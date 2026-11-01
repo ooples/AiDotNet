@@ -39,6 +39,17 @@ internal enum ConformerAsrFeedForward
     SwiGlu,
 }
 
+/// <summary>How a <see cref="ConformerAsrNetwork{T}"/> normalizes its log-mel features.</summary>
+internal enum ConformerAsrFeatureNormalization
+{
+    /// <summary>Each bin to zero mean and unit variance over the utterance (NeMo's <c>normalize: per_feature</c>).</summary>
+    PerFeature,
+
+    /// <summary>The log-mel features as they are (NeMo's <c>normalize: NA</c>, which streaming models use because a
+    /// statistic over the whole utterance is not available in a stream).</summary>
+    None,
+}
+
 /// <summary>The encoder block a <see cref="ConformerAsrNetwork{T}"/> stacks.</summary>
 internal enum ConformerAsrBlock
 {
@@ -149,6 +160,16 @@ internal sealed record ConformerAsrConfiguration
     public int AttentionChunkSize { get; init; }
     /// <summary>Whether the blocks see only past frames (causal attention and convolution), for streaming.</summary>
     public bool Causal { get; init; }
+    /// <summary>Chunks before its own that a chunk's frames also attend to (cache-aware streaming's chunked-limited
+    /// attention); zero keeps the chunks independent.</summary>
+    public int AttentionLeftChunks { get; init; }
+    /// <summary>A causal depthwise convolution without causal attention (cache-aware streaming).</summary>
+    public bool CausalConvolution { get; init; }
+    /// <summary>NeMo's <c>causal_downsampling</c> for the depthwise-separable striding: each stride-2 convolution pads
+    /// two frames before and one after, on time and frequency, instead of one on each side.</summary>
+    public bool CausalDownsampling { get; init; }
+    /// <summary>How the log-mel features are normalized.</summary>
+    public ConformerAsrFeatureNormalization FeatureNormalization { get; init; } = ConformerAsrFeatureNormalization.PerFeature;
     public ConformerAsrDecoder Decoder { get; init; } = ConformerAsrDecoder.Ctc;
     public int PredictionDim { get; init; } = 640;
     public int PredictionLayers { get; init; } = 1;
@@ -238,13 +259,16 @@ internal sealed class ConformerAsrNetwork<T>
         else
         {
             int c = _o.SubsamplingChannels;
-            FirstConv = Own(new Conv2DLayer<T>(1, c, 3, 3, 2, 2, 1, 1));
+            // Causal downsampling pads explicitly (two before, one after) and the convolutions add none.
+            int pad = _o.CausalDownsampling ? 0 : 1;
+            Func<int, int> stride = _o.CausalDownsampling ? CausalStrided : Padded;
+            FirstConv = Own(new Conv2DLayer<T>(1, c, 3, 3, 2, 2, pad, pad));
             int stages = _o.Subsampling == ConformerAsrSubsampling.DepthwiseStriding4x ? 1 : 2;
-            _subsampledBins = Padded(_o.NumMels);
+            _subsampledBins = stride(_o.NumMels);
             for (int s = 0; s < stages; s++)
             {
-                DepthwiseStages.Add(Own(new DepthwiseSeparableConvolutionalLayer<T>(c, 3, stride: 2, padding: 1, activation: (IActivationFunction<T>)new ReLUActivation<T>())));
-                _subsampledBins = Padded(_subsampledBins);
+                DepthwiseStages.Add(Own(new DepthwiseSeparableConvolutionalLayer<T>(c, 3, stride: 2, padding: pad, activation: (IActivationFunction<T>)new ReLUActivation<T>())));
+                _subsampledBins = stride(_subsampledBins);
             }
             _channels = c;
         }
@@ -254,7 +278,8 @@ internal sealed class ConformerAsrNetwork<T>
         {
             if (_o.Block == ConformerAsrBlock.Conformer)
                 Blocks.Add(Own(new ConformerBlockLayer<T>(d, _o.NumAttentionHeads, _o.FeedForwardMultiplier, _o.ConvKernel,
-                    ropeTheta: _o.RopeTheta, attentionChunkSize: _o.AttentionChunkSize, causal: _o.Causal)));
+                    ropeTheta: _o.RopeTheta, attentionChunkSize: _o.AttentionChunkSize, causal: _o.Causal,
+                    attentionLeftChunks: _o.AttentionLeftChunks, causalConvolution: _o.CausalConvolution)));
             else if (_o.Block == ConformerAsrBlock.Transformer) TransformerBlocks.Add(new TransformerBlock(_o, layer => Own(layer)));
             else BranchBlocks.Add(new BranchBlock(_o, layer => Own(layer)));
         }
@@ -300,6 +325,12 @@ internal sealed class ConformerAsrNetwork<T>
 
     // A 3x3 stride-2 convolution with padding 1.
     private static int Padded(int length) => (length - 1) / 2 + 1;
+
+    // A width-3 stride-2 convolution after two frames of padding before and one after (causal downsampling).
+    private static int CausalStrided(int length) => length / 2 + 1;
+
+    // NeMo's CausalConv2D padding: two before and one after on the last two axes.
+    private Tensor<T> CausalPad(Tensor<T> x) => _o.CausalDownsampling ? _engine.TensorConstantPad(x, new[] { 2, 1, 2, 1 }, NumOps.Zero) : x;
 
     public Conv2DLayer<T>? FirstConv { get; }
     public List<Conv1DLayer<T>> StemConvs { get; } = new();
@@ -602,10 +633,14 @@ internal sealed class ConformerAsrNetwork<T>
     {
         ConformerAsrSubsampling.Conv4x => Subsampled(Subsampled(melFrames)),
         ConformerAsrSubsampling.RawWaveformStem => ((melFrames - 127) / 64 + 1 - 7) / 3 + 1 is int y ? (y - 3) / 2 + 1 : 0,
+        ConformerAsrSubsampling.DepthwiseStriding4x when _o.CausalDownsampling => CausalStrided(CausalStrided(melFrames)),
+        ConformerAsrSubsampling.DepthwiseStriding4x => Padded(Padded(melFrames)),
+        _ when _o.CausalDownsampling => CausalStrided(CausalStrided(CausalStrided(melFrames))),
         _ => Padded(Padded(Padded(melFrames))),
     };
 
-    /// <summary>Log-mel features <c>[frames, bins]</c> of a waveform, each bin normalized over the utterance.</summary>
+    /// <summary>Log-mel features <c>[frames, bins]</c> of a waveform, each bin normalized over the utterance unless
+    /// <see cref="ConformerAsrConfiguration.FeatureNormalization"/> is <c>None</c>.</summary>
     public double[,] Features(IReadOnlyList<double> waveform)
     {
         if (_o.Subsampling == ConformerAsrSubsampling.RawWaveformStem)
@@ -620,6 +655,12 @@ internal sealed class ConformerAsrNetwork<T>
         var mel = _mel.Forward(samples);
         int frames = mel.Shape[0], bins = mel.Shape[1];
         var features = new double[frames, bins];
+        if (_o.FeatureNormalization == ConformerAsrFeatureNormalization.None)
+        {
+            for (int t = 0; t < frames; t++)
+                for (int b = 0; b < bins; b++) features[t, b] = NumOps.ToDouble(mel[t, b]);
+            return features;
+        }
         for (int b = 0; b < bins; b++)
         {
             double mean = 0, square = 0;
@@ -703,9 +744,9 @@ internal sealed class ConformerAsrNetwork<T>
                     if (i % 2 == 1) x = _engine.MaxPool2D(x, 2, 2);
                 }
             }
-            else x = _engine.ReLU((FirstConv ?? throw new InvalidOperationException("No convolution front end.")).Forward(mel));
+            else x = _engine.ReLU((FirstConv ?? throw new InvalidOperationException("No convolution front end.")).Forward(CausalPad(mel)));
             if (SecondConv is not null) x = _engine.ReLU(SecondConv.Forward(x));
-            foreach (var stage in DepthwiseStages) x = stage.Forward(x);
+            foreach (var stage in DepthwiseStages) x = stage.Forward(CausalPad(x));
             length = x.Shape[2];
             if (length <= 0) throw new ArgumentException("The audio is too short for the convolution subsampling.");
             var steps = _engine.Reshape(_engine.TensorPermute(x, new[] { 0, 2, 1, 3 }), new[] { length, _channels * _subsampledBins });

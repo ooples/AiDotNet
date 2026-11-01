@@ -1963,7 +1963,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "BiomedParse", "DKM", "EVACLIP", "SeedTTSClone", "VoxtLM",
         // The completed N-P shard added two resource-heavy failures. OWLv2's paper-scale ViT-L
         // memorization probe showed a first-step warm-up rise while repeatedly driving available
-        // memory below 1 GB. NemotronSpeech's first 24-layer encoder + 32-layer LLM forward consumed
+        // memory below 1 GB. NemotronSpeech's former 24-layer encoder + 32-layer LLM forward consumed
         // essentially the entire 16 GB runner and triggered shutdown. Apply the required precision
         // mitigation first; production defaults/options remain unchanged.
         "OWLv2", "NemotronSpeech",
@@ -6119,17 +6119,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 && typeName.StartsWith(
                     "AiDotNet.SpeechRecognition.Specialized.", System.StringComparison.Ordinal))
             {
-                // VoxtLM's production checkpoint configuration is a 12-layer,
-                // 512-wide decoder with a 32K token head. Exercise the same
-                // speech projection -> decoder -> token-head path at bounded
-                // public-options scale so the complete class fits the shard.
+                // VoxtLM-k50 small's speech tokenizer (HuBERT read at a layer, then k-means) and Transformer LM, at
+                // width 16 with one layer each, 8 speech units and 8 text tokens (a 23-token joint vocabulary).
+                // Production defaults are the paper's. Dropout is off so the invariants compare deterministic losses.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputSize: 32, outputSize: 16), " +
-                    "new AiDotNet.SpeechRecognition.Specialized.VoxtLMOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 1, NumAttentionHeads = 4, NumMels = 32, VocabSize = 16, " +
-                    "MaxTextLength = 8, DropoutRate = 0.0, LearningRate = 1e-4 })";
+                    "inputSize: 3200, outputSize: 23), " +
+                    "new AiDotNet.SpeechRecognition.Specialized.VoxtLMOptions { NumSpeechUnits = 8, TextVocabSize = 8, " +
+                    "EmbeddingDim = 16, ModelDim = 16, NumLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 32, DropoutRate = 0.0, " +
+                    "HubertWidth = 16, HubertLayer = 1, HubertHeads = 2, HubertIntermediate = 32, HubertConvChannels = 16, " +
+                    "MaxTextLength = 8, MaxAudioLengthSeconds = 1, WarmupSteps = 1, Seed = 5 })";
             }
             else if (model.ClassName == "Zipformer" && model.TypeParameterCount == 1
                 && typeName.StartsWith(
@@ -9616,18 +9616,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "NemotronSpeech" && model.TypeParameterCount == 1)
             {
-                // Nemotron-Speech keeps NVIDIA's paper-scale 1024/2048-wide, 24+32-layer,
-                // 65,536-token defaults in production. The generated invariant fixture exercises
-                // the same Fast-Conformer -> adapter -> Nemotron decoder architecture through the
-                // public options object at a scale that remains resident on a 16 GB CPU runner.
+                // Nemotron Speech Streaming: the release's cache-aware Fast Conformer (causal subsampling and
+                // convolutions, chunked attention with left context) and RNN-T decoder, at width 16 with one block,
+                // a two-frame chunk and one chunk of left context over a 16-token vocabulary. Production defaults are
+                // the release's. SpecAugment is off so the invariants compare training losses, not masks.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.SpeechRecognition.NeMo.NemotronSpeechOptions { " +
-                    "SampleRate = 16000, MaxAudioLengthSeconds = 1, EncoderDim = 64, DecoderDim = 64, " +
-                    "NumEncoderLayers = 2, NumDecoderLayers = 2, NumAttentionHeads = 4, " +
-                    "NumMels = 32, VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
+                    "EncoderDim = 16, NumEncoderLayers = 1, NumAttentionHeads = 2, ConvKernel = 3, NumMels = 32, SubsamplingChannels = 8, " +
+                    "LookaheadFrames = 1, LeftContextFrames = 2, PredictionDim = 16, PredictionLayers = 1, JointDim = 16, VocabSize = 16, " +
+                    "MaxAudioLengthSeconds = 1, FrequencyMasks = 0, TimeMasks = 0 })";
             }
             else if (model.ClassName == "TimeSformer" && model.TypeParameterCount == 1)
             {
@@ -16840,14 +16840,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
             }
+            else if (model.ClassName == "VoxtLM")
+            {
+                // VoxtLM reads waveforms (0.2 s, 9 HuBERT frames) and returns the logits of the transcript's first token.
+                // HuBERT Base group-normalizes its first convolution, so a recording scaled 10x gives the same units by
+                // design and the scaled-input invariant does not apply.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 23 };");
+                sb.AppendLine("    protected override bool ScaledInputInvariantApplicable => false;");
+            }
             else if (model.ClassName == "NemotronSpeech")
             {
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 32 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 64 };");
-                sb.AppendLine("    protected override int TrainingIterations => 2;");
-                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
-                sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
+                // Nemotron Speech reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, and causal 8x subsampling
+                // (each stage n/2 + 1) leaves 4 encoder frames of 80 ms over its 16 tokens.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 16 };");
             }
             else if (model.ClassName is "DistilWhisper" or "FasterWhisper" or "KotobaWhisper"
                 or "WhisperLargeV3" or "WhisperLargeV3Turbo" or "WhisperLive" or "WhisperX"
