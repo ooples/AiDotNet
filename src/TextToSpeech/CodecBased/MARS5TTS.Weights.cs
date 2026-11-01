@@ -11,7 +11,7 @@ public sealed class Mars5Checkpoints
     /// <summary>The NAR model (<c>mars5_nar.safetensors</c>).</summary>
     public required string NonAutoregressive { get; init; }
 
-    /// <summary>EnCodec's 24 kHz checkpoint (<c>encodec_24khz-d7cc33bc.th</c>).</summary>
+    /// <summary>EnCodec's 24 kHz checkpoint in the Hugging Face layout (<c>facebook/encodec_24khz</c>'s <c>model.safetensors</c>).</summary>
     public required string Codec { get; init; }
 
     /// <summary>Vocos's EnCodec model (<c>charactr/vocos-encodec-24khz</c>'s <c>pytorch_model.bin</c>).</summary>

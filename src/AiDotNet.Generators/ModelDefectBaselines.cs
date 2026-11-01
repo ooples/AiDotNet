@@ -155,7 +155,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.Classic.FastSpeech<T>",
             "AiDotNet.TextToSpeech.Classic.FastSpeech2<T>",
             "AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>",
-            "AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2<T>",
             "AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T>",
             "AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>",
             "AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>",

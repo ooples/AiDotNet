@@ -140,10 +140,17 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         var mel = new Tensor<T>(new[] { frames, channels }, target.ToVector());
         int tokenCount = tokens.Length;
 
+        // A model that reads codec tokens and durations of a waveform target (NaturalSpeech 2) counts its durations and
+        // pitch in codec frames, one per hop, not in samples.
+        int alignedFrames = network is not null && target.Rank == 1
+            && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.CodecTokens) != 0
+            && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.Durations) != 0
+            ? Math.Max(1, target.Length / Math.Max(1, network.HopSize)) : frames;
         var durations = new int[tokenCount];
-        for (int i = 0; i < tokenCount; i++) durations[i] = frames / tokenCount + (i < frames % tokenCount ? 1 : 0);
+        for (int i = 0; i < tokenCount; i++) durations[i] = alignedFrames / tokenCount + (i < alignedFrames % tokenCount ? 1 : 0);
 
-        var pitch = new double[frames];
+        var pitch = new double[alignedFrames];
+        for (int f = 0; f < alignedFrames; f++) pitch[f] = 150.0 + 50.0 * Math.Sin(2 * Math.PI * f / Math.Max(1, alignedFrames));
         var energy = new double[frames];
         // A log-magnitude linear spectrogram for models whose post-net predicts one (Tacotron): smooth in frequency,
         // following the target's frame-to-frame changes through its mean.
@@ -163,7 +170,6 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         for (int f = 0; f < frames; f++)
         {
-            pitch[f] = 150.0 + 50.0 * Math.Sin(2 * Math.PI * f / Math.Max(1, frames));
             double sum = 0;
             for (int c = 0; c < channels; c++)
             {

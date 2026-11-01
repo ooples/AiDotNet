@@ -184,6 +184,9 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
     /// <summary>The quantizer.</summary>
     protected IResidualVectorQuantizer<T>? Quantizer { get; private set; }
 
+    /// <summary>The residual quantizer, for a model that works on this codec's quantized latents (NaturalSpeech 2).</summary>
+    internal IResidualVectorQuantizer<T>? CodecQuantizer => Quantizer;
+
     // ---------------------------------------------------------------- layers
 
     /// <inheritdoc />

@@ -37,7 +37,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
 /// var model = new MARS5TTS&lt;float&gt;(architecture, MARS5TTSOptions.FromCheckpoint("mars5_ar.safetensors"));
 /// model.LoadReferenceWeights(new Mars5Checkpoints { Autoregressive = "mars5_ar.safetensors", NonAutoregressive = "mars5_nar.safetensors",
-///     Codec = "encodec_24khz-d7cc33bc.th", Vocoder = "vocos-encodec-24khz/pytorch_model.bin" });
+///     Codec = "encodec_24khz/model.safetensors", Vocoder = "vocos-encodec-24khz/pytorch_model.bin" });
 /// model.Voice = model.CreateVoice(referenceAudio, 24000, "What the reference says.");
 /// var audio = model.Synthesize("Text to speak in that voice.");   // 24 kHz
 /// </code>

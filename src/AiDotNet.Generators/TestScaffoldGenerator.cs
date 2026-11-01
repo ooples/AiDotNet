@@ -9930,17 +9930,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "NaturalSpeech2" && model.TypeParameterCount == 1)
             {
-                // NaturalSpeech 2 retains its paper diffusion depth and model
-                // dimensions in production. Exercise its configurable text
-                // encoder -> latent diffusion -> mel projection at CI scale.
+                // NaturalSpeech 2's paper model is a 512-wide prior and prompt encoder, 30-layer predictors and a 40-layer
+                // WaveNet denoiser over a 16-codebook SoundStream at 16 kHz; keep every component at width 16 with one or
+                // two layers, two sampling steps, and a two-codebook SoundStream at 4 kHz with a hop of 16.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 16, inputDepth: 1, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2Options { " +
-                    "HiddenDim = 32, EncoderDim = 32, DecoderDim = 32, DiffusionDim = 32, " +
-                    "MelChannels = 16, NumEncoderLayers = 1, NumDiffusionSteps = 2, " +
-                    "NumHeads = 4, DropoutRate = 0.0, MaxTextLength = 16 })";
+                    "inputSize: 8, outputSize: 128), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2Options { SampleRate = 4000, HopSize = 16, HiddenDim = 16, NumHeads = 2, " +
+                    "NumEncoderLayers = 1, FilterChannels = 32, EncoderKernel = 3, NumPromptLayers = 1, DurationLayers = 2, PitchLayers = 2, " +
+                    "PitchBins = 16, QueryTokens = 4, DenoiserLayers = 3, SamplingSteps = 2, WarmupSteps = 1, " +
+                    "Codec = new AiDotNet.Audio.Generation.SoundStreamOptions { SampleRate = 4000, SegmentSize = 4000, Filters = 2, Ratios = [4, 4], " +
+                    "Dimension = 8, NumQuantizers = 2, CodebookSize = 16, TargetBandwidthKbps = 2.0, " +
+                    "FilmPosition = AiDotNet.Audio.Generation.SoundStreamFilmPosition.None, IncludeDiscriminators = false } })";
             }
             else if (model.ClassName == "NaturalSpeech3" && model.TypeParameterCount == 1)
             {
@@ -16043,12 +16045,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 }
                 else if (model.ClassName == "NaturalSpeech2")
                 {
-                    // NaturalSpeech 2's native public contract consumes HiddenDim-wide
-                    // conditioning (the same shape produced by PreprocessText) and emits
-                    // MelChannels features. Keep the generated tensors aligned with the
-                    // bounded public-options fixture above: HiddenDim=32, MelChannels=16.
-                    sb.AppendLine("    protected override int[] InputShape => new[] { 8, 32 };");
-                    sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 16 };");
+                    // NaturalSpeech 2 reads phone ids and synthesizes a waveform in the voice of a recording; it trains on
+                    // durations, pitch and codec tokens: eight ids and 128 samples (eight codec frames at the fixture's hop).
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 128 };");
+                    // The denoiser's output projection starts at zero (Amphion's init), so an untrained model returns its
+                    // starting noise whatever the text; the text-sensitivity probes compare the deterministic objective.
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
                 else if (model.ClassName == "NaturalSpeech3")
                 {
