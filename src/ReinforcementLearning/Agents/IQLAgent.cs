@@ -157,7 +157,9 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             outputSize: _options.ActionSize * 2,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_options.PolicyLearningRate),
+            lossFunction: new MeanSquaredErrorLoss<T>());
     }
 
     private NeuralNetwork<T> CreateValueNetwork()
@@ -181,7 +183,7 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture);
+        return new NeuralNetwork<T>(architecture, optimizer: CreateNetworkOptimizer(_options.ValueLearningRate));
     }
 
     private NeuralNetwork<T> CreateQNetwork()
@@ -206,7 +208,9 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_options.QLearningRate),
+            lossFunction: _options.QLossFunction);
     }
 
     private void InitializeBuffer()

@@ -135,27 +135,6 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private int _inputWidth;
 
-    /// <summary>
-    /// Cached input for backpropagation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Cached intermediate conv outputs (before activation) for backpropagation.
-    /// </summary>
-    private Tensor<T>[]? _convOutputs;
-
-    /// <summary>
-    /// Cached intermediate activation outputs for backpropagation.
-    /// </summary>
-    private Tensor<T>[]? _activationOutputs;
-
-    /// <summary>
-    /// Cached concatenated inputs to each conv layer for backpropagation.
-    /// </summary>
-    private Tensor<T>[]? _concatInputs;
-
     #endregion
 
     #region Properties
@@ -341,46 +320,29 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>, IShapeContract
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-        _convOutputs = new Tensor<T>[5];
-        _activationOutputs = new Tensor<T>[4]; // Only first 4 have activation
-        _concatInputs = new Tensor<T>[5];
-
+        // Every intermediate is a local: the tape keeps what backward needs, and fields would hold
+        // all five convolutions' activations after the forward, in inference too.
         // x0 = input
         var x0 = input;
 
         // Conv1: x1 = LeakyReLU(Conv(x0))
-        _concatInputs[0] = x0;
-        _convOutputs[0] = _convLayers[0].Forward(x0);
-        _activationOutputs[0] = ApplyLeakyReLU(_convOutputs[0]);
-        var x1 = _activationOutputs[0];
+        var x1 = ApplyLeakyReLU(_convLayers[0].Forward(x0));
 
         // Conv2: x2 = LeakyReLU(Conv(concat(x0, x1)))
         var concat1 = ConcatenateChannels(x0, x1);
-        _concatInputs[1] = concat1;
-        _convOutputs[1] = _convLayers[1].Forward(concat1);
-        _activationOutputs[1] = ApplyLeakyReLU(_convOutputs[1]);
-        var x2 = _activationOutputs[1];
+        var x2 = ApplyLeakyReLU(_convLayers[1].Forward(concat1));
 
         // Conv3: x3 = LeakyReLU(Conv(concat(x0, x1, x2)))
         var concat2 = ConcatenateChannels(concat1, x2);
-        _concatInputs[2] = concat2;
-        _convOutputs[2] = _convLayers[2].Forward(concat2);
-        _activationOutputs[2] = ApplyLeakyReLU(_convOutputs[2]);
-        var x3 = _activationOutputs[2];
+        var x3 = ApplyLeakyReLU(_convLayers[2].Forward(concat2));
 
         // Conv4: x4 = LeakyReLU(Conv(concat(x0, x1, x2, x3)))
         var concat3 = ConcatenateChannels(concat2, x3);
-        _concatInputs[3] = concat3;
-        _convOutputs[3] = _convLayers[3].Forward(concat3);
-        _activationOutputs[3] = ApplyLeakyReLU(_convOutputs[3]);
-        var x4 = _activationOutputs[3];
+        var x4 = ApplyLeakyReLU(_convLayers[3].Forward(concat3));
 
         // Conv5: x5 = Conv(concat(x0, x1, x2, x3, x4)) - NO activation
         var concat4 = ConcatenateChannels(concat3, x4);
-        _concatInputs[4] = concat4;
-        _convOutputs[4] = _convLayers[4].Forward(concat4);
-        var x5 = _convOutputs[4];
+        var x5 = _convLayers[4].Forward(concat4);
 
         // Local residual learning: output = x5 * residualScale + x0
         return AddResidual(x5, x0, _residualScale);
@@ -566,10 +528,6 @@ public partial class ResidualDenseBlock<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _convOutputs = null;
-        _activationOutputs = null;
-        _concatInputs = null;
 
         foreach (var conv in _convLayers)
         {

@@ -34,7 +34,10 @@ public class CQLOptions<T> : ModelOptions
     public int ActionSize { get; set; }
     /// <summary>Learning rate of the policy network.</summary>
     public T PolicyLearningRate { get; set; }
-    /// <summary>Learning rate of the Q-network.</summary>
+    /// <summary>
+    /// Learning rate of the Q-networks; with <see cref="CQLLagrange"/> it is also the Adam step size of the
+    /// conservative multiplier (log alpha') that dual ascent tunes toward <see cref="CQLTargetActionGap"/>.
+    /// </summary>
     public T QLearningRate { get; set; }
     /// <summary>Learning rate used when tuning the entropy temperature.</summary>
     public T AlphaLearningRate { get; set; }
@@ -46,8 +49,21 @@ public class CQLOptions<T> : ModelOptions
     public T InitialTemperature { get; set; }
     /// <summary>Whether to tune the entropy temperature automatically toward <see cref="TargetEntropy"/>.</summary>
     public bool AutoTuneTemperature { get; set; } = true;
-    /// <summary>Target policy entropy for automatic temperature tuning; when null, the negative action dimension is used, as in SAC.</summary>
-    public T? TargetEntropy { get; set; }
+    /// <summary>
+    /// Target entropy for automatic temperature tuning (used when <see cref="AutoTuneTemperature"/> is on).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// When this is <c>null</c>, the agent uses -ActionSize, the heuristic of Haarnoja et al. 2018b.
+    /// </para>
+    /// <para><b>For Beginners:</b> Entropy measures how random the policy's actions are. With automatic
+    /// temperature tuning, the agent raises or lowers its exploration bonus to hold the policy's entropy at this
+    /// target. Lower targets mean less exploration. Leave it unset unless you have a reason to change it.
+    /// </para>
+    /// </remarks>
+    /// <value>The target entropy, or <c>null</c> (the default) for <c>-ActionSize</c>. Zero is a real target,
+    /// not "unset": a target of 0.0 is used as given.</value>
+    public double? TargetEntropy { get; set; }
 
     // CQL-specific parameters
     /// <summary>Weight of the conservative penalty that pushes down Q-values of actions outside the dataset.</summary>

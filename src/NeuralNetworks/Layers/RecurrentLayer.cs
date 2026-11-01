@@ -160,31 +160,9 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
     private bool _isInitialized;
 
     /// <summary>
-    /// Stores the input tensor from the most recent forward pass for use in backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// This cached input is needed during the backward pass to compute gradients. It holds the
-    /// sequence of input vectors that were processed in the most recent forward pass. The tensor
-    /// is null before the first forward pass or after a reset.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-
-    /// <summary>
-    /// Stores the output tensor from the most recent forward pass for use in backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// This cached output is needed during the backward pass to compute certain derivatives.
-    /// It holds the sequence of output vectors that were produced in the most recent forward pass.
-    /// The tensor is null before the first forward pass or after a reset.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Stores the gradients of the loss with respect to the input weight parameters.
@@ -428,12 +406,6 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
             input3D = Engine.Reshape(input, new[] { sequenceLength, flatBatch, inputSize });
         }
 
-        // Cache input only if training
-        if (IsTrainingMode)
-        {
-            _lastInput = input3D;
-        }
-
         int hiddenSize = _inputWeights.Shape[0];
         int actualInputSize = input3D.Shape[2]; // [seqLen, batch, inputSize]
         int expectedInputSize = _inputWeights.Shape[1];
@@ -504,8 +476,6 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
         // backward pass can split gradients back to each stepOutputs[t] and from
         // there to the per-step matmuls + biases.
         var output = Engine.TensorStack(stepOutputs, axis: 0);
-
-        _lastOutput = output;
 
         // Restore original batch dimensions for any-rank support — via Engine
         // for tape recording.
@@ -732,8 +702,6 @@ public partial class RecurrentLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
         _inputWeightsGradient = null;
         _hiddenWeightsGradient = null;
         _biasesGradient = null;

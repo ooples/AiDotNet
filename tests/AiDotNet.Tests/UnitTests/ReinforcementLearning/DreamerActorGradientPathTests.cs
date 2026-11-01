@@ -85,7 +85,7 @@ public class DreamerActorGradientPathTests
         using var agent = new DreamerAgent<double>();
 
         var actor = PrivateNetwork(agent, "_actorNetwork");
-        var dynamics = PrivateNetwork(agent, "_dynamicsNetwork");
+        var dynamics = PrivateNetwork(agent, "_transitionInputNetwork");
         var value = PrivateNetwork(agent, "_valueNetwork");
 
         var actorTensors = TrainableTensors(actor);

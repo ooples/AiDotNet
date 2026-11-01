@@ -132,10 +132,6 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
 
     // Cached values for backward pass
     [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
     private Tensor<T>? _lastProjectedQueries;
     [Scratch]
     private Tensor<T>? _lastProjectedKeys;
@@ -147,8 +143,6 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     private Tensor<T>? _lastExpandedValues;
     [Scratch]
     private Tensor<T>? _lastAttentionWeights;
-    [Scratch]
-    private Tensor<T>? _lastAttentionContext;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -476,7 +470,6 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
             : Engine.Reshape(input, new[] { batchSize, seqLen, embDim });
 
         bool cacheBwd = ShouldCacheForBackward; // #1668: gate all backward caches (arena safety)
-        _lastInput = cacheBwd ? input3D : null;
 
         // Project Q, K, V
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, embDim });
@@ -582,11 +575,6 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
             contextPermuted,
             new[] { batchSize * seqLen, _numHeads * _headDimension });
 
-        // Cache pre-projection context for output weights gradient
-        _lastAttentionContext = cacheBwd
-            ? Engine.Reshape(contextTransposed, new[] { batchSize, seqLen, _numHeads * _headDimension })
-            : null;
-
         // Output projection
         var output = Engine.TensorMatMul(contextTransposed, _outputWeights);
         var output3D = Engine.Reshape(output, new[] { batchSize, seqLen, _embeddingDimension });
@@ -597,8 +585,6 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         var biasBroadcast = Engine.Reshape(_outputBias, new[] { 1, 1, _embeddingDimension });
         var outputWithBias = Engine.TensorAdd(output3D, biasBroadcast);
         var result = ApplyActivation(outputWithBias);
-
-        _lastOutput = cacheBwd ? result : null;
 
         // Reshape back to original rank â€” via Engine for tape recording.
         if (rank == 2)
@@ -790,15 +776,12 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
         _lastProjectedQueries = null;
         _lastProjectedKeys = null;
         _lastProjectedValues = null;
         _lastExpandedKeys = null;
         _lastExpandedValues = null;
         _lastAttentionWeights = null;
-        _lastAttentionContext = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

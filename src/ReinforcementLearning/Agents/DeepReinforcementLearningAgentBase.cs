@@ -123,6 +123,72 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
     }
 
     /// <summary>
+    /// The Adam optimizer (β1 = 0.9, β2 = 0.999, ε = 1e-8) a network trains with at
+    /// <paramref name="learningRate"/>, for handing to the network's constructor.
+    /// </summary>
+    /// <param name="learningRate">The network's step size; must be positive and finite.</param>
+    /// <param name="maxGradientNorm">
+    /// When set, each step's gradient is rescaled to at most this global L2 norm (as PPO's MaxGradNorm
+    /// prescribes); when null the gradient is applied unclipped, as the RL papers' Adam is.
+    /// </param>
+    /// <returns>An optimizer that the network's <c>Train</c> and <c>TrainWithCustomLoss</c> step with.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">The learning rate is not positive and finite.</exception>
+    /// <remarks>
+    /// A network built without an optimizer trains with the network's own default rate, so an agent option
+    /// such as a critic or value learning rate only takes effect when the network is constructed with this.
+    /// Before this existed every deep agent's per-network learning-rate option was stored and never reached
+    /// the network it named.
+    /// </remarks>
+    protected static IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateNetworkOptimizer(
+        T learningRate, double? maxGradientNorm = null)
+    {
+        double rate = MathHelper.GetNumericOperations<T>().ToDouble(learningRate);
+        if (double.IsNaN(rate) || rate <= 0.0 || double.IsInfinity(rate))
+        {
+            throw new ArgumentOutOfRangeException(nameof(learningRate), rate,
+                "A network learning rate must be positive and finite.");
+        }
+        if (maxGradientNorm is double norm && (double.IsNaN(norm) || norm <= 0.0 || double.IsInfinity(norm)))
+        {
+            throw new ArgumentOutOfRangeException(nameof(maxGradientNorm), norm,
+                "A gradient-norm bound must be positive and finite.");
+        }
+
+        var options = new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = rate,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8,
+            UseAdaptiveLearningRate = false,
+            UseAMSGrad = false,
+            EnableGradientClipping = maxGradientNorm.HasValue,
+            GradientClippingMethod = AiDotNet.Models.Options.GradientClippingMethod.ByNorm,
+        };
+        // Without a bound, clipping is off and MaxGradientNorm keeps the option's own default.
+        if (maxGradientNorm is double bound) options.MaxGradientNorm = bound;
+        return new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, options);
+    }
+
+    /// <summary>The networks this agent registered, in <see cref="Networks"/> order.</summary>
+    internal IReadOnlyList<INeuralNetwork<T>> GetNetworks() => Networks;
+
+    /// <summary>
+    /// The weights of every network in <see cref="Networks"/>, concatenated in list order. Unlike
+    /// <c>GetParameters</c>, this leaves out state an agent keeps outside its networks.
+    /// </summary>
+    internal Vector<T> GetNetworkParameters()
+    {
+        var values = new List<T>();
+        foreach (var network in Networks)
+        {
+            var parameters = network.GetParameters();
+            for (int i = 0; i < parameters.Length; i++) values.Add(parameters[i]);
+        }
+        return new Vector<T>(values.ToArray());
+    }
+
+    /// <summary>
     /// Disposes of resources used by the agent, including every network registered in <see cref="Networks"/>.
     /// </summary>
     /// <remarks>

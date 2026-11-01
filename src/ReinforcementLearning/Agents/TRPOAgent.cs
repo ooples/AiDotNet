@@ -73,8 +73,6 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     }
     private TRPOOptions<T> _options;
 
-    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
-
     private INeuralNetwork<T> _policyNetwork;
     [Buffer]
     private INeuralNetwork<T> _oldPolicyNetwork;  // For KL divergence
@@ -91,19 +89,20 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     {
     }
 
-    public TRPOAgent(TRPOOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+    /// <summary>
+    /// Initializes a TRPO agent from <paramref name="options"/>.
+    /// </summary>
+    /// <param name="options">The agent's configuration.</param>
+    /// <remarks>
+    /// TRPO takes no optimizer: its policy step is the natural-gradient step solved by conjugate gradient inside the
+    /// MaxKL trust region, and its value function regresses with Adam at ValueLearningRate.
+    /// </remarks>
+    public TRPOAgent(TRPOOptions<T> options)
         : base(options)
     {
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-        {
-            InitialLearningRate = 0.001,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
         _updateCount = 0;
         _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, Vector<T>, bool)>();
 
@@ -187,7 +186,9 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _options.ValueLossFunction);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_options.ValueLearningRate),
+            lossFunction: _options.ValueLossFunction);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -280,14 +281,392 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
         // Compute returns and advantages
         var (states, actions, advantages, returns) = ComputeAdvantages();
+        int n = states.Count;
+        int stateSize = _options.StateSize;
 
-        // Update value function
+        var batchStates = new Tensor<T>([n, stateSize]);
+        var batchReturns = new Tensor<T>([n, 1]);
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < stateSize; j++) batchStates[i, j] = states[i][j];
+            batchReturns[i, 0] = returns[i];
+        }
 
-        // Update policy with TRPO
+        // Value function: a separate regression on the empirical returns (Schulman et al. 2015, §8 and
+        // Appendix D), ValueIterations passes at ValueLearningRate. The value network trains with the
+        // optimizer it was built with, which carries ValueLearningRate.
+        for (int iteration = 0; iteration < _options.ValueIterations; iteration++)
+        {
+            _valueNetwork.Train(batchStates, batchReturns);
+        }
+
+        // Policy: one natural-gradient step inside the KL trust region.
+        T surrogateImprovement = UpdatePolicyWithinTrustRegion(batchStates, actions, advantages);
 
         _updateCount++;
 
-        return StatisticsHelper<T>.CalculateMean(advantages.ToArray());
+        return surrogateImprovement;
+    }
+
+    /// <summary>
+    /// The KL divergence between the policy before and after the most recent update, averaged over that
+    /// update's states. Zero when the line search rejected every candidate step.
+    /// </summary>
+    internal double LastPolicyKL { get; private set; }
+
+    /// <summary>
+    /// The fraction of the full natural-gradient step the line search accepted on the most recent update
+    /// (<c>LineSearchBacktrackCoeff^k</c>), or zero when it accepted none.
+    /// </summary>
+    internal double LastStepFraction { get; private set; }
+
+    /// <summary>
+    /// The policy's action distribution for <paramref name="state"/>: the action probabilities for a discrete
+    /// policy, or the mean followed by the clamped log standard deviation for a continuous one.
+    /// </summary>
+    internal Vector<T> PolicyDistribution(Vector<T> state)
+    {
+        var output = _policyNetwork.Predict(Tensor<T>.FromVector(state)).ToVector();
+        return ToDistributionParameters(output, 0, output.Length);
+    }
+
+    /// <summary>The value network's parameters, for tests that check the value regression's settings.</summary>
+    internal Vector<T> GetValueNetworkParameters()
+    {
+        // Lazily sized layers have no weights until their first forward; materialize so the vector's
+        // length does not change between two reads.
+        if (_valueNetwork is NeuralNetworkBase<T> network) network.MaterializeParameters();
+        return _valueNetwork.GetParameters();
+    }
+
+    /// <summary>
+    /// Trust Region Policy Optimization step (Schulman et al. 2015, §6 and Appendix C):
+    /// maximise the surrogate L(θ) = E[π_θ(a|s)/π_old(a|s) · A] subject to E_s[KL(π_old ‖ π_θ)] ≤ MaxKL.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The constrained problem is solved as the paper prescribes: the search direction x ≈ F⁻¹g comes from
+    /// ConjugateGradientIterations steps of conjugate gradient on Fisher-vector products (with Damping added to
+    /// F), the step is scaled so its quadratic KL estimate ½·sᵀFs equals MaxKL, and a backtracking line search
+    /// (LineSearchSteps candidates shrinking by LineSearchBacktrackCoeff) accepts the first candidate whose
+    /// actual surrogate improvement is at least LineSearchAcceptRatio of the linear prediction AND whose exact KL
+    /// stays within MaxKL. When no candidate passes, the policy is left unchanged.
+    /// </para>
+    /// <para>
+    /// The Fisher matrix is the analytic estimator of Appendix C.1, F = (1/N)·Σ Jᵀ M J, where J is the Jacobian
+    /// of the network's distribution parameters with respect to θ and M is the Fisher information of the action
+    /// distribution in those parameters (diag(1/p) for categorical probabilities; diag(1/σ², 2) for a Gaussian
+    /// parameterised by mean and log standard deviation). Jᵀu is an exact reverse-mode product through the
+    /// network's tape; Jv is a central difference of the network outputs along v, whose truncation error is
+    /// second order in the probe size.
+    /// </para>
+    /// </remarks>
+    private T UpdatePolicyWithinTrustRegion(Tensor<T> batchStates, List<Vector<T>> actions, List<T> advantages)
+    {
+        int n = actions.Count;
+        int outputWidth = _options.IsContinuous ? _options.ActionSize * 2 : _options.ActionSize;
+
+        // Distribution parameters of the policy that collected the data; constants for this update. The
+        // forward runs before the parameters are read so lazily sized layers already hold their weights.
+        var oldOutputs = _policyNetwork.Predict(batchStates).ToVector();
+        var thetaOld = _policyNetwork.GetParameters();
+        var oldParams = new Vector<T>[n];
+        var oldLogProbs = new double[n];
+        var advantage = new double[n];
+        for (int i = 0; i < n; i++)
+        {
+            oldParams[i] = ToDistributionParameters(oldOutputs, i * outputWidth, outputWidth);
+            oldLogProbs[i] = LogProbability(oldParams[i], actions[i]);
+            advantage[i] = NumOps.ToDouble(advantages[i]);
+        }
+        CopyNetworkWeights(_policyNetwork, _oldPolicyNetwork);
+
+        // g = ∇θ L at θ_old = Jᵀ (∂L/∂output), with ∂L/∂output evaluated in closed form at ratio = 1.
+        var surrogateOutputGradient = new Tensor<T>([n, outputWidth]);
+        for (int i = 0; i < n; i++)
+        {
+            var dLogProb = LogProbabilityOutputGradient(oldParams[i], actions[i]);
+            for (int k = 0; k < outputWidth; k++)
+            {
+                surrogateOutputGradient[i, k] = NumOps.FromDouble(advantage[i] * dLogProb[k] / n);
+            }
+        }
+        var g = PolicyVectorJacobianProduct(batchStates, surrogateOutputGradient);
+        double gNorm = Math.Sqrt(Dot(g, g));
+        LastPolicyKL = 0.0;
+        LastStepFraction = 0.0;
+        if (double.IsNaN(gNorm) || gNorm <= 0.0 || double.IsInfinity(gNorm))
+        {
+            return NumOps.Zero;
+        }
+
+        Vector<T> FisherVectorProduct(Vector<T> v)
+        {
+            double vNorm = Math.Sqrt(Dot(v, v));
+            var result = new Vector<T>(v.Length);
+            if (vNorm <= 0.0) return result;
+
+            // Central difference of the outputs along v gives J·v.
+            double thetaNorm = Math.Sqrt(Dot(thetaOld, thetaOld));
+            double probe = 1e-5 * Math.Max(1.0, thetaNorm) / vNorm;
+            _policyNetwork.UpdateParameters(Axpy(thetaOld, probe, v));
+            var plus = _policyNetwork.Predict(batchStates).ToVector();
+            _policyNetwork.UpdateParameters(Axpy(thetaOld, -probe, v));
+            var minus = _policyNetwork.Predict(batchStates).ToVector();
+            _policyNetwork.UpdateParameters(thetaOld);
+
+            var weighted = new Tensor<T>([n, outputWidth]);
+            for (int i = 0; i < n; i++)
+            {
+                var plusParams = ToDistributionParameters(plus, i * outputWidth, outputWidth);
+                var minusParams = ToDistributionParameters(minus, i * outputWidth, outputWidth);
+                for (int k = 0; k < outputWidth; k++)
+                {
+                    double jv = (NumOps.ToDouble(plusParams[k]) - NumOps.ToDouble(minusParams[k])) / (2.0 * probe);
+                    weighted[i, k] = NumOps.FromDouble(DistributionFisherDiagonal(oldParams[i], k) * jv / n);
+                }
+            }
+
+            var fv = PolicyVectorJacobianProduct(batchStates, weighted);
+            for (int p = 0; p < fv.Length; p++)
+            {
+                result[p] = NumOps.FromDouble(NumOps.ToDouble(fv[p]) + _options.Damping * NumOps.ToDouble(v[p]));
+            }
+            return result;
+        }
+
+        // Conjugate gradient for F x = g.
+        var x = ConjugateGradient(FisherVectorProduct, g, _options.ConjugateGradientIterations);
+        double xFx = Dot(x, FisherVectorProduct(x));
+        double maxKl = NumOps.ToDouble(_options.MaxKL);
+        if (double.IsNaN(xFx) || xFx <= 0.0 || double.IsInfinity(xFx) || double.IsNaN(maxKl) || maxKl <= 0.0)
+        {
+            return NumOps.Zero;
+        }
+
+        // Scale so the quadratic KL model of the full step, ½ sᵀ F s, equals MaxKL.
+        double stepScale = Math.Sqrt(2.0 * maxKl / xFx);
+        double expectedImprovement = stepScale * Dot(g, x);
+        double oldSurrogate = Surrogate(batchStates, actions, oldLogProbs, advantage, outputWidth, null);
+
+        double fraction = 1.0;
+        for (int step = 0; step < _options.LineSearchSteps; step++, fraction *= _options.LineSearchBacktrackCoeff)
+        {
+            var candidate = Axpy(thetaOld, fraction * stepScale, x);
+            _policyNetwork.UpdateParameters(candidate);
+            double kl = 0.0;
+            double newSurrogate = Surrogate(batchStates, actions, oldLogProbs, advantage, outputWidth,
+                (i, newParams) => kl += KLDivergence(oldParams[i], newParams));
+            kl /= n;
+            double improvement = newSurrogate - oldSurrogate;
+            double expected = fraction * expectedImprovement;
+
+            if (kl <= maxKl && improvement > 0.0 && improvement / expected >= _options.LineSearchAcceptRatio)
+            {
+                LastPolicyKL = kl;
+                LastStepFraction = fraction;
+                return NumOps.FromDouble(improvement);
+            }
+        }
+
+        // No candidate satisfied both conditions: keep the old policy.
+        _policyNetwork.UpdateParameters(thetaOld);
+        return NumOps.Zero;
+    }
+
+    /// <summary>
+    /// Mean importance-weighted advantage under the network's current parameters; <paramref name="visit"/>
+    /// receives each state's new distribution parameters so the caller can accumulate the KL in the same pass.
+    /// </summary>
+    private double Surrogate(Tensor<T> batchStates, List<Vector<T>> actions, double[] oldLogProbs, double[] advantage,
+        int outputWidth, Action<int, Vector<T>>? visit)
+    {
+        var outputs = _policyNetwork.Predict(batchStates).ToVector();
+        double total = 0.0;
+        for (int i = 0; i < actions.Count; i++)
+        {
+            var parameters = ToDistributionParameters(outputs, i * outputWidth, outputWidth);
+            total += Math.Exp(LogProbability(parameters, actions[i]) - oldLogProbs[i]) * advantage[i];
+            visit?.Invoke(i, parameters);
+        }
+        return total / actions.Count;
+    }
+
+    /// <summary>
+    /// Jᵀw for the policy network over a batch: the parameter gradient of Σ output ⊙ w, laid out as
+    /// <c>GetParameters()</c>.
+    /// </summary>
+    private Vector<T> PolicyVectorJacobianProduct(Tensor<T> batchStates, Tensor<T> outputWeights)
+    {
+        if (_policyNetwork is not NeuralNetworkBase<T> network)
+        {
+            throw new NotSupportedException(
+                $"TRPO needs parameter gradients from its policy network, which {_policyNetwork.GetType().Name} does not provide.");
+        }
+
+        return network.ComputeGradients(batchStates, outputWeights, OutputContractionLoss<T>.Instance);
+    }
+
+    private Vector<T> ConjugateGradient(Func<Vector<T>, Vector<T>> multiply, Vector<T> b, int iterations)
+    {
+        var x = new Vector<T>(b.Length);
+        var r = b.Clone();
+        var p = b.Clone();
+        double rr = Dot(r, r);
+        for (int k = 0; k < iterations && rr > 1e-10; k++)
+        {
+            var ap = multiply(p);
+            double pAp = Dot(p, ap);
+            if (double.IsNaN(pAp) || pAp <= 0.0) break;
+            double alpha = rr / pAp;
+            x = Axpy(x, alpha, p);
+            r = Axpy(r, -alpha, ap);
+            double rrNext = Dot(r, r);
+            p = Axpy(r, rrNext / rr, p);
+            rr = rrNext;
+        }
+        return x;
+    }
+
+    private double Dot(Vector<T> a, Vector<T> b)
+    {
+        double sum = 0.0;
+        for (int i = 0; i < a.Length; i++) sum += NumOps.ToDouble(a[i]) * NumOps.ToDouble(b[i]);
+        return sum;
+    }
+
+    /// <summary>a + scale·b.</summary>
+    private Vector<T> Axpy(Vector<T> a, double scale, Vector<T> b)
+    {
+        var result = new Vector<T>(a.Length);
+        for (int i = 0; i < a.Length; i++)
+        {
+            result[i] = NumOps.FromDouble(NumOps.ToDouble(a[i]) + scale * NumOps.ToDouble(b[i]));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Reads one state's distribution parameters out of the network output: probabilities (floored away from
+    /// zero) for the softmax head, or the mean then the log standard deviation clamped to [-20, 2] — the same
+    /// clamp <see cref="SelectAction"/> samples with.
+    /// </summary>
+    private Vector<T> ToDistributionParameters(Vector<T> outputs, int offset, int width)
+    {
+        var parameters = new Vector<T>(width);
+        if (_options.IsContinuous)
+        {
+            int actionSize = _options.ActionSize;
+            for (int i = 0; i < actionSize; i++)
+            {
+                parameters[i] = outputs[offset + i];
+                parameters[actionSize + i] = MathHelper.Clamp<T>(
+                    outputs[offset + actionSize + i], NumOps.FromDouble(-20), NumOps.FromDouble(2));
+            }
+        }
+        else
+        {
+            for (int i = 0; i < width; i++)
+            {
+                parameters[i] = NumOps.FromDouble(Math.Max(NumOps.ToDouble(outputs[offset + i]), ProbabilityFloor));
+            }
+        }
+        return parameters;
+    }
+
+    private const double ProbabilityFloor = 1e-8;
+
+    private double LogProbability(Vector<T> parameters, Vector<T> action)
+    {
+        if (!_options.IsContinuous)
+        {
+            return Math.Log(NumOps.ToDouble(parameters[ArgMax(action)]));
+        }
+
+        int actionSize = _options.ActionSize;
+        double logProb = 0.0;
+        for (int i = 0; i < actionSize; i++)
+        {
+            double mean = NumOps.ToDouble(parameters[i]);
+            double logStd = NumOps.ToDouble(parameters[actionSize + i]);
+            double z = (NumOps.ToDouble(action[i]) - mean) / Math.Exp(logStd);
+            logProb += -0.5 * z * z - logStd - 0.5 * Math.Log(2.0 * Math.PI);
+        }
+        return logProb;
+    }
+
+    /// <summary>∂ log π(a|s) / ∂(distribution parameters).</summary>
+    private double[] LogProbabilityOutputGradient(Vector<T> parameters, Vector<T> action)
+    {
+        var gradient = new double[parameters.Length];
+        if (!_options.IsContinuous)
+        {
+            int index = ArgMax(action);
+            gradient[index] = 1.0 / NumOps.ToDouble(parameters[index]);
+            return gradient;
+        }
+
+        int actionSize = _options.ActionSize;
+        for (int i = 0; i < actionSize; i++)
+        {
+            double mean = NumOps.ToDouble(parameters[i]);
+            double std = Math.Exp(NumOps.ToDouble(parameters[actionSize + i]));
+            double z = (NumOps.ToDouble(action[i]) - mean) / std;
+            gradient[i] = z / std;
+            gradient[actionSize + i] = z * z - 1.0;
+        }
+        return gradient;
+    }
+
+    /// <summary>
+    /// Diagonal of the action distribution's Fisher information in its parameters: 1/p_k for categorical
+    /// probabilities (exact on the simplex, where every admissible direction sums to zero), 1/σ² for a Gaussian
+    /// mean and 2 for its log standard deviation.
+    /// </summary>
+    private double DistributionFisherDiagonal(Vector<T> parameters, int index)
+    {
+        if (!_options.IsContinuous)
+        {
+            return 1.0 / NumOps.ToDouble(parameters[index]);
+        }
+
+        int actionSize = _options.ActionSize;
+        if (index < actionSize)
+        {
+            double std = Math.Exp(NumOps.ToDouble(parameters[actionSize + index]));
+            return 1.0 / (std * std);
+        }
+        return 2.0;
+    }
+
+    /// <summary>KL(π_old ‖ π_new) for one state.</summary>
+    private double KLDivergence(Vector<T> oldParameters, Vector<T> newParameters)
+    {
+        double kl = 0.0;
+        if (!_options.IsContinuous)
+        {
+            for (int k = 0; k < oldParameters.Length; k++)
+            {
+                double p = NumOps.ToDouble(oldParameters[k]);
+                double q = NumOps.ToDouble(newParameters[k]);
+                kl += p * Math.Log(p / q);
+            }
+            return kl;
+        }
+
+        int actionSize = _options.ActionSize;
+        for (int i = 0; i < actionSize; i++)
+        {
+            double oldMean = NumOps.ToDouble(oldParameters[i]);
+            double newMean = NumOps.ToDouble(newParameters[i]);
+            double oldLogStd = NumOps.ToDouble(oldParameters[actionSize + i]);
+            double newLogStd = NumOps.ToDouble(newParameters[actionSize + i]);
+            double oldVar = Math.Exp(2.0 * oldLogStd);
+            double newVar = Math.Exp(2.0 * newLogStd);
+            double meanGap = oldMean - newMean;
+            kl += newLogStd - oldLogStd + (oldVar + meanGap * meanGap) / (2.0 * newVar) - 0.5;
+        }
+        return kl;
     }
 
     private (List<Vector<T>> states, List<Vector<T>> actions, List<T> advantages, List<T> returns) ComputeAdvantages()
@@ -379,170 +758,6 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         }
 
         return (states, actions, advantages, returns);
-    }
-
-
-    private T ComputeImportanceRatio(Vector<T> newPolicyOutput, Vector<T> oldPolicyOutput, Vector<T> action)
-    {
-        // Importance ratio: π_θ(a|s) / π_θ_old(a|s)
-        // For discrete actions: ratio = softmax_new(a) / softmax_old(a)
-        // For continuous actions: ratio = exp(log_prob_new - log_prob_old)
-
-        if (_options.ActionSize == newPolicyOutput.Length)
-        {
-            // Discrete action space
-            var newProbs = ComputeSoftmax(newPolicyOutput);
-            var oldProbs = ComputeSoftmax(oldPolicyOutput);
-            var actionIdx = GetDiscreteAction(action);
-
-            var ratio = NumOps.Divide(newProbs[actionIdx],
-                                      NumOps.Add(oldProbs[actionIdx], NumOps.FromDouble(1e-8)));
-            return ratio;
-        }
-        else
-        {
-            // Continuous action space: Gaussian policy
-            int actionDim = newPolicyOutput.Length / 2;
-            T logRatioSum = NumOps.Zero;
-
-            for (int i = 0; i < actionDim; i++)
-            {
-                var newMean = newPolicyOutput[i];
-                var newLogStd = newPolicyOutput[actionDim + i];
-                var oldMean = oldPolicyOutput[i];
-                var oldLogStd = oldPolicyOutput[actionDim + i];
-
-                var newStd = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(newLogStd)));
-                var oldStd = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(oldLogStd)));
-
-                var actionVal = action[i];
-
-                // Log probability = -0.5 * ((a - μ) / σ)² - log(σ) - 0.5 * log(2π)
-                var newDiff = NumOps.Subtract(actionVal, newMean);
-                var oldDiff = NumOps.Subtract(actionVal, oldMean);
-
-                var newLogProb = NumOps.Subtract(
-                    NumOps.Multiply(NumOps.FromDouble(-0.5),
-                        NumOps.Divide(NumOps.Multiply(newDiff, newDiff),
-                            NumOps.Multiply(newStd, newStd))),
-                    newLogStd);
-
-                var oldLogProb = NumOps.Subtract(
-                    NumOps.Multiply(NumOps.FromDouble(-0.5),
-                        NumOps.Divide(NumOps.Multiply(oldDiff, oldDiff),
-                            NumOps.Multiply(oldStd, oldStd))),
-                    oldLogStd);
-
-                logRatioSum = NumOps.Add(logRatioSum, NumOps.Subtract(newLogProb, oldLogProb));
-            }
-
-            return NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logRatioSum)));
-        }
-    }
-
-    private Vector<T> ComputeTRPOPolicyGradient(Vector<T> policyOutput, Vector<T> action, T weightedAdvantage)
-    {
-        // TRPO policy gradient: ∇θ log π(a|s) * [ratio * advantage]
-        // This is similar to standard policy gradient but weighted by importance ratio
-
-        if (_options.ActionSize == policyOutput.Length)
-        {
-            // Discrete action space
-            var softmax = ComputeSoftmax(policyOutput);
-            var actionIdx = GetDiscreteAction(action);
-
-            var gradient = new Vector<T>(policyOutput.Length);
-            for (int i = 0; i < policyOutput.Length; i++)
-            {
-                var indicator = (i == actionIdx) ? NumOps.One : NumOps.Zero;
-                var grad = NumOps.Subtract(indicator, softmax[i]);
-                gradient[i] = NumOps.Negate(NumOps.Multiply(weightedAdvantage, grad));
-            }
-            return gradient;
-        }
-        else
-        {
-            // Continuous action space: Gaussian policy
-            int actionDim = policyOutput.Length / 2;
-            var gradient = new Vector<T>(policyOutput.Length);
-
-            for (int i = 0; i < actionDim; i++)
-            {
-                var mean = policyOutput[i];
-                var logStd = policyOutput[actionDim + i];
-                var std = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(logStd)));
-                var actionDiff = NumOps.Subtract(action[i], mean);
-                var stdSquared = NumOps.Multiply(std, std);
-
-                gradient[i] = NumOps.Negate(
-                    NumOps.Multiply(weightedAdvantage, NumOps.Divide(actionDiff, stdSquared)));
-
-                var stdGrad = NumOps.Subtract(
-                    NumOps.Divide(NumOps.Multiply(actionDiff, actionDiff), stdSquared),
-                    NumOps.One);
-                gradient[actionDim + i] = NumOps.Negate(NumOps.Multiply(weightedAdvantage, stdGrad));
-            }
-            return gradient;
-        }
-    }
-
-    private Vector<T> ComputeSoftmax(Vector<T> logits)
-    {
-        var max = logits[0];
-        for (int i = 1; i < logits.Length; i++)
-            if (NumOps.GreaterThan(logits[i], max))
-                max = logits[i];
-
-        var expSum = NumOps.Zero;
-        var exps = new Vector<T>(logits.Length);
-        for (int i = 0; i < logits.Length; i++)
-        {
-            exps[i] = NumOps.FromDouble(Math.Exp(NumOps.ToDouble(NumOps.Subtract(logits[i], max))));
-            expSum = NumOps.Add(expSum, exps[i]);
-        }
-
-        var softmax = new Vector<T>(logits.Length);
-        for (int i = 0; i < logits.Length; i++)
-            softmax[i] = NumOps.Divide(exps[i], expSum);
-
-        return softmax;
-    }
-
-    private int GetDiscreteAction(Vector<T> actionVector)
-    {
-        int maxIdx = 0;
-        T maxVal = actionVector[0];
-        for (int i = 1; i < actionVector.Length; i++)
-        {
-            if (NumOps.GreaterThan(actionVector[i], maxVal))
-            {
-                maxVal = actionVector[i];
-                maxIdx = i;
-            }
-        }
-        return maxIdx;
-    }
-
-    private T ComputeKL(Vector<T> newDist, Vector<T> oldDist)
-    {
-        // Simplified KL divergence for discrete distributions
-        // KL(old || new) = sum(old * log(old / new))
-        T kl = NumOps.Zero;
-
-        for (int i = 0; i < newDist.Length; i++)
-        {
-            var oldProb = oldDist[i];
-            var newProb = newDist[i];
-
-            if (NumOps.GreaterThan(oldProb, NumOps.Zero) && NumOps.GreaterThan(newProb, NumOps.Zero))
-            {
-                var ratio = NumOps.Divide(oldProb, newProb);
-                var logRatio = NumOps.Log(ratio);
-                kl = NumOps.Add(kl, NumOps.Multiply(oldProb, logRatio));
-            }
-        }
-
-        return kl;
     }
 
     private int ArgMax(Vector<T> values)

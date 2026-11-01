@@ -413,28 +413,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _biasO;
 
     /// <summary>
-    /// The input tensor from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the input tensor from the most recent forward pass. It is needed during the backward pass
-    /// to compute gradients correctly. This field is reset when ResetState is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the most recent data that was fed into the layer.
-    /// 
-    /// The layer needs to remember the input:
-    /// - To calculate how each input value affected the output
-    /// - To determine how to propagate gradients during training
-    /// - To ensure the backward pass works correctly
-    /// 
-    /// This is like keeping track of what you were given so you can explain
-    /// how you processed it if asked.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// The hidden state from the last forward pass.
     /// </summary>
     /// <remarks>
@@ -499,17 +477,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             _stateStepping = false;
         }
     }
-    /// <summary>
-    /// Cached hidden states for all time steps (Batch, Time, Hidden).
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _cachedHiddenStates;
-
-    /// <summary>
-    /// Cached cell states for all time steps (Batch, Time, Hidden).
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _cachedCellStates;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
@@ -1263,12 +1230,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
             input3D = Engine.Reshape(input, [flatBatch, timeSteps, _inputSize]);
         }
 
-        // #1668: _lastInput is a manual-backward cache; gate it (and the per-timestep BPTT
-        // caches below) on ShouldCacheForBackward so inference/tape/eval keeps no arena-backed
-        // activation alive across a TensorArena.Reset().
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input3D : null;
-
         // The engine owns CPU/GPU dispatch. Both float and double have fused BPTT; restricting
         // this shared layer to float left every double-valued model on the per-step graph.
         // The state-returning overload dispatches sequence and final-state gradients together.
@@ -1316,12 +1277,6 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
         // when the sequence primitive is unavailable, for other numeric types, or when the engine declines the primitive.
         var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
 
-        // #1668: the per-timestep BPTT caches are read only by the manual Backward; skip
-        // renting+populating them when no eager Backward will run (cacheBwd computed above),
-        // so an arena loop holds no per-step references across a Reset.
-        _cachedHiddenStates = cacheBwd ? TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize }) : null;
-        _cachedCellStates = cacheBwd ? TensorAllocator.Rent<T>(new int[] { batchSize, timeSteps, _hiddenSize }) : null;
-
         var currentH = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
         var currentC = TensorAllocator.Rent<T>(new int[] { batchSize, _hiddenSize });
         // TensorAllocator.Rent returns POOLED memory that is not zero-initialized.
@@ -1364,17 +1319,16 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
                 : LstmGateDispatch<T>.Forward(Engine, gates, currentC, Activate, Recurrent, out currentC);
             // Collect the hidden state for the tape-connected output concat below.
             hiddenStatesList.Add(Engine.Reshape(currentH, new[] { batchSize, 1, _hiddenSize }));
-            // Caches for the manual backward path (not on the tape).
-            _cachedHiddenStates?.SetSlice(1, t, currentH);
-            _cachedCellStates?.SetSlice(1, t, currentC);
         }
 
         // Assemble the [batch, timeSteps, hiddenSize] output on the tape so gradients
         // flow back through the recurrence to the gate weights.
         var output = Engine.TensorConcatenate(hiddenStatesList.ToArray(), axis: 1);
 
-        _lastHiddenState = currentH;
-        _lastCellState = currentC;
+        // The final state is only read back by ForwardFromState. Outside a stepped call it is
+        // cleared, as the fused path above does, so it never pins this pass's buffers.
+        _lastHiddenState = _stateStepping ? currentH : null;
+        _lastCellState = _stateStepping ? currentC : null;
 
         // Restore original batch dimensions for any-rank support
         if (_originalInputShape != null && _originalInputShape.Length > 3)
@@ -2010,13 +1964,8 @@ public partial class LSTMLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
         _lastHiddenState = null;
         _lastCellState = null;
-
-        // Clear per-time-step cached states to prevent stale state leakage between sequences
-        _cachedHiddenStates = null;
-        _cachedCellStates = null;
 
         Gradients.Clear();
     }

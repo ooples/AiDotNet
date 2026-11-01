@@ -133,30 +133,6 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values for backward
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastProjectedInput;
-    [Scratch]
-    private Tensor<T>? _lastForgetGateRaw;
-    [Scratch]
-    private Tensor<T>? _lastInputGateRaw;
-    [Scratch]
-    private Tensor<T>? _lastForgetGateSigmoid;
-    [Scratch]
-    private Tensor<T>? _lastInputGateSigmoid;
-    [Scratch]
-    private Tensor<T>? _lastForgetGateNorm;
-    [Scratch]
-    private Tensor<T>? _lastInputGateNorm;
-    [Scratch]
-    private Tensor<T>? _lastCellCandidate;
-    [Scratch]
-    private Tensor<T>? _lastCellStates;
-    [Scratch]
-    private Tensor<T>? _lastRecurrenceOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -319,15 +295,12 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Input projection -- [batch*seq, modelDim] x [modelDim, expandedDim]
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var projected = Engine.TensorMatMul(inputFlat, _inputProjectionWeights);
         var projBias = Engine.Reshape(_inputProjectionBias, new[] { 1, _expandedDimension });
         projected = Engine.TensorAdd(projected, projBias);
         var projected3D = Engine.Reshape(projected, new[] { batchSize, seqLen, _expandedDimension });
-        _lastProjectedInput = projected3D;
 
         // Step 2: Compute forget gate f_t = sigma(W_f * x_proj + b_f)
         var projFlat = Engine.Reshape(projected3D, new[] { batchSize * seqLen, _expandedDimension });
@@ -336,8 +309,6 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
         forgetRaw = Engine.TensorAdd(forgetRaw, fBias);
         var forgetRaw3D = Engine.Reshape(forgetRaw, new[] { batchSize, seqLen, _expandedDimension });
         var forgetSigmoid = Engine.Sigmoid(forgetRaw3D);
-        _lastForgetGateRaw = forgetRaw3D;
-        _lastForgetGateSigmoid = forgetSigmoid;
 
         // Step 3: Compute input gate i_t = sigma(W_i * x_proj + b_i)
         var inputGateRaw = Engine.TensorMatMul(projFlat, _inputGateWeights);
@@ -345,8 +316,6 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
         inputGateRaw = Engine.TensorAdd(inputGateRaw, iBias);
         var inputGateRaw3D = Engine.Reshape(inputGateRaw, new[] { batchSize, seqLen, _expandedDimension });
         var inputGateSigmoid = Engine.Sigmoid(inputGateRaw3D);
-        _lastInputGateRaw = inputGateRaw3D;
-        _lastInputGateSigmoid = inputGateSigmoid;
 
         // Step 4: Normalize gates -- f' = f/(f+i), i' = i/(f+i)
         var gateSum = Engine.TensorAdd(forgetSigmoid, inputGateSigmoid);
@@ -357,20 +326,16 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
 
         var forgetNorm = Engine.TensorDivide(forgetSigmoid, gateSum);
         var inputNorm = Engine.TensorDivide(inputGateSigmoid, gateSum);
-        _lastForgetGateNorm = forgetNorm;
-        _lastInputGateNorm = inputNorm;
 
         // Step 5: Cell candidate c_tilde = W_c * x_proj + b_c (no activation -- pure linear)
         var cellCandRaw = Engine.TensorMatMul(projFlat, _cellCandidateWeights);
         var cBias = Engine.Reshape(_cellCandidateBias, new[] { 1, _expandedDimension });
         cellCandRaw = Engine.TensorAdd(cellCandRaw, cBias);
         var cellCandidate = Engine.Reshape(cellCandRaw, new[] { batchSize, seqLen, _expandedDimension });
-        _lastCellCandidate = cellCandidate;
 
         // Step 6: Gated recurrence -- c_t = f'_t * c_{t-1} + i'_t * c_tilde_t, h_t = c_t
         var recurrenceOutput = MinLSTMRecurrenceForward(
             forgetNorm, inputNorm, cellCandidate, batchSize, seqLen);
-        _lastRecurrenceOutput = recurrenceOutput;
 
         // Step 7: Output projection -- [batch*seq, expandedDim] x [expandedDim, modelDim]
         var recFlat = Engine.Reshape(recurrenceOutput, new[] { batchSize * seqLen, _expandedDimension });
@@ -380,7 +345,6 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -414,8 +378,6 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
         // This avoids RG-LRU's square-root normalization and preserves MinLSTM's gradients.
         var output = Engine.GlaScanForward(CreateOnesLike(cellCandidate), cellCandidate,
             inputNorm, forgetNorm, _expandedDimension);
-        var initialState = Tensor<T>.CreateDefault([batchSize, 1, _expandedDimension], NumOps.Zero);
-        _lastCellStates = Engine.TensorConcatenate([initialState, output], axis: 1);
         return output;
     }
 
@@ -485,18 +447,6 @@ public partial class MinLSTMLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastProjectedInput = null;
-        _lastForgetGateRaw = null;
-        _lastInputGateRaw = null;
-        _lastForgetGateSigmoid = null;
-        _lastInputGateSigmoid = null;
-        _lastForgetGateNorm = null;
-        _lastInputGateNorm = null;
-        _lastCellCandidate = null;
-        _lastCellStates = null;
-        _lastRecurrenceOutput = null;
         _originalInputShape = null;
         _inputProjectionWeightsGradient = null;
         _inputProjectionBiasGradient = null;

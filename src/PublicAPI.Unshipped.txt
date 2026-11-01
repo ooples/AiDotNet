@@ -191,6 +191,179 @@ AiDotNet.Safety.SafetyPipeline<T>.EmbedTextWatermark(string! text) -> string!
 AiDotNet.Safety.SafetyPipeline<T>.WatermarkLanguageModel(AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>! model) -> AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>!
 AiDotNet.Safety.WatermarkConfig.ImageWatermarkKey.get -> string?
 AiDotNet.Safety.WatermarkConfig.ImageWatermarkKey.set -> void
+*REMOVED*AiDotNet.Models.Options.A2COptions<T>.ValueLossCoefficient.get -> T
+*REMOVED*AiDotNet.Models.Options.A2COptions<T>.ValueLossCoefficient.set -> void
+*REMOVED*AiDotNet.Models.Options.A3COptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.A3COptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.A3COptions<T>.ValueLossCoefficient.get -> T
+*REMOVED*AiDotNet.Models.Options.A3COptions<T>.ValueLossCoefficient.init -> void
+*REMOVED*AiDotNet.Models.Options.CQLOptions<T>.TargetEntropy.get -> T?
+*REMOVED*AiDotNet.Models.Options.DQNOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+*REMOVED*AiDotNet.Models.Options.DQNOptions<T>.Optimizer.set -> void
+*REMOVED*AiDotNet.Models.Options.DecisionTransformerOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.DecisionTransformerOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.DreamerOptions<T>.LatentSize.get -> int
+*REMOVED*AiDotNet.Models.Options.DreamerOptions<T>.LatentSize.init -> void
+*REMOVED*AiDotNet.Models.Options.DreamerOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.DreamerOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.MADDPGOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.MADDPGOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.PPOOptions<T>.ValueLossCoefficient.get -> T
+*REMOVED*AiDotNet.Models.Options.PPOOptions<T>.ValueLossCoefficient.set -> void
+*REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.RainbowDQNOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.RainbowDQNOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.SACOptions<T>.TargetEntropy.get -> T?
+*REMOVED*AiDotNet.Models.Options.TRPOOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.TRPOOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.WorldModelsOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.WorldModelsOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.A3C.A3CAgent<T>.A3CAgent(AiDotNet.Models.Options.A3COptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.DecisionTransformer.DecisionTransformerAgent<T>.DecisionTransformerAgent(AiDotNet.Models.Options.DecisionTransformerOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent<T>.DreamerAgent(AiDotNet.Models.Options.DreamerOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.MADDPG.MADDPGAgent<T>.MADDPGAgent(AiDotNet.Models.Options.MADDPGOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.Rainbow.RainbowDQNAgent<T>.RainbowDQNAgent(AiDotNet.Models.Options.RainbowDQNOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>.TRPOAgent(AiDotNet.Models.Options.TRPOOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
+*REMOVED*AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength = 0.5, int segmentSamples = 4096) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.3) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioWatermarkerBase(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.LexicalWatermarker(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double watermarkStrength = 0.5, int vocabSize = 50000, double greenListFraction = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! content) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.IsReady.get -> bool
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.ModuleName.get -> string!
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.TextWatermarker(byte[]? secretKey = null, double greenListFraction = 0.5, double detectionThreshold = 4, int contextWidth = 1) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.WatermarkDetector<T>.WatermarkDetector() -> void
+*REMOVED*abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
+*REMOVED*abstract AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.NeedsDeclaredSubLayerInitialization.get -> bool
+*REMOVED*override AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! content) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.IsReady.get -> bool
+*REMOVED*override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+AiDotNet.Models.Options.A3COptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.A3COptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.CQLOptions<T>.TargetEntropy.get -> double?
+AiDotNet.Models.Options.DQNOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.DQNOptions<T>.OptimizerFactory.set -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.IsContinuous.get -> bool
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.IsContinuous.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.MaxEpisodeLength.get -> int
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.MaxEpisodeLength.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.NormalizeStates.get -> bool
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.NormalizeStates.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.ReturnScale.get -> double
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.ReturnScale.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.TargetReturn.get -> double?
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.TargetReturn.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.WeightDecay.get -> double
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.WeightDecay.init -> void
+AiDotNet.Models.Options.DreamerOptions<T>.ActorLearningRate.get -> T
+AiDotNet.Models.Options.DreamerOptions<T>.ActorLearningRate.init -> void
+AiDotNet.Models.Options.DreamerOptions<T>.FreeNats.get -> double
+AiDotNet.Models.Options.DreamerOptions<T>.FreeNats.init -> void
+AiDotNet.Models.Options.DreamerOptions<T>.Lambda.get -> double
+AiDotNet.Models.Options.DreamerOptions<T>.Lambda.init -> void
+AiDotNet.Models.Options.DreamerOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.DreamerOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.DreamerOptions<T>.ValueLearningRate.get -> T
+AiDotNet.Models.Options.DreamerOptions<T>.ValueLearningRate.init -> void
+AiDotNet.Models.Options.MADDPGOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.MADDPGOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.MuZeroOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.MuZeroOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.MuZeroOptions<T>.VisitTemperature.get -> double
+AiDotNet.Models.Options.MuZeroOptions<T>.VisitTemperature.init -> void
+AiDotNet.Models.Options.QMIXOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.QMIXOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.RainbowDQNOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.RainbowDQNOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.SACOptions<T>.TargetEntropy.get -> double?
+AiDotNet.Models.Options.WorldModelsOptions<T>.ControllerEvaluationRollouts.get -> int
+AiDotNet.Models.Options.WorldModelsOptions<T>.ControllerEvaluationRollouts.init -> void
+AiDotNet.Models.Options.WorldModelsOptions<T>.ControllerInitialStepSize.get -> double
+AiDotNet.Models.Options.WorldModelsOptions<T>.ControllerInitialStepSize.init -> void
+AiDotNet.Models.Options.WorldModelsOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.WorldModelsOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.WorldModelsOptions<T>.RNNSequenceLength.get -> int
+AiDotNet.Models.Options.WorldModelsOptions<T>.RNNSequenceLength.init -> void
+AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.AttentionDropoutRate.get -> double
+AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.ConfigureAttentionDropout(double dropoutRate) -> AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>!
+AiDotNet.Optimizers.CMAESGeneration<T>
+AiDotNet.Optimizers.CMAESGeneration<T>.Points.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>!
+AiDotNet.Optimizers.CMAESOptimizer<T, TInput, TOutput>.Ask(AiDotNet.Optimizers.CMAESSearchState! state, System.Random! random) -> AiDotNet.Optimizers.CMAESGeneration<T>!
+AiDotNet.Optimizers.CMAESOptimizer<T, TInput, TOutput>.CreateSearchState(AiDotNet.Tensors.LinearAlgebra.Vector<T>! initialParameters) -> AiDotNet.Optimizers.CMAESSearchState!
+AiDotNet.Optimizers.CMAESOptimizer<T, TInput, TOutput>.Tell(AiDotNet.Optimizers.CMAESSearchState! state, AiDotNet.Optimizers.CMAESGeneration<T>! generation, System.Collections.Generic.IReadOnlyList<T>! fitness) -> void
+AiDotNet.Optimizers.CMAESSearchState
+AiDotNet.Optimizers.CMAESSearchState.CMAESSearchState() -> void
+AiDotNet.Optimizers.CMAESSearchState.Clone() -> AiDotNet.Optimizers.CMAESSearchState!
+AiDotNet.Optimizers.CMAESSearchState.Covariance.get -> double[]![]!
+AiDotNet.Optimizers.CMAESSearchState.Covariance.set -> void
+AiDotNet.Optimizers.CMAESSearchState.Dimension.get -> int
+AiDotNet.Optimizers.CMAESSearchState.Dimension.set -> void
+AiDotNet.Optimizers.CMAESSearchState.Generation.get -> int
+AiDotNet.Optimizers.CMAESSearchState.Generation.set -> void
+AiDotNet.Optimizers.CMAESSearchState.IsDegenerate.get -> bool
+AiDotNet.Optimizers.CMAESSearchState.Mean.get -> double[]!
+AiDotNet.Optimizers.CMAESSearchState.Mean.set -> void
+AiDotNet.Optimizers.CMAESSearchState.PathC.get -> double[]!
+AiDotNet.Optimizers.CMAESSearchState.PathC.set -> void
+AiDotNet.Optimizers.CMAESSearchState.PathSigma.get -> double[]!
+AiDotNet.Optimizers.CMAESSearchState.PathSigma.set -> void
+AiDotNet.Optimizers.CMAESSearchState.PopulationSize.get -> int
+AiDotNet.Optimizers.CMAESSearchState.PopulationSize.set -> void
+AiDotNet.Optimizers.CMAESSearchState.Sigma.get -> double
+AiDotNet.Optimizers.CMAESSearchState.Sigma.set -> void
+AiDotNet.ReinforcementLearning.Agents.A3C.A3CAgent<T>.A3CAgent(AiDotNet.Models.Options.A3COptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Agents.DecisionTransformer.DecisionTransformerAgent<T>.DecisionTransformerAgent(AiDotNet.Models.Options.DecisionTransformerOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent<T>.DreamerAgent(AiDotNet.Models.Options.DreamerOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Agents.MADDPG.MADDPGAgent<T>.MADDPGAgent(AiDotNet.Models.Options.MADDPGOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Agents.Rainbow.RainbowDQNAgent<T>.RainbowDQNAgent(AiDotNet.Models.Options.RainbowDQNOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>.TRPOAgent(AiDotNet.Models.Options.TRPOOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.ControllerSearch.get -> AiDotNet.Optimizers.CMAESSearchState?
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.ControllerSearch.set -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.EpochCursor.get -> int
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.EpochCursor.set -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.EpochOrder.get -> System.Collections.Generic.List<int>!
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.EpochOrder.set -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.EpochsCompleted.get -> int
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.EpochsCompleted.set -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.Stage.get -> AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.Stage.set -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.StagePrepared.get -> bool
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.StagePrepared.set -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.WorldModelsTrainingCycle() -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage.Controller = 2 -> AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage.Memory = 1 -> AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage.Vision = 0 -> AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
 AiDotNet.Safety.WatermarkConfig.TextKey.get -> string?
 AiDotNet.Safety.WatermarkConfig.TextKey.set -> void
 AiDotNet.Safety.WatermarkConfig.TextTokenizer.get -> AiDotNet.Agentic.Models.Local.IGenerationTokenizer?
@@ -288,6 +461,9 @@ const AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.PublicKey = "aidotnet
 const AiDotNet.Safety.Watermarking.WatermarkKey.PublicKeyText = "aidotnet-public-watermark-key" -> string!
 const AiDotNet.Safety.Watermarking.WatermarkStatistics.FullConfidenceZ = 6 -> double
 const AiDotNet.Safety.Watermarking.WatermarkStatistics.ZeroConfidenceZ = 3 -> double
+override AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.OnRandomSeedAssigned() -> void
+override AiDotNet.ReinforcementLearning.Agents.A3C.A3CAgent<T>.Dispose() -> void
+override AiDotNet.ReinforcementLearning.Agents.DecisionTransformer.DecisionTransformerAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
 override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Safety.Watermarking.WatermarkResult!
 override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.DetectionWeights(double[]! band, double[]! weights) -> bool
 override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.EmbedFrame(double[]! band, double[]! pattern, double frameRms) -> void
@@ -329,6 +505,7 @@ override AiDotNet.Safety.Watermarking.TextWatermarker<T>.ReportThreshold.get -> 
 override AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
 override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.Detect(string! text) -> AiDotNet.Safety.Watermarking.WatermarkResult!
 override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.WatermarkDescription.get -> string!
+static AiDotNet.ReinforcementLearning.Agents.DeepReinforcementLearningAgentBase<T>.CreateNetworkOptimizer(T learningRate, double? maxGradientNorm = null) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 static AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AdditiveWeights(double[]! band, double[]! weights) -> bool
 static AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.FrameSizeFor(int sampleRate) -> int
 static AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.PooledZ(System.Collections.Generic.IReadOnlyList<(int StartSample, double Numerator, double Energy, int Count)>! frames) -> double
@@ -357,62 +534,32 @@ virtual AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.ReportThreshold.get
 virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(string! text) -> double
 virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.ReportThreshold.get -> double
 *REMOVED*AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer<T>.NeuralProgramSynthesizer(AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture<T>! architecture, AiDotNet.ProgramSynthesis.Interfaces.ICodeModel<T>! codeModel, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.ProgramSynthesis.Interfaces.IProgramExecutionEngine? executionEngine = null, AiDotNet.ProgramSynthesis.Options.NeuralProgramSynthesizerOptions? options = null, AiDotNet.ProgramSynthesis.Interfaces.ISqlSyntaxValidator? sqlSyntaxValidator = null) -> void
-*REMOVED*AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength = 0.5, int segmentSamples = 4096) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.3) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioWatermarkerBase(double watermarkStrength = 0.5) -> void
 *REMOVED*AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.FrequencyImageWatermarker(double watermarkStrength = 0.5) -> void
 *REMOVED*AiDotNet.Safety.Watermarking.ImageWatermarker<T>.ImageWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.5) -> void
 *REMOVED*AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.ImageWatermarkerBase(double watermarkStrength = 0.5) -> void
 *REMOVED*AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.InvisibleImageWatermarker(double watermarkStrength = 0.3) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.LexicalWatermarker(double watermarkStrength = 0.5) -> void
 *REMOVED*AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>
 *REMOVED*AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>.NeuralImageWatermarker(double watermarkStrength = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double watermarkStrength = 0.5, int vocabSize = 50000, double greenListFraction = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! content) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.IsReady.get -> bool
-*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.ModuleName.get -> string!
-*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.TextWatermarker(byte[]? secretKey = null, double greenListFraction = 0.5, double detectionThreshold = 4, int contextWidth = 1) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.WatermarkDetector<T>.WatermarkDetector() -> void
 *REMOVED*AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer
 *REMOVED*AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.Dispose() -> void
 *REMOVED*AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.TreeSitterTokenizer(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, AiDotNet.Tokenization.CodeTokenization.TreeSitterLanguage language = AiDotNet.Tokenization.CodeTokenization.TreeSitterLanguage.Python, bool includeNodeTypes = true, bool flattenTree = true) -> void
-*REMOVED*abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
 *REMOVED*abstract AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
-*REMOVED*abstract AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(string! text) -> double
-*REMOVED*override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
-*REMOVED*override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! content) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.IsReady.get -> bool
 *REMOVED*override AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
 *REMOVED*override AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
 *REMOVED*override AiDotNet.Safety.Watermarking.ImageWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
 *REMOVED*override AiDotNet.Safety.Watermarking.ImageWatermarker<T>.IsReady.get -> bool
 *REMOVED*override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
 *REMOVED*override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.DetectWatermark(string! text) -> double
-*REMOVED*override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
 *REMOVED*override AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
 *REMOVED*override AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
 *REMOVED*override AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>.ModuleName.get -> string!
-*REMOVED*override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.DetectWatermark(string! text) -> double
-*REMOVED*override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
-*REMOVED*override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.DetectWatermark(string! text) -> double
-*REMOVED*override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.DetectWatermark(string! text) -> double
-*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
-*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*override AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.Tokenize(string! text) -> System.Collections.Generic.List<string!>!
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultTtsLayers(int textHiddenDim = 256, int audioHiddenDim = 512, int numEncoderLayers = 6, int numDecoderLayers = 6, int numHeads = 8, int numMels = 80, int maxTextLength = 512, int maxMelFrames = 1000, int vocabSize = 148, double dropoutRate = 0.1) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 *REMOVED*static AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.CreateCSharp(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, bool includeNodeTypes = true) -> AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer!
 *REMOVED*static AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.CreateJava(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, bool includeNodeTypes = true) -> AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer!
 *REMOVED*static AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.CreateJavaScript(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, bool includeNodeTypes = true) -> AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer!
 *REMOVED*static AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.CreatePython(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, bool includeNodeTypes = true) -> AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer!
+*REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.UseValuePrefix.get -> bool
+*REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.UseValuePrefix.init -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<T>.DuelingCombinationLayer(int featureDim, int actionSize, int? seed = null) -> void
+AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<T>.DuelingCombinationLayer(int featureDim, int actionSize, int numAtoms = 1, int[]? valueHiddenWidths = null, int[]? advantageHiddenWidths = null, int? seed = null) -> void

@@ -71,11 +71,8 @@ public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>, IShapeCont
     // Gating mechanism
     private readonly FullyConnectedLayer<T> _gateTransform;
 
-    // Cached values
-    [Scratch]
-    private Tensor<T>? _inputCache;
-    [Scratch]
-    private Tensor<T>? _transformedCache;
+    // The last forward's gate values. Not a backward cache: GetGateValues / GetFeatureImportance
+    // read it after an inference forward for interpretability, so it is kept in every mode.
     [Scratch]
     private Tensor<T>? _gateCache;
 
@@ -116,11 +113,9 @@ public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>, IShapeCont
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _inputCache = input;
 
         // Transform features
         var transformed = _featureTransform.Forward(input);
-        _transformedCache = transformed;
 
         // Compute gate values with sigmoid
         var gateLogits = _gateTransform.Forward(input);
@@ -166,8 +161,6 @@ public partial class GatedFeatureLearningUnitLayer<T> : LayerBase<T>, IShapeCont
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _inputCache = null;
-        _transformedCache = null;
         _gateCache = null;
         _featureTransform.ResetState();
         _gateTransform.ResetState();

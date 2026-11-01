@@ -126,24 +126,6 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastInputGates;
-    [Scratch]
-    private Tensor<T>? _lastForgetGates;
-    [Scratch]
-    private Tensor<T>? _lastOutputGates;
-    [Scratch]
-    private Tensor<T>? _lastQ;
-    [Scratch]
-    private Tensor<T>? _lastK;
-    [Scratch]
-    private Tensor<T>? _lastV;
-    [Scratch]
-    private Tensor<T>? _lastHiddenPreProj;
     private int[]? _originalInputShape;
 
     // Fixed (non-trainable) unit-gamma / zero-beta for the mLSTM output
@@ -300,8 +282,6 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Project the full sequence once. The matrix-memory scan accepts scalar gates per head;
         // preserve this layer's historical first-coordinate selection and log stabilization.
         var flat = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
@@ -356,15 +336,7 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
         }
         output = Engine.LayerNorm(output, _outputNormGamma, _outputNormBeta, 1e-5, out _, out _);
 
-        // The scan owns recurrent caches; retain only the projection caches used by the layer.
-        _lastInputGates = inputLogits;
-        _lastForgetGates = forget;
-        _lastOutputGates = outputGate;
-        _lastQ = q; _lastK = k; _lastV = v;
-        _lastHiddenPreProj = hidden;
-
         var result = ApplyActivation(output);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -435,15 +407,6 @@ public partial class ExtendedLSTMLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastInputGates = null;
-        _lastForgetGates = null;
-        _lastOutputGates = null;
-        _lastQ = null;
-        _lastK = null;
-        _lastV = null;
-        _lastHiddenPreProj = null;
         _originalInputShape = null;
         _inputGateWeightsGradient = null;
         _inputGateBiasGradient = null;

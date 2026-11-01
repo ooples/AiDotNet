@@ -71,10 +71,6 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _layerNormBeta;
 
     // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _inputCache;
-    [Scratch]
-    private Tensor<T>? _normalizedCache;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -119,8 +115,6 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>, IShapeContract
         // real forward pass). The probe input is discarded.
         var probe = new Tensor<T>([1, 1, embeddingDim]);
         Forward(probe);
-        _inputCache = null;
-        _normalizedCache = null;
     }
 
     /// <summary>
@@ -133,8 +127,6 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>, IShapeContract
         // Registers the four projections with GetSubLayers() via the generated
         // EnsureSubLayersRegistered(); they otherwise stay invisible to every structural walker.
         EnsureInitializedFromInput(input);
-
-        _inputCache = input;
 
         int batchSize = input.Shape[0];
         int numFeatures = input.Shape[1];
@@ -171,7 +163,6 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>, IShapeContract
 
         // Residual connection and layer normalization over the embedding axis.
         var output = AddResidualAndNormalize(input, projected, batchSize, numFeatures, embDim);
-        _normalizedCache = output;
 
         return output;
     }
@@ -228,8 +219,6 @@ public partial class IntersampleAttentionLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _inputCache = null;
-        _normalizedCache = null;
 
         _queryProjection.ResetState();
         _keyProjection.ResetState();

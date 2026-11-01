@@ -128,29 +128,6 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
     [AiDotNet.Attributes.Scratch]
     private Tensor<T> _biasGradients;
 
-    /// <summary>
-    /// Stores the input tensor from the most recent forward pass for use in backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// This cached input is needed during the backward pass to compute gradients. It holds the
-    /// input tensor that was processed in the most recent forward pass. The tensor is null
-    /// before the first forward pass or after a reset.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stores the output tensor (post-activation) from the most recent forward pass for use in backpropagation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
-    /// Stores the pre-activation output tensor from the most recent forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastPreActivation;
-
     private int[] _originalInputShape = [];
 
     public override bool SupportsTraining => true;
@@ -280,7 +257,6 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _originalInputShape = input._shape;
 
         int inputSize = input.Shape[^1];
@@ -314,13 +290,9 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
         var matmul = Engine.TensorMatMul(flattenedInput, weightsTransposed);
         var withBias = Engine.TensorAdd(matmul, _bias);
 
-        _lastPreActivation = withBias;
-
         Tensor<T> activated = UsingVectorActivation
             ? (VectorActivation ?? throw new InvalidOperationException("VectorActivation has not been initialized.")).Activate(withBias)
             : (ScalarActivation ?? throw new InvalidOperationException("ScalarActivation has not been initialized.")).Activate(withBias);
-
-        _lastOutput = activated;
 
         if (input.Rank == 1)
         {
@@ -414,9 +386,6 @@ public partial class ReadoutLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached CPU values from forward pass
-        _lastInput = null;
-        _lastOutput = null;
-        _lastPreActivation = null;
         _originalInputShape = [];
 
         // Reset gradients using Tensor<T>

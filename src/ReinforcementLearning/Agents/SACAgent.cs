@@ -175,7 +175,7 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture);
+        return new NeuralNetwork<T>(architecture, optimizer: CreateNetworkOptimizer(_sacOptions.PolicyLearningRate));
     }
 
     private NeuralNetwork<T> BuildQNetwork()
@@ -203,7 +203,9 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _sacOptions.QLossFunction);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_sacOptions.QLearningRate),
+            lossFunction: _sacOptions.QLossFunction);
     }
 
     /// <inheritdoc/>
@@ -578,7 +580,7 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         }
 
         var avgEntropy = NumOps.Divide(totalEntropy, NumOps.FromDouble(batch.Count));
-        var targetEntropy = _sacOptions.TargetEntropy ?? NumOps.FromDouble(-_sacOptions.ActionSize);
+        var targetEntropy = NumOps.FromDouble(ResolvedTargetEntropy);
 
         // Alpha loss: -alpha * (log_prob + target_entropy)
         var alphaLoss = NumOps.Multiply(
@@ -590,6 +592,9 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         var alphaGrad = NumOps.Multiply(_sacOptions.AlphaLearningRate, alphaLoss);
         _logAlpha = NumOps.Subtract(_logAlpha, alphaGrad);
     }
+
+    /// <summary>TargetEntropy, or the −dim(A) heuristic of Haarnoja et al. 2018b when it is null.</summary>
+    internal double ResolvedTargetEntropy => _sacOptions.TargetEntropy ?? -_sacOptions.ActionSize;
 
     private void SoftUpdateTargets()
     {

@@ -82,7 +82,9 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     }
     private readonly A3COptions<T> _options;
 
-    private readonly IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
+    // Each worker's local policy and value networks, built once and reused across TrainAsync calls, so a worker keeps
+    // its optimizer state instead of starting a fresh optimizer on every call.
+    private readonly Dictionary<int, (INeuralNetwork<T> Policy, INeuralNetwork<T> Value)> _workerNetworks = new();
 
     private INeuralNetwork<T> _globalPolicyNetwork;
     private INeuralNetwork<T> _globalValueNetwork;
@@ -107,19 +109,16 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     {
     }
 
-    public A3CAgent(A3COptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+    /// <summary>
+    /// Initializes an A3C agent from <paramref name="options"/>.
+    /// </summary>
+    /// <param name="options">The agent's configuration.</param>
+    public A3CAgent(A3COptions<T> options)
         : base(options)
     {
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-        {
-            InitialLearningRate = 0.001,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
         _globalSteps = 0;
 
         // Initialize networks directly in constructor
@@ -144,15 +143,10 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             prevSize = hiddenSize;
         }
 
-        // Output layer
-        if (_options.IsContinuous)
-        {
-            layers.Add(new DenseLayer<T>(outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
-        }
-        else
-        {
-            layers.Add(new DenseLayer<T>(outputSize, (IActivationFunction<T>)new SoftmaxActivation<T>()));
-        }
+        // Output layer: Gaussian mean and log-std when continuous, action logits when discrete. The discrete policy
+        // loss and entropy apply the softmax themselves (PolicyDistributionHelper), so a softmax here would apply it
+        // twice and train on softmax(π) instead of π.
+        layers.Add(new DenseLayer<T>(outputSize, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
@@ -162,7 +156,11 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             outputSize: outputSize,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _options.ValueLossFunction);
+        // The policy trains through TrainWithCustomLoss; its declared loss only labels what GetLastLoss and
+        // ComputeGradients report, so it is MSE rather than the value network's configurable loss.
+        return new NeuralNetwork<T>(architecture,
+            optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(_options.PolicyLearningRate),
+            lossFunction: new MeanSquaredErrorLoss<T>());
     }
 
     private INeuralNetwork<T> CreateValueNetwork()
@@ -186,7 +184,9 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             outputSize: 1,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _options.ValueLossFunction);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(_options.ValueLearningRate),
+            lossFunction: _options.ValueLossFunction);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
@@ -253,11 +253,12 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
                 return oneHot;
             }
 
-            // Sample from distribution
+            // Sample from π = softmax(logits)
+            var policy = ComputeSoftmax(policyOutput);
             double[] probs = new double[_options.ActionSize];
             for (int i = 0; i < _options.ActionSize; i++)
             {
-                probs[i] = Convert.ToDouble(NumOps.ToDouble(policyOutput[i]));
+                probs[i] = NumOps.ToDouble(policy[i]);
             }
 
             double r = Random.NextDouble();
@@ -295,11 +296,25 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         }
     }
 
+    /// <summary>Worker <paramref name="workerId"/>'s local policy and value networks, built on first use.</summary>
+    internal (INeuralNetwork<T> Policy, INeuralNetwork<T> Value) WorkerNetworks(int workerId)
+    {
+        lock (_workerNetworks)
+        {
+            if (!_workerNetworks.TryGetValue(workerId, out var networks))
+            {
+                networks = (CreatePolicyNetwork(), CreateValueNetwork());
+                _workerNetworks[workerId] = networks;
+            }
+            return networks;
+        }
+    }
+
     private void RunWorker(Interfaces.IEnvironment<T> environment, int maxSteps, int workerId)
     {
-        // Create worker-local networks (not registered with Networks list)
-        var localPolicy = CreatePolicyNetwork();
-        var localValue = CreateValueNetwork();
+        // Worker-local networks (not registered with the Networks list); their weights are re-synchronised from the
+        // global networks at the start of every rollout below.
+        (INeuralNetwork<T> localPolicy, INeuralNetwork<T> localValue) = WorkerNetworks(workerId);
 
         var trajectory = new List<(Vector<T> state, Vector<T> action, T reward, bool done, T value)>();
 
@@ -466,22 +481,28 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         trainablePolicy.TrainWithCustomLoss(batchStates, policyOutput =>
         {
             Tensor<T> logProbs;
+            Tensor<T> entropy;
             if (_options.IsContinuous)
             {
                 int actSize = _options.ActionSize;
                 var means = Engine.TensorSlice(policyOutput, [0, 0], [trajLen, actSize]);
-                var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [trajLen, actSize * 2]);
+                // TensorSlice takes (start, length): the log-std half is actSize wide, not the full output width.
+                var logStds = Engine.TensorSlice(policyOutput, [0, actSize], [trajLen, actSize]);
                 logProbs = PolicyDistributionHelper<T>.ComputeGaussianLogProb(Engine, means, logStds, (actionsTensor ?? throw new InvalidOperationException("actionsTensor is null where it is required.")));
+                entropy = PolicyDistributionHelper<T>.ComputeGaussianEntropy(Engine, logStds);
             }
             else
             {
                 logProbs = PolicyDistributionHelper<T>.ComputeDiscreteLogProb(Engine, policyOutput, actionIndices);
+                entropy = PolicyDistributionHelper<T>.ComputeDiscreteEntropy(Engine, policyOutput);
             }
 
+            // Entropy regularisation (Mnih et al. 2016, §4): loss = −mean(log π·A) − β·mean(H(π)).
             var weighted = Engine.TensorMultiply(logProbs, advantagesTensor);
             var allAxes = Enumerable.Range(0, weighted.Shape.Length).ToArray();
             var mean = Engine.ReduceMean(weighted, allAxes, keepDims: false);
-            return Engine.TensorNegate(mean);
+            var meanEntropy = Engine.ReduceMean(entropy, Enumerable.Range(0, entropy.Shape.Length).ToArray(), keepDims: false);
+            return Engine.TensorNegate(Engine.TensorAdd(mean, Engine.TensorMultiplyScalar(meanEntropy, _options.EntropyCoefficient)));
         });
 
         // Copy local network parameters to global networks (A3C async update)
@@ -749,7 +770,38 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             var policyOutputTensor = _globalPolicyNetwork.Predict(stateTensor);
             policyOutput = policyOutputTensor.ToVector();
         }
-        return policyOutput;
+        // The discrete policy network emits logits; π(·|s) is their softmax.
+        return _options.IsContinuous ? policyOutput : ComputeSoftmax(policyOutput);
+    }
+
+    /// <summary>
+    /// Disposes the global networks and every worker's cached local networks.
+    /// </summary>
+    /// <remarks>
+    /// The worker networks are not registered in <c>Networks</c>, so the base class would not release them.
+    /// </remarks>
+    public override void Dispose()
+    {
+        try
+        {
+            var workers = new List<object?>();
+            lock (_workerNetworks)
+            {
+                foreach (var (policy, value) in _workerNetworks.Values)
+                {
+                    workers.Add(policy);
+                    workers.Add(value);
+                }
+
+                _workerNetworks.Clear();
+            }
+
+            AiDotNet.Helpers.DisposeOnceGuard.DisposeAll(workers, GetType().Name);
+        }
+        finally
+        {
+            base.Dispose();
+        }
     }
 
     public Task<Vector<T>> PredictAsync(Vector<T> input)

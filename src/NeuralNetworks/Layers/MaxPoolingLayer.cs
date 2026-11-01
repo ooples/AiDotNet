@@ -129,21 +129,10 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     private IGpuBuffer? _gpuIndices;
 
     /// <summary>
-    /// Stores the last input tensor from the forward pass for use in autodiff backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Tracks whether a batch dimension was added during the forward pass.
     /// </summary>
     private bool _addedBatchDimension;
     private int[]? _originalInputShape;
-
-    /// <summary>
-    /// Stores the actual output shape for 3D inputs (may differ from pre-computed OutputShape).
-    /// </summary>
-    private int[]? _lastOutputShape;
 
     /// <summary>
     /// Creates a new max pooling layer with the specified parameters.
@@ -248,7 +237,6 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
         if (input.Shape.Length < 3)
             throw new ArgumentException($"MaxPooling layer requires at least 3D tensor [C, H, W]. Got rank {input.Shape.Length}.");
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _originalInputShape = input._shape;
         int rank = input.Shape.Length;
 
@@ -294,13 +282,11 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
             outputShape[_originalInputShape.Length - 3] = output4D.Shape[1];
             outputShape[_originalInputShape.Length - 2] = output4D.Shape[2];
             outputShape[_originalInputShape.Length - 1] = output4D.Shape[3];
-            _lastOutputShape = outputShape;
             return Engine.Reshape(output4D, outputShape);
         }
         if (_addedBatchDimension)
         {
             var actualOutputShape = new int[] { output4D.Shape[1], output4D.Shape[2], output4D.Shape[3] };
-            _lastOutputShape = actualOutputShape;
             return Engine.Reshape(output4D, actualOutputShape);
         }
         return output4D;
@@ -344,7 +330,6 @@ public partial class MaxPoolingLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward pass
-        _lastInput = null;
         _addedBatchDimension = false;
 
         // Dispose GPU resources

@@ -174,7 +174,7 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture);
+        return new NeuralNetwork<T>(architecture, optimizer: CreateNetworkOptimizer(_options.ActorLearningRate));
     }
 
     private NeuralNetwork<T> BuildCriticNetwork()
@@ -201,7 +201,9 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             layers: layers
         );
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _options.CriticLossFunction);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_options.CriticLearningRate),
+            lossFunction: _options.CriticLossFunction);
     }
 
     /// <inheritdoc/>
