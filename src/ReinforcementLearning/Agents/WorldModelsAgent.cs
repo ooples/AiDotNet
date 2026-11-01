@@ -510,7 +510,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         for (int i = 0; i < _options.LatentSize; i++)
         {
             var std = NumOps.Exp(NumOps.Divide(logVar[i], NumOps.FromDouble(2)));
-            var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
+            var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One, Random);
             sample[i] = NumOps.Add(mean[i], NumOps.Multiply(std, noise));
         }
         return sample;

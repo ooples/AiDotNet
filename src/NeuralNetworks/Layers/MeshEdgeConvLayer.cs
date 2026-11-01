@@ -303,7 +303,7 @@ public partial class MeshEdgeConvLayer<T> : LayerBase<T>, IShapeContract
             NumOps.FromDouble(fanIn)));
 
         // Initialize weights in [-scale, scale] range
-        _weights = Engine.TensorRandomUniformRange<T>(_weights._shape, NumOps.Negate(scale), scale);
+        _weights = Engine.TensorRandomUniformRange<T>(_weights._shape, NumOps.Negate(scale), scale, Random.Next());
 
         // Initialize biases to zero
         _biases = new Tensor<T>(_biases._shape);

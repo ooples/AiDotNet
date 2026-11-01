@@ -373,7 +373,7 @@ public partial class SpiralConvLayer<T> : LayerBase<T>, IShapeContract
         // Fill the EXISTING lazy-allocated tensors in place — keeps
         // the AllocateLazyWeight registration intact. Closes review-
         // comment #1271.7BpS.
-        var randomWeights = Engine.TensorRandomUniformRange<T>(_weights._shape, NumOps.Negate(scale), scale);
+        var randomWeights = Engine.TensorRandomUniformRange<T>(_weights._shape, NumOps.Negate(scale), scale, Random.Next());
         randomWeights.AsSpan().CopyTo(_weights.AsWritableSpan());
 
         // Initialize biases to zero (in-place).

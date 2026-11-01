@@ -520,7 +520,7 @@ public partial class DiffusionConvLayer<T> : LayerBase<T>, IShapeContract
         // them would discard the AllocateLazyWeight registration and
         // recreate the first-forward peak this PR is trying to
         // eliminate. Closes review-comment #1271.7BoK.
-        var randomWeights = Engine.TensorRandomUniformRange<T>(_weights._shape, NumOps.Negate(scale), scale);
+        var randomWeights = Engine.TensorRandomUniformRange<T>(_weights._shape, NumOps.Negate(scale), scale, Random.Next());
         randomWeights.AsSpan().CopyTo(_weights.AsWritableSpan());
 
         // Initialize biases to zero (in-place).

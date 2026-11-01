@@ -531,7 +531,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
                 return current;
             }
             Tensor<T> EpsilonSampler(int bs) =>
-                Engine.TensorRandomUniformRange<T>(new[] { bs, 1 }, NumOps.Zero, NumOps.One);
+                Engine.TensorRandomUniformRange<T>(new[] { bs, 1 }, NumOps.Zero, NumOps.One, Random.Next());
             if (wganStep.TryStep(
                     discParameters: criticDiscParams,
                     realBatch: realImages,
@@ -572,7 +572,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
             var epsilonShape = new int[realImages.Shape.Length];
             epsilonShape[0] = batchSize;
             for (int d = 1; d < epsilonShape.Length; d++) epsilonShape[d] = 1;
-            var epsilonBase = Engine.TensorRandomUniform<T>(epsilonShape);
+            var epsilonBase = Engine.TensorRandomUniformRange<T>(epsilonShape, NumOps.Zero, NumOps.One, Random.Next());
             var tileFactors = new int[realImages.Shape.Length];
             tileFactors[0] = 1;
             for (int d = 1; d < tileFactors.Length; d++) tileFactors[d] = realImages.Shape[d];
@@ -646,7 +646,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         var epsilonShape = new int[realImages.Shape.Length];
         epsilonShape[0] = batchSize;
         for (int d = 1; d < epsilonShape.Length; d++) epsilonShape[d] = 1;
-        var epsilonBase = Engine.TensorRandomUniform<T>(epsilonShape);
+        var epsilonBase = Engine.TensorRandomUniformRange<T>(epsilonShape, NumOps.Zero, NumOps.One, Random.Next());
 
         // Tile epsilon to match full image shape
         var tileFactors = new int[realImages.Shape.Length];

@@ -226,7 +226,7 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             if (training)
             {
                 // Sample from Gaussian using MathHelper
-                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
+                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One, Random);
                 action[i] = NumOps.Add(mean, NumOps.Multiply(std, noise));
             }
             else

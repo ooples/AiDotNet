@@ -1290,10 +1290,10 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
 
             if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
             {
-                InitializationStrategy.InitializeWeights(_queryWeights, _embeddingDimension, _embeddingDimension);
-                InitializationStrategy.InitializeWeights(_keyWeights, _embeddingDimension, _embeddingDimension);
-                InitializationStrategy.InitializeWeights(_valueWeights, _embeddingDimension, _embeddingDimension);
-                InitializationStrategy.InitializeBiases(_outputBias);
+                InitializeLayerWeights(_queryWeights, _embeddingDimension, _embeddingDimension);
+                InitializeLayerWeights(_keyWeights, _embeddingDimension, _embeddingDimension);
+                InitializeLayerWeights(_valueWeights, _embeddingDimension, _embeddingDimension);
+                InitializeLayerBiases(_outputBias);
             }
             else
             {

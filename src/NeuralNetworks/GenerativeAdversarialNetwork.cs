@@ -1264,10 +1264,10 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         int halfElements = (totalElements + 1) / 2;
 
         // u2 is in [0, 1)
-        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One, Random.Next());
 
         // u1 is 1 - random to get (0, 1] and avoid log(0)
-        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One, Random.Next());
         var u1 = Engine.ScalarMinusTensor(NumOps.One, u1Temp);
 
         // Vectorized Box-Muller: radius = sqrt(-2 * log(u1)), theta = 2 * pi * u2
@@ -1944,7 +1944,7 @@ public partial class GenerativeAdversarialNetwork<T> : ImageGeneratorModelLayout
         int batchSize = Math.Max(1, realSamples.Shape[0]);
         int elementsPerSample = Math.Max(1, realSamples.Length / batchSize);
 
-        var epsilon = Engine.TensorRandomUniformRange<T>([batchSize, 1], NumOps.Zero, NumOps.One);
+        var epsilon = Engine.TensorRandomUniformRange<T>([batchSize, 1], NumOps.Zero, NumOps.One, Random.Next());
         var epsilonBroadcast = Engine.TensorTile(epsilon, [1, elementsPerSample]).Reshape([realSamples.Length]);
         var onesFlat = new Tensor<T>([realSamples.Length]);
         Engine.TensorFill(onesFlat, NumOps.One);

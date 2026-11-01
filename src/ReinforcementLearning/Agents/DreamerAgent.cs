@@ -236,7 +236,7 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
             // Add exploration noise
             for (int i = 0; i < action.Length; i++)
             {
-                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.FromDouble(0.1));
+                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.FromDouble(0.1), Random);
                 action[i] = NumOps.Add(action[i], noise);
                 action[i] = MathHelper.Clamp<T>(action[i], NumOps.FromDouble(-1), NumOps.FromDouble(1));
             }

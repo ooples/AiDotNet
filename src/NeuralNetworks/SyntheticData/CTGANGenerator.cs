@@ -836,8 +836,8 @@ public partial class CTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>,
         int totalElements = batchSize * embedDim;
         int halfElements = (totalElements + 1) / 2;
 
-        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
-        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One, _random.Next());
+        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One, _random.Next());
         var u1 = Engine.ScalarMinusTensor(NumOps.One, u1Temp);
         var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), NumOps.FromDouble(-2.0)));
         var theta = Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI));

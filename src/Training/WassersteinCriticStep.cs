@@ -79,7 +79,7 @@ internal static class WassersteinCriticStep<T>
                     realBatch: real,
                     fakeBatch: fake,
                     discForward: criticForward,
-                    epsilonSampler: size => engine.TensorRandomUniformRange<T>(new[] { size, 1 }, NumOps.Zero, NumOps.One),
+                    epsilonSampler: size => engine.TensorRandomUniformRange<T>(new[] { size, 1 }, NumOps.Zero, NumOps.One, random.Next()),
                     gradientPenaltyWeight: gradientPenaltyWeight,
                     optimizerType: config.Type,
                     learningRate: config.LearningRate,

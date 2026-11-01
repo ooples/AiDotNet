@@ -781,8 +781,11 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
                 // MultiHeadAttentionLayer's `&& !InitializationStrategy.IsLazy` guard.
                 if (InitializationStrategy is not null && !InitializationStrategy.IsLazy)
                 {
-                    InitializationStrategy.InitializeWeights(_weights, inputSize, outputSize);
-                    if (UseBias) InitializationStrategy.InitializeBiases(_biases);
+                    // Through the base helper, which drives the configured strategy from this layer's RandomSeed when
+                    // it has one; the strategy's own RNG is process-shared, so calling it directly made two
+                    // identically seeded models differ in exactly these layers.
+                    InitializeLayerWeights(_weights, inputSize, outputSize);
+                    if (UseBias) InitializeLayerBiases(_biases);
                 }
                 else
                 {

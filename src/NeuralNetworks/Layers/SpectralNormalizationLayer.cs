@@ -248,8 +248,8 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     {
         if (_u is null || _v is null || _u.Shape[0] != rows || _v.Shape[0] != cols)
         {
-            var u = Engine.TensorRandomUniformRange<T>([rows], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
-            var v = Engine.TensorRandomUniformRange<T>([cols], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0));
+            var u = Engine.TensorRandomUniformRange<T>([rows], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0), Random.Next());
+            var v = Engine.TensorRandomUniformRange<T>([cols], NumOps.FromDouble(-1.0), NumOps.FromDouble(1.0), Random.Next());
             NormalizeVector(ref u);
             NormalizeVector(ref v);
             _u = u;

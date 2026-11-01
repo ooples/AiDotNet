@@ -695,8 +695,8 @@ public partial class TableGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<
         int totalElements = batchSize * embedDim;
         int halfElements = (totalElements + 1) / 2;
 
-        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
-        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One, _random.Next());
+        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One, _random.Next());
         var u1 = Engine.ScalarMinusTensor(NumOps.One, u1Temp);
         var logU1 = Engine.TensorLog(u1);
         var negTwoLogU1 = Engine.TensorMultiplyScalar(logU1, NumOps.FromDouble(-2.0));
