@@ -152,7 +152,7 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         VGGOptions? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new VGGOptions()).MaxGradNorm)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLogitsLossFunction(architecture.TaskType), (options ??= new VGGOptions()).MaxGradNorm)
     {
         _options = options;
         Options = _options;
@@ -171,7 +171,7 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLogitsLossFunction(architecture.TaskType);
 
         InitializeLayers();
     }

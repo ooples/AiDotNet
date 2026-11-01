@@ -71,6 +71,30 @@ public static class NeuralNetworkHelper<T>
     }
 
     /// <summary>
+    /// The default loss for a network whose classification head emits raw logits (no output activation): the
+    /// with-logits form of <see cref="GetDefaultLossFunction"/>'s choice, which applies the activation inside the loss
+    /// (log-softmax for mutually exclusive classes, sigmoid for binary or independent labels). Pairing a logits head
+    /// with a probability loss, or a softmax head with a with-logits loss, applies the activation twice and leaves the
+    /// gradients a fraction of their size.
+    /// </summary>
+    /// <param name="taskType">The neural network task type.</param>
+    /// <returns>The with-logits loss for a classification task; otherwise <see cref="GetDefaultLossFunction"/>.</returns>
+    internal static ILossFunction<T> GetDefaultLogitsLossFunction(NeuralNetworkTaskType taskType)
+    {
+        // Binary: the head usually has one output, where a softmax collapses to a constant 1 (zero loss), so sigmoid + BCE.
+        // Multi-label: the labels are independent, not mutually exclusive, so BCE per output, not softmax cross-entropy.
+        // Multi-class and image classification: mutually exclusive classes, softmax cross-entropy.
+        return taskType switch
+        {
+            NeuralNetworkTaskType.BinaryClassification => new BinaryCrossEntropyWithLogitsLoss<T>(),
+            NeuralNetworkTaskType.MultiClassClassification => new CrossEntropyWithLogitsLoss<T>(),
+            NeuralNetworkTaskType.ImageClassification => new CrossEntropyWithLogitsLoss<T>(),
+            NeuralNetworkTaskType.MultiLabelClassification => new BinaryCrossEntropyWithLogitsLoss<T>(),
+            _ => GetDefaultLossFunction(taskType),
+        };
+    }
+
+    /// <summary>
     /// Gets the default activation function based on the task type.
     /// </summary>
     /// <param name="taskType">The neural network task type.</param>

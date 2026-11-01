@@ -27,7 +27,9 @@ public class ResNetNetworkTests
         Assert.Equal(224, config.InputWidth);
         Assert.Equal(3, config.InputChannels);
         Assert.True(config.IncludeClassifier);
-        Assert.True(config.ZeroInitResidual);
+        // He et al. 2016 starts every batch norm at gamma = 1 (torchvision: zero_init_residual=False); zero-initializing
+        // the last one of each branch is Goyal et al. 2017's opt-in trick.
+        Assert.False(config.ZeroInitResidual);
     }
 
     [Fact(Timeout = 120000)]

@@ -150,7 +150,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ResNetOptions? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new ResNetOptions()).MaxGradNorm)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLogitsLossFunction(architecture.TaskType), (options ??= new ResNetOptions()).MaxGradNorm)
     {
         _options = options;
         Options = _options;
@@ -168,7 +168,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLogitsLossFunction(architecture.TaskType);
 
         InitializeLayers();
     }
@@ -366,15 +366,14 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         layers.Add(new FlattenLayer<T>());
 
         // Fully connected classifier
+        // The head emits raw logits, as torchvision's ResNet does: the default loss is the with-logits form
+        // (NeuralNetworkHelper.GetDefaultLogitsLossFunction), which applies the softmax or sigmoid itself. A softmax
+        // here under a with-logits loss applied it twice, and training barely moved.
         if (config.IncludeClassifier)
         {
-            var outputActivation = Architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
-                ? (IActivationFunction<T>)new ActivationFunctions.SigmoidActivation<T>()
-                : new ActivationFunctions.SoftmaxActivation<T>();
-
             layers.Add(new DenseLayer<T>(
                 outputSize: config.NumClasses,
-                activationFunction: outputActivation));
+                activationFunction: new ActivationFunctions.IdentityActivation<T>()));
         }
 
         return layers;
