@@ -253,7 +253,13 @@ public class InjectedSublayerBlockRoundTripTests
 
         var restored = AssertRoundTrip(
             Build(new IdentityActivation<double>()), Build(new ReLUActivation<double>()), TokenIds(31, 5));
-        Assert.Equal(4, restored.GetSubLayers().Count);
+        Assert.Collection(restored.GetSubLayers(),
+            layer => Assert.IsType<EmbeddingLayer<double>>(layer),
+            layer => Assert.IsType<DenseLayer<double>>(layer),
+            layer => Assert.IsType<EmbeddingLayer<double>>(layer),
+            layer => Assert.IsType<DenseLayer<double>>(layer),
+            layer => Assert.IsType<LayerNormalizationLayer<double>>(layer),
+            layer => Assert.IsType<DenseLayer<double>>(layer));
     }
 
     /// <summary>
@@ -273,6 +279,11 @@ public class InjectedSublayerBlockRoundTripTests
 
         var restored = AssertRoundTrip(
             Build(new IdentityActivation<double>()), Build(new ReLUActivation<double>()), Features(4, 6));
-        Assert.Equal(4, restored.GetSubLayers().Count);
+        Assert.Collection(restored.GetSubLayers(),
+            layer => Assert.IsType<DenseLayer<double>>(layer),
+            layer => Assert.IsType<LayerNormalizationLayer<double>>(layer),
+            layer => Assert.IsType<EmbeddingLayer<double>>(layer),
+            layer => Assert.IsType<DenseLayer<double>>(layer),
+            layer => Assert.IsType<DenseLayer<double>>(layer));
     }
 }

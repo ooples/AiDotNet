@@ -74,11 +74,11 @@ public static class NeuralNetworkHelper<T>
     /// The default loss for a network whose classification head emits raw logits (no output activation): the
     /// with-logits form of <see cref="GetDefaultLossFunction"/>'s choice, which applies the activation inside the loss
     /// (log-softmax for mutually exclusive classes, sigmoid for binary or independent labels). Pairing a logits head
-    /// with a probability loss, or a softmax head with a with-logits loss, applies the activation twice and leaves the
-    /// gradients a fraction of their size.
+    /// with a probability loss uses values outside that loss's domain. A softmax head with a with-logits loss
+    /// applies the activation twice and weakens the gradients.
     /// </summary>
     /// <param name="taskType">The neural network task type.</param>
-    /// <returns>The with-logits loss for a classification task; otherwise <see cref="GetDefaultLossFunction"/>.</returns>
+    /// <returns>The with-logits loss for classification, sigmoid Dice for segmentation; otherwise <see cref="GetDefaultLossFunction"/>.</returns>
     /// <remarks>
     /// Derived from <see cref="GetDefaultLossFunction"/> rather than listing task types again, so every task that table
     /// gives a probability cross-entropy (sequence and token classification, NLP, text generation, speech recognition,
@@ -91,6 +91,7 @@ public static class NeuralNetworkHelper<T>
         {
             CategoricalCrossEntropyLoss<T> => new CrossEntropyWithLogitsLoss<T>(),
             BinaryCrossEntropyLoss<T> => new BinaryCrossEntropyWithLogitsLoss<T>(),
+            DiceLoss<T> dice => new CompositeLossWithLogits<T>((dice, 1.0)),
             var other => other,
         };
 

@@ -134,7 +134,7 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DenseNetOptions? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLogitsLossFunction(architecture.TaskType), (options ??= new DenseNetOptions()).MaxGradNorm)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossForGeneratedLogitsHead(architecture), (options ??= new DenseNetOptions()).MaxGradNorm)
     {
         _options = options;
         Options = _options;
@@ -181,7 +181,7 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
                     InitialLearningRate = 1e-4,
                     UseAMSGrad = true
                 }));
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLogitsLossFunction(architecture.TaskType);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossForGeneratedLogitsHead(architecture);
 
         InitializeLayers();
     }

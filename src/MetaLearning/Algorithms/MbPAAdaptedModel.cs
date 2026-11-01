@@ -83,9 +83,9 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
 
     // The memory as keyed for this model's embedding (the shared memory itself when every key is already this
     // embedding's), and the embedding parameters and memory version it was built for; rebuilt when either moves.
-    private MbPAEpisodicMemory<T>? _rekeyedMemory;
-    private Vector<T>? _rekeyedEmbeddingParameters;
-    private long _rekeyedMemoryVersion;
+    [Scratch] private MbPAEpisodicMemory<T>? _rekeyedMemory;
+    [Scratch] private Vector<T>? _rekeyedEmbeddingParameters;
+    [Scratch] private long _rekeyedMemoryVersion;
     [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _trainedOutputParams;
 
@@ -179,6 +179,16 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
             _rekeyedMemoryVersion = _memory.Version;
         }
         return _rekeyedMemory;
+    }
+
+    // Generated state restoration invokes this hook after restoring the authoritative parameters.
+    // A cached memory view must be rebuilt from the shared memory, never deserialized as an empty
+    // object while retaining the version and embedding stamp that would make it appear valid.
+    private void RefreshRekeyedMemoryCache()
+    {
+        _rekeyedMemory = null;
+        _rekeyedEmbeddingParameters = null;
+        _rekeyedMemoryVersion = 0;
     }
 
     private static bool SameParameters(Vector<T> a, Vector<T> b)

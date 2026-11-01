@@ -399,8 +399,10 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <para>
     /// <b>For Beginners:</b> This is how the network makes predictions. You give it an image
     /// (as a tensor), and it processes it through all the ResNet layers to produce a prediction.
-    /// The output is one raw score (logit) per class, as torchvision's models return: apply a softmax (a sigmoid for
-    /// binary or multi-label tasks) to read them as probabilities. The highest score is the predicted class either way.
+    /// Generated heads return raw logits. For mutually exclusive classes, softmax gives probabilities and
+    /// the largest score selects the class. For binary or multi-label tasks, apply sigmoid to each logit
+    /// and threshold each probability independently. Supplied layers define their own output contract and
+    /// may already return probabilities; do not apply an activation twice.
     /// </para>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
@@ -463,7 +465,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// Makes a prediction using the ResNet network for the given input.
     /// </summary>
     /// <param name="input">The input tensor to make a prediction for.</param>
-    /// <returns>The predicted output tensor of raw class logits (no softmax applied).</returns>
+    /// <returns>The output tensor: raw logits for generated heads; the supplied head's output otherwise.</returns>
     /// <summary>
     /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> so the
     /// forward pass gets traced and replayed by <c>CompiledModelHost</c> after warmup —
