@@ -9961,37 +9961,27 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "Paraformer" && model.TypeParameterCount == 1)
             {
-                // Paraformer retains its existing 512-wide, 12-layer production defaults.
-                // Generated invariants exercise its public Conformer/CIF/parallel-decoder controls
-                // at a scale that fits the 16 GB runner and permits repeated training. Keep a real
-                // encoder block, CIF alignment and a real decoder block; only widths/depths shrink.
+                // The AISHELL-1 recipe's Conformer encoder, CIF predictor and SAN decoder at width 16 with one block each,
+                // 16 mel bands and a 16-token vocabulary. Production defaults are the recipe's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.AlibabaASR.ParaformerOptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 16, DecoderDim = 16, " +
-                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, " +
-                    "FeedForwardDim = 32, NumMels = 32, VocabSize = 64, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\", " +
-                    "LearningRate = 1e-5, WeightDecay = 0.01 }) " +
-                    "{ StreamingTraining = AiDotNet.Enums.StreamingTrainingMode.ForceOn }";
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.AlibabaASR.ParaformerOptions { EncoderDim = 16, NumEncoderLayers = 1, " +
+                    "NumDecoderLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 32, ConvKernel = 3, NumMels = 16, " +
+                    "VocabSize = 16, MaxTextLength = 4, MaxAudioLengthSeconds = 1, FrequencyMasks = 0, TimeMasks = 0, " + SmokeWarmupSteps + " })";
             }
             else if (model.ClassName == "ParaformerLarge" && model.TypeParameterCount == 1)
             {
-                // Paraformer-Large retains the paper's 1024-wide, 50-layer, 16-head production
-                // defaults. Generated invariants exercise the same public Conformer/CIF/parallel-
-                // decoder controls at CI smoke scale after the precision-first and iteration-cap
-                // steps, retaining one real encoder block, CIF alignment and one decoder block.
+                // The release's SAN-M encoder, convolutional CIF predictor and SAN-M decoder at width 16 with one block
+                // each, 16 filterbank bands and a 16-token vocabulary. Production defaults are the release's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLargeOptions { " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 16, DecoderDim = 16, " +
-                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, " +
-                    "FeedForwardDim = 32, NumMels = 32, VocabSize = 64, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLargeOptions { NumMels = 16, EncoderDim = 16, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 32, " +
+                    "FsmnKernelSize = 3, VocabSize = 16, MaxTextLength = 4, MaxAudioLengthSeconds = 1, " + SmokeWarmupSteps + " })";
             }
             else if (model.ClassName == "MaskGCT" && model.TypeParameterCount == 1)
             {
@@ -10383,17 +10373,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "SeACo" && model.TypeParameterCount == 1)
             {
-                // SeACo-Paraformer's paper-scale 512-wide, 12-layer contextual ASR
-                // stack exceeded the 180-second memorization gate. Keep those defaults
-                // and exercise its configurable mel projection -> Paraformer -> CTC
-                // topology at bounded generated-test scale.
+                // The Paraformer-large backbone and the bias modules at width 16 with one block or layer each, 16
+                // filterbank bands and a 16-token vocabulary. Production defaults are the release's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.AlibabaASR.SeACoOptions { MaxAudioLengthSeconds = 1, " +
-                    "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, " +
-                    "VocabSize = 4, MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.AlibabaASR.SeACoOptions { NumMels = 16, EncoderDim = 16, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 32, " +
+                    "FsmnKernelSize = 3, NumBiasEncoderLayers = 1, NumBiasDecoderLayers = 1, BiasFeedForwardDim = 32, " +
+                    "BiasFsmnKernelSize = 3, VocabSize = 16, MaxTextLength = 4, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "SALMONN" && model.TypeParameterCount == 1)
             {
@@ -16864,6 +16853,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 || (model.ClassName == "FireRedASR" && model.FullyQualifiedName.StartsWith("AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal)))
             {
                 // Moonshine reads waveforms (0.2 s) and returns the decoder's logits for the first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName is "Paraformer" or "ParaformerLarge" or "SeACo")
+            {
+                // Paraformer reads waveforms (0.2 s) and returns the parallel decoder's logits at the first acoustic token.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
             }

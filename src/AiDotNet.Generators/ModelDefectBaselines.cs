@@ -106,7 +106,6 @@ internal static class ModelDefectBaselines
             "CreateMATCHADecoderLayers",
             "CreateMATCHAEncoderLayers",
             "CreatePortfolioAttentionTrunk",
-            "CreateSeACoBiasLayers",
             "CreateVITSLayers",
         };
 
@@ -124,12 +123,8 @@ internal static class ModelDefectBaselines
             "AiDotNet.ReinforcementLearning.Agents.DecisionTransformer.DecisionTransformerAgent<T>",
             "AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>",
             "AiDotNet.SpeechRecognition.AlibabaASR.FunASRNano<T>",
-            "AiDotNet.SpeechRecognition.AlibabaASR.Paraformer<T>",
-            "AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLarge<T>",
             "AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASR<T>",
             "AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASRSmall<T>",
-            "AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T>",
-            "AiDotNet.SpeechRecognition.AlibabaASR.SenseVoiceLarge<T>",
             "AiDotNet.SpeechRecognition.CTCVariants.CIFDecoder<T>",
             "AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASRLLM<T>",
             "AiDotNet.SpeechRecognition.LLMIntegrated.GraniteSpeech<T>",
