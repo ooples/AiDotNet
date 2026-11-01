@@ -56,10 +56,7 @@ public class NGBoostRegressionOptions<T> : DecisionTreeOptions
     /// </remarks>
     public double LearningRate { get; set; } = 0.01;
 
-    /// <summary>
-    /// Gets or sets the minimum number of samples required to be at a leaf node.
-    /// </summary>
-    /// <value>Default is 1.</value>
+    // MinSamplesSplit inherited from DecisionTreeOptions (default=2).
     // MinSamplesLeaf inherited from DecisionTreeOptions (default=1), matching NGBoost paper (Duan 2020)
 
     /// <summary>

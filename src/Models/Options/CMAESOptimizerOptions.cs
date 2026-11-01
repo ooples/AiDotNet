@@ -4,6 +4,8 @@ namespace AiDotNet.Models.Options;
 /// Configuration options for the CMA-ES (Covariance Matrix Adaptation Evolution Strategy) optimization algorithm.
 /// </summary>
 /// <typeparam name="T">The type of data being optimized.</typeparam>
+/// <typeparam name="TInput">The type of the input data (for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
+/// <typeparam name="TOutput">The type of the output data (for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
 /// <remarks>
 /// <para>
 /// CMA-ES is a powerful evolutionary algorithm for difficult non-linear, non-convex optimization problems.

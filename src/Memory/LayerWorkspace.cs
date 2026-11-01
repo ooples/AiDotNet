@@ -23,7 +23,7 @@ namespace AiDotNet.Memory;
 /// var rInput = Workspace.Timestep(BufRInput);  // O(1) array index
 /// </code>
 /// </summary>
-public sealed class LayerWorkspace<T>
+internal sealed class LayerWorkspace<T>
 {
     private readonly int[][] _timestepSuffixes;
     private readonly int[][] _sequenceSuffixes;

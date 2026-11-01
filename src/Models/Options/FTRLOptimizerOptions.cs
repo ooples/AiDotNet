@@ -175,22 +175,4 @@ public class FTRLOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// to be more cautious.</para>
     /// </remarks>
     public double LearningRateDecreaseFactor { get; set; } = 0.95;
-
-    /// <summary>
-    /// Gets or sets the maximum number of iterations (passes through the training data) allowed during training.
-    /// </summary>
-    /// <value>The maximum number of iterations, defaulting to 1000.</value>
-    /// <remarks>
-    /// <para>
-    /// This parameter limits how many times the algorithm will process the training data, preventing
-    /// excessively long training times. The algorithm may stop earlier if it converges to a solution
-    /// before reaching this limit.
-    /// </para>
-    /// <para><b>For Beginners:</b> This sets a limit on how many times the model will go through your training
-    /// data. With the default value of 1000, the model will stop after 1000 complete passes through your data,
-    /// even if it hasn't fully learned yet. Think of it like setting a time limit on a study session - at some
-    /// point, you need to stop even if you haven't mastered everything. For simple problems, the model might
-    /// need far fewer iterations (like 50-100), while complex problems might benefit from more iterations.
-    /// This parameter prevents your model from training forever if it's struggling to find a good solution.</para>
-    /// </remarks>
 }

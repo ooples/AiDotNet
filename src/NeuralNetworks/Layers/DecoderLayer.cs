@@ -83,18 +83,6 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private readonly LayerNormalizationLayer<T> _norm3;
 
-    /// <summary>
-    /// Stores the last input tensor processed by the layer.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stores the last encoder output tensor used by the layer.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastEncoderOutput;
-
     // GPU cached tensors for backward pass
     [ExternalState]
     private Tensor<T>? _gpuDecoderInput;
@@ -191,7 +179,9 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         _feedForwardSize = feedForwardSize;
         _attentionSize = attentionSize;
         _selfAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
-        _crossAttention = new AttentionLayer<T>(attentionSize, activation);
+        // Cross-attention normalises its scores with softmax, like self-attention; the layer's activation
+        // belongs to the feed-forward. Passing it here replaced the softmax over the scores with it.
+        _crossAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
 
         // FFN's second projection matches input feature size (resolved on first forward).
         // We use a sentinel-large outputDim that the lazy ctor accepts; OnFirstForward
@@ -334,7 +324,9 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         _feedForwardSize = feedForwardSize;
         _attentionSize = attentionSize;
         _selfAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
-        _crossAttention = new AttentionLayer<T>(attentionSize, activation);
+        // Cross-attention normalises its scores with softmax, like self-attention; the layer's activation
+        // belongs to the feed-forward. Passing it here replaced the softmax over the scores with it.
+        _crossAttention = new AttentionLayer<T>(attentionSize, (IVectorActivationFunction<T>?)null);
 
         var ffActivation = activation ?? (IVectorActivationFunction<T>)new ReLUActivation<T>();
         _feedForward1 = new FeedForwardLayer<T>(feedForwardSize, ffActivation);
@@ -465,9 +457,6 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private Tensor<T> ForwardInternal(Tensor<T> input, Tensor<T> encoderOutput, Tensor<T>? attentionMask = null)
     {
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-        _lastEncoderOutput = ShouldCacheForBackward ? encoderOutput : null;
-
         // Get dimensions from input and encoder output
         int batchSize = input.Shape[0];
         int decoderSeqLen = input.Shape[1];
@@ -627,8 +616,6 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
         // entry points, which would silently corrupt slicing). Calling
         // ResetState before the first Forward is a canonical pattern (e.g.
         // LayerTestBase.Forward_DifferentInputs_ShouldProduceDifferentOutputs).
-        _lastInput = null;
-        _lastEncoderOutput = null;
         _gpuDecoderInput = null;
         _gpuEncoderOutput = null;
         _gpuNormalized1 = null;

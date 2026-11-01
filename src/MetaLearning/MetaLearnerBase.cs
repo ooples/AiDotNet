@@ -97,6 +97,12 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// <summary>
     /// Optimizer for meta-parameter updates (outer loop).
     /// </summary>
+    /// <remarks>
+    /// It takes the steps that go through <see cref="ApplyOuterGradients(Vector{T}, Vector{T}, double)"/> and
+    /// <see cref="ApplyOuterUpdate"/>. Auxiliary parameters an algorithm updates by SPSA
+    /// (<c>UpdateAuxiliaryParamsSPSA</c>) stay on plain SGD at the outer learning rate, as do the hand-coded updates
+    /// of an algorithm's own meta-parameters (WarpGrad's warp layers, Meta-SGD's per-parameter rates, SImPa's psi).
+    /// </remarks>
     protected readonly IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer;
 
     /// <summary>
@@ -108,6 +114,9 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// Current meta-training iteration count.
     /// </summary>
     protected int _currentIteration;
+
+    // The vectors the last inner step returned; a step on anything else starts a new adaptation.
+    private Vector<T>[]? _lastInnerStep;
 
     /// <summary>
     /// Tracks whether the expensive gradient fallback warning has been emitted.
@@ -156,17 +165,22 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// <param name="lossFunction">Loss function for evaluation.</param>
     /// <param name="options">Configuration options with all hyperparameters.</param>
     /// <param name="dataLoader">Optional episodic data loader for sampling tasks.</param>
-    /// <param name="metaOptimizer">Optional optimizer for meta-updates. If null, gradient updates use manual SGD with OuterLearningRate.</param>
-    /// <param name="innerOptimizer">Optional optimizer for inner-loop. If null, gradient updates use manual SGD with InnerLearningRate.</param>
+    /// <param name="metaOptimizer">Optional optimizer for meta-updates, stepping at its own learning rate. If null,
+    /// meta-updates use plain SGD at OuterLearningRate.</param>
+    /// <param name="innerOptimizer">Optional optimizer for task adaptation, stepping at its own learning rate and reset
+    /// for each adaptation. If null, adaptation uses plain SGD at InnerLearningRate.</param>
+    /// <param name="optimizerUse">Which loops of the derived algorithm take their steps through these optimizers.</param>
     /// <exception cref="ArgumentNullException">Thrown when metaModel, lossFunction, or options is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when configuration validation fails.</exception>
+    /// <exception cref="ArgumentException">Thrown when configuration validation fails, or when an optimizer is
+    /// supplied for a loop the algorithm does not take gradient steps in.</exception>
     protected MetaLearnerBase(
         IFullModel<T, TInput, TOutput> metaModel,
         ILossFunction<T> lossFunction,
         IMetaLearnerOptions<T> options,
         IEpisodicDataLoader<T, TInput, TOutput>? dataLoader = null,
         IGradientBasedOptimizer<T, TInput, TOutput>? metaOptimizer = null,
-        IGradientBasedOptimizer<T, TInput, TOutput>? innerOptimizer = null)
+        IGradientBasedOptimizer<T, TInput, TOutput>? innerOptimizer = null,
+        MetaLearnerOptimizerUse optimizerUse = MetaLearnerOptimizerUse.InnerAndOuter)
     {
         Guard.NotNull(metaModel);
         MetaModel = metaModel;
@@ -181,6 +195,19 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         }
 
         DataLoader = dataLoader;
+        if (metaOptimizer is not null && (optimizerUse & MetaLearnerOptimizerUse.Outer) == 0)
+            throw new ArgumentException(
+                $"{GetType().Name} has no outer-loop gradient step for a meta-optimizer to take; leave MetaOptimizer null.",
+                nameof(metaOptimizer));
+        if (innerOptimizer is not null && (optimizerUse & MetaLearnerOptimizerUse.Inner) == 0)
+            throw new ArgumentException(
+                $"{GetType().Name} has no inner-loop gradient step for an inner optimizer to take; leave InnerOptimizer null.",
+                nameof(innerOptimizer));
+        if (metaOptimizer is not null && ReferenceEquals(metaOptimizer, innerOptimizer))
+            throw new ArgumentException(
+                "MetaOptimizer and InnerOptimizer must be separate instances: every adaptation resets the inner " +
+                "optimizer's state, which would erase the outer optimizer's moments.",
+                nameof(innerOptimizer));
         MetaOptimizer = metaOptimizer;
         InnerOptimizer = innerOptimizer;
 
@@ -432,15 +459,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
 
         // Reset optimizer state when the model changes to avoid stale momentum/velocity vectors
         // from the previous model's parameter space
-        if (MetaOptimizer is IResettable resettableMetaOptimizer)
-        {
-            resettableMetaOptimizer.Reset();
-        }
-
-        if (InnerOptimizer is IResettable resettableInnerOptimizer)
-        {
-            resettableInnerOptimizer.Reset();
-        }
+        ResetOptimizerState();
     }
 
     /// <inheritdoc/>
@@ -517,15 +536,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
             }
 
             // Reset optimizer state since it's not persisted
-            if (MetaOptimizer is IResettable resettableMetaOptimizer)
-            {
-                resettableMetaOptimizer.Reset();
-            }
-
-            if (InnerOptimizer is IResettable resettableInnerOptimizer)
-            {
-                resettableInnerOptimizer.Reset();
-            }
+            ResetOptimizerState();
         }
         else
         {
@@ -540,6 +551,10 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         RandomGenerator = _options.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
             : RandomHelper.CreateSecureRandom();
+
+        // A reset learner starts clean: momentum or moment estimates carried over from earlier training would
+        // otherwise shape its first updates.
+        ResetOptimizerState();
     }
 
     #endregion
@@ -801,13 +816,9 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     /// <remarks>
     /// <para>
     /// This method performs vanilla SGD: θ = θ - lr * gradients.
-    /// It does NOT use the stored <see cref="MetaOptimizer"/> or <see cref="InnerOptimizer"/>
-    /// because those optimizers expect to work with the full model, not just parameter vectors.
-    /// </para>
-    /// <para>
-    /// <b>For Advanced Optimizers:</b> If you need momentum, Adam, or other adaptive methods,
-    /// override this method in your algorithm implementation or use the stored optimizers directly
-    /// in your <see cref="MetaTrain"/> and <see cref="Adapt"/> implementations.
+    /// It does NOT use the stored <see cref="MetaOptimizer"/> or <see cref="InnerOptimizer"/>; algorithm
+    /// updates go through <see cref="ApplyInnerGradients(Vector{T}, Vector{T}, double)"/> and
+    /// <see cref="ApplyOuterGradients(Vector{T}, Vector{T}, double)"/>, which use them when supplied.
     /// </para>
     /// </remarks>
     protected virtual Vector<T> ApplyGradients(
@@ -820,6 +831,229 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         var lr = NumOps.FromDouble(learningRate);
         var scaledGradients = Engine.Multiply(gradients, lr);
         return Engine.Subtract(parameters, scaledGradients);
+    }
+
+    /// <summary>
+    /// Rejects a supplied <see cref="InnerOptimizer"/> when the configuration's meta-gradient differentiates
+    /// through, or meta-learns, plain SGD inner steps, since another optimizer's steps would make it wrong.
+    /// </summary>
+    /// <param name="required">Whether the active configuration assumes plain SGD inner steps.</param>
+    /// <param name="configuration">The configuration that assumes it, as completes "{algorithm} uses ...".</param>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="required"/> and an inner optimizer was supplied.</exception>
+    protected void RequirePlainSgdInnerSteps(bool required, string configuration)
+    {
+        if (required && InnerOptimizer is not null)
+            throw new ArgumentException(
+                $"{GetType().Name} uses {configuration}, which assumes plain SGD inner steps; leave InnerOptimizer null.",
+                "options");
+    }
+
+    /// <summary>
+    /// Takes one inner-loop (task adaptation) step: through <see cref="InnerOptimizer"/> when one was supplied,
+    /// otherwise plain SGD at <paramref name="innerLearningRate"/>.
+    /// </summary>
+    /// <param name="parameters">The parameters being adapted.</param>
+    /// <param name="gradients">The support-set gradients at <paramref name="parameters"/>.</param>
+    /// <param name="innerLearningRate">The SGD step size, used only when no inner optimizer was supplied.</param>
+    /// <returns>The adapted parameters.</returns>
+    /// <remarks>
+    /// <para>A supplied optimizer steps at its own learning rate, so <paramref name="innerLearningRate"/> does not
+    /// apply to it. Its state (momentum, Adam moments) belongs to one adaptation: it is reset whenever
+    /// <paramref name="parameters"/> is not the vector the previous inner step returned, which is exactly when a
+    /// new adaptation starts from the meta-parameters.</para>
+    /// </remarks>
+    protected Vector<T> ApplyInnerGradients(Vector<T> parameters, Vector<T> gradients, double innerLearningRate)
+    {
+        var optimizer = InnerOptimizer;
+        if (optimizer is null)
+            return ApplyGradients(parameters, gradients, innerLearningRate);
+
+        if (_lastInnerStep is null || _lastInnerStep.Length != 1 || !ReferenceEquals(_lastInnerStep[0], parameters))
+            optimizer.Reset();
+
+        var updated = optimizer.UpdateParameters(parameters, gradients);
+        _lastInnerStep = new[] { updated };
+        return updated;
+    }
+
+    /// <summary>
+    /// Takes one inner-loop step whose place in the adaptation the caller states, for loops that step a slice or a
+    /// copy rather than the vector the previous step returned.
+    /// </summary>
+    /// <param name="parameters">The parameters being adapted.</param>
+    /// <param name="gradients">The gradients at <paramref name="parameters"/>.</param>
+    /// <param name="innerLearningRate">The SGD step size, used only when no inner optimizer was supplied.</param>
+    /// <param name="firstStep">Whether this step starts a new adaptation, which resets the inner optimizer.</param>
+    /// <returns>The adapted parameters.</returns>
+    protected Vector<T> ApplyInnerGradients(Vector<T> parameters, Vector<T> gradients, double innerLearningRate, bool firstStep)
+    {
+        var optimizer = InnerOptimizer;
+        if (optimizer is null)
+            return ApplyGradients(parameters, gradients, innerLearningRate);
+
+        if (firstStep)
+            optimizer.Reset();
+
+        var updated = optimizer.UpdateParameters(parameters, gradients);
+        _lastInnerStep = new[] { updated };
+        return updated;
+    }
+
+    /// <summary>
+    /// Takes one inner-loop step on a coefficient array in place, for algorithms that adapt a small set of
+    /// coefficients (prompt, LoRA or gating weights) rather than a parameter vector.
+    /// </summary>
+    /// <param name="parameters">The coefficients being adapted; updated in place.</param>
+    /// <param name="gradients">The gradients at <paramref name="parameters"/>.</param>
+    /// <param name="innerLearningRate">The SGD step size, used only when no inner optimizer was supplied.</param>
+    /// <param name="firstStep">Whether this step starts a new adaptation, which resets the inner optimizer.</param>
+    protected void ApplyInnerGradientsInPlace(double[] parameters, double[] gradients, double innerLearningRate, bool firstStep)
+    {
+        if (InnerOptimizer is null)
+        {
+            for (int i = 0; i < parameters.Length; i++)
+                parameters[i] -= innerLearningRate * gradients[i];
+            return;
+        }
+
+        var current = new Vector<T>(parameters.Length);
+        var gradient = new Vector<T>(parameters.Length);
+        for (int i = 0; i < parameters.Length; i++)
+        {
+            current[i] = NumOps.FromDouble(parameters[i]);
+            gradient[i] = NumOps.FromDouble(gradients[i]);
+        }
+
+        var updated = ApplyInnerGradients(current, gradient, innerLearningRate, firstStep);
+        for (int i = 0; i < parameters.Length; i++)
+            parameters[i] = NumOps.ToDouble(updated[i]);
+    }
+
+    /// <summary>
+    /// Takes one inner-loop step over several parameter groups at once, as one optimizer step over their
+    /// concatenation, so a stateful <see cref="InnerOptimizer"/> keeps one consistent state for all of them.
+    /// </summary>
+    /// <param name="innerLearningRate">The SGD step size, used only when no inner optimizer was supplied.</param>
+    /// <param name="groups">Each group's parameters and gradients, in a fixed order; an empty group is allowed.</param>
+    /// <returns>The adapted parameters of each group, in the order given.</returns>
+    /// <remarks>
+    /// The optimizer is reset when any group is not the vector the previous grouped inner step returned for it.
+    /// </remarks>
+    protected Vector<T>[] ApplyInnerGradients(double innerLearningRate, params (Vector<T> Parameters, Vector<T> Gradients)[] groups)
+    {
+        var optimizer = InnerOptimizer;
+        if (optimizer is null)
+            return ApplyGradientsToGroups(innerLearningRate, groups);
+
+        var last = _lastInnerStep;
+        bool continuing = last is not null && last.Length == groups.Length;
+        for (int g = 0; continuing && last is not null && g < groups.Length; g++)
+            continuing = ReferenceEquals(last[g], groups[g].Parameters);
+        if (!continuing)
+            optimizer.Reset();
+
+        var updated = StepGroups(optimizer, groups);
+        _lastInnerStep = updated;
+        return updated;
+    }
+
+    /// <summary>
+    /// Takes one outer-loop (meta-parameter) step: through <see cref="MetaOptimizer"/> when one was supplied,
+    /// otherwise plain SGD at <paramref name="outerLearningRate"/>.
+    /// </summary>
+    /// <param name="parameters">The meta-parameters.</param>
+    /// <param name="gradients">The meta-gradient at <paramref name="parameters"/>.</param>
+    /// <param name="outerLearningRate">The SGD step size, used only when no meta-optimizer was supplied.</param>
+    /// <returns>The updated meta-parameters.</returns>
+    /// <remarks>
+    /// A supplied optimizer steps at its own learning rate and keeps its state across meta-iterations (MAML,
+    /// Finn et al. 2017, meta-trains with Adam this way). An algorithm whose meta-update covers several
+    /// parameter vectors must use the grouped overload, so they share one optimizer state.
+    /// </remarks>
+    protected Vector<T> ApplyOuterGradients(Vector<T> parameters, Vector<T> gradients, double outerLearningRate)
+    {
+        var optimizer = MetaOptimizer;
+        return optimizer is null
+            ? ApplyGradients(parameters, gradients, outerLearningRate)
+            : optimizer.UpdateParameters(parameters, gradients);
+    }
+
+    /// <summary>
+    /// Takes one outer-loop step over several parameter groups at once, as one <see cref="MetaOptimizer"/> step
+    /// over their concatenation (or plain SGD per group when no meta-optimizer was supplied).
+    /// </summary>
+    /// <param name="outerLearningRate">The SGD step size, used only when no meta-optimizer was supplied.</param>
+    /// <param name="groups">Each group's parameters and gradients, in a fixed order; an empty group is allowed.</param>
+    /// <returns>The updated parameters of each group, in the order given.</returns>
+    protected Vector<T>[] ApplyOuterGradients(double outerLearningRate, params (Vector<T> Parameters, Vector<T> Gradients)[] groups)
+    {
+        var optimizer = MetaOptimizer;
+        return optimizer is null
+            ? ApplyGradientsToGroups(outerLearningRate, groups)
+            : StepGroups(optimizer, groups);
+    }
+
+    private Vector<T>[] ApplyGradientsToGroups(double learningRate, (Vector<T> Parameters, Vector<T> Gradients)[] groups)
+    {
+        var updated = new Vector<T>[groups.Length];
+        for (int g = 0; g < groups.Length; g++)
+            updated[g] = groups[g].Parameters.Length == 0
+                ? groups[g].Parameters
+                : ApplyGradients(groups[g].Parameters, groups[g].Gradients, learningRate);
+        return updated;
+    }
+
+    private static Vector<T>[] StepGroups(
+        IGradientBasedOptimizer<T, TInput, TOutput> optimizer,
+        (Vector<T> Parameters, Vector<T> Gradients)[] groups)
+    {
+        int total = 0;
+        foreach (var (parameters, gradients) in groups)
+        {
+            // An empty group (a disabled component) contributes nothing, whatever its gradient holds.
+            if (parameters.Length > 0 && parameters.Length != gradients.Length)
+                throw new ArgumentException("Each group's gradient must have its parameters' length.", nameof(groups));
+            total += parameters.Length;
+        }
+
+        var allParameters = new Vector<T>(total);
+        var allGradients = new Vector<T>(total);
+        int offset = 0;
+        foreach (var (parameters, gradients) in groups)
+        {
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                allParameters[offset + i] = parameters[i];
+                allGradients[offset + i] = gradients[i];
+            }
+
+            offset += parameters.Length;
+        }
+
+        var stepped = optimizer.UpdateParameters(allParameters, allGradients);
+        var updated = new Vector<T>[groups.Length];
+        offset = 0;
+        for (int g = 0; g < groups.Length; g++)
+        {
+            int length = groups[g].Parameters.Length;
+            var group = new Vector<T>(length);
+            for (int i = 0; i < length; i++)
+                group[i] = stepped[offset + i];
+            updated[g] = group;
+            offset += length;
+        }
+
+        return updated;
+    }
+
+    /// <summary>
+    /// Clears both optimizers' state, for when it no longer describes the meta-model's parameters.
+    /// </summary>
+    private void ResetOptimizerState()
+    {
+        MetaOptimizer?.Reset();
+        InnerOptimizer?.Reset();
+        _lastInnerStep = null;
     }
 
     /// <summary>
@@ -1465,7 +1699,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
     {
         ParamModel.SetParameters(initParams);
         if (metaGradients.Count > 0)
-            ParamModel.SetParameters(ApplyGradients(initParams, AverageVectors(metaGradients), outerLR));
+            ParamModel.SetParameters(ApplyOuterGradients(initParams, AverageVectors(metaGradients), outerLR));
     }
 
     /// <summary>
@@ -1483,7 +1717,7 @@ public abstract partial class MetaLearnerBase<T, TInput, TOutput> : ModelBase<T,
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyGradients(adaptedParams, grad, innerLR);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, innerLR, step == 0);
         }
         return adaptedParams;
     }

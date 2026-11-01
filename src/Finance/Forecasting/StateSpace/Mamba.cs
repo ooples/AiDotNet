@@ -148,16 +148,6 @@ public partial class Mamba<T> : ForecastingModelBase<T>
     private int _contextLength;
 
     /// <summary>
-    /// Stores the actual sequence length from the last forward pass for use in backward.
-    /// </summary>
-    private int _lastForwardSeqLen;
-
-    /// <summary>
-    /// Stores the batch size from the last forward pass for use in backward.
-    /// </summary>
-    private int _lastForwardBatchSize;
-
-    /// <summary>
     /// Forecast horizon for predictions.
     /// </summary>
     private int _forecastHorizon;
@@ -665,10 +655,6 @@ public partial class Mamba<T> : ForecastingModelBase<T>
             throw new ArgumentException(
                 $"Input feature dimension ({featureDim}) does not match expected numFeatures ({_numFeatures}). " +
                 "The input embedding layer expects numFeatures as its input size.");
-
-        // Store forward pass dimensions for backward
-        _lastForwardSeqLen = seqLen;
-        _lastForwardBatchSize = batchSize;
 
         // === Phase 1: Input Embedding ===
         // Apply input DenseLayer per-timestep: reshape [batch, seqLen, numFeatures] -> [batch*seqLen, numFeatures]

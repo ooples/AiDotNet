@@ -40,7 +40,7 @@ public class EPNetOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     public double InnerLearningRate { get; set; } = 0.01;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.OuterLearningRate"/>
     public double OuterLearningRate { get; set; } = 0.001;
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.AdaptationSteps"/>
+    /// <summary>Number of gradient steps taken on each task's support set (0: this algorithm adapts without gradient steps). Default: 0.</summary>
     public int AdaptationSteps { get; set; } = 0;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaBatchSize"/>
     public int MetaBatchSize { get; set; } = 4;
@@ -60,11 +60,18 @@ public class EPNetOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
     public int CheckpointFrequency { get; set; } = 500;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.UseFirstOrder"/>
     public bool UseFirstOrder { get; set; } = true;
-    /// <summary>Gets or sets the loss function.</summary>
+    /// <summary>Loss function for meta-training; null uses the default multi-class classification loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
-    /// <summary>Gets or sets the outer loop optimizer.</summary>
+    /// <summary>
+    /// Optimizer for the meta-update. When set, it takes the outer step at its own learning rate (so
+    /// <see cref="OuterLearningRate"/> no longer applies) and keeps its state across meta-iterations; null uses
+    /// plain SGD at <see cref="OuterLearningRate"/>. It must not be the same instance as <see cref="InnerOptimizer"/>.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
-    /// <summary>Gets or sets the inner loop optimizer.</summary>
+    /// <summary>
+    /// Must stay null: this algorithm takes no plain gradient inner step (it adapts without one, or by its own
+    /// update rule), so a supplied optimizer is rejected when the learner is built.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
     /// <summary>Gets or sets the episodic data loader.</summary>
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }

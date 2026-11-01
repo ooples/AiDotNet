@@ -157,18 +157,6 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T>? _matrixMGradient;
 
     /// <summary>
-    /// Stored input from the forward pass, needed for gradient computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Cached compressed input from forward pass.
-    /// </summary>
-    [Scratch]
-    private Matrix<T>? _lastCompressed;
-
-    /// <summary>
     /// Gets the effective rank of the MoRA adaptation.
     /// </summary>
     /// <remarks>
@@ -319,7 +307,6 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input.Clone();
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
         int batchSize = input.Shape[0];
@@ -335,7 +322,6 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         Matrix<T> compressed = inputMatrix.Multiply(_compressionMatrix);
-        _lastCompressed = compressed;
 
         Matrix<T> transformed = compressed.Multiply(_matrixM.ToMatrix());
         Matrix<T> decompressed = transformed.Multiply(_decompressionMatrix);
@@ -433,8 +419,6 @@ public partial class MoRAAdapter<T> : LoRAAdapterBase<T>
     public override void ResetState()
     {
         _baseLayer.ResetState();
-        _lastInput = null;
-        _lastCompressed = null;
         _matrixMGradient = null;
     }
 }

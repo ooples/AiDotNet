@@ -7,12 +7,13 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// </summary>
 public class CapsuleNetworkOptions : NeuralNetworkOptions
 {
+    private double _learningRate = 0.01;
+
     /// <summary>
     /// Learning rate for SGD parameter updates during training. Default: 0.01.
     /// Must be finite and greater than zero.
     /// </summary>
-    private double _learningRate = 0.01;
-
+    /// <exception cref="ArgumentOutOfRangeException">Thrown if the value is NaN, infinite, or not greater than 0.</exception>
     public double LearningRate
     {
         get => _learningRate;

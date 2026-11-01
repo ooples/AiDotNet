@@ -96,7 +96,8 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                // model's DefaultLossFunction is squared error for every embedding model here, which is a
                // regression objective. The caller's own LossFunction still wins when supplied.
                options.LossFunction ?? new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>(),
-               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
+               optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _algoOptions = options;
         if (!options.IsValid())
@@ -171,11 +172,9 @@ public partial class ATAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         }
 
         double beta = _algoOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(shared, sharedGradient, beta));
-        if (_taskParameters.Length > 0)
-        {
-            _taskParameters = ApplyGradients(_taskParameters, taskGradient, beta);
-        }
+        var updated = ApplyOuterGradients(beta, (shared, sharedGradient), (_taskParameters, taskGradient));
+        ParamModel.SetParameters(updated[0]);
+        _taskParameters = updated[1];
 
         return NumOps.Divide(totalLoss, batchSize);
     }

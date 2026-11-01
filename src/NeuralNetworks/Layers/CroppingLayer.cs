@@ -411,8 +411,6 @@ public partial class CroppingLayer<T> : LayerBase<T>, IShapeContract
             input4D = Engine.Reshape(input, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
-        _lastInput = ShouldCacheForBackward ? input4D : null; // #1668: skip in inference (arena safety)
-
         // Convert from NHWC [batch, height, width, channels] to NCHW [batch, channels, height, width]
         var inputNCHW = Engine.TensorPermute(input4D, [0, 3, 1, 2]);
 
@@ -449,12 +447,6 @@ public partial class CroppingLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Stores the last input for use in autodiff backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Original input shape for restoring higher-rank tensors after processing.
     /// </summary>
     private int[]? _originalInputShape;
@@ -480,8 +472,7 @@ public partial class CroppingLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached data for autodiff and GPU backward
-        _lastInput = null;
+        // No per-pass state is retained between forwards, so there is nothing to clear.
     }
 
 }
