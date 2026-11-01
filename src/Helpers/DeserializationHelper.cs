@@ -2926,8 +2926,10 @@ public static class DeserializationHelper
                 && peG != Enums.PositionalEncodingType.None)
             {
                 double ropeThetaG = TryGetDouble(additionalParams, "RoPETheta") ?? 10000.0;
+                // Payloads written before the table length was persisted were configured with the sequence length.
+                int positionalMaxG = TryGetInt(additionalParams, "PositionalMaxSequenceLength") ?? seqLen;
                 var cfgMethod = type.GetMethod("ConfigurePositionalEncoding");
-                cfgMethod?.Invoke(instance, new object[] { peG, ropeThetaG, seqLen });
+                cfgMethod?.Invoke(instance, new object[] { peG, ropeThetaG, positionalMaxG });
             }
         }
         else if (genericDef.Name == "PreLNTransformerBlock`1")

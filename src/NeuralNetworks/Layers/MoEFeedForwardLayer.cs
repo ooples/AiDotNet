@@ -102,6 +102,10 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
     /// <summary>Construction state: the 'hiddenSize' the layer was built with.</summary>
     private readonly int _hiddenSize;
 
+    /// <summary>Construction state: the gate 'activation' the layer was built with (SiLU when none was given). Named
+    /// for the parameter so the generated factory persists it; without it a rebuild fell back to SiLU.</summary>
+    private readonly IActivationFunction<T> _activation;
+
     /// <summary>Creates a sparse MoE feed-forward layer.</summary>
     /// <param name="hiddenSize">Model (residual stream) dimension.</param>
     /// <param name="ffnDim">Each expert's inner (intermediate) dimension.</param>
@@ -127,6 +131,7 @@ public partial class MoEFeedForwardLayer<T> : LayerBase<T>, IShapeContract
         _topK = topK;
         _sharedFfnDim = sharedFfnDim;
         var act = activation ?? new SiLUActivation<T>();
+        _activation = act;
 
         _router = new DenseLayer<T>(numExperts, activationFunction: new IdentityActivation<T>());
         _gate = new DenseLayer<T>[numExperts];
