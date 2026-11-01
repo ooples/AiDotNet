@@ -12220,15 +12220,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "CIFDecoder" && model.TypeParameterCount == 1)
             {
-                // CIFDecoder (CTC-variant ASR). Defaults (EncoderDim=512, 12 encoder layers, VocabSize=5000)
-                // make each CPU training step multi-second so the 200-iter MoreData test timed out (120 s).
-                // Build the SAME architecture at CI-smoke width/depth/vocab; only scale shrinks.
+                // The paper's encoder, predictor, CIF and decoder at width 16 with one self-attention layer per
+                // resolution, 8 filters over 16 bands and 16 labels. Production defaults are the paper's Mandarin model.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.CTCVariants.CIFDecoderOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, VocabSize = 64, NumMels = 32 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.CTCVariants.CIFDecoderOptions { NumMels = 16, NumFilters = 8, EncoderDim = 16, " +
+                    "NumAttentionHeads = 2, FeedForwardDim = 32, NumLayersPerResolution = 1, NumDecoderLayers = 1, " +
+                    "VocabSize = 16, MaxTextLength = 4, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "USM" && model.TypeParameterCount == 1)
             {
@@ -16848,7 +16848,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
             }
-            else if (model.ClassName is "Paraformer" or "ParaformerLarge" or "SeACo")
+            else if (model.ClassName is "Paraformer" or "ParaformerLarge" or "SeACo" or "CIFDecoder")
             {
                 // Paraformer reads waveforms (0.2 s) and returns the parallel decoder's logits at the first acoustic token.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
