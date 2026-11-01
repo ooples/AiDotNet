@@ -8175,15 +8175,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "MedicalASR" && model.TypeParameterCount == 1)
             {
-                // MedicalASR (2024): clinical Conformer ASR — production 512-d / 18-layer encoder + 10k vocab
-                // OOMs the runner. InitializeLayers sizes the Conformer from public options, so exercise the
-                // full encoder + CTC head at bounded scale. Paper defaults unchanged. (#1789)
+                // Chiu et al.'s LAS (bidirectional LSTM encoder, multi-headed attention, LSTM speller) with one 8-unit
+                // layer each over 0.2 s of waveform (7 stacked-frame steps) and 16 graphemes. Production defaults are
+                // section 5.2's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
-                    "inputHeight: 64, inputWidth: 16, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.Specialized.MedicalASROptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 16, VocabSize = 64 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.Specialized.MedicalASROptions { MaxAudioLengthSeconds = 1, " +
+                    "EncoderDim = 8, NumEncoderLayers = 1, DecoderDim = 8, NumDecoderLayers = 1, NumAttentionHeads = 2, " +
+                    "NumMels = 16, VocabSize = 16, MaxTextLength = 6, Seed = 5 })";
             }
             else if (model.ClassName == "MedSegDiffV2" && model.TypeParameterCount == 1)
             {
@@ -10560,13 +10561,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "CodeSwitchingASR" && model.TypeParameterCount == 1)
             {
-                // 266 s of training probes in the first completed A-C run — the second most
-                // expensive class in the shard. The audio branch already caps its repetition
-                // counts to the floor (2 training steps, 1-vs-2 MoreData, 2 memorization), so
-                // capping is spent and the residual cost is per-step scale: an 18-layer,
-                // 512-wide encoder over a 15,000-entry vocabulary. Exercise the same
-                // mel -> encoder -> vocabulary topology at CI-smoke scale through public
-                // options; production keeps its paper-scale defaults.
                 // Zeng et al.'s ESPnet model (VGG2L, BLSTM encoder, location-aware LSTM decoder, CTC, LID decoder) with
                 // one 16-unit BLSTM layer over 0.2 s of waveform (6 encoder frames) and a 15-token inventory plus the
                 // boundary. Production defaults are section 4.3's.
@@ -16851,6 +16845,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Granite-speech reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "MedicalASR")
+            {
+                // MedicalASR reads waveforms; its LAS output is the greedy speller's logits over MaxTextLength (6) steps
+                // and 16 graphemes.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 6, 16 };");
             }
             else if (model.ClassName == "CodeSwitchingASR")
             {
