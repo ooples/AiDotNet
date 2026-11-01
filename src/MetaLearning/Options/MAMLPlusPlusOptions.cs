@@ -56,18 +56,21 @@ public class MAMLPlusPlusOptions<T, TInput, TOutput> : ModelOptions, IMetaLearne
 
     #region Optional Properties with Defaults
 
-    /// <summary>
-    /// Gets or sets the loss function for training.
-    /// </summary>
+    /// <summary>Loss function for meta-training; null uses the default multi-class classification loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for outer loop updates.
+    /// Optimizer for the meta-update. When set, it takes the outer step at its own learning rate (so
+    /// <see cref="OuterLearningRate"/> no longer applies) and keeps its state across meta-iterations; null uses
+    /// plain SGD at <see cref="OuterLearningRate"/>. It must not be the same instance as <see cref="InnerOptimizer"/>.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for inner loop updates.
+    /// Optimizer for task adaptation. When set, it takes each inner step at its own learning rate (so
+    /// <see cref="InnerLearningRate"/> no longer applies) and is reset at the start of every adaptation; null uses
+    /// plain SGD at <see cref="InnerLearningRate"/>.
+    /// It is rejected when the configuration uses meta-learned per-step inner learning rates, which assumes plain SGD inner steps.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
 

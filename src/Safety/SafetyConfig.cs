@@ -376,6 +376,27 @@ public class WatermarkConfig
     /// </summary>
     public double? WatermarkStrength { get; set; }
 
+    /// <summary>
+    /// Gets or sets the tokenizer of the language model whose output carries the generation-time text watermark.
+    /// Required when <see cref="TextWatermarking"/> or <see cref="DetectionMode"/> is on.
+    /// </summary>
+    /// <remarks>
+    /// The green-list watermark is keyed on token ids, so detection must split text into exactly the tokens the
+    /// generator produced. Without the generator's tokenizer a detector scores nothing, so the factory refuses to
+    /// build a text watermarker that would only appear to run.
+    /// </remarks>
+    public AiDotNet.Agentic.Models.Local.IGenerationTokenizer? TextTokenizer { get; set; }
+
+    /// <summary>
+    /// Gets or sets the secret key of the generation-time text watermark. Default: null, the published public key.
+    /// </summary>
+    /// <remarks>
+    /// With the public key the factory's text watermarker only detects: anyone can forge public-key marks, so the
+    /// pipeline never embeds with it. Set a key of your own to watermark generation through
+    /// <see cref="SafetyPipeline{T}.WatermarkLanguageModel"/> and to detect those marks.
+    /// </remarks>
+    public string? TextKey { get; set; }
+
     // -- Internal defaults --
     internal bool EffectiveTextWatermarking => TextWatermarking ?? false;
     internal bool EffectiveImageWatermarking => ImageWatermarking ?? false;

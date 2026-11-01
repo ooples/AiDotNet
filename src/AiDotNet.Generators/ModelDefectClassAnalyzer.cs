@@ -187,11 +187,11 @@ public sealed class ModelDefectClassAnalyzer : DiagnosticAnalyzer
         for (int i = u.IndexOf("arxiv.", StringComparison.Ordinal); i >= 0; i = u.IndexOf("arxiv.", i + 1, StringComparison.Ordinal))
         {
             int at = i;
-            foreach (var prefix in ArxivPrefixes.Where(p => string.CompareOrdinal(u, at, p, 0, p.Length) == 0))
-            {
-                string? id = ArxivIdAt(u, i + prefix.Length);
-                if (id is not null) return "arxiv:" + id;
-            }
+            string? id = ArxivPrefixes
+                .Where(p => string.CompareOrdinal(u, at, p, 0, p.Length) == 0)
+                .Select(p => ArxivIdAt(u, at + p.Length))
+                .FirstOrDefault(found => found is not null);
+            if (id is not null) return "arxiv:" + id;
         }
         int doi = u.IndexOf("doi.org/", StringComparison.Ordinal);
         if (doi >= 0 && doi + "doi.org/".Length < u.Length) return "doi:" + u.Substring(doi + "doi.org/".Length);

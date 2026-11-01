@@ -13,9 +13,12 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FinRLAgentOptions<T> : TradingAgentOptions<T>
 {
+    /// <summary>Creates options with the default values.</summary>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public FinRLAgentOptions() { }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public FinRLAgentOptions(FinRLAgentOptions<T> other) : this()
     {

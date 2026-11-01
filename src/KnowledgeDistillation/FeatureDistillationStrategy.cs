@@ -235,6 +235,9 @@ public class FeatureDistillationStrategy<T> : ModelBase<T, Tensor<T>, Tensor<T>>
     /// ∂MSE/∂student = (2/n) × (student - teacher)</para>
     ///
     /// <para>This tells us: if student feature is too high, decrease it; if too low, increase it.</para>
+    /// <para>It is the gradient of <see cref="ComputeFeatureLoss"/> with respect to one layer pair's student
+    /// features, so it carries the same feature weight and the same 1/(number of pairs) average:
+    /// featureWeight × (2/n) × (student - teacher) / pairs.</para>
     /// </remarks>
     public Vector<T> ComputeFeatureGradient(Vector<T> studentFeatures, Vector<T> teacherFeatures)
     {
@@ -243,7 +246,8 @@ public class FeatureDistillationStrategy<T> : ModelBase<T, Tensor<T>, Tensor<T>>
 
         int n = studentFeatures.Length;
         var gradient = new Vector<T>(n);
-        var scale = _numOps.FromDouble((2.0 / n) * _featureWeight);
+        // ComputeFeatureLoss averages the pairs, so each pair's share of the gradient is 1/pairs of it.
+        var scale = _numOps.FromDouble((2.0 / n) * _featureWeight / _layerPairs.Length);
 
         for (int i = 0; i < n; i++)
         {

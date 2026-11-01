@@ -43,7 +43,7 @@ namespace AiDotNet.Memory;
 /// </code>
 /// </para>
 /// </remarks>
-public class TensorPool<T> : IDisposable
+internal class TensorPool<T> : IDisposable
 {
     private readonly ConcurrentDictionary<int, ConcurrentBag<TensorEntry>> _tensorPools;
     private readonly ConcurrentDictionary<int, ConcurrentBag<MemoryEntry>> _memoryPools;

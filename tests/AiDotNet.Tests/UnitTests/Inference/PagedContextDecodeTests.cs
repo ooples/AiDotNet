@@ -1,4 +1,4 @@
-// Copyright (c) AiDotNet. All rights reserved.
+// Copyright (c) CrowdTrainer LLC. All rights reserved.
 // #99: per-sequence paged-KV decode. PagedCachedMultiHeadAttention.ForwardWithContext routes by a
 // per-call InferenceForwardContext (sequence id + position) instead of mutable layer state, so one
 // shared layer + one shared PagedKVCache can decode many sequences concurrently, isolated by id.

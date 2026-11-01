@@ -125,27 +125,11 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
     /// </summary>
     [AiDotNet.Attributes.FittedParameter(InputSized = true)]
     private Tensor<T>? _edgeFeatures;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _normalizedAdjacencyMatrix;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _normalizedEdgeFeatures;
-
-    /// <summary>
-    /// Cached values for backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastEdgeWeights;
-    [Scratch]
-    private Tensor<T>? _lastHidden;
 
     /// <summary>
     /// Gradients.
@@ -348,15 +332,14 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
             processInput = Engine.Reshape(input, [1, 1, input.Shape[0]]);
         }
 
-        _lastInput = processInput;
         int numNodes = processInput.Shape[1];
-        _normalizedAdjacencyMatrix = NormalizeAdjacency(_adjacencyMatrix, batchSize, numNodes);
-        _normalizedEdgeFeatures = NormalizeEdgeFeatures(_edgeFeatures, batchSize);
-        int numEdges = _normalizedEdgeFeatures.Shape[1];
+        var normalizedAdjacency = NormalizeAdjacency(_adjacencyMatrix, batchSize, numNodes);
+        var normalizedEdgeFeatures = NormalizeEdgeFeatures(_edgeFeatures, batchSize);
+        int numEdges = normalizedEdgeFeatures.Shape[1];
 
         // Step 1: Compute edge-specific weights using edge network
         // Edge network layer 1: [batch, numEdges, edgeFeatures] @ [edgeFeatures, hiddenDim] = [batch, numEdges, hiddenDim]
-        var hidden = BatchedMatMul3Dx2D(_normalizedEdgeFeatures, _edgeNetworkWeights1, batchSize, numEdges, _edgeFeaturesCount, _edgeNetworkHiddenDim);
+        var hidden = BatchedMatMul3Dx2D(normalizedEdgeFeatures, _edgeNetworkWeights1, batchSize, numEdges, _edgeFeaturesCount, _edgeNetworkHiddenDim);
 
         // Add bias: broadcast [hiddenDim] to [batch, numEdges, hiddenDim]
         var bias1Broadcast = BroadcastBias(_edgeNetworkBias1, batchSize, numEdges);
@@ -364,7 +347,6 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
 
         // Apply ReLU activation
         hidden = ApplyReLU(hidden);
-        _lastHidden = hidden;
 
         // Edge network layer 2: [batch, numEdges, hiddenDim] @ [hiddenDim, inF*outF] = [batch, numEdges, inF*outF]
         var flatWeights = BatchedMatMul3Dx2D(hidden, _edgeNetworkWeights2, batchSize, numEdges, _edgeNetworkHiddenDim, _inputFeatures * _outputFeatures);
@@ -375,7 +357,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
 
         // Reshape to [batch, numEdges, inputFeatures, outputFeatures]
         // Store as [batch, numNodes, numNodes, inputFeatures, outputFeatures] for backward compatibility
-        _lastEdgeWeights = TensorAllocator.Rent<T>([batchSize, numNodes, numNodes, _inputFeatures, _outputFeatures]);
+        var edgeWeights = TensorAllocator.Rent<T>([batchSize, numNodes, numNodes, _inputFeatures, _outputFeatures]);
 
         // Map flat edge weights to node pairs
         for (int b = 0; b < batchSize; b++)
@@ -385,14 +367,14 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
             {
                 for (int j = 0; j < numNodes; j++)
                 {
-                    if (!NumOps.Equals(_normalizedAdjacencyMatrix[b, i, j], NumOps.Zero))
+                    if (!NumOps.Equals(normalizedAdjacency[b, i, j], NumOps.Zero))
                     {
                         for (int inF = 0; inF < _inputFeatures; inF++)
                         {
                             for (int outF = 0; outF < _outputFeatures; outF++)
                             {
                                 int flatIdx = inF * _outputFeatures + outF;
-                                _lastEdgeWeights[b, i, j, inF, outF] = flatWeights[b, edgeIdx, flatIdx];
+                                edgeWeights[b, i, j, inF, outF] = flatWeights[b, edgeIdx, flatIdx];
                             }
                         }
                         edgeIdx++;
@@ -416,7 +398,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
 
                     for (int j = 0; j < numNodes; j++)
                     {
-                        if (NumOps.Equals(_normalizedAdjacencyMatrix[b, i, j], NumOps.Zero))
+                        if (NumOps.Equals(normalizedAdjacency[b, i, j], NumOps.Zero))
                             continue;
 
                         // Apply edge-specific transformation to neighbor features
@@ -424,7 +406,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
                         {
                             sum = NumOps.Add(sum,
                                 NumOps.Multiply(
-                                    _lastEdgeWeights[b, i, j, inF, outF],
+                                    edgeWeights[b, i, j, inF, outF],
                                     processInput[b, j, inF]));
                         }
                     }
@@ -443,12 +425,6 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
         output = Engine.TensorAdd(output, biasBroadcast);
 
         var result = ApplyActivation(output);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = result;
-        }
 
         if (_originalInputShape != null && _originalInputShape.Length != 3)
         {
@@ -763,10 +739,6 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastEdgeWeights = null;
-        _lastHidden = null;
         _edgeNetworkWeights1Gradient = null;
         _edgeNetworkWeights2Gradient = null;
         _edgeNetworkBias1Gradient = null;

@@ -377,3 +377,85 @@ jobs:
             fi
             gh release upload "$TAG_NAME" "$pkg"
           done
+
+  # The public API contract (src/PublicAPI*.txt, PublicApiAnalyzers) and package validation
+  # (PackageValidationBaselineVersion) both describe "what the last release shipped". Once a release is on
+  # NuGet, roll them forward and open a PR for review; a bot must not push to master.
+  roll-api-baseline:
+    name: Roll the public API baseline to the release
+    permissions:
+      contents: write # Required to push the baseline branch.
+      pull-requests: write # Required to open the baseline PR.
+    runs-on: ubuntu-latest
+    needs: [release-target, publish]
+    if: "!cancelled() && needs.publish.result == 'success' && needs.release-target.outputs.publish == 'true'"
+    timeout-minutes: 90
+    env:
+      VERSION: ${{ needs.release-target.outputs.version }}
+      TAG_NAME: ${{ needs.release-target.outputs.tag_name }}
+    steps:
+      - name: Free up disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/hostedtoolcache/CodeQL /usr/share/swift /opt/ghc /usr/local/.ghcup || true
+          sudo apt-get clean || true
+          df -h /
+
+      - name: Checkout master
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: master
+          fetch-depth: 0 # The script reads PublicAPI.Unshipped.txt at the release tag.
+          token: ${{ secrets.AUTOFIX_PAT || secrets.GITHUB_TOKEN }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Move the released API into PublicAPI.Shipped.txt and bump the validation baseline
+        shell: pwsh
+        run: ./scripts/Roll-PublicApiBaseline.ps1 -Version $env:VERSION -ReleasedRef $env:TAG_NAME
+
+      # Package validation downloads the new baseline from nuget.org, which serves a pushed package only
+      # after indexing (usually minutes).
+      - name: Wait for the release to be served by nuget.org
+        run: |
+          set -euo pipefail
+          url="https://api.nuget.org/v3-flatcontainer/aidotnet/${VERSION,,}/aidotnet.${VERSION,,}.nupkg"
+          for i in $(seq 1 60); do
+            if [ "$(curl -sSI -o /dev/null -w '%{http_code}' "$url")" = "200" ]; then exit 0; fi
+            sleep 30
+          done
+          echo "::error::AiDotNet $VERSION was not served by nuget.org after 30 minutes."
+          exit 1
+
+      # Regenerates CompatibilitySuppressions.xml against the new baseline: breaks that shipped in this
+      # release drop out, and breaks merged after the tag stay. The build also proves the rolled API files
+      # still match the code (RS0016/RS0017 fail it otherwise).
+      - name: Regenerate package-validation suppressions
+        run: |
+          set -euo pipefail
+          dotnet build src/AiDotNet.Generators/AiDotNet.Generators.csproj -c Release
+          dotnet build src/AiDotNet.csproj -c Release -m:2 -p:GenerateCompatibilitySuppressionFile=true
+
+      - name: Open the baseline PR
+        env:
+          GH_TOKEN: ${{ secrets.AUTOFIX_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          branch="chore/api-baseline-$TAG_NAME"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add -A src/PublicAPI.Shipped.txt src/PublicAPI.Unshipped.txt src/PublicAPI src/AiDotNet.csproj src/CompatibilitySuppressions.xml
+          if git diff --cached --quiet; then
+            echo "::notice::The public API baseline already matches $TAG_NAME."
+            exit 0
+          fi
+          git commit -m "chore: roll the public API baseline to $TAG_NAME"
+          git push --force origin "$branch"
+          if [ -z "$(gh pr list --head "$branch" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base master --head "$branch" \
+              --title "chore: roll the public API baseline to $TAG_NAME" \
+              --body "Moves the API that shipped in $TAG_NAME from PublicAPI.Unshipped.txt into PublicAPI.Shipped.txt, sets PackageValidationBaselineVersion to $VERSION and regenerates CompatibilitySuppressions.xml against it (scripts/Roll-PublicApiBaseline.ps1, run by the release workflow)."
+          fi
