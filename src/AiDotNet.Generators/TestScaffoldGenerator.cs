@@ -10451,19 +10451,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "SenseVoice" && model.TypeParameterCount == 1)
             {
-                // SenseVoice-Small uses the released 512-wide, 50-block encoder-only
-                // configuration in production. The exact FP32 memorization probe still
-                // exceeded 180 seconds. Exercise its encoder -> CTC token-head topology
-                // through public options at bounded CI scale, with no Paraformer decoder/CIF.
+                // SenseVoice-Small's Kaldi front end, task queries, SAN-M encoder (one block each side of the norm) and
+                // CTC head at width 16 over 16 filterbank bands and a 16-token vocabulary. Production defaults are the
+                // release's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.AlibabaASR.SenseVoiceOptions { SampleRate = 16000, " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, FeedForwardDim = 64, DecoderDim = 32, NumDecoderLayers = 0, " +
-                    "UseCifAlignment = false, NumMels = 64, VocabSize = 64, MaxTextLength = 16, " +
-                    "DropoutRate = 0.0, Language = \"en\", LearningRate = 2e-5, WeightDecay = 0.01 })";
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.AlibabaASR.SenseVoiceOptions { NumMels = 16, EncoderDim = 16, " +
+                    "NumEncoderLayers = 1, NumTpEncoderLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 32, " +
+                    "FsmnKernelSize = 3, VocabSize = 16, MaxTextLength = 4, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "Chirp3" && model.TypeParameterCount == 1)
             {
@@ -16835,6 +16832,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Moonshine reads waveforms (0.2 s) and returns the decoder's logits for the first token.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "SenseVoice")
+            {
+                // SenseVoice reads waveforms (0.2 s, three 60 ms frames) and returns the CTC logits after its queries.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 16 };");
             }
             else if (model.ClassName is "CanaryFlash" or "NeMoMultitask")
             {

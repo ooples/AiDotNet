@@ -6,8 +6,8 @@ namespace AiDotNet.SpeechRecognition.AlibabaASR;
 /// <summary>Options for SenseVoice: multi-task speech understanding model.</summary>
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure SenseVoice-Small. Supported defaults follow
-/// the released FunASR configuration: 512-wide SAN-M-style encoder, 50 blocks, 4 attention heads,
-/// 2048-wide feed-forward layers, 25,055 tokens, 80 mel bands, and AdamW at 2e-5.</para>
+/// the released FunASR configuration: 512-wide SAN-M encoder, 50 + 20 blocks, 4 attention heads,
+/// 2048-wide feed-forward layers, FSMN kernel 11, low frame rate 7/6, 25,055 tokens, 80 mel bands, and AdamW at 2e-5.</para>
 /// </remarks>
 public class SenseVoiceOptions : ModelOptions
 {
@@ -38,12 +38,15 @@ public class SenseVoiceOptions : ModelOptions
         MaxTextLength = other.MaxTextLength;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
         Language = other.Language;
-        DecoderDim = other.DecoderDim;
-        NumDecoderLayers = other.NumDecoderLayers;
         FeedForwardDim = other.FeedForwardDim;
-        UseCifAlignment = other.UseCifAlignment;
+        NumTpEncoderLayers = other.NumTpEncoderLayers;
+        FsmnKernelSize = other.FsmnKernelSize;
+        LfrM = other.LfrM;
+        LfrN = other.LfrN;
+        UseInverseTextNormalization = other.UseInverseTextNormalization;
+        TargetsIncludeRichTokens = other.TargetsIncludeRichTokens;
+        Vocabulary = (string[])other.Vocabulary.Clone();
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
     }
@@ -58,12 +61,25 @@ public class SenseVoiceOptions : ModelOptions
     public int MaxTextLength { get; set; } = 512;
     public string? ModelPath { get; set; }
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-    public double DropoutRate { get; set; } = 0.1;
-    public string Language { get; set; } = "en";
-    public int DecoderDim { get; set; } = 512;
-    public int NumDecoderLayers { get; set; } = 0;
+    /// <summary>The language query: auto (the release's default), zh, en, yue, ja, ko or nospeech.</summary>
+    public string Language { get; set; } = "auto";
     public int FeedForwardDim { get; set; } = 2048;
-    public bool UseCifAlignment { get; set; } = false;
+    /// <summary>SAN-M blocks after the first norm (<c>tp_blocks</c>, 20).</summary>
+    public int NumTpEncoderLayers { get; set; } = 20;
+    /// <summary>The FSMN memory's kernel (11).</summary>
+    public int FsmnKernelSize { get; set; } = 11;
+    /// <summary>Filterbank frames stacked by the low frame rate front end (7).</summary>
+    public int LfrM { get; set; } = 7;
+    /// <summary>The stride between stacks (6, 60 ms).</summary>
+    public int LfrN { get; set; } = 6;
+    /// <summary>The text-normalization query: with inverse text normalization (14) or without (15, the release's
+    /// default).</summary>
+    public bool UseInverseTextNormalization { get; set; } = false;
+    /// <summary>Training targets carry the four rich tokens (language, emotion, event, text normalization) before the
+    /// transcript, as the release's do; their cross-entropy is then added to the CTC loss.</summary>
+    public bool TargetsIncludeRichTokens { get; set; } = false;
+    /// <summary>Token strings by id; ids past it decode as Unicode code points.</summary>
+    public string[] Vocabulary { get; set; } = Array.Empty<string>();
     public double LearningRate { get; set; } = 2e-5;
     public double WeightDecay { get; set; } = 0.01;
 }
