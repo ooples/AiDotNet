@@ -548,6 +548,26 @@ public static class DeserializationHelper
 
             instance = new BiaffineSpanScorerLayer<T>(inputDim, spanDim, numCategories);
         }
+        else if (genericDef == typeof(TriaffineSpanLayer<>))
+        {
+            int inputDim = TryGetInt(additionalParams, "InputDim") ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (inputDim <= 0) throw new InvalidOperationException("TriaffineSpanLayer requires a positive InputDim in metadata or input shape.");
+            instance = new TriaffineSpanLayer<T>(inputDim, TryGetInt(additionalParams, "Dim") ?? 256,
+                TryGetInt(additionalParams, "NumLabels") ?? (outputShape.Length > 0 ? outputShape[^1] : 9), TryGetInt(additionalParams, "TopM") ?? 30);
+        }
+        else if (genericDef == typeof(PyramidSpanLayer<>))
+        {
+            int dim = TryGetInt(additionalParams, "Dim") ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (dim <= 0) throw new InvalidOperationException("PyramidSpanLayer requires a positive Dim in metadata or input shape.");
+            instance = new PyramidSpanLayer<T>(dim, TryGetInt(additionalParams, "NumLayers") ?? 16, TryGetInt(additionalParams, "NumClasses") ?? (outputShape.Length > 0 ? outputShape[^1] : 9));
+        }
+        else if (genericDef == typeof(WordPairGridLayer<>))
+        {
+            int inputDim = TryGetInt(additionalParams, "InputDim") ?? (inputShape.Length > 0 ? inputShape[^1] : 0);
+            if (inputDim <= 0) throw new InvalidOperationException("WordPairGridLayer requires a positive InputDim in metadata or input shape.");
+            instance = new WordPairGridLayer<T>(inputDim, TryGetInt(additionalParams, "Channels") ?? 96, TryGetInt(additionalParams, "HiddenDim") ?? 128,
+                TryGetInt(additionalParams, "BiaffineDim") ?? 768, TryGetInt(additionalParams, "NumRelations") ?? (outputShape.Length > 0 ? outputShape[^1] : 3));
+        }
         else if (genericDef == typeof(SpanRepresentationScorerLayer<>))
         {
             // PURE / SpERT span scorer: every dimension is persisted in the metadata.

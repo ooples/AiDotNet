@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
 using AiDotNet.NER.Options;
 using AiDotNet.NeuralNetworks;
@@ -108,13 +109,51 @@ public class W2NER<T> : SpanBasedNERBase<T>
     /// <inheritdoc />
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers()
     {
-        return LayerHelper<T>.CreateDefaultSpanBasedNERLayers(
-            hiddenDimension: NEROptions.HiddenDimension,
-            numAttentionHeads: NEROptions.NumAttentionHeads,
-            numTransformerLayers: NEROptions.NumTransformerLayers,
-            intermediateDimension: NEROptions.IntermediateDimension,
-            spanEmbeddingDimension: NEROptions.SpanEmbeddingDimension,
-            numLabels: NEROptions.NumLabels,
-            dropoutRate: NEROptions.DropoutRate);
+        // The encoder, then the paper's BiLSTM (directions summed here) and the word-pair grid classifier with the CoNLL-2003
+        // configuration of the authors' code (conv_hid_size 96, ffnn_hid_size 128, biaffine_size 768); the relations are
+        // None, NNW and one THW per entity type.
+        foreach (var layer in CreateTokenEncoderLayers()) yield return layer;
+        yield return new BidirectionalLayer<T>(new LSTMLayer<T>(NEROptions.HiddenDimension), mergeMode: true,
+            activationFunction: (IActivationFunction<T>)new IdentityActivation<T>());
+        yield return new WordPairGridLayer<T>(NEROptions.HiddenDimension, channels: 96, hiddenDim: 128, biaffineDim: 768,
+            numRelations: NEROptions.NumLabels + 1);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Each word pair's most likely relation (None, NNW or a THW type).</remarks>
+    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
+        => modelOutput.Rank >= 2 && modelOutput.Shape[^1] == NEROptions.NumLabels + 1 ? ArgmaxDecode(modelOutput) : modelOutput;
+
+    /// <summary>
+    /// Word-pair relation targets (section 2.1): each run of tokens sharing a non-zero label is an entity of that type; NNW
+    /// (relation 1) links each word of an entity to the next, THW of the type (relation 1 + type) links its tail to its head,
+    /// and every other pair is None (relation 0).
+    /// </summary>
+    protected override Tensor<T> BuildTrainingTargets(Tensor<T> labels, int seqLen)
+    {
+        var tokenLabels = PreprocessLabels(labels, seqLen);
+        int batch = tokenLabels.Rank >= 2 ? tokenLabels.Shape[0] : 1;
+        var targets = batch > 1 ? new Tensor<T>(new[] { batch, seqLen * seqLen }) : new Tensor<T>(new[] { seqLen * seqLen });
+        for (int b = 0; b < batch; b++)
+        {
+            int Label(int t) => (int)Math.Round(NumOps.ToDouble(tokenLabels.Rank == 1 ? tokenLabels[t] : tokenLabels[b, t]));
+            void Set(int i, int j, int relation)
+            {
+                if (batch > 1) targets[b, i * seqLen + j] = NumOps.FromDouble(relation);
+                else targets[i * seqLen + j] = NumOps.FromDouble(relation);
+            }
+            for (int start = 0; start < seqLen;)
+            {
+                int type = Label(start), end = start;
+                while (end + 1 < seqLen && type > 0 && Label(end + 1) == type) end++;
+                if (type > 0)
+                {
+                    for (int t = start; t < end; t++) Set(t, t + 1, 1);
+                    Set(end, start, 1 + type);
+                }
+                start = end + 1;
+            }
+        }
+        return targets;
     }
 }
