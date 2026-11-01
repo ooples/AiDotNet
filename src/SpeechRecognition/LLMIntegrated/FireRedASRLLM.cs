@@ -1,6 +1,7 @@
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
 using AiDotNet.Audio;
-using AiDotNet.Factories;
+using AiDotNet.Audio.Foundations;
+using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -12,28 +13,34 @@ using AiDotNet.Optimizers;
 namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 
 /// <summary>
-/// FireRedASR-LLM: LLM-enhanced version with Qwen2 decoder
+/// FireRedASR-LLM (FireRed Team, 2025): the Encoder-Adapter-LLM recognizer of FireRedASR, which feeds the FireRedASR-AED
+/// Conformer encoder's output through an adapter into Qwen2-7B-Instruct.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition" (FireRed Team, 2025)</item></list></para>
-/// <para><b>For Beginners:</b> FireRedASR-LLM extends the base system with Qwen2-7B as the decoder, using the speech encoder's output as prefix tokens for the LLM. This enables the model to leverage the LLM's extensive language knowledge for improved accuracy on complex utteran...</para>
+/// <para><b>For Beginners:</b> FireRedASR-LLM listens with the encoder of FireRedASR's encoder-decoder model, shrinks its
+/// output to half the frames, and hands it to a large language model (Qwen2-7B-Instruct) as part of a chat message that
+/// asks for a transcript. The language model then writes the transcript.</para>
 /// <para>
-/// FireRedASR-LLM extends the base system with Qwen2-7B as the decoder, using the speech encoder's output as prefix tokens for the LLM. This enables the model to leverage the LLM's extensive language knowledge for improved accuracy on complex utterances. The adapter module aligns speech encoder dimensions with the LLM's embedding space. This approach achieves significant WER reductions on hard test sets with proper nouns, code-switching, and domain-specific terminology.
+/// §2.2 and Figure 1 of the paper: the encoder is initialized from FireRedASR-AED's; the adapter splices adjacent frames
+/// and applies a linear layer with ReLU and a linear layer into the LLM's embedding space; the LLM is Qwen2-7B-Instruct.
+/// The release (<c>fireredasr_llm.py</c>, <c>adapter.py</c>, <c>llm_tokenizer.py</c>) fixes the details: two frames per
+/// adapter step with the remainder discarded; the prompt <c>&lt;|im_start|&gt;user\n&lt;speech&gt;请转写音频为文字
+/// &lt;|im_end|&gt;\n&lt;|im_start|&gt;assistant\n</c> with the adapter's output in place of <c>&lt;speech&gt;</c>; and
+/// LoRA of rank 64 (alpha 16, dropout 0.05) on every attention and feed-forward projection. Training minimizes the
+/// cross-entropy over the transcript only. The paper trains the encoder, the adapter and the LoRA adapters with the LLM
+/// fixed (<see cref="SpeechLlmTrainingScope.EncoderAdapterAndLora"/>); a model built here starts from random weights, so
+/// the default updates every parameter. The paper states no optimizer; AdamW with the library's defaults is used.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a FireRedASR-LLM model with Qwen2 decoder for enhanced ASR
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
-///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 32000);
-/// var model = new FireRedASRLLM&lt;double&gt;(architecture);
-///
-/// // Or load a pre-trained ONNX model for LLM-enhanced ASR inference
-/// var onnxModel = new FireRedASRLLM&lt;double&gt;(architecture, "fireredasrllm.onnx");
+///     inputSize: 160000, outputSize: 152064);
+/// var model = new FireRedASRLLM&lt;float&gt;(architecture);
+/// var text = model.Transcribe(waveform).Text;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -43,74 +50,233 @@ namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 [ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("FireRedASR: Open-Source Industrial-Grade Mandarin Speech Recognition Models from Encoder-Decoder to LLM Integration", "https://arxiv.org/abs/2501.14350", Year = 2025, Authors = "FireRed Team")]
-public partial class FireRedASRLLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class FireRedASRLLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
+    /// <inheritdoc />
+    /// <remarks>The decoder's vocabulary.</remarks>
+    protected override int OutputFeatureWidth => _options.VocabSize;
+
     private readonly FireRedASRLLMOptions _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+    // The paper network on the native path; null in ONNX mode or with custom layers.
+    private FireRedAsrLlmNetwork<T>? _network;
+    internal FireRedAsrLlmNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
     public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public FireRedASRLLM(NeuralNetworkArchitecture<T> architecture, string modelPath, FireRedASRLLMOptions? options = null) : base(architecture) { _options = options ?? new FireRedASRLLMOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
-    public FireRedASRLLM(NeuralNetworkArchitecture<T> architecture, FireRedASRLLMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new FireRedASRLLMOptions(); Options = _options; ValidateOptions(_options); _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "zh", "en" }; InitializeLayers(); }
+    public FireRedASRLLM(NeuralNetworkArchitecture<T> architecture, string modelPath, FireRedASRLLMOptions? options = null) : base(architecture)
+    {
+        _options = options ?? new FireRedASRLLMOptions(); Options = _options; _useNativeMode = false;
+        base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
+        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        SupportedLanguages = new[] { _options.Language }; InitializeLayersCore();
+    }
 
-    /// <summary>
-    /// Transcribes audio using FireRedASR encoder + Qwen2 LLM decoder.
-    /// Per FireRed Team (2025): Conformer encoder features are adapted to Qwen2's embedding
-    /// space, and the LLM decoder generates text with superior language understanding.
-    /// </summary>
+    public FireRedASRLLM(NeuralNetworkArchitecture<T> architecture, FireRedASRLLMOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new FireRedASRLLMOptions(); Options = _options; _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels;
+        SupportedLanguages = new[] { _options.Language }; InitializeLayersCore();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The model's optimizer, unless a base training optimizer was set explicitly.</remarks>
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
+    /// <summary>Transcribes audio: the LLM's greedy answer to the transcription prompt, at most as many tokens as the
+    /// adapter emits frames (the release's <c>max_new_tokens</c>) and <see cref="FireRedASRLLMOptions.MaxTextLength"/>.</summary>
     public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
-        var features = PreprocessAudio(audio);
-        Tensor<T> logits;
-
-        if (IsOnnxMode && OnnxEncoder is not null)
+        if (ResolveReturnTimestamps(includeTimestamps)) throw new NotSupportedException("Word-level timestamps are not supported for FireRedASR-LLM.");
+        var network = _network ?? throw new NotSupportedException("Transcription runs on the native network.");
+        int[] tokens;
+        using (new Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            logits = OnnxEncoder.Run(features);
+            var speech = network.Speech(Samples(audio), training: false);
+            tokens = network.Greedy(network.Prompt(speech, _options.Instruction), Math.Min(_options.MaxTextLength, Math.Max(1, speech.Shape[0])));
         }
-        else
-        {
-            logits = features;
-            foreach (var l in Layers) logits = l.Forward(logits);
-        }
-
-        var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits);
-        var text = TokensToText(tokens);
-        double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
-
         return new TranscriptionResult<T>
         {
-            Text = text,
-            Language = language ?? _options.Language,
-            Confidence = NumOps.FromDouble(confidence),
-            DurationSeconds = duration,
-            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(text, duration, tokens, confidence) : Array.Empty<TranscriptionSegment<T>>()
+            Text = Text(network, tokens), Language = language ?? _options.Language, Confidence = NumOps.FromDouble(tokens.Length > 0 ? 1.0 : 0.0),
+            DurationSeconds = audio.Length / (double)SampleRate, Segments = Array.Empty<TranscriptionSegment<T>>(),
         };
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
-    public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("FireRedASRLLM does not support streaming.");
+    public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
+    public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("FireRedASR-LLM does not support streaming.");
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultLLMASRLayers(encoderDim: _options.EncoderDim, adapterDim: _options.AdapterDim, llmDim: _options.LlmDim, numEncoderLayers: _options.NumEncoderLayers, numAdapterLayers: _options.NumAdapterLayers, numLLMLayers: _options.NumLlmLayers, numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate, maxSequenceLength: _options.MaxTextLength, encoderFeedForwardDim: _options.EncoderFeedForwardDim, llmFeedForwardDim: _options.LlmFeedForwardDim, numLlmAttentionHeads: _options.NumLlmAttentionHeads, adapterActivation: ActivationFunctionFactory<T>.CreateActivationFunction(_options.AdapterActivation), useAdapterLayerNormalization: _options.UseAdapterLayerNormalization, numLlmKvHeads: _options.NumLlmKvHeads, llmRopeTheta: _options.LlmRopeTheta, useQwen2Decoder: _options.UseQwen2Decoder, adapterFrameSplicingFactor: _options.AdapterFrameSplicingFactor)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    // Qwen's tokenizer decodes when the vocabulary is Qwen's; otherwise each token is its vocabulary entry or code point.
+    private string Text(FireRedAsrLlmNetwork<T> network, int[] tokens)
+    {
+        if (network.UsesQwenVocabulary) return network.Tokenizer.Decode(tokens).Trim();
+        var vocabulary = _options.Vocabulary;
+        var sb = new System.Text.StringBuilder();
+        foreach (int t in tokens)
+        {
+            if (vocabulary is not null && t < vocabulary.Length) sb.Append(vocabulary[t]);
+            else if (t <= 0x10FFFF && (t < 0xD800 || t > 0xDFFF)) sb.Append(char.ConvertFromUtf32(t));
+        }
+        return sb.ToString().Trim();
+    }
+
+    protected override void InitializeLayers() => InitializeLayersCore();
+
+    private void InitializeLayersCore()
+    {
+        if (!_useNativeMode) return;
+        _network = null;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        // The encoder, adapter and LLM (see the class remarks). It used to be a generic LLM-ASR template.
+        var o = _options;
+        if (o.EncoderDim <= 0 || o.EncoderFeedForwardDim % o.EncoderDim != 0)
+            throw new ArgumentException("The encoder's feed-forward width must be a multiple of its width.", nameof(Options));
+        var layers = new List<LayerBase<T>>();
+        _network = new FireRedAsrLlmNetwork<T>(Engine, new ConformerAsrConfiguration
+        {
+            SampleRate = o.SampleRate, NumMels = o.NumMels, EncoderDim = o.EncoderDim, NumEncoderLayers = o.NumEncoderLayers,
+            NumAttentionHeads = o.NumAttentionHeads, FeedForwardMultiplier = o.EncoderFeedForwardDim / o.EncoderDim, ConvKernel = o.ConvKernel,
+            RopeTheta = o.RopeTheta, Conv4xChannels = 32, VocabSize = 1,
+        }, o.AdapterFrameSplicingFactor, new LlamaConfiguration
+        {
+            VocabSize = o.VocabSize, Hidden = o.LlmDim, Layers = o.NumLlmLayers, Heads = o.NumLlmAttentionHeads, KeyValueHeads = o.NumLlmKvHeads,
+            Intermediate = o.LlmFeedForwardDim, RmsEpsilon = o.LlmRmsEpsilon, RopeTheta = o.LlmRopeTheta, AttentionBias = true,
+            LoraRank = o.LoraRank, LoraAlpha = o.LoraAlpha, LoraDropout = o.LoraDropout, LoraTargets = LlamaLoraTargets.All,
+        }, layers, Tensors.Helpers.RandomHelper.CreateSeededRandom(o.Seed ?? 42));
+        Layers.AddRange(layers);
+    }
+
+    // The 16 kHz waveform's samples, truncated to the longest recording transcribed.
+    private double[] Samples(Tensor<T> audio)
+    {
+        int length = Math.Min(audio.Length, SampleRate * _options.MaxAudioLengthSeconds);
+        var samples = new double[length];
+        var span = audio.Data.Span;
+        for (int i = 0; i < length; i++) samples[i] = NumOps.ToDouble(span[i]);
+        return samples;
+    }
+
+    private Tensor<T> Row(Tensor<T> input, int row, int rows)
+    {
+        if (rows == 1) return input;
+        int samples = input.Length / rows;
+        return Engine.Reshape(Engine.TensorSlice(Engine.Reshape(input, new[] { rows, samples }), new[] { row, 0 }, new[] { 1, samples }), new[] { samples });
+    }
+
+    // The logits [1, vocabulary] of the answer's first token for a waveform [S], or [batch, 1, vocabulary] for [batch, S].
+    private Tensor<T> FirstLogits(Tensor<T> input, bool training)
+    {
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        var outputs = new Tensor<T>[rows];
+        for (int r = 0; r < rows; r++)
+            outputs[r] = _network.FirstLogits(_network.Prompt(_network.Speech(Samples(Row(input, r, rows)), training), _options.Instruction));
+        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
+    }
+
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => rawAudio;
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return FirstLogits(input, training: false); }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : FirstLogits(input, training: true);
+
+    // The transcript a training target names: ids [length], or one distribution per token [length, vocabulary], read as
+    // its most likely tokens; the end token is never a target.
+    private int[] Transcript(FireRedAsrLlmNetwork<T> network, Tensor<T> target)
+    {
+        int vocabulary = _options.VocabSize, end = network.EndToken;
+        var span = target.Data.Span;
+        if (target.Rank >= 2 && target.Shape[^1] == vocabulary)
+        {
+            var tokens = new int[target.Length / vocabulary];
+            for (int r = 0; r < tokens.Length; r++)
+            {
+                int best = -1;
+                for (int v = 0; v < vocabulary; v++)
+                    if (v != end && (best < 0 || NumOps.GreaterThan(span[r * vocabulary + v], span[r * vocabulary + best]))) best = v;
+                tokens[r] = best;
+            }
+            return tokens;
+        }
+        var ids = new int[target.Length];
+        for (int i = 0; i < ids.Length; i++)
+        {
+            double value = Math.Round(NumOps.ToDouble(span[i]));
+            if (value < 0 || value >= vocabulary || (int)value == end)
+                throw new ArgumentException($"Token {value} is outside the vocabulary or the end token.", nameof(target));
+            ids[i] = (int)value;
+        }
+        return ids;
+    }
+
+    private Tensor<T> BatchLoss(FireRedAsrLlmNetwork<T> network, Tensor<T> input, Tensor<T> target, bool training)
+    {
+        int rows = input.Rank == 1 ? 1 : input.Shape[0];
+        Tensor<T>? total = null;
+        for (int r = 0; r < rows; r++)
+        {
+            var prompt = network.Prompt(network.Speech(Samples(Row(input, r, rows)), training), _options.Instruction);
+            var loss = Engine.Reshape(network.Loss(prompt, Transcript(network, Row(target, r, rows))), new[] { 1 });
+            total = total is null ? loss : Engine.TensorAdd(total, loss);
+        }
+        return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The transcript's cross-entropy after the prompt, averaged over the batch, with LoRA dropout active.</remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
+    {
+        var network = _network;
+        if (network is null) return false;
+        network.Llm.Training = true;
+        try { TrainWithCustomLoss(input, _ => BatchLoss(network, input, target, training: true)); }
+        finally { network.Llm.Training = false; }
+        return true;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>With <see cref="SpeechLlmTrainingScope.EncoderAdapterAndLora"/>, the encoder, the adapter and the LoRA
+    /// adapters (§2.2); otherwise every parameter.</remarks>
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
+    {
+        var network = _network;
+        if (network is null || _options.TrainingScope == SpeechLlmTrainingScope.AllParameters) return parameters;
+        var trainedLayers = network.EncoderLayers.Concat(network.AdapterLayers).Concat(network.Llm.LoraLayers);
+        var trained = new HashSet<Tensor<T>>(Training.TapeTrainingStep<T>.CollectParameters(trainedLayers.Cast<ILayer<T>>().ToList(), -1),
+            TensorReferenceComparer<Tensor<T>>.Instance);
+        return parameters.Where(trained.Contains).ToList();
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc />
+    /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        return BatchLoss(network, input, target, training: false)[0];
+    }
+
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "FireRedASRLLM-Native" : "FireRedASRLLM-ONNX", Description = "FireRedASR-LLM: Conformer + Qwen2 decoder (2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "FireRedASRLLM-Native" : "FireRedASRLLM-ONNX", Description = "FireRedASR-LLM: Conformer encoder, adapter and Qwen2-7B-Instruct (FireRed Team 2025)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers + _options.NumLlmLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
-
-
-    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, List<int> tokens, double confidence) { if (string.IsNullOrWhiteSpace(text) || tokens.Count == 0) return Array.Empty<TranscriptionSegment<T>>(); double timePerToken = duration / tokens.Count; var segments = new List<TranscriptionSegment<T>>(); var sb = new System.Text.StringBuilder(); double segStart = 0; for (int i = 0; i < tokens.Count; i++) { if (tokens[i] > 0 && tokens[i] <= char.MaxValue) sb.Append((char)tokens[i]); if ((tokens[i] == ' ' || i == tokens.Count - 1) && sb.Length > 0) { segments.Add(new TranscriptionSegment<T> { Text = sb.ToString().Trim(), StartTime = segStart, EndTime = (i + 1) * timePerToken, Confidence = NumOps.FromDouble(confidence) }); sb.Clear(); segStart = (i + 1) * timePerToken; } } if (segments.Count == 0) segments.Add(new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) }); return segments; }
-    private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
-    private static void ValidateOptions(FireRedASRLLMOptions o) { if (o.SampleRate <= 0) throw new ArgumentOutOfRangeException(nameof(o.SampleRate)); if (o.NumMels <= 0) throw new ArgumentOutOfRangeException(nameof(o.NumMels)); if (o.EncoderDim <= 0) throw new ArgumentOutOfRangeException(nameof(o.EncoderDim)); if (o.EncoderFeedForwardDim <= 0) throw new ArgumentOutOfRangeException(nameof(o.EncoderFeedForwardDim)); if (o.NumEncoderLayers <= 0) throw new ArgumentOutOfRangeException(nameof(o.NumEncoderLayers)); if (o.NumAttentionHeads <= 0 || o.EncoderDim % o.NumAttentionHeads != 0) throw new ArgumentException("EncoderDim must be divisible by a positive NumAttentionHeads.", nameof(o.NumAttentionHeads)); if (o.AdapterDim <= 0) throw new ArgumentOutOfRangeException(nameof(o.AdapterDim)); if (o.NumAdapterLayers < 0) throw new ArgumentOutOfRangeException(nameof(o.NumAdapterLayers)); if (o.AdapterFrameSplicingFactor <= 0) throw new ArgumentOutOfRangeException(nameof(o.AdapterFrameSplicingFactor)); if (o.LlmDim <= 0) throw new ArgumentOutOfRangeException(nameof(o.LlmDim)); if (o.LlmFeedForwardDim <= 0) throw new ArgumentOutOfRangeException(nameof(o.LlmFeedForwardDim)); if (o.NumLlmLayers <= 0) throw new ArgumentOutOfRangeException(nameof(o.NumLlmLayers)); if (o.NumLlmAttentionHeads <= 0 || o.LlmDim % o.NumLlmAttentionHeads != 0) throw new ArgumentException("LlmDim must be divisible by a positive NumLlmAttentionHeads.", nameof(o.NumLlmAttentionHeads)); if (o.UseQwen2Decoder && (o.NumLlmKvHeads <= 0 || o.NumLlmAttentionHeads % o.NumLlmKvHeads != 0)) throw new ArgumentException("NumLlmAttentionHeads must be divisible by a positive NumLlmKvHeads.", nameof(o.NumLlmKvHeads)); if (o.VocabSize <= 0) throw new ArgumentOutOfRangeException(nameof(o.VocabSize)); if (o.MaxTextLength <= 0) throw new ArgumentOutOfRangeException(nameof(o.MaxTextLength)); if (double.IsNaN(o.LlmRopeTheta) || double.IsInfinity(o.LlmRopeTheta) || o.LlmRopeTheta <= 0.0) throw new ArgumentOutOfRangeException(nameof(o.LlmRopeTheta)); if (double.IsNaN(o.DropoutRate) || double.IsInfinity(o.DropoutRate) || o.DropoutRate < 0.0 || o.DropoutRate >= 1.0) throw new ArgumentOutOfRangeException(nameof(o.DropoutRate)); }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(FireRedASRLLM<T>)); }
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 }

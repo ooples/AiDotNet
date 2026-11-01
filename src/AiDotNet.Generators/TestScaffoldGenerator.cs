@@ -8581,23 +8581,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      && typeName.StartsWith(
                          "AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal))
             {
-                // FireRedASR-LLM-L uses the paper's 1280-wide/16-layer FireRed encoder and the
-                // complete Qwen2-7B-Instruct decoder by default. That research-scale default must
-                // remain intact, but constructing it for a CPU unit-test invariant is neither a
-                // useful correctness probe nor feasible on the 16 GB runner. Exercise the same
-                // encoder -> adapter -> LLM -> vocabulary-head path at smoke scale through the
-                // public options object. FireRedASRLLM is also in Fp32TestClassNames, so this
-                // expression is precision-rewritten to <float> after generation.
+                // FireRedASR-LLM's Conformer encoder (width 16, one block, 32 mel bins), its two-frame adapter, and a
+                // one-layer Qwen2 decoder at width 16 with LoRA on every projection and a 16-token vocabulary, which has
+                // no ChatML prompt text. Production defaults are FireRedASR-LLM-L's (Qwen2-7B-Instruct).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.SpeechRecognition.LLMIntegrated.FireRedASRLLMOptions { " +
-                    "EncoderDim = 32, EncoderFeedForwardDim = 128, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, AdapterDim = 32, NumAdapterLayers = 1, " +
-                    "LlmDim = 32, LlmFeedForwardDim = 128, NumLlmLayers = 1, " +
-                    "NumLlmAttentionHeads = 2, NumLlmKvHeads = 1, NumMels = 32, VocabSize = 4, " +
-                    "MaxTextLength = 8, UseQwen2Decoder = false, DropoutRate = 0.0 })";
+                    "EncoderDim = 16, EncoderFeedForwardDim = 64, NumEncoderLayers = 1, NumAttentionHeads = 2, ConvKernel = 3, " +
+                    "NumMels = 32, LlmDim = 16, LlmFeedForwardDim = 32, NumLlmLayers = 1, NumLlmAttentionHeads = 2, " +
+                    "NumLlmKvHeads = 1, VocabSize = 16, LoraRank = 2, LoraDropout = 0.0, MaxTextLength = 4, " +
+                    "MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "NBEATSFinance" && model.TypeParameterCount == 1)
             {
@@ -16848,6 +16843,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 16 };");
             }
+            else if (model.ClassName == "FireRedASRLLM")
+            {
+                // FireRedASR-LLM reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
             else if (model.ClassName is "Qwen3ASR" or "Qwen3ASRSmall")
             {
                 // Qwen3-ASR reads waveforms (0.2 s) and returns the decoder's logits for the answer's first token.
@@ -16993,13 +16994,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // temporal video). Observed: net471 passes at 1e-4, net10.0's
                 // different float/SIMD trajectory lands at ~8e-3 — purely numeric,
                 // not a correctness regression.
-                sb.AppendLine(model.ClassName == "FireRedASRLLM"
-                    ? "    protected override double MoreDataTolerance => 0.75;"
-                    : model.ClassName is "FastEmit" or "EmformerRNNT"
-                        ? "    protected override double MoreDataTolerance => 0.0001;"
-                        : "    protected override double MoreDataTolerance => 0.5;");
-                if (model.ClassName == "FireRedASRLLM")
-                    sb.AppendLine("    protected override double TrainingLossReductionTolerance => 0.25;");
+                sb.AppendLine(model.ClassName is "FastEmit" or "EmformerRNNT"
+                    ? "    protected override double MoreDataTolerance => 0.0001;"
+                    : "    protected override double MoreDataTolerance => 0.5;");
 
                 // GraFPrint (graph-fingerprint embedding): passes SOLO (25/25) but its 50+200-iteration
                 // MoreData probe runs near the 120 s edge and tips over it under the loaded Gen G-I

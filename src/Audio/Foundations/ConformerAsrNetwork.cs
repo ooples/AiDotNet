@@ -20,6 +20,9 @@ internal enum ConformerAsrDecoder
 
     /// <summary>An attention decoder alone, without a CTC layer.</summary>
     Attention,
+
+    /// <summary>No decoder: the encoder alone, whose output another network reads (an LLM through an adapter).</summary>
+    None,
 }
 
 /// <summary>The activation of a feed-forward network.</summary>
@@ -252,6 +255,7 @@ internal sealed class ConformerAsrNetwork<T>
                 throw new ArgumentException($"Intermediate CTC layer {layer} is not below the last of {_o.NumEncoderLayers}.", nameof(options));
         if (_o.SelfConditioning || _o.Block == ConformerAsrBlock.Transformer)
             CtcNorm = Own(new LayerNormalizationLayer<T>(d));
+        if (_o.Decoder == ConformerAsrDecoder.None) return;
         if (_o.Decoder is ConformerAsrDecoder.Ctc or ConformerAsrDecoder.Attention)
         {
             if (_o.Decoder == ConformerAsrDecoder.Ctc) CtcHead = Own(new DenseLayer<T>(_o.VocabSize, identity));

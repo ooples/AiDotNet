@@ -1,12 +1,15 @@
+using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
-using AiDotNet.Enums;
 
 namespace AiDotNet.SpeechRecognition.LLMIntegrated;
 
-/// <summary>Options for FireRedASR-LLM: LLM-enhanced version with Qwen2 decoder.</summary>
+/// <summary>Options for FireRedASR-LLM: the FireRedASR-AED encoder, an adapter and the Qwen2-7B-Instruct decoder.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the FireRedASRLLM model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para><b>For Beginners:</b> Defaults are the released FireRedASR-LLM-L: FireRedASR-AED-L's Conformer encoder (16
+/// blocks of width 1,280, 20 heads, kernel 33) over 80-band filterbanks, an adapter that splices two encoder frames into
+/// one, and Qwen2-7B-Instruct (28 layers of width 3,584, 28 query and 4 key-value heads, SwiGLU 18,944, a 152,064-row
+/// untied vocabulary) with LoRA of rank 64 on every projection.</para>
 /// </remarks>
 public class FireRedASRLLMOptions : ModelOptions
 {
@@ -21,73 +24,86 @@ public class FireRedASRLLMOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
+        // Seed is inherited from ModelOptions and easy to miss; a copy without it builds a different model.
         Seed = other.Seed;
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        NumMels = other.NumMels;
         EncoderDim = other.EncoderDim;
         EncoderFeedForwardDim = other.EncoderFeedForwardDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
-        AdapterDim = other.AdapterDim;
-        NumAdapterLayers = other.NumAdapterLayers;
+        ConvKernel = other.ConvKernel;
+        RopeTheta = other.RopeTheta;
         AdapterFrameSplicingFactor = other.AdapterFrameSplicingFactor;
-        AdapterActivation = other.AdapterActivation;
-        UseAdapterLayerNormalization = other.UseAdapterLayerNormalization;
         LlmDim = other.LlmDim;
         LlmFeedForwardDim = other.LlmFeedForwardDim;
         NumLlmLayers = other.NumLlmLayers;
         NumLlmAttentionHeads = other.NumLlmAttentionHeads;
         NumLlmKvHeads = other.NumLlmKvHeads;
         LlmRopeTheta = other.LlmRopeTheta;
-        UseQwen2Decoder = other.UseQwen2Decoder;
-        NumMels = other.NumMels;
+        LlmRmsEpsilon = other.LlmRmsEpsilon;
         VocabSize = other.VocabSize;
+        LoraRank = other.LoraRank;
+        LoraAlpha = other.LoraAlpha;
+        LoraDropout = other.LoraDropout;
+        TrainingScope = other.TrainingScope;
+        Instruction = other.Instruction;
         MaxTextLength = other.MaxTextLength;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
         Language = other.Language;
+        Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
     }
 
     public int SampleRate { get; set; } = 16000;
+    /// <summary>The longest recording transcribed (30 seconds).</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
-    /// <summary>Gets or sets the FireRedASR-AED-L encoder width.</summary>
-    public int EncoderDim { get; set; } = 1280;
-    /// <summary>Gets or sets the encoder feed-forward width.</summary>
-    public int EncoderFeedForwardDim { get; set; } = 5120;
-    /// <summary>Gets or sets the number of encoder layers.</summary>
-    public int NumEncoderLayers { get; set; } = 16;
-    /// <summary>Gets or sets the number of encoder attention heads.</summary>
-    public int NumAttentionHeads { get; set; } = 20;
-    /// <summary>Gets or sets the adapter hidden/output width.</summary>
-    public int AdapterDim { get; set; } = 3584;
-    /// <summary>Gets or sets the number of nonlinear adapter projections before the output projection.</summary>
-    public int NumAdapterLayers { get; set; } = 1;
-    /// <summary>Gets or sets how many adjacent encoder frames are concatenated before the adapter.</summary>
-    public int AdapterFrameSplicingFactor { get; set; } = 2;
-    /// <summary>Gets or sets the adapter activation. The paper uses ReLU.</summary>
-    public ActivationFunction AdapterActivation { get; set; } = ActivationFunction.ReLU;
-    /// <summary>Gets or sets whether layer normalization is inserted between adapter projections.</summary>
-    public bool UseAdapterLayerNormalization { get; set; } = false;
-    /// <summary>Gets or sets the Qwen2-7B hidden width.</summary>
-    public int LlmDim { get; set; } = 3584;
-    /// <summary>Gets or sets the Qwen2-7B gated feed-forward width.</summary>
-    public int LlmFeedForwardDim { get; set; } = 18944;
-    /// <summary>Gets or sets the number of Qwen2-7B decoder layers.</summary>
-    public int NumLlmLayers { get; set; } = 28;
-    /// <summary>Gets or sets the number of Qwen2-7B attention heads.</summary>
-    public int NumLlmAttentionHeads { get; set; } = 28;
-    /// <summary>Gets or sets the number of Qwen2-7B key/value heads.</summary>
-    public int NumLlmKvHeads { get; set; } = 4;
-    /// <summary>Gets or sets the Qwen2 rotary-position base.</summary>
-    public double LlmRopeTheta { get; set; } = 1_000_000.0;
-    /// <summary>Gets or sets whether the decoder uses Qwen2 GQA, RoPE, RMSNorm, and gated SiLU blocks.</summary>
-    public bool UseQwen2Decoder { get; set; } = true;
+    /// <summary>Filterbank bands (80).</summary>
     public int NumMels { get; set; } = 80;
+    /// <summary>The FireRedASR-AED-L encoder's width (1,280).</summary>
+    public int EncoderDim { get; set; } = 1280;
+    /// <summary>The encoder's feed-forward width (5,120, four times the width; must be a multiple of it).</summary>
+    public int EncoderFeedForwardDim { get; set; } = 5120;
+    /// <summary>The encoder's Conformer blocks (16).</summary>
+    public int NumEncoderLayers { get; set; } = 16;
+    /// <summary>The encoder's attention heads (20).</summary>
+    public int NumAttentionHeads { get; set; } = 20;
+    /// <summary>The encoder's depthwise convolution kernel (33).</summary>
+    public int ConvKernel { get; set; } = 33;
+    /// <summary>The rotary base standing in for the encoder's relative positional encoding, as in FireRedASR-AED.</summary>
+    public double RopeTheta { get; set; } = 10000.0;
+    /// <summary>Encoder frames the adapter concatenates into one (2).</summary>
+    public int AdapterFrameSplicingFactor { get; set; } = 2;
+    /// <summary>Qwen2-7B's width (3,584), which the adapter projects to.</summary>
+    public int LlmDim { get; set; } = 3584;
+    /// <summary>Qwen2-7B's SwiGLU width (18,944).</summary>
+    public int LlmFeedForwardDim { get; set; } = 18944;
+    /// <summary>Qwen2-7B's layers (28).</summary>
+    public int NumLlmLayers { get; set; } = 28;
+    /// <summary>Qwen2-7B's query heads (28).</summary>
+    public int NumLlmAttentionHeads { get; set; } = 28;
+    /// <summary>Qwen2-7B's key-value heads (4).</summary>
+    public int NumLlmKvHeads { get; set; } = 4;
+    public double LlmRopeTheta { get; set; } = 1_000_000.0;
+    public double LlmRmsEpsilon { get; set; } = 1e-6;
+    /// <summary>Qwen2-7B's vocabulary rows (152,064). A vocabulary smaller than the tokenizer's has no ChatML prompt: the
+    /// decoder reads the speech alone and its last token ends the answer.</summary>
     public int VocabSize { get; set; } = 152064;
-    public int MaxTextLength { get; set; } = 32768;
+    /// <summary>The LoRA rank on every attention and feed-forward projection (64, the release's <c>LoraConfig</c>).</summary>
+    public int LoraRank { get; set; } = 64;
+    public double LoraAlpha { get; set; } = 16;
+    public double LoraDropout { get; set; } = 0.05;
+    /// <summary>The parameters training updates: every one by default; the paper's recipe trains the encoder, the adapter
+    /// and the LoRA adapters only.</summary>
+    public SpeechLlmTrainingScope TrainingScope { get; set; } = SpeechLlmTrainingScope.AllParameters;
+    /// <summary>The instruction after the speech ("请转写音频为文字", transcribe the audio as text).</summary>
+    public string Instruction { get; set; } = "请转写音频为文字";
+    /// <summary>The longest transcript generated, in tokens; the release also stops at the adapter's output length.</summary>
+    public int MaxTextLength { get; set; } = 512;
     public string? ModelPath { get; set; }
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-    public double DropoutRate { get; set; } = 0.1;
-    public string Language { get; set; } = "en";
+    public string Language { get; set; } = "zh";
+    /// <summary>Optional vocabulary mapping token ids to text when the vocabulary is not Qwen's.</summary>
+    public string[]? Vocabulary { get; set; }
 }
