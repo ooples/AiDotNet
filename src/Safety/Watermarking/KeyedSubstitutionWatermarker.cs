@@ -153,11 +153,19 @@ public abstract class KeyedSubstitutionWatermarker<T> : TextWatermarkerBase<T>, 
         return Math.Min(choice, _groups[group].Length - 1);
     }
 
-    // The longest group phrase starting at word i whose words are separated by whitespace only.
+    // The longest group phrase starting at word i whose words are separated by whitespace only and which stands alone:
+    // not joined to a hyphen, digit, underscore or letter on either side ("well-known", "big2" hold no phrase).
     private bool TryMatch(string text, List<(int Start, int Length)> words, int i, out (int Group, int Variant, int WordCount, int End) site)
     {
+        site = default;
+        if (words[i].Start > 0 && JoinsWord(text[words[i].Start - 1])) return false;
+
         for (int n = Math.Min(_maxPhraseWords, words.Count - i); n >= 1; n--)
         {
+            var last = words[i + n - 1];
+            int end = last.Start + last.Length;
+            if (end < text.Length && JoinsWord(text[end])) continue;
+
             var phrase = new StringBuilder();
             bool contiguous = true;
             for (int k = 0; k < n && contiguous; k++)
@@ -175,15 +183,16 @@ public abstract class KeyedSubstitutionWatermarker<T> : TextWatermarkerBase<T>, 
 
             if (contiguous && _index.TryGetValue(Normalize(phrase.ToString()), out var entry))
             {
-                var last = words[i + n - 1];
-                site = (entry.Group, entry.Variant, n, last.Start + last.Length);
+                site = (entry.Group, entry.Variant, n, end);
                 return true;
             }
         }
 
-        site = default;
         return false;
     }
+
+    // A character that makes the text around it one token with the adjacent word.
+    private static bool JoinsWord(char c) => c == '-' || c == '_' || char.IsLetterOrDigit(c);
 
     // Words: maximal runs of letters, with apostrophes inside a word (don't, o'clock).
     private static List<(int Start, int Length)> Words(string text)

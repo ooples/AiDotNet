@@ -499,7 +499,11 @@ public partial class DirectionalGraphLayer<T> : LayerBase<T>, IGraphConvolutionL
 
         // Step 4: Concatenate incoming, outgoing, and self features
         var combined = ConcatenateFeatures(incoming, outgoing, selfFeatures, batchSize, numNodes);
-        SaveForBackward(ref _lastCombined, combined);
+        // Only the gating backward reads the concatenation, so an ungated layer does not keep it.
+        if (_useGating)
+            SaveForBackward(ref _lastCombined, combined);
+        else
+            _lastCombined = null;
 
         Tensor<T> gatedCombined = combined;
 

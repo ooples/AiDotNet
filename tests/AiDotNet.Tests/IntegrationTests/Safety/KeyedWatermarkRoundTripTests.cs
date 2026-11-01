@@ -109,6 +109,41 @@ internal static class WatermarkFixtures
         return tokens.ToArray();
     }
 
+    /// <summary>
+    /// Draws one token id from softmax(<paramref name="logits"/>) by inverse-CDF sampling. A logit of negative infinity
+    /// (a token the watermarker excluded) gets zero probability.
+    /// </summary>
+    public static int SampleSoftmax(Vector<double> logits, Random rng)
+    {
+        if (logits.Length == 0) throw new ArgumentException("There are no logits to sample from.", nameof(logits));
+
+        double max = double.NegativeInfinity;
+        for (int i = 0; i < logits.Length; i++) max = Math.Max(max, logits[i]);
+        if (double.IsNegativeInfinity(max) || double.IsNaN(max))
+            throw new ArgumentException("Every logit is negative infinity or NaN.", nameof(logits));
+
+        var weights = new double[logits.Length];
+        double total = 0;
+        for (int i = 0; i < logits.Length; i++)
+        {
+            weights[i] = Math.Exp(logits[i] - max);
+            total += weights[i];
+        }
+
+        double target = rng.NextDouble() * total;
+        double cumulative = 0;
+        for (int i = 0; i < weights.Length; i++)
+        {
+            cumulative += weights[i];
+            if (target < cumulative) return i;
+        }
+
+        // Rounding can leave target at the very top of the range; the last token with any weight takes it.
+        for (int i = weights.Length - 1; i >= 0; i--)
+            if (weights[i] > 0) return i;
+        return weights.Length - 1;
+    }
+
     /// <summary>Replaces 10% of the generated tokens with random ids: an edit of one word in ten.</summary>
     public static int[] ReplaceTenPercent(int[] tokens, int seed)
     {

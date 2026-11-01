@@ -91,6 +91,17 @@ public class TextImageAlignmentClipTests
     }
 
     [Fact(Timeout = 60000)]
+    public async Task AKeywordInsideAnotherWord_DoesNotMakeTheCaptionUnsafe()
+    {
+        // "toward" holds "war". Matched mid-word, the caption counted as violent and so agreed with the violent image.
+        await Task.Yield();
+        var checker = new TextImageAlignmentChecker<double>(clipModel: new FakeClip());
+
+        var finding = Assert.Single(checker.EvaluateAlignment("a puppy walking toward a garden", Image(0.9)));
+        Assert.Equal(SafetyCategory.Manipulated, finding.Category);
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task ImageOfTheWrongSize_IsRejected()
     {
         await Task.Yield();

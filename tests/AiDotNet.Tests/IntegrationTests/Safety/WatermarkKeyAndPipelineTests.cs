@@ -16,6 +16,19 @@ public class WatermarkKeyAndPipelineTests
     private const string Secret = "pipeline-secret-key-81d2";
 
     [Fact(Timeout = 60000)]
+    public async Task SubstitutionLeavesAPhraseJoinedToItsNeighboursAlone()
+    {
+        // Each listed word is a synonym-group member, but joined by a hyphen, digit or underscore it is part of
+        // another token; replacing it ("rarely-seen" to "seldom-seen") edits a word the group never named.
+        await Task.Yield();
+        const string text = "x rarely-seen y toward-facing z perhaps2 w among_them v anyway-ish u rarely-heard " +
+                            "t seldom-seen s maybe-not r well-towards q anyhow3 p amongst_us o hence-forth";
+        var watermarker = new LexicalWatermarker<double>(key: Secret);
+
+        Assert.Equal(text, watermarker.EmbedWatermark(text));
+    }
+
+    [Fact(Timeout = 60000)]
     public async Task Key_RejectsBlankText_AndRequireSecretRejectsThePublicKey()
     {
         await Task.Yield();
@@ -115,5 +128,56 @@ public class WatermarkKeyAndPipelineTests
         string generated = tokenizer.Decode(WatermarkFixtures.Generate(model, 4));
         Assert.Contains(pipeline.EvaluateText(generated).Findings,
             f => f.Category == SafetyCategory.Watermarked && f.SourceModule == "TextWatermarker");
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Factory_RefusesTextWatermarkingWithoutTheGeneratorsTokenizer()
+    {
+        // Without the generator's tokenizer the detector scores every text as unmarked: refused, not registered.
+        await Task.Yield();
+        var config = new SafetyConfig { Watermarking = { DetectionMode = true } };
+
+        var ex = Assert.Throws<InvalidOperationException>(() => SafetyPipelineFactory<double>.Create(config));
+        Assert.Contains("TextTokenizer", ex.Message);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Factory_TextWatermarker_UsesTheConfiguredTokenizerAndKey()
+    {
+        await Task.Yield();
+        var tokenizer = new WatermarkFixtures.WordTokenizer();
+        var config = new SafetyConfig
+        {
+            Watermarking = { TextWatermarking = true, TextTokenizer = tokenizer, TextKey = Secret },
+        };
+        var pipeline = SafetyPipelineFactory<double>.Create(config);
+
+        // The factory's watermarker holds the secret key, so it embeds during generation and detects its own marks.
+        var model = pipeline.WatermarkLanguageModel(new WatermarkFixtures.ToyLanguageModel());
+        string generated = tokenizer.Decode(WatermarkFixtures.Generate(model, 4));
+        Assert.Contains(pipeline.EvaluateText(generated).Findings,
+            f => f.Category == SafetyCategory.Watermarked && f.SourceModule == "TextWatermarker");
+
+        // And text a model under a different key produced is not reported as this pipeline's watermark.
+        var foreign = new TextWatermarker<double>(key: "another-secret-key-77", tokenizer: tokenizer)
+            .WatermarkModel(new WatermarkFixtures.ToyLanguageModel());
+        string foreignText = tokenizer.Decode(WatermarkFixtures.Generate(foreign, 4));
+        Assert.DoesNotContain(pipeline.EvaluateText(foreignText).Findings,
+            f => f.Category == SafetyCategory.Watermarked && f.SourceModule == "TextWatermarker");
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task Factory_PublicKeyTextWatermarker_OnlyDetects()
+    {
+        await Task.Yield();
+        var config = new SafetyConfig
+        {
+            Watermarking = { TextWatermarking = true, TextTokenizer = new WatermarkFixtures.WordTokenizer() },
+        };
+        var pipeline = SafetyPipelineFactory<double>.Create(config);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            pipeline.WatermarkLanguageModel(new WatermarkFixtures.ToyLanguageModel()));
+        Assert.Throws<InvalidOperationException>(() => pipeline.EmbedTextWatermark("a finished answer"));
     }
 }

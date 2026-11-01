@@ -269,12 +269,27 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
             int matches = 0;
             foreach (string keyword in kvp.Value)
             {
-                if (text.Contains(keyword)) matches++;
+                if (ContainsAtWordStart(text, keyword)) matches++;
             }
             scores[kvp.Key] = Math.Min(1.0, (double)matches / 3);
         }
 
         return scores;
+    }
+
+    /// <summary>
+    /// Whether <paramref name="keyword"/> occurs where a word starts. A prefix still counts ("bloody" for "blood"), but
+    /// a match inside a word does not: "toward" holds "war" and is not violent.
+    /// </summary>
+    private static bool ContainsAtWordStart(string text, string keyword)
+    {
+        for (int index = text.IndexOf(keyword, StringComparison.Ordinal); index >= 0;
+             index = text.IndexOf(keyword, index + 1, StringComparison.Ordinal))
+        {
+            if (index == 0 || !char.IsLetterOrDigit(text[index - 1])) return true;
+        }
+
+        return false;
     }
 
     private static ImageVisualFeatures ExtractImageFeatures(ReadOnlySpan<T> span, int[] shape)
