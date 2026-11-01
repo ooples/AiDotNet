@@ -167,7 +167,8 @@ public partial class R2D2Algorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _r2d2Options = options;
         _lambda = options.Lambda;

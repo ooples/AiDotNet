@@ -19,8 +19,11 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TOTOOptions<T> : TimeSeriesRegressionOptions<T>
 {
+    /// <summary>Creates options with the default values.</summary>
     public TOTOOptions() { }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     public TOTOOptions(TOTOOptions<T> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));

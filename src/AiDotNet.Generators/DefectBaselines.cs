@@ -23,19 +23,9 @@ internal static class DefectBaselines
     internal static readonly System.Collections.Generic.HashSet<string> UntestedModels =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
-            "global::AiDotNet.AutoML.AutoMLEnsembleModel<T>",
-            "global::AiDotNet.AutoML.DiffusionAutoML<T>",
-            "global::AiDotNet.ContinualLearning.Memory.ExperienceReplayBuffer<T, TInput, TOutput>",
-            "global::AiDotNet.DistributedTraining.TensorParallelPagedModel<T>",
-            "global::AiDotNet.Finance.AutoML.FinancialAutoML<T>",
-            "global::AiDotNet.KnowledgeDistillation.FeatureDistillationStrategy<T>",
-            "global::AiDotNet.MetaLearning.Models.LinearVectorModel",
-            "global::AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>",
-            "global::AiDotNet.NeuralNetworks.SuperNet<T>",
             "global::AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>",
             "global::AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>",
             "global::AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>",
-            "global::AiDotNet.SelfSupervisedLearning.Evaluation.KNNEvaluator<T>",
             "global::AiDotNet.TextToSpeech.ProprietaryAPI.AmazonPolly<T>",
             "global::AiDotNet.TextToSpeech.ProprietaryAPI.AzureNeuralTTS<T>",
             "global::AiDotNet.TextToSpeech.ProprietaryAPI.ElevenLabsTTS<T>",

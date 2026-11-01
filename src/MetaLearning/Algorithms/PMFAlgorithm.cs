@@ -71,6 +71,7 @@ public partial class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
     {
         _pmfOptions = options;
+        RequirePlainSgdInnerSteps(options.EnableFineTuning, "a separate fine-tuning learning rate");
     }
 
     /// <summary>
@@ -101,7 +102,7 @@ public partial class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             for (int step = 0; step < _pmfOptions.AdaptationSteps; step++)
             {
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                taskParams = ApplyGradients(taskParams, grad, _pmfOptions.InnerLearningRate);
+                taskParams = ApplyInnerGradients(taskParams, grad, _pmfOptions.InnerLearningRate, step == 0);
                 ParamModel.SetParameters(taskParams);
             }
 
@@ -143,7 +144,7 @@ public partial class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-            adaptedParams = ApplyGradients(adaptedParams, grad, _pmfOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _pmfOptions.InnerLearningRate, step == 0);
         }
 
         // Optional fine-tuning (Stage 3)
@@ -153,7 +154,7 @@ public partial class PMFAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
-                adaptedParams = ApplyGradients(adaptedParams, grad, _pmfOptions.FineTuningLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _pmfOptions.FineTuningLearningRate, step == 0);
             }
         }
 

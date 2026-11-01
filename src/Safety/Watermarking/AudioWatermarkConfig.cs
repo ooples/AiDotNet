@@ -26,8 +26,11 @@ public class AudioWatermarkConfig
 /// </summary>
 public enum AudioWatermarkType
 {
-    /// <summary>Spread-spectrum frequency domain embedding.</summary>
+    /// <summary>Keyed spread spectrum in the block-DCT domain; see <see cref="AudioWatermarker{T}"/>.</summary>
     SpreadSpectrum,
-    /// <summary>AudioSeal-style localized watermarking.</summary>
+    /// <summary>
+    /// Keyed spread spectrum with per-segment (localized) detection, the objective of AudioSeal; see
+    /// <see cref="AudioSealWatermarker{T}"/>. It does not use the AudioSeal network.
+    /// </summary>
     AudioSeal
 }

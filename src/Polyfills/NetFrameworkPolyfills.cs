@@ -17,7 +17,7 @@ namespace System.Collections.Generic
     /// This polyfill enables that syntax in .NET Framework.
     /// </para>
     /// </remarks>
-    public static class KeyValuePairExtensions
+    internal static class KeyValuePairExtensions
     {
         /// <summary>
         /// Deconstructs a KeyValuePair into its key and value components.
@@ -41,7 +41,7 @@ namespace System.Collections.Generic
     /// <summary>
     /// Extension methods for Dictionary to add missing methods from newer .NET versions.
     /// </summary>
-    public static class DictionaryExtensions
+    internal static class DictionaryExtensions
     {
         /// <summary>
         /// Gets the value associated with the specified key, or the default value if not found.
@@ -115,7 +115,7 @@ namespace System.Collections.Generic
     /// <summary>
     /// Extension methods for IEnumerable to add ToHashSet functionality.
     /// </summary>
-    public static class EnumerableExtensions
+    internal static class EnumerableExtensions
     {
         /// <summary>
         /// Creates a HashSet from an IEnumerable.
@@ -158,7 +158,7 @@ namespace System
     /// This class provides these methods so code can work across all .NET versions.
     /// </para>
     /// </remarks>
-    public static class MathPolyfill
+    internal static class MathPolyfill
     {
         /// <summary>
         /// Computes the base-2 logarithm of a number.
@@ -215,7 +215,7 @@ namespace System
     /// Extension methods for Array to add missing methods from newer .NET versions.
     /// Available for all frameworks.
     /// </summary>
-    public static class ArrayPolyfill
+    internal static class ArrayPolyfill
     {
         /// <summary>
         /// Fills an array with a specified value.
@@ -268,7 +268,7 @@ namespace System.IO
     /// This class provides these methods so code can work across all .NET versions.
     /// </para>
     /// </remarks>
-    public static class FilePolyfill
+    internal static class FilePolyfill
     {
         /// <summary>
         /// Asynchronously reads all lines from a file.

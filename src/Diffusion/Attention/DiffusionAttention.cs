@@ -90,12 +90,6 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     private readonly FlashAttentionConfig _flashConfig;
 
     /// <summary>
-    /// Cached input for backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Whether Flash Attention was used in the last forward pass.
     /// </summary>
     private bool _usedFlashAttention;
@@ -213,11 +207,6 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // Retain the backward-activation cache only when an eager manual Backward
-        // will read it; skip in inference/under tape so the denoise-loop arena can
-        // recycle scratch without aliasing a stale reference (issue #1668).
-        _lastInput = ShouldCacheForBackward ? input : null;
-
         // Determine if input is image format [B, C, H, W] or sequence format [B, S, D]
         bool isImageFormat = input.Shape.Length == 4;
         int batchSize, sequenceLength, channels;
@@ -300,7 +289,6 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
         _usedFlashAttention = false;
         _flashAttention.ResetState();
         _standardAttention.ResetState();
@@ -395,18 +383,6 @@ public partial class DiffusionCrossAttention<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private readonly CrossAttentionLayer<T> _crossAttention;
 
-    /// <summary>
-    /// Cached input for backward pass.
-    /// </summary>
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Cached context for backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastContext;
-
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
@@ -474,11 +450,6 @@ public partial class DiffusionCrossAttention<T> : LayerBase<T>, IShapeContract
     /// <returns>Output tensor of the same shape as input.</returns>
     public Tensor<T> ForwardWithContext(Tensor<T> input, Tensor<T>? context)
     {
-        // See Forward: keep backward-activation caches only when a manual Backward reads them.
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input : null;
-        _lastContext = cacheBwd ? context : null;
-
         bool isImageFormat = input.Shape.Length == 4;
         int batchSize, sequenceLength, channels;
         Tensor<T> x;
@@ -549,8 +520,6 @@ public partial class DiffusionCrossAttention<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastContext = null;
         _crossAttention.ResetState();
     }
 

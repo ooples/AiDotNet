@@ -44,7 +44,7 @@ public class SpikingNeuralNetworkOptions : ModelHyperparameterOptions
     /// <para>
     /// <b>Scope:</b> This knob applies ONLY to unsupervised STDP weight updates on the
     /// hidden spiking layers (e.g. when training the reservoir as an unsupervised feature
-    /// extractor). The supervised <see cref="SpikingNeuralNetwork{T}.Train"/> path
+    /// extractor). The supervised <c>SpikingNeuralNetwork&lt;T&gt;.Train</c> path
     /// freezes hidden layers and trains the readout via Zenke 2018 surrogate-gradient
     /// Adam — pair-based STDP is non-supervised and decoupled from a supervised MSE
     /// loss (it can drift the hidden representation in directions that hurt loss, which

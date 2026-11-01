@@ -124,13 +124,6 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
     private readonly LayerBase<T> _backwardLayer;
     private readonly bool _mergeMode;
 
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastForwardOutput;
-    [Scratch]
-    private Tensor<T>? _lastBackwardOutput;
-
     /// <summary>
     /// The computation engine (CPU or GPU) for vectorized operations.
     /// </summary>
@@ -324,21 +317,17 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         // Forward pass
-        var forwardInput = input;
-        _lastForwardOutput = _forwardLayer.Forward(forwardInput);
+        var forwardOutput = _forwardLayer.Forward(input);
 
         // Backward direction: run the wrapped layer over the time-reversed sequence, then reverse its output back so
         // position t pairs the forward state at t with the backward state at t (Schuster & Paliwal 1997; PyTorch's and
         // Keras's bidirectional RNNs, and this layer's own GPU path). Both reversals are tape-tracked flips: the old
         // SetSlice copy was not an autodiff node, so no gradient reached the input through the backward direction.
-        var backwardOutput = _backwardLayer.Forward(ReverseTime(input));
-        _lastBackwardOutput = ReverseTime(backwardOutput);
+        var backwardOutput = ReverseTime(_backwardLayer.Forward(ReverseTime(input)));
 
         // Merge outputs
-        return MergeOutputs(_lastForwardOutput, _lastBackwardOutput);
+        return MergeOutputs(forwardOutput, backwardOutput);
     }
 
     /// <summary>
@@ -470,10 +459,6 @@ public partial class BidirectionalLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastForwardOutput = null;
-        _lastBackwardOutput = null;
-
         _forwardLayer.ResetState();
         _backwardLayer.ResetState();
     }

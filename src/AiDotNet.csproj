@@ -349,6 +349,43 @@
 	  </EmbeddedResource>
 	</ItemGroup>
 
+	<!-- Public API contract (#2392). Every public type and member is recorded in PublicAPI.Shipped.txt (the surface
+	     shipped so far) and PublicAPI.Unshipped.txt (added since the last release). Adding, changing or removing a
+	     public signature without updating PublicAPI.Unshipped.txt fails the build: RS0016 (undeclared API) and RS0017
+	     (declared API that no longer exists) are warnings, and TreatWarningsAsErrors above turns them into errors.
+	     The root files hold the API common to every target framework; PublicAPI/<tfm>/ holds the members that exist
+	     only on that framework, as the analyzer documents for multi-targeted projects (net10.0/net8.0 and the three
+	     legacy targets differ by 8 and 41 entries: record-clone covariant returns, default interface methods, nint,
+	     and the legacy polyfills). The package's own targets add the root files as AdditionalFiles. API that exists on
+	     every framework goes in the root PublicAPI.Unshipped.txt; a PublicAPI/<tfm>/PublicAPI.Unshipped.txt exists only
+	     while that framework has unreleased changes of its own (the post-release roll deletes it once it is empty).
+	     RS0041 (public API uses oblivious reference types) is off: 361 existing members sit in #nullable disable
+	     code, and annotating them is a separate change. The baseline still records them with the '~' marker, so a
+	     change to their signatures is caught by RS0016/RS0017 like any other. -->
+	<PropertyGroup>
+	  <NoWarn>$(NoWarn);RS0041</NoWarn>
+	</PropertyGroup>
+	<ItemGroup>
+	  <PackageReference Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" PrivateAssets="all" IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+	</ItemGroup>
+	<ItemGroup>
+	  <AdditionalFiles Include="PublicAPI\$(TargetFramework)\PublicAPI.Shipped.txt" Condition="Exists('PublicAPI\$(TargetFramework)\PublicAPI.Shipped.txt')" />
+	  <AdditionalFiles Include="PublicAPI\$(TargetFramework)\PublicAPI.Unshipped.txt" Condition="Exists('PublicAPI\$(TargetFramework)\PublicAPI.Unshipped.txt')" />
+	</ItemGroup>
+
+	<!-- Package validation (#2392): every pack compares the package against the last release on nuget.org and fails on
+	     a binary or source break, and checks that the assets for the different target frameworks are compatible with
+	     each other. GeneratePackageOnBuild packs on every multi-framework build (a single-framework `-f` build is an
+	     inner build and does not pack, so it does not validate). Accepted breaks are recorded in
+	     CompatibilitySuppressions.xml; regenerate it with -p:GenerateCompatibilitySuppressionFile=true and review the
+	     diff. After each release, the roll-api-baseline job in .github/workflows/release-please.yml runs
+	     scripts/Roll-PublicApiBaseline.ps1 (the Unshipped entries at the release tag move into Shipped, and the
+	     baseline below becomes the released version), regenerates the suppressions and opens a PR with the result. -->
+	<PropertyGroup>
+	  <EnablePackageValidation>true</EnablePackageValidation>
+	  <PackageValidationBaselineVersion>0.234.0</PackageValidationBaselineVersion>
+	</PropertyGroup>
+
 	<!-- Global usings for AiDotNet.Tensors namespaces -->
 	<ItemGroup>
 	  <Using Include="AiDotNet.Tensors.LinearAlgebra" />

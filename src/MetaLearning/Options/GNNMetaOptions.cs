@@ -46,22 +46,20 @@ public class GNNMetaOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
 
     #region Optional Properties with Defaults
 
-    /// <summary>
-    /// Gets or sets the loss function for training.
-    /// </summary>
-    /// <value>Default: null (uses model's default loss function if available).</value>
+    /// <summary>Loss function for meta-training; null uses the meta-model's default loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for meta-parameter updates (outer loop).
+    /// Optimizer for the meta-update. When set, it takes the outer step at its own learning rate (so
+    /// <see cref="OuterLearningRate"/> no longer applies) and keeps its state across meta-iterations; null uses
+    /// plain SGD at <see cref="OuterLearningRate"/>. It must not be the same instance as <see cref="InnerOptimizer"/>.
     /// </summary>
-    /// <value>Default: null (uses built-in Adam optimizer).</value>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for inner-loop adaptation.
+    /// Must stay null: this algorithm takes no plain gradient inner step (it adapts without one, or by its own
+    /// update rule), so a supplied optimizer is rejected when the learner is built.
     /// </summary>
-    /// <value>Default: null (uses built-in SGD optimizer).</value>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
 
     /// <summary>

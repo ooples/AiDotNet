@@ -1,7 +1,9 @@
 using System.Diagnostics;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.Agentic.Models.Local;
 using AiDotNet.Models;
+using AiDotNet.Safety.Watermarking;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.Safety;
@@ -130,12 +132,15 @@ public class SafetyPipeline<T>
             return SafetyReport.Safe(Array.Empty<string>());
         }
 
-        // Check text-specific modality flags
+        // Check text-specific modality flags. Text watermark detection counts too: a pipeline configured only to
+        // detect watermarks must still run its text watermarker.
         bool textEnabled = _config.Text.EffectiveToxicityDetection
                            || _config.Text.EffectivePIIDetection
                            || _config.Text.EffectiveJailbreakDetection
                            || _config.Text.EffectiveHallucinationDetection
-                           || _config.Text.EffectiveCopyrightDetection;
+                           || _config.Text.EffectiveCopyrightDetection
+                           || _config.Watermarking.EffectiveTextWatermarking
+                           || _config.Watermarking.EffectiveDetectionMode;
         if (!textEnabled)
         {
             return SafetyReport.Safe(Array.Empty<string>());
@@ -269,6 +274,71 @@ public class SafetyPipeline<T>
 
         sw.Stop();
         return SafetyReport.FromFindings(allFindings, modulesRun, sw.Elapsed.TotalMilliseconds);
+    }
+
+    /// <summary>
+    /// Returns <paramref name="audioSamples"/> marked by the pipeline's keyed audio watermarker.
+    /// </summary>
+    /// <param name="audioSamples">The audio to mark.</param>
+    /// <param name="sampleRate">The sample rate in Hz.</param>
+    /// <returns>The watermarked audio.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// No audio watermarker is registered, or every registered one uses the published public key.
+    /// </exception>
+    /// <remarks>
+    /// The first registered <see cref="IAudioWatermarker{T}"/> holding a secret key embeds the mark. Register one with
+    /// <see cref="SafetyPipelineBuilder{T}.AddAudioModule"/>, for example
+    /// <c>new AudioWatermarker&lt;T&gt;(key: secret)</c>. Watermarkers on the public key may stay registered for
+    /// detection; they are never used to embed, because anyone can forge their marks.
+    /// </remarks>
+    public Vector<T> EmbedAudioWatermark(Vector<T> audioSamples, int sampleRate) =>
+        RequireKeyedEmbedder<IAudioWatermarker<T>>("audio watermarker (IAudioWatermarker)").EmbedWatermark(audioSamples, sampleRate);
+
+    /// <summary>
+    /// Returns <paramref name="text"/> marked by the pipeline's keyed post-hoc text watermarker (for example
+    /// <see cref="LexicalWatermarker{T}"/>).
+    /// </summary>
+    /// <param name="text">The finished text to mark.</param>
+    /// <returns>The watermarked text.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// No post-hoc text watermarker is registered, or every registered one uses the published public key.
+    /// </exception>
+    public string EmbedTextWatermark(string text) =>
+        RequireKeyedEmbedder<ITextWatermarkEmbedder<T>>("post-hoc text watermarker (ITextWatermarkEmbedder)").EmbedWatermark(text);
+
+    /// <summary>
+    /// Wraps a language model so that everything it generates carries the pipeline's keyed generation-time watermark
+    /// (the green-list watermark of <see cref="TextWatermarker{T}"/>).
+    /// </summary>
+    /// <param name="model">The language model to watermark.</param>
+    /// <returns>The watermarked model; pass it to <see cref="LocalEngineChatClient{T}"/> or any other decode loop.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// No generation watermarker is registered, or every registered one uses the published public key.
+    /// </exception>
+    public ICausalLanguageModel<T> WatermarkLanguageModel(ICausalLanguageModel<T> model) =>
+        RequireKeyedEmbedder<IGenerationWatermarker<T>>("generation watermarker (IGenerationWatermarker)").WatermarkModel(model);
+
+    // The first registered watermarker of the requested kind that holds a secret key.
+    private TWatermarker RequireKeyedEmbedder<TWatermarker>(string kind) where TWatermarker : class
+    {
+        bool sawPublicKey = false;
+        foreach (var module in _modules)
+        {
+            if (module is not TWatermarker watermarker) continue;
+            if (module is IKeyedWatermarker { UsesPublicKey: true })
+            {
+                sawPublicKey = true;
+                continue;
+            }
+
+            return watermarker;
+        }
+
+        throw new InvalidOperationException(sawPublicKey
+            ? $"Every registered {kind} uses the published public watermark key, whose marks anyone can forge. " +
+              "Register one constructed with a secret key of your own to embed watermarks."
+            : $"The safety pipeline has no {kind} to embed with. Register one constructed with a secret key, " +
+              "for example through SafetyPipelineBuilder.");
     }
 
     /// <summary>

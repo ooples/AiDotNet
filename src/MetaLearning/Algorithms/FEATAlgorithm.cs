@@ -128,7 +128,8 @@ public partial class FEATAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _featOptions = options;
         InitializeTransformer();

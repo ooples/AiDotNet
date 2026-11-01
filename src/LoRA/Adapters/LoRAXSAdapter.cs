@@ -186,27 +186,6 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T>? _trainableRGradient;
 
     /// <summary>
-    /// Intermediate result from forward pass: V_r^T * input
-    /// Cached for use in backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _cachedVtInput;
-
-    /// <summary>
-    /// Intermediate result from forward pass: R * (V_r^T * input)
-    /// Cached for use in backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _cachedRVtInput;
-
-    /// <summary>
-    /// Intermediate result from forward pass: Σ_r * R * (V_r^T * input)
-    /// Cached for use in backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _cachedSigmaRVtInput;
-
-    /// <summary>
     /// Indicates whether the adapter was initialized from SVD of pretrained weights.
     /// </summary>
     private bool _initializedFromSVD;
@@ -425,16 +404,16 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
 
         // LoRA-XS forward pass: U_r * Σ_r * R * V_r^T * input
         // Step 1: x1 = V_r^T * input [rank × batchSize]
-        _cachedVtInput = MatrixVectorMultiply((_frozenVt ?? throw new InvalidOperationException("_frozenVt is null where it is required.")).ToMatrix(), input);
+        var vtInput = MatrixVectorMultiply((_frozenVt ?? throw new InvalidOperationException("_frozenVt is null where it is required.")).ToMatrix(), input);
 
         // Step 2: x2 = R * x1 [rank × batchSize]
-        _cachedRVtInput = MatrixVectorMultiply(_trainableR.ToMatrix(), _cachedVtInput);
+        var rVtInput = MatrixVectorMultiply(_trainableR.ToMatrix(), vtInput);
 
         // Step 3: x3 = Σ_r * x2 (diagonal multiplication) [rank × batchSize]
-        _cachedSigmaRVtInput = ApplySigmaScaling((_frozenSigma ?? throw new InvalidOperationException("_frozenSigma is null where it is required.")).ToVector(), _cachedRVtInput);
+        var sigmaRVtInput = ApplySigmaScaling((_frozenSigma ?? throw new InvalidOperationException("_frozenSigma is null where it is required.")).ToVector(), rVtInput);
 
         // Step 4: x4 = U_r * x3 [outputSize × batchSize]
-        Tensor<T> loraOutput = MatrixVectorMultiply((_frozenU ?? throw new InvalidOperationException("_frozenU is null where it is required.")).ToMatrix(), _cachedSigmaRVtInput);
+        Tensor<T> loraOutput = MatrixVectorMultiply((_frozenU ?? throw new InvalidOperationException("_frozenU is null where it is required.")).ToMatrix(), sigmaRVtInput);
 
         // Apply LoRA scaling factor
         T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
@@ -578,9 +557,6 @@ public partial class LoRAXSAdapter<T> : LoRAAdapterBase<T>
     public override void ResetState()
     {
         _baseLayer.ResetState();
-        _cachedVtInput = null;
-        _cachedRVtInput = null;
-        _cachedSigmaRVtInput = null;
         _trainableRGradient = null;
     }
 

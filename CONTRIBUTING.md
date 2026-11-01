@@ -70,6 +70,20 @@ Before auto-fix → After auto-fix:
 - Coverage ≥ 90% for modified code paths; upload to Codecov if `CODECOV_TOKEN` is set.
 - Release workflow validates packaged TFMs before publishing.
 
+## Public API Changes
+`src/AiDotNet.csproj` tracks its whole public surface with `Microsoft.CodeAnalysis.PublicApiAnalyzers`. A change to
+a public signature fails the build until the API files say so:
+- New public type or member (RS0016): add its line to `src/PublicAPI.Unshipped.txt`. The IDE code fix writes it for you.
+- Removed or changed public type or member (RS0017): add `*REMOVED*<old line>` to `src/PublicAPI.Unshipped.txt`, or
+  delete the line if it is still in `PublicAPI.Unshipped.txt`.
+- API that exists on only some target frameworks goes in `src/PublicAPI/<tfm>/PublicAPI.Unshipped.txt`.
+
+Every full build also packs, and package validation compares the package against the last release on nuget.org.
+An intended break is recorded in `src/CompatibilitySuppressions.xml`: regenerate it with
+`dotnet build src/AiDotNet.csproj -c Release -p:GenerateCompatibilitySuppressionFile=true` and review the diff.
+After each release, the release workflow runs `scripts/Roll-PublicApiBaseline.ps1` and opens a PR that moves the
+released entries into `PublicAPI.Shipped.txt` and points package validation at the new version.
+
 ## Scope Discipline
 - Only modify files relevant to the user story or bug.
 - Don’t introduce unrelated refactors.

@@ -83,71 +83,9 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _weightsGradient;
 
     /// <summary>
-    /// The input tensor from the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the input received during the last forward pass. It is necessary for computing
-    /// gradients during the backward pass (backpropagation).
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers what input data was processed during the latest prediction.
-    /// 
-    /// It's like keeping your work when solving a math problem:
-    /// - The network needs to know what input values it used
-    /// - During training, it looks back at this input to understand its mistakes
-    /// - This helps it learn how to adjust its weights correctly
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-
-    /// <summary>
-    /// The output tensor from the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the output produced during the last forward pass. It is used during
-    /// backpropagation to compute certain gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers what predictions the layer made in its latest run.
-    /// 
-    /// When training the network:
-    /// - It needs to remember what it predicted
-    /// - It compares these predictions with the correct answers
-    /// - This helps it understand how to improve for next time
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastPreSquash;
-
-    /// <summary>
-    /// The coupling coefficients from the last routing iteration, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the coupling coefficients computed during the dynamic routing process.
-    /// These coefficients determine how much each input capsule contributes to each output capsule.
-    /// </para>
-    /// <para><b>For Beginners:</b> This tracks how strongly different input features connect to each output class.
-    /// 
-    /// Think of it like voting:
-    /// - Each input capsule "votes" for different output capsules
-    /// - These numbers record how strongly each input voted for each output
-    /// - Higher values mean a stronger connection between an input and output
-    /// 
-    /// For example, if detecting numbers, an input feature that looks like a loop might strongly 
-    /// "vote" for digits like 0, 6, 8, and 9.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastCouplings;
 
     /// <summary>
     /// The number of capsules in the input layer.
@@ -621,8 +559,6 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
             }
         }
 
-        _lastInput = processInput;
-
         // Compute predictions u_hat_ij = W_ij * u_i
         // prediction[b,i,c,l] = sum_d(weights[i,c,d,l] * input[b,i,d])
         // Engine-accelerated: broadcast multiply + reduce sum over the input-capsule-dim axis
@@ -649,7 +585,6 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
             // activation - SquashActivation expects 2D [numCapsules, capsuleDim]
             // weightedSum is [B, C, outDim], reshape to [B*C, outDim] for activation
             var flatWeightedSum = Engine.Reshape(weightedSum, [batchSize * _numClasses, _outputCapsuleDimension]);
-            _lastPreSquash = flatWeightedSum;
             var flatActivated = ApplyActivation(flatWeightedSum);
             var activated = Engine.Reshape(flatActivated, [batchSize, _numClasses, _outputCapsuleDimension]);
             output = activated;
@@ -662,9 +597,6 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
                 couplings = Engine.TensorAdd(couplings, dot);
             }
         }
-
-        _lastOutput = output;
-        _lastCouplings = couplings;
 
         // DigitCapsuleLayer outputs [batch, numClasses * outputCapsuleDimension] for compatibility
         // with downstream layers (like ReconstructionLayer) that expect flattened capsule features
@@ -765,10 +697,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
-        _lastCouplings = null;
+        // Clear gradients from the backward pass
         _weightsGradient = null;
     }
 }

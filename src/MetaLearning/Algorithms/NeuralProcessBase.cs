@@ -62,7 +62,8 @@ public abstract partial class NeuralProcessBase<T, TInput, TOutput> : MetaLearne
         IGradientBasedOptimizer<T, TInput, TOutput>? metaOptimizer,
         IGradientBasedOptimizer<T, TInput, TOutput>? innerOptimizer,
         int representationDim = 128)
-        : base(metaModel, lossFunction, options, dataLoader, metaOptimizer, innerOptimizer)
+        : base(metaModel, lossFunction, options, dataLoader, metaOptimizer, innerOptimizer,
+               optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         if (representationDim <= 0)
             throw new ArgumentOutOfRangeException(nameof(representationDim), "Representation dimension must be positive.");

@@ -37,8 +37,6 @@ public partial class TemporalConvolution<T> : LayerBase<T>, IShapeContract
     private readonly bool _causal;
     private readonly DenseLayer<T> _conv;
     private readonly LayerNormalizationLayer<T> _norm;
-    [Scratch]
-    private Tensor<T>? _lastInput;
 
     private Tensor<T> AddTensors(Tensor<T> a, Tensor<T> b)
     {
@@ -106,8 +104,6 @@ public partial class TemporalConvolution<T> : LayerBase<T>, IShapeContract
     /// </summary>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // #1668: skip the backward-activation cache in inference (denoise-loop arena safety).
-        _lastInput = ShouldCacheForBackward ? input : null;
 
         var normed = _norm.Forward(input);
         var convOut = _conv.Forward(normed);
@@ -124,7 +120,6 @@ public partial class TemporalConvolution<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
         _conv.ResetState();
         _norm.ResetState();
     }

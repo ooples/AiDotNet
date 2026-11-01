@@ -91,8 +91,6 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
     private readonly RWKVForecastingOptions<T> _options;
 
     private int _contextLength;
-    private int _lastForwardSeqLen;
-    private int _lastForwardBatchSize;
     private int _forecastHorizon;
     private int _modelDimension;
     private int _numHeads;
@@ -506,9 +504,6 @@ public partial class RWKVForecaster<T> : ForecastingModelBase<T>
         if (featureDim != _numFeatures)
             throw new ArgumentException(
                 $"Input feature dimension ({featureDim}) does not match expected numFeatures ({_numFeatures}).");
-
-        _lastForwardSeqLen = seqLen;
-        _lastForwardBatchSize = batchSize;
 
         // Input embedding: [batch*seqLen, numFeatures] -> [batch*seqLen, modelDim]
         if (_inputEmbedding is not null)

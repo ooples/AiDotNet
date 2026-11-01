@@ -87,18 +87,6 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
     private Vector<T>? _magnitudeGradient;
 
     /// <summary>
-    /// Cached normalized direction from the last forward pass, used in backpropagation.
-    /// </summary>
-    [Scratch]
-    private Matrix<T>? _lastNormalizedDirection;
-
-    /// <summary>
-    /// Cached input matrix from forward pass (used for computing magnitude gradients in backward).
-    /// </summary>
-    [Scratch]
-    private Matrix<T>? _lastInputMatrix;
-
-    /// <summary>
     /// Initializes a new DoRA adapter wrapping an existing layer.
     /// </summary>
     /// <param name="baseLayer">The layer to adapt with DoRA.</param>
@@ -378,24 +366,24 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Normalize the adapted direction: d_norm = d' / ||d'||
-        _lastNormalizedDirection = NormalizeRows(adaptedDirection);
+        Matrix<T> normalizedDirection = NormalizeRows(adaptedDirection);
 
         // Recompose weights: W' = m * d_norm
-        Matrix<T> finalWeights = RecomposeWeights(_lastNormalizedDirection);
+        Matrix<T> finalWeights = RecomposeWeights(normalizedDirection);
 
         // Compute output: y = input @ W'^T
-        // Convert input to matrix and cache for backward pass
-        _lastInputMatrix = new Matrix<T>(batchSize, inputSize);
+        // Convert input to matrix
+        var inputMatrix = new Matrix<T>(batchSize, inputSize);
         for (int i = 0; i < batchSize; i++)
         {
             for (int j = 0; j < inputSize; j++)
             {
-                _lastInputMatrix[i, j] = input[i * inputSize + j];
+                inputMatrix[i, j] = input[i * inputSize + j];
             }
         }
 
         // Matrix multiply: [batchSize, inputSize] @ [inputSize, outputSize]
-        Matrix<T> outputMatrix = _lastInputMatrix.Multiply(finalWeights.Transpose());
+        Matrix<T> outputMatrix = inputMatrix.Multiply(finalWeights.Transpose());
 
         // Convert back to tensor
         Vector<T> outputData = new Vector<T>(batchSize * outputSize);
@@ -554,8 +542,6 @@ public partial class DoRAAdapter<T> : LoRAAdapterBase<T>
     {
         _baseLayer.ResetState();
         _loraLayer.ResetState();
-        _lastNormalizedDirection = null;
-        _lastInputMatrix = null;
         _magnitudeGradient = null;
     }
 }

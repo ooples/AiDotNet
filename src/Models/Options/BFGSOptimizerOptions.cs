@@ -178,21 +178,4 @@ public class BFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// a bad step, while a value closer to 1.0 would keep it more aggressive.</para>
     /// </remarks>
     public double LearningRateDecreaseFactor { get; set; } = 0.95;
-
-    /// <summary>
-    /// Gets or sets the maximum number of iterations for the optimization process.
-    /// </summary>
-    /// <value>The maximum number of iterations, defaulting to 1000.</value>
-    /// <remarks>
-    /// <para>
-    /// This parameter limits how many iterations the algorithm will perform when trying to find
-    /// the optimal solution. The algorithm will stop either when it reaches this limit
-    /// or when the convergence tolerance is met, whichever comes first.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a safety limit that prevents the algorithm from running forever
-    /// if it can't find a satisfactory solution. The default (1000 iterations) is sufficient for most problems.
-    /// If your problem is particularly complex, you might need to increase this. If the algorithm consistently
-    /// hits this limit without converging, it usually indicates either a very difficult problem or that other
-    /// settings need adjustment.</para>
-    /// </remarks>
 }

@@ -33,13 +33,19 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class QMIXOptions<T> : ReinforcementLearningOptions<T>
 {
+    /// <summary>Number of cooperating agents.</summary>
     public int NumAgents { get; init; }
+    /// <summary>Number of features in one observation of the environment state.</summary>
     public int StateSize { get; init; }  // Per-agent observation size
+    /// <summary>Number of discrete actions, or the dimension of the action vector for a continuous action space.</summary>
     public int ActionSize { get; init; }  // Per-agent action size
+    /// <summary>Number of features in the global state the mixing network's hypernetworks condition on.</summary>
     public int GlobalStateSize { get; init; }  // Global state for mixing network
 
     // Network architectures
+    /// <summary>Hidden layer sizes of each agent's Q-network.</summary>
     public List<int> AgentHiddenLayers { get; init; } = new List<int> { 64 };
+    /// <summary>Hidden layer sizes of the mixing network that combines per-agent Q-values.</summary>
     public List<int> MixingHiddenLayers { get; init; } = new List<int> { 32 };
 
     /// <summary>

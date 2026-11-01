@@ -96,7 +96,8 @@ public partial class LaplacianShotAlgorithm<T, TInput, TOutput> : MetaLearnerBas
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _lapShotOptions = options;
     }

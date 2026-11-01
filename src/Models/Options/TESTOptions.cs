@@ -19,8 +19,11 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TESTOptions<T> : TimeSeriesRegressionOptions<T>
 {
+    /// <summary>Creates options with the default values.</summary>
     public TESTOptions() { }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     public TESTOptions(TESTOptions<T> other)
     {
         if (other == null) throw new ArgumentNullException(nameof(other));
@@ -41,13 +44,21 @@ public class TESTOptions<T> : TimeSeriesRegressionOptions<T>
         AlignmentWeight = other.AlignmentWeight;
     }
 
+    /// <summary>Number of past time steps the model reads as context.</summary>
     public int ContextLength { get; set; } = 512;
+    /// <summary>Number of future time steps to forecast.</summary>
     public int ForecastHorizon { get; set; } = 96;
+    /// <summary>Number of time steps in each patch the series is split into.</summary>
     public int PatchLength { get; set; } = 16;
+    /// <summary>Width of the model's hidden representations.</summary>
     public int HiddenDimension { get; set; } = 768;
+    /// <summary>Number of transformer layers.</summary>
     public int NumLayers { get; set; } = 6;
+    /// <summary>Number of attention heads.</summary>
     public int NumHeads { get; set; } = 8;
+    /// <summary>Dropout probability applied during training.</summary>
     public double DropoutRate { get; set; } = 0.1;
+    /// <summary>Preset size of the foundation model.</summary>
     public FoundationModelSize ModelSize { get; set; } = FoundationModelSize.Base;
 
     /// <summary>

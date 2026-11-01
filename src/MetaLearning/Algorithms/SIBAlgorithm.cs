@@ -113,7 +113,8 @@ public partial class SIBAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _sibOptions = options;
     }
