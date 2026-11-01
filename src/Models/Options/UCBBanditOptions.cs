@@ -14,10 +14,13 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class UCBBanditOptions<T> : ReinforcementLearningOptions<T>
 {
+    /// <summary>Creates options with the default values.</summary>
     public UCBBanditOptions()
     {
     }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     public UCBBanditOptions(UCBBanditOptions<T> other)
     {
         Guard.NotNull(other);

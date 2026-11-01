@@ -148,7 +148,7 @@ public class ASGDOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// <value>The learning rate increase factor, defaulting to 1.05.</value>
     /// <remarks>
     /// <para>
-    /// Only consulted when <see cref="GradientBasedOptimizerOptions{T, TInput, TOutput}.UseAdaptiveLearningRate"/>
+    /// Only consulted when <see cref="OptimizationAlgorithmOptions{T, TInput, TOutput}.UseAdaptiveLearningRate"/>
     /// is enabled. This outer adaptation is an AiDotNet convenience shared by every gradient optimizer, and it
     /// operates on gamma_0, on top of ASGD's own schedule.
     /// </para>
