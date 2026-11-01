@@ -151,6 +151,7 @@ public class PPOOptions<T> : ModelOptions
     /// </summary>
     public List<int> ValueHiddenLayers { get; set; } = new List<int> { 64, 64 };
 
+    /// <summary>Creates options with the default values.</summary>
     public PPOOptions()
     {
         var numOps = MathHelper.GetNumericOperations<T>();

@@ -14,6 +14,7 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FinancialSACAgentOptions<T> : TradingAgentOptions<T>
 {
+    /// <summary>Creates options with the default values.</summary>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public FinancialSACAgentOptions()
     {
@@ -22,6 +23,8 @@ public class FinancialSACAgentOptions<T> : TradingAgentOptions<T>
         HiddenLayers = new[] { 256, 256 };
     }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public FinancialSACAgentOptions(FinancialSACAgentOptions<T> other) : base(other)
     {

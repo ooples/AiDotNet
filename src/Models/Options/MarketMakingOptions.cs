@@ -13,9 +13,12 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class MarketMakingOptions<T> : TradingAgentOptions<T>
 {
+    /// <summary>Creates options with the default values.</summary>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public MarketMakingOptions() { }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public MarketMakingOptions(MarketMakingOptions<T> other) : base(other)
     {

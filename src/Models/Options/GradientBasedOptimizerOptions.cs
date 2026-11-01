@@ -23,7 +23,7 @@ namespace AiDotNet.Models.Options;
 /// linear regression, and logistic regression.
 /// </para>
 /// <para>
-/// This class inherits from <see cref="OptimizationAlgorithmOptions"/>, which means it includes all the
+/// This class inherits from <see cref="OptimizationAlgorithmOptions{T, TInput, TOutput}"/>, which means it includes all the
 /// base configuration options for optimization algorithms plus any additional options specific to
 /// gradient-based methods.
 /// </para>

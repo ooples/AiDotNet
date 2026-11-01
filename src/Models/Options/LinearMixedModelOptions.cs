@@ -49,6 +49,7 @@ public class LinearMixedModelOptions<T> : RegressionOptions<T>
     /// </summary>
     /// <value>Default is 100.</value>
     private int _maxIterations = 100;
+    /// <summary>Maximum number of iterations of the variance-component estimation.</summary>
     public int MaxIterations
     {
         get => _maxIterations;
@@ -67,6 +68,7 @@ public class LinearMixedModelOptions<T> : RegressionOptions<T>
     /// </summary>
     /// <value>Default is 1e-6.</value>
     private double _tolerance = 1e-6;
+    /// <summary>Convergence tolerance of the variance-component estimation.</summary>
     public double Tolerance
     {
         get => _tolerance;
@@ -91,6 +93,7 @@ public class LinearMixedModelOptions<T> : RegressionOptions<T>
     /// </summary>
     /// <value>Default is 0.95 (95% confidence).</value>
     private double _confidenceLevel = 0.95;
+    /// <summary>Confidence level of the intervals reported for the fixed effects (for example 0.95).</summary>
     public double ConfidenceLevel
     {
         get => _confidenceLevel;
