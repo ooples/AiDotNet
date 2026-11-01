@@ -103,6 +103,18 @@ internal sealed record LlamaConfiguration
     /// (2022) for the nearest power of two of heads, interleaved for the rest.</summary>
     public bool SqrtAlibi { get; init; }
 
+    /// <summary>Granite's scale on the input embeddings (<c>embedding_multiplier</c>; 1 for LLaMA).</summary>
+    public double EmbeddingMultiplier { get; init; } = 1;
+
+    /// <summary>Granite's scale on each block's output before the residual sum (<c>residual_multiplier</c>; 1 for LLaMA).</summary>
+    public double ResidualMultiplier { get; init; } = 1;
+
+    /// <summary>Granite's attention score scale (<c>attention_multiplier</c>); 0 for LLaMA's 1/√(head width).</summary>
+    public double AttentionMultiplier { get; init; }
+
+    /// <summary>Granite's divisor of the logits (<c>logits_scaling</c>; 1 for LLaMA).</summary>
+    public double LogitsScaling { get; init; } = 1;
+
     /// <summary>The resolved head width.</summary>
     internal int ResolvedHeadDim => HeadDim > 0 ? HeadDim : Hidden / Heads;
 }
@@ -260,15 +272,17 @@ internal sealed class LlamaNetwork<T>
     // The logits of hidden states: the head, or the token table transposed.
     private Tensor<T>? Head(Tensor<T> hidden)
     {
-        if (LmHead is not null) return Rows(LmHead, hidden);
-        if (!Configuration.TieWordEmbeddings) return null;
         var c = Configuration;
-        var table = _engine.Reshape(Value(Embeddings!), new[] { c.VocabSize, c.Hidden });
+        Tensor<T> Scaled(Tensor<T> logits) => c.LogitsScaling == 1 ? logits : _engine.TensorMultiplyScalar(logits, NumOps.FromDouble(1.0 / c.LogitsScaling));
+        if (LmHead is not null) return Scaled(Rows(LmHead, hidden));
+        if (!c.TieWordEmbeddings) return null;
+        var embeddings = Embeddings ?? throw new InvalidOperationException("A tied head needs the token table.");
+        var table = _engine.Reshape(Value(embeddings), new[] { c.VocabSize, c.Hidden });
         var shape = hidden.Shape.ToArray();
         int rows = hidden.Length / c.Hidden;
         var logits = _engine.TensorMatMulTransposed(_engine.Reshape(hidden, new[] { rows, c.Hidden }), table);
         shape[^1] = c.VocabSize;
-        return _engine.Reshape(logits, shape);
+        return Scaled(_engine.Reshape(logits, shape));
     }
 
     // A value holder's parameter [1, N], read directly (the gradient tape records it as the layer's own forward does)
@@ -378,7 +392,8 @@ internal sealed class LlamaNetwork<T>
 
         if (cache is not null)
             while (cache.Layers.Count < Layers.Count) cache.Layers.Add(null);
-        var x = embeddings;
+        // GraniteModel scales whatever embeddings it is given, the multimodal sequence included.
+        var x = c.EmbeddingMultiplier == 1 ? embeddings : _engine.TensorMultiplyScalar(embeddings, NumOps.FromDouble(c.EmbeddingMultiplier));
         for (int i = 0; i < Layers.Count; i++) x = Run(Layers[i], x, cos, sin, bias, cache, i);
         if (cache is not null) cache.Length = total;
         var hidden = FinalNorm is null ? x : RmsNorm(FinalNorm, x);
@@ -499,16 +514,17 @@ internal sealed class LlamaNetwork<T>
         }
         var scores = _engine.TensorMultiplyScalar(
             _engine.BatchMatMul(_engine.Reshape(q, new[] { b * c.Heads, l, hd }), _engine.TensorPermute(_engine.Reshape(k, new[] { b * c.Heads, keys, hd }), new[] { 0, 2, 1 })),
-            NumOps.FromDouble(1.0 / Math.Sqrt(hd)));
+            NumOps.FromDouble(c.AttentionMultiplier > 0 ? c.AttentionMultiplier : 1.0 / Math.Sqrt(hd)));
         scores = _engine.TensorAdd(_engine.Reshape(scores, new[] { b, c.Heads, l, keys }), _engine.TensorBroadcastTo(bias, new[] { b, c.Heads, l, keys }));
         var probabilities = _engine.Reshape(_engine.Softmax(scores, axis: 3), new[] { b * c.Heads, l, keys });
         var context = _engine.Reshape(_engine.TensorPermute(
             _engine.Reshape(_engine.BatchMatMul(probabilities, _engine.Reshape(v, new[] { b * c.Heads, keys, hd })), new[] { b, c.Heads, l, hd }),
             new[] { 0, 2, 1, 3 }), new[] { b, l, c.Heads * hd });
-        x = _engine.TensorAdd(x, Adapted(layer.Output, layer.OutputLora, context));
+        Tensor<T> Residual(Tensor<T> block) => c.ResidualMultiplier == 1 ? block : _engine.TensorMultiplyScalar(block, NumOps.FromDouble(c.ResidualMultiplier));
+        x = _engine.TensorAdd(x, Residual(Adapted(layer.Output, layer.OutputLora, context)));
         var post = RmsNorm(layer.PostNorm, x);
         var gated = _engine.TensorMultiply(_engine.Swish(Adapted(layer.Gate, layer.GateLora, post)), Adapted(layer.Up, layer.UpLora, post));
-        return _engine.TensorAdd(x, Adapted(layer.Down, layer.DownLora, gated));
+        return _engine.TensorAdd(x, Residual(Adapted(layer.Down, layer.DownLora, gated)));
     }
 
     /// <summary>

@@ -9565,20 +9565,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "GraniteSpeech" && model.TypeParameterCount == 1)
             {
-                // Granite Speech keeps IBM's paper-scale 512-wide, 12-layer encoder and
-                // 32,000-token output head in production. Even after the required FP32
-                // mitigation and two-step training caps, that generated fixture consumes
-                // several minutes and multiple gigabytes per class. Exercise the same
-                // speech encoder -> adapter -> token-head topology through its public
-                // options at runner-safe scale; production defaults remain unchanged.
+                // Granite-speech's conformer CTC encoder (width 16, two blocks so the self-conditioned middle layer
+                // exists, attention blocks of 8 frames), a one-layer window Q-Former at width 16 and a one-layer Granite
+                // decoder at width 16 with LoRA on q and v and a 16-token vocabulary, which has no chat prompt text.
+                // A width-16 tied head cannot lift logits divided by 16, so the fixture leaves them unscaled and warms
+                // up for 2 steps. Production defaults are granite-speech-3.3-8b's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 8, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
+                    "inputSize: 3200, outputSize: 16), " +
                     "new AiDotNet.SpeechRecognition.LLMIntegrated.GraniteSpeechOptions { " +
-                    "SampleRate = 16000, MaxAudioLengthSeconds = 1, EncoderDim = 32, " +
-                    "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, VocabSize = 64, " +
-                    "MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\" })";
+                    "NumMels = 16, EncoderDim = 16, NumEncoderLayers = 2, NumAttentionHeads = 2, EncoderHeadDim = 8, " +
+                    "AttentionContextSize = 8, MaxRelativePosition = 8, ConvKernel = 3, CtcVocabSize = 8, ProjectorDim = 16, " +
+                    "NumProjectorLayers = 1, NumProjectorHeads = 2, ProjectorFeedForwardDim = 32, LlmDim = 16, " +
+                    "LlmFeedForwardDim = 32, NumLlmLayers = 1, NumLlmAttentionHeads = 2, NumLlmKvHeads = 1, VocabSize = 16, " +
+                    "LoraRank = 2, LogitsScaling = 1, WarmupSteps = 2, MaxTextLength = 4, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "ImageBindNeuralNetwork" && model.TypeParameterCount == 1)
             {
@@ -12227,15 +12228,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "OLMoASR" && model.TypeParameterCount == 1)
             {
-                // OLMoASR (LLM-integrated ASR). Defaults (EncoderDim=512, 12 layers, VocabSize=32000) make
-                // each CPU training step multi-second → 200-iter MoreData timed out (120 s). Build the SAME
-                // architecture at CI-smoke width/depth/vocab.
+                // OLMoASR's Whisper encoder-decoder at width 16 with one encoder and one decoder layer, the 30-second
+                // 80-band window and a 16-token vocabulary (three special tokens at its top). Production defaults are
+                // OLMoASR-large.en-v2's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
-                    "new AiDotNet.SpeechRecognition.LLMIntegrated.OLMoASROptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, VocabSize = 64, NumMels = 32 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.LLMIntegrated.OLMoASROptions { ModelDim = 16, NumAttentionHeads = 2, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, VocabSize = 16, MaxTextLength = 4 })";
             }
             else if (model.ClassName == "SambaASR" && model.TypeParameterCount == 1)
             {
@@ -16802,14 +16803,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "GraniteSpeech")
             {
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 32 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8, 64 };");
-                sb.AppendLine("    protected override int TrainingIterations => 2;");
-                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
-                sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
-                sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
-                sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+                // Granite-speech reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
             }
             else if (model.ClassName == "NemotronSpeech")
             {
@@ -16835,6 +16831,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Moonshine reads waveforms (0.2 s) and returns the decoder's logits for the first token.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "OLMoASR")
+            {
+                // OLMoASR reads waveforms (0.2 s, padded to its 30-second window) and returns the decoder's logits over
+                // start of transcript and no timestamps.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 16 };");
             }
             else if (model.ClassName == "SenseVoiceLarge")
             {

@@ -22,6 +22,7 @@ namespace AiDotNet.Tokenization.Algorithms
     internal static class WhisperTiktoken
     {
         private const string Resource = "AiDotNet.Tokenization.whisper-multilingual.tiktoken.gz";
+        private const string EnglishResource = "AiDotNet.Tokenization.whisper-gpt2.tiktoken.gz";
 
         /// <summary>Whisper's language codes in token order (<c>whisper.tokenizer.LANGUAGES</c>).</summary>
         public static readonly IReadOnlyList<string> LanguageCodes = new[]
@@ -33,7 +34,8 @@ namespace AiDotNet.Tokenization.Algorithms
             "ht", "ps", "tk", "nn", "mt", "sa", "lb", "my", "bo", "tl", "mg", "as", "tt", "haw", "ln", "ha", "ba", "jw", "su", "yue",
         };
 
-        private static readonly Lazy<Dictionary<byte[], int>> Ranks = new(LoadRanks);
+        private static readonly Lazy<Dictionary<byte[], int>> Ranks = new(() => LoadRanks(Resource));
+        private static readonly Lazy<TiktokenEncoding> EnglishEncoding = new(() => new TiktokenEncoding(LoadRanks(EnglishResource), SpecialTokens(99)));
         private static readonly ConcurrentDictionary<int, TiktokenEncoding> Encodings = new();
 
         /// <summary>The encoding with the first <paramref name="numLanguages"/> language tokens (99 or 100 in released models).</summary>
@@ -43,6 +45,11 @@ namespace AiDotNet.Tokenization.Algorithms
                 throw new ArgumentOutOfRangeException(nameof(numLanguages), numLanguages, $"Whisper defines 1 … {LanguageCodes.Count} languages.");
             return Encodings.GetOrAdd(numLanguages, n => new TiktokenEncoding(Ranks.Value, SpecialTokens(n)));
         }
+
+        /// <summary>The English-only models' encoding (<c>get_encoding("gpt2")</c>): GPT-2's vocabulary (the released
+        /// <c>gpt2.tiktoken</c>, MIT) with the 99-language special tokens, 51,864 ids with <c>&lt;|endoftext|&gt;</c> at
+        /// 50,256.</summary>
+        public static TiktokenEncoding English => EnglishEncoding.Value;
 
         /// <summary>The special tokens of the <paramref name="numLanguages"/>-language encoding, in id order.</summary>
         public static IReadOnlyList<string> SpecialTokens(int numLanguages)
@@ -56,10 +63,10 @@ namespace AiDotNet.Tokenization.Algorithms
             return specials;
         }
 
-        private static Dictionary<byte[], int> LoadRanks()
+        private static Dictionary<byte[], int> LoadRanks(string resource)
         {
-            using var stream = typeof(WhisperTiktoken).Assembly.GetManifestResourceStream(Resource)
-                ?? throw new System.IO.InvalidDataException($"The embedded resource {Resource} is missing.");
+            using var stream = typeof(WhisperTiktoken).Assembly.GetManifestResourceStream(resource)
+                ?? throw new System.IO.InvalidDataException($"The embedded resource {resource} is missing.");
             using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
             using var reader = new System.IO.StreamReader(gzip, Encoding.ASCII);
             return TiktokenEncoding.ReadRanks(reader);
