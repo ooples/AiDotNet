@@ -191,7 +191,7 @@ dotnet_diagnostic.CA2000.severity = error
 # configuration class (A-4 slice 3: options are the facade's configuration surface).
 # When a further area is fully documented, add
 # its paths here.
-[{src/AiModelBuilder*.cs,src/Models/Results/AiModelResult*.cs,src/AiDotNet.Serving/Extensions/AiModelResultExtensions.cs,src/Interfaces/IAiModelBuilder.cs,src/Interfaces/IFullModel.cs,src/Configuration/IConfiguredView.cs,src/Interfaces/**.cs,src/**/*Options.cs}]
+[{src/AiModelBuilder*.cs,src/Models/Results/AiModelResult*.cs,src/AiDotNet.Serving/Extensions/AiModelResultExtensions.cs,src/Interfaces/IAiModelBuilder.cs,src/Interfaces/IFullModel.cs,src/Configuration/IConfiguredView.cs,src/Interfaces/**.cs,src/**Options.cs}]
 dotnet_diagnostic.CS1591.severity = error
 dotnet_diagnostic.CS1570.severity = error
 dotnet_diagnostic.CS1571.severity = error
@@ -212,6 +212,55 @@ dotnet_diagnostic.CS1712.severity = error
 dotnet_diagnostic.CS1723.severity = error
 dotnet_diagnostic.CS1734.severity = error
 dotnet_diagnostic.CS1735.severity = error
+
+# Options classes in these namespaces are not documented yet; each is documented, and removed from this list,
+# in its own per-namespace PR (issue #2393). The list may only shrink: a section that matched no undocumented
+# member would hide nothing, so delete the namespace from it as soon as its Options classes are documented.
+# The AiDotNet.Serving classes listed are configuration the server does not bind yet; each is documented as it is
+# wired up (issue #2427).
+# CS1570 (malformed XML) is not listed: it stays an error everywhere (src/XmlDocDiagnostics.globalconfig).
+[src/{SpeechRecognition,TextToSpeech,VisionLanguage,Data,Audio,PhysicsInformed,ReinforcementLearning}/**Options.cs]
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CS1571.severity = none
+dotnet_diagnostic.CS1572.severity = none
+dotnet_diagnostic.CS1573.severity = none
+dotnet_diagnostic.CS1574.severity = none
+dotnet_diagnostic.CS1580.severity = none
+dotnet_diagnostic.CS1581.severity = none
+dotnet_diagnostic.CS1584.severity = none
+dotnet_diagnostic.CS1587.severity = none
+dotnet_diagnostic.CS1589.severity = none
+dotnet_diagnostic.CS1590.severity = none
+dotnet_diagnostic.CS1592.severity = none
+dotnet_diagnostic.CS0419.severity = none
+dotnet_diagnostic.CS1710.severity = none
+dotnet_diagnostic.CS1711.severity = none
+dotnet_diagnostic.CS1712.severity = none
+dotnet_diagnostic.CS1723.severity = none
+dotnet_diagnostic.CS1734.severity = none
+dotnet_diagnostic.CS1735.severity = none
+
+# Unbound AiDotNet.Serving configuration (issue #2427), excluded the same way.
+[src/AiDotNet.Serving/Configuration/{ServingSecurityOptions,ServingApiKeyOptions,StaticApiKeyOptions,ServingJwtAuthenticationOptions,ServingJwtTierOptions,AdminAuthorizationOptions,ServingDatabaseOptions}.cs]
+dotnet_diagnostic.CS1591.severity = none
+dotnet_diagnostic.CS1571.severity = none
+dotnet_diagnostic.CS1572.severity = none
+dotnet_diagnostic.CS1573.severity = none
+dotnet_diagnostic.CS1574.severity = none
+dotnet_diagnostic.CS1580.severity = none
+dotnet_diagnostic.CS1581.severity = none
+dotnet_diagnostic.CS1584.severity = none
+dotnet_diagnostic.CS1587.severity = none
+dotnet_diagnostic.CS1589.severity = none
+dotnet_diagnostic.CS1590.severity = none
+dotnet_diagnostic.CS1592.severity = none
+dotnet_diagnostic.CS0419.severity = none
+dotnet_diagnostic.CS1710.severity = none
+dotnet_diagnostic.CS1711.severity = none
+dotnet_diagnostic.CS1712.severity = none
+dotnet_diagnostic.CS1723.severity = none
+dotnet_diagnostic.CS1734.severity = none
+dotnet_diagnostic.CS1735.severity = none
 
 [src/libraries/System.Net.Http/src/System/Net/Http/{SocketsHttpHandler/Http3RequestStream.cs,BrowserHttpHandler/BrowserHttpHandler.cs}]
 # disable CA2025, the analyzer throws a NullReferenceException when processing this file: https://github.com/dotnet/roslyn-analyzers/issues/7652

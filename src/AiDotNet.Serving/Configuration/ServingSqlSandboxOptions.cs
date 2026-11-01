@@ -7,10 +7,16 @@ namespace AiDotNet.Serving.Configuration;
 /// </summary>
 public sealed class ServingSqlSandboxOptions
 {
+    /// <summary>Gets or sets the SQL dialect used when a request names neither a dialect nor a dataset.</summary>
+    /// <value>Default: <see cref="SqlDialect.SQLite"/>.</value>
     public SqlDialect DefaultDialect { get; set; } = SqlDialect.SQLite;
 
+    /// <summary>Gets or sets the database command timeout applied to every sandboxed statement, in seconds.</summary>
+    /// <value>Default: 5.</value>
     public int CommandTimeoutSeconds { get; set; } = 5;
 
+    /// <summary>Gets or sets the most rows a query returns; the query is limited to it and reading stops there.</summary>
+    /// <value>Values of zero or less use 1,000. Default: 1,000.</value>
     public int MaxResultRows { get; set; } = 1000;
 
     /// <summary>
@@ -36,6 +42,11 @@ public sealed class ServingSqlSandboxOptions
     /// </remarks>
     public string? MySqlConnectionString { get; set; }
 
+    /// <summary>
+    /// Gets or sets whether a request for Postgres or MySQL without a configured connection string runs against its
+    /// own throwaway Docker container; when false such a request is refused.
+    /// </summary>
+    /// <value>Default: <c>true</c>.</value>
     public bool EnableDockerFallback { get; set; } = true;
 
     /// <summary>

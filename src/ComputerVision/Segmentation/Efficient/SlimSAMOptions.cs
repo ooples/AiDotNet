@@ -37,10 +37,35 @@ public class SlimSAMOptions : SegmentationModelOptions
         WeightDecay = other.WeightDecay;
     }
 
+    /// <summary>
+    /// Gets or sets the channel width of each of the image encoder's four stages, from the highest-resolution stage
+    /// to the lowest.
+    /// </summary>
+    /// <value>Exactly four positive widths. Default: { 64, 128, 320, 768 }.</value>
     public int[] ChannelDimensions { get; set; } = [64, 128, 320, 768];
+
+    /// <summary>
+    /// Gets or sets the number of blocks in each of the image encoder's four stages, in the same order as
+    /// <see cref="ChannelDimensions"/>.
+    /// </summary>
+    /// <value>Exactly four positive block counts. Default: { 2, 2, 4, 12 }.</value>
     public int[] StageDepths { get; set; } = [2, 2, 4, 12];
+
+    /// <summary>Gets or sets the channel width of the mask decoder.</summary>
+    /// <value>A positive width. Default: 256.</value>
     public int DecoderDimension { get; set; } = 256;
+
+    /// <summary>
+    /// Gets or sets the learning rate of the default AdamW optimizer, used when no optimizer is supplied to the model.
+    /// </summary>
+    /// <value>Default: 1e-4.</value>
     public double LearningRate { get; set; } = 1e-4;
+
+    /// <summary>
+    /// Gets or sets the decoupled weight decay of the default AdamW optimizer, used when no optimizer is supplied to
+    /// the model.
+    /// </summary>
+    /// <value>Default: 0.01.</value>
     public double WeightDecay { get; set; } = 0.01;
 
     /// <summary>
