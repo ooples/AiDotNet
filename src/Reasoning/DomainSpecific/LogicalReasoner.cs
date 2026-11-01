@@ -108,7 +108,8 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 ///
 /// **Usage example:**
 /// ```csharp
-/// var reasoner = new LogicalReasoner&lt;double>(chatModel);
+/// var chatModel = new OllamaChatClient&lt;double&gt;("llama3");
+/// var reasoner = new LogicalReasoner&lt;double&gt;(chatModel);
 ///
 /// // Deductive reasoning
 /// var result = await reasoner.SolveAsync(
@@ -118,9 +119,9 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 ///
 /// // Logic puzzle
 /// result = await reasoner.SolvePuzzleAsync(
-///     "In a room are 3 switches and 3 light bulbs in another room.
-///      You can flip switches but only enter the bulb room once.
-///      How do you determine which switch controls which bulb?"
+///     "In a room are 3 switches and 3 light bulbs in another room. " +
+///     "You can flip switches but only enter the bulb room once. " +
+///     "How do you determine which switch controls which bulb?"
 /// );
 /// ```
 ///
