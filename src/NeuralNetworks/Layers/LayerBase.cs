@@ -3419,6 +3419,34 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// Runs <paramref name="build"/>, which constructs and registers child layers after this layer's constructor has
+    /// returned, so each child is seeded from this layer's own seed.
+    /// </summary>
+    /// <param name="build">The code that constructs the children and calls <see cref="RegisterSubLayer"/>.</param>
+    /// <remarks>
+    /// A child built after construction draws its seed from whatever construction scope the thread holds by then,
+    /// which depends on what else ran on the thread. Inside this call <see cref="RegisterSubLayer"/> replaces such a
+    /// seed with one derived from this layer's seed and the child's registration position; a seed a caller gave the
+    /// child outright is kept. Every route into <see cref="OnFirstForward"/> (the first real forward, the
+    /// shape-inference walk and <see cref="ResolveShapesOnly"/>) runs through it. A layer that rebuilds its children
+    /// elsewhere, for example when its forward sees a new input width, must call it too.
+    /// </remarks>
+    protected void BuildLateSubLayers(Action build)
+    {
+        if (build is null) throw new ArgumentNullException(nameof(build));
+        bool previous = _resolvingOnFirstForward;
+        _resolvingOnFirstForward = true;
+        try
+        {
+            build();
+        }
+        finally
+        {
+            _resolvingOnFirstForward = previous;
+        }
+    }
+
+    /// <summary>
     /// Convenience helper for deferred-shape layers: invokes <see cref="OnFirstForward"/>
     /// (if shapes are not yet resolved) followed by <see cref="EnsureInitialized"/>. Lazy
     /// layer Forward overrides should call this instead of <see cref="EnsureInitialized"/>
@@ -3582,7 +3610,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     {
         if (!IsShapeResolved)
         {
-            OnFirstForward(input);
+            BuildLateSubLayers(() => OnFirstForward(input));
             // This is the topology-aware counterpart of ResolveShapesOnly: OnFirstForward saw a
             // zero-filled shape probe, not a real activation. Custom forwards and preprocessing
             // pipelines can legitimately feed a different extent at execution time, so the first
@@ -3831,7 +3859,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         IsResolvingShapesOnly = true;
         try
         {
-            OnFirstForward(dummy);
+            BuildLateSubLayers(() => OnFirstForward(dummy));
         }
         finally
         {

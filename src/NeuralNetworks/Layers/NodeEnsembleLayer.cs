@@ -131,7 +131,7 @@ public partial class NodeEnsembleLayer<T> : LayerBase<T>, IShapeContract
         int features = input.Shape[input.Rank - 1];
         if (!_built || _numFeatures != features)
         {
-            BuildComponents(features);
+            BuildLateSubLayers(() => BuildComponents(features));
         }
 
         int batch = features > 0 ? input.Length / features : 1;
