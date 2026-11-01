@@ -6558,16 +6558,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "NaturalSpeech" && model.TypeParameterCount == 1)
             {
-                // NaturalSpeech keeps its published architecture and option defaults;
-                // only the generated invariant fixture uses a conservative AdamW rate.
-                // The 16 GB runner trajectory decreases at 1e-5 while the generic
-                // 1e-4 smoke rate overshoots on the second update.
-                pinInitSeed = true;
+                // NaturalSpeech's paper model is a 192-wide FFT phoneme encoder, the differentiable durator, a 4-coupling flow,
+                // a 16-layer WaveNet posterior, the memory bank and a 256-channel HiFi-GAN decoder; keep every component at
+                // width 16 with one or two layers, an 8-entry memory bank and VITS's fixture rates (hop 16 at 4 kHz), so a few
+                // phonemes make a short waveform. The warm-up stage (the default) trains with alignment-search durations.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    $"optimizer: {conservativeSmokeAdamWOptimizer})";
+                    "inputSize: 4, outputSize: 512), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions { HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 1, " +
+                    "FilterChannels = 32, DurationFilter = 8, UpsamplingFilter = 4, Couplings = 2, CouplingLayers = 1, " +
+                    "UpsampleRates = [4, 4], UpsampleKernels = [8, 8], UpsampleInitialChannels = 16, ResblockKernels = [3], " +
+                    "ResblockDilations = [[1, 3]], DiscriminatorPeriods = [2, 3], DiscriminatorWidthDivisor = 16, MemorySize = 8, FftSize = 64, HopSize = 16, " +
+                    "SampleRate = 4000, MelChannels = 8, SegmentFrames = 8 })";
             }
             else if (model.ClassName == "PriorGrad" && model.TypeParameterCount == 1)
             {
@@ -16504,12 +16507,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("Synthesize_DifferentText_DifferentOutput", false, "text"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
-                else if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS")
+                else if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "NaturalSpeech")
                 {
-                    // VITS, VITS2 and Piper read characters or phoneme ids and train on the waveform: four ids (nine tokens
+                    // VITS, VITS2, Piper and NaturalSpeech read characters or phoneme ids and train on the waveform: four ids (nine tokens
                     // with VITS's blanks or Piper's framing) and 512 samples, 32 frames at the fixture's hop of 16.
                     sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 512 };");
+                    if (model.ClassName == "NaturalSpeech")
+                    {
+                        sb.AppendLine("    protected override string? SynthesisUnavailableReason => AiDotNet.TextToSpeech.FrontEnd.EspeakNg.IsAvailable ? null");
+                        sb.AppendLine("        : \"NaturalSpeech phonemizes English with eSpeak NG (libespeak-ng), which is not installed here.\";");
+                    }
                 }
                 else
                 {
