@@ -97,6 +97,7 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
     private readonly bool _causal;
     private readonly int _attentionLeftChunks;
     private readonly bool _causalConvolution;
+    private readonly int _feedForwardUnits;
 
     // Macaron feed-forward #1 (half-step residual).
     private readonly LayerNormalizationLayer<T> _ffn1Norm;
@@ -155,6 +156,8 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
     /// </param>
     /// <param name="causalConvolution">A causal depthwise convolution (left padding of kernel − 1) without causal
     /// attention, as cache-aware streaming pairs with chunked attention.</param>
+    /// <param name="feedForwardUnits">Hidden units of each macaron feed-forward module when positive, for widths that are
+    /// not a whole multiple of <paramref name="modelDim"/>; zero uses <paramref name="ffnExpansionFactor"/>.</param>
     public ConformerBlockLayer(
         [LayerState] int modelDim,
         [LayerState] int numHeads,
@@ -166,7 +169,8 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         [LayerState] int attentionChunkSize = 0,
         [LayerState] bool causal = false,
         [LayerState] int attentionLeftChunks = 0,
-        [LayerState] bool causalConvolution = false)
+        [LayerState] bool causalConvolution = false,
+        [LayerState] int feedForwardUnits = 0)
         : base(new[] { -1, modelDim }, new[] { -1, modelDim })
     {
         _maxSequenceLength = maxSequenceLength;
@@ -180,6 +184,7 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         if (attentionGroupSize <= 0) throw new ArgumentOutOfRangeException(nameof(attentionGroupSize), "attentionGroupSize must be positive.");
         if (attentionChunkSize < 0) throw new ArgumentOutOfRangeException(nameof(attentionChunkSize), "attentionChunkSize must not be negative.");
         if (attentionLeftChunks < 0) throw new ArgumentOutOfRangeException(nameof(attentionLeftChunks), "attentionLeftChunks must not be negative.");
+        if (feedForwardUnits < 0) throw new ArgumentOutOfRangeException(nameof(feedForwardUnits), "feedForwardUnits must not be negative.");
 
         _modelDim = modelDim;
         _numHeads = numHeads;
@@ -190,11 +195,12 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         _causal = causal;
         _attentionLeftChunks = attentionLeftChunks;
         _causalConvolution = causalConvolution;
+        _feedForwardUnits = feedForwardUnits;
         _half = NumOps.FromDouble(0.5);
 
         var swish = (Interfaces.IActivationFunction<T>)new SwishActivation<T>();
         var identity = (Interfaces.IActivationFunction<T>)new IdentityActivation<T>();
-        int ffnDim = modelDim * ffnExpansionFactor;
+        int ffnDim = feedForwardUnits > 0 ? feedForwardUnits : modelDim * ffnExpansionFactor;
 
         // Every sub-layer below is constructed with EXPLICIT input dimensions rather than relying on
         // lazy first-forward resolution. That is required for Clone/deserialize: SetParameters slices
@@ -395,6 +401,7 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         metadata["Causal"] = _causal.ToString(ci);
         metadata["AttentionLeftChunks"] = _attentionLeftChunks.ToString(ci);
         metadata["CausalConvolution"] = _causalConvolution.ToString(ci);
+        metadata["FeedForwardUnits"] = _feedForwardUnits.ToString(ci);
         // A block built without a positional encoding (ropeTheta <= 0, w2v-BERT) leaves the attention at its default
         // theta; persisting that rebuilt the block WITH rotary encoding, so its construction state no longer matched,
         // the clone could not restore it in place, and the model kept running its untrained constructor block.
