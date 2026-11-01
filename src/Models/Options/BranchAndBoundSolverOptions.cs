@@ -11,8 +11,11 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class BranchAndBoundSolverOptions : ModelOptions
 {
+    /// <summary>Creates options with the default values.</summary>
     public BranchAndBoundSolverOptions() { }
 
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     public BranchAndBoundSolverOptions(BranchAndBoundSolverOptions other)
     {
         if (other is null) throw new ArgumentNullException(nameof(other));

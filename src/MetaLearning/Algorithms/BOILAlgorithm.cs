@@ -120,7 +120,8 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _boilOptions = options;
         if (options.NumClasses <= 0)
@@ -196,10 +197,12 @@ public partial class BOILAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         }
 
         double beta = _boilOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(metaBody, bodyGradient, beta));
-        _headWeights = ApplyGradients(_headWeights, weightGradient, beta);
-        _headBias = ApplyGradients(_headBias, biasGradient, beta);
-        if (_layerStepRates.Length > 0) _layerStepRates = ApplyGradients(_layerStepRates, rateGradient, beta);
+        var updated = ApplyOuterGradients(beta, (metaBody, bodyGradient), (_headWeights, weightGradient),
+            (_headBias, biasGradient), (_layerStepRates, rateGradient));
+        ParamModel.SetParameters(updated[0]);
+        _headWeights = updated[1];
+        _headBias = updated[2];
+        _layerStepRates = updated[3];
 
         return NumOps.Divide(totalLoss, batchSize);
     }

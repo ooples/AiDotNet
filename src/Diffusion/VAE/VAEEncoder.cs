@@ -184,18 +184,6 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private readonly int _bottleneckSize;
 
-    /// <summary>
-    /// Cached input for the backward pass.
-    /// </summary>
-    /// <remarks>
-    /// The per-stage intermediates that used to sit here were WRITE-ONLY, exactly as in
-    /// <see cref="VAEDecoder{T}"/>: nothing read them, and this encoder has no manual Backward. They
-    /// pinned every activation of the pass alive until the end of it, making peak memory
-    /// O(sum of all activations) instead of O(max live set).
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
     /// <inheritdoc />
     public override bool SupportsTraining => true;
 
@@ -392,7 +380,6 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
     /// <returns>Concatenated mean and log variance [batch, 2*latentChannels, H/f, W/f].</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input;
         return EnsureCompileHost().Predict(input, _compileStructureVersion, () => ForwardEager(input));
     }
 
@@ -440,7 +427,6 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
         Tensor<T> input,
         System.Threading.CancellationToken cancellationToken = default)
     {
-        _lastInput = input;
         return EnsureCompileHost().PredictAsync(
             input, _compileStructureVersion, () => ForwardEager(input), cancellationToken);
     }
@@ -651,8 +637,6 @@ public partial class VAEEncoder<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-
         _inputConv.ResetState();
         foreach (var block in _downBlocks)
         {

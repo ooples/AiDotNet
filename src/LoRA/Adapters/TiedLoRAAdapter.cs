@@ -125,18 +125,6 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     private readonly int _layerIndex;
 
     /// <summary>
-    /// Stored input from the forward pass, needed for gradient computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stored intermediate value (B_shared * A_shared * input) from forward pass.
-    /// </summary>
-    [Scratch]
-    private Matrix<T>? _lastIntermediate;
-
-    /// <summary>
     /// Gets the layer-specific scaling factor.
     /// </summary>
     public double LayerScaling => Convert.ToDouble(_layerScaling[0]);
@@ -431,8 +419,6 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input.Clone();
-
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
@@ -463,7 +449,6 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
 
             // Compute: afterA * B_shared → [batchSize, outputSize]
             Matrix<T> afterB = afterA.Multiply(_sharedMatrixB);
-            _lastIntermediate = afterB.Clone(); // Store for backward pass
 
             // Apply layer-specific scaling and alpha/rank scaling
             T scaling = NumOps.Divide(NumOps.FromDouble(Alpha), NumOps.FromDouble(Rank));
@@ -622,8 +607,6 @@ public partial class TiedLoRAAdapter<T> : LoRAAdapterBase<T>
     public override void ResetState()
     {
         _baseLayer.ResetState();
-        _lastInput = null;
-        _lastIntermediate = null;
         _layerScalingGradient = NumOps.Zero;
     }
 }

@@ -86,24 +86,6 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
     private Vector<T>? _coefficientsBGradient;
 
     /// <summary>
-    /// Cached matrix A from last forward pass (used in backward pass).
-    /// </summary>
-    [Scratch]
-    private Matrix<T>? _cachedMatrixA;
-
-    /// <summary>
-    /// Cached matrix B from last forward pass (used in backward pass).
-    /// </summary>
-    [Scratch]
-    private Matrix<T>? _cachedMatrixB;
-
-    /// <summary>
-    /// Cached input from last forward pass (needed for gradient computation).
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Seed for reproducible random basis generation.
     /// </summary>
     private readonly int _seed;
@@ -345,15 +327,12 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // Cache input for backward pass
-        _lastInput = input.Clone();
-
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
         // Reconstruct NOLA matrices A and B
-        _cachedMatrixA = ReconstructMatrixA();
-        _cachedMatrixB = ReconstructMatrixB();
+        Matrix<T> matrixA = ReconstructMatrixA();
+        Matrix<T> matrixB = ReconstructMatrixB();
 
         // Compute NOLA contribution: input * A * B * scaling
         int batchSize = input.Shape[0];
@@ -371,10 +350,10 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
         }
 
         // Compute: input * A (result: [batchSize, rank])
-        Matrix<T> intermediate = inputMatrix.Multiply(_cachedMatrixA);
+        Matrix<T> intermediate = inputMatrix.Multiply(matrixA);
 
         // Compute: intermediate * B (result: [batchSize, outputSize])
-        Matrix<T> nolaOutput = intermediate.Multiply(_cachedMatrixB);
+        Matrix<T> nolaOutput = intermediate.Multiply(matrixB);
 
         // Apply scaling (alpha / rank)
         T scaling = NumOps.Divide(
@@ -471,9 +450,6 @@ public partial class NOLAAdapter<T> : LoRAAdapterBase<T>
     public override void ResetState()
     {
         base.ResetState();
-        _lastInput = null;
-        _cachedMatrixA = null;
-        _cachedMatrixB = null;
         _coefficientsAGradient = null;
         _coefficientsBGradient = null;
     }

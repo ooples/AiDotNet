@@ -1,3 +1,4 @@
+using AiDotNet.Agentic.Models.Local;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -5,83 +6,76 @@ using AiDotNet.Tensors.LinearAlgebra;
 namespace AiDotNet.Safety.Watermarking;
 
 /// <summary>
-/// Unified watermark detector that combines multiple watermark detection strategies.
+/// Composite text watermark detector: runs the green-list, synonym and contraction detectors of one key and reports
+/// the strongest evidence, corrected for having run three tests.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Runs sampling, lexical, and syntactic watermark detectors in parallel and aggregates
-/// their scores to determine whether text contains any type of watermark.
+/// Each detector's z-score is approximately standard normal on text without its watermark. Taking the best of three
+/// would triple the false-positive rate, so the smallest p-value is multiplied by three (a Bonferroni correction) and
+/// turned back into a z-score before the usual confidence mapping. A false-positive rate stated for one detector
+/// therefore holds for the composite too.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> This detector checks for all known types of text watermarks
-/// at once. It combines multiple detection methods to be more accurate than any single
-/// method alone.
+/// The green-list detector can only score text when the generator's tokenizer is supplied; without it the composite
+/// still checks the two post-hoc watermarks.
+/// </para>
+/// <para>
+/// <b>For Beginners:</b> This detector checks for all of this library's text watermarks made with your key at once,
+/// without becoming more trigger-happy than any single check.
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 [ModelDomain(ModelDomain.Language)]
-[ModelCategory(ModelCategory.Classifier)]
+[ModelCategory(ModelCategory.Statistical)]
 [ModelCategory(ModelCategory.Ensemble)]
 [ModelCategory(ModelCategory.AnomalyDetection)]
 [ModelTask(ModelTask.Classification)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("SoK: Watermarking for AI-Generated Content",
-    "https://arxiv.org/abs/2411.18479",
-    Year = 2024,
-    Authors = "Various")]
+[ResearchPaper("A Watermark for Large Language Models",
+    "https://arxiv.org/abs/2301.10226",
+    Year = 2023,
+    Authors = "John Kirchenbauer, Jonas Geiping, Yuxin Wen, Jonathan Katz, Ian Miers, Tom Goldstein")]
 public partial class WatermarkDetector<T> : TextWatermarkerBase<T>
 {
-    private readonly SamplingWatermarker<T> _sampling;
-    private readonly LexicalWatermarker<T> _lexical;
-    private readonly SyntacticWatermarker<T> _syntactic;
+    private readonly ITextWatermarker<T>[] _detectors;
 
     /// <inheritdoc />
     public override string ModuleName => "WatermarkDetector";
 
+    /// <inheritdoc />
+    protected override string WatermarkDescription => "Text watermark (composite detector)";
+
     /// <summary>
     /// Initializes a new composite watermark detector.
     /// </summary>
-    public WatermarkDetector() : base(0.5)
+    /// <param name="key">The secret key shared by the three detectors; <c>null</c> uses the published key.</param>
+    /// <param name="tokenizer">The generator's tokenizer, needed to score the green-list watermark in text.</param>
+    public WatermarkDetector(string? key = null, IGenerationTokenizer? tokenizer = null) : base(0.5, key)
     {
-        _sampling = new SamplingWatermarker<T>();
-        _lexical = new LexicalWatermarker<T>();
-        _syntactic = new SyntacticWatermarker<T>();
-    }
-
-    /// <inheritdoc />
-    public override double DetectWatermark(string text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return 0;
-
-        double samplingScore = _sampling.DetectWatermark(text);
-        double lexicalScore = _lexical.DetectWatermark(text);
-        double syntacticScore = _syntactic.DetectWatermark(text);
-
-        // Take the maximum score across all detectors
-        return Math.Max(samplingScore, Math.Max(lexicalScore, syntacticScore));
-    }
-
-    /// <inheritdoc />
-    public override IReadOnlyList<SafetyFinding> EvaluateText(string text)
-    {
-        var findings = new List<SafetyFinding>();
-        double score = DetectWatermark(text);
-
-        if (score >= 0.3)
+        _detectors = new ITextWatermarker<T>[]
         {
-            findings.Add(new SafetyFinding
-            {
-                Category = SafetyCategory.Watermarked,
-                Severity = score >= 0.7 ? SafetySeverity.Medium : SafetySeverity.Info,
-                Confidence = score,
-                Description = $"Text watermark detected by composite detector (confidence: {score:F3}). " +
-                              "Content may be AI-generated with embedded provenance watermark.",
-                RecommendedAction = SafetyAction.Log,
-                SourceModule = ModuleName
-            });
+            new SamplingWatermarker<T>(key: key, tokenizer: tokenizer),
+            new LexicalWatermarker<T>(key: key),
+            new SyntacticWatermarker<T>(key: key)
+        };
+    }
+
+    /// <inheritdoc />
+    public override WatermarkResult Detect(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return TextResult(0, 0);
+        double bestZ = double.NegativeInfinity;
+        int units = 0;
+        foreach (var detector in _detectors)
+        {
+            var result = detector.Detect(text);
+            units += result.ScoredUnits;
+            if (result.ScoredUnits > 0 && result.ZScore > bestZ) bestZ = result.ZScore;
         }
 
-        return findings;
+        if (double.IsNegativeInfinity(bestZ)) return TextResult(0, 0);
+        return TextResult(WatermarkStatistics.BonferroniZ(bestZ, _detectors.Length), units);
     }
 }

@@ -89,12 +89,6 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
     private Tensor<T>? _lastInput;
 
     /// <summary>
-    /// Stored base layer output from the forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastBaseOutput;
-
-    /// <summary>
     /// Computed scaling factor (alpha / rank) used during forward pass.
     /// </summary>
     private readonly T _scaling;
@@ -202,11 +196,10 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input.Clone();
+        SaveForBackward(ref _lastInput, input);
 
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
-        _lastBaseOutput = baseOutput.Clone();
 
         // Compute LoHa delta using Hadamard products
         Tensor<T> lohaDelta = ComputeLoHaDelta(input);
@@ -510,7 +503,6 @@ public partial class LoHaAdapter<T> : LoRAAdapterBase<T>
     {
         _baseLayer.ResetState();
         _lastInput = null;
-        _lastBaseOutput = null;
         _matricesAGradient = null;
         _matricesBGradient = null;
     }

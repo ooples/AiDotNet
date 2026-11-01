@@ -34,6 +34,12 @@
     <ProjectReference Include="..\AiDotNet.csproj" />
   </ItemGroup>
 
+  <!-- AiDotNet's System.* polyfills are internal (#2392), so the net471 build compiles its own internal copy for the
+       KeyValuePair deconstruction it uses. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net471'">
+    <Compile Include="..\Polyfills\NetFrameworkPolyfills.cs" Link="Polyfills\NetFrameworkPolyfills.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <None Include="..\..\LICENSE" Pack="True" PackagePath="\" />
   </ItemGroup>
