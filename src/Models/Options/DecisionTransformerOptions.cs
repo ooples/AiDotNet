@@ -43,6 +43,22 @@ public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
     public int ContextLength { get; init; } = 20;  // Number of timesteps to condition on
     public double DropoutRate { get; init; } = 0.1;
 
+    /// <summary>Whether actions are continuous (tanh outputs, mean-squared error) or discrete (logits over one-hot
+    /// actions, cross-entropy). Default: true.</summary>
+    public bool IsContinuous { get; init; } = true;
+
+    /// <summary>Size of the learned timestep embedding: the longest episode. Default: 1000 (the Gym episodes).</summary>
+    public int MaxEpisodeLength { get; init; } = 1000;
+
+    /// <summary>Returns-to-go are divided by this before embedding. Default: 1; the authors' Gym runs used 1000.</summary>
+    public double ReturnScale { get; init; } = 1.0;
+
+    /// <summary>The return an episode is conditioned on at its start (section 3: "e.g. 1 for success"). Default: 1.</summary>
+    public double TargetReturn { get; init; } = 1.0;
+
+    /// <summary>Linear learning rate warmup steps. Default: 100000 (appendix A.2).</summary>
+    public int LearningRateWarmupSteps { get; init; } = 100000;
+
     // Training parameters
     public int BufferSize { get; init; } = 1000000;
 

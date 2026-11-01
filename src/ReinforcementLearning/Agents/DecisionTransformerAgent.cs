@@ -23,6 +23,14 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
 /// Decision Transformer treats RL as sequence modeling, using transformer architecture
 /// to predict actions conditioned on desired returns-to-go.
 /// </para>
+/// <para>
+/// The network (section 3) embeds the last K timesteps as 3K tokens, (return-to-go, state, action) per timestep, with a
+/// linear layer per modality plus a learned per-timestep embedding, normalizes them, and runs a causally masked GPT
+/// (3 layers, 1 head, 128 dimensions, dropout 0.1 by default, the Gym model of appendix A.2); the hidden state of each
+/// state token predicts that timestep's action. Training regresses the dataset's actions (mean-squared error, or
+/// cross-entropy for discrete actions) on K-step segments; acting conditions on a target return that each reward
+/// decrements.
+/// </para>
 /// <para><b>For Beginners:</b>
 /// Instead of learning "what's the best action", Decision Transformer learns
 /// "what action was taken when the outcome was X". At test time, you specify
@@ -68,13 +76,11 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
                 Source = "Chen et al. 2021, Appendix A: AdamW following PyTorch defaults, trained for "
                         + "10^5 gradient steps with a learning rate of 1e-4, a weight decay of 1e-4, a "
                         + "batch size of 64 and linear warmup over the first 10^5 training steps. The "
-                        + "exponents render as a bare 105 in extraction.")]
+                        + "exponents render as a bare 105 in extraction. Table 9: grad norm clip 0.25.",
+                MaxGradientNorm = 0.25)]
 public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
-
     /// <inheritdoc />
-    /// <remarks>The same components, in the same order, that the hand-written
-    /// GetParameters concatenated -- that order is the serialization order.</remarks>
     protected override void RegisterComponents()
     {
         RegisterParameterComponent(_transformerNetwork);
@@ -82,12 +88,25 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     private DecisionTransformerOptions<T> _options;
 
     private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
+    // AdamW with the paper's recipe (appendix A), on the transformer's tensors.
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _networkOptimizer;
 
-    private INeuralNetwork<T> _transformerNetwork;
-    private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo, Vector<T> previousAction)> _trajectoryBuffer;
+    private DecisionTransformerNetwork<T> _transformerNetwork;
+    // The offline dataset, trajectory after trajectory: each step's state, action, reward, return-to-go and timestep
+    // (0 starts a trajectory).
+    private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo, int timestep)> _trajectoryBuffer;
+    // The episode StoreExperience is collecting; it joins the dataset when it ends.
+    private List<(Vector<T> state, Vector<T> action, T reward)> _episode;
     private int _updateCount;
 
+    // Evaluation (Algorithm 1): the last K returns-to-go, states and actions, the episode's timestep, and the
+    // return-to-go still to collect.
     private SequenceContext<T> _currentContext;
+    private int _contextTimestep;
+    private T _runningReturn;
+
+    /// <summary>The transformer.</summary>
+    internal DecisionTransformerNetwork<T> Network => _transformerNetwork;
 
     public DecisionTransformerAgent() : this(new DecisionTransformerOptions<T>()) { }
 
@@ -105,236 +124,219 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
             Epsilon = 1e-8
         });
         _updateCount = 0;
-        _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, T, Vector<T>)>();
+        _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, T, int)>();
+        _episode = new List<(Vector<T>, Vector<T>, T)>();
         _currentContext = new SequenceContext<T>();
+        _runningReturn = NumOps.FromDouble(_options.TargetReturn);
 
-        // Initialize network directly in constructor
-        // Input: concatenated [return_to_go, state, previous_action]
-        int inputSize = 1 + _options.StateSize + _options.ActionSize;
+        _transformerNetwork = new DecisionTransformerNetwork<T>(_options.StateSize, _options.ActionSize, _options.EmbeddingDim,
+            _options.NumLayers, _options.NumHeads, _options.ContextLength, _options.MaxEpisodeLength, _options.DropoutRate,
+            _options.IsContinuous);
+        _networkOptimizer = PaperOptimizerFactory.CreateFor(_transformerNetwork, warmupStepsOverride: _options.LearningRateWarmupSteps);
 
-        // Create initial architecture for layer generation
-        var tempArchitecture = new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.Regression,
-            complexity: NetworkComplexity.Medium,
-            inputSize: inputSize,
-            outputSize: _options.ActionSize
-        );
-
-        // Use LayerHelper to create production-ready network layers
-        // For DecisionTransformer, use feedforward layers to approximate the transformer
-        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
-            tempArchitecture,
-            hiddenLayerCount: _options.NumLayers,
-            hiddenLayerSize: _options.EmbeddingDim
-        ).ToList();
-
-        // Override final activation to Tanh for continuous actions
-        var lastLayer = layers[layers.Count - 1];
-        if (lastLayer is DenseLayer<T> denseLayer)
-        {
-            int layerInputSize = denseLayer.GetInputShape()[0];
-            layers[layers.Count - 1] = new DenseLayer<T>(
-                _options.ActionSize,
-                (IActivationFunction<T>)new TanhActivation<T>()
-            );
-        }
-
-        // Create final architecture with the modified layers
-        var architecture = new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.Regression,
-            complexity: NetworkComplexity.Medium,
-            inputSize: inputSize,
-            outputSize: _options.ActionSize,
-            layers: layers
-        );
-        _transformerNetwork = new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
-
-        // Register network with base class
         Networks.Add(_transformerNetwork);
     }
 
     /// <summary>
-    /// Load offline dataset into the trajectory buffer.
-    /// Dataset should contain complete trajectories with computed returns-to-go.
+    /// Loads offline trajectories into the dataset, computing each step's return-to-go (the sum of the rewards from
+    /// that step to the end) and timestep.
     /// </summary>
     public void LoadOfflineData(List<List<(Vector<T> state, Vector<T> action, T reward)>> trajectories)
     {
-        foreach (var trajectory in trajectories)
-        {
-            // Compute returns-to-go for this trajectory
-            T returnToGo = NumOps.Zero;
-            var returnsToGo = new List<T>();
-
-            for (int i = trajectory.Count - 1; i >= 0; i--)
-            {
-                returnToGo = NumOps.Add(trajectory[i].reward, returnToGo);
-                returnsToGo.Insert(0, returnToGo);
-            }
-
-            // Store trajectory with returns-to-go and previous actions
-            for (int i = 0; i < trajectory.Count; i++)
-            {
-                // Previous action is the action from the previous timestep (zero for first step)
-                Vector<T> previousAction = i > 0
-                    ? trajectory[i - 1].action
-                    : new Vector<T>(_options.ActionSize);
-
-                _trajectoryBuffer.Add((
-                    trajectory[i].state,
-                    trajectory[i].action,
-                    trajectory[i].reward,
-                    returnsToGo[i],
-                    previousAction
-                ));
-            }
-        }
+        foreach (var trajectory in trajectories) AddTrajectory(trajectory);
     }
 
-    public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+    private void AddTrajectory(List<(Vector<T> state, Vector<T> action, T reward)> trajectory)
     {
-        return SelectActionWithReturn(state, NumOps.Zero, training);
+        var returnsToGo = new T[trajectory.Count];
+        T returnToGo = NumOps.Zero;
+        for (int i = trajectory.Count - 1; i >= 0; i--)
+        {
+            returnToGo = NumOps.Add(trajectory[i].reward, returnToGo);
+            returnsToGo[i] = returnToGo;
+        }
+        for (int i = 0; i < trajectory.Count; i++)
+            _trajectoryBuffer.Add((trajectory[i].state, trajectory[i].action, trajectory[i].reward, returnsToGo[i], i));
+        while (_trajectoryBuffer.Count > _options.BufferSize) _trajectoryBuffer.RemoveAt(0);
     }
 
     /// <summary>
-    /// Select action conditioned on desired return-to-go.
+    /// Selects an action for the episode's next state, conditioned on the return-to-go still to collect: the
+    /// configured <see cref="DecisionTransformerOptions{T}.TargetReturn"/> at the start of an episode, decremented by
+    /// each reward passed to <see cref="StoreExperience"/>.
+    /// </summary>
+    public override Vector<T> SelectAction(Vector<T> state, bool training = true)
+    {
+        return SelectActionWithReturn(state, _runningReturn, training);
+    }
+
+    /// <summary>
+    /// Select action conditioned on desired return-to-go (Algorithm 1's evaluation loop): appends (R, s, t) to the
+    /// context, keeps its last K timesteps, and returns the action predicted at the newest state token.
     /// </summary>
     public Vector<T> SelectActionWithReturn(Vector<T> state, T targetReturn, bool training = true)
     {
-        // Add to context window
         _currentContext.States.Add(state);
         _currentContext.ReturnsToGo.Add(targetReturn);
-
-        // Keep context within window size
-        if (_currentContext.Length > _options.ContextLength)
+        _runningReturn = targetReturn;
+        _contextTimestep++;
+        while (_currentContext.Length > _options.ContextLength)
         {
             _currentContext.States.RemoveAt(0);
             _currentContext.ReturnsToGo.RemoveAt(0);
-            if (_currentContext.Actions.Count > 0)
-            {
-                _currentContext.Actions.RemoveAt(0);
-            }
+            if (_currentContext.Actions.Count > 0) _currentContext.Actions.RemoveAt(0);
         }
 
-        // Prepare input: [return_to_go, state, previous_action]
-        var previousAction = _currentContext.Actions.Count > 0
-            ? _currentContext.Actions[_currentContext.Actions.Count - 1]
-            : new Vector<T>(_options.ActionSize);  // Zero action for first step
-
-        var input = ConcatenateInputs(targetReturn, state, previousAction);
-
-        // Predict action
-        var inputTensor = Tensor<T>.FromVector(input);
-        var actionOutputTensor = _transformerNetwork.Predict(inputTensor);
-        var actionOutput = actionOutputTensor.ToVector();
-
-        // Store action in context
-        _currentContext.Actions.Add(actionOutput);
-
-        return actionOutput;
+        // The newest action is not known yet: its slot is zero, and causal masking keeps it from the state token's
+        // prediction anyway.
+        int k = _currentContext.Length, firstTimestep = _contextTimestep - k;
+        var input = new Tensor<T>(new[] { 1, k, _transformerNetwork.StepWidth });
+        for (int i = 0; i < k; i++)
+        {
+            var action = i < _currentContext.Actions.Count ? _currentContext.Actions[i] : null;
+            Pack(input, 0, i, _currentContext.ReturnsToGo[i], _currentContext.States[i], action, firstTimestep + i);
+        }
+        _transformerNetwork.SetTrainingMode(false);
+        var output = _transformerNetwork.Predict(input);
+        var predicted = new Vector<T>(_options.ActionSize);
+        for (int j = 0; j < _options.ActionSize; j++) predicted[j] = output.Data.Span[(k - 1) * _options.ActionSize + j];
+        var chosen = _options.IsContinuous ? predicted : OneHot(ArgMax(predicted));
+        _currentContext.Actions.Add(chosen);
+        return chosen;
     }
 
-    private Vector<T> ConcatenateInputs(T returnToGo, Vector<T> state, Vector<T> previousAction)
+    private Vector<T> OneHot(int index)
     {
-        var input = new Vector<T>(1 + _options.StateSize + _options.ActionSize);
-        input[0] = returnToGo;
-
-        for (int i = 0; i < state.Length; i++)
-        {
-            input[1 + i] = state[i];
-        }
-
-        for (int i = 0; i < previousAction.Length; i++)
-        {
-            input[1 + _options.StateSize + i] = previousAction[i];
-        }
-
-        return input;
+        var v = new Vector<T>(_options.ActionSize);
+        v[index] = NumOps.One;
+        return v;
     }
 
+    private static int ArgMax(Vector<T> v)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        int best = 0;
+        for (int i = 1; i < v.Length; i++) if (ops.GreaterThan(v[i], v[best])) best = i;
+        return best;
+    }
+
+    // One packed timestep [R / scale, s, a, t]; a null action is zero.
+    private void Pack(Tensor<T> input, int b, int position, T returnToGo, Vector<T> state, Vector<T>? action, int timestep)
+    {
+        int w = _transformerNetwork.StepWidth;
+        var span = input.Data.Span;
+        int offset = (b * input.Shape[1] + position) * w;
+        span[offset] = NumOps.FromDouble(NumOps.ToDouble(returnToGo) / _options.ReturnScale);
+        for (int j = 0; j < _options.StateSize; j++) span[offset + 1 + j] = state[j];
+        if (action is not null) for (int j = 0; j < _options.ActionSize; j++) span[offset + 1 + _options.StateSize + j] = action[j];
+        span[offset + w - 1] = NumOps.FromDouble(Math.Min(Math.Max(timestep, 0), _options.MaxEpisodeLength - 1));
+    }
+
+    /// <summary>
+    /// Collects the episode; when it ends it joins the offline dataset (with its returns-to-go). The reward also
+    /// decrements the return-to-go the next <see cref="SelectAction"/> conditions on (Algorithm 1).
+    /// </summary>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        // Decision Transformer uses offline data loaded via LoadOfflineData()
-        // This method is for interface compliance
+        _episode.Add((state, action, reward));
+        _runningReturn = NumOps.Subtract(_runningReturn, reward);
+        if (done)
+        {
+            AddTrajectory(_episode);
+            _episode = new List<(Vector<T>, Vector<T>, T)>();
+            ResetEpisode();
+        }
     }
 
+    /// <summary>
+    /// One gradient step (section 3, "Training"): a minibatch of K-step segments, each predicting its actions from
+    /// the state tokens, with the mean-squared error (continuous) or cross-entropy (discrete) averaged over the
+    /// timesteps. Segments shorter than K (at a trajectory's end) are padded on the left and the padding is left out of
+    /// the loss.
+    /// </summary>
     public override T Train()
     {
-        if (_trajectoryBuffer.Count < _options.BatchSize)
+        if (_trajectoryBuffer.Count == 0)
         {
             return NumOps.Zero;
         }
 
-        T totalLoss = NumOps.Zero;
-
-        // Sample a batch and build batched tensors
-        var batch = SampleBatch(_options.BatchSize);
-        int inputSize = 1 + _options.StateSize + _options.ActionSize; // returnToGo + state + prevAction
-        int batchCount = batch.Count;
-
-        var batchInputs = new Tensor<T>([batchCount, inputSize]);
-        var batchTargets = new Tensor<T>([batchCount, _options.ActionSize]);
-
-        for (int b = 0; b < batchCount; b++)
+        int batch = Math.Max(1, _options.BatchSize), k = _options.ContextLength, a = _options.ActionSize;
+        var input = new Tensor<T>(new[] { batch, k, _transformerNetwork.StepWidth });
+        var targets = new Tensor<T>(new[] { batch, k, a });
+        var mask = new Tensor<T>(new[] { batch, k, a });
+        int counted = 0;
+        for (int b = 0; b < batch; b++)
         {
-            var (state, targetAction, reward, returnToGo, previousAction) = batch[b];
-            var input = ConcatenateInputs(returnToGo, state, previousAction);
-            for (int j = 0; j < inputSize; j++)
-                batchInputs[b, j] = input[j];
-            for (int j = 0; j < _options.ActionSize; j++)
-                batchTargets[b, j] = targetAction[j];
+            // A uniformly drawn step starts the segment: the authors' trajectory-by-length then uniform-start sampling.
+            int start = Random.Next(_trajectoryBuffer.Count), length = 1;
+            while (length < k && start + length < _trajectoryBuffer.Count && _trajectoryBuffer[start + length].timestep != 0) length++;
+            int pad = k - length;
+            for (int i = 0; i < length; i++)
+            {
+                var step = _trajectoryBuffer[start + i];
+                Pack(input, b, pad + i, step.returnToGo, step.state, step.action, step.timestep);
+                for (int j = 0; j < a; j++)
+                {
+                    targets[b, pad + i, j] = step.action[j];
+                    mask[b, pad + i, j] = NumOps.One;
+                }
+                counted++;
+            }
         }
 
-        // Single batched training step with configured optimizer
-        _transformerNetwork.Train(batchInputs, batchTargets);
-        totalLoss = _transformerNetwork.GetLastLoss();
+        var scale = NumOps.FromDouble(1.0 / (counted * (_options.IsContinuous ? a : 1)));
+        _transformerNetwork.SetTrainingMode(true);
+        T loss = _transformerNetwork.TrainWithCustomLoss(input, output =>
+        {
+            var allAxes = new[] { 0, 1, 2 };
+            if (_options.IsContinuous)
+            {
+                var diff = Engine.TensorMultiply(Engine.TensorSubtract(output, targets), mask);
+                return Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(diff, diff), allAxes, keepDims: false), scale);
+            }
+            var logProbabilities = Engine.TensorLogSoftmax(output, 2);
+            var picked = Engine.TensorMultiply(Engine.TensorMultiply(logProbabilities, targets), mask);
+            return Engine.TensorNegate(Engine.TensorMultiplyScalar(Engine.ReduceSum(picked, allAxes, keepDims: false), scale));
+        }, _networkOptimizer);
+        _transformerNetwork.SetTrainingMode(false);
 
         _updateCount++;
-
-        return totalLoss;
+        return loss;
     }
 
     /// <summary>
-    /// Supervised (online) training entry from <see cref="IFullModel{T,TInput,TOutput}"/>: trains
-    /// the transformer to predict <paramref name="target"/> (the desired action) from
-    /// <paramref name="state"/>. Decision Transformer is return-conditioned behavior cloning, so a
-    /// single supervised step on (return-to-go, state, prev-action) → action IS the training
-    /// objective. The base <see cref="ReinforcementLearningAgentBase{T}.Train(Vector{T},Vector{T})"/>
-    /// stores a Q-learning transition then calls the parameterless <see cref="Train()"/>, but DT's
-    /// <see cref="StoreExperience"/> is a deliberate no-op (DT consumes OFFLINE data via
-    /// LoadOfflineData), so that path would leave the trajectory buffer empty and never update a
-    /// single weight. Route the supervised pair straight into a transformer step instead.
+    /// Supervised (online) training entry from <see cref="IFullModel{T,TInput,TOutput}"/>: one step predicting
+    /// <paramref name="target"/> (the action) from a one-timestep sequence of <paramref name="state"/> at return-to-go 0
+    /// and timestep 0. Decision Transformer is return-conditioned behavior cloning, so this is its objective on a
+    /// single pair.
     /// </summary>
     public override void Train(Vector<T> state, Vector<T> target)
     {
         if (state is null) throw new ArgumentNullException(nameof(state));
         if (target is null) throw new ArgumentNullException(nameof(target));
 
-        // Build the DT input [returnToGo=0, state, zero-prev-action] (start-of-sequence convention).
-        var previousAction = new Vector<T>(_options.ActionSize);
-        var input = ConcatenateInputs(NumOps.Zero, state, previousAction);
-
-        // Target is the desired action vector, sized to the transformer's action output.
-        var targetAction = new Vector<T>(_options.ActionSize);
+        var input = SingleStep(state);
+        var targetAction = new Tensor<T>(new[] { 1, 1, _options.ActionSize });
         int copyLen = Math.Min(target.Length, _options.ActionSize);
-        for (int i = 0; i < copyLen; i++) targetAction[i] = target[i];
+        for (int i = 0; i < copyLen; i++) targetAction[0, 0, i] = target[i];
 
-        _transformerNetwork.Train(Tensor<T>.FromVector(input), Tensor<T>.FromVector(targetAction));
+        _transformerNetwork.SetTrainingMode(true);
+        _transformerNetwork.TrainWithCustomLoss(input, output =>
+        {
+            var diff = Engine.TensorSubtract(output, targetAction);
+            return Engine.ReduceMean(Engine.TensorMultiply(diff, diff), new[] { 0, 1, 2 }, keepDims: false);
+        }, _networkOptimizer);
+        _transformerNetwork.SetTrainingMode(false);
         _updateCount++;
     }
 
-    private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo, Vector<T> previousAction)> SampleBatch(int batchSize)
+    // A one-timestep sequence: return-to-go 0, the state, no action, timestep 0.
+    private Tensor<T> SingleStep(Vector<T> state)
     {
-        var batch = new List<(Vector<T>, Vector<T>, T, T, Vector<T>)>();
-
-        for (int i = 0; i < batchSize && i < _trajectoryBuffer.Count; i++)
-        {
-            int idx = Random.Next(_trajectoryBuffer.Count);
-            batch.Add(_trajectoryBuffer[idx]);
-        }
-
-        return batch;
+        var input = new Tensor<T>(new[] { 1, 1, _transformerNetwork.StepWidth });
+        Pack(input, 0, 0, NumOps.Zero, state, null, 0);
+        return input;
     }
 
     public override Dictionary<string, T> GetMetrics()
@@ -349,21 +351,20 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     public override void ResetEpisode()
     {
         _currentContext = new SequenceContext<T>();
+        _contextTimestep = 0;
+        _runningReturn = NumOps.FromDouble(_options.TargetReturn);
     }
 
     public override Vector<T> Predict(Vector<T> input)
     {
-        // Pure, stateless single-step inference (the IFullModel.Predict contract): two Predict(state)
-        // calls must return the same action. SelectAction is the EPISODIC entry — it appends to the
-        // rolling _currentContext, so calling it from Predict made repeated Predict(state) calls
-        // diverge (each saw the previous call's action as prev-action) and broke determinism + clone
-        // parity. Build a fresh single-step DT input [returnToGo=0, state, zero-prev-action] and run
-        // the transformer without touching _currentContext.
+        // Pure, stateless single-step inference (the IFullModel.Predict contract): two Predict(state) calls must
+        // return the same action, so this runs a one-timestep sequence without touching the episode's context.
         if (input is null) throw new ArgumentNullException(nameof(input));
-        var previousAction = new Vector<T>(_options.ActionSize);
-        var dtInput = ConcatenateInputs(NumOps.Zero, input, previousAction);
-        var outputTensor = _transformerNetwork.Predict(Tensor<T>.FromVector(dtInput));
-        return outputTensor.ToVector();
+        _transformerNetwork.SetTrainingMode(false);
+        var output = _transformerNetwork.Predict(SingleStep(input));
+        var action = new Vector<T>(_options.ActionSize);
+        for (int j = 0; j < _options.ActionSize; j++) action[j] = output.Data.Span[j];
+        return action;
     }
 
     public Task<Vector<T>> PredictAsync(Vector<T> input)
@@ -394,21 +395,19 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     /// <param name="lossFunction">The loss to differentiate, or null to use the agent's own.</param>
     /// <returns>A gradient vector the same length as <c>GetParameters()</c>.</returns>
     /// <remarks>
-    /// Returns PARAMETER-space gradients, as <c>IGradientComputable</c> documents and as
-    /// <c>ApplyGradients</c> requires. The gradient comes from the network's own tape pass, so no
-    /// derivative is written by hand here.
+    /// The state runs as a one-timestep sequence (as in <see cref="Predict"/>) and the gradient comes from the network's
+    /// own tape pass.
     /// </remarks>
     public Vector<T> ComputeGradients(
         Vector<T> input,
         Vector<T> target,
         ILossFunction<T>? lossFunction = null)
     {
-        return ComputeGradientsForNetwork(
-            _transformerNetwork,
-            new[] { _transformerNetwork },
-            input,
-            target,
-            lossFunction);
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        var targetAction = new Tensor<T>(new[] { 1, 1, _options.ActionSize });
+        for (int i = 0; i < Math.Min(target.Length, _options.ActionSize); i++) targetAction[0, 0, i] = target[i];
+        return _transformerNetwork.ComputeGradients(SingleStep(input), targetAction, lossFunction ?? LossFunction);
     }
 
     public override void SaveModel(string filepath)
@@ -421,7 +420,5 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     {
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
-    
-
-}
+    }
 }
