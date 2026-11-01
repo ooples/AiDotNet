@@ -90,10 +90,6 @@ internal sealed class ParaformerNetwork<T>
         LayerNormalizationLayer<T> Norm2, DenseLayer<T> CrossQuery, DenseLayer<T> CrossKey, DenseLayer<T> CrossValue, DenseLayer<T> CrossOutput,
         LayerNormalizationLayer<T> Norm3, DenseLayer<T> FeedForward1, DenseLayer<T> FeedForward2);
 
-    internal sealed record SanmBlock(LayerNormalizationLayer<T> Norm1, DenseLayer<T> FeedForward1, LayerNormalizationLayer<T> FeedForwardNorm,
-        DenseLayer<T> FeedForward2, LayerNormalizationLayer<T>? Norm2, NormedConv1DLayer<T>? Fsmn, LayerNormalizationLayer<T>? Norm3,
-        DenseLayer<T>? CrossQuery, DenseLayer<T>? CrossKeyValue, DenseLayer<T>? CrossOutput);
-
     public ParaformerNetwork(IEngine engine, List<LayerBase<T>> layers, ParaformerConfiguration configuration)
     {
         _engine = engine;
@@ -116,16 +112,13 @@ internal sealed class ParaformerNetwork<T>
             for (int i = 0; i < _o.DecoderLayers; i++)
                 SanBlocks.Add(new SanBlock(Norm(d), Linear(d), Linear(d), Linear(d), Linear(d), Norm(d), Linear(d), Linear(d), Linear(d), Linear(d),
                     Norm(d), Linear(_o.FeedForward), Linear(d)));
+            AfterNorm = Norm(d);
         }
         else
         {
-            for (int i = 0; i < _o.DecoderLayers; i++)
-                SanmBlocks.Add(new SanmBlock(Norm(d), Linear(_o.FeedForward), Norm(_o.FeedForward), Linear(d, bias: false), Norm(d),
-                    Own(new NormedConv1DLayer<T>(d, d, _o.FsmnKernel, 1, 1, d, 0, false, ConvolutionNormalization.None, useBias: false)),
-                    Norm(d), Linear(d), Linear(2 * d), Linear(d)));
-            SanmBlocks.Add(new SanmBlock(Norm(d), Linear(_o.FeedForward), Norm(_o.FeedForward), Linear(d, bias: false), null, null, null, null, null, null));
+            SanmDecoder = new SanmDecoder<T>(engine, layers, d, _o.Heads, _o.FeedForward, _o.DecoderLayers, _o.FsmnKernel, _o.NormEpsilon);
+            AfterNorm = SanmDecoder.AfterNorm;
         }
-        AfterNorm = Norm(d);
         Output = Linear(_o.VocabSize);
     }
 
@@ -134,18 +127,13 @@ internal sealed class ParaformerNetwork<T>
     public DenseLayer<T> PredictorOutput { get; }
     public EmbeddingLayer<T> Embedding { get; }
     public List<SanBlock> SanBlocks { get; } = new();
-    public List<SanmBlock> SanmBlocks { get; } = new();
+    /// <summary>The SAN-M decoder, or null for the SAN decoder.</summary>
+    public SanmDecoder<T>? SanmDecoder { get; }
     public LayerNormalizationLayer<T> AfterNorm { get; }
     public DenseLayer<T> Output { get; }
 
-    // [L, d] features through a 1-D convolution over time with `left` and `right` zero frames, back to [L, d].
-    private Tensor<T> Convolve(NormedConv1DLayer<T> convolution, Tensor<T> x, int left, int right)
-    {
-        int length = x.Shape[0], d = x.Shape[1];
-        var channels = _engine.Reshape(_engine.TensorTranspose(x), new[] { 1, d, length });
-        var padded = _engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1, d, left }), channels, new Tensor<T>(new[] { 1, d, right }) }, 2);
-        return _engine.TensorTranspose(_engine.Reshape(convolution.Forward(padded), new[] { d, length }));
-    }
+    private Tensor<T> Convolve(NormedConv1DLayer<T> convolution, Tensor<T> x, int left, int right) =>
+        SanmDecoder<T>.Convolve(_engine, convolution, x, left, right);
 
     /// <summary>The predictor's weights α <c>[1, T]</c> for the encoder output <c>[T, width]</c>.</summary>
     public Tensor<T> Alphas(Tensor<T> encoded)
@@ -200,22 +188,17 @@ internal sealed class ParaformerNetwork<T>
         return tokens == 0 ? null : Integrate(encoded, alphas, tokens);
     }
 
-    private Tensor<T> Attend(Tensor<T> q, Tensor<T> k, Tensor<T> v)
-    {
-        int rows = q.Shape[0], keys = k.Shape[0], heads = _o.Heads, dk = _o.Width / heads;
-        Tensor<T> Heads(Tensor<T> x, int n) => _engine.TensorPermute(_engine.Reshape(x, new[] { n, heads, dk }), new[] { 1, 0, 2 });
-        var scores = _engine.BatchMatMul(_engine.TensorMultiplyScalar(Heads(q, rows), NumOps.FromDouble(Math.Pow(dk, -0.5))),
-            _engine.TensorPermute(Heads(k, keys), new[] { 0, 2, 1 }));
-        var context = _engine.BatchMatMul(_engine.Softmax(scores, axis: 2), Heads(v, keys));
-        return _engine.Reshape(_engine.TensorPermute(context, new[] { 1, 0, 2 }), new[] { rows, _o.Width });
-    }
+    private Tensor<T> Attend(Tensor<T> q, Tensor<T> k, Tensor<T> v) => SanmDecoder<T>.Attend(_engine, q, k, v, _o.Heads);
 
     /// <summary>The decoder's logits <c>[n, VocabSize]</c> for decoder inputs <c>[n, width]</c> (acoustic or semantic
     /// embeddings) reading the encoder output <c>[T, width]</c>.</summary>
-    public Tensor<T> Decode(Tensor<T> encoded, Tensor<T> embeddings)
+    public Tensor<T> Decode(Tensor<T> encoded, Tensor<T> embeddings) => Output.Forward(Hidden(encoded, embeddings));
+
+    /// <summary>The decoder's hidden states <c>[n, width]</c> before the output layer (FunASR's <c>return_hidden</c>).</summary>
+    public Tensor<T> Hidden(Tensor<T> encoded, Tensor<T> embeddings)
     {
+        if (SanmDecoder is not null) return SanmDecoder.Forward(encoded, embeddings);
         var x = embeddings;
-        int d = _o.Width;
         foreach (var b in SanBlocks)
         {
             var h = b.Norm1.Forward(x);
@@ -224,26 +207,7 @@ internal sealed class ParaformerNetwork<T>
             x = _engine.TensorAdd(x, b.CrossOutput.Forward(Attend(b.CrossQuery.Forward(h), b.CrossKey.Forward(encoded), b.CrossValue.Forward(encoded))));
             x = _engine.TensorAdd(x, b.FeedForward2.Forward(_engine.ReLU(b.FeedForward1.Forward(b.Norm3.Forward(x)))));
         }
-        foreach (var b in SanmBlocks)
-        {
-            var residual = x;
-            var h = b.FeedForward2.Forward(b.FeedForwardNorm.Forward(_engine.ReLU(b.FeedForward1.Forward(b.Norm1.Forward(x)))));
-            if (b.Norm2 is null || b.Fsmn is null || b.Norm3 is null || b.CrossQuery is null || b.CrossKeyValue is null || b.CrossOutput is null)
-            {
-                x = h;                                                                              // the last block: no residual
-                continue;
-            }
-            // forward_fsmn with sanm_shfit 0: (k - 1)/2 zeros each side, the depthwise convolution, plus its input.
-            var normed = b.Norm2.Forward(h);
-            int left = (_o.FsmnKernel - 1) / 2;
-            x = _engine.TensorAdd(residual, _engine.TensorAdd(Convolve(b.Fsmn, normed, left, _o.FsmnKernel - 1 - left), normed));
-            var q = b.CrossQuery.Forward(b.Norm3.Forward(x));
-            var kv = b.CrossKeyValue.Forward(encoded);
-            int m = encoded.Shape[0];
-            x = _engine.TensorAdd(x, b.CrossOutput.Forward(Attend(q, _engine.TensorSlice(kv, new[] { 0, 0 }, new[] { m, d }),
-                _engine.TensorSlice(kv, new[] { 0, d }, new[] { m, d }))));
-        }
-        return Output.Forward(AfterNorm.Forward(x));
+        return AfterNorm.Forward(x);
     }
 
     /// <summary>The targets' embeddings <c>[n, width]</c>: the token embedding, scaled by √width with sinusoidal
@@ -300,7 +264,7 @@ internal sealed class ParaformerNetwork<T>
     /// embeddings alone, as at inference.</param>
     public Tensor<T> Loss(Tensor<T> encoded, IReadOnlyList<int> labels, Random random, Tensor<T>? ctcLoss, bool sample = true)
     {
-        var targets = _o.AppendEndToken ? labels.Concat(new[] { _o.EndToken }).ToArray() : labels.ToArray();
+        var targets = Targets(labels);
         int n = targets.Length;
         var alphas = Alphas(encoded);
         var sum = _engine.ReduceSum(alphas, new[] { 0, 1 }, keepDims: true);                           // [1, 1]
@@ -313,9 +277,7 @@ internal sealed class ParaformerNetwork<T>
         Tensor<T> total = mae;
         if (n > 0)
         {
-            // Σα scaled to the target length.
-            var scaled = _engine.TensorMultiplyScalar(_engine.TensorDivide(alphas, _engine.TensorTile(sum, new[] { 1, encoded.Shape[0] })), NumOps.FromDouble(n));
-            var acoustic = Integrate(encoded, scaled, n);
+            var acoustic = Integrate(encoded, ScaledAlphas(alphas, sum, n), n);
             var inputs = acoustic;
             if (sample && _o.SamplingRatio > 0)
             {
@@ -337,20 +299,42 @@ internal sealed class ParaformerNetwork<T>
                 }
             }
             var logProbabilities = _engine.TensorLogSoftmax(Decode(encoded, inputs), axis: -1);
-            // ESPnet's LabelSmoothingLoss: KL(q || p), q putting 1 − ε on the target and ε / (V − 1) on every other token.
-            int v = _o.VocabSize;
-            double eps = _o.LabelSmoothing, on = 1 - eps, off = v > 1 ? eps / (v - 1) : 0;
-            var smoothed = new Tensor<T>(new[] { n, v });
-            for (int i = 0; i < n; i++) { for (int k = 0; k < v; k++) smoothed[i, k] = NumOps.FromDouble(off); smoothed[i, targets[i]] = NumOps.FromDouble(on); }
-            double entropy = (on > 0 ? on * Math.Log(on) : 0) + (off > 0 ? (v - 1) * off * Math.Log(off) : 0);
-            var crossEntropy = _engine.ReduceSum(_engine.TensorMultiply(logProbabilities, smoothed), new[] { 0, 1 }, keepDims: true);
-            var attention = _engine.TensorMultiplyScalar(_engine.TensorAddScalar(_engine.TensorNegate(crossEntropy), NumOps.FromDouble(n * entropy)),
-                NumOps.FromDouble(1.0 / normalizer));
+            var attention = LabelSmoothedLoss(_engine, logProbabilities, targets, _o.LabelSmoothing, normalizer);
             double attentionWeight = ctcLoss is null ? 1 : 1 - _o.CtcWeight;
             total = _engine.TensorAdd(total, _engine.TensorMultiplyScalar(attention, NumOps.FromDouble(attentionWeight)));
         }
         if (ctcLoss is not null && _o.CtcWeight > 0)
             total = _engine.TensorAdd(total, _engine.TensorMultiplyScalar(_engine.Reshape(ctcLoss, new[] { 1, 1 }), NumOps.FromDouble(_o.CtcWeight)));
         return _engine.Reshape(total, new[] { 1 });
+    }
+
+    /// <summary>The decoder's targets: the labels, followed by the end token when it is appended.</summary>
+    public int[] Targets(IReadOnlyList<int> labels) => _o.AppendEndToken ? labels.Concat(new[] { _o.EndToken }).ToArray() : labels.ToArray();
+
+    /// <summary>The training acoustic embeddings <c>[tokens, width]</c>: the predictor's weights scaled to sum to
+    /// <paramref name="tokens"/>, integrated.</summary>
+    public Tensor<T> TrainingAcousticEmbeddings(Tensor<T> encoded, int tokens)
+    {
+        var alphas = Alphas(encoded);
+        return Integrate(encoded, ScaledAlphas(alphas, _engine.ReduceSum(alphas, new[] { 0, 1 }, keepDims: true), tokens), tokens);
+    }
+
+    // Σα scaled to the target length.
+    private Tensor<T> ScaledAlphas(Tensor<T> alphas, Tensor<T> sum, int tokens) =>
+        _engine.TensorMultiplyScalar(_engine.TensorDivide(alphas, _engine.TensorTile(sum, new[] { 1, alphas.Shape[1] })), NumOps.FromDouble(tokens));
+
+    /// <summary>ESPnet's <c>LabelSmoothingLoss</c> <c>[1, 1]</c>: KL(q || p) summed over the rows of the log-probabilities
+    /// <c>[n, classes]</c>, q putting 1 − ε on the target and ε / (classes − 1) on every other class, divided by
+    /// <paramref name="normalizer"/>.</summary>
+    internal static Tensor<T> LabelSmoothedLoss(IEngine engine, Tensor<T> logProbabilities, IReadOnlyList<int> targets, double smoothing, double normalizer)
+    {
+        int n = targets.Count, v = logProbabilities.Shape[1];
+        double eps = smoothing, on = 1 - eps, off = v > 1 ? eps / (v - 1) : 0;
+        var smoothed = new Tensor<T>(new[] { n, v });
+        for (int i = 0; i < n; i++) { for (int k = 0; k < v; k++) smoothed[i, k] = NumOps.FromDouble(off); smoothed[i, targets[i]] = NumOps.FromDouble(on); }
+        double entropy = (on > 0 ? on * Math.Log(on) : 0) + (off > 0 ? (v - 1) * off * Math.Log(off) : 0);
+        var crossEntropy = engine.ReduceSum(engine.TensorMultiply(logProbabilities, smoothed), new[] { 0, 1 }, keepDims: true);
+        return engine.TensorMultiplyScalar(engine.TensorAddScalar(engine.TensorNegate(crossEntropy), NumOps.FromDouble(n * entropy)),
+            NumOps.FromDouble(1.0 / normalizer));
     }
 }
