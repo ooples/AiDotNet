@@ -3926,10 +3926,11 @@ public static class DeserializationHelper
         bool causal = TryGetBool(additionalParams, "Causal") ?? false;
         int attentionLeftChunks = TryGetInt(additionalParams, "AttentionLeftChunks") ?? 0;
         bool causalConvolution = TryGetBool(additionalParams, "CausalConvolution") ?? false;
+        int feedForwardUnits = TryGetInt(additionalParams, "FeedForwardUnits") ?? 0;
 
         return new ConformerBlockLayer<T>(
             modelDim, numHeads, ffnExpansionFactor, convKernelSize, ropeTheta, maxSeq, attentionGroupSize, attentionChunkSize, causal,
-            attentionLeftChunks, causalConvolution);
+            attentionLeftChunks, causalConvolution, feedForwardUnits);
     }
 
     /// <summary>Reconstructs a paper-faithful Vocos generator from serialized layer metadata.</summary>

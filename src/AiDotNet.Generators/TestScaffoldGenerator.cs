@@ -5945,8 +5945,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumLlmAttentionHeads = 2, VocabSize = 16, LoraRank = 2, LoraAlpha = 2, WarmupSteps = 0, MaxTextLength = 4, " +
                     "MaxAudioLengthSeconds = 1 })";
             }
-            else if (model.ClassName is "RobustConformer"
-                    or "SpeakerDiarizedASR"
+            else if (model.ClassName == "RobustConformer" && model.TypeParameterCount == 1)
+            {
+                // Wang et al. 2021's noise-robust wav2vec 2.0 at width 32 with one Transformer block, over 0.2 s of
+                // waveform (9 frames) and a 16-token CTC vocabulary. Production defaults are section 3.2's BASE model.
+                // The regularizers are off so the invariants see a deterministic objective.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.Robust.RobustConformerOptions { MaxAudioLengthSeconds = 1, " +
+                    "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 4, FeedForwardDim = 64, ReconstructionHidden = 8, " +
+                    "VocabSize = 16, MaxTextLength = 8, DropoutRate = 0.0, ActivationDropout = 0.0, FeatureProjectionDropout = 0.0, " +
+                    "FinalDropout = 0.0, LayerDrop = 0.0, MaskTimeProbability = 0.0, Seed = 5 })";
+            }
+            else if (model.ClassName is "SpeakerDiarizedASR"
                 && model.TypeParameterCount == 1)
             {
                 // These ASR encoders have already exhausted the first two timeout rungs:
@@ -5954,11 +5967,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // 1-vs-2 repeated-training cap, yet the exact PR shards still reached
                 // the 120/180-second watchdogs. Preserve each model's native encoder
                 // topology while exercising it at a bounded public-options scale.
-                string optionsType = model.ClassName switch
-                {
-                    "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
-                    _ => "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions",
-                };
+                string optionsType = "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions";
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
@@ -9645,7 +9654,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if ((model.ClassName is "ConformerCTC" or "ConformerTransducer" or "StreamingConformer" or "Branchformer" or "EBranchformer"
                       or "InterCTC" or "SelfConditionedCTC" or "ParakeetCTC" or "ParakeetRNNT" or "FastEmit" or "ParakeetTDT" or "TDTDecoder"
-                      or "ESPnetASR" or "SpeechBrain" or "OWSM" or "AssemblyAIUniversal2" or "CTCSegmentation"
+                      or "ESPnetASR" or "SpeechBrain" or "OWSM" or "AssemblyAIUniversal2" or "CTCSegmentation" or "RevAI"
+                      or "AzureSpeechSTT" or "AWSTranscribe" or "DeepgramNova2" or "SpeechmaticsASR" or "SarvamASR"
                       || (model.ClassName == "Conformer" && typeName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
                      && model.TypeParameterCount == 1)
             {
@@ -9660,17 +9670,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "FastEmit" or "TDTDecoder" => $"AiDotNet.SpeechRecognition.Streaming.{model.ClassName}Options",
                     "ESPnetASR" or "SpeechBrain" => $"AiDotNet.SpeechRecognition.Robust.{model.ClassName}Options",
                     "OWSM" => "AiDotNet.SpeechRecognition.Multilingual.OWSMOptions",
-                    "AssemblyAIUniversal2" => "AiDotNet.SpeechRecognition.ProprietaryAPI.AssemblyAIUniversal2Options",
+                    "AssemblyAIUniversal2" or "RevAI" or "AzureSpeechSTT" or "AWSTranscribe" or "DeepgramNova2" or "SpeechmaticsASR"
+                        or "SarvamASR" => $"AiDotNet.SpeechRecognition.ProprietaryAPI.{model.ClassName}Options",
                     "InterCTC" or "SelfConditionedCTC" or "CTCSegmentation" => $"AiDotNet.SpeechRecognition.CTCVariants.{model.ClassName}Options",
                     "ParakeetCTC" or "ParakeetRNNT" or "ParakeetTDT" => $"AiDotNet.SpeechRecognition.NeMo.{model.ClassName}Options",
                     _ => $"AiDotNet.SpeechRecognition.ConformerFamily.{model.ClassName}Options",
                 };
                 string decoderOptions = model.ClassName switch
                 {
-                    "ConformerCTC" => string.Empty,
+                    "ConformerCTC" or "SpeechmaticsASR" or "SarvamASR" => string.Empty,
+                    // The Transformer-CTC stand-in has no convolution module.
+                    "DeepgramNova2" => "NumEncoderLayers = 1, ",
+                    // Two chunks of history and a feed-forward width that is not a multiple of the model width.
+                    "AzureSpeechSTT" => "PredictionDim = 16, JointDim = 16, AttentionChunkSize = 2, AttentionLeftChunks = 1, FeedForwardUnits = 24, ",
+                    "AWSTranscribe" => "PredictionDim = 16, JointDim = 16, AttentionChunkSize = 2, ",
                     // One decoder layer for the joint CTC/attention models.
                     "Branchformer" or "EBranchformer" or "OWSM" => "CgmlpDim = 32, AttentionDecoderLayers = 1, AttentionDecoderFeedForward = 32, ",
                     "ESPnetASR" or "SpeechBrain" => "AttentionDecoderLayers = 1, AttentionDecoderFeedForward = 32, ",
+                    // One layer in each direction for Reverb's bidirectional decoder.
+                    "RevAI" => "AttentionDecoderLayers = 1, ReverseDecoderLayers = 1, AttentionDecoderFeedForward = 32, ",
                     "CTCSegmentation" => "NumEncoderLayers = 1, AttentionDecoderLayers = 1, AttentionDecoderFeedForward = 32, ",
                     // Two layers, so the intermediate CTC loss reads the first.
                     "InterCTC" or "SelfConditionedCTC" => "NumEncoderLayers = 2, IntermediateCtcLayers = new[] { 1 }, ",
@@ -9684,7 +9702,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
                     "inputSize: 3200, outputSize: 16), " +
                     $"new {conformerOptions} {{ EncoderDim = 16, NumAttentionHeads = 2, NumMels = 32, " +
-                    (model.ClassName is "InterCTC" or "SelfConditionedCTC" or "CTCSegmentation" ? string.Empty : "NumEncoderLayers = 1, ConvKernel = 3, ") + decoderOptions + "VocabSize = 16, MaxAudioLengthSeconds = 1, " +
+                    (model.ClassName is "InterCTC" or "SelfConditionedCTC" or "CTCSegmentation" or "DeepgramNova2" ? string.Empty : "NumEncoderLayers = 1, ConvKernel = 3, ") + decoderOptions + "VocabSize = 16, MaxAudioLengthSeconds = 1, " +
                     // SpecAugment draws new masks each step (up to 27 of the 32 bins), so the step-to-step training losses
                     // the invariants compare would measure the masks; the fixture trains on unmasked features.
                     "FrequencyMasks = 0, TimeMasks = 0 })";
@@ -16739,19 +16757,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     ("ScaledInput_ShouldChangeOutput", false, "random"),
                 }, "((AiDotNet.Audio.MusicGen.MusicGenModel<double>)network).TextToTokens");
             }
-            else if (model.ClassName == "DeepgramNova2")
-            {
-                // The FP32 fixture's MoreData path was already capped, but its default training and
-                // memorization repetitions still dominated the serialized D-F trace. Keep real
-                // optimizer updates while bounding only generated-test repetition.
-                sb.AppendLine("    protected override int TrainingIterations => 5;");
-                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-                sb.AppendLine("    protected override int MoreDataLongIterations => 1;");
-                sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
-                sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
-                sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
-                sb.AppendLine("    protected override double TrainingLossReductionTolerance => 0.5;");
-            }
             else if (model.ClassName == "DannaSep")
             {
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16, 16 };");
@@ -16847,6 +16852,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Granite-speech reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "RobustConformer")
+            {
+                // The noise-robust wav2vec 2.0 reads waveforms: 0.2 s is 9 frames of 20 ms over its 16 CTC tokens. The
+                // BASE feature encoder group-normalizes its first convolution, so a recording scaled 10x gives the same
+                // features by design and the scaled-input invariant does not apply.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 9, 16 };");
+                sb.AppendLine("    protected override bool ScaledInputInvariantApplicable => false;");
             }
             else if (model.ClassName == "VoxtLM")
             {
@@ -16975,7 +16989,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName is "ConformerCTC" or "ConformerTransducer" or "StreamingConformer" or "Branchformer" or "EBranchformer"
                 or "InterCTC" or "SelfConditionedCTC" or "ParakeetCTC" or "ParakeetRNNT" or "FastEmit" or "ParakeetTDT" or "TDTDecoder"
-                or "ESPnetASR" or "SpeechBrain" or "OWSM" or "AssemblyAIUniversal2" or "CTCSegmentation" or "EmformerRNNT" or "StreamingZipformer"
+                or "ESPnetASR" or "SpeechBrain" or "OWSM" or "AssemblyAIUniversal2" or "CTCSegmentation" or "RevAI" or "EmformerRNNT" or "StreamingZipformer"
+                or "AzureSpeechSTT" or "AWSTranscribe" or "DeepgramNova2" or "SpeechmaticsASR" or "SarvamASR"
                      || (model.ClassName == "Conformer" && model.FullyQualifiedName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
             {
                 // Conformer reads waveforms: 0.2 s at 16 kHz is 21 log-mel frames, 4 encoder frames over its 16 tokens.

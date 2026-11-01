@@ -110,6 +110,9 @@ internal sealed record ConformerAsrConfiguration
     public int NumEncoderLayers { get; init; } = 16;
     public int NumAttentionHeads { get; init; } = 4;
     public int FeedForwardMultiplier { get; init; } = 4;
+    /// <summary>Hidden units of each Conformer feed-forward module when positive (widths that are not a whole multiple
+    /// of the model width); zero uses <see cref="FeedForwardMultiplier"/>.</summary>
+    public int FeedForwardUnits { get; init; }
     public int ConvKernel { get; init; } = 32;
     public ConformerAsrBlock Block { get; init; } = ConformerAsrBlock.Conformer;
     /// <summary>Whether sinusoidal absolute positions are added to the scaled input (always for the Transformer block).</summary>
@@ -147,6 +150,11 @@ internal sealed record ConformerAsrConfiguration
     public int AttentionDecoderLayers { get; init; }
     /// <summary>Feed-forward units of each attention-decoder layer.</summary>
     public int AttentionDecoderFeedForward { get; init; } = 2048;
+    /// <summary>Layers of a second, right-to-left attention decoder (WeNet U2++'s <c>BiTransformerDecoder</c>); zero for
+    /// none.</summary>
+    public int ReverseDecoderLayers { get; init; }
+    /// <summary>The right-to-left decoder's share of the attention loss (WeNet's <c>reverse_weight</c>).</summary>
+    public double ReverseWeight { get; init; }
     /// <summary>Weight of the CTC loss in the hybrid objective: L = w L_CTC + (1 - w) L_attention.</summary>
     public double CtcWeight { get; init; } = 0.3;
     /// <summary>Label smoothing of the attention decoder's cross-entropy.</summary>
@@ -279,7 +287,8 @@ internal sealed class ConformerAsrNetwork<T>
             if (_o.Block == ConformerAsrBlock.Conformer)
                 Blocks.Add(Own(new ConformerBlockLayer<T>(d, _o.NumAttentionHeads, _o.FeedForwardMultiplier, _o.ConvKernel,
                     ropeTheta: _o.RopeTheta, attentionChunkSize: _o.AttentionChunkSize, causal: _o.Causal,
-                    attentionLeftChunks: _o.AttentionLeftChunks, causalConvolution: _o.CausalConvolution)));
+                    attentionLeftChunks: _o.AttentionLeftChunks, causalConvolution: _o.CausalConvolution,
+                    feedForwardUnits: _o.FeedForwardUnits)));
             else if (_o.Block == ConformerAsrBlock.Transformer) TransformerBlocks.Add(new TransformerBlock(_o, layer => Own(layer)));
             else BranchBlocks.Add(new BranchBlock(_o, layer => Own(layer)));
         }
@@ -308,6 +317,16 @@ internal sealed class ConformerAsrNetwork<T>
                 for (int i = 0; i < _o.AttentionDecoderLayers; i++) DecoderBlocks.Add(new DecoderBlock(_o, layer => Own(layer)));
                 DecoderNorm = Own(new LayerNormalizationLayer<T>(d));
                 DecoderOutput = _o.DecoderTiedOutput ? Own(new TiedEmbeddingHeadLayer<T>(TokenEmbedding)) : Own(new DenseLayer<T>(_o.VocabSize, identity));
+                if (_o.ReverseDecoderLayers > 0)
+                {
+                    // WeNet's right decoder: its own embedding, layers, norm and output over the reversed transcript.
+                    if (embedding != d || DecoderContextConvs.Count > 0 || _o.DecoderTiedOutput)
+                        throw new ArgumentException("A right-to-left decoder takes a plain, untied decoder at the encoder's width.", nameof(options));
+                    ReverseTokenEmbedding = Own(new EmbeddingLayer<T>(_o.VocabSize, d));
+                    for (int i = 0; i < _o.ReverseDecoderLayers; i++) ReverseDecoderBlocks.Add(new DecoderBlock(_o, layer => Own(layer)));
+                    ReverseDecoderNorm = Own(new LayerNormalizationLayer<T>(d));
+                    ReverseDecoderOutput = Own(new DenseLayer<T>(_o.VocabSize, identity));
+                }
             }
             return;
         }
@@ -448,6 +467,10 @@ internal sealed class ConformerAsrNetwork<T>
     public List<DecoderBlock> DecoderBlocks { get; } = new();
     public LayerNormalizationLayer<T>? DecoderNorm { get; }
     public LayerBase<T>? DecoderOutput { get; }
+    public EmbeddingLayer<T>? ReverseTokenEmbedding { get; }
+    public List<DecoderBlock> ReverseDecoderBlocks { get; } = new();
+    public LayerNormalizationLayer<T>? ReverseDecoderNorm { get; }
+    public DenseLayer<T>? ReverseDecoderOutput { get; }
 
     /// <summary>The start-and-end-of-sentence token of the attention decoder: the vocabulary's last.</summary>
     public int SentenceBoundary => _o.VocabSize - 1;
@@ -531,14 +554,21 @@ internal sealed class ConformerAsrNetwork<T>
 
     /// <summary>The attention decoder's logits <c>[n, VocabSize]</c> for a token history, reading the encoder output
     /// <c>[L, D]</c>: embedding scaled by sqrt(D) plus sinusoidal positions, the decoder layers and a final norm.</summary>
-    public Tensor<T> DecoderLogits(IReadOnlyList<int> tokens, Tensor<T> encoded)
+    public Tensor<T> DecoderLogits(IReadOnlyList<int> tokens, Tensor<T> encoded) => DecoderLogits(tokens, encoded, reverse: false);
+
+    /// <summary>The left-to-right or, with <paramref name="reverse"/>, the right-to-left decoder's logits.</summary>
+    public Tensor<T> DecoderLogits(IReadOnlyList<int> tokens, Tensor<T> encoded, bool reverse)
     {
-        if (TokenEmbedding is null || DecoderNorm is null || DecoderOutput is null) throw new InvalidOperationException("This network has no attention decoder.");
+        var embeddingLayer = reverse ? ReverseTokenEmbedding : TokenEmbedding;
+        var norm = reverse ? ReverseDecoderNorm : DecoderNorm;
+        LayerBase<T>? output = reverse ? ReverseDecoderOutput : DecoderOutput;
+        if (embeddingLayer is null || norm is null || output is null)
+            throw new InvalidOperationException(reverse ? "This network has no right-to-left decoder." : "This network has no attention decoder.");
         int n = tokens.Count, d = _o.EncoderDim;
         var ids = new Tensor<T>(new[] { 1, n });
         for (int i = 0; i < n; i++) ids[0, i] = NumOps.FromDouble(tokens[i]);
         int embedding = _o.DecoderEmbeddingDim > 0 ? _o.DecoderEmbeddingDim : d;
-        var x = _engine.Reshape(TokenEmbedding.Forward(ids), new[] { n, embedding });
+        var x = _engine.Reshape(embeddingLayer.Forward(ids), new[] { n, embedding });
         for (int i = 0; i < DecoderContextConvs.Count; i++)
         {
             // Causal: two frames of left padding, so position i sees tokens i - 2 to i.
@@ -551,17 +581,28 @@ internal sealed class ConformerAsrNetwork<T>
             : _engine.Reshape(_engine.TensorAdd(_engine.TensorMultiplyScalar(x, NumOps.FromDouble(Math.Sqrt(d))), Positions(n, d)), new[] { 1, n, d });
         // The decoder reads the encoder's normalized output (the Transformer encoder's final norm).
         var memory = _engine.Reshape(CtcNorm is not null ? CtcNorm.Forward(encoded) : encoded, new[] { 1, encoded.Shape[0], d });
-        foreach (var block in DecoderBlocks) x = block.Forward(_engine, x, memory);
-        return DecoderOutput.Forward(_engine.Reshape(DecoderNorm.Forward(x), new[] { n, d }));
+        foreach (var block in reverse ? ReverseDecoderBlocks : DecoderBlocks) x = block.Forward(_engine, x, memory);
+        return output.Forward(_engine.Reshape(norm.Forward(x), new[] { n, d }));
     }
 
     /// <summary>The attention decoder's label-smoothed cross-entropy of a transcript: it reads the boundary token then
-    /// the labels, and predicts the labels then the boundary token (Watanabe et al. 2017, section 3.2).</summary>
+    /// the labels, and predicts the labels then the boundary token (Watanabe et al. 2017, section 3.2). With a
+    /// right-to-left decoder, L = (1 - r) L_left-to-right + r L_right-to-left, the second over the reversed transcript
+    /// (WeNet U2++).</summary>
     public Tensor<T> AttentionLoss(Tensor<T> encoded, IReadOnlyList<int> labels)
+    {
+        var forward = DirectionalAttentionLoss(encoded, labels, reverse: false);
+        if (ReverseDecoderBlocks.Count == 0) return forward;
+        double r = _o.ReverseWeight;
+        var backward = DirectionalAttentionLoss(encoded, labels.Reverse().ToArray(), reverse: true);
+        return _engine.TensorAdd(_engine.TensorMultiplyScalar(forward, NumOps.FromDouble(1 - r)), _engine.TensorMultiplyScalar(backward, NumOps.FromDouble(r)));
+    }
+
+    private Tensor<T> DirectionalAttentionLoss(Tensor<T> encoded, IReadOnlyList<int> labels, bool reverse)
     {
         var input = new List<int> { StartToken };
         input.AddRange(labels);
-        var logits = DecoderLogits(input, encoded);
+        var logits = DecoderLogits(input, encoded, reverse);
         int n = input.Count, v = _o.VocabSize;
         double smooth = _o.LabelSmoothing;
         var weights = new Tensor<T>(new[] { n, v });
