@@ -454,7 +454,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
 
         // Step 5: Rebuild layers with actual data dimensions
         int genInputDim = _options.EmbeddingDimension + _condWidth;
-        RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
+        BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim));
 
         // Step 6: Transform data
         var transformedData = _transformer.Transform(copulaData);
@@ -518,7 +518,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             _packedInputDim = (_dataWidth + _condWidth) * _options.PacSize;
 
             int genInputDim = _options.EmbeddingDimension + _condWidth;
-            RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
+            BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim));
 
             // Pre-allocate training buffers
             InitializeTrainingBuffers(genInputDim);

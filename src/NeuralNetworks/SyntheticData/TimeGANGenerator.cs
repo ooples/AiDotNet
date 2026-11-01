@@ -368,7 +368,7 @@ public partial class TimeGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         _dataWidth = data.Columns;
         int seqLen = _options.SequenceLength;
 
-        RebuildAllNetworks();
+        BuildFromConstructionSequence(() => RebuildAllNetworks());
 
         var sequences = PrepareSequences(data, seqLen);
         if (sequences.Count == 0)

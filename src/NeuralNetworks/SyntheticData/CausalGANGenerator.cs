@@ -388,7 +388,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         _prevDagConstraint = double.MaxValue;
 
         // Step 4: Build networks with actual dimensions
-        RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth);
+        BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth));
 
         // Step 5: Training loop
         T lr = NumOps.FromDouble(_options.LearningRate);
@@ -450,7 +450,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             _lagrangeRho = 1.0;
             _prevDagConstraint = double.MaxValue;
 
-            RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth);
+            BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth));
 
             T lr = NumOps.FromDouble(_options.LearningRate);
             int batchSize = Math.Min(_options.BatchSize, data.Rows);

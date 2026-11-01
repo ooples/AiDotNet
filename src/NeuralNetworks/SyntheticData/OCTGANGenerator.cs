@@ -254,7 +254,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         _minorityData = ExtractMinorityData(data, transformedData, columns);
         var trainData = _minorityData.Rows > 0 ? _minorityData : transformedData;
 
-        RebuildLayersWithActualDimensions();
+        BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions());
         InitializeSVDDCenter(trainData);
 
         T lr = NumOps.FromDouble(_options.LearningRate);

@@ -406,7 +406,7 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         var transformedData = _transformer.Transform(data);
 
         // Step 2: Rebuild layers with actual data dimensions
-        RebuildLayersWithActualDimensions(_dataWidth);
+        BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(_dataWidth));
 
         // Step 3: Train VAE
         int vaeBatchSize = Math.Min(_options.BatchSize, data.Rows);
@@ -480,7 +480,7 @@ public partial class TabSynGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 
             var transformedData = _transformer.Transform(data);
 
-            RebuildLayersWithActualDimensions(_dataWidth);
+            BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(_dataWidth));
 
             int vaeBatchSize = Math.Min(_options.BatchSize, data.Rows);
             int vaeNumBatches = Math.Max(1, data.Rows / vaeBatchSize);

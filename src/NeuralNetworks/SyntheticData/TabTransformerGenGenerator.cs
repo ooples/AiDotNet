@@ -321,7 +321,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
         }
 
         // Rebuild all layers with the actual per-column widths.
-        BuildLayers();
+        BuildFromConstructionSequence(() => BuildLayers());
 
         // Masked-prediction training (the TabTransformer-Gen objective): for each
         // row, randomly mask a fraction of columns (zero their values) and train
@@ -482,7 +482,7 @@ public partial class TabTransformerGenGenerator<T> : NeuralSyntheticTabularGener
             _colWidths.Clear();
             for (int c = 0; c < _numColumns; c++) _colWidths.Add(1);
             _dataWidth = _numColumns;
-            BuildLayers();
+            BuildFromConstructionSequence(() => BuildLayers());
         }
 
         // Canonicalise the input to a flat [dataWidth] vector (callers pass

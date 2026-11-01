@@ -411,7 +411,7 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
 
         // Step 5: Rebuild layers with actual data dimensions
         int genInputDim = _options.EmbeddingDimension + _condWidth;
-        RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
+        BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim));
         InitializeTrainingBuffers(genInputDim);
 
         // Step 6: Transform data
@@ -463,7 +463,7 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
             _packedInputDim = (_dataWidth + _condWidth) * _options.PacSize;
 
             int genInputDim = _options.EmbeddingDimension + _condWidth;
-            RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
+            BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim));
             InitializeTrainingBuffers(genInputDim);
 
             var transformedData = _transformer.Transform(data);

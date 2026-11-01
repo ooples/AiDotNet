@@ -333,7 +333,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
         if (!IsFitted && input.Length != _dataWidth)
         {
             _dataWidth = input.Length;
-            RebuildLayersWithActualDimensions(_dataWidth);
+            BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(_dataWidth));
         }
     }
 
@@ -392,7 +392,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
         var transformedData = _transformer.Transform(data);
 
         // Step 3: Rebuild layers with actual data dimensions
-        RebuildLayersWithActualDimensions(_dataWidth);
+        BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(_dataWidth));
 
         // Step 4: Training loop
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
@@ -477,7 +477,7 @@ public partial class TVAEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>, 
             var transformedData = _transformer.Transform(data);
 
             // Step 3: Rebuild layers with actual data dimensions
-            RebuildLayersWithActualDimensions(_dataWidth);
+            BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(_dataWidth));
 
             // Step 4: Training loop
             int batchSize = Math.Min(_options.BatchSize, data.Rows);

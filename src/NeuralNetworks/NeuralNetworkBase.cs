@@ -364,13 +364,38 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// another with the same seed built right after it. Continuing the model's own sequence gives exactly the seeds
     /// it would have drawn had nothing been constructed in between.
     /// </remarks>
-    private void InitializeLayersFromConstructionSequence()
+    private void InitializeLayersFromConstructionSequence() => BuildFromConstructionSequence(InitializeLayers);
+
+    /// <summary>
+    /// Runs <paramref name="build"/> with this model's own layer-seed sequence, so every layer it constructs draws
+    /// its seed from the sequence this model's construction armed.
+    /// </summary>
+    /// <param name="build">The code that constructs layers.</param>
+    /// <remarks>
+    /// <para>
+    /// Call it around any layer construction that happens after the constructor returns: a model that resizes its
+    /// layers to the data on its first <c>Train</c> or <c>Predict</c>, or that rebuilds them for a new
+    /// configuration. Outside it, those layers draw from whatever sequence the thread's scope holds by then (the
+    /// model constructed last, or none), so two models built with the same seed end up with different weights.
+    /// </para>
+    /// <para>
+    /// It is safe inside the constructor too: there the scope already holds this model's sequence. An unseeded model
+    /// resumes no sequence, so its layers stay unseeded, which keeps "reproducible if and only if a seed was
+    /// requested".
+    /// </para>
+    /// </remarks>
+    protected void BuildFromConstructionSequence(Action build)
     {
+        if (build is null)
+        {
+            throw new ArgumentNullException(nameof(build));
+        }
+
         var enclosing = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResumeSequence(_constructionSequence);
         try
         {
-            InitializeLayers();
+            build();
         }
         finally
         {
