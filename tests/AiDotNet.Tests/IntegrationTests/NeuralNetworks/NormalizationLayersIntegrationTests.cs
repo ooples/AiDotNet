@@ -1,4 +1,4 @@
-// Copyright (c) AiDotNet. All rights reserved.
+// Copyright (c) CrowdTrainer LLC. All rights reserved.
 
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;

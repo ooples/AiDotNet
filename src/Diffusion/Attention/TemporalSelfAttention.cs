@@ -41,8 +41,6 @@ public partial class TemporalSelfAttention<T> : LayerBase<T>, IShapeContract
     private readonly int _numFrames;
     private readonly int _spatialSize;
     private readonly MultiHeadAttentionLayer<T> _temporalAttention;
-    [Scratch]
-    private Tensor<T>? _lastInput;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -110,8 +108,6 @@ public partial class TemporalSelfAttention<T> : LayerBase<T>, IShapeContract
     /// <returns>Output tensor with temporal information mixed, same shape as input.</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // #1668: skip the backward-activation cache in inference (denoise-loop arena safety).
-        _lastInput = ShouldCacheForBackward ? input : null;
         return _temporalAttention.Forward(input);
     }
 
@@ -124,7 +120,6 @@ public partial class TemporalSelfAttention<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
         _temporalAttention.ResetState();
     }
 

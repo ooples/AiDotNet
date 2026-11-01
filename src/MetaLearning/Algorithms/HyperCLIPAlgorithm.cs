@@ -120,7 +120,7 @@ public partial class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
             }
 
             // Param embedding from parameter delta
@@ -163,7 +163,7 @@ public partial class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(initParams);
@@ -272,7 +272,7 @@ public partial class HyperCLIPAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             {
                 ParamModel.SetParameters(ap);
                 var g = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                ap = ApplyGradients(ap, g, _algoOptions.InnerLearningRate);
+                ap = ApplyInnerGradients(ap, g, _algoOptions.InnerLearningRate, step == 0);
             }
 
             // Param embedding from delta

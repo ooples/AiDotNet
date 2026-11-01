@@ -116,27 +116,20 @@ public class CAVIAOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOption
 
     #region Optional Properties with Defaults
 
-    /// <summary>
-    /// Gets or sets the loss function for training.
-    /// Default: null (uses the model's default loss function).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The loss function measures how well the adapted model performs on query examples.
-    /// Cross-entropy is typical for classification, MSE for regression.
-    /// </para>
-    /// </remarks>
+    /// <summary>Loss function for meta-training; null uses the meta-model's default loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for outer loop updates (shared parameter updates).
-    /// Default: null (uses built-in SGD with OuterLearningRate).
+    /// Optimizer for the meta-update. When set, it takes the outer step at its own learning rate (so
+    /// <see cref="OuterLearningRate"/> no longer applies) and keeps its state across meta-iterations; null uses
+    /// plain SGD at <see cref="OuterLearningRate"/>. It must not be the same instance as <see cref="InnerOptimizer"/>.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for inner loop updates (context parameter updates).
-    /// Default: null (uses built-in SGD with InnerLearningRate).
+    /// Optimizer for task adaptation. When set, it takes each inner step at its own learning rate (so
+    /// <see cref="InnerLearningRate"/> no longer applies) and is reset at the start of every adaptation; null uses
+    /// plain SGD at <see cref="InnerLearningRate"/>.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
 

@@ -33,17 +33,25 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
 {
+    /// <summary>Number of features in one observation of the environment state.</summary>
     public int StateSize { get; init; } = 16;
+    /// <summary>Number of discrete actions, or the dimension of the action vector for a continuous action space.</summary>
     public int ActionSize { get; init; } = 4;
 
     // Transformer architecture parameters
+    /// <summary>Width of the token embeddings for returns-to-go, states and actions.</summary>
     public int EmbeddingDim { get; init; } = 128;
+    /// <summary>Number of transformer blocks.</summary>
     public int NumLayers { get; init; } = 3;
+    /// <summary>Number of attention heads.</summary>
     public int NumHeads { get; init; } = 1;
+    /// <summary>Number of past time steps the model reads as context.</summary>
     public int ContextLength { get; init; } = 20;  // Number of timesteps to condition on
+    /// <summary>Dropout probability applied during training.</summary>
     public double DropoutRate { get; init; } = 0.1;
 
     // Training parameters
+    /// <summary>Maximum number of transitions kept in the trajectory buffer.</summary>
     public int BufferSize { get; init; } = 1000000;
 
     /// <summary>

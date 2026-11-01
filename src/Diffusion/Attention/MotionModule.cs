@@ -45,8 +45,6 @@ public partial class MotionModule<T> : LayerBase<T>, IShapeContract
     private readonly DenseLayer<T> _ffnOut;
     private readonly LayerNormalizationLayer<T> _norm1;
     private readonly LayerNormalizationLayer<T> _norm2;
-    [Scratch]
-    private Tensor<T>? _lastInput;
 
     /// <inheritdoc />
     public override bool SupportsTraining => true;
@@ -133,8 +131,6 @@ public partial class MotionModule<T> : LayerBase<T>, IShapeContract
     /// </summary>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // #1668: skip the backward-activation cache in inference (denoise-loop arena safety).
-        _lastInput = ShouldCacheForBackward ? input : null;
 
         // Temporal attention with residual
         var normed1 = _norm1.Forward(input);
@@ -178,7 +174,6 @@ public partial class MotionModule<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
         _temporalAttention.ResetState();
         _ffnIn.ResetState();
         _ffnOut.ResetState();

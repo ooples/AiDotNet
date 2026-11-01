@@ -177,29 +177,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     private Tensor<T>? _embeddingGradient;
 
     /// <summary>
-    /// The input tensor from the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the input indices received during the last forward pass. These indices are
-    /// necessary for computing the gradients during the backward pass, as they indicate which embeddings
-    /// were accessed.
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers which token IDs were processed in the latest calculation.
-    /// 
-    /// During training:
-    /// - The layer needs to remember which tokens it looked up
-    /// - This helps when calculating how to improve the embeddings
-    /// - Only the embeddings for these specific tokens will be updated
-    /// 
-    /// For example, if the input was the sequence [5, 10, 3] (representing three tokens),
-    /// only the embeddings for token IDs 5, 10, and 3 will receive updates during training.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the last computed embedding regularization loss for diagnostics.
     /// </summary>
     private T _lastEmbeddingRegularizationLoss;
@@ -590,7 +567,6 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // allocation up front.
         EnsureEmbeddingInitialized();
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _originalInputShape = input._shape;
 
         int embeddingDim = _embeddingTensor.Shape[1];
@@ -900,8 +876,7 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
     public override void ResetState()
     {
-        // Clear cached values from forward and backward passes
-        _lastInput = null;
+        // Clear gradients from the backward pass
         _embeddingGradient = null;
 
         // Clear GPU-related cached data

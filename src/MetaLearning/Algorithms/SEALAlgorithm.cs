@@ -115,6 +115,7 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             options.InnerOptimizer)
     {
         _sealOptions = options;
+        RequirePlainSgdInnerSteps(options.UseAdaptiveInnerLR, "adaptive per-parameter inner learning rates");
 
         if (_sealOptions.UseAdaptiveInnerLR)
         {
@@ -269,7 +270,7 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         // Outer loop: Update meta-parameters
         var currentMetaParams = ParamModel.GetParameters();
-        var updatedMetaParams = ApplyGradients(currentMetaParams, metaGradients, _sealOptions.OuterLearningRate);
+        var updatedMetaParams = ApplyOuterGradients(currentMetaParams, metaGradients, _sealOptions.OuterLearningRate);
         ParamModel.SetParameters(updatedMetaParams);
 
         // Return average meta-loss
@@ -390,7 +391,7 @@ public partial class SEALAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             else
             {
                 // Standard gradient descent with fixed learning rate
-                parameters = ApplyGradients(parameters, gradients, _sealOptions.InnerLearningRate);
+                parameters = ApplyInnerGradients(parameters, gradients, _sealOptions.InnerLearningRate, step == 0);
             }
 
             InterfaceGuard.Parameterizable(model).SetParameters(parameters);

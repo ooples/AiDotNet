@@ -30,10 +30,10 @@ public class TextWatermarkConfig
 /// </summary>
 public enum TextWatermarkType
 {
-    /// <summary>Modify sampling distribution (SynthID-style).</summary>
+    /// <summary>Generation-time green-list logit bias (Kirchenbauer et al. 2023); see <see cref="SamplingWatermarker{T}"/>.</summary>
     Sampling,
-    /// <summary>Synonym substitution watermarking.</summary>
+    /// <summary>Keyed synonym substitution in finished text; see <see cref="LexicalWatermarker{T}"/>.</summary>
     Lexical,
-    /// <summary>Structural rearrangement watermarking.</summary>
+    /// <summary>Keyed contraction and expansion in finished text; see <see cref="SyntacticWatermarker{T}"/>.</summary>
     Syntactic
 }

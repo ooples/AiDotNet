@@ -1,4 +1,4 @@
-// Copyright (c) AiDotNet. All rights reserved.
+// Copyright (c) CrowdTrainer LLC. All rights reserved.
 // #99 Stage 2 (exceed-industry, RadixAttention-style): automatic prompt-prefix KV sharing via
 // PagedKVCache.ForkSequence (copy-on-write blocks). A sequence forked after a shared prefix reuses
 // the prefix's KV blocks (no re-allocation, no recompute) and still produces the SAME attention as

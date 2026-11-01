@@ -92,12 +92,6 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T>? _gradientB;
 
     /// <summary>
-    /// Stored input from the forward pass, needed for gradient computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Dimensions for matrix A (m, n).
     /// </summary>
     private readonly (int m, int n) _dimsA;
@@ -276,8 +270,6 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input.Clone();
-
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
@@ -562,7 +554,6 @@ public partial class LoKrAdapter<T> : LoRAAdapterBase<T>
     public override void ResetState()
     {
         base.ResetState();
-        _lastInput = null;
         _gradientA = null;
         _gradientB = null;
     }

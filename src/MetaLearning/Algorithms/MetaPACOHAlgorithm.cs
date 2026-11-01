@@ -84,7 +84,8 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
     public MetaPACOHAlgorithm(MetaPACOHOptions<T, TInput, TOutput> options)
         : base((options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
                options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
-               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+               options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
+               optimizerUse: MetaLearnerOptimizerUse.InnerAndOuter)
     {
         _algoOptions = options;
         _paramDim = InterfaceGuard.Parameterizable(options.MetaModel).GetParameters().Length;
@@ -130,6 +131,7 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
                 var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
                 // Prior gradient with per-group variances
+                var stepGradient = new Vector<T>(_paramDim);
                 for (int d = 0; d < _paramDim; d++)
                 {
                     int g = _groupOf[d];
@@ -137,8 +139,9 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
                     double var_g = Math.Exp(NumOps.ToDouble(_groupLogVars[g])) + 1e-10;
                     double priorGrad = diff / var_g;
                     double combined = NumOps.ToDouble(taskGrad[d]) + _algoOptions.KLCoefficient * priorGrad;
-                    theta[d] = NumOps.Subtract(theta[d], NumOps.FromDouble(_algoOptions.InnerLearningRate * combined));
+                    stepGradient[d] = NumOps.FromDouble(combined);
                 }
+                theta = ApplyInnerGradients(theta, stepGradient, _algoOptions.InnerLearningRate, step == 0);
             }
 
             adaptedParamsList.Add(theta);
@@ -159,7 +162,7 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            _priorMean = ApplyGradients(_priorMean, avgGrad, _algoOptions.OuterLearningRate);
+            _priorMean = ApplyOuterGradients(_priorMean, avgGrad, _algoOptions.OuterLearningRate);
             ParamModel.SetParameters(_priorMean);
         }
 
@@ -181,6 +184,7 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             ParamModel.SetParameters(theta);
             var taskGrad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
 
+            var stepGradient = new Vector<T>(_paramDim);
             for (int d = 0; d < _paramDim; d++)
             {
                 int g = _groupOf[d];
@@ -188,8 +192,9 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
                 double var_g = Math.Exp(NumOps.ToDouble(_groupLogVars[g])) + 1e-10;
                 double priorGrad = diff / var_g;
                 double combined = NumOps.ToDouble(taskGrad[d]) + _algoOptions.KLCoefficient * priorGrad;
-                theta[d] = NumOps.Subtract(theta[d], NumOps.FromDouble(_algoOptions.InnerLearningRate * combined));
+                stepGradient[d] = NumOps.FromDouble(combined);
             }
+            theta = ApplyInnerGradients(theta, stepGradient, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(_priorMean);
@@ -265,14 +270,16 @@ public partial class MetaPACOHAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T,
             {
                 ParamModel.SetParameters(theta);
                 var grad = ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput);
+                var stepGradient = new Vector<T>(_paramDim);
                 for (int d = 0; d < _paramDim; d++)
                 {
                     int g = _groupOf[d];
                     double diff = NumOps.ToDouble(theta[d]) - NumOps.ToDouble(_priorMean[d]);
                     double var_g = Math.Exp(NumOps.ToDouble(_groupLogVars[g])) + 1e-10;
                     double combined = NumOps.ToDouble(grad[d]) + _algoOptions.KLCoefficient * diff / var_g;
-                    theta[d] = NumOps.Subtract(theta[d], NumOps.FromDouble(_algoOptions.InnerLearningRate * combined));
+                    stepGradient[d] = NumOps.FromDouble(combined);
                 }
+                theta = ApplyInnerGradients(theta, stepGradient, _algoOptions.InnerLearningRate, step == 0);
             }
 
             adapted.Add(theta);

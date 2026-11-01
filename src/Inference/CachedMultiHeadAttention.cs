@@ -86,12 +86,6 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
     private KVCache<T>? _cache;
     private int _layerIndex;
 
-    // Cached values for backward (training mode only)
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
     // Gradients
     [Scratch]
     private Matrix<T>? _queryWeightsGradient;
@@ -309,8 +303,6 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input;
-
         if (InferenceMode && _cache != null)
         {
             return ForwardWithCache(input);
@@ -382,9 +374,7 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
 
         // Output projection
         var output = attentionOutput.Multiply(_outputWeights).Add(_outputBias);
-        _lastOutput = ApplyActivation(output);
-
-        return _lastOutput;
+        return ApplyActivation(output);
     }
 
     /// <summary>
@@ -432,9 +422,7 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
 
         // Output projection
         var output = attentionOutput.Multiply(_outputWeights).Add(_outputBias);
-        _lastOutput = ApplyActivation(output);
-
-        return _lastOutput;
+        return ApplyActivation(output);
     }
 
     /// <summary>
@@ -563,8 +551,6 @@ public partial class CachedMultiHeadAttention<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
         _valueWeightsGradient = null;

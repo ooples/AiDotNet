@@ -740,22 +740,23 @@ public partial class ExperienceReplayBuffer<T, TInput, TOutput> : ModelBase<T, T
         // Remove samples from overrepresented tasks
         int targetPerTask = (_maxSize - neededSpace) / Math.Max(1, _taskIndices.Count);
 
-        foreach (var kvp in _taskIndices.ToList())
+        // Choose every task's evictions first, then remove them all in one descending pass. Removing task by task
+        // shifted the buffer under the indices the later tasks still held, so they evicted the wrong points or ran
+        // past the end of the buffer.
+        var toRemove = new List<int>();
+        foreach (var kvp in _taskIndices)
         {
             if (kvp.Key == newTaskId) continue;
 
             int excess = kvp.Value.Count - targetPerTask;
             if (excess > 0)
-            {
-                var toRemove = kvp.Value.OrderBy(_ => _random.Next()).Take(excess).ToList();
-                foreach (var idx in toRemove.OrderByDescending(i => i))
-                {
-                    _estimatedMemoryBytes -= EstimateDataPointSize(_buffer[idx]);
-                    _buffer.RemoveAt(idx);
-                    _priorities.Remove(idx);
-                    kvp.Value.Remove(idx);
-                }
-            }
+                toRemove.AddRange(kvp.Value.OrderBy(_ => _random.Next()).Take(excess));
+        }
+
+        foreach (var idx in toRemove.OrderByDescending(i => i))
+        {
+            _estimatedMemoryBytes -= EstimateDataPointSize(_buffer[idx]);
+            _buffer.RemoveAt(idx);
         }
 
         RebuildIndices();

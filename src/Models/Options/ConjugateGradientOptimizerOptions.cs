@@ -124,20 +124,4 @@ public class ConjugateGradientOptimizerOptions<T, TInput, TOutput> : GradientBas
     /// make the steps decrease more quickly, helping to recover from overshooting but potentially slowing down training.</para>
     /// </remarks>
     public double LearningRateDecreaseFactor { get; set; } = 0.95;
-
-    /// <summary>
-    /// Gets or sets the maximum number of iterations the algorithm will perform before stopping.
-    /// </summary>
-    /// <value>The maximum number of iterations, defaulting to 1000.</value>
-    /// <remarks>
-    /// <para>
-    /// This is a safety limit to ensure the algorithm terminates even if convergence is not achieved.
-    /// The algorithm will stop after this many iterations regardless of whether the tolerance criterion has been met.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a safety setting that prevents the algorithm from running forever.
-    /// Even if it hasn't found the perfect solution, it will stop after this many attempts. The default (1000)
-    /// is usually enough for moderately complex problems. For simpler problems, you might reduce this to save time,
-    /// while for very complex problems, you might need to increase it to allow more time for convergence.
-    /// This value overrides the one from the parent class to provide a more appropriate default for the conjugate gradient method.</para>
-    /// </remarks>
 }

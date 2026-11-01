@@ -33,21 +33,21 @@ public class MAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions
 
     #region Optional Properties with Defaults
 
-    /// <summary>
-    /// Gets or sets the loss function for training.
-    /// Default: null (uses model's default loss function if available).
-    /// </summary>
+    /// <summary>Loss function for meta-training; null uses the meta-model's default loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for meta-parameter updates (outer loop).
-    /// Default: null (uses built-in Adam optimizer with OuterLearningRate).
+    /// Optimizer for the meta-update. When set, it takes the outer step at its own learning rate (so
+    /// <see cref="OuterLearningRate"/> no longer applies) and keeps its state across meta-iterations; null uses
+    /// plain SGD at <see cref="OuterLearningRate"/>. It must not be the same instance as <see cref="InnerOptimizer"/>.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for inner-loop adaptation.
-    /// Default: null (uses built-in SGD optimizer with InnerLearningRate).
+    /// Optimizer for task adaptation. When set, it takes each inner step at its own learning rate (so
+    /// <see cref="InnerLearningRate"/> no longer applies) and is reset at the start of every adaptation; null uses
+    /// plain SGD at <see cref="InnerLearningRate"/>.
+    /// It is rejected when the configuration uses second-order meta-gradients through the inner steps, which assumes plain SGD inner steps.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
 
