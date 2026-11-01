@@ -120,9 +120,22 @@ public class W2NER<T> : SpanBasedNERBase<T>
     }
 
     /// <inheritdoc />
-    /// <remarks>Each word pair's most likely relation (None, NNW or a THW type).</remarks>
-    protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput)
-        => modelOutput.Rank >= 2 && modelOutput.Shape[^1] == NEROptions.NumLabels + 1 ? ArgmaxDecode(modelOutput) : modelOutput;
+    /// <remarks>Each word pair's most likely relation (None, NNW or a THW type); a THW pair from tail i to head j (j at or
+    /// before i) is an entity of that type over tokens j to i. Discontinuous entities, which the paper recovers by
+    /// following NNW links from the head (Algorithm 1), are returned as their contiguous extent.</remarks>
+    protected override IReadOnlyList<NamedEntitySpan> DecodeSpans(Tensor<T> output, int seqLen)
+    {
+        int relations = output.Shape[^1];
+        var grid = Engine.Reshape(output, new[] { seqLen * seqLen, relations });
+        var spans = new List<NamedEntitySpan>();
+        for (int tail = 0; tail < seqLen; tail++)
+            for (int head = 0; head <= tail; head++)
+            {
+                var (relation, probability) = MostLikely(grid, tail * seqLen + head, relations);
+                if (relation >= 2) spans.Add(new NamedEntitySpan(head, tail, relation - 1, probability));
+            }
+        return spans;
+    }
 
     /// <summary>
     /// Word-pair relation targets (section 2.1): each run of tokens sharing a non-zero label is an entity of that type; NNW
