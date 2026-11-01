@@ -109,6 +109,9 @@ internal static class Ns2Ops
         return embedding;
     }
 
+    /// <summary>A stop-gradient copy (<c>torch.detach</c>).</summary>
+    public static Tensor<T> Detach<T>(Tensor<T> x) => new(x._shape, x.ToVector());
+
     public static Tensor<T> Dropout<T>(IEngine engine, Tensor<T> x, double rate, bool training, Random? random) =>
         training && rate > 0 && random is not null ? T5Seq2Seq<T>.Dropout(engine, x, rate, random) : x;
 

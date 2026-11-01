@@ -141,8 +141,11 @@ public sealed class PaperWarmupOverrideValidationTests
     {
         var options = new NaturalSpeech3Options
         {
-            HiddenDim = 32, EncoderDim = 32, DecoderDim = 32, DiffusionDim = 32, MelChannels = 16,
-            NumEncoderLayers = 1, NumDiffusionSteps = 2, NumHeads = 4, DropoutRate = 0.0, MaxTextLength = 16,
+            SampleRate = 1000, HopSize = 4, CodecEncoderDim = 4, CodecEncoderRates = new[] { 2, 2 }, CodecDim = 16, CodecDecoderChannels = 16,
+            CodecDecoderRates = new[] { 2, 2 }, CodebookDim = 4, CodebookSize = 16, CodecPhones = 100, CodecSpeakers = 4, MelWindows = new[] { 16, 32 },
+            MelBins = new[] { 4, 8 }, DiscriminatorPeriods = new[] { 2, 3 }, DiscriminatorWindows = new[] { 64, 32 }, DiscriminatorWidthDivisor = 16,
+            HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 1, FilterChannels = 32, EncoderKernel = 3, DiffusionDim = 16, DiffusionHeads = 2,
+            DiffusionFilter = 32, FrameDiffusionLayers = 1, PhonemeDiffusionLayers = 1, MaxDuration = 15, SamplingSteps = 2, TopK = 4,
         };
         if (warmupSteps is int steps) options.WarmupSteps = steps;
         return options;

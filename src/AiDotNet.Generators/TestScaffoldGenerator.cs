@@ -9946,18 +9946,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "NaturalSpeech3" && model.TypeParameterCount == 1)
             {
-                // Preserve the paper-scale production defaults while exercising
-                // NaturalSpeech 3's configurable factorized-diffusion topology at CI scale.
+                // NaturalSpeech 3's paper model is FACodec (a 16 kHz DAC-style codec with three factorized quantizers and a
+                // timbre Transformer) and 12- and 6-layer 1024-wide diffusion Transformers; keep the codec at width 16 with a
+                // hop of 4 at 1 kHz and 16-code books, and every diffusion Transformer at width 16 with one layer.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 16, inputDepth: 1, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options { " +
-                    "HiddenDim = 32, EncoderDim = 32, DecoderDim = 32, DiffusionDim = 32, " +
-                    "MelChannels = 16, NumEncoderLayers = 1, NumDiffusionSteps = 2, " +
-                    // WarmupSteps: the paper's 5000-step ramp leaves the rate near 1e-8 for the
-                    // memorization probe's two steps; a short ramp reaches the recipe's 1e-4.
-                    "NumHeads = 4, DropoutRate = 0.0, MaxTextLength = 16, " + SmokeWarmupSteps + " })";
+                    "inputSize: 8, outputSize: 64), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options { SampleRate = 1000, HopSize = 4, CodecEncoderDim = 4, " +
+                    "CodecEncoderRates = [2, 2], CodecDim = 16, CodecDecoderChannels = 16, CodecDecoderRates = [2, 2], CodebookDim = 4, " +
+                    "CodebookSize = 16, CodecPhones = 100, CodecSpeakers = 4, MelWindows = [16, 32], MelBins = [4, 8], DiscriminatorPeriods = [2, 3], " +
+                    "DiscriminatorWindows = [64, 32], DiscriminatorWidthDivisor = 16, HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 1, " +
+                    "FilterChannels = 32, EncoderKernel = 3, DiffusionDim = 16, DiffusionHeads = 2, DiffusionFilter = 32, FrameDiffusionLayers = 1, " +
+                    "PhonemeDiffusionLayers = 1, MaxDuration = 15, SamplingSteps = 2, TopK = 4, WarmupSteps = 1 })";
             }
             else if (model.ClassName == "Paraformer" && model.TypeParameterCount == 1)
             {
@@ -16049,10 +16050,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 }
                 else if (model.ClassName == "NaturalSpeech3")
                 {
-                    // NaturalSpeech 3's first native projection consumes MelChannels
-                    // features and its mel projection emits the same configured width.
-                    sb.AppendLine("    protected override int[] InputShape => new[] { 8, 16 };");
-                    sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 16 };");
+                    // NaturalSpeech 3 reads phone ids and synthesizes a waveform after a prompt recording: eight ids and 64
+                    // samples (16 codec frames at the fixture's hop of 4).
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 64 };");
+                    // An untrained discrete diffusion over 16-code books can sample the same codes for two constant
+                    // texts; the input-sensitivity probes compare the deterministic objective.
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
                 else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2" or "SoundStorm" or "SPEARTTS" or "ChatTTS" or "ParlerTTS" or "CosyVoice" or "CosyVoice2")
                 {

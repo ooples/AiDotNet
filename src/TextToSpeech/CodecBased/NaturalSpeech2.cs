@@ -67,7 +67,6 @@ public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     private NaturalSpeech2Core<T>? _core;
     private AudioCodecLayer<T>? _codec;
-    private Dictionary<string, string[]>? _lexicon;
 
     private readonly List<LayerBase<T>> _priorLayers = new();
     private readonly List<LayerBase<T>> _promptLayers = new();
@@ -225,58 +224,14 @@ public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     // ---------------------------------------------------------------- text
 
     /// <summary>The phone set (Amphion's): CMUdict's 84 ARPAbet symbols, then sp, spn, sil, &lt;s&gt; and &lt;/s&gt;.</summary>
-    public static readonly IReadOnlyList<string> Symbols = new[]
-    {
-        "AA", "AA0", "AA1", "AA2", "AE", "AE0", "AE1", "AE2", "AH", "AH0", "AH1", "AH2", "AO", "AO0", "AO1", "AO2", "AW", "AW0", "AW1", "AW2",
-        "AY", "AY0", "AY1", "AY2", "B", "CH", "D", "DH", "EH", "EH0", "EH1", "EH2", "ER", "ER0", "ER1", "ER2", "EY", "EY0", "EY1", "EY2", "F", "G",
-        "HH", "IH", "IH0", "IH1", "IH2", "IY", "IY0", "IY1", "IY2", "JH", "K", "L", "M", "N", "NG", "OW", "OW0", "OW1", "OW2", "OY", "OY0",
-        "OY1", "OY2", "P", "R", "S", "SH", "T", "TH", "UH", "UH0", "UH1", "UH2", "UW", "UW0", "UW1", "UW2", "V", "W", "Y", "Z", "ZH",
-        "sp", "spn", "sil", "<s>", "</s>",
-    };
-
-    private static readonly Dictionary<string, int> SymbolIds = Symbols.Select((s, i) => (s, i)).ToDictionary(p => p.s, p => p.i);
-
-    private static readonly Regex Separators = new(@"([,;.\-\?\!\s+])", RegexOptions.CultureInvariant);
-    private static readonly Regex Punctuation = new(@"\{[^\w\s]?\}", RegexOptions.CultureInvariant);
-    private const string TrailingPunctuation = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
+    public static IReadOnlyList<string> Symbols => NaturalSpeechArpabet.Symbols;
 
     /// <summary>
     /// The text's phone ids (Amphion's <c>preprocess_english</c>): trailing punctuation stripped, the text split at
     /// punctuation and spaces, each piece looked up in the lexicon (<see cref="NaturalSpeech2Options.LexiconPath"/>) or
     /// pronounced by g2p_en, a punctuation mark becoming <c>sp</c>.
     /// </summary>
-    public int[] TextToPhonemes(string text)
-    {
-        if (text is null) throw new ArgumentNullException(nameof(text));
-        var lexicon = Lexicon();
-        var phones = new List<string>();
-        foreach (string w in Separators.Split(text.TrimEnd(TrailingPunctuation.ToCharArray())))
-        {
-            if (lexicon is not null && lexicon.TryGetValue(w.ToLowerInvariant(), out var known)) phones.AddRange(known);
-            else if (w.Length > 0) phones.AddRange(G2pEn.Default.Word(w).Where(p => p != " "));
-        }
-        string joined = "{" + string.Join("}{", phones) + "}";
-        joined = Punctuation.Replace(joined, "{sp}");
-        var ids = new List<int>();
-        foreach (string phone in joined.Trim('{', '}').Split(new[] { "}{" }, StringSplitOptions.None))
-            if (SymbolIds.TryGetValue(phone, out int id)) ids.Add(id);
-        if (ids.Count == 0) throw new ArgumentException("The text has no pronounceable phones.", nameof(text));
-        return ids.ToArray();
-    }
-
-    private Dictionary<string, string[]>? Lexicon()
-    {
-        if (_options.LexiconPath is null) return null;
-        if (_lexicon is not null) return _lexicon;
-        var lexicon = new Dictionary<string, string[]>(StringComparer.Ordinal);
-        foreach (string line in File.ReadLines(_options.LexiconPath))
-        {
-            var parts = Regex.Split(line.TrimEnd('\n'), @"\s+");
-            string word = parts[0].ToLowerInvariant();
-            if (!lexicon.ContainsKey(word)) lexicon[word] = parts.Skip(1).ToArray();
-        }
-        return _lexicon = lexicon;
-    }
+    public int[] TextToPhonemes(string text) => NaturalSpeechArpabet.Phonemes(text, _options.LexiconPath);
 
     /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
