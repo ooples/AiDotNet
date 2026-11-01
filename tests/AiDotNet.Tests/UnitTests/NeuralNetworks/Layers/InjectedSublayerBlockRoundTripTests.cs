@@ -4,6 +4,7 @@ using System.Linq;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -12,10 +13,13 @@ using Xunit;
 namespace AiDotNet.Tests.UnitTests.NeuralNetworks.Layers;
 
 /// <summary>
-/// Decoder blocks that receive their attention (and, for the mixture-of-experts blocks, their feed-forward layer)
-/// through the constructor must come back from a standalone save: same weights, same settings (the block's own and
-/// every setting of the injected sublayers), and the same outputs. Each test also builds a negative control that
-/// differs in one injected setting only, to show the comparison would catch a lost setting.
+/// Layers that receive other layers through their constructor (decoder blocks given their attention and, for the
+/// mixture-of-experts blocks, their feed-forward layer; encoder-decoder composites given their encoder, decoder and
+/// output stacks) must come back from a standalone save: same weights, same settings (the layer's own and every
+/// setting of the injected layers), and the same outputs. None of them writes or reads its own metadata: the
+/// LayerStateGenerator infers each constructor argument from its same-named field and persists injected layers through
+/// LayerStateBag, so these tests pin that generated path. Each test also builds a negative control that differs in one
+/// injected setting only, to show the comparison would catch a lost setting.
 /// </summary>
 public class InjectedSublayerBlockRoundTripTests
 {
@@ -63,10 +67,10 @@ public class InjectedSublayerBlockRoundTripTests
     /// outputs. Then loads the same weights into <paramref name="control"/>, which differs in one injected setting,
     /// and requires both its metadata and its outputs to differ, so the checks above could have failed.
     /// </summary>
-    private static TBlock AssertRoundTrip<TBlock>(TBlock block, TBlock control)
+    private static TBlock AssertRoundTrip<TBlock>(TBlock block, TBlock control, Tensor<double>? input = null)
         where TBlock : LayerBase<double>
     {
-        var x = Input();
+        var x = input ?? Input();
         block.SetTrainingMode(false);
         var expected = block.Forward(x);
         var weights = block.GetParameters();
@@ -118,7 +122,7 @@ public class InjectedSublayerBlockRoundTripTests
 
     /// <summary>
     /// CohereDecoderBlock round-trips with its injected causal RoPE attention and LayerNorm epsilon. Fails if the
-    /// block stops writing its metadata, the attention sub-blob, or the epsilon, or the deserializer branch is removed.
+    /// generated factory stops carrying the attention or the epsilon.
     /// </summary>
     [Fact]
     public void CohereDecoderBlock_RoundTrips()
@@ -158,7 +162,8 @@ public class InjectedSublayerBlockRoundTripTests
 
     /// <summary>
     /// DbrxDecoderBlock round-trips with both injected sublayers: the attention and the mixture-of-experts FFN (its
-    /// expert count, top-k and gate activation). Fails if either sub-blob or the MoE layer's own metadata is lost.
+    /// expert count, top-k and gate activation). Fails if either injected layer, or the MoE gate activation (which
+    /// fell back to SiLU while nothing stored it), is lost.
     /// </summary>
     [Fact]
     public void DbrxDecoderBlock_RoundTrips()
@@ -185,8 +190,8 @@ public class InjectedSublayerBlockRoundTripTests
     }
 
     /// <summary>
-    /// PreLNTransformerBlock now writes its attention through the shared helper; its round trip must be unchanged.
-    /// Fails if the shared writer and reader disagree on the sub-blob keys.
+    /// PreLNTransformerBlock, the one block that persists its attention by hand (its "Attn." keys are kept so existing
+    /// saves still load), round-trips with the same checks.
     /// </summary>
     [Fact]
     public void PreLNTransformerBlock_RoundTrips()
@@ -197,16 +202,77 @@ public class InjectedSublayerBlockRoundTripTests
         RestoredAttention(restored.AttentionLayer);
     }
 
-    /// <summary>A block whose metadata has lost its attention sub-blob is refused rather than rebuilt without it.</summary>
+    /// <summary>
+    /// A block whose metadata has lost its injected attention is refused rather than rebuilt without it: no
+    /// constructor can be called without the layer, so the rebuild must fail loudly.
+    /// </summary>
     [Fact]
-    public void MissingAttentionSubBlob_IsRejected()
+    public void MissingInjectedAttention_IsRejected()
     {
         var block = new CohereDecoderBlock<double>(Hidden, 16, Attention(), Epsilon);
-        var metadata = block.GetMetadata()
-            .Where(pair => !pair.Key.StartsWith("Attn.", StringComparison.Ordinal))
+        var full = block.GetMetadata();
+        Assert.Contains(full, pair => pair.Value.StartsWith("aidotnet-layer-v1:", StringComparison.Ordinal));
+        var metadata = full
+            .Where(pair => !pair.Value.StartsWith("aidotnet-layer-v1:", StringComparison.Ordinal))
             .ToDictionary(pair => pair.Key, pair => (object)pair.Value);
 
-        Assert.Throws<InvalidOperationException>(() => DeserializationHelper.CreateLayerFromType<double>(
+        Assert.ThrowsAny<Exception>(() => DeserializationHelper.CreateLayerFromType<double>(
             typeof(CohereDecoderBlock<double>).Name, block.GetInputShape(), block.GetOutputShape(), metadata));
+    }
+
+    private static Tensor<double> TokenIds(int vocabulary, int length)
+    {
+        var ids = new Tensor<double>([1, length]);
+        for (int i = 0; i < length; i++) ids[i] = (i * 7 + 3) % vocabulary;
+        return ids;
+    }
+
+    private static Tensor<double> Features(int length, int width)
+    {
+        var rng = RandomHelper.CreateSeededRandom(4127);
+        var features = new Tensor<double>([1, length, width]);
+        for (int i = 0; i < features.Length; i++) features[i] = rng.NextDouble() * 2 - 1;
+        return features;
+    }
+
+    /// <summary>
+    /// TokenConditionedDecoderLayer (MusicGen/AudioGen) round-trips with its injected encoder stack, decoder embedding,
+    /// decoder stack and output head. The control differs only in the output head's activation.
+    /// </summary>
+    [Fact]
+    public void TokenConditionedDecoderLayer_RoundTrips()
+    {
+        TokenConditionedDecoderLayer<double> Build(IActivationFunction<double> head) => new(
+            encoderLayers: [new EmbeddingLayer<double>(31, Hidden), new DenseLayer<double>(Hidden)],
+            decoderEmbedding: new EmbeddingLayer<double>(17, Hidden),
+            decoderLayers: [new DenseLayer<double>(Hidden), new LayerNormalizationLayer<double>()],
+            outputLayer: new DenseLayer<double>(17, head),
+            encoderVocabularySize: 31,
+            decoderVocabularySize: 17,
+            maximumDecoderLength: 6);
+
+        var restored = AssertRoundTrip(
+            Build(new IdentityActivation<double>()), Build(new ReLUActivation<double>()), TokenIds(31, 5));
+        Assert.Equal(4, restored.GetSubLayers().Count);
+    }
+
+    /// <summary>
+    /// VisionEncoderDecoderLayer (Donut, Pix2Struct) round-trips with its injected stacks. The control differs only in
+    /// the output head's activation.
+    /// </summary>
+    [Fact]
+    public void VisionEncoderDecoderLayer_RoundTrips()
+    {
+        VisionEncoderDecoderLayer<double> Build(IActivationFunction<double> head) => new(
+            encoderLayers: [new DenseLayer<double>(Hidden), new LayerNormalizationLayer<double>()],
+            decoderEmbedding: new EmbeddingLayer<double>(17, Hidden),
+            decoderLayers: [new DenseLayer<double>(Hidden)],
+            outputLayer: new DenseLayer<double>(17, head),
+            decoderVocabularySize: 17,
+            maximumDecoderLength: 6);
+
+        var restored = AssertRoundTrip(
+            Build(new IdentityActivation<double>()), Build(new ReLUActivation<double>()), Features(4, 6));
+        Assert.Equal(4, restored.GetSubLayers().Count);
     }
 }
