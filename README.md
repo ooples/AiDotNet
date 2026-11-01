@@ -95,6 +95,16 @@ The model and component counts are in the generated table at the top of this pag
 dotnet add package AiDotNet
 ```
 
+Native acceleration binaries are optional packages maintained by AiDotNet.Tensors. Install only the
+backend you need alongside AiDotNet:
+
+```bash
+dotnet add package AiDotNet.Native.CLBlast  # OpenCL BLAS acceleration
+dotnet add package AiDotNet.Native.OneDNN   # oneDNN CPU acceleration
+```
+
+AiDotNet works without these packages using the Tensors engine's available managed and in-house kernels.
+
 **Requirements:** .NET 10.0 / .NET 8.0+ (or .NET Framework 4.7.1+)
 
 ---

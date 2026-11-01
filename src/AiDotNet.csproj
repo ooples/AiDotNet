@@ -314,17 +314,9 @@
 	  <ProjectReference Include="$(EvolutionProjectPath)" />
 	</ItemGroup>
 
-	<!--
-	  Optional native acceleration packages.
-	  These provide pre-built native binaries for hardware acceleration.
-	  Users can also install these separately to enable specific accelerators.
-	-->
-	<ItemGroup>
-	  <!-- GPU acceleration via CLBlast (OpenCL-based) -->
-	  <PackageReference Include="AiDotNet.Native.CLBlast" />
-	  <!-- CPU acceleration via Intel OneDNN -->
-	  <PackageReference Include="AiDotNet.Native.OneDNN" />
-	</ItemGroup>
+	<!-- Native acceleration binaries are optional packages maintained by AiDotNet.Tensors.
+	     Consumers opt into AiDotNet.Native.CLBlast or AiDotNet.Native.OneDNN for their hardware;
+	     core must not pull them into every application's dependency closure. -->
 
 	<!-- Build-time key derivation resource (injected by CI/CD, not present in dev builds).
 	     BuildKeyProvider uses this to derive encryption keys for AIMF model files.
