@@ -117,6 +117,21 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         return description;
     }
 
+    /// <summary>
+    /// A waveform target long enough for every token to own a frame. The target is often the untrained model's own
+    /// prediction, whose length follows predicted durations that may total fewer frames than the text has tokens (a
+    /// NaturalSpeech durator rounds the summed continuous durations), which alignment search cannot align; the waveform
+    /// is repeated until it reaches one hop per token.
+    /// </summary>
+    private static Tensor<T> AtLeastOneHopPerToken(Tensor<T> audio, int tokenCount, int hop)
+    {
+        int needed = tokenCount * Math.Max(1, hop);
+        if (audio.Length >= needed || audio.Length == 0) return audio;
+        var longer = new Tensor<T>(new[] { needed });
+        for (int i = 0; i < needed; i++) longer[i] = audio[i % audio.Length];
+        return longer;
+    }
+
     private static AiDotNet.TextToSpeech.TtsTrainingSample<T> SyntheticSupervision(Tensor<T> tokens, Tensor<T> target,
         AiDotNet.TextToSpeech.TtsModelBase<T>? network = null)
     {
@@ -203,7 +218,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
             Mel = mel,
             // A model that reconstructs the recording (StyleTTS 2) and outputs a waveform trains on the target itself.
             Audio = network is not null && target.Rank == 1 && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.Recording) != 0
-                ? target : null,
+                ? AtLeastOneHopPerToken(target, tokenCount, network.HopSize) : null,
             Durations = durations,
             Pitch = pitch,
             Energy = energy,
