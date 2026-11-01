@@ -5913,7 +5913,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ProjectionDim = 16, PredictorChannels = 16, ClassifierChannels = 16, VocabSize = 16, " +
                     "MaxTextLength = 16, MaxAudioLengthSeconds = 1 })";
             }
-            else if (model.ClassName is "FunASRNano" or "RobustConformer" or "SALM"
+            else if (model.ClassName == "FunASRNano" && model.TypeParameterCount == 1)
+            {
+                // Fun-ASR-nano's SenseVoice-Small encoder, adaptor, Qwen3 decoder (with LoRA) and CTC decoder at width 16,
+                // one layer each, over 16-band filterbanks; a 16-token vocabulary, which has no ChatML prompt text.
+                // Production defaults are the release's (Qwen3-0.6B).
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions { NumMels = 16, EncoderDim = 16, " +
+                    "NumEncoderLayers = 1, NumTpEncoderLayers = 1, NumAttentionHeads = 2, EncoderFeedForwardDim = 32, " +
+                    "FsmnKernelSize = 3, AdaptorFeedForwardDim = 32, NumAdaptorLayers = 1, AdaptorHeads = 2, " +
+                    "LlmHiddenDim = 16, NumLlmLayers = 1, LlmHeads = 2, LlmKeyValueHeads = 1, LlmHeadDim = 8, " +
+                    "LlmIntermediateDim = 32, VocabSize = 16, LoraRank = 2, CtcDecoderDim = 16, CtcFeedForwardDim = 32, " +
+                    "NumCtcDecoderLayers = 1, CtcVocabSize = 16, MaxTextLength = 4 })";
+            }
+            else if (model.ClassName is "RobustConformer" or "SALM"
                     or "SpeakerDiarizedASR"
                 && model.TypeParameterCount == 1)
             {
@@ -5924,7 +5940,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // topology while exercising it at a bounded public-options scale.
                 string optionsType = model.ClassName switch
                 {
-                    "FunASRNano" => "AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions",
                     "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
                     "SALM" => "AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions",
                     _ => "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions",
@@ -16835,6 +16850,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // logits over the start of transcript and the LID task token.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 16 };");
+            }
+            else if (model.ClassName == "FunASRNano")
+            {
+                // Fun-ASR-nano reads waveforms (0.2 s) and returns the LLM's logits for the answer's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
             }
             else if (model.ClassName is "Paraformer" or "ParaformerLarge" or "SeACo" or "CIFDecoder")
             {
