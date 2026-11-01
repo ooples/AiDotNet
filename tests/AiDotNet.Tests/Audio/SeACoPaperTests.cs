@@ -143,7 +143,7 @@ public class SeACoPaperTests
         using var model = new SeACo<double>(Architecture(), Tiny(SeACoTrainingStage.Backbone));
         var audio = Voice(8000, 180);
         Assert.NotNull(model.Transcribe(audio).Text);
-        var biased = model.Transcribe(audio, new[] { "", "" });
+        var biased = model.Transcribe(audio, new[] { "\u0003\u0004", "\u0005" });
         Assert.NotNull(biased.Text);
         var bias = model.Bias ?? throw new InvalidOperationException("native model");
         Assert.True(bias.Output.ParameterCount > 0);

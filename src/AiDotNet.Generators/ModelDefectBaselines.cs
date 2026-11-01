@@ -62,7 +62,6 @@ internal static class ModelDefectBaselines
             "CreateDefaultNonStationaryTransformerLayers(int, int, int, int, int, int, int, int, int, double)",
             "CreateDefaultOccupancyTemporalLayers",
             "CreateDefaultOpenCLIPLayers",
-            "CreateDefaultParaformerLayers",
             "CreateDefaultPengiLayers",
             "CreateDefaultPerceiverResamplerLayers",
             "CreateDefaultPixelShuffleProjectorLayers",

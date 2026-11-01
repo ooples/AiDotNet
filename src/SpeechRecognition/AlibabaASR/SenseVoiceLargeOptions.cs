@@ -3,12 +3,11 @@ using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.AlibabaASR;
 
-/// <summary>Options for SenseVoice-Large: scaled multi-task speech model.</summary>
+/// <summary>Options for SenseVoice-Large: the autoregressive encoder-decoder SenseVoice (FunAudioLLM, 2024).</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the native SenseVoice-Large approximation.
-/// The paper specifies an autoregressive encoder-decoder supporting more than 50 languages, but does
-/// not publish its exact layer dimensions or optimizer hyperparameters. Every native scale and training
-/// value used by this implementation is therefore exposed for customization.</para>
+/// <para><b>For Beginners:</b> Defaults are the Whisper-large geometry SenseVoice-Large follows: 128 mel bands over a
+/// 30-second window, a 32-layer encoder and a 32-layer decoder of width 1,280 with 20 heads. The report gives 1,587M
+/// parameters; its vocabulary is unpublished, so Whisper large-v3's 51,866 tokens (1,550M parameters) is the default.</para>
 /// </remarks>
 public class SenseVoiceLargeOptions : ModelOptions
 {
@@ -23,67 +22,55 @@ public class SenseVoiceLargeOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        // INHERITED FROM ModelOptions, AND THEREFORE EASY TO MISS. Every declared property is copied
-        // below; Seed is not declared here, so it was silently dropped and a copied configuration
-        // produced a DIFFERENT model from the one it was copied from -- the failure mode that costs
-        // the most to diagnose, because the two configurations compare equal on everything visible.
+        // Seed is inherited from ModelOptions and easy to miss; a copy without it builds a different model.
         Seed = other.Seed;
-
         SampleRate = other.SampleRate;
-        MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        NumMels = other.NumMels;
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
+        NumDecoderLayers = other.NumDecoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
-        NumMels = other.NumMels;
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
         Language = other.Language;
-        DecoderDim = other.DecoderDim;
-        NumDecoderLayers = other.NumDecoderLayers;
-        FeedForwardDim = other.FeedForwardDim;
-        UseCifAlignment = other.UseCifAlignment;
+        PredictLanguage = other.PredictLanguage;
+        PredictEmotion = other.PredictEmotion;
+        PredictEvents = other.PredictEvents;
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
+        Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
     }
 
     public int SampleRate { get; set; } = 16000;
-    public int MaxAudioLengthSeconds { get; set; } = 30;
-    public int EncoderDim { get; set; } = 1024;
-    public int NumEncoderLayers { get; set; } = 50;
-    public int NumAttentionHeads { get; set; } = 16;
+    /// <summary>Log-mel bands (128).</summary>
     public int NumMels { get; set; } = 128;
-    public int VocabSize { get; set; } = 25000;
-    public int MaxTextLength { get; set; } = 512;
+    /// <summary>The encoder's and the decoder's width (1,280); the feed-forward is four times wider.</summary>
+    public int EncoderDim { get; set; } = 1280;
+    /// <summary>Encoder layers (32).</summary>
+    public int NumEncoderLayers { get; set; } = 32;
+    /// <summary>Decoder layers (32).</summary>
+    public int NumDecoderLayers { get; set; } = 32;
+    public int NumAttentionHeads { get; set; } = 20;
+    /// <summary>The vocabulary (51,866). Its last five tokens are the special ones: end of text, start of transcript, and
+    /// the LID, SER and AED task tokens; the others are text, language, emotion and event tokens.</summary>
+    public int VocabSize { get; set; } = 51866;
+    /// <summary>The longest decoded sequence, task outputs included (at most the decoder's 448 positions).</summary>
+    public int MaxTextLength { get; set; } = 224;
     public string? ModelPath { get; set; }
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-    public double DropoutRate { get; set; } = 0.1;
-    public string Language { get; set; } = "en";
-    public int DecoderDim { get; set; } = 512;
-    public int NumDecoderLayers { get; set; } = 6;
-    public int FeedForwardDim { get; set; } = 2048;
-    /// <summary>
-    /// Whether to insert a CIF (continuous integrate-and-fire) monotonic-alignment stage between
-    /// the encoder and decoder.
-    /// </summary>
-    /// <value>
-    /// Defaults to <c>false</c>. SenseVoice-Large is an AUTOREGRESSIVE ENCODER-DECODER
-    /// (An et al., "FunAudioLLM", arXiv:2407.04051), and the paper describes no CIF stage and no
-    /// Paraformer-style non-autoregressive decoder for either SenseVoice variant. The
-    /// autoregressive decoder performs the alignment itself, so a CIF stage is not part of this
-    /// architecture.
-    /// </value>
-    /// <remarks>
-    /// <para>This previously defaulted to <c>true</c>, inherited from the shared Paraformer layer
-    /// factory that SenseVoice is built on. CIF genuinely belongs to Paraformer (Gao et al. 2022)
-    /// and to the CIF paper (Dong &amp; Xu 2020) — not to SenseVoice. SenseVoice-Small already
-    /// defaulted to <c>false</c>, so only the Large variant carried the extra stage.</para>
-    /// <para>Kept as a public option rather than removed, so callers who deliberately want a
-    /// Paraformer-style non-autoregressive variant can still opt in.</para>
-    /// </remarks>
-    public bool UseCifAlignment { get; set; } = false;
+    public string Language { get; set; } = "auto";
+    /// <summary>Whether the prompt carries the LID task token, so the decoder first predicts the language.</summary>
+    public bool PredictLanguage { get; set; } = true;
+    /// <summary>Whether the prompt carries the SER task token, so the decoder predicts the speech emotion.</summary>
+    public bool PredictEmotion { get; set; }
+    /// <summary>Whether the prompt carries the AED task token, so the decoder predicts audio events with timestamps.</summary>
+    public bool PredictEvents { get; set; }
+    /// <summary>The AdamW learning rate used when no optimizer is injected (1e-4; the report states no optimizer).</summary>
     public double LearningRate { get; set; } = 1e-4;
+    /// <summary>The AdamW weight decay used when no optimizer is injected (0.01).</summary>
     public double WeightDecay { get; set; } = 0.01;
+    /// <summary>Optional vocabulary mapping token IDs to text.</summary>
+    public string[]? Vocabulary { get; set; }
 }

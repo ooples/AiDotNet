@@ -10604,42 +10604,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // vs string modelPath), so any fix must disambiguate on the containing namespace.
             else if (model.ClassName == "SenseVoiceLarge" && model.TypeParameterCount == 1)
             {
-                // SenseVoice-Large retains the paper-scale 1024-wide, 50-layer encoder and
-                // 25,000-entry vocabulary as its production default. The generated FP32 fixture
-                // still consumed about 10 GB and timed out in metadata and training invariants.
-                // Exercise the same mel projection -> Paraformer encoder -> CTC head topology at
-                // CI-smoke scale through public options. Production defaults and customization
-                // remain unchanged; NumMels=64 matches the generated [1,64,32] audio fixture.
+                // The Whisper-large-geometry encoder-decoder at width 16 with one encoder and one decoder layer, the
+                // 30-second 80-band window and a 16-token vocabulary (five special tokens at its top). Production
+                // defaults are the large geometry.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.AlibabaASR.SenseVoiceLargeOptions { SampleRate = 16000, " +
-                    "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, DecoderDim = 32, NumDecoderLayers = 1, FeedForwardDim = 64, " +
-                    // SenseVoice-Large is an autoregressive encoder-decoder (arXiv:2407.04051);
-                    // the paper describes no CIF stage for either SenseVoice variant. This
-                    // fixture previously forced UseCifAlignment = true, which both diverged from
-                    // the paper and put a CIF layer in the graph.
-                    // UseCifAlignment = false, matching the sibling SenseVoice fixture directly above.
-                    // With CIF on, Predict re-aligns the encoder output through continuous
-                    // integrate-and-fire while the training forward does not, so the two paths emit
-                    // different sequences — and Training_ShouldReduceLoss (which measures
-                    // MeasureLoss(Predict(input), target), and this family's loss IS
-                    // MeanSquaredErrorLoss via AudioNeuralNetworkBase) was scoring a quantity the
-                    // optimizer never descends. Measured: initial = 0.943767 -> final = 0.956849 at
-                    // LearningRate 1e-4 and 0.944680 at 2e-5 — i.e. lowering the rate only shrank the
-                    // step, it never turned the sign, which is the signature of measuring the wrong
-                    // forward rather than of an over-rate. LossStrictlyDecreasesOnMemorizationTask
-                    // passes throughout because it reads GetLastLoss (the training forward).
-                    "UseCifAlignment = false, NumMels = 64, VocabSize = 64, MaxTextLength = 16, " +
-                    // 2e-5 is the fine-tuning rate the sibling SenseVoice fixture already uses for the
-                    // same Paraformer encoder; SenseVoice-Large's optimizer IS wired correctly (AdamW
-                    // built from _options.LearningRate and handed to TrainWithTape), so this is the
-                    // rate that actually trains. Configured through the PUBLIC options exactly as the
-                    // width/depth reduction above is; the production default (1e-4) is unchanged and
-                    // no assertion, threshold or iteration count is relaxed.
-                    "DropoutRate = 0.0, Language = \"en\", LearningRate = 2e-5, WeightDecay = 0.01 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.AlibabaASR.SenseVoiceLargeOptions { NumMels = 80, EncoderDim = 16, " +
+                    "NumEncoderLayers = 1, NumDecoderLayers = 1, NumAttentionHeads = 2, VocabSize = 16, MaxTextLength = 4 })";
             }
             else if ((model.ClassName == "Qwen3ASR" || model.ClassName == "Qwen3ASRSmall")
                      && model.TypeParameterCount == 1)
@@ -16855,6 +16828,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Moonshine reads waveforms (0.2 s) and returns the decoder's logits for the first token.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "SenseVoiceLarge")
+            {
+                // SenseVoice-Large reads waveforms (0.2 s, padded to its 30-second window) and returns the decoder's
+                // logits over the start of transcript and the LID task token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 16 };");
             }
             else if (model.ClassName is "Paraformer" or "ParaformerLarge" or "SeACo" or "CIFDecoder")
             {
