@@ -254,7 +254,7 @@ public partial class MATCHA<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>, I
             return;
         }
 
-        InitializeLayers();
+        BuildFromConstructionSequence(InitializeLayers);
         InitializeEmbeddings();
         _nativeLayersInitialized = true;
         InvalidateParameterCountCache();

@@ -246,7 +246,7 @@ public partial class Pix2Struct<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T
             return;
         }
 
-        InitializeLayers();
+        BuildFromConstructionSequence(InitializeLayers);
         _nativeLayersInitialized = true;
         InvalidateParameterCountCache();
     }
