@@ -325,8 +325,11 @@ public partial class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         var values = new List<Vector<T>>(count);
         for (int i = 0; i < count; i++)
         {
-            values.Add(MbPAConversions<T>.ResizeTo(
-                MbPAConversions<T>.SliceTargetRow(targets, i), _algoOptions.OutputDimension));
+            var row = MbPAConversions<T>.SliceTargetRow(targets, i)
+                ?? throw new NotSupportedException("MbPA targets must be vectors, matrices, or tensors.");
+            values.Add(_algoOptions.OutputDistribution == MbPAOutputDistribution.Categorical
+                ? MbPAConversions<T>.CategoricalTarget(row, _algoOptions.OutputDimension)
+                : MbPAConversions<T>.ResizeTo(row, _algoOptions.OutputDimension));
         }
         return values;
     }
