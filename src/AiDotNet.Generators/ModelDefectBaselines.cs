@@ -121,8 +121,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.NeuralNetworks.SyntheticData.PATEGANGenerator<T>",
             "AiDotNet.ReinforcementLearning.Agents.DecisionTransformer.DecisionTransformerAgent<T>",
             "AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>",
-            "AiDotNet.SpeechRecognition.LLMIntegrated.SeedASR<T>",
-            "AiDotNet.SpeechRecognition.NeMo.CanaryQwen<T>",
             "AiDotNet.SpeechRecognition.NeMo.NemotronSpeech<T>",
             "AiDotNet.SpeechRecognition.ProprietaryAPI.AWSTranscribe<T>",
             "AiDotNet.SpeechRecognition.ProprietaryAPI.AzureSpeechSTT<T>",

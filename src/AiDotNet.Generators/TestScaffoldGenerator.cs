@@ -10458,18 +10458,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "SeedASR" && model.TypeParameterCount == 1)
             {
-                // Seed-ASR retains its large multilingual encoder/LLM defaults in production.
-                // Its paper-scale generated MoreData probe exceeded the CPU timeout. Exercise
-                // the same mel projection -> encoder -> LLM adapter -> token head through the
-                // complete public options surface at CI-smoke scale.
+                // Seed-ASR's LUISE Conformer (width 16, one block, kernel 3) at 40 ms, the four-frame converter and a
+                // one-layer decoder at width 16 with a 16-token vocabulary; 0.5 s of audio gives the converter two
+                // tokens. Production defaults are the paper's (and its unpublished sizes as SeedASROptions documents).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.LLMIntegrated.SeedASROptions { MaxAudioLengthSeconds = 1, " +
-                    "EncoderDim = 32, NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 32, " +
-                    "VocabSize = 4, MaxTextLength = 16, DropoutRate = 0.0, Language = \"en\", " +
-                    "LearningRate = 1e-4, WeightDecay = 0.01 })";
+                    "inputSize: 8000, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.LLMIntegrated.SeedASROptions { NumMels = 16, EncoderDim = 16, " +
+                    "NumEncoderLayers = 1, NumAttentionHeads = 2, ConvKernel = 3, LlmDim = 16, LlmFeedForwardDim = 32, " +
+                    "NumLlmLayers = 1, NumLlmAttentionHeads = 2, NumLlmKvHeads = 1, VocabSize = 16, MaxTextLength = 4, " +
+                    "MaxAudioLengthSeconds = 1, LearningRate = 1e-3 })";
             }
             else if (model.ClassName == "SenseVoice" && model.TypeParameterCount == 1)
             {
@@ -12129,23 +12128,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "CanaryQwen" && model.TypeParameterCount == 1)
             {
-                // CanaryQwen (NVIDIA, 2025): multilingual ASR + translation with a Qwen-2.5 LLM decoder,
-                // built via CreateDefaultLLMASRLayers. Its paper defaults (EncoderDim=1024/24 layers,
-                // DecoderDim=1536/28 layers, VocabSize=151936) make even a SINGLE forward multi-minute:
-                // the final Dense(151936) output head alone is ~15 GFLOPs at seq 64, so every invariant
-                // (including single-forward BatchConsistency / determinism) overran the 120 s gate. Build
-                // the SAME architecture (audio front-end -> residual encoder blocks -> adapter -> LLM
-                // decoder blocks -> vocab head) at CI-smoke scale, mirroring the CSM / XTTSv2 codec-LM
-                // reductions: 64-wide, 2+2 layers, 4 heads, a 64-way vocab head. The Canary-Qwen
-                // structure is preserved; only width/depth/vocab shrink. Architecture matches the
-                // isAudio branch's [1,64,32] InputShape so lazy shapes resolve consistently.
+                // Canary-Qwen's Fast Conformer encoder (width 16, one block, 4-channel subsampling), its projection and a
+                // one-layer Qwen3 at width 16 (head width 8, query-key norm, tied head, LoRA on q and v) with a 16-token
+                // vocabulary, which has no chat prompt text; no warm-up, so the short training invariants see the
+                // learning rate. Production defaults are nvidia/canary-qwen-2.5b's.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.SpeechRecognition.NeMo.CanaryQwenOptions { EncoderDim = 32, " +
-                    "DecoderDim = 32, NumEncoderLayers = 2, NumDecoderLayers = 2, NumAttentionHeads = 4, " +
-                    "NumMels = 32, VocabSize = 64, DropoutRate = 0.0 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    "new AiDotNet.SpeechRecognition.NeMo.CanaryQwenOptions { NumMels = 16, EncoderDim = 16, NumEncoderLayers = 1, " +
+                    "NumAttentionHeads = 2, ConvKernel = 3, SubsamplingChannels = 4, DecoderDim = 16, DecoderFeedForwardDim = 32, " +
+                    "NumDecoderLayers = 1, NumDecoderHeads = 2, NumDecoderKvHeads = 1, DecoderHeadDim = 8, VocabSize = 16, " +
+                    "LoraRank = 2, LoraAlpha = 4, LoraDropout = 0, WarmupSteps = 0, MaxTextLength = 4, MaxAudioLengthSeconds = 1 })";
             }
             else if (model.ClassName == "Data2Vec2" && model.TypeParameterCount == 1)
             {
@@ -16815,6 +16809,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // real 16x128 frame embeddings and failed. Declare the shapes the architecture implies.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16, 32 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16, 32 };");
+            }
+            else if (model.ClassName == "SeedASR")
+            {
+                // Seed-ASR reads waveforms (0.5 s) and returns the decoder's logits for the transcript's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 8000 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
+            }
+            else if (model.ClassName == "CanaryQwen")
+            {
+                // Canary-Qwen reads waveforms (0.2 s) and returns the decoder's logits for the transcript's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
             }
             else if (model.ClassName == "SALM")
             {
