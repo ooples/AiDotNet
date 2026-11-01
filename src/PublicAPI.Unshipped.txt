@@ -411,3 +411,5 @@ virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.MaxSamples.get -> l
 virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.ReportThreshold.get -> double
 virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(string! text) -> double
 virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.ReportThreshold.get -> double
+*REMOVED*AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = true) -> void
+AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = false) -> void
