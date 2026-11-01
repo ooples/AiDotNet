@@ -1,5 +1,5 @@
 """WhisperSpeech's semantic tokenizer reference (collabora/WhisperSpeech vq_stoks.py RQBottleneckTransformer with
-vector-quantize-pytorch 1.12.0's ResidualVQ and openai-whisper 20240930): a tiny Whisper (80 mels, 16 wide, 2 heads,
+vector-quantize-pytorch 1.6.32's ResidualVQ, whose per-layer projections the released checkpoints carry, and openai-whisper 20240930): a tiny Whisper (80 mels, 16 wide, 2 heads,
 one encoder and one decoder layer) as the frozen teacher and student decoder, and a tiny bottleneck with the released
 whisper-vq-stoks-medium-en+pl tunables (cosine-similarity codebook through a 4-dim projection, 8 codes plus the padding
 code, mean downsampling by 2, padding masked to the padding code's embedding, one rotary output block), seeded random
@@ -8,7 +8,7 @@ draws random samples, so the comparison runs with threshold_ema_dead_code 0 (the
 
 Records quantize() of a mel, dequantize() of codes, and one training step's loss (cross-entropy + KL to the teacher +
 commitment) with the codebook's moving averages after it.
-Usage: PYTHONPATH=<dir holding whisper/> python tools/reference-data/whisperspeech_vq_reference.py --whisperspeech <checkout> [--write]
+Usage: PYTHONPATH=<vector_quantize_pytorch 1.6.32 dir>;<dir holding whisper/> python tools/reference-data/whisperspeech_vq_reference.py --whisperspeech <checkout> [--write]
 """
 import argparse
 import math

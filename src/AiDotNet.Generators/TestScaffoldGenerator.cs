@@ -1950,7 +1950,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // VideoGigaGAN/XDecoder run deep visual backbones. Apply the required precision-first mitigation
         // only. Production defaults and all public architecture options remain unchanged. The workflow's
         // per-test marker will identify any remaining offender before a fixture-size override is considered.
-        "YuE", "UniAudio", "Voicebox", "WhisperSpeech", "VideoGigaGAN", "XDecoder",
+        "YuE", "UniAudio", "Voicebox", "VideoGigaGAN", "XDecoder",
         // PR #1789 run 29945592590: BiomedParse and DKM exceeded the 120-second MoreData gate;
         // EVACLIP exceeded the 120-second Training gate and then exhausted runner memory; VoxtLM
         // exceeded both 180/120-second training gates and exhausted runner memory. KaniTTS timed out
@@ -7892,15 +7892,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Qwen2.5's real tokenizer (the token table keeps its 151,665 rows).
                 constructorExpr = "AiDotNet.Tests.TextToSpeech.MinMoFixture.Tts<double>()";
             }
-            else if ((model.ClassName == "Voicebox"
-                      || model.ClassName == "WhisperSpeech")
+            else if (model.ClassName == "WhisperSpeech" && model.TypeParameterCount == 1)
+            {
+                // WhisperSpeech is a T2S and an S2A transformer, the Whisper VQ semantic tokenizer over a Whisper encoder and
+                // decoder, ECAPA-TDNN, EnCodec and Vocos. The fixture builds every part 16 wide (ECAPA 8) with one block
+                // each, a 16-position Whisper window, four codebooks of 64 codes and a speaker from a tone.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.WhisperSpeechFixture.Tts<double>()";
+            }
+            else if (model.ClassName == "Voicebox"
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
             {
                 // CodecTtsOptions models whose production defaults are foundation-scale codec LMs —
                 // a codec-token head behind a wide, deep autoregressive decoder.
-                // Voicebox and WhisperSpeech join from the T-Z shard, which ran only 23 classes
-                // before hitting the 45-min job timeout: measured there at 356s and 199s of test time. Voicebox and WhisperSpeech
+                // Voicebox joins from the T-Z shard, which ran only 23 classes
+                // before hitting the 45-min job timeout: measured there at 356s of test time. Voicebox
                 // additionally failed Training_ShouldReduceLoss and
                 // LossStrictlyDecreasesOnMemorizationTask, which the smaller fixture also settles
                 // by keeping training stable at the default step size.
@@ -7914,11 +7920,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // architectures is silently skipped by the fixture and the test stops covering the
                 // thing the paper is about. 2 is the smallest value that keeps both stages live, and
                 // it only widens the codec head from 1x16 to 2x16.
-                string codecOptionsType = model.ClassName switch
-                {
-                    "Voicebox" => "AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions",
-                    _ => "AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions",
-                };
+                string codecOptionsType = "AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions";
                 pinInitSeed = true;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
@@ -15794,7 +15796,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
                 sb.AppendLine($"    protected override int[] OutputShape => new[] {{ 4, {codecDim} }};");
                 sb.AppendLine();
-                if (model.ClassName is "Bark" or "BarkModel" or "UniAudio" or "WhisperSpeech" or "XTTSv2" or "XTTSv2Clone")
+                if (model.ClassName is "Bark" or "BarkModel" or "UniAudio" or "XTTSv2" or "XTTSv2Clone")
                 {
                     // These codec language models predict a discrete acoustic token at each
                     // sequence position and train with token cross-entropy. Dense random
@@ -16309,6 +16311,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
+                else if (model.ClassName == "WhisperSpeech")
+                {
+                    // WhisperSpeech reads a text's UTF-8 bytes and trains on a 24 kHz recording: eight bytes, and 7680 samples
+                    // (the fixture's 0.32 s Whisper window: eight semantic tokens, three codec frames). Generation samples its
+                    // tokens, so the probes compare the training objective, which reads the text.
+                    sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                    sb.AppendLine("    protected override int[] OutputShape => new[] { 7680 };");
+                    AppendObjectiveSensitivityProbes(sb, new[]
+                    {
+                        ("DifferentText_DifferentAudio", false, "constant"),
+                        ("DifferentInputs_ShouldProduceDifferentOutputs", false, "constant"),
+                        ("DifferentInputs_AfterTraining_ShouldProduceDifferentOutputs", true, "constant"),
+                        ("ScaledInput_ShouldChangeOutput", false, "random"),
+                        ("Synthesize_DifferentText_DifferentOutput", false, "text"),
+                    }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
+                }
                 else if (model.ClassName == "MARS5TTS")
                 {
                     // MARS5 reads a text's tokens and trains on a 24 kHz recording: eight tokens, and 25600 samples (ten frames of
@@ -16574,7 +16592,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // every five steps, and on this probe's random sample 1.8749 (step 1), 1.8665 (15), 1.8605 (30): steady,
                     // about 0.05 % a step. Sixty steps clear the unchanged 1 % threshold. At 1e-3 the objective oscillated
                     // (2.85 to 3.15), so the paper's rate stays.
-                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "GPTSoVITS" or "MARS5TTS" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "FireRedTTS" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
+                    sb.AppendLine($"    protected override int MemorizationTaskIterations => {(model.ClassName == "StyleTTS" ? 30 : model.ClassName is "IndexTTS" or "IndexTTS2" or "GPTSoVITS" or "MARS5TTS" or "Vevo" or "FishSpeech" or "FishSpeechV15" or "FireRedTTS" or "SpeechT5" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2" or "OrpheusTTS" or "Llasa" or "CSM" or "Dia" or "Zonos" or "MaskGCT" or "Vocos" or "VITS" or "VITS2" or "Piper" or "YourTTS" or "DiTToTTS" or "AudioPaLM" or "WhisperSpeech" ? 15 : model.ClassName == "NaturalSpeech" ? 5 : 2)};");
                     if (model.ClassName is "VITS" or "VITS2" or "Piper" or "YourTTS" or "StyleTTS" or "StyleTTS2" or "StyleTTSZS" or "EmotiVoice" or "OuteTTS" or "KaniTTS" or "KaniTTS2")
                     {
                         // StyleTTS's step trains against a discriminator updated in the same step, with dropout and a
@@ -22035,7 +22053,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "CosyVoice3"
             or "CosyVoiceClone" or "Chatterbox"
             or "SeedTTS" or "SeedTTSClone"
-            or "WhisperSpeech"
             // SparkTTS exposes the same discrete codec-token contract.
             or "SparkTTS"
             || IsValleCodecLMModel(className);

@@ -314,12 +314,13 @@ internal sealed class WhisperSpeechS2A<T>
             for (int q = 0; q < Math.Min(i, c.Quantizers); q++) toks[q][i] = sampled[q];
         }
         var output = new int[c.Quantizers][];
-        int keep = Math.Max(0, Math.Min(n - 1, n - 4));
+        // Python's [:N − 4] of the N − 1 shifted positions: a negative bound counts from the end.
+        int shifted = Math.Max(0, n - 1), keep = n - 4 >= 0 ? Math.Min(n - 4, shifted) : Math.Max(0, shifted + n - 4);
         for (int q = 0; q < c.Quantizers; q++)
         {
             // toks[:, q, 1:N] rolled by −q, then the first N − 4.
             var row = toks[q].Skip(1).Take(n - 1).ToArray();
-            output[q] = Enumerable.Range(0, keep).Select(t => row[(t + q) % row.Length]).ToArray();
+            output[q] = row.Length == 0 ? Array.Empty<int>() : Enumerable.Range(0, keep).Select(t => row[(t + q) % row.Length]).ToArray();
         }
         return output;
     }

@@ -292,9 +292,9 @@ internal sealed class WhisperSpeechVq<T>
     /// targets (−100 ignored): cross-entropy, plus <c>kl_loss_mul</c> × the KL divergence (summed, per batch) from the
     /// teacher's logits — zeroed where the target is ignored, so those positions are pulled toward uniform, as there — plus
     /// the commitment loss (each quantizer's mean squared distance of the normalized projection to its code, averaged).
-    /// The codebooks take their moving-average update.
+    /// The codebooks take their moving-average update unless <paramref name="updateCodebook"/> is false (evaluation).
     /// </summary>
-    public Tensor<T> Loss(Tensor<T> mel, bool[] mask, IReadOnlyList<int> inputTokens, IReadOnlyList<int> outputTokens)
+    public Tensor<T> Loss(Tensor<T> mel, bool[] mask, IReadOnlyList<int> inputTokens, IReadOnlyList<int> outputTokens, bool updateCodebook = true)
     {
         var c = Configuration;
         int frames = Whisper.Dimensions.AudioContext, w = c.Width, vocabulary = Whisper.Dimensions.Vocabulary, n = inputTokens.Count;
@@ -316,7 +316,7 @@ internal sealed class WhisperSpeechVq<T>
             {
                 codes = MostSimilar(normalized, q);
                 code = new Tensor<T>(new[] { codes.Length, c.CodebookWidth }, Rows(q, codes).ToVector());
-                UpdateCodebook(q, normalized, codes);
+                if (updateCodebook) UpdateCodebook(q, normalized, codes);
             }
             var difference = _engine.TensorSubtract(code, normalized);
             var term = _engine.ReduceMean(_engine.TensorMultiply(difference, difference), new[] { 0, 1 }, false);
