@@ -78,7 +78,6 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
         UnrollSteps = other.UnrollSteps;
         TDSteps = other.TDSteps;
         PriorityAlpha = other.PriorityAlpha;
-        UseValuePrefix = other.UseValuePrefix;
         OptimizerFactory = other.OptimizerFactory;
     }
 
@@ -161,10 +160,6 @@ public class MuZeroOptions<T> : ReinforcementLearningOptions<T>
     public int TDSteps { get; init; } = 10;
     /// <summary>Prioritization exponent of the replay buffer: how strongly TD error shapes sampling (0 samples uniformly).</summary>
     public double PriorityAlpha { get; init; } = 1.0;
-
-    // Value/Policy targets
-    /// <summary>Whether the dynamics network predicts the cumulative reward (value prefix) of an unrolled segment instead of each step's reward, as in EfficientZero.</summary>
-    public bool UseValuePrefix { get; init; } = false;
 
     /// <summary>
     /// Gets or sets a factory for the optimizer of the agent's joint training step.

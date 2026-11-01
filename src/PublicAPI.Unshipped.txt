@@ -489,3 +489,5 @@ virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.MaxSamples.get -> l
 virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.ReportThreshold.get -> double
 virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(string! text) -> double
 virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.ReportThreshold.get -> double
+*REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.UseValuePrefix.get -> bool
+*REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.UseValuePrefix.init -> void
