@@ -8,7 +8,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 public class HopeNetworkOptions : ModelHyperparameterOptions
 {
     /// <summary>
-    /// Returns a shallow clone of these options. <see cref="HopeNetwork{T}.Clone"/>
+    /// Returns a shallow clone of these options. <c>HopeNetwork&lt;T&gt;.Clone</c>
     /// uses this so a cloned network gets its own options instance and
     /// caller-side mutation of one doesn't bleed into the other. If a
     /// future field of reference type is added to this class, override

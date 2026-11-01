@@ -37,7 +37,8 @@ public class ComplianceIntegrationTests
         var config = new SafetyConfig
         {
             Compliance = { EUAIAct = true },
-            Watermarking = { TextWatermarking = true, ImageWatermarking = true, AudioWatermarking = true },
+            Watermarking = { TextWatermarking = true, ImageWatermarking = true, AudioWatermarking = true,
+                             TextTokenizer = new WatermarkFixtures.WordTokenizer() },
             Text = { ToxicityDetection = true, PIIDetection = true, JailbreakDetection = true },
             Fairness = { DemographicParity = true, EqualizedOdds = true }
         };

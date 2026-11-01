@@ -79,35 +79,4 @@ public class StochasticGradientDescentOptimizerOptions<T, TInput, TOutput> : Gra
     /// </para>
     /// </remarks>
     public int BatchSize { get; set; } = 1;
-
-    /// <summary>
-    /// Gets or sets the maximum number of iterations for the optimization algorithm.
-    /// </summary>
-    /// <value>A positive integer, defaulting to 1000.</value>
-    /// <remarks>
-    /// <para>
-    /// This property specifies the maximum number of epochs that the SGD algorithm will perform.
-    /// Each epoch processes all batches of data. The optimization will stop either when this number of
-    /// epochs is reached or when another stopping criterion (such as convergence tolerance) is met,
-    /// whichever comes first. The default value of 1000 is suitable for many applications, but may
-    /// need adjustment based on the specific problem, dataset size, and batch size.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting limits how many complete passes through the data
-    /// the algorithm will perform.
-    ///
-    /// The maximum iterations (epochs) parameter:
-    /// - Sets an upper limit on training duration
-    /// - Prevents the algorithm from running indefinitely
-    /// - Serves as a safety mechanism if convergence isn't reached
-    ///
-    /// The default value of 1000 epochs means:
-    /// - The algorithm will make at most 1000 complete passes through your data
-    /// - This is often sufficient for many problems
-    ///
-    /// When to adjust this value:
-    /// - Increase it for complex problems that need more iterations to converge
-    /// - Decrease it for simpler problems or when you need faster results
-    /// - Monitor validation metrics to determine if more iterations are helpful
-    /// </para>
-    /// </remarks>
 }

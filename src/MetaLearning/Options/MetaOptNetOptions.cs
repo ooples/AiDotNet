@@ -56,14 +56,15 @@ public class MetaOptNetOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
-    /// supplied optimizer is only reset along with the learner.
+    /// Optimizer for the meta-update. When set, it takes the outer step at its own learning rate (so
+    /// <see cref="OuterLearningRate"/> no longer applies) and keeps its state across meta-iterations; null uses
+    /// plain SGD at <see cref="OuterLearningRate"/>. It must not be the same instance as <see cref="InnerOptimizer"/>.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for inner loop updates.
-    /// Default: null (not used in MetaOptNet - inner loop is solved analytically).
+    /// Must stay null: this algorithm takes no plain gradient inner step (it adapts without one, or by its own
+    /// update rule), so a supplied optimizer is rejected when the learner is built.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
 

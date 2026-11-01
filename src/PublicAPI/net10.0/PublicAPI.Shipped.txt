@@ -1,0 +1,9 @@
+#nullable enable
+AiDotNet.Deployment.Mobile.Android.INNAPIGraphBuilder.BuildGraph(nint modelHandle, byte[]! modelBytes) -> bool
+AiDotNet.Interfaces.IParameterizable<T, TInput, TOutput>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Interfaces.IParameterizable<T, TInput, TOutput>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
+override AiDotNet.Configuration.FusedOptimizerPathEvent.<Clone>$() -> AiDotNet.Configuration.FusedOptimizerPathEvent!
+override AiDotNet.Configuration.GradientNormEvent.<Clone>$() -> AiDotNet.Configuration.GradientNormEvent!
+override AiDotNet.Configuration.TrainingLossEvent.<Clone>$() -> AiDotNet.Configuration.TrainingLossEvent!
+override AiDotNet.Configuration.TrainingMessageEvent.<Clone>$() -> AiDotNet.Configuration.TrainingMessageEvent!
+override AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>.<Clone>$() -> AiDotNet.ReinforcementLearning.ReplayBuffers.Experience<T>!

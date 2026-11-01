@@ -126,7 +126,10 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            // The task-graph context modulates each gradient coordinate by a learned scale, which an adaptive inner
+            // optimizer divides back out; the inner steps stay plain SGD so the context keeps its effect.
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _gnnOptions = options;
 
@@ -282,7 +285,7 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
 
         // Update meta-model parameters
         var currentParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
-        var updatedParams = ApplyGradients(currentParams, accumulatedMetaGradients, _gnnOptions.OuterLearningRate);
+        var updatedParams = ApplyOuterGradients(currentParams, accumulatedMetaGradients, _gnnOptions.OuterLearningRate);
         InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedParams);
 
         // Update GNN weights using finite differences
@@ -741,7 +744,7 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
             var modulatedGradients = ModulateGradientsWithContext(gradients, graphContext);
 
             // Apply gradients
-            parameters = ApplyGradients(parameters, modulatedGradients, _gnnOptions.InnerLearningRate);
+            parameters = ApplyInnerGradients(parameters, modulatedGradients, _gnnOptions.InnerLearningRate, step == 0);
             InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 
@@ -806,7 +809,7 @@ public partial class GNNMetaAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, T
         for (int step = 0; step < _gnnOptions.AdaptationSteps; step++)
         {
             var gradients = ComputeGradients(model, task.SupportInput, task.SupportOutput);
-            parameters = ApplyGradients(parameters, gradients, _gnnOptions.InnerLearningRate);
+            parameters = ApplyInnerGradients(parameters, gradients, _gnnOptions.InnerLearningRate, step == 0);
             InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 

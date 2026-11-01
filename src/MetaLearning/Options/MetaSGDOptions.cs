@@ -90,22 +90,15 @@ public class MetaSGDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
-    /// supplied optimizer is only reset along with the learner.
+    /// Must stay null: this algorithm's meta-update is part of the method rather than a plain gradient step, so a
+    /// supplied optimizer is rejected when the learner is built.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for inner-loop adaptation.
+    /// Must stay null: Meta-SGD's inner update is its learned per-parameter rule, so a supplied optimizer is
+    /// rejected when the learner is built.
     /// </summary>
-    /// <value>Default: null (uses the learned per-parameter optimizer).</value>
-    /// <remarks>
-    /// <para>
-    /// In Meta-SGD, this is typically not used directly because the per-parameter
-    /// optimizer with learned coefficients replaces standard optimization.
-    /// This is provided for compatibility with the base interface.
-    /// </para>
-    /// </remarks>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
 
     /// <summary>

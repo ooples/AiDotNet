@@ -22,7 +22,7 @@ namespace AiDotNet.MetaLearning.Options;
 /// </remarks>
 public class SparseMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOptions<T>
 {
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaModel"/>
+    /// <summary>The model whose parameters the meta-learner trains to adapt quickly to new tasks.</summary>
     public IFullModel<T, TInput, TOutput> MetaModel { get; set; }
     /// <inheritdoc cref="IMetaLearnerOptions{T}.InnerLearningRate"/>
     public double InnerLearningRate { get; set; } = 0.01;
@@ -48,13 +48,20 @@ public class SparseMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
     public int CheckpointFrequency { get; set; } = 500;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.UseFirstOrder"/>
     public bool UseFirstOrder { get; set; } = true;
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.LossFunction"/>
+    /// <summary>Loss function for meta-training; null uses the default multi-class classification loss.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.MetaOptimizer"/>
+    /// <summary>
+    /// Optimizer for the meta-update. When set, it takes the outer step at its own learning rate (so
+    /// <see cref="OuterLearningRate"/> no longer applies) and keeps its state across meta-iterations; null uses
+    /// plain SGD at <see cref="OuterLearningRate"/>. It must not be the same instance as <see cref="InnerOptimizer"/>.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.InnerOptimizer"/>
+    /// <summary>
+    /// Must stay null: this algorithm takes no plain gradient inner step (it adapts without one, or by its own
+    /// update rule), so a supplied optimizer is rejected when the learner is built.
+    /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.DataLoader"/>
+    /// <summary>Episodic data loader that supplies the meta-training tasks; null when tasks are passed to training directly.</summary>
     public IEpisodicDataLoader<T, TInput, TOutput>? DataLoader { get; set; }
 
     /// <summary>
@@ -96,9 +103,12 @@ public class SparseMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
     /// <value>Defaults to 0.5.</value>
     public double SparsityThreshold { get; set; } = 0.5;
 
+    /// <summary>Creates options for meta-learning <paramref name="metaModel"/>, with the default settings.</summary>
+    /// <param name="metaModel">The model whose parameters are meta-learned.</param>
     public SparseMAMLOptions(IFullModel<T, TInput, TOutput> metaModel)
     { Guard.NotNull(metaModel); MetaModel = metaModel; }
 
+    /// <inheritdoc/>
     public bool IsValid() =>
         MetaModel != null &&
         InnerLearningRate > 0 &&
@@ -108,6 +118,7 @@ public class SparseMAMLOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerO
         GateLearningRate > 0 &&
         SparsityThreshold > 0.0 && SparsityThreshold < 1.0;
 
+    /// <inheritdoc/>
     public IMetaLearnerOptions<T> Clone() => new SparseMAMLOptions<T, TInput, TOutput>(MetaModel)
     {
         LossFunction = LossFunction, MetaOptimizer = MetaOptimizer, InnerOptimizer = InnerOptimizer,

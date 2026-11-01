@@ -89,8 +89,6 @@ public partial class Mamba2<T> : ForecastingModelBase<T>
     private readonly Mamba2Options<T> _options;
 
     private int _contextLength;
-    private int _lastForwardSeqLen;
-    private int _lastForwardBatchSize;
     private int _forecastHorizon;
     private int _modelDimension;
     private int _stateDimension;
@@ -375,9 +373,6 @@ public partial class Mamba2<T> : ForecastingModelBase<T>
         if (featureDim != _numFeatures)
             throw new ArgumentException(
                 $"Input feature dimension ({featureDim}) does not match expected numFeatures ({_numFeatures}).");
-
-        _lastForwardSeqLen = seqLen;
-        _lastForwardBatchSize = batchSize;
 
         if (_inputEmbedding is not null)
         {

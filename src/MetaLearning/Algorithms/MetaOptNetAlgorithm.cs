@@ -109,7 +109,8 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
             options,
             options.DataLoader,
             options.MetaOptimizer,
-            options.InnerOptimizer)
+            options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _metaOptNetOptions = options;
         if (!options.IsValid())
@@ -171,10 +172,13 @@ public partial class MetaOptNetAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T
         }
 
         double beta = _metaOptNetOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, beta));
-        if (_metaOptNetOptions.UseLearnedTemperature)
+        bool learnScale = _metaOptNetOptions.UseLearnedTemperature;
+        var updated = ApplyOuterGradients(beta, (body, bodyGradient),
+            learnScale ? (_logitScale, scaleGradient) : (new Vector<T>(0), new Vector<T>(0)));
+        ParamModel.SetParameters(updated[0]);
+        if (learnScale)
         {
-            _logitScale = ApplyGradients(_logitScale, scaleGradient, beta);
+            _logitScale = updated[1];
         }
 
         return NumOps.Divide(totalLoss, batchSize);

@@ -100,7 +100,7 @@ public partial class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             {
                 ParamModel.SetParameters(adaptedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+                adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
             }
 
             // Query loss with adapted params
@@ -163,7 +163,7 @@ public partial class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         if (metaGradients.Count > 0)
         {
             var avgGrad = AverageVectors(metaGradients);
-            var newParams = ApplyGradients(initParams, avgGrad, _algoOptions.OuterLearningRate);
+            var newParams = ApplyOuterGradients(initParams, avgGrad, _algoOptions.OuterLearningRate);
             ParamModel.SetParameters(newParams);
 
             // Update teacher via EMA
@@ -188,7 +188,7 @@ public partial class iTAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         {
             ParamModel.SetParameters(adaptedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            adaptedParams = ApplyGradients(adaptedParams, grad, _algoOptions.InnerLearningRate);
+            adaptedParams = ApplyInnerGradients(adaptedParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(initParams);

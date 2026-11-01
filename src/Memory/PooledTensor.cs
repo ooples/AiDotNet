@@ -73,7 +73,7 @@ public sealed class PooledTensor<T> : IDisposable
     /// Typically you should not create PooledTensor instances directly.
     /// Instead, use <see cref="TensorPool{T}.RentPooled"/> to obtain a properly initialized wrapper.
     /// </remarks>
-    public PooledTensor(TensorPool<T> pool, Tensor<T> tensor)
+    internal PooledTensor(TensorPool<T> pool, Tensor<T> tensor)
     {
         Guard.NotNull(pool);
         _pool = pool;

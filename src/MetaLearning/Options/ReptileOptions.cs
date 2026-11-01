@@ -48,19 +48,21 @@ public class ReptileOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
     /// <summary>
     /// Gets or sets the optimizer for meta-parameter updates (outer loop).
     /// </summary>
-    /// <value>Default: null (Reptile uses simple interpolation, not optimizer-based updates).</value>
+    /// <value>Default: null (the plain interpolation step theta += OuterLearningRate * Interpolation * (phi - theta)).</value>
     /// <remarks>
     /// <para>
-    /// Note: Reptile typically doesn't use an optimizer for outer-loop updates.
-    /// Instead, it uses a simple interpolation step. This is provided for compatibility
-    /// with the base interface but is not used in standard Reptile.
+    /// When set, the optimizer takes the step on the "gradient" theta - phi, as Nichol et al. (2018, section 3)
+    /// do with Adam, at its own learning rate; <see cref="Interpolation"/> then scales the displacement it
+    /// produces (0 leaves the meta-parameters unchanged). Its state is kept across meta-iterations. It must not be
+    /// the same instance as <see cref="InnerOptimizer"/>.
     /// </para>
     /// </remarks>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 
     /// <summary>
-    /// Not used by this algorithm yet: any per-task adaptation is built in (scaled by <see cref="InnerLearningRate"/>).
-    /// A supplied optimizer is only reset along with the learner.
+    /// Optimizer for task adaptation. When set, it takes each inner step at its own learning rate (so
+    /// <see cref="InnerLearningRate"/> no longer applies) and is reset at the start of every adaptation; null uses
+    /// plain SGD at <see cref="InnerLearningRate"/>.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? InnerOptimizer { get; set; }
 

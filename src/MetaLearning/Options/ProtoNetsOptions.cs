@@ -109,8 +109,9 @@ public class ProtoNetsOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOp
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Not used by this algorithm yet: its meta-update is built in (scaled by <see cref="OuterLearningRate"/>). A
-    /// supplied optimizer is only reset along with the learner.
+    /// Optimizer for the meta-update. When set, it takes the outer step at its own learning rate (so
+    /// <see cref="OuterLearningRate"/> no longer applies) and keeps its state across meta-iterations; null uses
+    /// plain SGD at <see cref="OuterLearningRate"/>.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 

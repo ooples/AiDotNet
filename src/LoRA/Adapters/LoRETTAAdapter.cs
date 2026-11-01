@@ -300,8 +300,9 @@ public partial class LoRETTAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // Store intermediates for backward pass
-        _forwardIntermediates = new List<Tensor<T>>();
+        // Collect intermediates only when a manual backward will read them (the list stays null otherwise,
+        // so ComputeTensorTrainForward skips recording)
+        SaveForBackward(ref _forwardIntermediates, new List<Tensor<T>>());
 
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);

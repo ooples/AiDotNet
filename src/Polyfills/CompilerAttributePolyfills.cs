@@ -16,7 +16,7 @@ namespace System.Runtime.CompilerServices
     /// In .NET Framework, this flag has no effect at runtime, but it allows code to compile.
     /// The JIT compiler in .NET Framework will simply ignore this flag.
     /// </remarks>
-    public static class MethodImplOptionsEx
+    internal static class MethodImplOptionsEx
     {
         /// <summary>
         /// Specifies that the method should be optimized aggressively by the JIT compiler.
@@ -97,7 +97,7 @@ namespace System.Diagnostics.CodeAnalysis
     /// Indicates that the specified parameter will be non-null when the method returns the specified value.
     /// </summary>
     [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
-    public sealed class NotNullWhenAttribute : Attribute
+    internal sealed class NotNullWhenAttribute : Attribute
     {
         public NotNullWhenAttribute(bool returnValue)
         {
@@ -112,7 +112,7 @@ namespace System.Diagnostics.CodeAnalysis
     /// specified value.
     /// </summary>
     [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
-    public sealed class MaybeNullWhenAttribute : Attribute
+    internal sealed class MaybeNullWhenAttribute : Attribute
     {
         public MaybeNullWhenAttribute(bool returnValue)
         {
@@ -127,7 +127,7 @@ namespace System.Diagnostics.CodeAnalysis
     /// have non-null values when returning with the specified return value condition.
     /// </summary>
     [AttributeUsage(AttributeTargets.Method | AttributeTargets.Property, AllowMultiple = true, Inherited = false)]
-    public sealed class MemberNotNullAttribute : Attribute
+    internal sealed class MemberNotNullAttribute : Attribute
     {
         public MemberNotNullAttribute(string member)
         {
