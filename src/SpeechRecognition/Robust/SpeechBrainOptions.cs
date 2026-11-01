@@ -1,11 +1,14 @@
+using AiDotNet.Audio.Foundations;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.Robust;
 
-/// <summary>Options for SpeechBrain: open-source speech processing toolkit ASR models.</summary>
+/// <summary>Options for SpeechBrain ASR.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the SpeechBrain model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para>The defaults: 12 Conformer blocks, width 512, 8 heads, a 31-wide depthwise kernel and a CTC layer.</para>
+/// <para><b>For Beginners:</b> These options set the size of the Conformer encoder, the feature front end and
+/// the training augmentation.</para>
 /// </remarks>
 public class SpeechBrainOptions : ModelOptions
 {
@@ -22,28 +25,105 @@ public class SpeechBrainOptions : ModelOptions
 
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        NumMels = other.NumMels;
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
-        NumMels = other.NumMels;
-        VocabSize = other.VocabSize;
+        FeedForwardMultiplier = other.FeedForwardMultiplier;
+        ConvKernel = other.ConvKernel;
+        RopeTheta = other.RopeTheta;
+        AttentionDecoderLayers = other.AttentionDecoderLayers;
+        AttentionDecoderFeedForward = other.AttentionDecoderFeedForward;
+        CtcWeight = other.CtcWeight;
+        LabelSmoothing = other.LabelSmoothing;
         MaxTextLength = other.MaxTextLength;
+        FrequencyMasks = other.FrequencyMasks;
+        FrequencyMaskWidth = other.FrequencyMaskWidth;
+        TimeMasks = other.TimeMasks;
+        TimeMaskRatio = other.TimeMaskRatio;
+        VocabSize = other.VocabSize;
+        Vocabulary = (string[])other.Vocabulary.Clone();
+        Language = other.Language;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
-        Language = other.Language;
     }
 
+    /// <summary>Audio sample rate in Hz.</summary>
     public int SampleRate { get; set; } = 16000;
+
+    /// <summary>Longest audio a transcription covers, in seconds; longer input is truncated.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
-    public int EncoderDim { get; set; } = 512;
-    public int NumEncoderLayers { get; set; } = 12;
-    public int NumAttentionHeads { get; set; } = 8;
+
+    /// <summary>Log-mel bins (section 3.1: 80-channel filterbanks over 25 ms windows with a 10 ms stride).</summary>
     public int NumMels { get; set; } = 80;
+
+    /// <summary>Conformer width.</summary>
+    public int EncoderDim { get; set; } = 512;
+
+    /// <summary>Conformer blocks.</summary>
+    public int NumEncoderLayers { get; set; } = 12;
+
+    /// <summary>Attention heads per block.</summary>
+    public int NumAttentionHeads { get; set; } = 8;
+
+    /// <summary>Expansion of each half-step feed-forward module (section 2.3: 4).</summary>
+    public int FeedForwardMultiplier { get; set; } = 4;
+
+    /// <summary>Depthwise convolution kernel (Table 1: 32).</summary>
+    public int ConvKernel { get; set; } = 31;
+
+    /// <summary>Rotary base of the attention's relative position encoding, standing in for the paper's relative
+    /// sinusoidal encoding (section 2.1).</summary>
+    public double RopeTheta { get; set; } = 10000.0;
+
+    /// <summary>Transformer decoder layers trained jointly with the CTC layer.</summary>
+    public int AttentionDecoderLayers { get; set; } = 6;
+
+    /// <summary>Feed-forward units of each decoder layer.</summary>
+    public int AttentionDecoderFeedForward { get; set; } = 2048;
+
+    /// <summary>Weight w of the CTC loss in the joint objective w L_CTC + (1 - w) L_attention.</summary>
+    public double CtcWeight { get; set; } = 0.3;
+
+    /// <summary>Label smoothing of the decoder's cross-entropy.</summary>
+    public double LabelSmoothing { get; set; } = 0.1;
+
+    /// <summary>Most tokens a transcription decodes.</summary>
+    public int MaxTextLength { get; set; } = 256;
+
+    /// <summary>SpecAugment frequency masks (section 3.1: 2).</summary>
+    public int FrequencyMasks { get; set; } = 2;
+
+    /// <summary>Largest frequency mask, in mel bins (section 3.1: F = 27).</summary>
+    public int FrequencyMaskWidth { get; set; } = 27;
+
+    /// <summary>SpecAugment time masks (section 3.1: 10).</summary>
+    public int TimeMasks { get; set; } = 10;
+
+    /// <summary>Largest time mask as a fraction of the utterance (section 3.1: pS = 0.05).</summary>
+    public double TimeMaskRatio { get; set; } = 0.05;
+
+    /// <summary>Output vocabulary size, blank (token 0) included.</summary>
     public int VocabSize { get; set; } = 5000;
-    public int MaxTextLength { get; set; } = 512;
-    public string? ModelPath { get; set; }
-    public OnnxModelOptions OnnxOptions { get; set; } = new();
-    public double DropoutRate { get; set; } = 0.1;
+
+    /// <summary>The text of each token; tokens past the list decode as Unicode code points, and tokens in angle brackets
+    /// decode to nothing.</summary>
+    public string[] Vocabulary { get; set; } = { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
+
+    /// <summary>Language reported for transcriptions.</summary>
     public string Language { get; set; } = "en";
+
+    /// <summary>Path to an exported ONNX model, when one is used.</summary>
+    public string? ModelPath { get; set; }
+
+    /// <summary>ONNX runtime options.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    internal ConformerAsrConfiguration ToConfiguration() => new()
+    {
+        SampleRate = SampleRate, NumMels = NumMels, EncoderDim = EncoderDim, NumEncoderLayers = NumEncoderLayers,
+        NumAttentionHeads = NumAttentionHeads, FeedForwardMultiplier = FeedForwardMultiplier, ConvKernel = ConvKernel, RopeTheta = RopeTheta,
+        AttentionDecoderLayers = AttentionDecoderLayers, AttentionDecoderFeedForward = AttentionDecoderFeedForward, CtcWeight = CtcWeight, LabelSmoothing = LabelSmoothing, FrequencyMasks = FrequencyMasks, FrequencyMaskWidth = FrequencyMaskWidth, TimeMasks = TimeMasks, TimeMaskRatio = TimeMaskRatio,
+        VocabSize = VocabSize,
+    };
 }

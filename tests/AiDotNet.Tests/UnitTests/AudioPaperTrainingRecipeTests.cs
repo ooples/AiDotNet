@@ -20,12 +20,18 @@ namespace AiDotNet.Tests.UnitTests.Audio;
 public class AudioPaperTrainingRecipeTests
 {
     [Fact]
-    public void ConvTransformer_DefaultOptimizerMatchesConformerRecipe()
+    public void ConvTransformer_DefaultOptimizerMatchesItsPapersRecipe()
     {
-        var options = CreateConvTransformerOptions();
-        using var model = new ConvTransformer<double>(CreateArchitecture(), options);
-
-        AssertTransformerAdamRecipe(model, options.EncoderDim, options.WarmupSteps, options.LearningRateFactor, options.WeightDecay);
+        // Mohamed et al. 2019 ("Transformers with convolutional context for ASR"), section 3.1: AdaDelta with a fixed
+        // learning rate of 1.0, no warmup, gradient clipping at 10.0. The earlier Noam recipe belonged to the Conformer
+        // paper the class used to cite by mistake.
+        using var model = new ConvTransformer<double>(CreateArchitecture(), CreateConvTransformerOptions());
+        var field = model.GetType().GetField("_optimizer", BindingFlags.Instance | BindingFlags.NonPublic);
+        var optimizer = Assert.IsType<AdaDeltaOptimizer<double, Tensor<double>, Tensor<double>>>(field?.GetValue(model));
+        var optimizerOptions = Assert.IsType<AdaDeltaOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());
+        Assert.Equal(1.0, optimizerOptions.InitialLearningRate, 12);
+        Assert.True(optimizerOptions.EnableGradientClipping);
+        Assert.Equal(10.0, optimizerOptions.MaxGradientNorm, 12);
     }
 
     [Fact]
@@ -241,11 +247,11 @@ public class AudioPaperTrainingRecipeTests
     {
         EncoderDim = 4,
         NumEncoderLayers = 1,
+        NumDecoderLayers = 1,
         NumAttentionHeads = 1,
-        FeedForwardDim = 8,
-        NumMels = 4,
+        DecoderEmbeddingDim = 4,
+        NumMels = 8,
         VocabSize = 4,
-        DropoutRate = 0.0,
     };
 
     private static EfficientConformerOptions CreateEfficientConformerOptions() => new()

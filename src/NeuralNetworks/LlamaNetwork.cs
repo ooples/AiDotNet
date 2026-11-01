@@ -70,6 +70,11 @@ internal sealed record LlamaConfiguration
     /// <summary>Llama 3's original context length (8192).</summary>
     public int RopeOriginalMaxPositions { get; init; } = 8192;
 
+    /// <summary>Step-1's ALiBi in place of rotary positions (StepFun's <c>modeling_step1.build_alibi_cache</c>): each
+    /// head adds <c>−m_h · √(i − j)</c> to the score of query position i on key j, the slopes m_h those of Press et al.
+    /// (2022) for the nearest power of two of heads, interleaved for the rest.</summary>
+    public bool SqrtAlibi { get; init; }
+
     /// <summary>The resolved head width.</summary>
     internal int ResolvedHeadDim => HeadDim > 0 ? HeadDim : Hidden / Heads;
 }
@@ -121,7 +126,7 @@ internal sealed class LlamaNetwork<T>
         var c = configuration;
         if ((c.HeadDim <= 0 && c.Hidden % c.Heads != 0) || c.Heads % c.KeyValueHeads != 0)
             throw new ArgumentException("The width must divide by the heads, and the heads by the key-value heads.", nameof(configuration));
-        if (c.ResolvedHeadDim % 2 != 0) throw new ArgumentException("Rotary embeddings need an even head width.", nameof(configuration));
+        if (!c.SqrtAlibi && c.ResolvedHeadDim % 2 != 0) throw new ArgumentException("Rotary embeddings need an even head width.", nameof(configuration));
         if (c.TieWordEmbeddings && (c.VocabSize <= 0 || !c.IncludeHead))
             throw new ArgumentException("A tied head needs a token table and a head.", nameof(configuration));
         TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T>
@@ -306,13 +311,19 @@ internal sealed class LlamaNetwork<T>
                     sin[i, 0, j, k] = sin[i, 0, j, k + half] = NumOps.FromDouble(Math.Sin(angle));
                 }
 
-        // Causal mask plus key padding, as torch.finfo(dtype).min added to the scores.
-        var bias = new Tensor<T>(new[] { b, 1, l, total });
+        // Causal mask plus key padding, as torch.finfo(dtype).min added to the scores; with ALiBi, per head.
+        var slopes = c.SqrtAlibi ? AlibiSlopes(c.Heads) : null;
+        int biasHeads = slopes?.Length ?? 1;
+        var bias = new Tensor<T>(new[] { b, biasHeads, l, total });
         var blocked = NumOps.FromDouble(typeof(T) == typeof(float) ? float.MinValue : double.MinValue);
         for (int i = 0; i < b; i++)
-            for (int q = 0; q < l; q++)
-                for (int k = 0; k < total; k++)
-                    if (k > past + q || (attentionMask is not null && !attentionMask[i, k])) bias[i, 0, q, k] = blocked;
+            for (int h = 0; h < biasHeads; h++)
+                for (int q = 0; q < l; q++)
+                    for (int k = 0; k < total; k++)
+                    {
+                        if (k > past + q || (attentionMask is not null && !attentionMask[i, k])) bias[i, h, q, k] = blocked;
+                        else if (slopes is not null) bias[i, h, q, k] = NumOps.FromDouble(-slopes[h] * Math.Sqrt(past + q - k));
+                    }
 
         if (cache is not null)
             while (cache.Layers.Count < Layers.Count) cache.Layers.Add(null);
@@ -358,8 +369,22 @@ internal sealed class LlamaNetwork<T>
         return (hidden, logits ?? throw new InvalidOperationException("The head produced no logits."));
     }
 
+    // build_alibi_cache's slopes: 2^(−8k/n) for k = 1 … n, n the largest power of two ≤ heads, then 2^(−4(2k−1)/n) for
+    // the remaining heads.
+    internal static double[] AlibiSlopes(int heads)
+    {
+        int n = 1 << (int)Math.Floor(Math.Log(heads, 2) + 1e-9);
+        var slopes = new double[heads];
+        double m0 = Math.Pow(2.0, -8.0 / n);
+        for (int k = 1; k <= n; k++) slopes[k - 1] = Math.Pow(m0, k);
+        double m1 = Math.Pow(2.0, -4.0 / n);
+        for (int k = 0; k < heads - n; k++) slopes[n + k] = Math.Pow(m1, 2 * k + 1);
+        return slopes;
+    }
+
     private Tensor<T> Rotate(Tensor<T> x, Tensor<T> cos, Tensor<T> sin)
     {
+        if (Configuration.SqrtAlibi) return x;
         var shape = x.Shape.ToArray();
         int hd = shape[3], half = hd / 2;
         var first = _engine.TensorSlice(x, new[] { 0, 0, 0, 0 }, new[] { shape[0], shape[1], shape[2], half });

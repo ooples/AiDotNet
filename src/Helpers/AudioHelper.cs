@@ -517,6 +517,7 @@ public static class AudioHelper<T>
     {
         if (from <= 0 || to <= 0) throw new ArgumentOutOfRangeException(nameof(from), "Sample rates must be positive.");
         if (from == to) return audio;
+        if (audio.Length == 0) return new Tensor<T>(new[] { 0 });
         int gcd = Gcd(from, to), orig = from / gcd, target = to / gcd;
         double baseFrequency = Math.Min(orig, target) * rolloff;
         int width = (int)Math.Ceiling((double)zeroCrossings * orig / baseFrequency);

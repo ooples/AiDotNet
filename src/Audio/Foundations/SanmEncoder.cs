@@ -13,8 +13,10 @@ namespace AiDotNet.Audio.Foundations;
 /// <param name="Blocks">SAN-M blocks before the norm (50, the first reading the stacked features) and after it
 /// (<c>tp_blocks</c>, 20).</param>
 /// <param name="Kernel">The FSMN memory's kernel (11).</param>
+/// <param name="NormEpsilon">The layer norms' epsilon: SenseVoice's own LayerNorm (1e-5), or FunASR's (1e-12) for
+/// Paraformer.</param>
 internal sealed record SanmEncoderConfiguration(int Mels = 80, int LfrM = 7, int LfrN = 6, int Width = 512, int Heads = 4,
-    int FeedForward = 2048, int Blocks = 50, int TpBlocks = 20, int Kernel = 11)
+    int FeedForward = 2048, int Blocks = 50, int TpBlocks = 20, int Kernel = 11, double NormEpsilon = 1e-5)
 {
     /// <summary>The stacked feature width, <c>Mels · LfrM</c> (560).</summary>
     public int InputSize => Mels * LfrM;
@@ -61,26 +63,27 @@ internal sealed class SanmEncoder<T>
         }
         Block NewBlock(int inputSize)
         {
-            var norm1 = Add(new LayerNormalizationLayer<T>(inputSize, 1e-5));
+            var norm1 = Add(new LayerNormalizationLayer<T>(inputSize, c.NormEpsilon));
             var qkv = Linear(inputSize, 3 * c.Width);
             var fsmn = Add(new NormedConv1DLayer<T>(c.Width, c.Width, c.Kernel, 1, 1, c.Width, 0, false, ConvolutionNormalization.None, useBias: false));
             fsmn.Reinitialize(() => Uniform(c.Kernel));
             var output = Linear(c.Width, c.Width);
-            var norm2 = Add(new LayerNormalizationLayer<T>(c.Width, 1e-5));
+            var norm2 = Add(new LayerNormalizationLayer<T>(c.Width, c.NormEpsilon));
             return new Block(norm1, qkv, fsmn, output, norm2, Linear(c.Width, c.FeedForward), Linear(c.FeedForward, c.Width), inputSize);
         }
         Blocks.Add(NewBlock(c.InputSize));
         for (int i = 1; i < c.Blocks; i++) Blocks.Add(NewBlock(c.Width));
-        AfterNorm = Add(new LayerNormalizationLayer<T>(c.Width, 1e-5));
+        AfterNorm = Add(new LayerNormalizationLayer<T>(c.Width, c.NormEpsilon));
         for (int i = 0; i < c.TpBlocks; i++) TpBlocks.Add(NewBlock(c.Width));
-        TpNorm = Add(new LayerNormalizationLayer<T>(c.Width, 1e-5));
+        TpNorm = c.TpBlocks > 0 ? Add(new LayerNormalizationLayer<T>(c.Width, c.NormEpsilon)) : null;
     }
 
     public SanmEncoderConfiguration Configuration { get; }
     public List<Block> Blocks { get; } = new();
     public LayerNormalizationLayer<T> AfterNorm { get; }
     public List<Block> TpBlocks { get; } = new();
-    public LayerNormalizationLayer<T> TpNorm { get; }
+    /// <summary>The norm after the tp blocks; null without them (Paraformer).</summary>
+    public LayerNormalizationLayer<T>? TpNorm { get; }
 
     /// <summary>The CMVN's shift and scale (<c>am.mvn</c>'s AddShift and Rescale): features become (x + shift) · scale.</summary>
     public (double[] Shift, double[] Scale) Normalization
@@ -145,51 +148,66 @@ internal sealed class SanmEncoder<T>
     {
         var c = Configuration;
         int length = features.Shape[0], input = features.Shape[1];
-        var x = _engine.TensorMultiplyScalar(features, NumOps.FromDouble(Math.Sqrt(c.Width)));
-        // SinusoidalPositionEncoder: positions 1 … T, timescales 10000^(−k/(depth/2 − 1)), sines then cosines.
+        var x = AddPositions(_engine.TensorMultiplyScalar(features, NumOps.FromDouble(Math.Sqrt(c.Width))), 0);
+        foreach (var block in Blocks) x = Run(block, x);
+        x = AfterNorm.Forward(x);
+        foreach (var block in TpBlocks) x = Run(block, x);
+        return TpNorm is null ? x : TpNorm.Forward(x);
+    }
+
+    /// <summary>SinusoidalPositionEncoder (and its streaming form from <paramref name="start"/>): positions start + 1 …,
+    /// timescales 10000^(−k/(depth/2 − 1)), sines then cosines, added to <c>[L, depth]</c>.</summary>
+    internal Tensor<T> AddPositions(Tensor<T> x, int start)
+    {
+        int length = x.Shape[0], input = x.Shape[1], half = input / 2;
         var positions = new Tensor<T>(new[] { length, input });
-        int half = input / 2;
         double increment = Math.Log(10000.0) / (input / 2.0 - 1);
         for (int t = 0; t < length; t++)
             for (int k = 0; k < half; k++)
             {
-                double scaled = (t + 1) * Math.Exp(-increment * k);
+                double scaled = (start + t + 1) * Math.Exp(-increment * k);
                 positions[t, k] = NumOps.FromDouble(Math.Sin(scaled));
                 positions[t, half + k] = NumOps.FromDouble(Math.Cos(scaled));
             }
-        x = _engine.TensorAdd(x, positions);
-        foreach (var block in Blocks) x = Run(block, x);
-        x = AfterNorm.Forward(x);
-        foreach (var block in TpBlocks) x = Run(block, x);
-        return TpNorm.Forward(x);
+        return _engine.TensorAdd(x, positions);
     }
 
     /// <summary>The encoder's output for a 16 kHz waveform.</summary>
     public Tensor<T> Encode(Tensor<T> audio) => Forward(Features(audio));
 
-    private Tensor<T> Run(Block block, Tensor<T> x)
+    private Tensor<T> Run(Block block, Tensor<T> x) => RunChunk(block, x, null, null).Output;
+
+    /// <summary>
+    /// A SAN-M block on <c>[L, width]</c>, attending over <paramref name="pastKeys"/> and <paramref name="pastValues"/>
+    /// (<c>[P, width]</c>, the streaming encoder's look-back) before this input's own keys and values, which are returned
+    /// with the output. The FSMN memory reads this input only.
+    /// </summary>
+    internal (Tensor<T> Output, Tensor<T> Keys, Tensor<T> Values) RunChunk(Block block, Tensor<T> x, Tensor<T>? pastKeys, Tensor<T>? pastValues)
     {
         var c = Configuration;
         int length = x.Shape[0], d = c.Width, heads = c.Heads, dk = d / heads;
         var normed = block.Norm1.Forward(x);
         var qkv = block.QueryKeyValue.Forward(normed);                                                   // [L, 3d]
         var q = _engine.TensorSlice(qkv, new[] { 0, 0 }, new[] { length, d });
-        var k = _engine.TensorSlice(qkv, new[] { 0, d }, new[] { length, d });
+        var ownKeys = _engine.TensorSlice(qkv, new[] { 0, d }, new[] { length, d });
         var v = _engine.TensorSlice(qkv, new[] { 0, 2 * d }, new[] { length, d });
+        var k = pastKeys is null ? ownKeys : _engine.TensorConcatenate(new[] { pastKeys, ownKeys }, 0);
+        var attendedValues = pastValues is null ? v : _engine.TensorConcatenate(new[] { pastValues, v }, 0);
+        int keys = k.Shape[0];
         // forward_fsmn: the values padded (k − 1)/2 each side, the depthwise convolution, plus the values.
         int pad = (c.Kernel - 1) / 2, right = c.Kernel - 1 - pad;
         var channels = _engine.Reshape(_engine.TensorTranspose(v), new[] { 1, d, length });
         var paddedValues = _engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1, d, pad }), channels, new Tensor<T>(new[] { 1, d, right }) }, 2);
         var memory = _engine.TensorAdd(_engine.TensorTranspose(_engine.Reshape(block.Fsmn.Forward(paddedValues), new[] { d, length })), v);
-        Tensor<T> Heads(Tensor<T> t) => _engine.TensorPermute(_engine.Reshape(t, new[] { length, heads, dk }), new[] { 1, 0, 2 });
-        var scores = _engine.BatchMatMul(_engine.TensorMultiplyScalar(Heads(q), NumOps.FromDouble(Math.Pow(dk, -0.5))),
-            _engine.TensorPermute(Heads(k), new[] { 0, 2, 1 }));
+        Tensor<T> Heads(Tensor<T> t, int rows) => _engine.TensorPermute(_engine.Reshape(t, new[] { rows, heads, dk }), new[] { 1, 0, 2 });
+        var scores = _engine.BatchMatMul(_engine.TensorMultiplyScalar(Heads(q, length), NumOps.FromDouble(Math.Pow(dk, -0.5))),
+            _engine.TensorPermute(Heads(k, keys), new[] { 0, 2, 1 }));
         var weights = _engine.Softmax(scores, axis: 2);
-        var context = _engine.Reshape(_engine.TensorPermute(_engine.BatchMatMul(weights, Heads(v)), new[] { 1, 0, 2 }), new[] { length, d });
+        var context = _engine.Reshape(_engine.TensorPermute(_engine.BatchMatMul(weights, Heads(attendedValues, keys)), new[] { 1, 0, 2 }), new[] { length, d });
         var attended = _engine.TensorAdd(block.Output.Forward(context), memory);
         x = block.InputSize == d ? _engine.TensorAdd(x, attended) : attended;
         var h = block.FeedForward2.Forward(_engine.ReLU(block.FeedForward1.Forward(block.Norm2.Forward(x))));
-        return _engine.TensorAdd(x, h);
+        return (_engine.TensorAdd(x, h), ownKeys, v);
     }
 
     /// <summary>Loads the release's encoder state (<c>{prefix}encoders0.0.*</c>, <c>encoders.{i}.*</c>,
@@ -217,6 +235,6 @@ internal sealed class SanmEncoder<T>
         for (int i = 1; i < Blocks.Count; i++) Load(Blocks[i], $"encoders.{i - 1}.");
         Norm(AfterNorm, "after_norm");
         for (int i = 0; i < TpBlocks.Count; i++) Load(TpBlocks[i], $"tp_encoders.{i}.");
-        Norm(TpNorm, "tp_norm");
+        if (TpNorm is not null) Norm(TpNorm, "tp_norm");
     }
 }

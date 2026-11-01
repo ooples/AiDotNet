@@ -10348,6 +10348,17 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // The lazy contract still works here because the WithSeededRandom /
         // EagerInitializationStrategy branch below handles both lazy and
         // non-lazy strategies uniformly when RandomSeed is set.
+        // A strategy that cannot be re-seeded is used as configured even under a pinned seed: one that loads external
+        // weights (FromFile) keeps its per-layer cursor only on the shared instance, so a seeded clone made every layer
+        // load weights_0 while its biases advanced; and a custom IInitializationStrategy outside InitializationStrategyBase
+        // has no WithSeededRandom, so replacing it with seeded Xavier discarded the caller's distribution.
+        if (InitializationStrategy is { IsLazy: false } configured
+            && (configured.LoadFromExternal || configured is not Initialization.InitializationStrategyBase<T>))
+        {
+            configured.InitializeWeights(tensor, fanIn, fanOut);
+            return;
+        }
+
         if (RandomSeed.HasValue)
         {
             // Mix the tensor shape (fanIn, fanOut) into the derivation alongside
