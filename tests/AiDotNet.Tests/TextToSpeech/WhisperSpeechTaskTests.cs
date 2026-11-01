@@ -16,7 +16,7 @@ public class WhisperSpeechTaskTests
         using var model = WhisperSpeechFixture.Tts<double>();
         var audio = model.Synthesize("hello");
         Assert.Equal(0, audio.Length % 2560);
-        Assert.All(audio.ToArray(), v => Assert.True(double.IsFinite(v)));
+        Assert.All(audio.ToArray(), v => Assert.False(double.IsNaN(v) || double.IsInfinity(v)));
         // The same input gives the same output (a fresh sampler per call).
         Assert.Equal(audio.ToArray(), model.Synthesize("hello").ToArray());
     }
