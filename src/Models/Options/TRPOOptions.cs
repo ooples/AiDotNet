@@ -36,21 +36,42 @@ public class TRPOOptions<T> : ReinforcementLearningOptions<T>
     public int StateSize { get; init; } = 1;
     public int ActionSize { get; init; } = 1;
     public bool IsContinuous { get; init; } = false;
+    /// <summary>Adam learning rate of the value baseline. Default: 0.001.</summary>
     public T ValueLearningRate { get; init; }
+
+    /// <summary>GAE lambda of the advantage estimate. Default: 1, the paper's discounted return minus the baseline
+    /// (single path, section 5.1).</summary>
     public T GaeLambda { get; init; }
 
-    // TRPO-specific parameters
-    public T MaxKL { get; init; }  // Maximum KL divergence (trust region size)
-    public double Damping { get; init; } = 0.1;  // Damping coefficient for conjugate gradient
+    /// <summary>The trust region δ, the largest mean KL divergence of a step. Default: 0.01, used "for all
+    /// experiments" (section 8).</summary>
+    public T MaxKL { get; init; }
+
+    /// <summary>Damping added to the Fisher-vector products of the conjugate gradient solve. Default: 0.1 (the
+    /// authors' implementation).</summary>
+    public double Damping { get; init; } = 0.1;
+
+    /// <summary>Conjugate gradient iterations of the search direction (appendix C). Default: 10.</summary>
     public int ConjugateGradientIterations { get; init; } = 10;
+
+    /// <summary>Backtracking steps of the line search. Default: 10.</summary>
     public int LineSearchSteps { get; init; } = 10;
+
+    /// <summary>The smallest accepted fraction of the surrogate's linearly predicted improvement. Default: 0.1.</summary>
     public double LineSearchAcceptRatio { get; init; } = 0.1;
-    public double LineSearchBacktrackCoeff { get; init; } = 0.8;
+
+    /// <summary>The line search's exponential shrink factor (appendix C). Default: 0.5.</summary>
+    public double LineSearchBacktrackCoeff { get; init; } = 0.5;
 
     public int StepsPerUpdate { get; init; } = 2048;
     public int ValueIterations { get; init; } = 5;
     public ILossFunction<T> ValueLossFunction { get; init; } = new MeanSquaredErrorLoss<T>();
-    public List<int> PolicyHiddenLayers { get; init; } = new List<int> { 64, 64 };
+    /// <summary>Hidden layer widths of the policy (tanh). Default: one layer of 30 units, the swimmer policy of
+    /// figure 3 (the hopper and walker used 50, table 2).</summary>
+    public List<int> PolicyHiddenLayers { get; init; } = new List<int> { 30 };
+
+    /// <summary>Hidden layer widths of the value baseline (tanh). Default: { 64, 64 }; the paper does not describe its
+    /// baseline.</summary>
     public List<int> ValueHiddenLayers { get; init; } = new List<int> { 64, 64 };
 
     /// <summary>
@@ -62,7 +83,7 @@ public class TRPOOptions<T> : ReinforcementLearningOptions<T>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         ValueLearningRate = numOps.FromDouble(0.001);
-        GaeLambda = numOps.FromDouble(0.95);
+        GaeLambda = numOps.FromDouble(1.0);
         MaxKL = numOps.FromDouble(0.01);
     }
 }
