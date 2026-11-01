@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>AiDotNet.Tools.XmlDocCoverage</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The AiDotNet build this tool loads is the one whose XML documentation file it reads: the reference copies
+         AiDotNet.dll and AiDotNet.xml from the same build into this tool's output, so the two cannot disagree. -->
+    <ProjectReference Include="..\..\src\AiDotNet.csproj" />
+  </ItemGroup>
+
+</Project>

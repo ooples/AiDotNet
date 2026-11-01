@@ -273,8 +273,14 @@ public class ProfilerSession
 /// </summary>
 public interface IProfilerEntry
 {
+    /// <summary>Gets the name of the operation this entry times.</summary>
     string Name { get; }
+
+    /// <summary>Gets how many timings this entry has recorded.</summary>
     int SampleCount { get; }
+
+    /// <summary>Returns the statistics (count, mean, spread, percentiles) of the timings recorded so far.</summary>
+    /// <returns>A snapshot of this entry's statistics.</returns>
     ProfilerStats GetStats();
 }
 

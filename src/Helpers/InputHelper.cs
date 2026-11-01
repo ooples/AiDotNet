@@ -565,14 +565,33 @@ public static class InputHelper<T, TInput>
         }
     }
 
+    /// <summary>
+    /// A container that exposes its backing array, so batch construction can copy it in one block instead of
+    /// element by element.
+    /// </summary>
     public interface IArrayAccessible
     {
+        /// <summary>Returns the array that holds this container's elements.</summary>
+        /// <returns>The backing array; the elements start at <see cref="GetOffset"/>.</returns>
         T[] GetArray();
+
+        /// <summary>Returns the index in <see cref="GetArray"/> of this container's first element.</summary>
+        /// <returns>The starting offset into the backing array.</returns>
         int GetOffset();
     }
 
+    /// <summary>A two-dimensional container that can take a contiguous block of elements in one copy.</summary>
     public interface IArraySettable
     {
+        /// <summary>
+        /// Copies <paramref name="length"/> elements of <paramref name="array"/>, starting at
+        /// <paramref name="offset"/>, into this container from (<paramref name="row"/>, <paramref name="col"/>) on.
+        /// </summary>
+        /// <param name="row">The row of the first element written.</param>
+        /// <param name="col">The column of the first element written.</param>
+        /// <param name="array">The source elements.</param>
+        /// <param name="offset">The index in <paramref name="array"/> of the first element copied.</param>
+        /// <param name="length">How many elements to copy.</param>
         void SetArray(int row, int col, T[] array, int offset, int length);
     }
 
