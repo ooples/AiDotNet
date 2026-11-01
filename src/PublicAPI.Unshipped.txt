@@ -356,3 +356,63 @@ virtual AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.MaxPixels.get -> lo
 virtual AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.ReportThreshold.get -> double
 virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(string! text) -> double
 virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.ReportThreshold.get -> double
+*REMOVED*AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer<T>.NeuralProgramSynthesizer(AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture<T>! architecture, AiDotNet.ProgramSynthesis.Interfaces.ICodeModel<T>! codeModel, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.ProgramSynthesis.Interfaces.IProgramExecutionEngine? executionEngine = null, AiDotNet.ProgramSynthesis.Options.NeuralProgramSynthesizerOptions? options = null, AiDotNet.ProgramSynthesis.Interfaces.ISqlSyntaxValidator? sqlSyntaxValidator = null) -> void
+*REMOVED*AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength = 0.5, int segmentSamples = 4096) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.3) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioWatermarkerBase(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.FrequencyImageWatermarker(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.ImageWatermarker<T>.ImageWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.ImageWatermarkerBase(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.InvisibleImageWatermarker(double watermarkStrength = 0.3) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.LexicalWatermarker(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>
+*REMOVED*AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>.NeuralImageWatermarker(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double watermarkStrength = 0.5, int vocabSize = 50000, double greenListFraction = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! content) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.IsReady.get -> bool
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.ModuleName.get -> string!
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.TextWatermarker(byte[]? secretKey = null, double greenListFraction = 0.5, double detectionThreshold = 4, int contextWidth = 1) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.WatermarkDetector<T>.WatermarkDetector() -> void
+*REMOVED*AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer
+*REMOVED*AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.Dispose() -> void
+*REMOVED*AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.TreeSitterTokenizer(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, AiDotNet.Tokenization.CodeTokenization.TreeSitterLanguage language = AiDotNet.Tokenization.CodeTokenization.TreeSitterLanguage.Python, bool includeNodeTypes = true, bool flattenTree = true) -> void
+*REMOVED*abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
+*REMOVED*abstract AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
+*REMOVED*abstract AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! content) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.IsReady.get -> bool
+*REMOVED*override AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.ImageWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.ImageWatermarker<T>.IsReady.get -> bool
+*REMOVED*override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>.ModuleName.get -> string!
+*REMOVED*override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+*REMOVED*override AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.Tokenize(string! text) -> System.Collections.Generic.List<string!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultTtsLayers(int textHiddenDim = 256, int audioHiddenDim = 512, int numEncoderLayers = 6, int numDecoderLayers = 6, int numHeads = 8, int numMels = 80, int maxTextLength = 512, int maxMelFrames = 1000, int vocabSize = 148, double dropoutRate = 0.1) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.CreateCSharp(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, bool includeNodeTypes = true) -> AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer!
+*REMOVED*static AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.CreateJava(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, bool includeNodeTypes = true) -> AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer!
+*REMOVED*static AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.CreateJavaScript(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, bool includeNodeTypes = true) -> AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer!
+*REMOVED*static AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.CreatePython(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, bool includeNodeTypes = true) -> AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer!
