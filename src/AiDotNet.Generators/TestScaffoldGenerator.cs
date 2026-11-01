@@ -16859,6 +16859,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
             }
+            else if (model.ClassName == "GenreClassifier")
+            {
+                // Tzanetakis and Cook's 30 musical surface features in, one posterior per genre (the paper's ten) out.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 30 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 10 };");
+            }
             else if (model.ClassName == "AudioEventDetector")
             {
                 // One log-mel patch (32 frames of 16 bins) in, one presence probability per label out.
