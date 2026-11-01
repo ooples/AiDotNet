@@ -148,26 +148,30 @@ internal sealed class ParaformerNetwork<T>
     /// CIF with threshold 1: <paramref name="tokens"/> acoustic embeddings <c>[n, width]</c>, token n integrating each frame
     /// by the share of its weight whose cumulative sum lies in [n, n + 1).
     /// </summary>
-    public Tensor<T> Integrate(Tensor<T> encoded, Tensor<T> alphas, int tokens)
+    public Tensor<T> Integrate(Tensor<T> encoded, Tensor<T> alphas, int tokens) => Integrate(_engine, encoded, alphas, tokens);
+
+    /// <summary>CIF with threshold 1 (see the instance overload), for any encoder output <c>[T, width]</c> and weights
+    /// <c>[1, T]</c>.</summary>
+    internal static Tensor<T> Integrate(IEngine engine, Tensor<T> encoded, Tensor<T> alphas, int tokens)
     {
         int t = encoded.Shape[0];
         var inclusive = new Tensor<T>(new[] { t, t });
         for (int i = 0; i < t; i++) for (int j = i; j < t; j++) inclusive[i, j] = NumOps.One;
-        var cumulative = _engine.TensorMatMul(alphas, inclusive);                                        // [1, T]
-        var previous = _engine.TensorSubtract(cumulative, alphas);
+        var cumulative = engine.TensorMatMul(alphas, inclusive);                                        // [1, T]
+        var previous = engine.TensorSubtract(cumulative, alphas);
         var ones = new Tensor<T>(new[] { tokens, 1 });
         for (int n = 0; n < tokens; n++) ones[n, 0] = NumOps.One;
-        var upper = _engine.TensorMatMul(ones, cumulative);                                             // [n, T]
-        var lower = _engine.TensorMatMul(ones, previous);
+        var upper = engine.TensorMatMul(ones, cumulative);                                             // [n, T]
+        var lower = engine.TensorMatMul(ones, previous);
         var floor = new Tensor<T>(new[] { tokens, t });
         var ceiling = new Tensor<T>(new[] { tokens, t });
         for (int n = 0; n < tokens; n++)
             for (int j = 0; j < t; j++) { floor[n, j] = NumOps.FromDouble(n); ceiling[n, j] = NumOps.FromDouble(n + 1); }
         // min(c_t, n + 1) - max(c_{t-1}, n), clipped at zero.
-        var top = _engine.TensorSubtract(upper, _engine.ReLU(_engine.TensorSubtract(upper, ceiling)));
-        var bottom = _engine.TensorAdd(lower, _engine.ReLU(_engine.TensorSubtract(floor, lower)));
-        var weights = _engine.ReLU(_engine.TensorSubtract(top, bottom));
-        return _engine.TensorMatMul(weights, encoded);
+        var top = engine.TensorSubtract(upper, engine.ReLU(engine.TensorSubtract(upper, ceiling)));
+        var bottom = engine.TensorAdd(lower, engine.ReLU(engine.TensorSubtract(floor, lower)));
+        var weights = engine.ReLU(engine.TensorSubtract(top, bottom));
+        return engine.TensorMatMul(weights, encoded);
     }
 
     /// <summary>The inference token count and acoustic embeddings: the tail weight appended after a zero frame, the floor
