@@ -79,20 +79,31 @@ public static class NeuralNetworkHelper<T>
     /// </summary>
     /// <param name="taskType">The neural network task type.</param>
     /// <returns>The with-logits loss for a classification task; otherwise <see cref="GetDefaultLossFunction"/>.</returns>
+    /// <remarks>
+    /// Derived from <see cref="GetDefaultLossFunction"/> rather than listing task types again, so every task that table
+    /// gives a probability cross-entropy (sequence and token classification, NLP, text generation, speech recognition,
+    /// translation as well as the classification tasks) gets its with-logits form, and the two can never disagree.
+    /// Binary and multi-label tasks take sigmoid + BCE: a one-output softmax collapses to a constant 1, and independent
+    /// labels are not mutually exclusive.
+    /// </remarks>
     internal static ILossFunction<T> GetDefaultLogitsLossFunction(NeuralNetworkTaskType taskType)
-    {
-        // Binary: the head usually has one output, where a softmax collapses to a constant 1 (zero loss), so sigmoid + BCE.
-        // Multi-label: the labels are independent, not mutually exclusive, so BCE per output, not softmax cross-entropy.
-        // Multi-class and image classification: mutually exclusive classes, softmax cross-entropy.
-        return taskType switch
+        => GetDefaultLossFunction(taskType) switch
         {
-            NeuralNetworkTaskType.BinaryClassification => new BinaryCrossEntropyWithLogitsLoss<T>(),
-            NeuralNetworkTaskType.MultiClassClassification => new CrossEntropyWithLogitsLoss<T>(),
-            NeuralNetworkTaskType.ImageClassification => new CrossEntropyWithLogitsLoss<T>(),
-            NeuralNetworkTaskType.MultiLabelClassification => new BinaryCrossEntropyWithLogitsLoss<T>(),
-            _ => GetDefaultLossFunction(taskType),
+            CategoricalCrossEntropyLoss<T> => new CrossEntropyWithLogitsLoss<T>(),
+            BinaryCrossEntropyLoss<T> => new BinaryCrossEntropyWithLogitsLoss<T>(),
+            var other => other,
         };
-    }
+
+    /// <summary>
+    /// The default loss for a network that generates a raw-logits head unless the architecture supplies its own layers:
+    /// the with-logits loss for the generated head, and the probability loss of <see cref="GetDefaultLossFunction"/> for
+    /// supplied layers, whose head (typically ending in softmax or sigmoid) the network does not change. Pass a loss
+    /// explicitly for a supplied head that emits logits.
+    /// </summary>
+    internal static ILossFunction<T> GetDefaultLossForGeneratedLogitsHead(NeuralNetworkArchitecture<T> architecture)
+        => architecture.Layers is { Count: > 0 }
+            ? GetDefaultLossFunction(architecture.TaskType)
+            : GetDefaultLogitsLossFunction(architecture.TaskType);
 
     /// <summary>
     /// Gets the default activation function based on the task type.
