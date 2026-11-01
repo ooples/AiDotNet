@@ -112,14 +112,20 @@ public abstract class AdaptedModelTestBase<TOutput>
     }
 
     [Fact(Timeout = 120000)]
-    public async Task Parameters_AreLive()
+    public async Task WithParameters_LeavesTheSourceModelUnchanged()
     {
+        // Parameters_RoundTrip shows new values change the answer; this shows they land on the copy only. A
+        // WithParameters that wrote into the source and returned it would pass that test.
         await Task.Yield();
         var adapted = Adapt(13, out var query);
         var before = Values(adapted.Predict(query));
-        var changed = Values(adapted.WithParameters(Perturbed(adapted.GetParameters())).Predict(query));
-        Assert.True(Distance(before, changed) > 1e-9,
-            $"{ExpectedType.Name}: changing every parameter did not change the predictions; its parameters are dead.");
+        var parametersBefore = adapted.GetParameters().ToArray();
+
+        var copy = adapted.WithParameters(Perturbed(adapted.GetParameters()));
+
+        Assert.False(ReferenceEquals(adapted, copy), $"{ExpectedType.Name}: WithParameters returned the source model.");
+        AssertSame(parametersBefore, adapted.GetParameters().ToArray(), "the source's parameters after WithParameters");
+        AssertSame(before, Values(adapted.Predict(query)), "the source's predictions after WithParameters");
     }
 
     [Fact(Timeout = 120000)]

@@ -128,6 +128,38 @@ public class ColBERTQueryAugmentationTests
         Assert.Equal(QueryLength, model.EmbedQueryLateInteraction(longQuery).Rows);
     }
 
+    [Fact]
+    public void LongQuery_KeepsItsTrailingSeparator()
+    {
+        // Truncation happens before the special tokens are added; cutting the encoded ids instead drops the
+        // separator along with the overflow.
+        var tokenizer = AiDotNet.Tokenization.LanguageModelTokenizerFactory.CreateForBackbone(LanguageModelBackbone.RoBERTa);
+        var model = new ColBERT<double>(
+            new NeuralNetworkArchitecture<double>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                inputSize: 16, outputSize: 8),
+            new ColBERTOptions
+            {
+                EmbeddingDimension = 16, OutputDimension = 8, MaxSequenceLength = 32, MaxQueryLength = QueryLength,
+                NumLayers = 1, NumHeads = 2, FeedForwardDim = 32,
+            },
+            tokenizer: tokenizer);
+        string longQuery = string.Join(" ", Enumerable.Repeat("a photo of a cat", 10));
+        var full = tokenizer.Encode(longQuery).TokenIds;
+        Assert.True(full.Count > QueryLength, "The fixture query is not long enough to truncate.");
+        int separator = full[full.Count - 1];
+        Assert.Equal(tokenizer.Vocabulary.GetTokenId(tokenizer.SpecialTokens.SepToken), separator);
+
+        var truncated = full.Take(QueryLength - 1).Concat(new[] { separator }).ToList();
+        var expected = Encode(model, truncated, separator);
+        var query = model.EmbedQueryLateInteraction(longQuery);
+
+        for (int s = 0; s < QueryLength; s++)
+            for (int d = 0; d < query.Columns; d++)
+                Assert.Equal(expected[s, d], query[s, d], 10);
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(33)]

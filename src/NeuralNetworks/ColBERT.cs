@@ -210,7 +210,19 @@ namespace AiDotNet.NeuralNetworks
                 return new Matrix<T>(0, _outputDim);
 
             int queryLength = _options.MaxQueryLength;
-            var tokens = _tokenizer.Encode(query).TokenIds.Take(queryLength).ToList();
+            // Truncate before the special tokens are added, so a long query keeps its trailing [SEP] instead of
+            // having it cut off with the overflow.
+            var tokens = _tokenizer.Encode(query, new AiDotNet.Tokenization.Models.EncodingOptions
+            {
+                Truncation = true,
+                MaxLength = queryLength,
+            }).TokenIds.ToList();
+            if (tokens.Count > queryLength)
+            {
+                throw new InvalidOperationException(
+                    $"The tokenizer returned {tokens.Count} tokens for a query truncated to {queryLength}; " +
+                    "ColBERT needs a tokenizer that honours EncodingOptions.MaxLength.");
+            }
             if (tokens.Count < queryLength)
             {
                 string mask = _tokenizer.SpecialTokens.MaskToken;

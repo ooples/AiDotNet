@@ -74,6 +74,18 @@ public class DefaultStackOptionTests
     }
 
     [Fact]
+    public void Autoencoder_ALatentWiderThanTheHiddenLayerIsTheEncodedSize()
+    {
+        // 16 inputs give 8-wide hidden layers, so the narrowest layer is not the 12-wide latent.
+        var model = new Autoencoder<double>(Vector(16, 16),
+            options: new AutoencoderOptions { LatentSize = 12 });
+
+        Assert.Equal(12, model.EncodedSize);
+        var encoded = model.Encode(new Tensor<double>([1, 16]));
+        Assert.Equal(12, encoded.Shape[encoded.Shape.Length - 1]);
+    }
+
+    [Fact]
     public void DeepBeliefNetwork_StacksTheGivenRbms()
     {
         long Count(params int[] hidden) => new DeepBeliefNetwork<double>(Vector(4, 2),

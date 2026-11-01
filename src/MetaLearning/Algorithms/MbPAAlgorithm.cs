@@ -287,7 +287,9 @@ public partial class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         var values = ExtractTargets(targets, keys.Count);
         for (int i = 0; i < keys.Count; i++)
         {
-            _memory.Write(keys[i], values[i]);
+            // The source example travels with its key: an adapted model whose embedding network is changed re-keys
+            // the memory from it (MbPAAdaptedModel.MemoryForThisEmbedding).
+            _memory.Write(keys[i], values[i], MbPAConversions<T>.SliceExample(inputs, i));
         }
     }
 

@@ -455,6 +455,14 @@ public partial class InvertedResidualBlock<T> : LayerBase<T>, ILayerSerializatio
         // null, so nothing references recycled scratch across the per-step Reset.
         bool cacheBwd = ShouldCacheForBackward;
         _lastInput = cacheBwd ? input : null;
+        if (!cacheBwd)
+        {
+            // A fused stage below skips the assignments of the stage it replaces, so drop what a previous training
+            // forward cached here rather than keep its tensors alive through inference.
+            _lastExpandOut = _lastExpandBnOut = _lastExpandActOut = null;
+            _lastDwOut = _lastDwBnOut = _lastDwActOut = null;
+            _lastSeOut = _lastProjectOut = _lastProjectBnOut = null;
+        }
         Tensor<T> x = input;
 
         // In inference each convolution's batch norm (and the block activation after it) folds into the convolution,

@@ -5,7 +5,9 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// <summary>
 /// Holds one tensor derived from up to four source tensors (a stacked gate weight, a folded bias) and rebuilds it only
 /// when it could differ: a source was replaced, a source's <see cref="Tensor{T}.Version"/> moved (every in-place write
-/// advances it: an optimizer step, a <c>SetParameters</c>, a deserialization), or the engine changed.
+/// advances it: an optimizer step, a <c>SetParameters</c>, a deserialization), or the engine changed. A writer that
+/// changes a source without advancing its version must call <see cref="Invalidate"/> before the derived tensor is
+/// reused.
 /// </summary>
 /// <remarks>
 /// <para>

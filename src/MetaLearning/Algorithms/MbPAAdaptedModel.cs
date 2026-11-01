@@ -75,6 +75,16 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
 
     private readonly MbPAEpisodicMemory<T> _memory;
     private readonly MbPAOptions<T, TInput, TOutput> _options;
+
+    // The embedding parameters the shared memory's keys were computed with: the writer's. A constructor argument, so
+    // a clone rebuilt from this model's (possibly changed) embedding network still knows which parameters wrote them.
+    private readonly Vector<T> _keyEmbeddingParameters;
+
+    // The memory re-keyed with this model's embedding, and the embedding parameters and memory version it was built
+    // for; rebuilt when either moves.
+    private MbPAEpisodicMemory<T>? _rekeyedMemory;
+    private Vector<T>? _rekeyedEmbeddingParameters;
+    private long _rekeyedMemoryVersion;
     [AiDotNet.Attributes.TrainableParameter]
     private Vector<T> _trainedOutputParams;
 
@@ -100,16 +110,20 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
     /// <param name="memory">The shared episodic memory to retrieve from.</param>
     /// <param name="trainedOutputParams">theta, the trained head; this model holds its own copy.</param>
     /// <param name="options">MbPA options.</param>
+    /// <param name="keyEmbeddingParameters">The embedding parameters the memory's keys were computed with; null when
+    /// they are <paramref name="embeddingNetwork"/>'s current ones, as they are when the algorithm adapts.</param>
     public MbPAAdaptedModel(
         IFullModel<T, TInput, TOutput> embeddingNetwork,
         MbPAEpisodicMemory<T> memory,
         Vector<T> trainedOutputParams,
-        MbPAOptions<T, TInput, TOutput> options)
+        MbPAOptions<T, TInput, TOutput> options,
+        Vector<T>? keyEmbeddingParameters = null)
         : base((embeddingNetwork ?? throw new ArgumentNullException(nameof(embeddingNetwork))).Clone())
     {
         _memory = memory ?? throw new ArgumentNullException(nameof(memory));
         _trainedOutputParams = (trainedOutputParams ?? throw new ArgumentNullException(nameof(trainedOutputParams))).Clone();
         _options = options ?? throw new ArgumentNullException(nameof(options));
+        _keyEmbeddingParameters = (keyEmbeddingParameters ?? BaseModel.GetParameters()).Clone();
     }
 
     /// <inheritdoc/>
@@ -129,20 +143,54 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
         }
 
         var rows = new List<Vector<T>>(batchSize);
+        var memory = MemoryForThisEmbedding();
 
         for (int i = 0; i < batchSize; i++)
         {
             var single = MbPAConversions<T>.SliceExample(input, i);
-            rows.Add(PredictSingle(single));
+            rows.Add(PredictSingle(single, memory));
         }
 
         return AssembleOutput(rows);
     }
 
     /// <summary>
-    /// One query's worth of MbPA: q = f_gamma(x), retrieve, T local steps, g_(theta_x)(q).
+    /// The memory to retrieve from: the shared one while this model's embedding network still has the parameters the
+    /// keys were written with, else that memory re-keyed with this model's embedding network.
     /// </summary>
-    private Vector<T> PredictSingle(TInput single)
+    /// <remarks>
+    /// <c>SetParameters</c> and <c>WithParameters</c> span the embedding network too. Comparing a query from a changed
+    /// embedding against keys from the old one retrieves neighbours by distances that mean nothing, so the keys are
+    /// recomputed from their source examples instead. The shared memory itself is never modified.
+    /// </remarks>
+    private MbPAEpisodicMemory<T> MemoryForThisEmbedding()
+    {
+        var current = BaseModel.GetParameters();
+        if (SameParameters(current, _keyEmbeddingParameters)) return _memory;
+
+        if (_rekeyedMemory is null || _rekeyedMemoryVersion != _memory.Version
+            || _rekeyedEmbeddingParameters is null || !SameParameters(current, _rekeyedEmbeddingParameters))
+        {
+            _rekeyedMemory = _memory.Rekeyed(source => Embed((TInput)source));
+            _rekeyedEmbeddingParameters = current.Clone();
+            _rekeyedMemoryVersion = _memory.Version;
+        }
+        return _rekeyedMemory;
+    }
+
+    private static bool SameParameters(Vector<T> a, Vector<T> b)
+    {
+        if (a.Length != b.Length) return false;
+        var comparer = EqualityComparer<T>.Default;
+        for (int i = 0; i < a.Length; i++)
+        {
+            if (!comparer.Equals(a[i], b[i])) return false;
+        }
+        return true;
+    }
+
+    /// <summary>q = f_gamma(x), sized to the head's feature dimension.</summary>
+    private Vector<T> Embed(TInput single)
     {
         // FAIL AT THE REAL CAUSE. ConvertOutputToVector returns null for any TOutput that is not
         // Vector/Matrix/Tensor, and that null went straight into ResizeTo -- so an unsupported output
@@ -156,9 +204,18 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
                 "Use Vector<T>, Matrix<T> or Tensor<T> as the meta-learning output type.");
         }
 
-        var query = MbPAConversions<T>.ResizeTo(embedded, _options.FeatureDimension);
+        return MbPAConversions<T>.ResizeTo(embedded, _options.FeatureDimension);
+    }
 
-        var neighbors = _memory.Retrieve(
+    /// <summary>
+    /// One query's worth of MbPA: q = f_gamma(x), retrieve from <paramref name="memory"/>, T local steps,
+    /// g_(theta_x)(q).
+    /// </summary>
+    private Vector<T> PredictSingle(TInput single, MbPAEpisodicMemory<T> memory)
+    {
+        var query = Embed(single);
+
+        var neighbors = memory.Retrieve(
             query, _options.NumNeighbors, _options.KernelEpsilon, NumOps.ToDouble);
 
         // theta_x — local, and about to be thrown away.

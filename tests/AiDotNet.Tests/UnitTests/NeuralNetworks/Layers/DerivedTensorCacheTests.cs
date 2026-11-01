@@ -76,6 +76,42 @@ public class DerivedTensorCacheTests
         Assert.Equal(new[] { 1.0, 2.0 }, cache.GetOrBuild(engine, Concat, a).ToArray());
     }
 
+    // GRULayer passes three sources and LSTMLayer four, so the third and fourth slots are checked like the first two.
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void Rebuilds_after_a_write_to_the_third_or_fourth_source(int written)
+    {
+        var cache = new DerivedTensorCache<double>();
+        var engine = AiDotNetEngine.Current;
+        var sources = new[] { Vector(1), Vector(2), Vector(3), Vector(4) };
+        var first = cache.GetOrBuild(engine, Concat, sources[0], sources[1], sources[2], sources[3]);
+        Assert.Same(first, cache.GetOrBuild(engine, Concat, sources[0], sources[1], sources[2], sources[3]));
+
+        sources[written].SetFlat(0, 9);
+
+        var expected = new[] { 1.0, 2.0, 3.0, 4.0 };
+        expected[written] = 9.0;
+        Assert.Equal(expected, cache.GetOrBuild(engine, Concat, sources[0], sources[1], sources[2], sources[3]).ToArray());
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void Rebuilds_when_the_third_or_fourth_source_is_replaced(int replaced)
+    {
+        var cache = new DerivedTensorCache<double>();
+        var engine = AiDotNetEngine.Current;
+        var sources = new[] { Vector(1), Vector(2), Vector(3), Vector(4) };
+        cache.GetOrBuild(engine, Concat, sources[0], sources[1], sources[2], sources[3]);
+
+        sources[replaced] = Vector(9);
+
+        var expected = new[] { 1.0, 2.0, 3.0, 4.0 };
+        expected[replaced] = 9.0;
+        Assert.Equal(expected, cache.GetOrBuild(engine, Concat, sources[0], sources[1], sources[2], sources[3]).ToArray());
+    }
+
     [Fact]
     public void Rebuilds_on_another_engine_and_after_invalidation()
     {

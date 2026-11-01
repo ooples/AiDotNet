@@ -1037,7 +1037,7 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
             else if (_stateful)
             {
                 // A stateful layer carries the final state into its next call in inference too.
-                _lastHiddenState = finalHidden;
+                _lastHiddenState = PersistState(finalHidden);
             }
             _allHiddenStates = null;
             return RestoreOriginalOutputShape(fused, sequenceLength);
@@ -1129,7 +1129,7 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
         else if (_stateful)
         {
             // A stateful layer carries the final state into its next call in inference too.
-            _lastHiddenState = currentHiddenState;
+            _lastHiddenState = PersistState(currentHiddenState);
         }
 
         // Return either the sequence of hidden states or just the final state
@@ -1152,6 +1152,24 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
     /// True when the gates use the sigmoid and the candidate the tanh (the defaults), the activations the fused
     /// sequence op computes. A configured activation of another type, including a subclass, keeps the per-step loop.
     /// </summary>
+    /// <summary>
+    /// A copy of an inference hidden state that outlives the call that produced it.
+    /// </summary>
+    /// <remarks>
+    /// An inference forward may run inside a tensor arena or a <see cref="TensorScope"/> that reclaims its tensors when
+    /// the call ends, so a stateful layer carrying <paramref name="state"/> into its next call would read reclaimed
+    /// memory. The copy is made outside both and without a tape, so it holds no graph history either.
+    /// </remarks>
+    private static Tensor<T> PersistState(Tensor<T> state)
+    {
+        using (AiDotNet.Tensors.Helpers.TensorArena.Suspend())
+        using (TensorScope.Suspend())
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            return state.Clone();
+        }
+    }
+
     private bool UsesStandardGruActivations()
     {
         object? gate = (object?)_vectorRecurrentActivation ?? _recurrentActivation;

@@ -44,10 +44,20 @@ public class MobileNetV2FusedParityTests
         Stride2,
         /// <summary>The stem, then an inverted residual block without the expansion stage.</summary>
         NoExpansion,
+        /// <summary>
+        /// The network's own default stack (no layers given): every stage, the stage-boundary blocks and the 1x1 head
+        /// convolution, at the narrowest width and a 32x32 input. The fused step is on by default for this stack, not
+        /// only for hand-built ones.
+        /// </summary>
+        DefaultStack,
     }
 
-    private static List<ILayer<float>> Layers(StackVariant variant)
+    /// <summary>The input side for a variant: the default stack's five stride-2 stages need more than 8 pixels.</summary>
+    private static int InputSize(StackVariant variant) => variant == StackVariant.DefaultStack ? 32 : Size;
+
+    private static List<ILayer<float>>? Layers(StackVariant variant)
     {
+        if (variant == StackVariant.DefaultStack) return null;
         var layers = new List<ILayer<float>>
         {
             new ConvolutionalLayer<float>(outputDepth: 8, kernelSize: 3, stride: 1, padding: 1,
@@ -84,15 +94,16 @@ public class MobileNetV2FusedParityTests
 
     private static NeuralNetworkBase<float> Build(StackVariant variant)
     {
-
+        int size = InputSize(variant);
         var arch = new NeuralNetworkArchitecture<float>(
             inputType: InputType.ThreeDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
-            inputHeight: Size, inputWidth: Size, inputDepth: 3, outputSize: Classes,
+            inputHeight: size, inputWidth: size, inputDepth: 3, outputSize: Classes,
             layers: Layers(variant));
 
+        var width = variant == StackVariant.DefaultStack ? MobileNetV2WidthMultiplier.Alpha035 : MobileNetV2WidthMultiplier.Alpha100;
         return new MobileNetV2Network<float>(arch,
-            new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha100, Classes, Size, Size),
+            new MobileNetV2Configuration(width, Classes, size, size),
             options: new MobileNetV2Options { DisableFusedOptimizerStep = false });
     }
 
@@ -111,6 +122,7 @@ public class MobileNetV2FusedParityTests
     [InlineData(StackVariant.Residual)]
     [InlineData(StackVariant.Stride2)]
     [InlineData(StackVariant.NoExpansion)]
+    [InlineData(StackVariant.DefaultStack)]
     public void One_fused_step_matches_the_eager_tape(StackVariant variant)
     {
         var prior = AiDotNetEngine.Current;
@@ -118,12 +130,18 @@ public class MobileNetV2FusedParityTests
         try
         {
             AiDotNetEngine.Current = new CpuEngine();
-            var x = Seeded(11, Batch, 3, Size, Size);
+            int size = InputSize(variant);
+            var x = Seeded(11, Batch, 3, size, size);
             var y = new Tensor<float>(new[] { Batch, Classes });
             for (int b = 0; b < Batch; b++) y[b, b % Classes] = 1f;
 
             var fused = Build(variant);
             var eager = Build(variant);
+            if (variant == StackVariant.DefaultStack)
+            {
+                // Otherwise the case does not test the block its name promises.
+                Assert.Contains(fused.Layers, layer => layer is InvertedResidualBlock<float>);
+            }
             fused.Predict(x);   // materialise the lazy weights
             eager.Predict(x);
             var init = fused.GetParameters();
@@ -202,7 +220,7 @@ public class MobileNetV2FusedParityTests
                 inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.MultiClassClassification,
                 inputHeight: Size, inputWidth: Size, inputDepth: 3, outputSize: Classes,
-                layers: Layers(StackVariant.ConvBatchNorm));
+                layers: Layers(StackVariant.ConvBatchNorm) ?? throw new InvalidOperationException("no layers"));
             var net = new MobileNetV2Network<float>(arch,
                 new MobileNetV2Configuration(MobileNetV2WidthMultiplier.Alpha100, Classes, Size, Size), options: options);
             net.Predict(x);

@@ -63,12 +63,10 @@ public class InvertedResidualBlockFusionTests
         finally { InferenceFusionSettings.FoldBatchNormIntoConvolution = previous; }
 
         Assert.Equal(unfused.Length, fused.Length);
-        int clampedHigh = 0;
         for (int i = 0; i < fused.Length; i++)
         {
             Assert.True(Math.Abs(unfused[i] - fused[i]) <= 1e-10 + 1e-9 * Math.Abs(unfused[i]),
                 $"[{i}]: unfused {unfused[i]}, fused {fused[i]}");
-            if (unfused[i] >= 6) clampedHigh++;
         }
         Assert.Contains(fused, v => Math.Abs(v) > 1e-6);   // not a degenerate all-zero output
     }

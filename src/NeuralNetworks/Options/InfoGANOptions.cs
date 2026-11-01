@@ -61,7 +61,8 @@ public class InfoGANOptions : GanOptions
     /// <summary>
     /// Gets the width of the whole latent code: each categorical code one-hot, then the continuous codes.
     /// </summary>
-    public int LatentCodeSize => NumCategoricalCodes * CategoricalCodeDimension + NumContinuousCodes;
+    /// <exception cref="OverflowException">The width does not fit in an <see cref="int"/>.</exception>
+    public int LatentCodeSize => checked(NumCategoricalCodes * CategoricalCodeDimension + NumContinuousCodes);
 
     /// <summary>
     /// Gets or sets the mutual info coefficient.
@@ -72,8 +73,8 @@ public class InfoGANOptions : GanOptions
     /// Throws if a value this model requires has been left unset or is not positive.
     /// </summary>
     /// <exception cref="ArgumentException">
-    /// Thrown when a code count is negative, a categorical code has fewer than two values, or there is no code
-    /// at all.
+    /// Thrown when a code count is negative, a categorical code has fewer than two values, there is no code
+    /// at all, or the code is too wide to count.
     /// </exception>
     public void Validate()
     {
@@ -91,7 +92,19 @@ public class InfoGANOptions : GanOptions
                 $"A categorical code needs at least two values; got CategoricalCodeDimension={CategoricalCodeDimension}.");
         }
 
-        if (LatentCodeSize <= 0)
+        int latentCodeSize;
+        try
+        {
+            latentCodeSize = LatentCodeSize;
+        }
+        catch (OverflowException ex)
+        {
+            throw new ArgumentException(
+                $"The latent code is too wide: {NumCategoricalCodes} categorical codes of {CategoricalCodeDimension} " +
+                $"values plus {NumContinuousCodes} continuous codes overflows an int.", ex);
+        }
+
+        if (latentCodeSize <= 0)
         {
             throw new ArgumentException("InfoGAN needs at least one latent code, categorical or continuous.");
         }

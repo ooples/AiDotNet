@@ -84,6 +84,67 @@ public class InfoGANCodeLayoutTests
         Assert.Equal(expected, loss, 9);
     }
 
+    private static InfoGANOptions TwoCategoricalCodesOnly() =>
+        new InfoGANOptions { NumCategoricalCodes = 2, CategoricalCodeDimension = 3, NumContinuousCodes = 0 };
+
+    [Fact]
+    public void SampledCodes_EachCategoricalCodeIsItsOwnOneHotBlock()
+    {
+        var model = Create(TwoCategoricalCodesOnly(), 6);
+        var codes = model.GenerateRandomLatentCodes(64);
+
+        for (int b = 0; b < 64; b++)
+        {
+            for (int code = 0; code < 2; code++)
+            {
+                int ones = 0;
+                for (int c = code * 3; c < code * 3 + 3; c++)
+                {
+                    double v = codes[b, c];
+                    Assert.True(v == 0.0 || v == 1.0, $"Categorical entry [{b}, {c}] = {v} is not one-hot.");
+                    if (v == 1.0) ones++;
+                }
+
+                Assert.Equal(1, ones);
+            }
+        }
+    }
+
+    [Fact]
+    public void CodeLoss_ScoresEachCategoricalCodeAgainstItsOwnLogits()
+    {
+        // Non-uniform logits, and a different label per code, so reading the wrong block changes the loss.
+        var model = Create(TwoCategoricalCodesOnly(), 6);
+        var codes = new Tensor<double>(new[] { 1, 6 });
+        codes[0, 1] = 1.0;
+        codes[0, 3] = 1.0;
+        var predicted = new Tensor<double>(new[] { 1, 6 });
+        predicted[0, 0] = 0.0; predicted[0, 1] = 1.0; predicted[0, 2] = 2.0;
+        predicted[0, 3] = 2.0; predicted[0, 4] = 0.0; predicted[0, 5] = 1.0;
+
+        double loss = model.CodeLoss(predicted, codes).ToVector()[0];
+
+        double logDenominator = Math.Log(1.0 + Math.E + Math.E * Math.E);
+        double expected = (logDenominator - 1.0) + (logDenominator - 2.0);
+        Assert.Equal(expected, loss, 9);
+    }
+
+    [Theory]
+    [InlineData(-1, 10, 2)]
+    [InlineData(1, 10, -1)]
+    [InlineData(1, 1, 2)]
+    [InlineData(0, 10, 0)]
+    [InlineData(int.MaxValue, 10, 0)]
+    public void Validate_RejectsALayoutThatCannotBeScored(int categorical, int dimension, int continuous)
+    {
+        var options = new InfoGANOptions
+        {
+            NumCategoricalCodes = categorical, CategoricalCodeDimension = dimension, NumContinuousCodes = continuous,
+        };
+
+        Assert.Throws<ArgumentException>(() => options.Validate());
+    }
+
     [Fact]
     public void ExplicitWidth_MustMatchTheOptionsLayout()
     {

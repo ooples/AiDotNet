@@ -53,6 +53,17 @@ public class FastTextNgramOptionTests
         Assert.True(MaxAbsDifference(a, c) > 1e-9, "MaxNgramLength = 0 still added subwords.");
     }
 
+    [Fact]
+    public void SubwordsOff_IgnoresTheMinimumLength()
+    {
+        // Validate accepts any MinNgramLength once MaxNgramLength = 0; a minimum of 0 must not add empty n-grams.
+        var reference = Create(3, 0);
+        var zeroMinimum = Create(0, 0);
+        zeroMinimum.SetParameters(reference.GetParameters());
+
+        Assert.Equal(0.0, MaxAbsDifference(reference.Embed("whereabouts"), zeroMinimum.Embed("whereabouts")));
+    }
+
     [Theory]
     [InlineData(0, 6)]
     [InlineData(5, 4)]

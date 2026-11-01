@@ -21,8 +21,13 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <typeparam name="T">The numeric type.</typeparam>
 public sealed class MbPAEpisodicMemory<T>
 {
-    private readonly List<(Vector<T> Key, Vector<T> Value)> _entries;
+    private readonly List<(Vector<T> Key, Vector<T> Value, object? Source)> _entries;
     private readonly int _capacity;
+
+    /// <summary>
+    /// Advances on every write or clear, so a view built from this memory can tell it is out of date.
+    /// </summary>
+    internal long Version { get; private set; }
 
     /// <summary>Gets the number of stored pairs.</summary>
     public int Count => _entries.Count;
@@ -42,20 +47,57 @@ public sealed class MbPAEpisodicMemory<T>
             throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "Memory capacity must be positive.");
         }
         _capacity = capacity;
-        _entries = new List<(Vector<T>, Vector<T>)>(Math.Min(capacity, 1024));
+        _entries = new List<(Vector<T>, Vector<T>, object?)>(Math.Min(capacity, 1024));
     }
 
     /// <summary>
     /// Stores one <c>(embedding, target)</c> pair, evicting the oldest when at capacity.
     /// </summary>
-    public void Write(Vector<T> key, Vector<T> value)
+    public void Write(Vector<T> key, Vector<T> value) => Write(key, value, null);
+
+    /// <summary>
+    /// Stores one pair together with the example its key was embedded from, so the key can be recomputed by an
+    /// embedding network other than the one that wrote it.
+    /// </summary>
+    internal void Write(Vector<T> key, Vector<T> value, object? source)
     {
         if (_entries.Count >= _capacity) _entries.RemoveAt(0);
-        _entries.Add((key, value));
+        _entries.Add((key, value, source));
+        Version++;
     }
 
     /// <summary>Removes every stored pair.</summary>
-    public void Clear() => _entries.Clear();
+    public void Clear()
+    {
+        _entries.Clear();
+        Version++;
+    }
+
+    /// <summary>
+    /// A copy of this memory whose keys are recomputed from each entry's source example by
+    /// <paramref name="embed"/>; the values are shared.
+    /// </summary>
+    /// <remarks>
+    /// Keys are only comparable with queries from the embedding network that produced them. A model whose embedding
+    /// network has moved away from the writer's re-keys the memory with its own network rather than compare its
+    /// queries against another network's keys.
+    /// </remarks>
+    /// <exception cref="InvalidOperationException">An entry was written without its source example.</exception>
+    internal MbPAEpisodicMemory<T> Rekeyed(Func<object, Vector<T>> embed)
+    {
+        var copy = new MbPAEpisodicMemory<T>(_capacity);
+        foreach (var (_, value, source) in _entries)
+        {
+            if (source is null)
+            {
+                throw new InvalidOperationException(
+                    "An episodic-memory entry was written without its source example, so its key cannot be recomputed " +
+                    "for a model whose embedding network has changed. Write entries through MbPAAlgorithm.WriteToMemory.");
+            }
+            copy.Write(embed(source), value, source);
+        }
+        return copy;
+    }
 
     /// <summary>
     /// Returns the K entries whose keys are nearest to <paramref name="query"/> in Euclidean

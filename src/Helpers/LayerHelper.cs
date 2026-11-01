@@ -3990,6 +3990,15 @@ public static partial class LayerHelper<T>
     /// <param name="architecture">The neural network architecture configuration that defines input and output shapes.</param>
     /// <param name="hiddenLayerSizes">The width of each hidden layer, input side first. Each must be positive.</param>
     /// <returns>A collection of layers forming a feed-forward neural network.</returns>
+    /// <remarks>
+    /// <para>
+    /// <b>For Beginners:</b> Each entry of <paramref name="hiddenLayerSizes"/> becomes one ReLU hidden layer of that
+    /// width, in order, so <c>[256, 128]</c> builds a 256-wide layer followed by a 128-wide one. A final layer of
+    /// <see cref="NeuralNetworkArchitecture{T}.OutputSize"/> units follows, with the activation that suits the
+    /// architecture's task type (softmax for multi-class, sigmoid for binary, identity for regression).
+    /// Multi-dimensional input is flattened first.
+    /// </para>
+    /// </remarks>
     public static IEnumerable<ILayer<T>> CreateDefaultFeedForwardLayers(
         NeuralNetworkArchitecture<T> architecture,
         IReadOnlyList<int> hiddenLayerSizes)
@@ -4011,10 +4020,12 @@ public static partial class LayerHelper<T>
         {
             layers.Add(new FlattenLayer<T>());
         }
+        // Hidden layers: one ReLU dense layer per configured width.
         foreach (int width in hiddenLayerSizes)
         {
             layers.Add(new DenseLayer<T>(width, new ReLUActivation<T>() as IActivationFunction<T>));
         }
+        // Output layer: OutputSize units with the task's default activation.
         var outputActivation = NeuralNetworkHelper<T>.GetDefaultActivationFunction(architecture.TaskType);
         layers.Add(new DenseLayer<T>(architecture.OutputSize, outputActivation));
 
