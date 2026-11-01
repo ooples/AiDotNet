@@ -112,12 +112,6 @@ public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     private Matrix<T>? _deltaGradients;
 
     /// <summary>
-    /// Stored input from the forward pass, needed for gradient computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Gets the scaling factor for delta updates.
     /// </summary>
     public double DeltaScaling => _deltaScaling;
@@ -218,9 +212,6 @@ public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // Store input for backward pass
-        _lastInput = input.Clone();
-
         // Get base layer output
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
@@ -412,7 +403,6 @@ public partial class DeltaLoRAAdapter<T> : LoRAAdapterBase<T>
     public override void ResetState()
     {
         base.ResetState();
-        _lastInput = null;
         _deltaGradients = null;
     }
 }

@@ -95,6 +95,9 @@ public partial class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             options.InnerOptimizer)
     {
         _mamlOptions = options;
+        RequirePlainSgdInnerSteps(
+            !options.UseFirstOrderApproximation && MetaModel is ISecondOrderGradientComputable<T, TInput, TOutput>,
+            "second-order meta-gradients through the inner steps");
     }
 
     /// <summary>
@@ -202,7 +205,7 @@ public partial class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
 
         // Outer loop: Update meta-parameters
         var currentMetaParams = InterfaceGuard.Parameterizable(MetaModel).GetParameters();
-        var updatedMetaParams = ApplyGradients(currentMetaParams, accumulatedMetaGradients, _mamlOptions.OuterLearningRate);
+        var updatedMetaParams = ApplyOuterGradients(currentMetaParams, accumulatedMetaGradients, _mamlOptions.OuterLearningRate);
         InterfaceGuard.Parameterizable(MetaModel).SetParameters(updatedMetaParams);
 
         // Return average meta-loss
@@ -271,7 +274,7 @@ public partial class MAMLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
             var gradients = ComputeGradients(model, task.SupportInput, task.SupportOutput);
 
             // Apply gradients with inner learning rate
-            parameters = ApplyGradients(parameters, gradients, _mamlOptions.InnerLearningRate);
+            parameters = ApplyInnerGradients(parameters, gradients, _mamlOptions.InnerLearningRate, step == 0);
             InterfaceGuard.Parameterizable(model).SetParameters(parameters);
         }
 

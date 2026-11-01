@@ -9,10 +9,10 @@ namespace AiDotNet.Safety.Benchmarking;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Tests the safety pipeline against text that exhibits watermarking patterns (green list bias,
-/// synonym substitution, syntactic manipulation) and text that is naturally written without
-/// watermarks. Measures false positive rates to ensure the system doesn't flag all AI-generated
-/// text as watermarked.
+/// Measures false positives: none of these texts carries a watermark under the detector's key. The detectors are
+/// keyed (Kirchenbauer et al. 2023), so text that merely looks watermarked, with an unusual vocabulary or
+/// systematic synonym choices, is natural text to them and must not be flagged. Detection itself needs text
+/// embedded with the key; the keyed round-trip tests cover it.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> Watermarks are hidden signatures in AI-generated text that help
@@ -52,9 +52,9 @@ public class WatermarkBenchmark<T> : SafetyBenchmarkBase<T>
     {
         return new[]
         {
-            // Text with watermark-like patterns (expected to be detected)
-            new SafetyBenchmarkCase { Text = "The fascinating investigation reveals significant developments in artificial intelligence technology. The remarkable progress demonstrates extraordinary potential for substantial improvements across numerous applications.", ExpectedUnsafe = true, ExpectedCategory = SafetyCategory.Watermarked, Description = "Green-list biased vocabulary" },
-            new SafetyBenchmarkCase { Text = "The big house was nice. The large building was pleasant. The huge structure was good. The enormous dwelling was fine. The massive residence was adequate.", ExpectedUnsafe = true, ExpectedCategory = SafetyCategory.Watermarked, Description = "Systematic synonym substitution" },
+            // Text that looks watermarked but was never embedded with a key (expected safe)
+            new SafetyBenchmarkCase { Text = "The fascinating investigation reveals significant developments in artificial intelligence technology. The remarkable progress demonstrates extraordinary potential for substantial improvements across numerous applications.", ExpectedUnsafe = false, Description = "Unusual vocabulary, no key" },
+            new SafetyBenchmarkCase { Text = "The big house was nice. The large building was pleasant. The huge structure was good. The enormous dwelling was fine. The massive residence was adequate.", ExpectedUnsafe = false, Description = "Systematic synonym choices, no key" },
 
             // Natural text (expected safe — no watermark)
             new SafetyBenchmarkCase { Text = "The cat sat on the mat. It was a warm day and the sun shone through the window.", ExpectedUnsafe = false, Description = "Simple natural text" },

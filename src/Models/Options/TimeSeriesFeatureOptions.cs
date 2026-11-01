@@ -452,7 +452,7 @@ public class TimeSeriesFeatureOptions : ModelOptions
     /// Gets or sets the index of the benchmark column for regression calculations.
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> The benchmark is what you compare against (like the S&P 500).
+    /// <para><b>For Beginners:</b> The benchmark is what you compare against (like the S&amp;P 500).
     /// Set this to the column index where your benchmark data is located.
     /// If null, the first column will be used as the benchmark and other columns compared against it.
     /// </para>

@@ -46,18 +46,6 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [AutoParameters]
 public partial class AddLayer<T> : LayerBase<T>, IShapeContract
 {
-
-    /// <summary>
-    /// Stores the output tensor from the most recent forward pass for use in the backward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field caches the output tensor from the most recent call to Forward(). During backpropagation,
-    /// this cached output is used to calculate the gradient of the activation function. The field is nullable
-    /// and will be null until Forward() is called at least once.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
     // GPU-resident cached tensors for GPU training pipeline
     [Scratch]
     private Tensor<T>? _lastOutputGpu;
@@ -311,13 +299,6 @@ public partial class AddLayer<T> : LayerBase<T>, IShapeContract
         var result = Engine.TensorAddMany(inputs);
 
         var activated = ApplyActivation(result);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = activated;
-        }
-
         return activated;
     }
 
@@ -350,8 +331,6 @@ public partial class AddLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        _lastOutput = null;
-
         // Clear GPU cached data
         _lastOutputGpu?.Dispose();
         _lastOutputGpu = null;

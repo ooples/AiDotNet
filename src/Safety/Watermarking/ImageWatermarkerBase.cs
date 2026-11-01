@@ -43,7 +43,7 @@ namespace AiDotNet.Safety.Watermarking;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImageWatermarker<T>
+public abstract class ImageWatermarkerBase<T> : ImageSafetyModuleBase<T>, IImageWatermarker<T>, IKeyedWatermarker
 {
     /// <summary>
     /// The key used when none is given. It is public, so marks made with it prove nothing about who made them.

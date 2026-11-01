@@ -137,17 +137,10 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _biasC; // Cell state bias
     private Tensor<T> _biasO; // Output gate bias
 
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-    [Scratch]
-    private Tensor<T>? _lastHiddenState;
-    [Scratch]
-    private Tensor<T>? _lastCellState;
     private Dictionary<string, object> _gradients = new Dictionary<string, object>();
     private readonly Dictionary<string, Tensor<T>> _momentums = new Dictionary<string, Tensor<T>>();
     private const double MomentumFactor = 0.9;
@@ -703,15 +696,13 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentException($"ConvLSTMLayer requires at least 4D input, got {rank}D");
         }
 
-        _lastInput = input5D;
-
         // Collect per-time-step hidden states for a tape-connected concat (states
         // need zero init for the initial timestep). A pre-allocated tensor written
         // with SetSlice would detach the output from the recurrence and stop
         // gradients reaching the conv-gate weights.
         var hiddenStatesList = new System.Collections.Generic.List<Tensor<T>>(timeSteps);
-        _lastHiddenState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
-        _lastCellState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
+        var hiddenState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
+        var cellState = TensorAllocator.Rent<T>([batchSize, height, width, _filters]);
 
         var packedInput = Engine.TensorConcatenate(new[] { _weightsIi, _weightsFi, _weightsCi, _weightsOi }, 3);
         var packedHidden = Engine.TensorConcatenate(new[] { _weightsIh, _weightsFh, _weightsCh, _weightsOh }, 3);
@@ -721,8 +712,8 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
         {
             // Slice along dimension 1 (time) to get [batchSize, height, width, channels]
             var xt = Engine.TensorSqueeze(Engine.TensorNarrow(input5D, 1, t, 1), 1);
-            (_lastHiddenState, _lastCellState) = ConvLSTMCell(xt, _lastHiddenState, _lastCellState, packedInput, packedHidden, packedBias);
-            hiddenStatesList.Add(Engine.Reshape(_lastHiddenState, new[] { batchSize, 1, height, width, _filters }));
+            (hiddenState, cellState) = ConvLSTMCell(xt, hiddenState, cellState, packedInput, packedHidden, packedBias);
+            hiddenStatesList.Add(Engine.Reshape(hiddenState, new[] { batchSize, 1, height, width, _filters }));
         }
 
         // Assemble [batch, timeSteps, height, width, filters] on the tape.
@@ -1255,19 +1246,14 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method clears all cached values and gradients from previous forward and backward passes:
+    /// This method clears the gradients accumulated by previous backward passes:
     /// </para>
     /// <para>
-    /// 1. Clears the cached input tensor (_lastInput)
-    /// 2. Clears the cached hidden state (_lastHiddenState)
-    /// 3. Clears the cached cell state (_lastCellState)
-    /// 4. Clears all accumulated gradients
+    /// 1. Clears all accumulated gradients
     /// </para>
     /// <para><b>For Beginners:</b> This method clears the layer's memory to start fresh.
     /// 
     /// It's like erasing a whiteboard to start a new lesson:
-    /// - The layer forgets the last input it processed
-    /// - It clears its internal memory states (hidden and cell states)
     /// - It discards any stored gradients from previous training
     /// 
     /// This is important when:
@@ -1280,11 +1266,6 @@ public partial class ConvLSTMLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward pass
-        _lastInput = null;
-        _lastHiddenState = null;
-        _lastCellState = null;
-
         // Clear gradients
         _gradients.Clear();
 

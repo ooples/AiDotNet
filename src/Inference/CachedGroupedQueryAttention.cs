@@ -70,12 +70,6 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
     private RotaryPositionalEncodingLayer<T>? _ropeLayer;
     private ALiBiPositionalBiasLayer<T>? _alibiLayer;
 
-    // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
     /// <inheritdoc />
     public override bool SupportsTraining => false;
 
@@ -250,8 +244,6 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
     /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input;
-
         if (InferenceMode && _cache == null)
             throw new InvalidOperationException("InferenceMode is enabled but no KV cache has been set. Call SetCache() before running inference.");
 
@@ -324,9 +316,7 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
         // Reshape and project output
         attentionOutput = attentionOutput.Transpose([0, 2, 1, 3]).Reshape(batchSize, seqLen, _embeddingDimension);
         var output = attentionOutput.Multiply(_outputWeights).Add(_outputBias);
-        _lastOutput = ApplyActivation(output);
-
-        return _lastOutput;
+        return ApplyActivation(output);
     }
 
     private Tensor<T> ForwardStandard(Tensor<T> input)
@@ -358,9 +348,7 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
 
         attentionOutput = attentionOutput.Transpose([0, 2, 1, 3]).Reshape(batchSize, seqLen, _embeddingDimension);
         var output = attentionOutput.Multiply(_outputWeights).Add(_outputBias);
-        _lastOutput = ApplyActivation(output);
-
-        return _lastOutput;
+        return ApplyActivation(output);
     }
 
     private Tensor<T> ExpandKVHeads(Tensor<T> kv, int batchSize, int seqLen)
@@ -461,8 +449,6 @@ public partial class CachedGroupedQueryAttention<T> : LayerBase<T>, IShapeContra
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
     }
 
     /// <inheritdoc />

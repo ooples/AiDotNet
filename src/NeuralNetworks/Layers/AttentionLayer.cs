@@ -115,30 +115,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     private readonly int _attentionSize;
 
     /// <summary>
-    /// The last input processed by the layer.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// The cached query input from the last forward pass (for cross-attention backward).
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastQueryInput;
-
-    /// <summary>
-    /// The cached key input from the last forward pass (for cross-attention backward).
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastKeyInput;
-
-    /// <summary>
-    /// The cached value input from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastValueInput;
-
-    /// <summary>
     /// Tracks whether the last input was originally 2D (and thus reshaped to 3D).
     /// </summary>
     private bool _inputWas2D = false;
@@ -147,12 +123,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// Stores the original input shape for restoring higher-rank tensor output.
     /// </summary>
     private int[]? _originalInputShape;
-
-    /// <summary>
-    /// The cached attention mask from the last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastMask;
 
     /// <summary>
     /// The last attention weights computed by the layer.
@@ -175,22 +145,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// Stores the last computed attention entropy for diagnostics.
     /// </summary>
     private T _lastAttentionEntropy;
-
-    /// <summary>
-    /// Tracks whether the last forward pass used cross-attention (separate Q and K/V sources).
-    /// </summary>
-    private bool _lastWasCrossAttention;
-
-    /// <summary>
-    /// Tracks whether the last forward pass used an attention mask.
-    /// </summary>
-    private bool _lastUsedMask;
-
-    /// <summary>
-    /// Cached attention output before output projection (Wo), used for backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastAttentionOutput;
 
     /// <summary>
     /// Gets or sets whether to use auxiliary loss (attention entropy regularization) during training.
@@ -491,15 +445,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             input3D = Engine.Reshape(input, [flatBatch, input.Shape[rank - 2], input.Shape[rank - 1]]);
         }
 
-        // #1668: gate every backward-only cache (forward uses locals); skip in inference.
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input : null;
-        _lastQueryInput = cacheBwd ? input3D : null;
-        _lastKeyInput = cacheBwd ? input3D : null;
-        _lastWasCrossAttention = false;
-        _lastUsedMask = false;
-        _lastMask = null;
-
         int batchSize = input3D.Shape[0];
         int seqLen = input3D.Shape[1];
 
@@ -537,7 +482,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             Tensor<T> output4D;
             // The weights are also the auxiliary attention-entropy loss's input: materialize them when that
             // loss will read them, as MultiHeadAttentionLayer does (scoresNeeded), not only for the manual backward.
-            bool scoresNeeded = cacheBwd || (UseAuxiliaryLoss && IsTrainingMode);
+            bool scoresNeeded = ShouldCacheForBackward || (UseAuxiliaryLoss && IsTrainingMode);
             if (scoresNeeded)
             {
                 output4D = Engine.ScaledDotProductAttention(
@@ -593,7 +538,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             // 4. Apply activation (custom, not softmax). Use a local for the forward (it's
             // read by the weights@V matmul below); cache to the field only for backward (#1668).
             var attnWeights = ApplyActivation(attentionScores);
-            _lastAttentionWeights = cacheBwd ? attnWeights : null;
+            SaveForBackward(ref _lastAttentionWeights, attnWeights);
 
             // 5. Output: Weights @ V (per-batch)
             attentionOutput = TensorAllocator.Rent<T>([batchSize, seqLen, _attentionSize]);
@@ -606,7 +551,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
                     attentionOutput.SetFlat(b * seqLen * _attentionSize + i, outB.GetFlat(i));
             }
         }
-        _lastAttentionOutput = cacheBwd ? attentionOutput : null; // #1668: cache for backward only
 
         // 6. Output Projection: Apply Wo to project from attentionSize back to inputSize
         // Flatten for matmul: [B*S, A] @ [A, inputSize] -> [B*S, inputSize]
@@ -775,20 +719,11 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // [..., _inputSize] fails with _inputSize == -1).
         EnsureInitializedFromInput(input);
 
-        // #1668: gate every backward-only cache; forward uses the local mask/input3D.
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input : null;
-        _lastMask = cacheBwd ? mask : null;
-
         // Handle 2D [Batch, InputSize] or 3D [Batch, Seq, InputSize] input
         _inputWas2D = input.Shape.Length == 2;
         Tensor<T> input3D = _inputWas2D
             ? Engine.Reshape(input, [input.Shape[0], 1, _inputSize])
             : input;
-
-        _lastQueryInput = cacheBwd ? input3D : null;
-        _lastKeyInput = cacheBwd ? input3D : null;
-        _lastValueInput = cacheBwd ? input3D : null;
 
         int batchSize = input3D.Shape[0];
         int seqLen = input3D.Shape[1];
@@ -820,11 +755,10 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
 
         // 5. Softmax (cache to the field for backward only; forward uses the local)
         var attnWeights = ApplyActivation(attentionScores);
-        _lastAttentionWeights = cacheBwd ? attnWeights : null;
+        SaveForBackward(ref _lastAttentionWeights, attnWeights);
 
         // 6. Output: Weights @ V
         var attentionOutput = Engine.BatchMatMul(attnWeights, V);
-        _lastAttentionOutput = cacheBwd ? attentionOutput : null; // #1668: cache for backward only
 
         // 7. Output Projection: Apply Wo to project from attentionSize back to inputSize
         var attnFlat = Engine.Reshape(attentionOutput, [batchSize * seqLen, _attentionSize]);
@@ -858,11 +792,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         // this, but the cross-attention entry point did not).
         EnsureInitializedFromInput(queryInput);
 
-        _lastWasCrossAttention = true;
-        _lastUsedMask = mask != null;
-        _lastMask = mask;
-        _lastInput = queryInput;
-
         // Handle 2D [Batch, InputSize] or 3D [Batch, Seq, InputSize] input
         _inputWas2D = queryInput.Shape.Length == 2;
         Tensor<T> query3D, keyValue3D;
@@ -886,10 +815,6 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             query3D = queryInput;
             keyValue3D = keyValueInput;
         }
-
-        _lastQueryInput = query3D;
-        _lastKeyInput = keyValue3D;
-        _lastValueInput = keyValue3D;
 
         int batchSize = query3D.Shape[0];
         int seqLenQ = query3D.Shape[1];
@@ -924,11 +849,15 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
             attentionScores = Engine.TensorAdd(attentionScores, mask);
         }
 
-        _lastAttentionWeights = ApplyActivation(attentionScores);
+        var attnWeights = ApplyActivation(attentionScores);
+        // Kept for the manual backward and, in training, the entropy auxiliary loss; dropped in inference.
+        if (ShouldCacheForBackward || (UseAuxiliaryLoss && IsTrainingMode))
+            _lastAttentionWeights = attnWeights;
+        else
+            _lastAttentionWeights = null;
 
         // Output: Weights @ V -> [B, seqLenQ, attentionSize]
-        var attentionOutput = Engine.BatchMatMul(_lastAttentionWeights, V);
-        _lastAttentionOutput = attentionOutput; // Cache for backward pass
+        var attentionOutput = Engine.BatchMatMul(attnWeights, V);
 
         // Output Projection: Apply Wo to project from attentionSize back to inputSize
         var attnFlat = Engine.Reshape(attentionOutput, [batchSize * seqLenQ, _attentionSize]);
@@ -1170,10 +1099,7 @@ public partial class AttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
     /// </remarks>
     public override void ResetState()
     {
-        _lastInput = null;
         _lastAttentionWeights = null;
-        _lastWasCrossAttention = false;
-        _lastUsedMask = false;
 
         // Clear GPU cached tensors
         _gpuInput = null;

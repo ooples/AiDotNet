@@ -144,7 +144,7 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
                 {
                     ParamModel.SetParameters(modulatedParams);
                     var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                    modulatedParams = ApplyGradients(modulatedParams, grad, _algoOptions.InnerLearningRate);
+                    modulatedParams = ApplyInnerGradients(modulatedParams, grad, _algoOptions.InnerLearningRate, step == 0);
                 }
 
                 ParamModel.SetParameters(modulatedParams);
@@ -192,7 +192,7 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
         {
             ParamModel.SetParameters(modulatedParams);
             var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-            modulatedParams = ApplyGradients(modulatedParams, grad, _algoOptions.InnerLearningRate);
+            modulatedParams = ApplyInnerGradients(modulatedParams, grad, _algoOptions.InnerLearningRate, step == 0);
         }
 
         ParamModel.SetParameters(initParams);
@@ -283,7 +283,7 @@ public partial class PEARLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TIn
             {
                 ParamModel.SetParameters(modulatedParams);
                 var grad = ClipGradients(ComputeGradients(MetaModel, task.SupportInput, task.SupportOutput));
-                modulatedParams = ApplyGradients(modulatedParams, grad, _algoOptions.InnerLearningRate);
+                modulatedParams = ApplyInnerGradients(modulatedParams, grad, _algoOptions.InnerLearningRate, step == 0);
             }
 
             ParamModel.SetParameters(modulatedParams);

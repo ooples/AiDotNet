@@ -151,8 +151,10 @@ public interface IMetaLearnerOptions<T>
     bool IsValid();
 
     /// <summary>
-    /// Creates a deep copy of this options instance.
+    /// Creates a copy of this options instance. Value settings (rates, step counts, flags) are copied; reference-typed
+    /// collaborators (the meta-model, loss function, optimizers and data loader) are shared with the original, so
+    /// training or modifying them through either copy affects both.
     /// </summary>
-    /// <returns>A new options instance with the same values.</returns>
+    /// <returns>A new options instance with the same values and the same collaborator references.</returns>
     IMetaLearnerOptions<T> Clone();
 }

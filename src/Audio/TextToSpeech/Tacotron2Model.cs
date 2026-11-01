@@ -947,8 +947,12 @@ public partial class Tacotron2Model<T> : AudioNeuralNetworkBase<T>, ITextToSpeec
                 data =>
                 {
                     var afterPostnet = MeanSquaredDifference(ForwardForTraining(data[0]), data[1]);
-                    if (_lastPrePostnetMel is null) return afterPostnet;
-                    return Engine.TensorAdd(afterPostnet, MeanSquaredDifference(_lastPrePostnetMel, data[1]));
+                    // Take the hand-off and clear it: the tape already holds the tensor for backward,
+                    // so the field must not keep the activation alive past this step.
+                    var prePostnetMel = _lastPrePostnetMel;
+                    _lastPrePostnetMel = null;
+                    if (prePostnetMel is null) return afterPostnet;
+                    return Engine.TensorAdd(afterPostnet, MeanSquaredDifference(prePostnetMel, data[1]));
                 }),
         };
     /// <summary>

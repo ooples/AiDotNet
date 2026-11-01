@@ -175,7 +175,16 @@ internal static class SafetyPipelineFactory<T>
     {
         if (config.Watermarking.EffectiveTextWatermarking || config.Watermarking.EffectiveDetectionMode)
         {
-            pipeline.AddModule(new TextWatermarker<T>());
+            // Detection re-tokenizes the text with the generator's tokenizer and scores it under the generator's key; a
+            // watermarker with neither scores every text as unmarked, so it is refused rather than registered.
+            var tokenizer = config.Watermarking.TextTokenizer ?? throw new InvalidOperationException(
+                "Text watermarking and watermark detection need the generating model's tokenizer: set " +
+                "SafetyConfig.Watermarking.TextTokenizer (and TextKey for a secret key), or register a " +
+                "TextWatermarker through SafetyPipelineBuilder.AddTextModule.");
+            pipeline.AddModule(new TextWatermarker<T>(
+                key: config.Watermarking.TextKey,
+                tokenizer: tokenizer,
+                watermarkStrength: config.Watermarking.EffectiveWatermarkStrength));
         }
 
         if (config.Watermarking.EffectiveImageWatermarking || config.Watermarking.EffectiveDetectionMode)
