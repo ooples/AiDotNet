@@ -109,18 +109,6 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
     private Vector<T>? _scalingVectorBGradient;
 
     /// <summary>
-    /// Stored input from the forward pass, needed for gradient computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stored intermediate value (B * A * input) from forward pass, needed for backward pass.
-    /// </summary>
-    [Scratch]
-    private Matrix<T>? _lastIntermediate;
-
-    /// <summary>
     /// Initializes a new VeRA adapter wrapping an existing layer.
     /// </summary>
     /// <param name="baseLayer">The layer to adapt with VeRA.</param>
@@ -318,8 +306,6 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input.Clone();
-
         // Forward through base layer
         Tensor<T> baseOutput = _baseLayer.Forward(input);
 
@@ -353,7 +339,6 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
 
         // Compute: afterB * B (shared, frozen) → [batchSize, outputSize]
         Matrix<T> afterSharedB = afterB.Multiply(_sharedMatrixB ?? throw new InvalidOperationException("Shared matrix B not initialized."));
-        _lastIntermediate = afterSharedB.Clone(); // Store for backward pass
 
         // Apply scaling vector d element-wise: afterSharedB * diag(d) → [batchSize, outputSize]
         Matrix<T> afterD = new Matrix<T>(batchSize, outputSize);
@@ -524,8 +509,6 @@ public partial class VeRAAdapter<T> : LoRAAdapterBase<T>
     public override void ResetState()
     {
         _baseLayer.ResetState();
-        _lastInput = null;
-        _lastIntermediate = null;
         _scalingVectorDGradient = null;
         _scalingVectorBGradient = null;
     }

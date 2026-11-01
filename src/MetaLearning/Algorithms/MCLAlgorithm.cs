@@ -94,7 +94,8 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         : base(
             (options ?? throw new ArgumentNullException(nameof(options))).MetaModel,
             options.LossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(NeuralNetworkTaskType.MultiClassClassification),
-            options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer)
+            options, options.DataLoader, options.MetaOptimizer, options.InnerOptimizer,
+            optimizerUse: MetaLearnerOptimizerUse.Outer)
     {
         _mclOptions = options;
     }
@@ -138,11 +139,9 @@ public partial class MCLAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInpu
         }
 
         double beta = _mclOptions.OuterLearningRate;
-        ParamModel.SetParameters(ApplyGradients(body, bodyGradient, beta));
-        if (_projectionWeights.Length > 0)
-        {
-            _projectionWeights = ApplyGradients(_projectionWeights, projectionGradient, beta);
-        }
+        var updated = ApplyOuterGradients(beta, (body, bodyGradient), (_projectionWeights, projectionGradient));
+        ParamModel.SetParameters(updated[0]);
+        _projectionWeights = updated[1];
 
         return NumOps.Divide(totalLoss, batchSize);
     }

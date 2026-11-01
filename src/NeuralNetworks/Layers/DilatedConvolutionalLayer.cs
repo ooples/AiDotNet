@@ -233,48 +233,6 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _biases;
 
     /// <summary>
-    /// The input tensor from the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the input received during the last forward pass. It is necessary for computing
-    /// gradients during the backward pass (backpropagation).
-    /// </para>
-    /// <para><b>For Beginners:</b> This remembers what input data was processed most recently.
-    /// 
-    /// During training:
-    /// - The layer needs to remember what input it processed
-    /// - This helps it calculate how to update its filters
-    /// - It's like keeping your work when solving a math problem
-    /// 
-    /// This is automatically cleared after each training batch to save memory.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// The output tensor from the last forward pass, saved for backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This tensor stores the output produced during the last forward pass. It is used during
-    /// backpropagation to compute certain gradients, particularly for activation functions.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores what the layer output after its most recent calculation.
-    /// 
-    /// During training:
-    /// - The network needs to remember what predictions it made
-    /// - This helps calculate how to improve for next time
-    /// - It's used along with the true answer to adjust the weights
-    /// 
-    /// This is also cleared after each training batch to save memory.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// Stores the original input shape before any reshaping.
     /// </summary>
     private int[]? _originalInputShape;
@@ -609,8 +567,6 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             input4D = Engine.Reshape(input, new[] { flatBatch, input.Shape[rank - 3], input.Shape[rank - 2], input.Shape[rank - 1] });
         }
 
-        _lastInput = input4D;
-
         // Get the fused activation type for optimal GPU/CPU performance
         var fusedActivation = GetFusedActivationType();
 
@@ -626,9 +582,6 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
                 _padding, _padding,
                 _dilation, _dilation,
                 fusedActivation);
-
-            // Store activated output for backward pass gradient computation
-            _lastOutput = outputNCHW;
         }
         else
         {
@@ -643,7 +596,6 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             var biasReshaped = Engine.Reshape(_biases, [1, _outputDepth, 1, 1]);
             var withBias = Engine.TensorAdd(convOutput, biasReshaped);
             outputNCHW = ApplyActivation(withBias);
-            _lastOutput = outputNCHW;
         }
 
         // Return with matching dimensions to preserve original tensor rank
@@ -654,18 +606,18 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             for (int d = 0; d < _originalInputShape.Length - 3; d++)
                 outputShape[d] = _originalInputShape[d];
             outputShape[_originalInputShape.Length - 3] = _outputDepth;
-            outputShape[_originalInputShape.Length - 2] = _lastOutput.Shape[2];
-            outputShape[_originalInputShape.Length - 1] = _lastOutput.Shape[3];
-            return Engine.Reshape(_lastOutput, outputShape);
+            outputShape[_originalInputShape.Length - 2] = outputNCHW.Shape[2];
+            outputShape[_originalInputShape.Length - 1] = outputNCHW.Shape[3];
+            return Engine.Reshape(outputNCHW, outputShape);
         }
 
         if (_addedBatchDimension)
         {
             // 3D input [C, H, W] should produce 3D output [OutputDepth, outH, outW]
-            return Engine.Reshape(_lastOutput, new[] { _outputDepth, _lastOutput.Shape[2], _lastOutput.Shape[3] });
+            return Engine.Reshape(outputNCHW, new[] { _outputDepth, outputNCHW.Shape[2], outputNCHW.Shape[3] });
         }
 
-        return _lastOutput;
+        return outputNCHW;
     }
 
     /// <summary>
@@ -834,9 +786,7 @@ public partial class DilatedConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
+        // Clear gradients from the backward pass
         _kernelGradients = null;
         _biasGradients = null;
     }

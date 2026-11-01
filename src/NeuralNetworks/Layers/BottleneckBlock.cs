@@ -139,29 +139,6 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
     private int _inputWidth;
     private readonly bool _zeroInitResidual;
 
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastConv1Output;
-    [Scratch]
-    private Tensor<T>? _lastBn1Output;
-    [Scratch]
-    private Tensor<T>? _lastRelu1Output;
-    [Scratch]
-    private Tensor<T>? _lastConv2Output;
-    [Scratch]
-    private Tensor<T>? _lastBn2Output;
-    [Scratch]
-    private Tensor<T>? _lastRelu2Output;
-    [Scratch]
-    private Tensor<T>? _lastConv3Output;
-    [Scratch]
-    private Tensor<T>? _lastBn3Output;
-    [Scratch]
-    private Tensor<T>? _lastIdentity;
-    [Scratch]
-    private Tensor<T>? _lastPreActivation;
-
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -380,65 +357,42 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
         // identity-branch decision below.
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2 -> relu -> conv3 -> bn3. In inference each convolution and its
-        // batch norm (and the ReLU) run as one folded convolution (ConvolutionBatchNormFolding); the backward caches stay
-        // unset there.
-        if (ConvolutionBatchNormFolding<T>.TryForward(_conv1, _bn1, input, relu: true, out var relu1))
+        // batch norm (and the ReLU) run as one folded convolution (ConvolutionBatchNormFolding). The intermediates are
+        // locals: autodiff records what backward needs, and fields would keep every block's activations alive after
+        // the forward.
+        if (!ConvolutionBatchNormFolding<T>.TryForward(_conv1, _bn1, input, relu: true, out var relu1))
         {
-            _lastConv1Output = null;
-            _lastRelu1Output = relu1;
-        }
-        else
-        {
-            _lastConv1Output = _conv1.Forward(input);
             // Normalization and ReLU in one pass in inference (BatchNormalizationLayer.ForwardThenReLU).
-            _lastRelu1Output = _bn1.ForwardThenReLU(_lastConv1Output);
+            relu1 = _bn1.ForwardThenReLU(_conv1.Forward(input));
         }
-        _lastBn1Output = _lastRelu1Output;
 
-        if (ConvolutionBatchNormFolding<T>.TryForward(_conv2, _bn2, _lastRelu1Output, relu: true, out var relu2))
+        if (!ConvolutionBatchNormFolding<T>.TryForward(_conv2, _bn2, relu1, relu: true, out var relu2))
         {
-            _lastConv2Output = null;
-            _lastRelu2Output = relu2;
+            relu2 = _bn2.ForwardThenReLU(_conv2.Forward(relu1));
         }
-        else
-        {
-            _lastConv2Output = _conv2.Forward(_lastRelu1Output);
-            _lastRelu2Output = _bn2.ForwardThenReLU(_lastConv2Output);
-        }
-        _lastBn2Output = _lastRelu2Output;
 
-        if (ConvolutionBatchNormFolding<T>.TryForward(_conv3, _bn3, _lastRelu2Output, relu: false, out var bn3))
+        if (!ConvolutionBatchNormFolding<T>.TryForward(_conv3, _bn3, relu2, relu: false, out var bn3))
         {
-            _lastConv3Output = null;
-            _lastBn3Output = bn3;
-        }
-        else
-        {
-            _lastConv3Output = _conv3.Forward(_lastRelu2Output);
-            _lastBn3Output = _bn3.Forward(_lastConv3Output);
+            bn3 = _bn3.Forward(_conv3.Forward(relu2));
         }
 
         // Identity/skip branch
+        Tensor<T> identity;
         if (_hasDownsample && _downsampleConv is not null && _downsampleBn is not null)
         {
-            _lastIdentity = ConvolutionBatchNormFolding<T>.TryForward(_downsampleConv, _downsampleBn, input, relu: false,
+            identity = ConvolutionBatchNormFolding<T>.TryForward(_downsampleConv, _downsampleBn, input, relu: false,
                 out var downsampled)
                 ? downsampled
                 : _downsampleBn.Forward(_downsampleConv.Forward(input));
         }
         else
         {
-            _lastIdentity = input;
+            identity = input;
         }
 
-        // Add residual connection
-        _lastPreActivation = Engine.TensorAdd(_lastBn3Output, _lastIdentity);
-
-        // Final ReLU
-        return ApplyReLU(_lastPreActivation);
+        // Add residual connection, then the final ReLU
+        return ApplyReLU(Engine.TensorAdd(bn3, identity));
     }
 
     /// <summary>
@@ -553,18 +507,6 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastConv1Output = null;
-        _lastBn1Output = null;
-        _lastRelu1Output = null;
-        _lastConv2Output = null;
-        _lastBn2Output = null;
-        _lastRelu2Output = null;
-        _lastConv3Output = null;
-        _lastBn3Output = null;
-        _lastIdentity = null;
-        _lastPreActivation = null;
-
         _conv1.ResetState();
         _bn1.ResetState();
         _conv2.ResetState();

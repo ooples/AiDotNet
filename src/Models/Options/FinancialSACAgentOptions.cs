@@ -18,7 +18,7 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FinancialSACAgentOptions<T> : TradingAgentOptions<T>
 {
-    /// <summary>Creates Haarnoja et al. 2018a's defaults.</summary>
+    /// <summary>Creates options with the default values.</summary>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public FinancialSACAgentOptions()
     {
@@ -31,7 +31,8 @@ public class FinancialSACAgentOptions<T> : TradingAgentOptions<T>
         AutoTuneAlpha = false;
     }
 
-    /// <summary>Copies every option, the base's included.</summary>
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public FinancialSACAgentOptions(FinancialSACAgentOptions<T> other) : base(other)
     {

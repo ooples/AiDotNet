@@ -19,7 +19,7 @@ namespace System.Collections.Generic
     /// This is a polyfill implementation for .NET Framework compatibility.
     /// It uses a binary heap internally for O(log n) enqueue and dequeue operations.
     /// </remarks>
-    public class PriorityQueue<TElement, TPriority>
+    internal class PriorityQueue<TElement, TPriority>
     {
         private readonly List<(TElement Element, TPriority Priority)> _heap;
         private readonly IComparer<TPriority> _comparer;

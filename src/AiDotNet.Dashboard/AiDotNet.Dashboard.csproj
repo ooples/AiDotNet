@@ -19,4 +19,10 @@
     <Reference Include="System.Net.Http" />
   </ItemGroup>
 
+  <!-- AiDotNet's System.* polyfills are internal (#2392), so the net471 build compiles its own internal copy for the
+       Dictionary.GetValueOrDefault it uses. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net471'">
+    <Compile Include="..\Polyfills\NetFrameworkPolyfills.cs" Link="Polyfills\NetFrameworkPolyfills.cs" />
+  </ItemGroup>
+
 </Project>

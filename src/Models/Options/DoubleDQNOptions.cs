@@ -59,6 +59,7 @@ public class DoubleDQNOptions<T> : ModelOptions
     /// <summary>Hidden layer sizes for the Q-network.</summary>
     public List<int> HiddenLayers { get; set; } = new List<int> { 64, 64 };
 
+    /// <summary>Creates options with the default values.</summary>
     public DoubleDQNOptions()
     {
         var numOps = MathHelper.GetNumericOperations<T>();

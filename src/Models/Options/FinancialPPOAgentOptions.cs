@@ -21,7 +21,7 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class FinancialPPOAgentOptions<T> : TradingAgentOptions<T>
 {
-    /// <summary>Creates the paper's defaults.</summary>
+    /// <summary>Creates options with the default values.</summary>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public FinancialPPOAgentOptions()
     {
@@ -36,7 +36,8 @@ public class FinancialPPOAgentOptions<T> : TradingAgentOptions<T>
         ValueCoefficient = 1.0;
     }
 
-    /// <summary>Copies every option, the base's included.</summary>
+    /// <summary>Creates a copy of another options instance.</summary>
+    /// <param name="other">The options to copy.</param>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public FinancialPPOAgentOptions(FinancialPPOAgentOptions<T> other) : base(other)
     {

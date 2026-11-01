@@ -1,4 +1,4 @@
-// Copyright (c) AiDotNet. All rights reserved.
+// Copyright (c) CrowdTrainer LLC. All rights reserved.
 // #99 Stage 1b end-to-end: a real (embedding-based) transformer LM served through
 // ServableModelWrapper drives KV-cached incremental decode via per-request sessions. Proves the
 // wrapper builds the incremental path, generation produces in-range tokens, and concurrent requests

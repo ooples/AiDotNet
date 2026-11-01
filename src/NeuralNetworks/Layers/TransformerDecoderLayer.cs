@@ -661,15 +661,14 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             {
                 var activation = _lazyFfnActivation ?? new GELUActivation<T>();
 
-                // The attention sublayers are linear (Vaswani et al. 2017, §3.2.2: the heads' concatenation is projected
-                // by W^O with no nonlinearity); the FFN activation used to be applied to them as well. An autoregressive
-                // decoder's self-attention is masked so position i only sees positions <= i (§3.1); see IsCausal.
-                _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, new IdentityActivation<T>() as IActivationFunction<T>)
+                // The FFN activation applies to the feed-forward only. Self- and cross-attention outputs carry no
+                // activation (Vaswani et al. 2017; PyTorch's nn.TransformerDecoderLayer has none).
+                _selfAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads)
                 {
                     UseCausalMask = _causal,
                 };
                 _norm1 = new LayerNormalizationLayer<T>();
-                _crossAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads, new IdentityActivation<T>() as IActivationFunction<T>);
+                _crossAttention = new MultiHeadAttentionLayer<T>(_numHeads, _embeddingSize / _numHeads);
                 _norm2 = new LayerNormalizationLayer<T>();
                 _feedForward = new FeedForwardLayer<T>(_feedForwardDim, activation);
                 _feedForwardProjection = new FeedForwardLayer<T>(_embeddingSize, (IActivationFunction<T>?)null);

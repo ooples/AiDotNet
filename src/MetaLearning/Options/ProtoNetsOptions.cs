@@ -105,21 +105,13 @@ public class ProtoNetsOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOp
 
     #region Optional Properties with Defaults
 
-    /// <summary>
-    /// Gets or sets the loss function for training.
-    /// Default: null (uses cross-entropy loss internally).
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// ProtoNets typically uses cross-entropy loss with softmax over negative distances.
-    /// This encourages the correct class prototype to be closer than other prototypes.
-    /// </para>
-    /// </remarks>
+    /// <summary>Loss function for meta-training; null uses cross-entropy over logits.</summary>
     public ILossFunction<T>? LossFunction { get; set; }
 
     /// <summary>
-    /// Gets or sets the optimizer for feature encoder updates.
-    /// Default: null (uses built-in Adam optimizer with OuterLearningRate).
+    /// Optimizer for the meta-update. When set, it takes the outer step at its own learning rate (so
+    /// <see cref="OuterLearningRate"/> no longer applies) and keeps its state across meta-iterations; null uses
+    /// plain SGD at <see cref="OuterLearningRate"/>.
     /// </summary>
     public IGradientBasedOptimizer<T, TInput, TOutput>? MetaOptimizer { get; set; }
 

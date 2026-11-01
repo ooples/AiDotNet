@@ -33,8 +33,11 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class TRPOOptions<T> : ReinforcementLearningOptions<T>
 {
+    /// <summary>Number of features in one observation of the environment state.</summary>
     public int StateSize { get; init; } = 1;
+    /// <summary>Number of discrete actions, or the dimension of the action vector for a continuous action space.</summary>
     public int ActionSize { get; init; } = 1;
+    /// <summary>Whether the action space is continuous rather than discrete.</summary>
     public bool IsContinuous { get; init; } = false;
     /// <summary>Adam learning rate of the value baseline. Default: 0.001.</summary>
     public T ValueLearningRate { get; init; }
@@ -63,8 +66,11 @@ public class TRPOOptions<T> : ReinforcementLearningOptions<T>
     /// <summary>The line search's exponential shrink factor (appendix C). Default: 0.5.</summary>
     public double LineSearchBacktrackCoeff { get; init; } = 0.5;
 
+    /// <summary>Number of environment steps collected before each policy update.</summary>
     public int StepsPerUpdate { get; init; } = 2048;
+    /// <summary>Number of value-function gradient steps per update.</summary>
     public int ValueIterations { get; init; } = 5;
+    /// <summary>Loss function used to train the value network.</summary>
     public ILossFunction<T> ValueLossFunction { get; init; } = new MeanSquaredErrorLoss<T>();
     /// <summary>Hidden layer widths of the policy (tanh). Default: one layer of 30 units, the swimmer policy of
     /// figure 3 (the hopper and walker used 50, table 2).</summary>
@@ -79,6 +85,7 @@ public class TRPOOptions<T> : ReinforcementLearningOptions<T>
     /// </summary>
     public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
 
+    /// <summary>Creates options with the default values.</summary>
     public TRPOOptions()
     {
         var numOps = MathHelper.GetNumericOperations<T>();
