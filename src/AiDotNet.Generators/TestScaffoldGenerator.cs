@@ -10632,23 +10632,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if ((model.ClassName == "Qwen3ASR" || model.ClassName == "Qwen3ASRSmall")
                      && model.TypeParameterCount == 1)
             {
-                // Qwen3-ASR and Qwen3-ASR-Small (Alibaba 2025) retain their production defaults of,
-                // respectively, 1024-wide/24-layer and 512-wide/12-layer encoders with a 151,936-entry
-                // vocabulary. At those scales the generated CPU training invariants exceed 120 seconds
-                // (and the full model can exhaust the 16 GB runner). Exercise the same mel encoder ->
-                // LLM-integrated transformer -> CTC vocabulary-head topology at CI scale through each
-                // model's public options. This changes only generated tests; paper defaults and every
-                // customization point remain intact. NumMels=64 matches the generated [1,64,32] input,
-                // and NumAttentionHeads=2 divides EncoderDim=32. Both classes are floatified afterwards.
+                // Qwen3-ASR-1.7B and -0.6B: the AuT encoder (80-band Whisper log-mel, 4-channel convolutions, width 16,
+                // one layer) and a one-layer Qwen3 decoder at width 16 with a 16-token vocabulary, which has no ChatML
+                // prompt text. Production defaults are the releases'.
                 string qwenOptionsType = model.ClassName == "Qwen3ASR"
                     ? "AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASROptions"
                     : "AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASRSmallOptions";
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    $"new {qwenOptionsType} {{ EncoderDim = 32, " +
-                    "NumEncoderLayers = 1, NumAttentionHeads = 2, NumMels = 64, VocabSize = 64 })";
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.SequenceToSequence, " +
+                    "inputSize: 3200, outputSize: 16), " +
+                    $"new {qwenOptionsType} {{ NumMels = 80, EncoderDim = 16, NumEncoderLayers = 1, " +
+                    "NumAttentionHeads = 2, EncoderFeedForwardDim = 32, DownsampleChannels = 4, LlmHiddenDim = 16, " +
+                    "NumLlmLayers = 1, LlmHeads = 2, LlmKeyValueHeads = 1, LlmHeadDim = 8, LlmIntermediateDim = 32, " +
+                    "VocabSize = 16, MaxTextLength = 4 })";
             }
             else if (model.ClassName == "AVHuBERT" && model.TypeParameterCount == 1)
             {
@@ -16850,6 +16847,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // logits over the start of transcript and the LID task token.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 16 };");
+            }
+            else if (model.ClassName is "Qwen3ASR" or "Qwen3ASRSmall")
+            {
+                // Qwen3-ASR reads waveforms (0.2 s) and returns the decoder's logits for the answer's first token.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 3200 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 16 };");
             }
             else if (model.ClassName == "FunASRNano")
             {
