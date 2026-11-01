@@ -156,7 +156,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ResNetOptions? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new ResNetOptions()).MaxGradNorm)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossForGeneratedLogitsHead(architecture), (options ??= new ResNetOptions()).MaxGradNorm)
     {
         _options = options;
         Options = _options;
@@ -174,7 +174,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossForGeneratedLogitsHead(architecture);
 
         InitializeLayers();
     }
@@ -372,15 +372,14 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         layers.Add(new FlattenLayer<T>());
 
         // Fully connected classifier
+        // The head emits raw logits, as torchvision's ResNet does: the default loss is the with-logits form
+        // (NeuralNetworkHelper.GetDefaultLogitsLossFunction), which applies the softmax or sigmoid itself. A softmax
+        // here under a with-logits loss applied it twice, and training barely moved.
         if (config.IncludeClassifier)
         {
-            var outputActivation = Architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
-                ? (IActivationFunction<T>)new ActivationFunctions.SigmoidActivation<T>()
-                : new ActivationFunctions.SoftmaxActivation<T>();
-
             layers.Add(new DenseLayer<T>(
                 outputSize: config.NumClasses,
-                activationFunction: outputActivation));
+                activationFunction: new ActivationFunctions.IdentityActivation<T>()));
         }
 
         return layers;
@@ -400,7 +399,8 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <para>
     /// <b>For Beginners:</b> This is how the network makes predictions. You give it an image
     /// (as a tensor), and it processes it through all the ResNet layers to produce a prediction.
-    /// The output contains probabilities for each class.
+    /// The output is one raw score (logit) per class, as torchvision's models return: apply a softmax (a sigmoid for
+    /// binary or multi-label tasks) to read them as probabilities. The highest score is the predicted class either way.
     /// </para>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
@@ -463,7 +463,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// Makes a prediction using the ResNet network for the given input.
     /// </summary>
     /// <param name="input">The input tensor to make a prediction for.</param>
-    /// <returns>The predicted output tensor containing class probabilities.</returns>
+    /// <returns>The predicted output tensor of raw class logits (no softmax applied).</returns>
     /// <summary>
     /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> so the
     /// forward pass gets traced and replayed by <c>CompiledModelHost</c> after warmup —

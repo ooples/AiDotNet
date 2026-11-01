@@ -158,7 +158,7 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         VGGOptions? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new VGGOptions()).MaxGradNorm)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossForGeneratedLogitsHead(architecture), (options ??= new VGGOptions()).MaxGradNorm)
     {
         _options = options;
         Options = _options;
@@ -177,7 +177,7 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossForGeneratedLogitsHead(architecture);
 
         InitializeLayers();
     }
@@ -248,12 +248,13 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <remarks>
     /// <para>
     /// The forward pass sequentially processes the input through each layer of the network:
-    /// convolution blocks, pooling, fully connected layers, and produces class probabilities.
+    /// convolution blocks, pooling, fully connected layers, and produces raw class logits.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This is how the network makes predictions. You give it an image
     /// (as a tensor), and it processes it through all the VGG layers to produce a prediction.
-    /// The output contains probabilities for each class.
+    /// The output is one raw score (logit) per class, as torchvision's models return: apply a softmax (a sigmoid for
+    /// binary or multi-label tasks) to read them as probabilities. The highest score is the predicted class either way.
     /// </para>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
@@ -323,12 +324,12 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// Makes a prediction using the VGG network for the given input.
     /// </summary>
     /// <param name="input">The input tensor to make a prediction for.</param>
-    /// <returns>The predicted output tensor containing class probabilities.</returns>
+    /// <returns>The predicted output tensor of raw class logits (no softmax applied).</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This is the main method you'll use after training. Give it an
-    /// image, and it returns probabilities for each class. The class with the highest
-    /// probability is the network's prediction.
+    /// image, and it returns one score (logit) per class. The class with the highest score is the network's
+    /// prediction; a softmax over the scores gives probabilities.
     /// </para>
     /// </remarks>
     /// <summary>

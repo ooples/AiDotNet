@@ -1129,10 +1129,11 @@ public static partial class LayerHelper<T>
             );
             yield return new DropoutLayer<T>((float)configuration.DropoutRate);
 
-            // FC3 (Output): 4096 -> numClasses
+            // FC3 (Output): 4096 -> numClasses, raw logits (as torchvision's VGG); VGGNetwork's default loss is the
+            // with-logits form, which applies the softmax itself.
             yield return new DenseLayer<T>(
                 outputSize: configuration.NumClasses,
-                activationFunction: new SoftmaxActivation<T>() as IActivationFunction<T>,
+                activationFunction: new IdentityActivation<T>() as IActivationFunction<T>,
                 initializationStrategy: InitializationStrategies<T>.Lazy
             );
         }
