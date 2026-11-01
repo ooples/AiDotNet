@@ -16861,9 +16861,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "GenreClassifier")
             {
-                // Tzanetakis and Cook's 30 musical surface features in, one posterior per genre (the paper's ten) out.
-                sb.AppendLine("    protected override int[] InputShape => new[] { 30 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 10 };");
+                // Tzanetakis and Cook's 30 musical surface features per recording in, one posterior per genre (the
+                // paper's ten) out. The features have a fixed width, so the variable axis is the batch of recordings.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 30 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 10 };");
+                sb.AppendLine("    protected override int VariableLengthAxis => 0;");
             }
             else if (model.ClassName == "AudioEventDetector")
             {

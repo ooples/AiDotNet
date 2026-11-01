@@ -65,6 +65,17 @@ public partial class GaussianMixtureClassifierLayer<T> : LayerBase<T>, IShapeCon
     /// <summary>Gaussians per class.</summary>
     internal int Components => _components;
 
+    /// <summary>Draws every mean from a standard normal, so the classes differ before any fit.</summary>
+    internal void InitializeMeans(Random random)
+    {
+        for (int i = 0; i < _means.Length; i++)
+        {
+            double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
+            _means[i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
+        }
+        Engine.InvalidatePersistentTensor(_means);
+    }
+
     /// <inheritdoc />
     /// <remarks>The trailing feature axis becomes one log-likelihood per class; a leading batch axis is carried.</remarks>
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
@@ -103,6 +114,9 @@ public partial class GaussianMixtureClassifierLayer<T> : LayerBase<T>, IShapeCon
     /// Fits every class's mixture to its samples by maximum likelihood: K-means initialization, then EM for diagonal
     /// covariance (Tzanetakis and Cook 2002, section IV). A class without samples keeps its parameters.
     /// </summary>
+    /// <remarks>Each variance carries one pseudo-observation of the pooled spread of all the samples (a conjugate
+    /// prior): <c>(sum_i r_i (x_i - mu)^2 + v0) / (sum_i r_i + 1)</c>. The paper does not state its regularization; this
+    /// one keeps a class with few samples from collapsing onto them and vanishes as the class grows.</remarks>
     /// <param name="samples">The feature vectors.</param>
     /// <param name="labels">Each sample's class.</param>
     /// <param name="iterations">EM iterations (and K-means iterations).</param>
@@ -110,27 +124,31 @@ public partial class GaussianMixtureClassifierLayer<T> : LayerBase<T>, IShapeCon
     internal void Fit(IReadOnlyList<double[]> samples, IReadOnlyList<int> labels, int iterations, int seed)
     {
         var random = RandomHelper.CreateSeededRandom(seed);
+        var prior = new double[_features];
+        if (samples.Count > 0)
+        {
+            for (int j = 0; j < _features; j++)
+            {
+                double mean = samples.Average(x => x[j]);
+                prior[j] = samples.Average(x => (x[j] - mean) * (x[j] - mean));
+            }
+        }
+        for (int j = 0; j < _features; j++) if (!(prior[j] > VarianceFloor)) prior[j] = 1.0;
         for (int c = 0; c < _classes; c++)
         {
             var points = new List<double[]>();
             for (int i = 0; i < samples.Count; i++) if (labels[i] == c) points.Add(samples[i]);
             if (points.Count == 0) continue;
-            FitClass(c, points, iterations, random);
+            FitClass(c, points, prior, iterations, random);
         }
         Engine.InvalidatePersistentTensor(_means);
         Engine.InvalidatePersistentTensor(_logVariances);
         Engine.InvalidatePersistentTensor(_logWeights);
     }
 
-    private void FitClass(int c, List<double[]> points, int iterations, Random random)
+    private void FitClass(int c, List<double[]> points, double[] prior, int iterations, Random random)
     {
         int n = points.Count, k = _components, d = _features;
-        // The class's per-feature variance sets the floor, so features of very different scales are each regularized.
-        var globalMean = new double[d];
-        var floor = new double[d];
-        foreach (var p in points) for (int j = 0; j < d; j++) globalMean[j] += p[j] / n;
-        foreach (var p in points) for (int j = 0; j < d; j++) floor[j] += (p[j] - globalMean[j]) * (p[j] - globalMean[j]) / n;
-        for (int j = 0; j < d; j++) floor[j] = Math.Max(floor[j] * 1e-3, VarianceFloor);
 
         // K-means: centres from distinct samples, then Lloyd iterations.
         var centres = points.OrderBy(_ => random.Next()).Take(k).Select(p => (double[])p.Clone()).ToList();
@@ -138,7 +156,7 @@ public partial class GaussianMixtureClassifierLayer<T> : LayerBase<T>, IShapeCon
         var assignment = new int[n];
         for (int it = 0; it < iterations; it++)
         {
-            for (int i = 0; i < n; i++) assignment[i] = Nearest(points[i], centres, floor);
+            for (int i = 0; i < n; i++) assignment[i] = Nearest(points[i], centres, prior);
             for (int m = 0; m < k; m++)
             {
                 var members = Enumerable.Range(0, n).Where(i => assignment[i] == m).ToList();
@@ -156,7 +174,7 @@ public partial class GaussianMixtureClassifierLayer<T> : LayerBase<T>, IShapeCon
             var members = Enumerable.Range(0, n).Where(i => assignment[i] == m).ToList();
             weights[m] = Math.Max(members.Count, 1) / (double)(n + k);
             for (int j = 0; j < d; j++)
-                variances[m][j] = members.Count > 1 ? Math.Max(members.Average(i => (points[i][j] - means[m][j]) * (points[i][j] - means[m][j])), floor[j]) : Math.Max(floor[j] * 1e3, VarianceFloor);
+                variances[m][j] = (members.Sum(i => (points[i][j] - means[m][j]) * (points[i][j] - means[m][j])) + prior[j]) / (members.Count + 1);
         }
 
         var responsibility = new double[n, k];
@@ -197,7 +215,7 @@ public partial class GaussianMixtureClassifierLayer<T> : LayerBase<T>, IShapeCon
                     double variance = 0;
                     for (int i = 0; i < n; i++) variance += responsibility[i, m] * (points[i][j] - mean) * (points[i][j] - mean);
                     means[m][j] = mean;
-                    variances[m][j] = Math.Max(variance / mass, floor[j]);
+                    variances[m][j] = Math.Max((variance + prior[j]) / (mass + 1), VarianceFloor);
                 }
             }
         }

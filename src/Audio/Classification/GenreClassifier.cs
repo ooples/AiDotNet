@@ -162,7 +162,7 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
         NeuralNetworkArchitecture<T> architecture,
         GenreClassifierOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>())
     {
         _options = options ?? new GenreClassifierOptions();
         Options = _options;
@@ -244,8 +244,12 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
         else
         {
             // Section IV: one Gaussian mixture with diagonal covariance per genre over the 30 features.
-            Layers.Add(new AiDotNet.NeuralNetworks.Layers.GaussianMixtureClassifierLayer<T>(
-                ClassLabels.Count, _options.MixtureComponents, MusicalSurfaceFeatures.Length));
+            var mixtures = new AiDotNet.NeuralNetworks.Layers.GaussianMixtureClassifierLayer<T>(
+                ClassLabels.Count, _options.MixtureComponents, MusicalSurfaceFeatures.Length);
+            mixtures.InitializeMeans(_options.Seed is int seed
+                ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed)
+                : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom());
+            Layers.Add(mixtures);
         }
     }
 
@@ -521,6 +525,16 @@ public partial class GenreClassifier<T> : AudioClassifierBase<T>, IGenreClassifi
 
     /// <inheritdoc />
     protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+
+    /// <inheritdoc />
+    /// <exception cref="NotSupportedException">The paper's EM fit (no optimizer) computes no gradients.</exception>
+    public override Vector<T> GetParameterGradients()
+    {
+        if (_useNativeMode && _optimizer is null)
+            throw new NotSupportedException("GenreClassifier fits its mixtures with EM, which computes no gradients; " +
+                "construct it with an optimizer for gradient training.");
+        return base.GetParameterGradients();
+    }
 
     /// <summary>
     /// The paper's training: every genre's mixture is fitted by EM to the feature vectors labelled with it (section IV).

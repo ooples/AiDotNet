@@ -99,8 +99,9 @@ public class GenreClassifierPaperTests
     public async Task SimpleGaussian_LogLikelihoodIsTheClassGaussiansDensity()
     {
         await Task.Yield();
-        // One component per class is the paper's simple Gaussian classifier: the EM fit is the sample mean and the
-        // (population) variance of each feature, and the output is the diagonal Gaussian log density.
+        // One component per class is the paper's simple Gaussian classifier: the fit is the sample mean and variance of
+        // each feature (the variance with one pseudo-observation of the pooled spread, the layer's documented prior),
+        // and the output is the diagonal Gaussian log density.
         var options = new GenreClassifierOptions { MixtureComponents = 1, CustomGenres = new[] { "a", "b" } };
         using var model = new GenreClassifier<double>(options);
         int n = 6, d = MusicalSurfaceFeatures.Length;
@@ -119,7 +120,10 @@ public class GenreClassifierPaperTests
         for (int j = 0; j < d; j++)
         {
             var column = Enumerable.Range(0, n).Select(i => inputs[i, j]).ToArray();
-            double mean = column.Average(), variance = column.Select(v => (v - mean) * (v - mean)).Average();
+            var pooled = Enumerable.Range(0, 2 * n).Select(i => inputs[i, j]).ToArray();
+            double pooledMean = pooled.Average(), prior = pooled.Select(v => (v - pooledMean) * (v - pooledMean)).Average();
+            double mean = column.Average();
+            double variance = (column.Select(v => (v - mean) * (v - mean)).Sum() + prior) / (n + 1);
             expected += -0.5 * (Math.Log(2 * Math.PI * variance) + (x[j] - mean) * (x[j] - mean) / variance);
         }
         var logLikelihood = model.Layers[0].Forward(new Tensor<double>(x, new[] { d }));
