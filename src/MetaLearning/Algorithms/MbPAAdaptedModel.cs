@@ -76,12 +76,13 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
     private readonly MbPAEpisodicMemory<T> _memory;
     private readonly MbPAOptions<T, TInput, TOutput> _options;
 
-    // The embedding parameters the shared memory's keys were computed with: the writer's. A constructor argument, so
-    // a clone rebuilt from this model's (possibly changed) embedding network still knows which parameters wrote them.
+    // The embedding parameters a key stored through the memory's public Write (which records none) is taken to have
+    // been computed with: the embedding this model was adapted from. A constructor argument, so a clone rebuilt from
+    // this model's (possibly changed) embedding network still knows them.
     private readonly Vector<T> _keyEmbeddingParameters;
 
-    // The memory re-keyed with this model's embedding, and the embedding parameters and memory version it was built
-    // for; rebuilt when either moves.
+    // The memory as keyed for this model's embedding (the shared memory itself when every key is already this
+    // embedding's), and the embedding parameters and memory version it was built for; rebuilt when either moves.
     private MbPAEpisodicMemory<T>? _rekeyedMemory;
     private Vector<T>? _rekeyedEmbeddingParameters;
     private long _rekeyedMemoryVersion;
@@ -155,24 +156,26 @@ public partial class MbPAAdaptedModel<T, TInput, TOutput> : MetaLearningModelBas
     }
 
     /// <summary>
-    /// The memory to retrieve from: the shared one while this model's embedding network still has the parameters the
-    /// keys were written with, else that memory re-keyed with this model's embedding network.
+    /// The memory to retrieve from: the shared one while every key in it was computed with this model's embedding
+    /// parameters, else a copy in which the other keys are recomputed with this model's embedding network.
     /// </summary>
     /// <remarks>
-    /// <c>SetParameters</c> and <c>WithParameters</c> span the embedding network too. Comparing a query from a changed
-    /// embedding against keys from the old one retrieves neighbours by distances that mean nothing, so the keys are
-    /// recomputed from their source examples instead. The shared memory itself is never modified.
+    /// Keys from another embedding reach this model two ways: <c>SetParameters</c> and <c>WithParameters</c> span the
+    /// embedding network, and the meta-learner keeps writing to the shared memory after this model was adapted, with
+    /// keys from its own, later embedding. Comparing a query against another embedding's keys retrieves neighbours by
+    /// distances that mean nothing, so each such key is recomputed from its source example. The shared memory itself
+    /// is never modified.
     /// </remarks>
     private MbPAEpisodicMemory<T> MemoryForThisEmbedding()
     {
         var current = BaseModel.GetParameters();
-        if (SameParameters(current, _keyEmbeddingParameters)) return _memory;
-
         if (_rekeyedMemory is null || _rekeyedMemoryVersion != _memory.Version
             || _rekeyedEmbeddingParameters is null || !SameParameters(current, _rekeyedEmbeddingParameters))
         {
-            _rekeyedMemory = _memory.Rekeyed(source => Embed((TInput)source));
-            _rekeyedEmbeddingParameters = current.Clone();
+            var snapshot = current.Clone();
+            _rekeyedMemory = _memory.KeyedFor(snapshot, _keyEmbeddingParameters, SameParameters,
+                source => Embed((TInput)source));
+            _rekeyedEmbeddingParameters = snapshot;
             _rekeyedMemoryVersion = _memory.Version;
         }
         return _rekeyedMemory;

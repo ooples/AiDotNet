@@ -286,11 +286,14 @@ public partial class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     {
         var keys = EmbedBatch(inputs);
         var values = ExtractTargets(targets, keys.Count);
+        // The parameters that embedded this batch, shared by its entries: a reader with other parameters (a model
+        // adapted before the meta-learner moved on, or one whose parameters were set) recomputes these keys.
+        var keyParameters = MetaModel.GetParameters().Clone();
         for (int i = 0; i < keys.Count; i++)
         {
-            // The source example travels with its key: an adapted model whose embedding network is changed re-keys
-            // the memory from it (MbPAAdaptedModel.MemoryForThisEmbedding).
-            _memory.Write(keys[i], values[i], MbPAConversions<T>.SliceExample(inputs, i));
+            // The source example travels with its key, so the key can be recomputed
+            // (MbPAAdaptedModel.MemoryForThisEmbedding).
+            _memory.Write(keys[i], values[i], MbPAConversions<T>.SliceExample(inputs, i), keyParameters);
         }
     }
 

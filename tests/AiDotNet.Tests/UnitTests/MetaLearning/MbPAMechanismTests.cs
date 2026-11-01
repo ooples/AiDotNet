@@ -442,12 +442,69 @@ public class MbPAMechanismTests
     }
 
     [Fact]
+    public void AdaptedModel_AfterTheMetaLearnerWritesWithANewerEmbedding_RetrievesByItsOwnEmbeddingsKeys()
+    {
+        // The meta-learner keeps training and writing after a model was adapted from it. Entries it writes with its
+        // newer embedding share the memory with the adapted model, whose own parameters never changed; it must
+        // retrieve as if every key were its own embedding's, as a learner that kept the original embedding would.
+        var original = new[] { 1.0, 1.0, 1.0, 1.0, 0.0 };
+        var newer = new[] { 10.0, 1.0, 1.0, 1.0, 0.0 };
+        var probe = BuildScaledProbe();
+        var task = new MetaLearningTask<double, Matrix<double>, Vector<double>>
+        {
+            SupportSetX = probe.Support, SupportSetY = probe.SupportY,
+            QuerySetX = probe.Query, QuerySetY = probe.QueryY,
+        };
+
+        var learner = BuildScaledAlgorithm(original);
+        var adapted = learner.Adapt(task);
+        learner.GetMetaModel().SetParameters(new Vector<double>(newer));
+        learner.WriteToMemory(probe.Query, probe.QueryY);
+
+        var referenceLearner = BuildScaledAlgorithm(original);
+        var reference = referenceLearner.Adapt(task);
+        referenceLearner.WriteToMemory(probe.Query, probe.QueryY);
+
+        // Discriminating: the newer embedding moves those entries' keys (feature 0 scaled by 10), so retrieving by the
+        // keys the learner wrote would differ from the reference.
+        var firstQuery = Row(probe.Query, 0);
+        Assert.NotEqual(BuildScaledAlgorithm(original).GetMetaModel().Predict(firstQuery)[0],
+            learner.GetMetaModel().Predict(firstQuery)[0]);
+        Assert.Equal(referenceLearner.MemoryCount, learner.MemoryCount);
+
+        for (int row = 0; row < probe.Query.Rows; row++)
+        {
+            var query = Row(probe.Query, row);
+            var expected = reference.Predict(query);
+            var actual = adapted.Predict(query);
+            for (int i = 0; i < expected.Length; i++) Assert.Equal(expected[i], actual[i], 10);
+        }
+    }
+
+    [Fact]
     public void Rekeying_ThrowsForAnEntryWrittenWithoutItsSourceExample()
     {
+        // A pair stored through the public Write records no source; read by an embedding other than the one it is
+        // taken to have been written with, its key cannot be recomputed.
         var memory = new MbPAEpisodicMemory<double>(4);
         memory.Write(new Vector<double>(new[] { 1.0 }), new Vector<double>(new[] { 2.0 }));
 
-        Assert.Throws<InvalidOperationException>(() => memory.Rekeyed(_ => new Vector<double>(1)));
+        Assert.Throws<InvalidOperationException>(() => memory.KeyedFor(
+            new Vector<double>(new[] { 9.0 }), new Vector<double>(new[] { 1.0 }),
+            (a, b) => a[0] == b[0], _ => new Vector<double>(1)));
+    }
+
+    [Fact]
+    public void KeyedFor_ReturnsTheMemoryItselfWhenEveryKeyIsTheReadersEmbeddings()
+    {
+        var memory = new MbPAEpisodicMemory<double>(4);
+        memory.Write(new Vector<double>(new[] { 1.0 }), new Vector<double>(new[] { 2.0 }));
+        var parameters = new Vector<double>(new[] { 3.0 });
+
+        var keyed = memory.KeyedFor(parameters, parameters, (a, b) => a[0] == b[0],
+            _ => throw new InvalidOperationException("no key needed recomputing"));
+
+        Assert.Same(memory, keyed);
     }
 
     [Fact]
