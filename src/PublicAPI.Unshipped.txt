@@ -3549,8 +3549,6 @@ AiDotNet.SpeechRecognition.Multilingual.XLSROptions.LayerDrop.set -> void
 AiDotNet.SpeechRecognition.Multilingual.XLSROptions.FreezeFeatureEncoder.get -> bool
 AiDotNet.SpeechRecognition.Multilingual.XLSROptions.MaskTimeProbability.set -> void
 AiDotNet.SpeechRecognition.Multilingual.XLSROptions.FreezeFeatureEncoder.set -> void
-AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.SpeechGPT(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.MultiModal.SpeechGPTOptions? options) -> void
-AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.SpeechGPT(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> void
 AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.SupportedLanguages.get -> System.Collections.Generic.IReadOnlyList<string!>!
 AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.SupportsStreaming.get -> bool
 AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.SupportsWordTimestamps.get -> bool
@@ -4334,8 +4332,6 @@ AiDotNet.TextToSpeech.Classic.ProDiff<T>.BeginDistillation(AiDotNet.TextToSpeech
 override AiDotNet.SpeechRecognition.CTCVariants.InterCTC<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.Multilingual.OWSM<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.CTCVariants.InterCTC<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.SpeechRecognition.Streaming.Moshi<T>.Moshi(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.MultiModal.MoshiOptions? options) -> void
-AiDotNet.SpeechRecognition.Streaming.Moshi<T>.Moshi(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> void
 AiDotNet.SpeechRecognition.Streaming.Moshi<T>.SupportedLanguages.get -> System.Collections.Generic.IReadOnlyList<string!>!
 AiDotNet.SpeechRecognition.Streaming.Moshi<T>.SupportsStreaming.get -> bool
 AiDotNet.SpeechRecognition.Streaming.Moshi<T>.SupportsWordTimestamps.get -> bool
@@ -10723,7 +10719,6 @@ AiDotNet.TextToSpeech.MultiModal.SpeechGptResponse<T>.Units.get -> int[]!
 AiDotNet.TextToSpeech.MultiModal.SpeechGptResponse<T>.Units.init -> void
 AiDotNet.TextToSpeech.MultiModal.SpeechGptResponse<T>.Audio.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.MultiModal.SpeechGptResponse<T>.Audio.init -> void
-AiDotNet.TextToSpeech.MultiModal.SpeechGPT<T>.SpeechGPT(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.MultiModal.SpeechGPTOptions? options = null) -> void
 override AiDotNet.TextToSpeech.MultiModal.SpeechGPT<T>.RequiredVoice.get -> AiDotNet.TextToSpeech.TtsSupervision
 override AiDotNet.TextToSpeech.MultiModal.SpeechT5<T>.RequiredVoice.get -> AiDotNet.TextToSpeech.TtsSupervision
 AiDotNet.TextToSpeech.MultiModal.SpiritLM<T>.SpeechUnits(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording) -> (int[]! Hubert, int[]? Pitch, int[]? Style)
@@ -10918,7 +10913,6 @@ AiDotNet.TextToSpeech.MultiModal.MoshiConversation<T>.User.get -> AiDotNet.Tenso
 AiDotNet.TextToSpeech.MultiModal.MoshiConversation<T>.Words.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.TextToSpeech.MultiModal.MoshiWord>?
 AiDotNet.TextToSpeech.MultiModal.MoshiConversation<T>.Words.init -> void
 AiDotNet.TextToSpeech.MultiModal.SpiritLM<T>.Speak(string! speechTokens, int? speaker = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.TextToSpeech.MultiModal.Moshi<T>.Moshi(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.MultiModal.MoshiOptions? options = null) -> void
 override AiDotNet.TextToSpeech.MultiModal.Moshi<T>.CodecTokenCodebooks.get -> int
 override AiDotNet.TextToSpeech.MultiModal.Moshi<T>.CodecTokenVocabulary.get -> int
 AiDotNet.TextToSpeech.MultiModal.SpeechT5<T>.TokenizeText(string! text) -> int[]!
@@ -17523,3 +17517,18 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*virtual AiDotNet.Diffusion.Audio.MusicGenModel<T>.GenerateMusicWithTempo(string! prompt, int bpm, string? negativePrompt = null, double? durationSeconds = null, int numInferenceSteps = 200, double guidanceScale = 5, int? seed = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*virtual AiDotNet.NeuralNetworks.Layers.SAM2HieraImageEncoderLayer<T>.GetParameterRoles() -> System.Collections.Generic.Dictionary<string!, string!>!
 *REMOVED*virtual AiDotNet.NeuralNetworks.Layers.SAM2NativePipelineLayer<T>.GetParameterRoles() -> System.Collections.Generic.Dictionary<string!, string!>!
+AiDotNet.SpeechRecognition.Streaming.Moshi<T>.Moshi(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.MultiModal.MoshiOptions? options = null) -> void
+AiDotNet.SpeechRecognition.LLMIntegrated.SpeechGPT<T>.SpeechGPT(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.MultiModal.SpeechGPTOptions? options = null) -> void
+AiDotNet.TextToSpeech.MultiModal.SpeechGPT<T>.SpeechGPT(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.MultiModal.SpeechGPTOptions? options) -> void
+AiDotNet.TextToSpeech.MultiModal.SpeechGPT<T>.SpeechGPT(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> void
+AiDotNet.TextToSpeech.MultiModal.Moshi<T>.Moshi(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> void
+AiDotNet.TextToSpeech.MultiModal.Moshi<T>.Moshi(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.MultiModal.MoshiOptions? options) -> void
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T>.SPEARTTS(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! modelPath, AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions? options = null) -> void
+AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T>.SPEARTTS(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! modelPath, AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions? options) -> void
+AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T>.SPEARTTS(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! modelPath) -> void
+*REMOVED*AiDotNet.TextToSpeech.Vocoders.APNet2<T>.APNet2(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! modelPath, AiDotNet.TextToSpeech.Vocoders.APNet2Options? options = null) -> void
+AiDotNet.TextToSpeech.Vocoders.APNet2<T>.APNet2(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! modelPath, AiDotNet.TextToSpeech.Vocoders.APNet2Options? options) -> void
+AiDotNet.TextToSpeech.Vocoders.APNet2<T>.APNet2(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! modelPath) -> void
+*REMOVED*static AiDotNet.Helpers.AudioHelper<T>.LoadWav(string! filePath, bool normalize = true) -> AiDotNet.Helpers.AudioHelper<T>.AudioLoadResult!
+static AiDotNet.Helpers.AudioHelper<T>.LoadWav(string! filePath, bool normalize) -> AiDotNet.Helpers.AudioHelper<T>.AudioLoadResult!
+static AiDotNet.Helpers.AudioHelper<T>.LoadWav(string! filePath) -> AiDotNet.Helpers.AudioHelper<T>.AudioLoadResult!

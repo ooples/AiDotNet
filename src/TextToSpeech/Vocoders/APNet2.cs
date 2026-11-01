@@ -68,7 +68,13 @@ public partial class APNet2<T> : AmplitudePhaseVocoderBase<T>
     private ApNet2ResolutionDiscriminators<T>? _resolutions;
 
     /// <summary>Creates an APNet2 that runs an exported ONNX graph.</summary>
-    public APNet2(NeuralNetworkArchitecture<T> architecture, string modelPath, APNet2Options? options = null)
+    public APNet2(NeuralNetworkArchitecture<T> architecture, string modelPath)
+        : this(architecture, modelPath, null)
+    {
+    }
+
+    /// <summary>Creates an ONNX-backed APNet2 with explicit options.</summary>
+    public APNet2(NeuralNetworkArchitecture<T> architecture, string modelPath, APNet2Options? options)
         : base(architecture, modelPath, options ?? new APNet2Options(), options?.SamplingSeed ?? 0)
     {
     }

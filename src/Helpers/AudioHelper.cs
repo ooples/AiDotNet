@@ -24,6 +24,9 @@ namespace AiDotNet.Helpers;
 /// <typeparam name="T">The numeric type for tensor values.</typeparam>
 public static class AudioHelper<T>
 {
+    /// <summary>Loads WAV samples with amplitude normalization enabled.</summary>
+    public static AudioLoadResult LoadWav(string filePath) => LoadWav(filePath, true);
+
     /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
     public static AudioLoadResult LoadWav(Stream stream)
         => LoadWav(stream, true);
@@ -98,7 +101,7 @@ public static class AudioHelper<T>
     /// <param name="filePath">Path to the WAV file.</param>
     /// <param name="normalize">Whether to normalize to [-1, 1].</param>
     /// <returns>Audio tensor and metadata.</returns>
-    public static AudioLoadResult LoadWav(string filePath, bool normalize = true)
+    public static AudioLoadResult LoadWav(string filePath, bool normalize)
     {
         using var stream = File.OpenRead(filePath);
         return LoadWav(stream, normalize);

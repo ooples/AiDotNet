@@ -156,7 +156,13 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private AudioCodecLayer<T>? _codec;
 
     /// <summary>Creates an ONNX-backed SPEAR-TTS for inference.</summary>
-    public SPEARTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, SPEARTTSOptions? options = null)
+    public SPEARTTS(NeuralNetworkArchitecture<T> architecture, string modelPath)
+        : this(architecture, modelPath, null)
+    {
+    }
+
+    /// <summary>Creates an ONNX-backed SPEAR-TTS with explicit options.</summary>
+    public SPEARTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, SPEARTTSOptions? options)
         : base(architecture)
     {
         _options = options ?? new SPEARTTSOptions();
