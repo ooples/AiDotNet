@@ -9110,7 +9110,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// - ✅ Using modern GPUs with Tensor Core support
     /// - ✅ Memory-constrained scenarios
     /// - ❌ CPU-only training (minimal benefit)
-    /// - ❌ Very small models (<1M parameters)
+    /// - ❌ Very small models (&lt;1M parameters)
     ///
     /// Note: This feature requires that the network's numeric type T is float.
     /// Mixed-precision training with Half or double is not supported.
@@ -13017,6 +13017,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
+    /// <summary>
+    /// The learning rate an optimizer is currently stepping at, read from
     /// <see cref="GradientBasedOptimizerBase{T,TInput,TOutput}"/>; falls
     /// back to a conservative default for optimizers that don't expose
     /// the rate.
@@ -15154,7 +15156,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     private bool _skipParameterBuffer;
     private int _skipParameterBufferVersion = -1;
 
-    /// <summary>
     /// <summary>
     /// Original tensor references saved before buffer view replacement.
     /// Restored after each training step so Clone/serialization see real tensors.

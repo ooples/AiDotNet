@@ -278,16 +278,16 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
     /// For example:
     /// ```csharp
     /// // Create a global average pooling layer for 28×28 feature maps with 64 channels
-    /// var globalAvgPool = new GlobalPoolingLayer<float>(
+    /// var globalAvgPool = new GlobalPoolingLayer&lt;float>(
     ///     new int[] { batchSize, 28, 28, 64 }, 
     ///     PoolingType.Average
     /// );
     /// 
     /// // Create a global max pooling layer with ReLU activation
-    /// var globalMaxPool = new GlobalPoolingLayer<float>(
+    /// var globalMaxPool = new GlobalPoolingLayer&lt;float>(
     ///     new int[] { batchSize, 14, 14, 128 }, 
     ///     PoolingType.Max,
-    ///     new ReLUActivation<float>()
+    ///     new ReLUActivation&lt;float>()
     /// );
     /// ```
     /// 

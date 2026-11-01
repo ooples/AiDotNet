@@ -195,7 +195,7 @@ public static class ModelHelper<T, TInput, TOutput>
     /// <remarks>
     /// <para>
     /// This method extracts specific columns from the input data based on the provided indices.
-    /// It supports different input types like Matrix<T> and Tensor<T>.
+    /// It supports different input types like Matrix&lt;T> and Tensor&lt;T>.
     /// </para>
     /// <para><b>For Beginners:</b> This method helps you select specific features from your dataset.
     /// 

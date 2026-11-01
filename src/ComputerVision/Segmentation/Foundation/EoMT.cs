@@ -336,7 +336,6 @@ public partial class EoMT<T> : Common.PanopticSegmentationBase<T>
         };
     }
 
-    /// <summary>
     // Dispose of the ONNX session and the _disposed latch are handled by SegmentationModelBase.
 
     #endregion

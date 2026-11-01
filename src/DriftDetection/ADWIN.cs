@@ -35,7 +35,7 @@ namespace AiDotNet.DriftDetection;
 /// Typical values: 0.001 (sensitive) to 0.2 (conservative). Default: 0.002.
 /// </para>
 ///
-/// <para><b>Reference:</b> Bifet & Gavaldà, "Learning from Time-Changing Data with Adaptive Windowing" (2007)</para>
+/// <para><b>Reference:</b> Bifet &amp; Gavaldà, "Learning from Time-Changing Data with Adaptive Windowing" (2007)</para>
 /// </remarks>
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 public class ADWIN<T> : DriftDetectorBase<T>

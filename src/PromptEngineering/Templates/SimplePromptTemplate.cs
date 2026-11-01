@@ -18,7 +18,7 @@ namespace AiDotNet.PromptEngineering.Templates;
 /// "Translate the following {source_lang} text to {target_lang}: {text}"
 /// );
 ///
-/// var prompt = template.Format(new Dictionary<string, string>
+/// var prompt = template.Format(new Dictionary&lt;string, string>
 /// {
 ///     ["source_lang"] = "English",
 ///     ["target_lang"] = "Spanish",

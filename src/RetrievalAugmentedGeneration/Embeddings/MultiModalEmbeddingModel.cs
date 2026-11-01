@@ -31,7 +31,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels;
 /// Real-world uses:
 /// 1. Search images with text: "sunset over mountains" finds mountain sunset photos
 /// 2. Search text with images: Upload product photo, find product descriptions
-/// 3. Visual Q&A: "What's in this image?" matched against image embeddings
+/// 3. Visual Q&amp;A: "What's in this image?" matched against image embeddings
 /// 4. Content recommendation: Show images similar to text user likes
 /// 
 /// How it works:

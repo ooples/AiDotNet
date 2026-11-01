@@ -1496,6 +1496,8 @@ public partial class DeepSurv<T> : AsyncDecisionTreeRegressionBase<T>
     }
 
     /// <summary>
+    /// The sample indices ordered by survival time.
+    /// </summary>
     private int[] GetSortedIndices(Vector<T> times)
     {
         return Enumerable.Range(0, times.Length)

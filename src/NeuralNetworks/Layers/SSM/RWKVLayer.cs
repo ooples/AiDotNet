@@ -262,7 +262,7 @@ public partial class RWKVLayer<T> : LayerBase<T>, IShapeContract
     /// the first forward pass.
     /// </summary>
     /// <remarks>
-    /// <c>GetParameters()</c> already returns 13,664 values for <c>RWKVLayer<float>(4, 32, 4)</c>. Without this,
+    /// <c>GetParameters()</c> already returns 13,664 values for <c>RWKVLayer&lt;float>(4, 32, 4)</c>. Without this,
     /// <c>IsShapeResolved</c> stays false and <see cref="LayerBase{T}.SetParameters"/> treats the
     /// layer as shape-DEFERRED, parking a wrong-length vector as a pending restore instead of
     /// rejecting it -- so mismatched weights fail silently and surface later somewhere unrelated.
