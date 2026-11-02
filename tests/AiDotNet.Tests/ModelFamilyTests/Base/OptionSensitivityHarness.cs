@@ -155,9 +155,8 @@ public sealed class OptionSensitivityReport
 /// <para>
 /// <b>Perturbations.</b> A valid different value of the same type: a number doubled, else incremented,
 /// else halved or decremented; a flag flipped; an enum moved to its next member; a list lengthened by
-/// repeating its last element, else shortened. Candidates are tried in that order and the first one the
-/// model's constructor accepts is used, which is how "within its validation range" is honoured without
-/// duplicating every model's validation here.
+/// repeating its last element, else shortened. Candidates are tried until one changes observable
+/// behaviour. Insensitivity is reported only after every accepted candidate has been measured.
 /// </para>
 /// </remarks>
 public static class OptionSensitivityHarness
@@ -279,6 +278,7 @@ public static class OptionSensitivityHarness
             return new OptionSensitivityReport(modelKey, option, control.FailureOutcome, control.Failure);
         }
 
+        OptionSensitivityReport? insensitive = null;
         var rejected = new List<string>();
         foreach (var candidate in Perturbations(property.PropertyType, fixtureValue))
         {
@@ -323,9 +323,10 @@ public static class OptionSensitivityHarness
 
                 if (probe.Train is null || control.Trained is null)
                 {
-                    return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Insensitive,
+                    insensitive = new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Insensitive,
                         $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} reached the rebuilt model and changed neither its "
                         + "parameters nor its outputs; this family has no generic training step to look further.");
+                    continue;
                 }
 
                 long trained;
@@ -341,10 +342,10 @@ public static class OptionSensitivityHarness
                         + $"({Unwrap(ex).GetType().Name}: {Unwrap(ex).Message}).");
                 }
 
-                return trained != control.Trained.Value
-                    ? new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Sensitive,
-                        $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} changes parameters or outputs after training.")
-                    : new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Insensitive,
+                if (trained != control.Trained.Value)
+                    return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Sensitive,
+                        $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} changes parameters or outputs after training.");
+                insensitive = new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Insensitive,
                         $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} reached the rebuilt model, yet parameter count, "
                         + "parameters and outputs are bit-identical to the control both before and after the fixed training steps. "
                         + "Read the option where the model is built or trained, or, if it genuinely cannot act at test scale, mark "
@@ -356,6 +357,7 @@ public static class OptionSensitivityHarness
             }
         }
 
+        if (insensitive is not null) return insensitive;
         return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.NoValidPerturbation,
             rejected.Count == 0
                 ? $"No generic perturbation exists for {option} of type {property.PropertyType.Name}."
