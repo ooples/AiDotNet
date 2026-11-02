@@ -17532,3 +17532,69 @@ AiDotNet.TextToSpeech.Vocoders.APNet2<T>.APNet2(AiDotNet.NeuralNetworks.NeuralNe
 *REMOVED*static AiDotNet.Helpers.AudioHelper<T>.LoadWav(string! filePath, bool normalize = true) -> AiDotNet.Helpers.AudioHelper<T>.AudioLoadResult!
 static AiDotNet.Helpers.AudioHelper<T>.LoadWav(string! filePath, bool normalize) -> AiDotNet.Helpers.AudioHelper<T>.AudioLoadResult!
 static AiDotNet.Helpers.AudioHelper<T>.LoadWav(string! filePath) -> AiDotNet.Helpers.AudioHelper<T>.AudioLoadResult!
+AiDotNet.Initialization.TorchDefaultInitializationStrategy<T>
+AiDotNet.Initialization.TorchDefaultInitializationStrategy<T>.TorchDefaultInitializationStrategy() -> void
+AiDotNet.Initialization.TorchDefaultInitializationStrategy<T>.TorchDefaultInitializationStrategy(System.Random? rng) -> void
+AiDotNet.LossFunctions.PSNRLoss<T>
+AiDotNet.LossFunctions.PSNRLoss<T>.PSNRLoss(double lossWeight = 1) -> void
+AiDotNet.Video.Options.ShiftNetOptions.CosineIterations.get -> int
+AiDotNet.Video.Options.ShiftNetOptions.CosineIterations.set -> void
+AiDotNet.Video.Options.ShiftNetOptions.MinLearningRate.get -> double
+AiDotNet.Video.Options.ShiftNetOptions.MinLearningRate.set -> void
+AiDotNet.Video.Options.ShiftNetOptions.NoiseLevel.get -> double?
+AiDotNet.Video.Options.ShiftNetOptions.NoiseLevel.set -> void
+AiDotNet.Video.Options.ShiftNetOptions.NumUNets.get -> int
+AiDotNet.Video.Options.ShiftNetOptions.NumUNets.set -> void
+AiDotNet.Video.Options.ShiftNetOptions.PsnrLossWeight.get -> double
+AiDotNet.Video.Options.ShiftNetOptions.PsnrLossWeight.set -> void
+AiDotNet.Video.Options.ShiftNetOptions.RefinementFeatures.get -> int
+AiDotNet.Video.Options.ShiftNetOptions.RefinementFeatures.set -> void
+AiDotNet.Video.Options.ShiftNetOptions.ShiftStride.get -> int
+AiDotNet.Video.Options.ShiftNetOptions.ShiftStride.set -> void
+AiDotNet.Video.Options.ShiftNetOptions.UNetGrowth.get -> int
+AiDotNet.Video.Options.ShiftNetOptions.UNetGrowth.set -> void
+AiDotNet.Video.Options.UDVDOptions.DecoderFeatures.get -> int
+AiDotNet.Video.Options.UDVDOptions.DecoderFeatures.set -> void
+AiDotNet.Video.Options.UDVDOptions.EncoderFeatures.get -> int
+AiDotNet.Video.Options.UDVDOptions.EncoderFeatures.set -> void
+AiDotNet.Video.Options.UDVDOptions.FirstStageFeatures.get -> int
+AiDotNet.Video.Options.UDVDOptions.FirstStageFeatures.set -> void
+AiDotNet.Video.Options.UDVDOptions.NoiseLevel.get -> double?
+AiDotNet.Video.Options.UDVDOptions.NoiseLevel.set -> void
+override AiDotNet.Initialization.TorchDefaultInitializationStrategy<T>.InitializeBiases(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! biases) -> void
+override AiDotNet.Initialization.TorchDefaultInitializationStrategy<T>.InitializeWeights(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! weights, int inputSize, int outputSize) -> void
+override AiDotNet.Initialization.TorchDefaultInitializationStrategy<T>.IsLazy.get -> bool
+override AiDotNet.Initialization.TorchDefaultInitializationStrategy<T>.LoadFromExternal.get -> bool
+override AiDotNet.LossFunctions.PSNRLoss<T>.CalculateLoss(AiDotNet.Tensors.LinearAlgebra.Vector<T>! predicted, AiDotNet.Tensors.LinearAlgebra.Vector<T>! actual) -> T
+override AiDotNet.LossFunctions.PSNRLoss<T>.ComputeTapeLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! predicted, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Denoising.ShiftNet<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.Denoising.ShiftNet<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Denoising.ShiftNet<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Denoising.ShiftNet<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.Denoising.UDVD<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.Denoising.UDVD<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Denoising.UDVD<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Denoising.UDVD<T>.ResolveLazyLayerShapes() -> void
+*REMOVED*AiDotNet.Video.Denoising.ShiftNet<T>.Shift.get -> AiDotNet.Video.Denoising.GroupedSpatialTemporalShift<T>!
+*REMOVED*AiDotNet.Video.Options.ShiftNetOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.ShiftNetOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.ShiftNetOptions.NumBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.ShiftNetOptions.NumBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.ShiftNetOptions.NumShifts.get -> int
+*REMOVED*AiDotNet.Video.Options.ShiftNetOptions.NumShifts.set -> void
+*REMOVED*AiDotNet.Video.Options.ShiftNetOptions.ShiftRadius.get -> int
+*REMOVED*AiDotNet.Video.Options.ShiftNetOptions.ShiftRadius.set -> void
+*REMOVED*AiDotNet.Video.Options.ShiftNetOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.ShiftNetOptions.Variant.set -> void
+*REMOVED*AiDotNet.Video.Options.UDVDOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.UDVDOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.UDVDOptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.UDVDOptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.UDVDOptions.NumLevels.get -> int
+*REMOVED*AiDotNet.Video.Options.UDVDOptions.NumLevels.set -> void
+*REMOVED*AiDotNet.Video.Options.UDVDOptions.NumResBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.UDVDOptions.NumResBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.UDVDOptions.TemporalBufferSize.get -> int
+*REMOVED*AiDotNet.Video.Options.UDVDOptions.TemporalBufferSize.set -> void
+*REMOVED*AiDotNet.Video.Options.UDVDOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.UDVDOptions.Variant.set -> void
