@@ -466,6 +466,9 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         if (observation.Length != ObservationSize)
             throw new ArgumentException($"Observation length must be {ObservationSize}, got {observation.Length}.", nameof(observation));
 
+        // The carried (h, c) and controller memory this step produces are read by the next call, after Train's tapes
+        // have rewound any active arena, so they must not come from it.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         var batch = new Tensor<T>(new[] { 1, ObservationSize });
         for (int i = 0; i < ObservationSize; i++) batch[i] = observation[i];
         var (mean, logVar) = Encode(batch);
@@ -498,6 +501,8 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     private void ResetMemory()
     {
+        // Carried across calls, so never arena scratch (see SelectAction).
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         _hiddenStates = new Tensor<T>?[_options.RNNLayers];
         _cellStates = new Tensor<T>?[_options.RNNLayers];
         _controllerMemory = new Tensor<T>(new[] { 1, _options.RNNHiddenSize });
@@ -510,6 +515,10 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// per call.</remarks>
     public override T Train()
     {
+        // OUTSIDE THE STEP ARENA. A stage step runs several tapes (the dream alone runs one per imagined step), and
+        // every top-level tape rewinds the active arena when it is disposed; the batches, latents and carried LSTM
+        // state outlive the tape that made them. Same rule as CreditAssignmentGradientComputer.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
         int batchSize = _options.BatchSize;
         if (batchSize <= 0 || _replayBuffer.Count < batchSize)
         {
