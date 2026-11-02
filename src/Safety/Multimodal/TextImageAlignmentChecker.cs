@@ -359,4 +359,8 @@ public class TextImageAlignmentChecker<T> : TextSafetyModuleBase<T>
         public double RedDominance;
         public double DarkFraction;
     }
+
+    /// <summary>Preserves the original constructor signature using the default configuration.</summary>
+    public TextImageAlignmentChecker(double mismatchThreshold) : this(mismatchThreshold, null) { }
+
 }
