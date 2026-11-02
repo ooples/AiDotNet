@@ -18,35 +18,32 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 /// </summary>
 // Sets AiDotNetEngine.Current, a process-wide static: run apart from every other test class.
 [Collection("EngineCurrentGlobalState")]
+[Trait("Category", "GPU")]
 public class DenseBlockGpuInferenceScopeTests
 {
     private const int NumLayers = 4, GrowthRate = 8, Batch = 2, Channels = 16, Size = 8;
     private readonly ITestOutputHelper _output;
     public DenseBlockGpuInferenceScopeTests(ITestOutputHelper output) => _output = output;
 
-    [Fact(Timeout = 120000)]
+    [SkippableFact(Timeout = 120000)]
     public async Task GpuInference_ReleasesEachLayersIntermediates_AndMatchesCpu()
     {
         await Task.Yield();
         DirectGpuTensorEngine? gpu = null;
         try { gpu = new DirectGpuTensorEngine(); }
         catch (System.Exception ex) { _output.WriteLine($"No GPU engine: {ex.GetType().Name}: {ex.Message}"); }
-        if (gpu is null || !gpu.SupportsGpu)
-        {
-            _output.WriteLine("No GPU backend available: skipping the DenseBlock inference scope test.");
-            return;
-        }
-
         var previous = AiDotNetEngine.Current;
         try
         {
+            Skip.If(gpu is null || !gpu.SupportsGpu || !gpu.IsGpuAvailable,
+                "No GPU backend available for the DenseBlock inference scope test.");
+            AiDotNetEngine.Current = new CpuEngine();
             var block = new DenseBlock<float>(NumLayers, GrowthRate);
             var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(1573);
             var input = new Tensor<float>(new[] { Batch, Channels, Size, Size });
             for (int i = 0; i < input.Length; i++) input[i] = (float)(rng.NextDouble() * 2.0 - 1.0);
 
             block.SetTrainingMode(false);
-            AiDotNetEngine.Current = previous;
             float[] cpu = block.Forward(input).ToArray();
 
             AiDotNetEngine.Current = gpu;
@@ -72,7 +69,7 @@ public class DenseBlockGpuInferenceScopeTests
         finally
         {
             AiDotNetEngine.Current = previous;
-            gpu.Dispose();
+            gpu?.Dispose();
         }
     }
 }
