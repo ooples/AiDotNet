@@ -65,6 +65,8 @@ if ($null -ne $memTotal) {
     # OutOfMemoryException in the host instead of the kernel killing the runner (see heavy-timeout-nightly.yml).
     $env:DOTNET_GCHeapHardLimit = '0x{0:X}' -f [long]([long]$memTotal.Matches[0].Groups[1].Value * 1024 * 0.7)
 }
+# Each option rebuilds several models; reclaim their short-lived heaps before the chunk reaches its cap.
+$env:DOTNET_GCConserveMemory = '9'
 $env:AIDOTNET_PAPER_FIDELITY_RESULTS = $resultsRoot
 
 $rows = [Collections.Generic.List[object]]::new()

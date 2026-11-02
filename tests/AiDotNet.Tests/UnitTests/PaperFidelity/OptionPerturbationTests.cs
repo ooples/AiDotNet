@@ -19,6 +19,10 @@ public class OptionPerturbationTests
             typeof(ClampingModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
         CloneRegistry.Register(new ClonePlan(
             typeof(OverwritingModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
+        CloneRegistry.Register(new ClonePlan(
+            typeof(LateRandomModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
+        CloneRegistry.Register(new ClonePlan(
+            typeof(DeepFixtureModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
     }
 
     public sealed class FixedArrayOptions : ModelOptions
@@ -73,6 +77,52 @@ public class OptionPerturbationTests
     private sealed class InferenceProbe { }
     private sealed class TrainingProbe { }
     private sealed class IgnoredProbe { }
+
+    public sealed class DepthOptions : ModelOptions
+    {
+        public int Depth { get; set; } = 5;
+    }
+
+    public sealed class DeepFixtureModel
+    {
+        private readonly DepthOptions _options;
+        public DeepFixtureModel(DepthOptions options)
+        {
+            if (options.Depth > 6) throw new OutOfMemoryException("Doubling a deep fixture exceeds its allocation budget.");
+            _options = options;
+        }
+        public long Output => _options.Depth;
+    }
+
+    [Fact]
+    public void StructuralOptionCanBeMeasuredBeforeAnExponentialExpansion()
+    {
+        var probe = new OptionSensitivityProbe<DeepFixtureModel>(() => new(new()), model => model.Output, train: null);
+        var result = OptionSensitivityHarness.Measure(typeof(DeepFixtureModel), "Depth", probe);
+        Assert.Equal(OptionSensitivityOutcome.Sensitive, result.Outcome);
+    }
+
+    public sealed class LateRandomModel
+    {
+        private readonly ThresholdOptions _options;
+        private Random? _random;
+        public LateRandomModel(ThresholdOptions options) => _options = options;
+        public long Output { get; set; }
+        public long Read() => (_random ??= AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope
+            .CreateComponentRandom(null)).Next() + (long)(_options.Threshold * 100);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RandomnessFirstUsedAfterConstructionStillGetsTheFixtureSeed(bool duringTraining)
+    {
+        var probe = new OptionSensitivityProbe<LateRandomModel>(
+            () => new(new()), model => duringTraining ? model.Output : model.Read(),
+            duringTraining ? model => model.Output = model.Read() : null);
+        var result = OptionSensitivityHarness.Measure(typeof(LateRandomModel), "Threshold", probe);
+        Assert.Equal(OptionSensitivityOutcome.Sensitive, result.Outcome);
+    }
 
     [Fact]
     public void LaterValidCandidateCanCrossAnInferenceThreshold()

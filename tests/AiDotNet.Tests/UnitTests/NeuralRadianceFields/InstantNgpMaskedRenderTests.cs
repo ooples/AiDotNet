@@ -14,6 +14,21 @@ namespace AiDotNet.Tests.UnitTests.NeuralRadianceFields;
 /// </summary>
 public class InstantNgpMaskedRenderTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ParameterReadsDoNotTreatDisabledOccupancyAsUnfitted(bool useOccupancy)
+    {
+        using var model = new InstantNGP<double>(new InstantNGPOptions<double>
+        {
+            HashTableSize = 64, NumLevels = 2, FeaturesPerLevel = 2, FinestResolution = 8, CoarsestResolution = 2,
+            MlpHiddenDim = 8, MlpNumLayers = 1, FeatureDim = 4, ColorHiddenDim = 4, ColorNumLayers = 1,
+            OccupancyGridResolution = 4, UseOccupancyGrid = useOccupancy, Seed = 3,
+        });
+        Assert.NotEmpty(model.GetParameters().ToArray());
+        Assert.NotEmpty(model.GetParameterChunks());
+    }
+
     [Fact]
     public void MaskedRender_MatchesTheOccupancySkippingRender()
     {

@@ -153,8 +153,8 @@ public sealed class OptionSensitivityReport
 /// verdict is <see cref="OptionSensitivityOutcome.NonDeterministic"/>, never a guess.
 /// </para>
 /// <para>
-/// <b>Perturbations.</b> A valid different value of the same type: a number doubled, else incremented,
-/// else halved or decremented; a flag flipped; an enum moved to its next member; a list lengthened by
+/// <b>Perturbations.</b> A valid different value of the same type: small integral steps before doubling,
+/// floating-point values doubled, halved or shifted; a flag flipped; an enum moved to its next member; a list lengthened by
 /// repeating its last element, else shortened. Candidates are tried until one changes observable
 /// behaviour. Insensitivity is reported only after every accepted candidate has been measured.
 /// </para>
@@ -332,7 +332,7 @@ public static class OptionSensitivityHarness
                 long untrained;
                 try
                 {
-                    untrained = probe.Observe(perturbed);
+                    untrained = Seeded(() => probe.Observe(perturbed));
                 }
                 catch (Exception ex) when (IsInputContractRejection(ex))
                 {
@@ -362,8 +362,8 @@ public static class OptionSensitivityHarness
                 long trained;
                 try
                 {
-                    probe.Train(perturbed);
-                    trained = probe.Observe(perturbed);
+                    Seeded(() => probe.Train(perturbed));
+                    trained = Seeded(() => probe.Observe(perturbed));
                 }
                 catch (Exception ex) when (IsInputContractRejection(ex))
                 {
@@ -492,8 +492,8 @@ public static class OptionSensitivityHarness
 
         try
         {
-            long a = probe.Observe(first);
-            long b = probe.Observe(second);
+            long a = Seeded(() => probe.Observe(first));
+            long b = Seeded(() => probe.Observe(second));
             if (a != b)
             {
                 result.Failure = "Two identical, identically seeded builds already differ before training, so no difference can be "
@@ -507,8 +507,8 @@ public static class OptionSensitivityHarness
 
             try
             {
-                probe.Train(first);
-                probe.Train(second);
+                Seeded(() => probe.Train(first));
+                Seeded(() => probe.Train(second));
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
@@ -519,8 +519,8 @@ public static class OptionSensitivityHarness
                 return result;
             }
 
-            long trainedA = probe.Observe(first);
-            long trainedB = probe.Observe(second);
+            long trainedA = Seeded(() => probe.Observe(first));
+            long trainedB = Seeded(() => probe.Observe(second));
             if (trainedA != trainedB)
             {
                 result.Failure = "Two identical, identically seeded builds diverge during the fixed training steps, so a "
@@ -585,7 +585,7 @@ public static class OptionSensitivityHarness
             mutate?.Invoke(copy);
             ReplaceReferences(shell, held, copy);
             var rebuilt = Seeded(() => (TModel)CloneEngine.CopyConfiguration(shell));
-            probe.PrepareModel?.Invoke(rebuilt);
+            Seeded(() => probe.PrepareModel?.Invoke(rebuilt));
             return rebuilt;
         }
         finally
@@ -598,6 +598,13 @@ public static class OptionSensitivityHarness
     private static void PinSeed(ModelOptions options)
     {
         if (options.Seed is null) options.Seed = FixedSeed;
+    }
+
+    // Lazy parameters and component RNGs may first be created while observing or training.
+    // Keep those operations under the same fixture seed as construction.
+    private static void Seeded(Action action)
+    {
+        Seeded(() => { action(); return 0; });
     }
 
     private static TResult Seeded<TResult>(Func<TResult> build)
@@ -731,10 +738,11 @@ public static class OptionSensitivityHarness
     {
         double value = current is null ? 0.0 : Convert.ToDouble(current, System.Globalization.CultureInfo.InvariantCulture);
         bool integral = type != typeof(double) && type != typeof(float) && type != typeof(decimal);
+        // Prefer a one-step structural change before potentially exponential depth/width expansions.
         var raw = current is null
             ? new[] { 1.0, 2.0 }
             : integral
-                ? new[] { value * 2, value + 1, value - 1 }
+                ? new[] { value + 1, value - 1, value * 2 }
                 : new[] { value * 2, value / 2, value + 0.1, value - 0.1, value + 1, value - 1 };
 
         var seen = new HashSet<double>();

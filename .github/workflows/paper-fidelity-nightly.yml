@@ -24,11 +24,13 @@ name: Paper Fidelity (nightly)
 # the generator that emits the cases, or the baseline it regenerates - runs the full sweep on the pull request
 # itself, so the change is proven (and RuntimeFidelityBaseline.cs can be re-seeded from its report) before it
 # merges. Every other pull request is served by the impact-gated jobs in sonarcloud.yml.
+# Drafts wait for ready_for_review; manual dispatch can still validate a draft explicitly.
 
 on:
   schedule:
     - cron: '30 7 * * *'   # 07:30 UTC, after the heavy-timeout (06:00) and census (06:00) lanes start
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - '.github/workflows/paper-fidelity-nightly.yml'
       - 'tools/PaperFidelity/**'
@@ -58,6 +60,7 @@ permissions:
 jobs:
   build:
     name: Build and discover paper-fidelity classes
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft != true
     runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
