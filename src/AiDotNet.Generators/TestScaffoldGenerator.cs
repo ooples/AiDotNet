@@ -7722,18 +7722,14 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "TTVSR" && model.TypeParameterCount == 1)
             {
-                // TTVSROptions carries the paper's 2e-4 (Liu et al., CVPR 2022), tuned for the full
-                // trajectory-aware transformer on real video sequences. Now that the optimizer
-                // actually reads it, that rate overshoots at fixture scale -- the class passed in
-                // isolation but failed LossStrictlyDecreases and MoreData inside the full lane. Bind
-                // a gentler rate through the public option; the library default is unchanged.
+                // TTVSR keeps the release's TTVSRNet in production (64 channels, 60 trunk blocks, 4x4
+                // tokens, keyframes every third frame). The same SPyNet -> trajectory-aware attention ->
+                // bidirectional propagation -> x4 topology runs here at CI scale through public options.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
-                    "new AiDotNet.Video.Options.TTVSROptions { LearningRate = 1e-4, " +
-                    "NumFeatures = 32, NumTransformerBlocks = 2, NumResBlocks = 4, " +
-                    "NumScales = 2, TrajectoryLength = 3, NumHeads = 4 })";
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 16, inputWidth: 16, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.TTVSROptions { Seed = 1, MidChannels = 16, NumResBlocks = 2, NumFrames = 2 })";
             }
             else if (model.ClassName == "ShiftNet" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Denoising.", System.StringComparison.Ordinal))
@@ -13206,24 +13202,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 64, outputSize: 64), " +
                     "new AiDotNet.Audio.Effects.AudioSuperResolutionOptions { HiddenDim = 16, NumResBlocks = 2 })";
             }
-            else if (model.ClassName == "TTVSR" && model.TypeParameterCount == 1
-                     && typeName.StartsWith(
-                         "AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
-            {
-                // TTVSR remained a 3m12s class after FP32 + generated-iteration caps,
-                // starving neighboring tests in the four-core T-Z shard. Apply the
-                // final timeout mitigation through its public options: the same native
-                // feature extraction -> residual reconstruction -> temporal fusion ->
-                // pixel-shuffle path at 8 channels, one residual block, 2x scale, and
-                // a two-frame 8x8 clip. Production/paper defaults remain unchanged.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
-                    "new AiDotNet.Video.Options.TTVSROptions { NumFeatures = 8, NumResBlocks = 1, " +
-                    "NumTransformerBlocks = 1, ScaleFactor = 2, TrajectoryLength = 2, " +
-                    "NumHeads = 1, NumScales = 1, DropoutRate = 0.0 })";
-            }
             else if (model.ClassName == "VideoGigaGAN" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
                          "AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
@@ -14545,10 +14523,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (model.ClassName == "TTVSR")
         {
-            // Matches the public-options smoke fixture above: two RGB frames at
-            // 8x8 with a 2x pixel-shuffle reconstruction.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
+            // Matches the public-options fixture above: two RGB frames at 16x16 (four 4x4 tokens a
+            // side) with the x4 reconstruction.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 16, 16 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 64, 64 };");
         }
         else if (model.ClassName == "VRT")
         {

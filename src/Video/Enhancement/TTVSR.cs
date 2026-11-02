@@ -3,10 +3,15 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Training;
 using AiDotNet.Video.Options;
 
 namespace AiDotNet.Video.Enhancement;
@@ -17,37 +22,34 @@ namespace AiDotNet.Video.Enhancement;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// TTVSR (Liu et al., ECCV 2022) learns trajectory-aware features for temporal modeling:
-/// - Trajectory-aware attention: instead of attending to fixed spatial locations across
-///   frames, attention follows estimated motion trajectories so features are gathered along
-///   the actual path each visual element traveled
-/// - Cross-scale feature tokenization: visual tokens are extracted at multiple spatial
-///   scales and fused, capturing both fine textures and coarse structures simultaneously
-/// - Location map: a learned spatial routing map that helps the transformer locate the
-///   correct trajectory positions across the full video sequence
-/// - Long-range modeling: trajectories span the full video, not just adjacent frames,
-///   enabling information flow from temporally distant frames along motion paths
+/// The network is the authors' TTVSRNet (Liu et al., CVPR 2022; researchmm/TTVSR): SPyNet flow, per-frame features
+/// from five residual blocks, and backward and forward recurrent propagation through a shared 60-block trunk. At every
+/// step the propagated feature is warped by the flow and refined by trajectory-aware attention: each keyframe (every
+/// third frame) leaves 4x4 tokens at three scales and a trajectory, a location map warped along the flow at every
+/// later step, and the current frame takes, per token, the trajectory token of the most similar keyframe, scaled by
+/// that cosine similarity. The two directions are fused with the frame's features and reconstructed at x4.
+/// </para>
+/// <para>
+/// Training follows configs/TTVSR_reds4.py: Charbonnier loss, Adam (0.9, 0.99) at 2e-4 with SPyNet at 0.125 times the
+/// rate and frozen for the first 5,000 iterations, cosine annealing to 1e-7 over 400,000 iterations. SPyNet is loaded
+/// pretrained in the release and starts from PyTorch's default initialization here.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> Imagine following a ball as it moves across frames. Instead of
 /// looking at the same fixed spot in every frame (which would miss the ball after it
 /// moves), TTVSR tracks where objects actually go and gathers information along their
-/// travel path. This is much more effective because real video has complex motion, and
-/// the best information for upscaling a pixel often comes from a completely different
-/// position in neighboring frames.
-///
-/// <b>Usage:</b>
-/// <code>
-/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputHeight: 64, inputWidth: 64, inputDepth: 3);
-/// var model = new TTVSR&lt;float&gt;(arch, "ttvsr.onnx");
-/// var hrFrames = model.Upscale(lrFrames);
-/// </code>
-/// </para>
-/// <para>
-/// <b>Reference:</b> "TTVSR: Learning Trajectory-Aware Transformer for Video
-/// Super-Resolution" (Liu et al., ECCV 2022)
+/// travel path, even from frames far back in the video.
 /// </para>
 /// </remarks>
+/// <example>
+/// <code>
+/// var arch = new NeuralNetworkArchitecture&lt;float&gt;(inputType: InputType.FourDimensional,
+///     taskType: NeuralNetworkTaskType.Regression, inputFrames: 10, inputHeight: 64, inputWidth: 64, inputDepth: 3);
+/// var model = new TTVSR&lt;float&gt;(arch, new TTVSROptions());
+/// model.Train(lowResClip, highResClip);         // [10, 3, 64, 64] -> [10, 3, 256, 256], pixel values 0-255
+/// var upscaled = model.Upscale(lowResClip);
+/// </code>
+/// </example>
 [ModelDomain(ModelDomain.Video)]
 [ModelDomain(ModelDomain.Vision)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -59,21 +61,23 @@ namespace AiDotNet.Video.Enhancement;
     "https://arxiv.org/abs/2204.04216",
     Year = 2022,
     Authors = "Chengxu Liu, Huan Yang, Jianlong Fu, Xueming Qian")]
-[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.99, ReferenceBatchSize = 8,
-                MinLearningRate = 0,
-                Schedule = LearningRateSchedulerType.CosineAnnealing,
-                Source = "Liu et al. 2022, Sec. 4.1: cosine annealing with Adam at beta1 0.9 and beta2 "
-                        + "0.99, at a batch size of 8. No single learning rate is declared because the "
-                        + "paper sets 1.25e-5 for the motion estimation and 2e-4 for the other parts, "
-                        + "and this model builds one optimizer over both.")]
-public partial class TTVSR<T> : VideoSuperResolutionBase<T>
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, Beta2 = 0.99, ReferenceBatchSize = 4,
+                Schedule = LearningRateSchedulerType.CosineAnnealing, MinLearningRate = 1e-7,
+                Source = "Liu et al. 2022, Sec. 4.1; researchmm/TTVSR configs/TTVSR_reds4.py: Adam lr 2e-4, betas (0.9, 0.99), "
+                        + "SPyNet lr_mult 0.125 and frozen for fix_iter = 5000, CosineRestart over 400k iterations to "
+                        + "min_lr 1e-7, 2 clips per GPU on 2 GPUs.")]
+public partial class TTVSR<T> : VideoSuperResolutionBase<T>, ITrainingObjectiveProvider<T>
 {
     #region Fields
 
     private readonly TTVSROptions _options;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
+    private bool _usingCustomLayers;
     private bool _disposed;
+    private int _trainingSteps;
+
+    private TtvsrBackbone<T>? _backbone;
 
     #endregion
 
@@ -83,10 +87,13 @@ public partial class TTVSR<T> : VideoSuperResolutionBase<T>
     public TTVSR(NeuralNetworkArchitecture<T> architecture, string modelPath, TTVSROptions? options = null)
         : base(architecture)
     {
+        if (string.IsNullOrWhiteSpace(modelPath))
+            throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         _options = options ?? new TTVSROptions();
         Options = _options;
         _useNativeMode = false;
-        ScaleFactor = _options.ScaleFactor;
+        ScaleFactor = 4;
+        NumFrames = _options.NumFrames;
         _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         InitializeLayers();
@@ -95,23 +102,17 @@ public partial class TTVSR<T> : VideoSuperResolutionBase<T>
     /// <summary>Creates a TTVSR model in native training mode.</summary>
     public TTVSR(NeuralNetworkArchitecture<T> architecture, TTVSROptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture)
+        : base(architecture, new CharbonnierLoss<T>((options ?? new TTVSROptions()).CharbonnierEpsilon))
     {
         _options = options ?? new TTVSROptions();
         Options = _options;
+        if (_options.MidChannels < 1) throw new ArgumentOutOfRangeException(nameof(options), "MidChannels must be positive.");
+        if (_options.NumResBlocks < 0) throw new ArgumentOutOfRangeException(nameof(options), "NumResBlocks cannot be negative.");
         _useNativeMode = true;
-        // TTVSR (Liu et al., CVPR 2022) trains with Adam at 2e-4, which TTVSROptions.LearningRate
-        // already carried as its default -- but building the optimizer bare ignored it and ran on
-        // AdamW's 1e-3, and Train() then dropped the optimizer entirely on the two-argument
-        // TrainWithTape overload.
-        _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-                new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-                {
-                    InitialLearningRate = _options.LearningRate,
-                }));
-        ScaleFactor = _options.ScaleFactor;
+        ScaleFactor = 4;
+        NumFrames = _options.NumFrames;
         InitializeLayers();
+        _optimizer = optimizer;
     }
 
     #endregion
@@ -129,65 +130,191 @@ public partial class TTVSR<T> : VideoSuperResolutionBase<T>
 
     #endregion
 
-    #region NeuralNetworkBase
+    #region Layers
 
+    /// <inheritdoc />
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
         if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
         {
+            _usingCustomLayers = true;
             Layers.AddRange(Architecture.Layers);
+            return;
         }
-        else
-        {
-            int ch = Architecture.InputDepth > 0 ? Architecture.InputDepth : 3;
-            int h = Architecture.InputHeight > 0 ? Architecture.InputHeight : 64;
-            int w = Architecture.InputWidth > 0 ? Architecture.InputWidth : 64;
-            Layers.AddRange(LayerHelper<T>.CreateDefaultVideoSuperResolutionLayers(
-                inputChannels: ch, inputHeight: h, inputWidth: w,
-                numFeatures: _options.NumFeatures,
-                numResBlocks: _options.NumResBlocks,
-                scaleFactor: _options.ScaleFactor));
-        }
+
+        if (_options.TokenStride < 4 || _options.TokenStride % 4 != 0)
+            throw new InvalidOperationException("TokenStride must be a positive multiple of 4 (its 1.5x and 2x patches need it).");
+        if (_options.KeyframeStride < 1) throw new InvalidOperationException("KeyframeStride must be positive.");
+        _backbone = new TtvsrBackbone<T>(Layers, _options.MidChannels, _options.NumResBlocks, _options.TokenStride, _options.KeyframeStride);
     }
 
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    /// <inheritdoc />
+    protected override void ResolveLazyLayerShapes()
     {
-        ThrowIfDisposed();
-        if (IsOnnxMode) return RunOnnxInference(input);
-        return Forward(input);
+        if (_usingCustomLayers || !_useNativeMode) return;
+        using var noGrad = new NoGradScope<T>();
+        Network(new Tensor<T>(new[] { 1, 2, 3, 4 * _options.TokenStride, 4 * _options.TokenStride }));
     }
+
+    #endregion
+
+    #region Network
+
+    private TtvsrBackbone<T> Backbone
+        => _backbone ?? throw new InvalidOperationException("TTVSR's native layers are not initialized.");
+
+    /// <summary>TTVSRNet.forward: clips [N, T, 3, H, W] in [0, 1] to [N, T, 3, 4H, 4W].</summary>
+    private Tensor<T> Network(Tensor<T> clips) => Backbone.Run(Engine, Layers, clips);
+
+    private Tensor<T> RunClips(Tensor<T> frames)
+    {
+        bool batched = frames.Rank == 5;
+        var clips = batched ? frames : Engine.Reshape(frames, new[] { 1 }.Concat(frames._shape).ToArray());
+        var output = Network(clips);
+        return batched ? output : Engine.Reshape(output, output._shape.Skip(1).ToArray());
+    }
+
+    /// <summary>Test hook: SPyNet's flow from <paramref name="reference"/> to <paramref name="support"/>, [N, 3, H, W] in [0, 1].</summary>
+    internal Tensor<T> FlowForTest(Tensor<T> reference, Tensor<T> support)
+        => Backbone.SpyNet.Flow(Engine, Layers, reference, support);
+
+    /// <summary>Test hook: mmagic's flow_warp with zero padding.</summary>
+    internal Tensor<T> WarpForTest(Tensor<T> image, Tensor<T> flow) => BasicVsrBlocks.FlowWarp(Engine, image, flow, GridSamplePadding.Zeros);
+
+    /// <summary>Test hook: the three-scale tokenization of a feature [N, C, H, W].</summary>
+    internal Tensor<T>[] TokenizeForTest(Tensor<T> feature) => Backbone.Tokenize(Engine, feature);
+
+    /// <summary>Test hook: the network on frames already scaled to [0, 1].</summary>
+    internal Tensor<T> UpscaleNormalizedForTest(Tensor<T> frames) => RunClips(frames);
+
+    /// <summary>The SPyNet parameters.</summary>
+    internal IReadOnlyList<Tensor<T>> FlowParameters
+        => _backbone is null ? Array.Empty<Tensor<T>>() : _backbone.FlowParameters(Layers);
+
+    #endregion
+
+    #region Forward and training
+
+    /// <inheritdoc />
+    protected override Tensor<T> Forward(Tensor<T> input)
+        => _usingCustomLayers ? base.Forward(input) : RunClips(input);
+
+    /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => _usingCustomLayers ? base.ForwardForTraining(input) : RunClips(PreprocessFrames(input));
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> BuildPaperOptimizer()
+    {
+        if (_optimizer is not null) return _optimizer;
+        // The rate mask is keyed by parameter tensor, so the lazily shaped convolutions must exist first.
+        ResolveLazyLayerShapes();
+        // Adam is AdamW without decay; AdamW carries the per-parameter rate mask that gives SPyNet its 0.125.
+        var optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate,
+            Beta1 = 0.9,
+            Beta2 = 0.99,
+            Epsilon = 1e-8,
+            WeightDecay = 0.0,
+            UseAdaptiveLearningRate = false,
+            UseAdaptiveBetas = false,
+            EnableGradientClipping = false,
+            LearningRateScheduler = new CosineAnnealingLRScheduler(
+                _options.LearningRate, Math.Max(1, _options.CosineIterations), _options.MinLearningRate),
+            SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+        });
+        var flow = new HashSet<Tensor<T>>(FlowParameters);
+        var parameters = TapeTrainingStep<T>.CollectParameters(Layers);
+        var rates = new List<T>();
+        foreach (var p in parameters)
+        {
+            var rate = NumOps.FromDouble(flow.Contains(p) ? _options.SpyNetLearningRateMultiplier : 1.0);
+            for (int i = 0; i < p.Length; i++) rates.Add(rate);
+        }
+        var options = (AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>)optimizer.GetOptions();
+        options.LearningRateMask = new Vector<T>(rates.ToArray());
+        options.MaskParameters = parameters;
+        _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this, optimizer);
+        return _optimizer;
+    }
+
+    private IReadOnlyList<Tensor<T>> TrainableParameters()
+    {
+        var all = TapeTrainingStep<T>.CollectParameters(Layers);
+        if (_trainingSteps > _options.FlowFreezeIterations) return all;
+        var flow = new HashSet<Tensor<T>>(FlowParameters);
+        return all.Where(p => !flow.Contains(p)).ToList();
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Charbonnier loss over every output frame; SPyNet joins training after the freeze iterations.</remarks>
+    protected override IReadOnlyList<TrainingObjective<T>>? DefineTrainingObjectives(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        if (_usingCustomLayers || !_useNativeMode) return null;
+        _trainingSteps++;
+        var optimizer = BuildPaperOptimizer();
+        return new[]
+        {
+            new TrainingObjective<T>(new[] { input, expectedOutput }, data =>
+                LossFunction.ComputeTapeLoss(RunClips(PreprocessFrames(data[0])), NormalizeFrames(data[1])))
+            {
+                Optimizer = optimizer,
+                Parameters = TrainableParameters,
+            }
+        };
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc />
+    /// <remarks>The Charbonnier loss training minimizes, between the network's output and the target both scaled to
+    /// [0, 1]; a loss on the 0-255 outputs is a different objective whose minimizer need not coincide on small data.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        if (_usingCustomLayers || !_useNativeMode) return LossFunction.ComputeTapeLoss(Predict(input), target)[0];
+        return LossFunction.ComputeTapeLoss(RunClips(PreprocessFrames(input)), NormalizeFrames(target))[0];
+    }
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
+        => _useNativeMode && !_usingCustomLayers ? BuildPaperOptimizer() : base.GetOrCreateBaseOptimizer();
+
+    #endregion
+
+    #region NeuralNetworkBase
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessFrames(Tensor<T> rawFrames) => NormalizeFrames(rawFrames);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
         {
             Name = _useNativeMode ? "TTVSR-Native" : "TTVSR-ONNX",
-            Description = $"TTVSR {_options.Variant} trajectory-aware transformer VSR (Liu et al., ECCV 2022)",
-            Complexity = _options.NumTransformerBlocks
+            Description = "TTVSR trajectory-aware transformer VSR (Liu et al., CVPR 2022)",
+            Complexity = _options.NumResBlocks
         };
-        m.AdditionalInfo["Variant"] = _options.Variant.ToString();
-        m.AdditionalInfo["NumFeatures"] = _options.NumFeatures.ToString();
-        m.AdditionalInfo["NumTransformerBlocks"] = _options.NumTransformerBlocks.ToString();
-        m.AdditionalInfo["TrajectoryLength"] = _options.TrajectoryLength.ToString();
-        m.AdditionalInfo["NumHeads"] = _options.NumHeads.ToString();
-        m.AdditionalInfo["NumScales"] = _options.NumScales.ToString();
-        m.AdditionalInfo["ScaleFactor"] = _options.ScaleFactor.ToString();
+        m.AdditionalInfo["MidChannels"] = _options.MidChannels.ToString();
+        m.AdditionalInfo["NumResBlocks"] = _options.NumResBlocks.ToString();
+        m.AdditionalInfo["TokenStride"] = _options.TokenStride.ToString();
+        m.AdditionalInfo["KeyframeStride"] = _options.KeyframeStride.ToString();
+        m.AdditionalInfo["ScaleFactor"] = "4";
         return m;
     }
-
-
-
-
 
     #endregion
 
@@ -198,10 +325,15 @@ public partial class TTVSR<T> : VideoSuperResolutionBase<T>
         if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(TTVSR<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;
         _disposed = true;
+        if (disposing)
+        {
+            OnnxModel?.Dispose();
+        }
         base.Dispose(disposing);
     }
 

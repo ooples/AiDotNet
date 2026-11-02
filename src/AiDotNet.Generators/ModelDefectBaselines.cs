@@ -143,7 +143,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.Video.Enhancement.RVRT<T>",
             "AiDotNet.Video.Enhancement.SeedVR<T>",
             "AiDotNet.Video.Enhancement.StreamDiffVSR<T>",
-            "AiDotNet.Video.Enhancement.TTVSR<T>",
             "AiDotNet.Video.Enhancement.Upscale4KAgent<T>",
             "AiDotNet.Video.FrameInterpolation.ABME<T>",
             "AiDotNet.Video.FrameInterpolation.AMT<T>",
