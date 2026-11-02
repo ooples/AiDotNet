@@ -895,10 +895,8 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         var hidden = new Tensor<T>?[_options.RNNLayers];
         var cell = new Tensor<T>?[_options.RNNLayers];
         var memory = new Tensor<T>(new[] { rollouts, _options.RNNHiddenSize });
-        var alive = new bool[rollouts];
-        for (int b = 0; b < rollouts; b++) alive[b] = true;
-        var returns = new T[rollouts];
-        for (int b = 0; b < rollouts; b++) returns[b] = NumOps.Zero;
+        var alive = Enumerable.Repeat(true, rollouts).ToArray();
+        var returns = Enumerable.Repeat(NumOps.Zero, rollouts).ToArray();
         int remaining = rollouts;
 
         var weights = new double[_options.NumMixtures];
@@ -915,10 +913,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
         }
 
         DreamEvaluations++;
-
-        T sum = NumOps.Zero;
-        for (int b = 0; b < rollouts; b++) sum = NumOps.Add(sum, returns[b]);
-        return NumOps.Divide(sum, NumOps.FromDouble(rollouts));
+        return NumOps.Divide(returns.Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(rollouts));
     }
 
     /// <summary>
