@@ -85,4 +85,8 @@ public class AudioWatermarker<T> : AudioWatermarkerBase<T>
 
     /// <inheritdoc />
     protected override bool DetectionWeights(double[] band, double[] weights) => AdditiveWeights(band, weights);
+
+    /// <summary>Preserves the original constructor signature using the default configuration.</summary>
+    public AudioWatermarker(double detectionThreshold, double watermarkStrength) : this(detectionThreshold, watermarkStrength, null) { }
+
 }
