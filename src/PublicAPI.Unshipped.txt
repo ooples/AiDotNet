@@ -17909,3 +17909,156 @@ static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultQuantumNetworkLayers(AiDotNe
 static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultRNNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int hiddenSize = 0, int recurrentLayerCount = 2) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSpikingLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Enums.SpikingNeuronType neuronType = AiDotNet.Enums.SpikingNeuronType.LeakyIntegrateAndFire, double tau = 10, double refractoryPeriod = 2, bool useLayerNormalization = false, bool useOutputConversion = true, int timeSteps = 20, System.Collections.Generic.IReadOnlyList<int>? hiddenLayerSizes = null) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 virtual AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.ReleasesInferenceIntermediates.get -> bool
+AiDotNet.Video.Options.RVRTOptions.AttentionHeads.get -> int
+AiDotNet.Video.Options.RVRTOptions.AttentionHeads.set -> void
+AiDotNet.Video.Options.RVRTOptions.CharbonnierEpsilon.get -> double
+AiDotNet.Video.Options.RVRTOptions.CharbonnierEpsilon.set -> void
+AiDotNet.Video.Options.RVRTOptions.CosineIterations.get -> int
+AiDotNet.Video.Options.RVRTOptions.CosineIterations.set -> void
+AiDotNet.Video.Options.RVRTOptions.DeformableGroups.get -> int
+AiDotNet.Video.Options.RVRTOptions.DeformableGroups.set -> void
+AiDotNet.Video.Options.RVRTOptions.Depth.get -> int
+AiDotNet.Video.Options.RVRTOptions.Depth.set -> void
+AiDotNet.Video.Options.RVRTOptions.EmbedDim.get -> int
+AiDotNet.Video.Options.RVRTOptions.EmbedDim.set -> void
+AiDotNet.Video.Options.RVRTOptions.ExtractionBlocks.get -> int
+AiDotNet.Video.Options.RVRTOptions.ExtractionBlocks.set -> void
+AiDotNet.Video.Options.RVRTOptions.FlowFreezeIterations.get -> int
+AiDotNet.Video.Options.RVRTOptions.FlowFreezeIterations.set -> void
+AiDotNet.Video.Options.RVRTOptions.MaxResidueMagnitude.get -> double
+AiDotNet.Video.Options.RVRTOptions.MaxResidueMagnitude.set -> void
+AiDotNet.Video.Options.RVRTOptions.MinLearningRate.get -> double
+AiDotNet.Video.Options.RVRTOptions.MinLearningRate.set -> void
+AiDotNet.Video.Options.RVRTOptions.MlpRatio.get -> double
+AiDotNet.Video.Options.RVRTOptions.MlpRatio.set -> void
+AiDotNet.Video.Options.RVRTOptions.NumFrames.get -> int
+AiDotNet.Video.Options.RVRTOptions.NumFrames.set -> void
+AiDotNet.Video.Options.RVRTOptions.PropagationBlocks.get -> int
+AiDotNet.Video.Options.RVRTOptions.PropagationBlocks.set -> void
+AiDotNet.Video.Options.RVRTOptions.ReconstructionBlocks.get -> int
+AiDotNet.Video.Options.RVRTOptions.ReconstructionBlocks.set -> void
+AiDotNet.Video.Options.RVRTOptions.SpyNetLearningRateMultiplier.get -> double
+AiDotNet.Video.Options.RVRTOptions.SpyNetLearningRateMultiplier.set -> void
+override AiDotNet.Video.Enhancement.RVRT<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.Enhancement.RVRT<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.RVRT<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.RVRT<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.Enhancement.RVRT<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.Enhancement.RVRT<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.Enhancement.RVRT<T>.ResolveLazyLayerShapes() -> void
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.ClipSize.get -> int
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.ClipSize.set -> void
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.NumBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.NumBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.NumFrameGroups.get -> int
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.NumFrameGroups.set -> void
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.NumSamplingPoints.get -> int
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.NumSamplingPoints.set -> void
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.ScaleFactor.get -> int
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.ScaleFactor.set -> void
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.RVRTOptions.Variant.set -> void
+*REMOVED*override AiDotNet.Video.Enhancement.RVRT<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Video.Options.IARTOptions.CharbonnierEpsilon.get -> double
+AiDotNet.Video.Options.IARTOptions.CharbonnierEpsilon.set -> void
+AiDotNet.Video.Options.IARTOptions.CosineIterations.get -> int
+AiDotNet.Video.Options.IARTOptions.CosineIterations.set -> void
+AiDotNet.Video.Options.IARTOptions.Depths.get -> int[]!
+AiDotNet.Video.Options.IARTOptions.Depths.set -> void
+AiDotNet.Video.Options.IARTOptions.DropPathRate.get -> double
+AiDotNet.Video.Options.IARTOptions.DropPathRate.set -> void
+AiDotNet.Video.Options.IARTOptions.EmaMomentum.get -> double?
+AiDotNet.Video.Options.IARTOptions.EmaMomentum.set -> void
+AiDotNet.Video.Options.IARTOptions.EmbedDim.get -> int
+AiDotNet.Video.Options.IARTOptions.EmbedDim.set -> void
+AiDotNet.Video.Options.IARTOptions.FlowFreezeIterations.get -> int
+AiDotNet.Video.Options.IARTOptions.FlowFreezeIterations.set -> void
+AiDotNet.Video.Options.IARTOptions.MidChannels.get -> int
+AiDotNet.Video.Options.IARTOptions.MidChannels.set -> void
+AiDotNet.Video.Options.IARTOptions.MinLearningRate.get -> double
+AiDotNet.Video.Options.IARTOptions.MinLearningRate.set -> void
+AiDotNet.Video.Options.IARTOptions.MlpRatio.get -> double
+AiDotNet.Video.Options.IARTOptions.MlpRatio.set -> void
+AiDotNet.Video.Options.IARTOptions.NumFrames.get -> int
+AiDotNet.Video.Options.IARTOptions.NumFrames.set -> void
+AiDotNet.Video.Options.IARTOptions.PositionTemperature.get -> double
+AiDotNet.Video.Options.IARTOptions.PositionTemperature.set -> void
+AiDotNet.Video.Options.IARTOptions.SpyNetLearningRateMultiplier.get -> double
+AiDotNet.Video.Options.IARTOptions.SpyNetLearningRateMultiplier.set -> void
+AiDotNet.Video.Options.IARTOptions.WindowSize.get -> int
+AiDotNet.Video.Options.IARTOptions.WindowSize.set -> void
+AiDotNet.Video.Options.PSRTOptions.CharbonnierEpsilon.get -> double
+AiDotNet.Video.Options.PSRTOptions.CharbonnierEpsilon.set -> void
+AiDotNet.Video.Options.PSRTOptions.CosineIterations.get -> int
+AiDotNet.Video.Options.PSRTOptions.CosineIterations.set -> void
+AiDotNet.Video.Options.PSRTOptions.Depths.get -> int[]!
+AiDotNet.Video.Options.PSRTOptions.Depths.set -> void
+AiDotNet.Video.Options.PSRTOptions.DropPathRate.get -> double
+AiDotNet.Video.Options.PSRTOptions.DropPathRate.set -> void
+AiDotNet.Video.Options.PSRTOptions.EmaMomentum.get -> double?
+AiDotNet.Video.Options.PSRTOptions.EmaMomentum.set -> void
+AiDotNet.Video.Options.PSRTOptions.EmbedDim.get -> int
+AiDotNet.Video.Options.PSRTOptions.EmbedDim.set -> void
+AiDotNet.Video.Options.PSRTOptions.FlowFreezeIterations.get -> int
+AiDotNet.Video.Options.PSRTOptions.FlowFreezeIterations.set -> void
+AiDotNet.Video.Options.PSRTOptions.MidChannels.get -> int
+AiDotNet.Video.Options.PSRTOptions.MidChannels.set -> void
+AiDotNet.Video.Options.PSRTOptions.MinLearningRate.get -> double
+AiDotNet.Video.Options.PSRTOptions.MinLearningRate.set -> void
+AiDotNet.Video.Options.PSRTOptions.MlpRatio.get -> double
+AiDotNet.Video.Options.PSRTOptions.MlpRatio.set -> void
+AiDotNet.Video.Options.PSRTOptions.NumFrames.get -> int
+AiDotNet.Video.Options.PSRTOptions.NumFrames.set -> void
+AiDotNet.Video.Options.PSRTOptions.SpyNetLearningRateMultiplier.get -> double
+AiDotNet.Video.Options.PSRTOptions.SpyNetLearningRateMultiplier.set -> void
+override AiDotNet.Video.Enhancement.IART<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.Enhancement.IART<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.IART<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.IART<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.Enhancement.IART<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.Enhancement.IART<T>.OnTrainingStepEnded(bool succeeded) -> void
+override AiDotNet.Video.Enhancement.IART<T>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+override AiDotNet.Video.Enhancement.IART<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.Enhancement.PSRT<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.Enhancement.PSRT<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.PSRT<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.PSRT<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.Enhancement.PSRT<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.Enhancement.PSRT<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.Enhancement.PSRT<T>.OnTrainingStepEnded(bool succeeded) -> void
+override AiDotNet.Video.Enhancement.PSRT<T>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+override AiDotNet.Video.Enhancement.PSRT<T>.ResolveLazyLayerShapes() -> void
+*REMOVED*AiDotNet.Video.Options.IARTOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.IARTOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.IARTOptions.ImplicitDim.get -> int
+*REMOVED*AiDotNet.Video.Options.IARTOptions.ImplicitDim.set -> void
+*REMOVED*AiDotNet.Video.Options.IARTOptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.IARTOptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.IARTOptions.NumResBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.IARTOptions.NumResBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.IARTOptions.NumScales.get -> int
+*REMOVED*AiDotNet.Video.Options.IARTOptions.NumScales.set -> void
+*REMOVED*AiDotNet.Video.Options.IARTOptions.NumTransformerBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.IARTOptions.NumTransformerBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.IARTOptions.ScaleFactor.get -> int
+*REMOVED*AiDotNet.Video.Options.IARTOptions.ScaleFactor.set -> void
+*REMOVED*AiDotNet.Video.Options.IARTOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.IARTOptions.Variant.set -> void
+*REMOVED*AiDotNet.Video.Options.PSRTOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.PSRTOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.PSRTOptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.PSRTOptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.PSRTOptions.NumSTABs.get -> int
+*REMOVED*AiDotNet.Video.Options.PSRTOptions.NumSTABs.set -> void
+*REMOVED*AiDotNet.Video.Options.PSRTOptions.ScaleFactor.get -> int
+*REMOVED*AiDotNet.Video.Options.PSRTOptions.ScaleFactor.set -> void
+*REMOVED*AiDotNet.Video.Options.PSRTOptions.TemporalRadius.get -> int
+*REMOVED*AiDotNet.Video.Options.PSRTOptions.TemporalRadius.set -> void
+*REMOVED*AiDotNet.Video.Options.PSRTOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.PSRTOptions.Variant.set -> void
+*REMOVED*override AiDotNet.Video.Enhancement.IART<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Video.Enhancement.PSRT<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!

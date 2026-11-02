@@ -1652,6 +1652,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Video.IconVSRPaperTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.RealESRGANVideoPaperTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.TTVSRPaperTests.|
+      FullyQualifiedName~AiDotNet.Tests.Video.RVRTPaperTests.|FullyQualifiedName~AiDotNet.Tests.Video.PSRTPaperTests.|FullyQualifiedName~AiDotNet.Tests.Video.IARTPaperTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BatchNormalizationSingleImageTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.BatchNormalizationLayoutAndRecalibrationTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.T5RelativeBiasAttentionBehaviourTests.|

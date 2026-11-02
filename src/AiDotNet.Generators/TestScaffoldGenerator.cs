@@ -1754,6 +1754,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // emits TrainingIterations=2 / MemorizationTaskIterations=2), so these must NOT also be
         // listed in HeavyTrainingTimeoutClassNames — that would double-emit the override properties.
         "PANNs", "PANNsModel", "PSRT", "OneFormer",
+        // IART: PSRT-recurrent's SwinIRFM passes with an implicit warp; floated for the same reason as PSRT.
+        "IART",
         // UNINEXT's ResNet-50 instance-perception stack exceeded the 120-second
         // MoreData gate in the exact Generated U-Z shard. Keep it explicitly
         // FP32 even if the temporary shard-wide precision rule is later removed.
@@ -2405,6 +2407,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // FP32 is applied above first; retain the full paper architecture and trim only repeated
         // generated training iterations that exceeded the per-test CI budget.
         "RealESRGANVideo", "SlowFast",
+        // RVRT: rung 2. Rung 1 (<float>) is applied above; on xUnit's single managed thread the CI fixture
+        // still measured 2.3 s per update, so the 27-update TrainingStep_ShouldDependOnTheTarget probe timed
+        // out at 120 s while the other 41 tests passed. Rung 3 (Depth = 1) is in its fixture branch.
+        "RVRT",
         // SECBERT (SAN-Sig shard): rung 2 of the ladder. Rung 1 (<float>, already applied above) was
         // not enough on its own — the measured 331.3 s still overran the 180 s memorization gate, and
         // run 31056926335 recorded it as "Test execution timed out after 180000 milliseconds" rather
@@ -6483,16 +6489,16 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "IART" && model.TypeParameterCount == 1)
             {
-                // IART's public feature and residual-depth controls retain the same video-SR
-                // encoder/resampler/reconstruction path at generated-test scale. Its released
-                // 64-wide, 20-block configuration remains the production default.
+                // IART keeps the release's network in production (PSRT-recurrent's 120-wide SwinIRFM passes with
+                // a shared implicit warp, 64-wide x4 reconstruction). The same SPyNet -> embedding -> four
+                // implicitly aligned SwinIRFM passes -> x4 pixel-shuffle topology runs here at CI scale through
+                // public options. Three frames give every pass a frame with a previous and a second-previous output.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 3), " +
-                    "new AiDotNet.Video.Options.IARTOptions { NumFeatures = 8, NumTransformerBlocks = 1, " +
-                    "ScaleFactor = 2, NumHeads = 1, NumScales = 1, ImplicitDim = 8, " +
-                    "NumResBlocks = 1, DropoutRate = 0.0 })";
+                    "inputFrames: 3, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.IARTOptions { Seed = 1, MidChannels = 8, EmbedDim = 12, " +
+                    "Depths = new[] { 2 }, NumHeads = 2, NumFrames = 3 })";
             }
             else if (model.ClassName == "HTDemucs" && model.TypeParameterCount == 1)
             {
@@ -10415,17 +10421,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "PSRT" && model.TypeParameterCount == 1)
             {
-                // PSRT's paper default remains 64 features, 6 progressive spatio-temporal blocks,
-                // and 4x upscaling. The exact MoreData test still reached the 120-second timeout
-                // after the generated fixture was moved to <float>, so precision alone is measured
-                // insufficient. Exercise the same residual video-SR architecture at CI-smoke scale
-                // through PSRT's public options; no production default is changed.
+                // PSRT keeps the release's PSRT-recurrent in production (120-wide embeddings, three RSTBs of six
+                // layers, 6 heads, 3x8x8 windows, 64-wide x4 reconstruction). The same SPyNet -> embedding -> four
+                // patch-aligned SwinIRFM passes -> x4 pixel-shuffle topology runs here at CI scale through public
+                // options. Three frames give every pass a frame with both a previous and a second-previous output,
+                // so the composed second-order flow and both patch warps are exercised.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
-                    "inputHeight: 8, inputWidth: 8, inputDepth: 3, outputSize: 3), " +
-                    "new AiDotNet.Video.Options.PSRTOptions { NumFeatures = 8, NumSTABs = 1, " +
-                    "ScaleFactor = 2, WindowSize = 4, TemporalRadius = 1, NumHeads = 2 })";
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 3, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.PSRTOptions { Seed = 1, MidChannels = 8, EmbedDim = 12, " +
+                    "Depths = new[] { 2 }, NumHeads = 2, NumFrames = 3 })";
             }
             else if (model.ClassName == "RVM" && model.TypeParameterCount == 1)
             {
@@ -13743,18 +13749,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "RVRT" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
             {
-                // RVRT (Liang et al. 2022) — recurrent video restoration transformer with guided deformable
-                // attention. Production defaults (120 features, 4 blocks, scale x4) build the heavy VSR stack
-                // whose <double> Train() step is multi-second, so every training invariant times out. Same
-                // fix as DAMVSR/FlashVSR: a small legal CI fixture (2 RGB frames @ 8x8, 8 features, 1 block,
-                // 2x scale, 2 heads) that keeps the recurrent-transformer architecture but runs at CI-smoke
-                // cost. Only the model SCALE is reduced; the LearningRate default (4e-4) is retained.
+                // RVRT keeps the release's network in production (144-wide embeddings, 6 heads, 2x8x8 windows,
+                // [1, 2, 1] RSTB blocks of depth 2, guided deformable attention with 12 groups and 12 heads).
+                // The same SPyNet -> RSTB extraction -> four guided-deformable-attention passes -> RSTB
+                // reconstruction -> x4 topology runs here at CI scale through public options. Four frames make two
+                // clips, so every pass aligns a propagated clip (two frames would skip the attention entirely).
+                // Depth = 1 is the shrink rung after float and the HeavyTrainingTimeoutClassNames cap: xUnit pins the
+                // managed engine to one thread, where Depth 2 measured 2.3 s per update and the escalated
+                // target-dependence probe (12 + 36 updates) overran 120 s; Depth 1 measures 1.4 s. The shifted-window
+                // layer stays covered by RVRTPaperTests, which run the default depth.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
-                    "new AiDotNet.Video.Options.RVRTOptions { NumFeatures = 8, NumBlocks = 1, ScaleFactor = 2, " +
-                    "NumFrameGroups = 1, NumHeads = 2 })";
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.RVRTOptions { Seed = 1, EmbedDim = 12, NumHeads = 2, AttentionHeads = 2, " +
+                    "DeformableGroups = 2, PropagationBlocks = 1, NumFrames = 4, Depth = 1 })";
             }
             else if (model.ClassName == "RealisVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
@@ -14547,11 +14556,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 4, 32, 32 };");
         }
+        else if (model.ClassName == "IART")
+        {
+            // Matches the public-options fixture above: three 8x8 RGB frames and the x4 reconstruction.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 3, 32, 32 };");
+        }
         else if (model.ClassName == "PSRT")
         {
-            // Matches the bounded public-options fixture: four 8x8 RGB frames and 2x reconstruction.
-            sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 8, 8 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 3, 16, 16 };");
+            // Matches the public-options fixture above: three 8x8 RGB frames and the x4 reconstruction.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 3, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 3, 3, 32, 32 };");
         }
         else if (model.ClassName == "E3TTS")
         {
