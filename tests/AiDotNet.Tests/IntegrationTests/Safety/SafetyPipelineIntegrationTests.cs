@@ -424,11 +424,14 @@ public class SafetyPipelineIntegrationTests
         Assert.Throws<InvalidOperationException>(() => SafetyPipelineFactory<double>.Create(
             new SafetyConfig { Watermarking = { ImageWatermarking = true, ImageWatermarkKey = ImageWatermarkerBase<double>.PublicKey } }));
 
-        // Detection alone needs no key: it looks for marks made with the public key.
-        var detectOnly = SafetyPipelineFactory<double>.Create(new SafetyConfig { Watermarking = { DetectionMode = true } });
+        // Detection alone needs no image key: it looks for marks made with the public key. (Detection mode also scores
+        // text, which needs the generator's tokenizer -- Factory_RefusesTextWatermarkingWithoutTheGeneratorsTokenizer.)
+        var tokenizer = new WatermarkFixtures.WordTokenizer();
+        var detectOnly = SafetyPipelineFactory<double>.Create(
+            new SafetyConfig { Watermarking = { DetectionMode = true, TextTokenizer = tokenizer } });
         Assert.Contains(detectOnly.Modules, m => m is ImageWatermarker<double>);
         var detectBlank = SafetyPipelineFactory<double>.Create(
-            new SafetyConfig { Watermarking = { DetectionMode = true, ImageWatermarkKey = "   " } });
+            new SafetyConfig { Watermarking = { DetectionMode = true, TextTokenizer = tokenizer, ImageWatermarkKey = "   " } });
         Assert.Contains(detectBlank.Modules, m => m is ImageWatermarker<double>);
     }
 
