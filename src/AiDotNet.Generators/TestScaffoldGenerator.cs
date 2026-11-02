@@ -13685,7 +13685,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // smallest legal output side 4, so two 4x4 frames upscale 2x to 8x8. The fixture stays on the
                 // ControlNet stage (the default 60,000 iterations): switching stage mid-probe would compare
                 // different objectives, and the stage switches have their own paper tests. Two sampling
-                // steps keep Predict cheap; the VGG19 is left out (perceptual weight 0).
+                // steps keep Predict cheap; the VGG19 is left out (perceptual weight 0). The ControlNet starts
+                // from zero convolutions and trains on a fresh log-normal σ each step, so at the paper's 8e-5
+                // the deterministic objective drifts up for the first ten steps (0.49989 -> 0.50018 measured)
+                // before falling; 3e-3 lowers it from the first step (0.4999 -> 0.4756 at 10, 0.4580 at 100).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
@@ -13697,7 +13700,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ImageEncoderSize = 28, ImageEncoderPatchSize = 14, ImageEncoderWidth = 32, " +
                     "ImageEncoderDepth = 1, ImageEncoderHeads = 2, ImageEncoderMlpDim = 64, ImageEmbedDim = 32, " +
                     "ScaleFactor = 2, NumFrames = 2, NumInferenceSteps = 2, DecoderSamplingSteps = 1, " +
-                    "PerceptualWeight = 0.0, DiscriminatorChannels = 4 })";
+                    "PerceptualWeight = 0.0, DiscriminatorChannels = 4, LearningRate = 3e-3 })";
             }
             else if (model.ClassName == "MIAVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))

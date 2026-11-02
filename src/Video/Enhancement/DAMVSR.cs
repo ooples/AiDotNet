@@ -242,8 +242,9 @@ public partial class DAMVSR<T> : VideoSuperResolutionBase<T>, ITrainingObjective
     {
         if (LayerShapesResolved || _usingCustomLayers || !_useNativeMode) return;
         using var noGrad = new NoGradScope<T>();
-        int side = Math.Max(MinimumSide, 2 * _options.ScaleFactor);
-        side = (side + MinimumSide - 1) / MinimumSide * MinimumSide;
+        // The discriminator halves the frames three times, so the side must also divide by 8 (both are powers of two).
+        int unit = Math.Max(MinimumSide, 8);
+        int side = (Math.Max(unit, 2 * _options.ScaleFactor) + unit - 1) / unit * unit;
         int low = Math.Max(1, side / _options.ScaleFactor);
         var output = RunClips(new Tensor<T>(new[] { 1, 2, 3, low, low }), 1, InferenceRandom());
         var frames = Engine.Reshape(output, new[] { 2, 3, output.Shape[3], output.Shape[4] });
@@ -321,6 +322,9 @@ public partial class DAMVSR<T> : VideoSuperResolutionBase<T>, ITrainingObjective
             sigmas[i] = Math.Pow(steps == 1 ? max : max + i / (double)(steps - 1) * (min - max), _options.KarrasRho);
         return sigmas;
     }
+
+    /// <summary>The schedule index SDEdit enters at: the last SdeditStrength of the <paramref name="steps"/> are run.</summary>
+    internal int SdeditStart(int steps) => Math.Min(steps - 1, steps - (int)Math.Round(steps * _options.SdeditStrength));
 
     private Tensor<T> Gaussian(int[] shape, Random random)
     {
@@ -440,6 +444,10 @@ public partial class DAMVSR<T> : VideoSuperResolutionBase<T>, ITrainingObjective
         }).ToList();
     }
 
+    /// <summary>The backward pass's temporal attention of temporal block <paramref name="index"/>: tokens [S, F, C] and
+    /// the forward pass's map [S·heads, F, F].</summary>
+    internal Tensor<T> BackwardTemporalAttention(int index, Tensor<T> x, Tensor<T> map) => RotatedMapAttention(x, map, _backwardTemporal[index]);
+
     private Tensor<T> RotatedMapAttention(Tensor<T> x, Tensor<T> map, (int Value, int Output) projections)
     {
         int s = x.Shape[0], f = x.Shape[1], heads = map.Shape[0] / s;
@@ -480,7 +488,7 @@ public partial class DAMVSR<T> : VideoSuperResolutionBase<T>, ITrainingObjective
         var forward = Condition(References(0), lowUp, frames, random);
         var backward = _options.BidirectionalSampling ? Condition(References(frames - 1), ReverseFrames(lowUp, frames), frames, random) : null;
         var sigmas = Sigmas(steps);
-        int start = Math.Min(steps - 1, steps - (int)Math.Round(steps * _options.SdeditStrength));
+        int start = SdeditStart(steps);
         var z0 = Engine.TensorMultiplyScalar(EncodeLatent(lowUp), NumOps.FromDouble(_options.LatentScale));
         var z = Engine.TensorAdd(z0, Engine.TensorMultiplyScalar(Gaussian(z0.Shape.ToArray(), random), NumOps.FromDouble(sigmas[start])));
         for (int i = start; i < steps; i++)
