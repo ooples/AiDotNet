@@ -286,9 +286,14 @@ public partial class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     {
         var keys = EmbedBatch(inputs);
         var values = ExtractTargets(targets, keys.Count);
+        // The parameters that embedded this batch, shared by its entries: a reader with other parameters (a model
+        // adapted before the meta-learner moved on, or one whose parameters were set) recomputes these keys.
+        var keyParameters = MetaModel.GetParameters().Clone();
         for (int i = 0; i < keys.Count; i++)
         {
-            _memory.Write(keys[i], values[i]);
+            // The source example travels with its key, so the key can be recomputed
+            // (MbPAAdaptedModel.MemoryForThisEmbedding).
+            _memory.Write(keys[i], values[i], MbPAConversions<T>.SliceExample(inputs, i), keyParameters);
         }
     }
 
@@ -320,8 +325,11 @@ public partial class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
         var values = new List<Vector<T>>(count);
         for (int i = 0; i < count; i++)
         {
-            values.Add(MbPAConversions<T>.ResizeTo(
-                MbPAConversions<T>.SliceTargetRow(targets, i), _algoOptions.OutputDimension));
+            var row = MbPAConversions<T>.SliceTargetRow(targets, i)
+                ?? throw new NotSupportedException("MbPA targets must be vectors, matrices, or tensors.");
+            values.Add(_algoOptions.OutputDistribution == MbPAOutputDistribution.Categorical
+                ? MbPAConversions<T>.CategoricalTarget(row, _algoOptions.OutputDimension)
+                : MbPAConversions<T>.ResizeTo(row, _algoOptions.OutputDimension));
         }
         return values;
     }

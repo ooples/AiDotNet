@@ -111,14 +111,15 @@ public class ResNetConfiguration
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Default is true. This technique (from "Bag of Tricks" paper) improves training stability
-    /// by initializing the last BN layer in each residual branch to zero, making the initial residual
-    /// branch act as an identity.
+    /// Default is false, as in He et al. 2016, whose batch norms all start with gamma = 1 (torchvision's default too).
+    /// The trick from Goyal et al. 2017 ("Bag of Tricks") initializes the last batch norm of each residual branch to zero,
+    /// so every branch starts as an identity: a stability aid for long, many-block ImageNet training that slows the first
+    /// steps, because a branch whose output is scaled by zero passes no gradient to its convolutions until gamma moves.
     /// </para>
     /// <para>
-    /// <b>For Beginners:</b> This is a training trick that helps the network start learning
-    /// more effectively. When enabled, each residual block initially acts like an identity function,
-    /// making the network easier to optimize.
+    /// <b>For Beginners:</b> This is an optional training trick. When enabled, each residual block starts out passing
+    /// its input straight through, which can help very deep networks trained for a long time, but makes short training
+    /// runs learn more slowly.
     /// </para>
     /// </remarks>
     public bool ZeroInitResidual { get; }
@@ -217,7 +218,7 @@ public class ResNetConfiguration
     /// <param name="inputWidth">The width of input images (default: 224).</param>
     /// <param name="inputChannels">The number of input channels (default: 3 for RGB).</param>
     /// <param name="includeClassifier">Whether to include the classifier layers (default: true).</param>
-    /// <param name="zeroInitResidual">Whether to use zero-initialization for residual branches (default: true).</param>
+    /// <param name="zeroInitResidual">Whether to zero-initialize the last batch norm of each residual branch (default: false, as in He et al. 2016).</param>
     /// <exception cref="ArgumentOutOfRangeException">
     /// Thrown when numClasses is less than or equal to 0, or when image dimensions are invalid.
     /// </exception>
@@ -228,7 +229,7 @@ public class ResNetConfiguration
         int inputWidth = 224,
         int inputChannels = 3,
         bool includeClassifier = true,
-        bool zeroInitResidual = true)
+        bool zeroInitResidual = false)
     {
         if (numClasses <= 0)
         {

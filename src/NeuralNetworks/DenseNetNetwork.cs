@@ -72,6 +72,13 @@ namespace AiDotNet.NeuralNetworks;
                 Source = "Huang et al. 2017, Sec. 4: SGD with Nesterov momentum 0.9 without dampening and weight decay 1e-4, initial learning rate 0.1 divided by 10 at 50% and 75% of the total epochs, batch size 64 on CIFAR (256 on ImageNet). The decay points are kept as the fractions the paper states rather than transcribed for one epoch count. Built by the model rather than by the factory because it constructs explicit options; the declaration verifies those values instead of replacing them.")]
 public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
+    /// <summary>
+    /// The generated DenseNet keeps nothing between calls, so each Predict frees its GPU intermediates when it ends
+    /// (#2383: without it every op allocated a fresh device buffer and process memory grew to 4.6-7.4 GB at b1-b16).
+    /// Caller-supplied <c>Architecture.Layers</c> may carry a tensor between calls, so they keep the default.
+    /// </summary>
+    protected override bool ReleasesInferenceIntermediates => Architecture.Layers is not { Count: > 0 };
+
     /// <inheritdoc/>
     /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
     protected override bool SizesLayersFromOptions => true;
@@ -127,7 +134,7 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         DenseNetOptions? options = null)
-        : base(architecture, lossFunction ?? GetDenseNetDefaultLoss(architecture.TaskType), (options ??= new DenseNetOptions()).MaxGradNorm)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossForGeneratedLogitsHead(architecture), (options ??= new DenseNetOptions()).MaxGradNorm)
     {
         _options = options;
         Options = _options;
@@ -174,37 +181,11 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
                     InitialLearningRate = 1e-4,
                     UseAMSGrad = true
                 }));
-        _lossFunction = lossFunction ?? GetDenseNetDefaultLoss(architecture.TaskType);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossForGeneratedLogitsHead(architecture);
 
         InitializeLayers();
     }
 
-    /// <summary>
-    /// Returns the appropriate loss function for DenseNet. DenseNet outputs raw logits
-    /// (no softmax activation), so classification tasks use CrossEntropyWithLogitsLoss
-    /// which applies LogSoftmax internally per Huang et al. 2017.
-    /// </summary>
-    private static ILossFunction<T> GetDenseNetDefaultLoss(NeuralNetworkTaskType taskType)
-    {
-        // Match each task type to the corresponding *WithLogits loss so the DenseNet
-        // classification head's raw-logits output flows into a numerically stable loss
-        // that applies the activation internally:
-        //   * BinaryClassification — outputSize is typically 1, so softmax([x]) collapses
-        //     to a constant 1 (zero loss). Use BinaryCrossEntropyWithLogitsLoss instead,
-        //     which is the sigmoid+BCE fused form.
-        //   * MultiLabelClassification — labels are independent (not mutually exclusive),
-        //     so softmax cross-entropy is the wrong objective. BCE-with-logits per output
-        //     is the standard multi-label loss.
-        //   * MultiClassClassification — the only task type where softmax cross-entropy
-        //     is correct (mutually exclusive classes).
-        return taskType switch
-        {
-            NeuralNetworkTaskType.BinaryClassification     => new BinaryCrossEntropyWithLogitsLoss<T>(),
-            NeuralNetworkTaskType.MultiClassClassification => new CrossEntropyWithLogitsLoss<T>(),
-            NeuralNetworkTaskType.MultiLabelClassification => new BinaryCrossEntropyWithLogitsLoss<T>(),
-            _ => NeuralNetworkHelper<T>.GetDefaultLossFunction(taskType),
-        };
-    }
 
     /// <summary>
     /// Creates a DenseNet-121 network.

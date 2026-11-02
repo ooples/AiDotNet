@@ -174,7 +174,7 @@ internal static class ModelDefectBaselines
             "CreateVITSLayers",
         };
 
-    /// <summary>ADNDEF003: models on a factory shared across papers with no [ArchitectureFromPaper], 426 types.</summary>
+    /// <summary>ADNDEF003: models on a factory shared across papers with no [ArchitectureFromPaper], 425 types.</summary>
     internal static readonly System.Collections.Generic.HashSet<string> UndeclaredSharedFactoryModels =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
@@ -195,7 +195,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.NER.SpanBased.SpERTNER<T>",
             "AiDotNet.NER.SpanBased.TriaffineNER<T>",
             "AiDotNet.NER.SpanBased.W2NER<T>",
-            "AiDotNet.NeuralNetworks.FeedForwardNeuralNetwork<T>",
             "AiDotNet.NeuralNetworks.SyntheticData.OCTGANGenerator<T>",
             "AiDotNet.NeuralNetworks.SyntheticData.PATEGANGenerator<T>",
             "AiDotNet.NeuralNetworks.Tabular.TabNetNetwork<T>",
