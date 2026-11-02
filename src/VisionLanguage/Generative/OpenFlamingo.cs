@@ -250,13 +250,12 @@ public partial class OpenFlamingo<T> : VisionLanguageModelBase<T>, IGenerativeVi
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-        // Normalize ONNX inputs the same way the native path does — both
-        // EncodeImage and the native Predict call PreprocessImage. Without
-        // this, the ONNX fast path would diverge silently from native.
-        var c = PreprocessImage(input);
         if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(c);
+            return OnnxModel.Run(input);
         SetTrainingMode(false);
+        // The native stack opens with attention over VisionDim, so it reads post-patch-embedding
+        // tokens [batch, tokens, VisionDim]; pixel normalization applies to images, not to them.
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;

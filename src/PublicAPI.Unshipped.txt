@@ -833,3 +833,14 @@ override AiDotNet.Models.Options.NadamOptimizerOptions<T, TInput, TOutput>.MinLe
 override AiDotNet.NeuralNetworks.Layers.ObliviousDecisionTreeLayer<T>.OnRandomSeedAssigned() -> void
 static AiDotNet.Finance.Base.RiskModelBase<T>.DefaultOptionsFor<TOptions>(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> TOptions!
 static AiDotNet.ReinforcementLearning.Policies.PolicyBase<T>.RandomFromSeed(int? seed) -> System.Random?
+*REMOVED*override AiDotNet.VisionLanguage.Generative.IDEFICS2<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.Generative.IDEFICS3<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.Generative.IDEFICS<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.Generative.OpenFlamingo<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.MPLUGOwl2<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.MPLUGOwl3<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.MPLUGOwl<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.Qwen25VL<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.Qwen2VL<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.Qwen3VL<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.QwenVL<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!

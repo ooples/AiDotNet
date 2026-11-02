@@ -253,11 +253,12 @@ public partial class IDEFICS<T> : VisionLanguageModelBase<T>, IGenerativeVisionL
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-        // Both paths must see the same preprocessed input.
-        var c = PreprocessImage(input);
         if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(c);
+            return OnnxModel.Run(input);
         SetTrainingMode(false);
+        // The native stack opens with attention over VisionDim, so it reads post-patch-embedding
+        // tokens [batch, tokens, VisionDim]; pixel normalization applies to images, not to them.
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;
