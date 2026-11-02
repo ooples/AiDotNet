@@ -63,7 +63,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
     [
         // MetaLearnerBase and NeuralProcessBase are no longer excluded: MetaLearnerTestBase supplies the inner
         // model a meta-learner wraps, so the fixture only names the algorithm and its options type (#2139).
-        "MetaLearningModelBase",     // The adapted models Adapt returns: results of a meta-learner, not learners
+        // The adapted models Adapt returns: only adaptation can build one, so the generator cannot. They are covered by
+        // the hand-written AdaptedModelTestBase fixtures (AdaptedMetaModelTests and its siblings), which adapt (#2139).
+        "MetaLearningModelBase",
         // NoisePredictorBase is no longer excluded: NoisePredictorTestBase drives PredictNoise directly, and each
         // predictor is built at a reduced size from NoisePredictorFixtureArgs (#2139).
         // ShardedModelBase is no longer excluded: ShardedModelTestBase wraps a seeded network at world size 1, where

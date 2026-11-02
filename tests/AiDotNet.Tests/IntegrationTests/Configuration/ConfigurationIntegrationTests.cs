@@ -467,7 +467,8 @@ public class ConfigurationIntegrationTests
         Assert.Equal(224, config.InputWidth);
         Assert.Equal(3, config.InputChannels);
         Assert.True(config.IncludeClassifier);
-        Assert.True(config.ZeroInitResidual);
+        // He et al. 2016 / torchvision (zero_init_residual=False): the zero-init trick is opt-in.
+        Assert.False(config.ZeroInitResidual);
         Assert.False(config.UseAutodiff);
     }
 

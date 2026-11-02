@@ -171,6 +171,24 @@ public abstract class MetaLearnerTestBase
         Assert.Equal(before, MetaParameters(learner));
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task PredictingWithAnAdaptedModel_LeavesTheMetaModelUnchanged()
+    {
+        // Adaptation is per task (Finn et al. 2017: theta'_i is computed from theta), so using the adapted model must
+        // not write theta'_i back into the meta-model either. NeuralProcessModel.Predict once pushed its parameters
+        // into the meta-learner's own MetaModel, which this checks for every learner.
+        await Task.Yield();
+        using var arena = TensorArena.Create();
+        var learner = CreateLearner();
+        var task = CreateTask(seed: 8);
+        var adapted = learner.Adapt(task);
+        var before = MetaParameters(learner);
+
+        adapted.Predict(task.QuerySetX);
+
+        Assert.Equal(before, MetaParameters(learner));
+    }
+
     /// <summary>The learner's parameters and declared state, as its own serializer writes them.</summary>
     private static byte[] LearnedState(IMetaLearner<double, Matrix<double>, Vector<double>> learner)
     {

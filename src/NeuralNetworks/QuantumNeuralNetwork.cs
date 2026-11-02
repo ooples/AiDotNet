@@ -169,7 +169,7 @@ public partial class QuantumNeuralNetwork<T> : VectorModelLayoutBase<T>
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultQuantumNetworkLayers(Architecture, _numQubits));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultQuantumNetworkLayers(Architecture, _numQubits, _options.NumLayers));
         }
     }
 

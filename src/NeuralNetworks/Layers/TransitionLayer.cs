@@ -299,10 +299,21 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
             throw new ArgumentException($"TransitionLayer requires at least 3D input, got {rank}D");
         }
 
-        // BN → ReLU → Conv1x1 → AvgPool. Locals, not fields: nothing reads them after the forward,
-        // and a field would keep this layer's activations alive between forwards.
-        var bnOut = _bn.Forward(processInput);
-        var reluOut = _relu.Activate(bnOut);
+        // BN → ReLU → Conv1x1 → AvgPool. In inference BN + ReLU is one pass (when the block's ReLU is exactly a ReLU);
+        // otherwise, and whenever the backward will read the intermediates, the stages run separately. Locals, not
+        // fields: nothing reads them after the forward, and a field would keep this layer's activations alive between
+        // forwards.
+        Tensor<T> reluOut;
+        if (!ShouldCacheForBackward && _relu.GetType() == typeof(ReLUActivation<T>)
+            && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(_bn, processInput, FusedActivationType.ReLU, out var preActivated))
+        {
+            reluOut = preActivated;
+        }
+        else
+        {
+            var bnOut = _bn.Forward(processInput);
+            reluOut = _relu.Activate(bnOut);
+        }
         var convOut = conv.Forward(reluOut);
 
         // Handle batched input (4D) - use Engine.AvgPool2D directly

@@ -8,16 +8,17 @@ using Xunit;
 namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 
 /// <summary>
-/// Regression repro: PPO's per-episode training reward must RISE on a trivially learnable oracle
-/// environment (a feature column equal to the next-bar return). Downstream evidence: this rises reliably
-/// on the 0.208.117 package (ec214ec) and DECLINES on master-built 0.208.119 — suspected regression in the
-/// 117→master window (prime suspect: the NeuralNetworkBase lazy-init/Layers-ordering changes in #1555,
-/// which the PPO actor/critic tape training flows through). This test is the bisection instrument.
+/// PPO training must improve reward on a deterministic eight-bar trading cycle.
+/// Fixed seeds control both network initialization and exploration, so CI exercises repeatable learning
+/// trajectories in float and double rather than randomly passing or failing on each run.
 /// </summary>
 public class PpoOracleLearningRegressionTests
 {
-    [Fact]
-    public void Ppo_training_reward_rises_on_a_perfect_oracle()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(42)]
+    public void Ppo_training_reward_rises_on_a_perfect_oracle(int seed)
     {
         const int n = 600;
         const int windowSize = 4;
@@ -36,7 +37,7 @@ public class PpoOracleLearningRegressionTests
             data, windowSize, initialCapital: 100_000.0, tradeSize: 100.0,
             transactionCost: 0.0, allowShortSelling: true, randomStart: false);
 
-        var options = new FinancialPPOAgentOptions<double> { ContinuousActions = false };
+        var options = new FinancialPPOAgentOptions<double> { ContinuousActions = false, Seed = seed };
         var agent = new FinancialPPOAgent<double>(
             Arch(options.StateSize, options.ActionSize),
             Arch(options.StateSize, 1),
@@ -72,13 +73,17 @@ public class PpoOracleLearningRegressionTests
 
         var early = episodeRewards.Take(20).Average();
         var late = episodeRewards.Skip(40).Average();
-        Assert.True(late > early,
+        // Require a meaningful positive reward as well as improvement; random drift alone can rise.
+        Assert.True(late > early && late > 0.05,
             $"PPO is not learning a PERFECT oracle: early-episodes avg {early:F3} vs late {late:F3} " +
             $"(full curve: {string.Join(",", episodeRewards.Select(r => r.ToString("F2")))})");
     }
 
-    [Fact]
-    public void Ppo_training_reward_rises_on_a_perfect_oracle_float()
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(42)]
+    public void Ppo_training_reward_rises_on_a_perfect_oracle_float(int seed)
     {
         // FLOAT variant — the downstream platform trains agents in float; the float kernel path (incl.
         // native oneDNN/OpenBLAS adoption) differs from double and is where the observed decline lives.
@@ -97,7 +102,7 @@ public class PpoOracleLearningRegressionTests
             data, windowSize, initialCapital: 100_000f, tradeSize: 100f,
             transactionCost: 0.0, allowShortSelling: true, randomStart: false);
 
-        var options = new FinancialPPOAgentOptions<float> { ContinuousActions = false };
+        var options = new FinancialPPOAgentOptions<float> { ContinuousActions = false, Seed = seed };
         var agent = new FinancialPPOAgent<float>(
             new NeuralNetworkArchitecture<float>(inputFeatures: options.StateSize, outputSize: options.ActionSize),
             new NeuralNetworkArchitecture<float>(inputFeatures: options.StateSize, outputSize: 1),
@@ -133,7 +138,8 @@ public class PpoOracleLearningRegressionTests
 
         var early = episodeRewards.Take(20).Average();
         var late = episodeRewards.Skip(40).Average();
-        Assert.True(late > early,
+        // Require a meaningful positive reward as well as improvement; random drift alone can rise.
+        Assert.True(late > early && late > 0.05,
             $"PPO<float> is not learning a PERFECT oracle: early {early:F3} vs late {late:F3} " +
             $"(curve: {string.Join(",", episodeRewards.Select(r => r.ToString("F2")))})");
     }
