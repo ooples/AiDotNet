@@ -145,9 +145,11 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
                 var reportedProperties = new HashSet<IPropertySymbol>(SymbolEqualityComparer.Default);
                 foreach (var options in optionsTypes)
                 {
-                    foreach (var property in ConfigurableProperties(options, modelOptions).Where(p => !read.ContainsKey(p)))
+                    // reportedProperties.Add keeps a property shared by several options types to one report.
+                    foreach (var property in ConfigurableProperties(options, modelOptions)
+                                 .Where(p => !read.ContainsKey(p))
+                                 .Where(reportedProperties.Add))
                     {
-                        if (!reportedProperties.Add(property)) continue;
                         string key = PropertyKey(property);
                         unread.Add(key);
                         if (OptionsFidelityBaselines.UnreadOptions.Contains(key)) continue;
@@ -233,11 +235,9 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (INamedTypeSymbol? walk = options.OriginalDefinition; walk is not null; walk = walk.BaseType?.OriginalDefinition)
         {
-            foreach (var property in walk.GetMembers().OfType<IPropertySymbol>().Where(IsConfigurable))
-            {
-                if (!seen.Add(property.Name)) continue;
+            // seen.Add keeps the most-derived declaration of a name: the walk starts at the options type itself.
+            foreach (var property in walk.GetMembers().OfType<IPropertySymbol>().Where(IsConfigurable).Where(p => seen.Add(p.Name)))
                 yield return property;
-            }
 
             if (SymbolEqualityComparer.Default.Equals(walk, modelOptions)) yield break;
         }
