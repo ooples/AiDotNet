@@ -83,6 +83,7 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached values
     [Scratch]
+    [KeepsActivation("GetAttentionScores and AutoInt.GetInteractionWeights expose the last field-interaction weights after prediction.")]
     private Tensor<T>? _attentionScoresCache;
 
     /// <inheritdoc/>
@@ -198,10 +199,7 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
         var context = Engine.ScaledDotProductAttention(q, k, v, mask: null,
             scale: 1.0 / Math.Sqrt(_headDim), out var scores);
         // Preserve the public [batch, fields, fields] interpretation by averaging the heads.
-        if (ShouldCacheForBackward)
-            SaveForBackward(ref _attentionScoresCache, Engine.ReduceMean(scores, new[] { 1 }, keepDims: false));
-        else
-            _attentionScoresCache = null;
+        _attentionScoresCache = Engine.ReduceMean(scores, new[] { 1 }, keepDims: false);
         var attended = Engine.Reshape(Engine.TensorPermute(context, new[] { 0, 2, 1, 3 }),
             new[] { batchSize, numFeatures, _attentionDim });
         var output = ProjectInput(attended, _outputWeights, batchSize, numFeatures, _attentionDim, _embeddingDim);

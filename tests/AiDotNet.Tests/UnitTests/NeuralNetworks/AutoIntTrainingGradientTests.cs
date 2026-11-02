@@ -9,6 +9,22 @@ namespace AiDotNet.Tests.UnitTests.NeuralNetworks;
 public class AutoIntTrainingGradientTests
 {
     [Fact]
+    public void Prediction_PreservesPublicFeatureInteractionWeights()
+    {
+        var model = new AutoIntRegression<double>(2, options: new AutoIntOptions<double>
+        {
+            EmbeddingDimension = 4, NumHeads = 2, AttentionDimension = 2,
+            NumLayers = 1, MLPHiddenDimensions = new[] { 2 }
+        });
+        model.Predict(new Tensor<double>(new[] { 1, 2 }, new Vector<double>(new[] { 0.3, 0.7 })));
+        var weights = model.GetInteractionWeights();
+        Assert.NotNull(weights);
+        Assert.Equal(new[] { 1, 2, 2 }, weights.Shape.ToArray());
+        Assert.Equal(1.0, weights[0] + weights[1], 10);
+        Assert.Equal(1.0, weights[2] + weights[3], 10);
+    }
+
+    [Fact]
     public void TrainStep_CategoricalOnlyModelUpdatesParameters()
     {
         var options = new AutoIntOptions<double>
@@ -28,11 +44,13 @@ public class AutoIntTrainingGradientTests
     }
 
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    [InlineData(true, true)]
-    public void TrainStep_WholeModelUpdateMatchesFiniteDifferences(bool classification, bool categorical)
+    [InlineData(false, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    public void TrainStep_WholeModelUpdateMatchesFiniteDifferences(bool classification, bool categorical, bool repeatedCategory)
     {
         var options = new AutoIntOptions<double>
         {
@@ -47,7 +65,7 @@ public class AutoIntTrainingGradientTests
         var targets = new Tensor<double>(new[] { 2, 1 }, new Vector<double>(new[] { 0.3, 0.8 }));
         var labels = new Vector<int>(new[] { 0, 1 });
         Matrix<int>? categories = categorical ? new Matrix<int>(2, 1) : null;
-        if (categories != null) categories[1, 0] = 2;
+        if (categories != null) categories[1, 0] = repeatedCategory ? 0 : 2;
         // Keep ReLUs away from their kink; use distinct values to avoid symmetric attention.
         var initial = model.GetParameters();
         for (int i = 0; i < initial.Length; i++) initial[i] = 0.3 + 0.04 * (i % 7);

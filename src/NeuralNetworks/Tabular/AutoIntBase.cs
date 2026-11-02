@@ -249,7 +249,10 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
             // The objective already averages over the batch; do not divide its gradients again.
             foreach (var parameter in parameters.Distinct())
                 if (gradients.TryGetValue(parameter, out var gradient))
+                {
                     Engine.TensorSubtractInPlace(parameter, Engine.TensorMultiplyScalar(gradient, learningRate));
+                    Engine.InvalidatePersistentTensor(parameter);
+                }
             return value;
         }
         finally
@@ -283,16 +286,16 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
             for (int f = 0; f < NumCategoricalFeatures; f++)
             {
                 int cardinality = cardinalities[f];
-                var selection = new Tensor<T>(new[] { batchSize, cardinality });
+                var indices = new Tensor<int>(new[] { batchSize });
                 for (int b = 0; b < batchSize; b++)
                 {
                     int catIdx = categoricalIndices[b, f];
                     if ((uint)catIdx >= (uint)cardinality)
                         throw new ArgumentOutOfRangeException(nameof(categoricalIndices),
                             $"Categorical index {catIdx} for feature {f} (batch {b}) is out of range [0, {cardinality}).");
-                    selection[b * cardinality + catIdx] = NumOps.One;
+                    indices[b] = catIdx;
                 }
-                var selected = Engine.TensorMatMul(selection, _categoricalEmbeddings[f]);
+                var selected = Engine.TensorEmbeddingLookup<T, int>(_categoricalEmbeddings[f], indices);
                 parts.Add(Engine.Reshape(selected, new[] { batchSize, 1, Options.EmbeddingDimension }));
             }
         }
