@@ -238,6 +238,9 @@ public class ActivationCacheGuardAnalyzer : DiagnosticAnalyzer
     private static bool IsNullLike(ExpressionSyntax value)
     {
         var stripped = StripParentheses(value);
+        // A chained clear (_a = _b = null) stores the innermost value in every field of the chain.
+        while (stripped is AssignmentExpressionSyntax chained && chained.IsKind(SyntaxKind.SimpleAssignmentExpression))
+            stripped = StripParentheses(chained.Right);
         return stripped.IsKind(SyntaxKind.NullLiteralExpression) || stripped.IsKind(SyntaxKind.DefaultLiteralExpression);
     }
 

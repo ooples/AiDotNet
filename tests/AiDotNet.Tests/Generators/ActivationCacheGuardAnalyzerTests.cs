@@ -201,6 +201,30 @@ public sealed class Subject : LayerBase
         Assert.Empty(Unguarded(diagnostics));
     }
 
+    // Mutation: stop IsNullLike unwrapping assignment chains; every field but the last in the chain is then
+    // reported although the chain only stores null.
+    [Fact]
+    public async Task ChainedNullClear_IsNotReported()
+    {
+        var diagnostics = await RunAsync(Layer(
+            "    private Tensor<double> _lastInput;\n    private Tensor<double> _lastOut;\n    private Tensor<double> _bnOut;",
+            "        _lastInput = _lastOut = _bnOut = null;"));
+
+        Assert.Empty(Unguarded(diagnostics));
+    }
+
+    // Mutation: let IsNullLike treat any assignment chain as null-like; a chain that stores a tensor would then
+    // pass unreported.
+    [Fact]
+    public async Task ChainedTensorStore_ReportsEveryField()
+    {
+        var diagnostics = await RunAsync(Layer(
+            "    private Tensor<double> _lastInput;\n    private Tensor<double> _lastOut;",
+            "        _lastInput = _lastOut = input;"));
+
+        Assert.Equal(2, Unguarded(diagnostics).Count());
+    }
+
     // Mutation: drop the IsNullLike(conditional.WhenFalse) requirement in IsGuardedValue; the ternary then
     // counts as a guard although it stores a tensor on both branches.
     [Fact]
