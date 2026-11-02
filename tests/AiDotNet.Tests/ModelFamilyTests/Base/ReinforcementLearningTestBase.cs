@@ -1303,9 +1303,12 @@ public abstract class ReinforcementLearningTestBase<T>
     // PAPER FIDELITY: Option Sensitivity
     // Called by the scaffold generator's per-option theory. Perturbs one options property and
     // requires the agent to change: parameters, or greedy actions over the state battery, before
-    // or after OptionSensitivityTrainingSteps single-transition training steps. The agent's own
-    // warmup / batch gates are lowered on BOTH builds before the perturbation, so a training-time
-    // option is observed through real updates rather than through a gate neither build reaches.
+    // or after OptionSensitivityTrainingSteps training steps. An IRLAgent takes them through its own
+    // loop -- SelectAction with exploration, StoreExperience, Train() -- which is where exploration
+    // schedules, discounting, replay and target updates act; the supervised Train(state, target)
+    // shortcut reaches none of them. The agent's own warmup / batch gates are lowered on BOTH builds
+    // before the perturbation, so a training-time option is observed through real updates rather
+    // than through a gate neither build reaches.
     // =====================================================
 
     /// <summary>Single-transition training steps both builds take when their untrained fingerprints match.</summary>
@@ -1337,6 +1340,21 @@ public abstract class ReinforcementLearningTestBase<T>
             model => ObserveAgent(model, battery),
             model =>
             {
+                if (model is IRLAgent<T> agent)
+                {
+                    for (int i = 0; i < steps; i++)
+                    {
+                        bool even = i % 2 == 0;
+                        var state = even ? stateA : stateB;
+                        // The agent's own exploratory draw, so its action-provenance checks accept it.
+                        var action = agent.SelectAction(state, explore: true);
+                        agent.StoreExperience(state, action, ToT(even ? 1.0 : -1.0), even ? stateB : stateA, i % 16 == 15);
+                        agent.Train();
+                    }
+
+                    return;
+                }
+
                 for (int i = 0; i < steps; i++)
                     model.Train(i % 2 == 0 ? stateA : stateB, i % 2 == 0 ? targetA : targetB);
             },
