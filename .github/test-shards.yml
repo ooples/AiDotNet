@@ -1491,6 +1491,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Generators.ModelStateOwnershipContractTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ParameterGeneratorSemanticTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ParameterUpdateInPlaceAnalyzerTests.|
+      FullyQualifiedName~AiDotNet.Tests.Generators.PaperTestDetectionTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.TestScaffoldCoverageReportTests.|
       FullyQualifiedName~AiDotNet.Tests.Helpers.LicenseServerEndpointTests.|
       FullyQualifiedName~AiDotNet.Tests.Helpers.OnlineLicenseServicesTests.|
