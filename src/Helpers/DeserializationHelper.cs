@@ -314,6 +314,7 @@ public static class DeserializationHelper
                     out var registeredLayer)
                 && registeredLayer is ILayer<T> registeredAsLayer)
             {
+                RestorePostConstructionConfiguration(registeredAsLayer, additionalParams);
                 PreResolveLazyShape(registeredAsLayer, inputShape);
                 return registeredAsLayer;
             }
@@ -4511,6 +4512,30 @@ public static class DeserializationHelper
         {
             RestoreMultiHeadAttentionConfiguration(attention, additionalParams);
             return;
+        }
+
+        if (layer is NeuralNetworks.Layers.TransformerEncoderBlock<T> encoderBlock
+            && encoderBlock.AttentionLayer is MultiHeadAttentionLayer<T> encoderAttention)
+        {
+            RestoreNestedMultiHeadAttentionConfiguration(
+                encoderAttention,
+                additionalParams,
+                NeuralNetworks.Layers.TransformerEncoderBlock<T>.AttentionMetadataPrefix);
+        }
+        else if (layer is NeuralNetworks.Layers.TransformerDecoderBlock<T> decoderBlock)
+        {
+            if (decoderBlock.SelfAttentionLayer is MultiHeadAttentionLayer<T> selfAttention)
+            {
+                RestoreNestedMultiHeadAttentionConfiguration(
+                    selfAttention,
+                    additionalParams,
+                    NeuralNetworks.Layers.TransformerDecoderBlock<T>.SelfAttentionMetadataPrefix);
+            }
+
+            RestoreNestedMultiHeadAttentionConfiguration(
+                decoderBlock.CrossAttentionLayer,
+                additionalParams,
+                NeuralNetworks.Layers.TransformerDecoderBlock<T>.CrossAttentionMetadataPrefix);
         }
 
         string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");
