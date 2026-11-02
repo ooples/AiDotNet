@@ -9,6 +9,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.ReinforcementLearning.Common;
+using AiDotNet.NeuralNetworks.Options;
 
 namespace AiDotNet.ReinforcementLearning.Agents.A2C;
 
@@ -137,7 +138,9 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             outputSize: outputSize,
             layers: layers);
 
-        return new NeuralNetwork<T>(architecture, optimizer: CreateNetworkOptimizer(_a2cOptions.PolicyLearningRate));
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_a2cOptions.PolicyLearningRate),
+            options: new NeuralNetworkDefaultOptions { Seed = _a2cOptions.Seed });
     }
 
     private NeuralNetwork<T> BuildValueNetwork()
@@ -163,7 +166,8 @@ public partial class A2CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
         return new NeuralNetwork<T>(architecture,
             optimizer: CreateNetworkOptimizer(_a2cOptions.ValueLearningRate),
-            lossFunction: _a2cOptions.ValueLossFunction);
+            lossFunction: _a2cOptions.ValueLossFunction,
+            options: new NeuralNetworkDefaultOptions { Seed = _a2cOptions.Seed is int seed ? unchecked(seed + 1) : null });
     }
 
     /// <inheritdoc/>

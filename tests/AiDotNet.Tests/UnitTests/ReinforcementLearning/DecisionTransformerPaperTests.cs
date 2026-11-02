@@ -362,14 +362,18 @@ public class DecisionTransformerPaperTests
     public void UnsetTargetReturn_ConditionsOnBestStoredEpisodeReturn()
     {
         using var implicitTarget = new DecisionTransformerAgent<double>(Small());
-        implicitTarget.LoadOfflineData(new List<List<(Vector<double>, Vector<double>, double)>>
+        var data = new List<List<(Vector<double>, Vector<double>, double)>>
         {
             Trajectory(new[] { 1.0, 1.0 }, V(0.1, 0.1)),
             Trajectory(new[] { 4.0, 5.0 }, V(0.1, 0.1)),
-        });
+        };
+        implicitTarget.LoadOfflineData(data);
 
         using var explicitTarget = new DecisionTransformerAgent<double>(Small(targetReturn: 9.0));
         using var zeroTarget = new DecisionTransformerAgent<double>(Small(targetReturn: 0.0));
+        // Parameter copies do not copy fitted preprocessing; normalize the same observations in every arm.
+        explicitTarget.LoadOfflineData(data);
+        zeroTarget.LoadOfflineData(data);
         explicitTarget.SetParameters(implicitTarget.GetParameters());
         zeroTarget.SetParameters(implicitTarget.GetParameters());
 
