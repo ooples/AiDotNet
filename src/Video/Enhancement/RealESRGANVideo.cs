@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -154,11 +155,12 @@ public partial class RealESRGANVideo<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc />
     protected override void ResolveLazyLayerShapes()
     {
-        if (_usingCustomLayers || !_useNativeMode) return;
+        if (LayerShapesResolved || _usingCustomLayers || !_useNativeMode) return;
         using var noGrad = new NoGradScope<T>();
         var output = Generator.Forward(Engine, Layers, new Tensor<T>(new[] { 1, 3, 8, 8 }));
         Discriminator.Run(Engine, Layers, output, training: false);
         _vgg?.Loss(Engine, Layers, output, output);
+        MarkLayerShapesResolved();
     }
 
     private RrdbNetBlock<T> Generator => _generator ?? throw new InvalidOperationException("Real-ESRGAN Video's native layers are not initialized.");
@@ -322,6 +324,12 @@ public partial class RealESRGANVideo<T> : VideoSuperResolutionBase<T>
 
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+
+    /// <summary>Frames are pixels on the 0-255 scale; the network divides them by 255.</summary>
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) => VideoPixelInputDomain.Value;
+
+    /// <summary>Upscaled frames come back on the same 0-255 scale.</summary>
+    public override LayerInputDomain GetOutputDomain(int[]? outputShape) => VideoPixelInputDomain.Value;
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()

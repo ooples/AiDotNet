@@ -151,9 +151,10 @@ public partial class IconVSR<T> : VideoSuperResolutionBase<T>, ITrainingObjectiv
     /// <inheritdoc />
     protected override void ResolveLazyLayerShapes()
     {
-        if (_usingCustomLayers || !_useNativeMode) return;
+        if (LayerShapesResolved || _usingCustomLayers || !_useNativeMode) return;
         using var noGrad = new NoGradScope<T>();
         Network(new Tensor<T>(new[] { 1, 2, 3, 32, 32 }));
+        MarkLayerShapesResolved();
     }
 
     #endregion
@@ -299,6 +300,12 @@ public partial class IconVSR<T> : VideoSuperResolutionBase<T>, ITrainingObjectiv
 
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+
+    /// <summary>Frames are pixels on the 0-255 scale; the network divides them by 255.</summary>
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) => VideoPixelInputDomain.Value;
+
+    /// <summary>Upscaled frames come back on the same 0-255 scale.</summary>
+    public override LayerInputDomain GetOutputDomain(int[]? outputShape) => VideoPixelInputDomain.Value;
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()

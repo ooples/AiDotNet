@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -162,12 +163,13 @@ public partial class RealBasicVSRSharp<T> : VideoSuperResolutionBase<T>
     /// <inheritdoc />
     protected override void ResolveLazyLayerShapes()
     {
-        if (_usingCustomLayers || !_useNativeMode) return;
+        if (LayerShapesResolved || _usingCustomLayers || !_useNativeMode) return;
         using var noGrad = new NoGradScope<T>();
         var (output, _) = Core.Run(Engine, Layers, new Tensor<T>(new[] { 1, 2, 3, 8, 8 }), TrainingCleaningThreshold);
         var frames = Engine.Reshape(output, new[] { 2, 3, 32, 32 });
         Discriminator.Run(Engine, Layers, frames, training: false);
         _vgg?.Loss(Engine, Layers, frames, frames);
+        MarkLayerShapesResolved();
     }
 
     private RealBasicVsrCore<T> Core => _core ?? throw new InvalidOperationException("RealBasicVSR-Sharp's native layers are not initialized.");
@@ -347,6 +349,12 @@ public partial class RealBasicVSRSharp<T> : VideoSuperResolutionBase<T>
 
     /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> modelOutput) => DenormalizeFrames(modelOutput);
+
+    /// <summary>Frames are pixels on the 0-255 scale; the network divides them by 255.</summary>
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) => VideoPixelInputDomain.Value;
+
+    /// <summary>Upscaled frames come back on the same 0-255 scale.</summary>
+    public override LayerInputDomain GetOutputDomain(int[]? outputShape) => VideoPixelInputDomain.Value;
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
