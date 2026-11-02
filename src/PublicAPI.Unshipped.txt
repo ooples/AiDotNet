@@ -563,3 +563,11 @@ virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.ReportThreshold.get 
 *REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.UseValuePrefix.init -> void
 *REMOVED*AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<T>.DuelingCombinationLayer(int featureDim, int actionSize, int? seed = null) -> void
 AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<T>.DuelingCombinationLayer(int featureDim, int actionSize, int numAtoms = 1, int[]? valueHiddenWidths = null, int[]? advantageHiddenWidths = null, int? seed = null) -> void
+AiDotNet.ReinforcementLearning.Policies.BetaPolicy<T>.BetaPolicy(AiDotNet.ReinforcementLearning.Policies.BetaPolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.ContinuousPolicy<T>.ContinuousPolicy(AiDotNet.ReinforcementLearning.Policies.ContinuousPolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.DeterministicPolicy<T>.DeterministicPolicy(AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.ExplorationStrategy.get -> AiDotNet.ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T>?
+AiDotNet.ReinforcementLearning.Policies.DiscretePolicy<T>.DiscretePolicy(AiDotNet.ReinforcementLearning.Policies.DiscretePolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.MixedPolicy<T>.MixedPolicy(AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.MultiModalPolicy<T>.MultiModalPolicy(AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>! options) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.ExplorationStrategy.get -> AiDotNet.ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T>!

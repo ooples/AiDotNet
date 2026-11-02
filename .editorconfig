@@ -219,7 +219,7 @@ dotnet_diagnostic.CS1735.severity = error
 # The AiDotNet.Serving classes listed are configuration the server does not bind yet; each is documented as it is
 # wired up (issue #2427).
 # CS1570 (malformed XML) is not listed: it stays an error everywhere (src/XmlDocDiagnostics.globalconfig).
-[src/{SpeechRecognition,TextToSpeech,VisionLanguage,Data,Audio,PhysicsInformed,ReinforcementLearning}/**Options.cs]
+[src/{SpeechRecognition,TextToSpeech,VisionLanguage,Data,Audio,PhysicsInformed}/**Options.cs]
 dotnet_diagnostic.CS1591.severity = none
 dotnet_diagnostic.CS1571.severity = none
 dotnet_diagnostic.CS1572.severity = none

@@ -56,6 +56,23 @@ namespace AiDotNet.ReinforcementLearning.Policies
         {
         }
 
+        /// <summary>
+        /// Builds the policy from <paramref name="options"/>: a dense ReLU network of the options' hidden widths from
+        /// StateSize inputs to a mixing logit, ActionSize means and ActionSize log standard deviations per component
+        /// (NumComponents × (1 + 2 × ActionSize) outputs).
+        /// </summary>
+        /// <param name="options">The policy's configuration.</param>
+        public MultiModalPolicy(MultiModalPolicyOptions<T> options)
+            : this(
+                PolicyNetworks.Build((options ?? throw new ArgumentNullException(nameof(options))).StateSize,
+                    options.HiddenLayers,
+                    options.ActionSize > 0 ? options.NumComponents * (1 + 2 * options.ActionSize) : 0,
+                    options.LossFunction, nameof(MultiModalPolicyOptions<T>)),
+                options.ActionSize, options.NumComponents, options.ExplorationStrategy,
+                PolicyNetworks.RandomFor(options.Seed))
+        {
+        }
+
         public MultiModalPolicy(
             INeuralNetwork<T> policyNetwork,
             int actionSize,
