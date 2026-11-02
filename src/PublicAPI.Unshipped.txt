@@ -2677,7 +2677,6 @@ AiDotNet.TextToSpeech.TtsTrainingSample<T>.Text.init -> void
 override AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.VarianceAdaptorTtsModelBase<T>.Dispose(bool disposing) -> void
 override AiDotNet.TextToSpeech.VarianceAdaptorTtsModelBase<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.TacotronSpectrogram.TacotronSpectrogram(int sampleRate = 22050, int fftSize = 1024, int hopLength = 256, int windowLength = 1024, int melChannels = 80, double minFrequency = 0, double maxFrequency = 8000, double clipValue = 1E-05) -> void
 virtual AiDotNet.TextToSpeech.VarianceAdaptorTtsModelBase<T>.HasAcousticConditioning.get -> bool
 virtual AiDotNet.TextToSpeech.VarianceAdaptorTtsModelBase<T>.ConditionForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! hidden, AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, int[]! durations) -> AiDotNet.TextToSpeech.AcousticConditioning<T>!

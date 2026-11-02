@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>AiDotNetTests</AssemblyName>
+    <IsTestProject>true</IsTestProject>
+    <IsPackable>false</IsPackable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+    <PackageReference Include="Newtonsoft.Json" />
+    <PackageReference Include="Xunit.SkippableFact" />
+    <ProjectReference Include="../../src/AiDotNet.csproj" />
+    <Compile Include="../AiDotNet.Tests/GlobalUsings.cs" Link="GlobalUsings.cs" />
+    <Compile Include="../AiDotNet.Tests/ModuleInitializer.cs" Link="ModuleInitializer.cs" />
+    <Compile Include="../AiDotNet.Tests/Helpers/LicenseTestSupport.cs" Link="LicenseTestSupport.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/CosyVoice*Tests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/S3TokenizerReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/CamPlusPlusReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/WhisperTiktokenReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/VALLE*PaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/VallECoreParityTests.cs" />
+  </ItemGroup>
+</Project>

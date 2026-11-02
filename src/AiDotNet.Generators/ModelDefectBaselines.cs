@@ -126,7 +126,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>",
             "AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>",
-            "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>",

@@ -1824,7 +1824,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // 32-layer decoder, so the generated model can OOM in its constructor.
         // The public-options fixture below retains all three streams.
         "BLIP3",
-        "CosyVoice2", "CosyVoice3", "CosyVoiceClone", "AdaSpeech2", "BEATs",
+        "CosyVoice2", "CosyVoice3", "AdaSpeech2", "BEATs",
         // TimeLLM's Generated T-Z fixture diverges during its short training
         // probe at double precision. Keep it explicitly in the FP32 roster even
         // when the temporary shard-wide resource rule is eventually removed.
@@ -10926,24 +10926,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "SpeechTokenizer = new AiDotNet.Audio.Generation.SpeechTokenizerOptions { Filters = 4, Ratios = [8, 5, 4, 4, 4], " +
                     "Dimension = 8, SemanticDimension = 6, LstmLayers = 1, NumQuantizers = 3, CodebookSize = 16, " +
                     "TargetBandwidthKbps = 0.075 } })";
-            }
-            else if (model.ClassName == "CosyVoiceClone" && model.TypeParameterCount == 1)
-            {
-                // CosyVoiceClone keeps the paper-scale supervised semantic-token encoder,
-                // codec LM, and speaker-conditioning dimensions in production. Its FP32
-                // generated warmup still OOMed while lazily materializing the first attention
-                // block. Exercise the complete token embedding -> text encoder -> codec LM ->
-                // codec-token head at bounded scale, while retaining the public speaker
-                // embedding and reference-conditioning surface used by SynthesizeWithVoice.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 8, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions { TextEncoderDim = 32, " +
-                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 2, NumHeads = 2, " +
-                    "NumCodebooks = 1, CodebookSize = 16, SpeakerEmbeddingDim = 32, " +
-                    "MaxTextLength = 8, MaxCodecFrames = 8, MinReferenceDurationSec = 0.1, " +
-                    "DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "AdaSpeech2" && model.TypeParameterCount == 1)
             {
@@ -22220,7 +22202,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         return className is "Bark" or "BarkModel"
             or "UniAudio" or "XTTSv2" or "XTTSv2Clone"
             or "CosyVoice3"
-            or "CosyVoiceClone" or "Chatterbox"
+            or "Chatterbox"
             or "SeedTTS" or "SeedTTSClone"
             // SparkTTS exposes the same discrete codec-token contract.
             or "SparkTTS";
@@ -22240,7 +22222,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "SeedTTSClone" => 16,
             "Bark" or "BarkModel" => 32,
             "CosyVoice3" => 16,
-            "CosyVoiceClone" => 16,
             "Chatterbox" => 16,
             // SparkTTS: the CI-smoke fixture pins NumCodebooks = 1, CodebookSize = 16, so its codec
             // head is 1 x 16 wide (production stays 1 x 4096).
