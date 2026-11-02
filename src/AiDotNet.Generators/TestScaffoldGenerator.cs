@@ -7742,18 +7742,28 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "NumFeatures = 32, NumTransformerBlocks = 2, NumResBlocks = 4, " +
                     "NumScales = 2, TrajectoryLength = 3, NumHeads = 4 })";
             }
-            else if (model.ClassName == "UDVD" && model.TypeParameterCount == 1)
+            else if (model.ClassName == "ShiftNet" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Denoising.", System.StringComparison.Ordinal))
             {
-                // UDVDOptions defaults to the paper's 1e-4 (Sheth et al., ICCV 2021). That rate is
-                // tuned for the full blind-spot network on real video; at fixture scale it overshoots
-                // -- the loss rose from 0.2480 to 2.6160 on Training_ShouldReduceLoss and 200
-                // iterations came out worse than 50. Bind a gentler rate through the public option;
-                // the library default stays at the published value.
+                // Every stage of the release (refinement U-Nets, temporal-shift CABs, the seven spatial-temporal
+                // shift blocks) at reduced width and one U-Net per stage (the paper: 80/24 channels, five U-Nets).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
-                    "new AiDotNet.Video.Options.UDVDOptions { LearningRate = 1e-6 })";
+                    "new AiDotNet.Video.Options.ShiftNetOptions { Seed = 1, NumFeatures = 16, RefinementFeatures = 8, " +
+                    "UNetGrowth = 4, NumUNets = 1 })";
+            }
+            else if (model.ClassName == "UDVD" && model.TypeParameterCount == 1)
+            {
+                // Bounded widths keep the two blind-spot U-Nets (x4 rotations, x3 triplets) inside
+                // the fixture budget; the architecture is the paper's blind-video-net-4.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.UDVDOptions { EncoderFeatures = 8, DecoderFeatures = 8, " +
+                    "FirstStageFeatures = 8 })";
             }
             else if (model.ClassName == "XLSR" && model.TypeParameterCount == 1)
             {
