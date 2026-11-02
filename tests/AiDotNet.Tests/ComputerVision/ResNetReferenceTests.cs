@@ -106,7 +106,7 @@ public class ResNetReferenceTests
         {
             var logits = net.Forward(images);
             AssertClose(Values(k.GetProperty("logits")), logits, 1e-9, "logits");
-            probabilities = AiDotNet.Autodiff.TensorOperations<double>.Softmax(logits);
+            probabilities = engine.Softmax(logits);
             var picked = engine.TensorMultiply(engine.TensorLog(probabilities), oneHot);
             loss = engine.TensorMultiplyScalar(engine.ReduceSum(picked, new[] { 0, 1 }, false), -0.5);
             grads = tape.ComputeGradients(loss, sources: parameters);
@@ -119,7 +119,7 @@ public class ResNetReferenceTests
             for (int i = 0; i < p.Length; i++) p[i] -= 0.1 * g[i];
             engine.InvalidatePersistentTensor(p);
         }
-        var after = AiDotNet.Autodiff.TensorOperations<double>.Softmax(net.Forward(images));
+        var after = engine.Softmax(net.Forward(images));
         double afterLoss = -Enumerable.Range(0, 2).Average(b => Math.Log(after[b, targets[b]]));
         Assert.True(Math.Abs(k.GetProperty("loss_after_sgd").GetDouble() - afterLoss) < 1e-9,
             $"{k.GetProperty("loss_after_sgd").GetDouble()} vs {afterLoss}");
@@ -127,7 +127,7 @@ public class ResNetReferenceTests
         net.SetTrainingMode(true);
         Tensor<double> trainProbabilities;
         using (new NoGradScope<double>())
-            trainProbabilities = AiDotNet.Autodiff.TensorOperations<double>.Softmax(net.Forward(images));
+            trainProbabilities = engine.Softmax(net.Forward(images));
         AssertClose(Softmax(Values(k.GetProperty("train_logits")), classes), trainProbabilities, 1e-9, "training-mode probabilities");
         AssertClose(Values(k.GetProperty("train_bn1_running_mean")), net.Trunk.StemNorm.GetRunningMean(), 1e-12, "bn1.running_mean");
         AssertClose(Values(k.GetProperty("train_bn1_running_var")), net.Trunk.StemNorm.GetRunningVariance(), 1e-12, "bn1.running_var");

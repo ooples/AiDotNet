@@ -32,7 +32,7 @@ public class NeuralNetworkHelperLogitsLossTests
         Assert.IsType<CrossEntropyWithLogitsLoss<double>>(network.DefaultLossFunction);
 
         var head = network.Classifier!;
-        var parameters = new Vector<double>(head.ParameterCount);
+        var parameters = new Vector<double>(checked((int)head.ParameterCount));
         double[] logits = [-2.0, 0.25, 1.5];
         for (int i = 0; i < logits.Length; i++)
             parameters[parameters.Length - logits.Length + i] = logits[i];
