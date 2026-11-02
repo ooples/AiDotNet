@@ -40,7 +40,7 @@ public class PSRTPaperTests
         Assert.Equal(new[] { 6, 6, 6 }, o.Depths);
         Assert.Equal((2.0, 0.1, 16), (o.MlpRatio, o.DropPathRate, o.NumFrames));
         Assert.Equal((2e-4, 0.125, 5000, 1e-7, 600000), (o.LearningRate, o.SpyNetLearningRateMultiplier, o.FlowFreezeIterations, o.MinLearningRate, o.CosineIterations));
-        Assert.Equal(1e-12, o.CharbonnierEpsilon * o.CharbonnierEpsilon, 20);
+        Assert.Equal(1e-6, o.CharbonnierEpsilon, 15);
         Assert.Equal(0.001, o.EmaMomentum);
     }
 

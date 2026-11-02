@@ -172,12 +172,33 @@ internal sealed class RvrtWindowAttention<T>
         _tableSize = (2 * window[0] - 1) * (2 * window[1] - 1) * (2 * window[2] - 1);
         _index = RvrtBlocks.PositionIndex(window);
         _table = layers.Count;
-        // The table is read as one-hot rows times a bias-free [table, heads] matrix: the same gather, on the tape.
+        // The table is a bias-free [table, heads] matrix, read out through the identity and gathered in Forward.
         layers.Add(RvrtBlocks.Linear<T>(heads, bias: false, init: tableInit ?? new ZeroInitializationStrategy<T>()));
         _qkv = layers.Count;
         layers.Add(RvrtBlocks.Linear<T>(3 * dim, bias: qkvBias, init: linearInit));
         _proj = layers.Count;
         layers.Add(RvrtBlocks.Linear<T>(dim, init: linearInit));
+    }
+
+    private Tensor<T>? _identity;
+    private Tensor<int>? _pairIndex;
+
+    private Tensor<T> Identity(INumericOperations<T> ops)
+    {
+        if (_identity is not null) return _identity;
+        var identity = new Tensor<T>(new[] { _tableSize, _tableSize });
+        for (int i = 0; i < _tableSize; i++) identity[i * _tableSize + i] = ops.One;
+        return _identity = identity;
+    }
+
+    // The table row of each of the first n tokens' pairs (the release slices the full window's index to n).
+    private Tensor<int> PairIndex(int n)
+    {
+        if (_pairIndex is { Length: var length } && length == n * n) return _pairIndex;
+        var index = new Tensor<int>(new[] { n * n });
+        for (int i = 0; i < n; i++)
+            for (int j = 0; j < n; j++) index[i * n + j] = _index[i, j];
+        return _pairIndex = index;
     }
 
     /// <param name="windows">[B·nW, N, C].</param>
@@ -193,10 +214,11 @@ internal sealed class RvrtWindowAttention<T>
         var v = Part(2);
         var attn = engine.Reshape(engine.TensorBatchMatMul(q, engine.TensorPermute(k, new[] { 0, 2, 1 })), new[] { b, _heads, n, n });
 
-        var onehot = new Tensor<T>(new[] { n * n, _tableSize });
-        for (int i = 0; i < n; i++)
-            for (int j = 0; j < n; j++) onehot[(i * n + j) * _tableSize + _index[i, j]] = ops.One;
-        var bias = engine.TensorPermute(engine.Reshape(layers[_table].Forward(onehot), new[] { n, n, _heads }), new[] { 2, 0, 1 });
+        // relative_position_bias_table[relative_position_index]: the [table, heads] matrix is read out once through
+        // the identity and its rows gathered per token pair, so the tape scatters the gradient into the table rows.
+        var table = layers[_table].Forward(Identity(ops));
+        var bias = engine.TensorPermute(engine.Reshape(engine.TensorIndexSelectDiff(table, PairIndex(n), 0), new[] { n, n, _heads }),
+            new[] { 2, 0, 1 });
         attn = engine.TensorAdd(attn, engine.Reshape(bias, new[] { 1, _heads, n, n }));
 
         if (mask is not null)

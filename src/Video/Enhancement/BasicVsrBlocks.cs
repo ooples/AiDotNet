@@ -29,6 +29,7 @@ internal static class BasicVsrBlocks
     {
         var ops = MathHelper.GetNumericOperations<T>();
         int n = image.Shape[0], h = image.Shape[2], w = image.Shape[3];
+        if (mode == GridSampleMode.Nearest) return NearestFlowWarp(engine, image, flow, padding);
         var baseX = new Tensor<T>(new[] { n, 1, h, w });
         var baseY = new Tensor<T>(new[] { n, 1, h, w });
         var bx = baseX.Data.Span;
@@ -61,6 +62,40 @@ internal static class BasicVsrBlocks
             engine.Reshape(gy, new[] { n, h, w, 1 }),
         }, 3);
         return engine.GridSample(image, grid, mode, padding, true);
+    }
+
+    // grid_sample(mode='nearest', align_corners=True) as a gather of the rounded source pixel: PyTorch rounds half to
+    // even, gives the image the scattered gradient and the grid none. The engine's GridSample refuses a Nearest
+    // backward, so the gather carries it; a sample outside the frame reads a zero row (zeros) or the clamped pixel.
+    private static Tensor<T> NearestFlowWarp<T>(IEngine engine, Tensor<T> image, Tensor<T> flow, GridSamplePadding padding)
+    {
+        if (padding == GridSamplePadding.Reflection)
+            throw new NotSupportedException("Nearest flow warping supports zero and border padding.");
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = image.Shape[0], c = image.Shape[1], h = image.Shape[2], w = image.Shape[3];
+        int pixels = n * h * w;
+        var index = new Tensor<int>(new[] { pixels });
+        for (int b = 0; b < n; b++)
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    int sx = (int)Math.Round(x + ops.ToDouble(flow[((b * 2) * h + y) * w + x]), MidpointRounding.ToEven);
+                    int sy = (int)Math.Round(y + ops.ToDouble(flow[((b * 2 + 1) * h + y) * w + x]), MidpointRounding.ToEven);
+                    bool inside = sx >= 0 && sx < w && sy >= 0 && sy < h;
+                    if (!inside && padding == GridSamplePadding.Zeros)
+                    {
+                        index[(b * h + y) * w + x] = pixels;
+                        continue;
+                    }
+                    sx = Math.Min(Math.Max(sx, 0), w - 1);
+                    sy = Math.Min(Math.Max(sy, 0), h - 1);
+                    index[(b * h + y) * w + x] = (b * h + sy) * w + sx;
+                }
+
+        var rows = engine.Reshape(engine.TensorPermute(image, new[] { 0, 2, 3, 1 }), new[] { pixels, c });
+        rows = engine.TensorConcatenate(new[] { rows, new Tensor<T>(new[] { 1, c }) }, 0);
+        var gathered = engine.Reshape(engine.TensorIndexSelectDiff(rows, index, 0), new[] { n, h, w, c });
+        return engine.TensorPermute(gathered, new[] { 0, 3, 1, 2 });
     }
 
     /// <summary>mmagic's <c>default_init_weights(scale)</c>: Kaiming-normal (fan-in, ReLU gain) times scale, zero bias.</summary>
