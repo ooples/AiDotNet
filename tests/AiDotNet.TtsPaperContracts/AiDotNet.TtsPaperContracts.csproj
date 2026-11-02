@@ -24,5 +24,6 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/WhisperTiktokenReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VALLE*PaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VallECoreParityTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/SPEARTTS*Tests.cs" />
   </ItemGroup>
 </Project>

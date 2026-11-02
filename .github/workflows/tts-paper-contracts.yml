@@ -11,13 +11,13 @@ on:
       family:
         description: Native paper/reference contracts to run
         type: choice
-        options: [CosyVoice, VALLE, All]
+        options: [CosyVoice, VALLE, SPEARTTS, All]
         default: All
 permissions:
   contents: read
 concurrency:
   group: tts-paper-contracts-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   contracts:
     runs-on: windows-latest
