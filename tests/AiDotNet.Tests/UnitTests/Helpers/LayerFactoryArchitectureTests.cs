@@ -12,11 +12,13 @@ namespace AiDotNet.Tests.UnitTests.Helpers;
 /// sized from that architecture while sizing it purely from option defaults.
 /// </summary>
 /// <remarks>
-/// Re-derived with one instrument (a C# syntax tree, which bounds each method body exactly rather
-/// than guessing where a doc comment stops): 194 factories in <c>LayerHelper</c> take a
-/// <c>NeuralNetworkArchitecture&lt;T&gt;</c> and 92 never read it. The five covered here are the
+/// The reproducible syntax-tree audit in <c>tools/LayerFactoryArchitectureAudit</c> bounds each
+/// method body exactly rather than guessing where a doc comment stops. As of 2026-11-02, 184
+/// public static factories take an architecture; all 89 that never reference it are obsolete.
+/// Of those, 88 forward to overloads without it; the historical FEDformer factory is retired in
+/// favour of the model's native network. The three covered here are the
 /// time-series transformers whose final projection IS the model's flat output width AND whose
-/// model agrees with it. TFT looked like a fifth and is not: its fixture passes an architecture
+/// model agrees with it. TFT is different: its fixture passes an architecture
 /// whose <c>OutputSize</c> disagrees with <c>predictionHorizon * numFeatures</c>, and honouring it
 /// failed all 25 of TFT's own tests, so TFT needs the per-model reconciliation the issue's risk
 /// section describes rather than this mechanical change.
