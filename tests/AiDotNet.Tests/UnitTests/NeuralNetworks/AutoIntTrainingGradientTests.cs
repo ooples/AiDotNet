@@ -23,7 +23,7 @@ public class AutoIntTrainingGradientTests
         var before = model.GetParameters().ToArray();
         double loss = model.TrainStep(input,
             new Tensor<double>(new[] { 2, 1 }, new Vector<double>(new[] { 0.3, 0.8 })), 0.01, categories);
-        Assert.True(double.IsFinite(loss));
+        Assert.True(!double.IsNaN(loss) && !double.IsInfinity(loss));
         Assert.False(before.SequenceEqual(model.GetParameters().ToArray()));
     }
 
