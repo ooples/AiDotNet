@@ -70,32 +70,20 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _residualWeights;  // [embeddingDim, embeddingDim] if needed
 
     // Gradients
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _queryWeightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _keyWeightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _valueWeightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T> _outputWeightsGrad;
-    [AiDotNet.Attributes.TrainableParameter]
+    [Scratch]
     private Tensor<T>? _residualWeightsGrad;
 
     // Cached values
     [Scratch]
-    private Tensor<T>? _inputCache;
-    [Scratch]
-    private Tensor<T>? _queriesCache;
-    [Scratch]
-    private Tensor<T>? _keysCache;
-    [Scratch]
-    private Tensor<T>? _valuesCache;
-    [Scratch]
     private Tensor<T>? _attentionScoresCache;
-    [Scratch]
-    private Tensor<T>? _attendedCache;
-    [Scratch]
-    private Tensor<T>? _preActivationCache;
 
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
@@ -119,6 +107,10 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
         double initScale = 0.02)
         : base([embeddingDim], [embeddingDim])
     {
+        if (embeddingDim <= 0) throw new ArgumentOutOfRangeException(nameof(embeddingDim));
+        if (numHeads <= 0) throw new ArgumentOutOfRangeException(nameof(numHeads));
+        if ((attentionDim ?? embeddingDim) <= 0 || (attentionDim ?? embeddingDim) % numHeads != 0)
+            throw new ArgumentException("Attention dimension must be positive and divisible by numHeads.", nameof(attentionDim));
         _initScale = initScale;
         _embeddingDim = embeddingDim;
         _numHeads = numHeads;
@@ -190,116 +182,39 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>Feature interactions [batchSize, numFeatures, embeddingDim].</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _inputCache = input;
-
+        if (input.Rank != 3 || input.Shape[2] != _embeddingDim)
+            throw new ArgumentException("Expected [batch, fields, embeddingDim] input.", nameof(input));
         int batchSize = input.Shape[0];
         int numFeatures = input.Shape[1];
-        int embDim = input.Shape[2];
+        var queries = ProjectInput(input, _queryWeights, batchSize, numFeatures, _embeddingDim, _attentionDim);
+        var keys = ProjectInput(input, _keyWeights, batchSize, numFeatures, _embeddingDim, _attentionDim);
+        var values = ProjectInput(input, _valueWeights, batchSize, numFeatures, _embeddingDim, _attentionDim);
 
-        // Project to queries, keys, values using Engine.TensorMatMul
-        var queries = ProjectInput(input, _queryWeights, batchSize, numFeatures, embDim, _attentionDim);
-        var keys = ProjectInput(input, _keyWeights, batchSize, numFeatures, embDim, _attentionDim);
-        var values = ProjectInput(input, _valueWeights, batchSize, numFeatures, embDim, _attentionDim);
-
-        _queriesCache = queries;
-        _keysCache = keys;
-        _valuesCache = values;
-
-        // Multi-head self-attention using Engine ops
-        var attended = MultiHeadAttention(queries, keys, values, batchSize, numFeatures);
-        _attendedCache = attended;
-
-        // Output projection using Engine.TensorMatMul
-        var output = ProjectOutput(attended, batchSize, numFeatures);
-
-        // Residual connection
+        // Split heads explicitly; scalar copies here disconnect Q/K/V from the gradient tape.
+        var headShape = new[] { batchSize, numFeatures, _numHeads, _headDim };
+        var q = Engine.TensorPermute(Engine.Reshape(queries, headShape), new[] { 0, 2, 1, 3 });
+        var k = Engine.TensorPermute(Engine.Reshape(keys, headShape), new[] { 0, 2, 1, 3 });
+        var v = Engine.TensorPermute(Engine.Reshape(values, headShape), new[] { 0, 2, 1, 3 });
+        var context = Engine.ScaledDotProductAttention(q, k, v, mask: null,
+            scale: 1.0 / Math.Sqrt(_headDim), out var scores);
+        // Preserve the public [batch, fields, fields] interpretation by averaging the heads.
+        if (ShouldCacheForBackward)
+            SaveForBackward(ref _attentionScoresCache, Engine.ReduceMean(scores, new[] { 1 }, keepDims: false));
+        else
+            _attentionScoresCache = null;
+        var attended = Engine.Reshape(Engine.TensorPermute(context, new[] { 0, 2, 1, 3 }),
+            new[] { batchSize, numFeatures, _attentionDim });
+        var output = ProjectInput(attended, _outputWeights, batchSize, numFeatures, _attentionDim, _embeddingDim);
         if (_useResidual)
-        {
-            output = AddResidual(input, output, batchSize, numFeatures, embDim);
-        }
-
-        _preActivationCache = output;
-
-        // Apply ReLU activation using Engine
-        output = Engine.ReLU(output);
-
-        return output;
+            output = AddResidual(input, output, batchSize, numFeatures, _embeddingDim);
+        return Engine.ReLU(output);
     }
 
     private Tensor<T> ProjectInput(Tensor<T> input, Tensor<T> weights,
         int batchSize, int numFeatures, int inputDim, int outputDim)
     {
-        // Reshape [batchSize, numFeatures, inputDim] -> [batchSize * numFeatures, inputDim]
-        var flat = input.Reshape(batchSize * numFeatures, inputDim);
-        // MatMul: [batchSize * numFeatures, inputDim] x [inputDim, outputDim] -> [batchSize * numFeatures, outputDim]
-        var projected = Engine.TensorMatMul(flat, weights);
-        // Reshape back to [batchSize, numFeatures, outputDim]
-        return projected.Reshape(batchSize, numFeatures, outputDim);
-    }
-
-    private Tensor<T> MultiHeadAttention(Tensor<T> queries, Tensor<T> keys, Tensor<T> values,
-        int batchSize, int numFeatures)
-    {
-        var output = TensorAllocator.Rent<T>([batchSize, numFeatures, _attentionDim]);
-        var attentionScores = TensorAllocator.Rent<T>([batchSize, numFeatures, numFeatures]);
-        var scale = NumOps.FromDouble(1.0 / Math.Sqrt(_headDim));
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            // Extract batch slices [numFeatures, attentionDim]
-            var qSlice = ExtractBatchSlice(queries, b, numFeatures, _attentionDim);
-            var kSlice = ExtractBatchSlice(keys, b, numFeatures, _attentionDim);
-            var vSlice = ExtractBatchSlice(values, b, numFeatures, _attentionDim);
-
-            // Q * K^T -> [numFeatures, numFeatures]
-            var kT = kSlice.Transpose(new[] { 1, 0 });
-            var scores = Engine.TensorMatMul(qSlice, kT);
-            scores = Engine.TensorMultiplyScalar(scores, scale);
-
-            // Softmax over features
-            scores = Engine.Softmax(scores);
-
-            // Store attention scores
-            int scoreOffset = b * numFeatures * numFeatures;
-            for (int i = 0; i < numFeatures * numFeatures; i++)
-            {
-                attentionScores[scoreOffset + i] = scores[i];
-            }
-
-            // Apply attention: scores * V -> [numFeatures, attentionDim]
-            var attended = Engine.TensorMatMul(scores, vSlice);
-
-            // Store into output
-            int outOffset = b * numFeatures * _attentionDim;
-            for (int i = 0; i < numFeatures * _attentionDim; i++)
-            {
-                output[outOffset + i] = attended[i];
-            }
-        }
-
-        _attentionScoresCache = attentionScores;
-        return output;
-    }
-
-    private Tensor<T> ExtractBatchSlice(Tensor<T> tensor, int batchIdx, int rows, int cols)
-    {
-        var slice = new Tensor<T>([rows, cols]);
-        int offset = batchIdx * rows * cols;
-        for (int i = 0; i < rows * cols; i++)
-        {
-            slice[i] = tensor[offset + i];
-        }
-        return slice;
-    }
-
-    private Tensor<T> ProjectOutput(Tensor<T> attended, int batchSize, int numFeatures)
-    {
-        // Reshape [batchSize, numFeatures, attentionDim] -> [batchSize * numFeatures, attentionDim]
-        var flat = attended.Reshape(batchSize * numFeatures, _attentionDim);
-        // MatMul: [batchSize * numFeatures, attentionDim] x [attentionDim, embeddingDim]
-        var projected = Engine.TensorMatMul(flat, _outputWeights);
-        // Reshape back to [batchSize, numFeatures, embeddingDim]
-        return projected.Reshape(batchSize, numFeatures, _embeddingDim);
+        var flat = Engine.Reshape(input, new[] { batchSize * numFeatures, inputDim });
+        return Engine.Reshape(Engine.TensorMatMul(flat, weights), new[] { batchSize, numFeatures, outputDim });
     }
 
     private Tensor<T> AddResidual(Tensor<T> input, Tensor<T> output,
@@ -308,9 +223,9 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
         if (_residualWeights != null)
         {
             // Project residual if dimensions differ
-            var flat = input.Reshape(batchSize * numFeatures, embDim);
+            var flat = Engine.Reshape(input, new[] { batchSize * numFeatures, embDim });
             var projected = Engine.TensorMatMul(flat, _residualWeights);
-            var residual = projected.Reshape(batchSize, numFeatures, embDim);
+            var residual = Engine.Reshape(projected, new[] { batchSize, numFeatures, embDim });
             return Engine.TensorAdd(output, residual);
         }
 
@@ -360,13 +275,7 @@ public partial class InteractingLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _inputCache = null;
-        _queriesCache = null;
-        _keysCache = null;
-        _valuesCache = null;
         _attentionScoresCache = null;
-        _attendedCache = null;
-        _preActivationCache = null;
 
         Engine.TensorFill(_queryWeightsGrad, NumOps.Zero);
         Engine.TensorFill(_keyWeightsGrad, NumOps.Zero);

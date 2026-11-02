@@ -48,17 +48,19 @@ public class PredictionCacheBoundaryTests
     }
 
     [Fact]
-    public void AutoIntClassifier_TrainingAfterPredictionRetainsEmbeddingCache()
+    public void AutoIntClassifier_TrainingAfterPredictionUpdatesParameters()
     {
-        var model = new ObservedClassifier();
+        var model = new AutoIntClassifier<double>(2, 2, Options());
         var input = new Tensor<double>(new[] { 1, 2 }, new Vector<double>(new[] { 0.3, -0.2 }));
         model.Forward(input);
         Assert.NotNull(EmbeddingCache(model));
         var probabilities = model.PredictProbabilities(input);
         Assert.Equal(1.0, probabilities.ToArray().Sum(), 10);
         Assert.Null(EmbeddingCache(model));
+        var before = model.GetParameters().ToArray();
         model.TrainStep(input, new Vector<int>(new[] { 1 }), 0.01);
-        Assert.True(model.HadCacheDuringUpdate);
+        Assert.False(before.SequenceEqual(model.GetParameters().ToArray()));
+        Assert.Null(EmbeddingCache(model));
         Assert.False(InferenceMode.IsActive);
     }
 
@@ -84,15 +86,4 @@ public class PredictionCacheBoundaryTests
     private static object? ReadField(object instance, string name) =>
         instance.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(instance);
 
-    private sealed class ObservedClassifier : AutoIntClassifier<double>
-    {
-        public bool HadCacheDuringUpdate { get; private set; }
-        public ObservedClassifier() : base(2, 2, Options()) { }
-        public override void UpdateParameters(double learningRate)
-        {
-            // Observe the training boundary independently of this legacy model's
-            // incomplete gradient/update implementation.
-            HadCacheDuringUpdate = EmbeddingCache(this) is not null;
-        }
-    }
 }

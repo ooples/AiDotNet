@@ -172,12 +172,23 @@ public class AutoIntClassifier<T> : AutoIntBase<T>
     /// </summary>
     public T TrainStep(Tensor<T> numericalFeatures, Vector<int> targets, T learningRate, Matrix<int>? categoricalIndices = null)
     {
-        var probabilities = ApplySoftmax(Forward(numericalFeatures, categoricalIndices));
-        var loss = ComputeCrossEntropyLoss(probabilities, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        int batchSize = numericalFeatures.Shape[0];
+        if (batchSize == 0 || targets.Length != batchSize)
+            throw new ArgumentException("Targets must match a nonempty input batch.", nameof(targets));
+        var labels = new Tensor<T>(new[] { batchSize, _numClasses });
+        for (int b = 0; b < batchSize; b++)
+        {
+            if ((uint)targets[b] >= (uint)_numClasses)
+                throw new ArgumentOutOfRangeException(nameof(targets), "Target class is out of range.");
+            labels[b * _numClasses + targets[b]] = NumOps.One;
+        }
+        return TrainWithTape(() =>
+        {
+            var probabilities = ApplySoftmax(Forward(numericalFeatures, categoricalIndices));
+            var logProbabilities = Engine.TensorLog(Engine.TensorAddScalar(probabilities, NumOps.FromDouble(1e-15)));
+            var sum = Engine.ReduceSum(Engine.TensorMultiply(labels, logProbabilities), new[] { 0, 1 }, keepDims: false);
+            return Engine.TensorMultiplyScalar(sum, NumOps.FromDouble(-1.0 / batchSize));
+        }, learningRate);
     }
 
     /// <summary>

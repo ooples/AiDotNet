@@ -155,12 +155,13 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     /// </summary>
     public T TrainStep(Tensor<T> numericalFeatures, Tensor<T> targets, T learningRate, Matrix<int>? categoricalIndices = null)
     {
-        var predictions = Forward(numericalFeatures, categoricalIndices);
-        var loss = ComputeMSELoss(predictions, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        return TrainWithTape(() =>
+        {
+            var predictions = Forward(numericalFeatures, categoricalIndices);
+            if (!predictions._shape.SequenceEqual(targets._shape))
+                throw new ArgumentException("Targets must match the prediction shape.", nameof(targets));
+            return new AiDotNet.LossFunctions.MeanSquaredErrorLoss<T>().ComputeTapeLoss(predictions, targets);
+        }, learningRate);
     }
 
     /// <summary>
