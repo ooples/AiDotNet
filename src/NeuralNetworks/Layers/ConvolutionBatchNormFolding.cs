@@ -1,7 +1,5 @@
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using AiDotNet.ActivationFunctions;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks.Graph;
 using AiDotNet.Tensors.Engines;
@@ -14,23 +12,12 @@ namespace AiDotNet.NeuralNetworks.Layers;
 /// (see <see cref="InferenceFusionSettings.FoldBatchNormIntoConvolution"/>).
 /// </summary>
 /// <remarks>
-/// The folded weights and bias are cached per convolution and rebuilt when any source tensor changes: each is held by
-/// reference and checked by <see cref="Tensor{T}.Version"/>, which every in-place write advances (an optimizer step, a
+/// The engine caches the folded weights and bias by the convolution's kernel and rebuilds them when any source tensor's
+/// identity or <see cref="Tensor{T}.Version"/> changes, which every in-place write advances (an optimizer step, a
 /// <c>SetParameters</c>, a deserialization). A clone is a new layer, so it folds its own weights.
 /// </remarks>
 internal static class ConvolutionBatchNormFolding<T>
 {
-    private sealed class Folded
-    {
-        internal BatchNormalizationLayer<T>? Norm;
-        internal Tensor<T>? Kernels, Biases, Gamma, Beta, Mean, Variance;
-        internal int KernelsVersion, BiasesVersion, GammaVersion, BetaVersion, MeanVersion, VarianceVersion;
-        internal double Epsilon;
-        internal Tensor<T>? FoldedKernels, FoldedBiases;
-    }
-
-    private static readonly ConditionalWeakTable<ConvolutionalLayer<T>, Folded> s_folded = new();
-
     /// <summary>
     /// <c>act(bn(conv(input)))</c> as one convolution with the folded weights, <paramref name="relu"/> selecting a ReLU
     /// after the batch norm. False, with nothing computed, when the pair cannot fold here: folding is off, either layer
@@ -40,31 +27,124 @@ internal static class ConvolutionBatchNormFolding<T>
     /// </summary>
     internal static bool TryForward(ConvolutionalLayer<T> conv, BatchNormalizationLayer<T> norm, Tensor<T> input,
         bool relu, out Tensor<T> output)
+        => TryForward(conv, norm, input, relu ? FusedActivationType.ReLU : FusedActivationType.None, out output);
+
+    /// <summary>
+    /// <c>act(bn(conv(input)))</c> as one convolution with the folded weights, for any activation the engine fuses into
+    /// a convolution (a ReLU6 for MobileNetV2's expansion stage). False, with nothing computed, under the same
+    /// conditions as the ReLU overload.
+    /// </summary>
+    internal static bool TryForward(ConvolutionalLayer<T> conv, BatchNormalizationLayer<T> norm, Tensor<T> input,
+        FusedActivationType activation, out Tensor<T> output)
     {
         output = input;
-        if (!InferenceFusionSettings.FoldBatchNormIntoConvolution) return false;
-        if (input.Rank != 4 || conv.InTrainingMode || norm.InTrainingMode) return false;
-        if (AiDotNet.Autodiff.GradientRecording.IsRecording<T>() || AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive)
-            return false;
-        if (LayerBase<T>.IsInferringShapes) return false;
+        if (!CanFuse(norm, conv, input)) return false;
         if (!conv.CanFoldFollowingBatchNorm || input.Shape[1] != conv.InputDepth) return false;
         if (!norm.TryGetFoldingStatistics(conv.OutputDepth, out var gamma, out var beta, out var mean, out var variance,
                 out double epsilon))
             return false;
-        // Last, so the observer learns only of a fold that would otherwise have run: a traced forward
-        // that suppressed one differs from an untraced forward by rounding (NeuralNetworkBase re-runs it).
-        if (LayerForwardObserver<T>.Current is { } observer)
-        {
-            observer.NoteSuppressedFolding();
-            return false;
-        }
+        if (ObserverSuppresses()) return false;
 
-        var kernels = conv.KernelsForFolding;
-        var biases = conv.BiasesForFolding;
-        var (foldedKernels, foldedBiases) = GetFolded(conv, norm, kernels, biases, gamma, beta, mean, variance, epsilon);
-        output = AiDotNetEngine.Current.FusedConv2D(input, foldedKernels, foldedBiases, conv.Stride, conv.Stride, conv.Padding,
-            conv.Padding, 1, 1, relu ? FusedActivationType.ReLU : FusedActivationType.None);
+        // The engine folds and caches (AiDotNet.Tensors' FusedConv2DBatchNorm, ooples/AiDotNet.Tensors#1432): rebuilt when a
+        // source tensor's identity or version changes, and on a GPU folded on the device when the parameters live only
+        // there (after on-device training), instead of downloading all six to fold them on the host.
+        output = AiDotNetEngine.Current.FusedConv2DBatchNorm(input, conv.KernelsForFolding, conv.BiasesForFolding,
+            gamma, beta, mean, variance, epsilon, conv.Stride, conv.Stride, conv.Padding, conv.Padding, 1, 1,
+            activation);
         return true;
+    }
+
+    /// <summary>
+    /// <c>act(bn(input))</c> in one pass over the activation (AiDotNet.Tensors' BatchNormInference with an activation),
+    /// where a batch norm cannot fold into the convolution before it: a depthwise convolution, say. False, with nothing
+    /// computed, when folding is off, the layer is training, a tape is recording, a graph is being captured, shapes are
+    /// being inferred, an observer is attached, or the input is not rank 4.
+    /// </summary>
+    internal static bool TryBatchNormActivation(BatchNormalizationLayer<T> norm, Tensor<T> input,
+        FusedActivationType activation, out Tensor<T> output)
+    {
+        output = input;
+        if (!CanFuse(norm, conv: null, input)) return false;
+        // BatchNormInference reads the activation as one contiguous span (as BatchNormalizationLayer's own fused path
+        // requires); a strided view takes the layer's unfused path instead.
+        if (!input.IsContiguous) return false;
+        if (!norm.TryGetFoldingStatistics(input.Shape[1], out var gamma, out var beta, out var mean, out var variance,
+                out double epsilon))
+            return false;
+        if (ObserverSuppresses()) return false;
+
+        output = AiDotNetEngine.Current.BatchNormInference(input, gamma, beta, mean, variance, epsilon, activation);
+        return true;
+    }
+
+    /// <summary>
+    /// <c>act(bn(depthwise(input) + bias))</c> as a bias-free depthwise convolution and one batch-norm pass with the bias
+    /// folded into its mean (mean - bias): the bias add and the activation are no separate passes. False, with nothing
+    /// computed, under the conditions of <see cref="TryBatchNormActivation"/> or when the convolution is not a depthwise
+    /// one without an activation of its own (<see cref="ConvolutionalLayer{T}.CanFoldBiasIntoFollowingBatchNorm"/>).
+    /// </summary>
+    internal static bool TryDepthwiseBatchNormActivation(ConvolutionalLayer<T> conv, BatchNormalizationLayer<T> norm,
+        Tensor<T> input, FusedActivationType activation, out Tensor<T> output)
+    {
+        output = input;
+        if (!CanFuse(norm, conv, input)) return false;
+        if (!conv.CanFoldBiasIntoFollowingBatchNorm || input.Shape[1] != conv.InputDepth) return false;
+        if (!norm.TryGetFoldingStatistics(conv.OutputDepth, out var gamma, out var beta, out var mean, out var variance,
+                out double epsilon))
+            return false;
+        if (ObserverSuppresses()) return false;
+
+        var engine = AiDotNetEngine.Current;
+        var depthwise = engine.DepthwiseConv2D(input, conv.KernelsForFolding, new[] { conv.Stride, conv.Stride },
+            new[] { conv.Padding, conv.Padding });
+        // mean - bias is the same for every predict, so it is computed once and kept until the mean or the bias is
+        // replaced or written (a SetParameters, a deserialization, a training step), like the folded convolution weights.
+        var shiftedMean = conv.BiasesForFolding is { } bias
+            ? conv.FoldedBatchNormMean.GetOrBuild(engine, SubtractBias, mean, bias)
+            : mean;
+        output = engine.BatchNormInference(depthwise, gamma, beta, shiftedMean, variance, epsilon, activation);
+        return true;
+    }
+
+    /// <summary>
+    /// The conditions every fusion here shares: folding is on, the input is rank 4, neither layer is training, no
+    /// gradient tape is recording, no graph is being captured, and no layer is inferring shapes.
+    /// </summary>
+    private static bool CanFuse(BatchNormalizationLayer<T> norm, ConvolutionalLayer<T>? conv, Tensor<T> input)
+        => InferenceFusionSettings.FoldBatchNormIntoConvolution
+           && input.Rank == 4
+           && !norm.InTrainingMode
+           && (conv is null || !conv.InTrainingMode)
+           && !AiDotNet.Autodiff.GradientRecording.IsRecording<T>()
+           && !AiDotNet.Tensors.Engines.Compilation.GraphMode.IsActive
+           && !LayerBase<T>.IsInferringShapes;
+
+    /// <summary>
+    /// True, after telling it, when a forward observer is attached. Checked last, so the observer learns only of a fold
+    /// that would otherwise have run: a traced forward that suppressed one differs from an untraced forward by rounding
+    /// (NeuralNetworkBase re-runs it).
+    /// </summary>
+    private static bool ObserverSuppresses()
+    {
+        if (LayerForwardObserver<T>.Current is not { } observer) return false;
+        observer.NoteSuppressedFolding();
+        return true;
+    }
+
+    private static Tensor<T> SubtractBias(IEngine engine, Tensor<T>[] meanAndBias)
+        => engine.TensorSubtract(meanAndBias[0], meanAndBias[1]);
+
+    /// <summary>
+    /// The engine-fusable form of <paramref name="activation"/>: None for no activation, ReLU and ReLU6 for exactly those
+    /// activation types (a subclass may compute something else, so it does not qualify). False otherwise.
+    /// </summary>
+    internal static bool TryGetFusedActivation(IActivationFunction<T>? activation, out FusedActivationType fused)
+    {
+        fused = FusedActivationType.None;
+        if (activation is null) return true;
+        if (activation.GetType() == typeof(ReLU6Activation<T>)) { fused = FusedActivationType.ReLU6; return true; }
+        if (activation.GetType() == typeof(ReLUActivation<T>)) { fused = FusedActivationType.ReLU; return true; }
+        return false;
     }
 
     /// <summary>
@@ -88,60 +168,4 @@ internal static class ConvolutionBatchNormFolding<T>
         consumed = relu ? 3 : 2;
         return true;
     }
-
-    private static (Tensor<T> Kernels, Tensor<T> Biases) GetFolded(ConvolutionalLayer<T> conv,
-        BatchNormalizationLayer<T> norm, Tensor<T> kernels, Tensor<T>? biases, Tensor<T> gamma, Tensor<T> beta,
-        Tensor<T> mean, Tensor<T> variance, double epsilon)
-    {
-        var entry = s_folded.GetValue(conv, static _ => new Folded());
-        lock (entry)
-        {
-            if (entry.FoldedKernels is { } cachedKernels && entry.FoldedBiases is { } cachedBiases
-                && ReferenceEquals(entry.Norm, norm)
-                && BitConverter.DoubleToInt64Bits(entry.Epsilon) == BitConverter.DoubleToInt64Bits(epsilon)
-                && Same(entry.Kernels, entry.KernelsVersion, kernels) && SameOrNull(entry.Biases, entry.BiasesVersion, biases)
-                && Same(entry.Gamma, entry.GammaVersion, gamma) && Same(entry.Beta, entry.BetaVersion, beta)
-                && Same(entry.Mean, entry.MeanVersion, mean) && Same(entry.Variance, entry.VarianceVersion, variance))
-                return (cachedKernels, cachedBiases);
-
-            var ops = MathHelper.GetNumericOperations<T>();
-            int channels = conv.OutputDepth;
-            int perChannel = kernels.Length / channels;
-            var w = kernels.ToArray();
-            var b = biases?.ToArray();
-            var g = gamma.ToArray();
-            var bt = beta.ToArray();
-            var m = mean.ToArray();
-            var v = variance.ToArray();
-            var foldedW = new T[w.Length];
-            var foldedB = new T[channels];
-            // In double, then rounded once to T: the folded weights are as close to the exact products as T allows.
-            for (int c = 0; c < channels; c++)
-            {
-                double scale = ops.ToDouble(g[c]) / System.Math.Sqrt(ops.ToDouble(v[c]) + epsilon);
-                for (int i = c * perChannel, end = i + perChannel; i < end; i++)
-                    foldedW[i] = ops.FromDouble(ops.ToDouble(w[i]) * scale);
-                double bias = b is null ? 0.0 : ops.ToDouble(b[c]);
-                foldedB[c] = ops.FromDouble((bias - ops.ToDouble(m[c])) * scale + ops.ToDouble(bt[c]));
-            }
-
-            entry.Norm = norm;
-            entry.Epsilon = epsilon;
-            entry.Kernels = kernels; entry.KernelsVersion = kernels.Version;
-            entry.Biases = biases; entry.BiasesVersion = biases?.Version ?? 0;
-            entry.Gamma = gamma; entry.GammaVersion = gamma.Version;
-            entry.Beta = beta; entry.BetaVersion = beta.Version;
-            entry.Mean = mean; entry.MeanVersion = mean.Version;
-            entry.Variance = variance; entry.VarianceVersion = variance.Version;
-            entry.FoldedKernels = new Tensor<T>(foldedW, kernels.Shape.ToArray());
-            entry.FoldedBiases = new Tensor<T>(foldedB, new[] { channels });
-            return (entry.FoldedKernels, entry.FoldedBiases);
-        }
-    }
-
-    private static bool Same(Tensor<T>? cached, int version, Tensor<T> current)
-        => ReferenceEquals(cached, current) && current.Version == version;
-
-    private static bool SameOrNull(Tensor<T>? cached, int version, Tensor<T>? current)
-        => current is null ? cached is null : Same(cached, version, current);
 }

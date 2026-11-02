@@ -168,7 +168,7 @@ public partial class RadialBasisFunctionNetwork<T> : VectorModelLayoutBase<T>
     /// 
     /// The constructor figures out:
     /// - How many inputs the network will accept (_inputSize)
-    /// - How many experts to create (_hiddenSize, default is 64 if not specified)
+    /// - How many experts to create (_hiddenSize: NumCenters, or max(10, (inputs + outputs) / 2) if not set)
     /// - How many outputs the network will produce (_outputSize)
     /// 
     /// Then it initializes the layers of the network accordingly.
@@ -208,7 +208,12 @@ public partial class RadialBasisFunctionNetwork<T> : VectorModelLayoutBase<T>
         }
         else
         {
-            hiddenSize = 64; // Default to 64 if not specified
+            // The width the default stack is built with. This read 64 while the stack was built with the
+            // derived width, so the reported hidden size and the real one disagreed.
+            int inputWidth = inputShape is { Length: > 0 } ? inputShape[0] : 0;
+            hiddenSize = _options.NumCenters ?? Math.Max(10, (inputWidth + outputSize) / 2);
+            if (hiddenSize <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), hiddenSize, "NumCenters must be positive.");
         }
 
         // Validate the network structure
@@ -263,7 +268,7 @@ public partial class RadialBasisFunctionNetwork<T> : VectorModelLayoutBase<T>
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultRBFNetworkLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultRBFNetworkLayers(Architecture, _hiddenSize, _radialBasisFunction));
         }
     }
 
