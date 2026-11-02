@@ -327,7 +327,10 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
             complexity: NetworkComplexity.Medium,
             inputSize: featureCount,
             outputSize: _options.ActionSize,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         var optimizer = _options.OptimizerFactory?.Invoke() ?? CreatePaperOptimizer();
         _transformerOptimizer = optimizer;

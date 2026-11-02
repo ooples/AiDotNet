@@ -182,7 +182,10 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             inputSize: _options.StateSize,
             outputSize: _options.ActionSize,
             layers: layers
-        );
+        )
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture,
             optimizer: CreateNetworkOptimizer(_options.ActorLearningRate),
@@ -211,7 +214,10 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             inputSize: inputSize,
             outputSize: 1,
             layers: layers
-        );
+        )
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture,
             optimizer: CreateNetworkOptimizer(_options.CriticLearningRate),

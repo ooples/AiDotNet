@@ -191,6 +191,31 @@ public class WorldModelsPaperTests
         Assert.Equal(nll + rewardLoss + doneLoss, value, 9);
     }
 
+    /// <summary>
+    /// The done term is softplus(l) - y l evaluated stably: a done logit of 800 labelled done costs ~0, and the loss
+    /// stays finite. Fails if log(1 + e^l) is evaluated literally, where e^800 overflows and the loss becomes +inf.
+    /// </summary>
+    [Fact]
+    public void MdnObjective_DoneTerm_IsFiniteForALargeDoneLogit()
+    {
+        var agent = new WorldModelsAgent<double>(Small(latent: 1, mixtures: 2));
+        double[] step = { 0.0, 1.0, 0.5, -1.0, 0.0, Math.Log(0.5), 0.3, 800.0 };
+        var output = new Tensor<double>(new[] { 1, 1, 8 });
+        for (int j = 0; j < 8; j++) output[j] = step[j];
+        var z = new Tensor<double>(new[] { 1, 1, 1 }); z[0] = 0.2;
+        var reward = new Tensor<double>(new[] { 1, 1, 1 }); reward[0] = 1.0;
+        var done = new Tensor<double>(new[] { 1, 1, 1 }); done[0] = 1.0;
+        var mask = new Tensor<double>(new[] { 1, 1, 1 }); mask[0] = 1.0;
+
+        double Density(double x, double m, double s) => Math.Exp(-0.5 * ((x - m) / s) * ((x - m) / s)) / (s * Math.Sqrt(2 * Math.PI));
+        double p0 = 1.0 / (1.0 + Math.E), p1 = Math.E / (1.0 + Math.E);
+        double nll = -Math.Log(p0 * Density(0.2, 0.5, 1.0) + p1 * Density(0.2, -1.0, 0.5));
+        double rewardLoss = (0.3 - 1.0) * (0.3 - 1.0);
+
+        double value = agent.MdnObjective(output, z, reward, done, mask, 1.0)[0];
+        Assert.Equal(nll + rewardLoss, value, 9);
+    }
+
     [Fact]
     public void Temperature_FlattensTheMixtureWeights_AndScalesSigmaBySqrtTau()
     {

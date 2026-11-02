@@ -675,7 +675,7 @@ public static class DeserializationHelper
                 ?? throw new InvalidOperationException("DuelingCombinationLayer metadata has no FeatureDim.");
             int numAtoms = TryGetInt(additionalParams, "NumAtoms") ?? 1;
             int actionSize = TryGetInt(additionalParams, "ActionSize")
-                ?? (outputShape.Length > 0 ? outputShape[outputShape.Length - 1] / numAtoms : 1);
+                ?? (outputShape is { Length: > 0 } ? outputShape[outputShape.Length - 1] / numAtoms : 1);
             int[] valueHidden = TryGetIntArray(additionalParams, "ValueHiddenWidths") ?? Array.Empty<int>();
             int[] advantageHidden = TryGetIntArray(additionalParams, "AdvantageHiddenWidths") ?? Array.Empty<int>();
 
@@ -4563,10 +4563,10 @@ public static class DeserializationHelper
     {
         if (additionalParams is null) return;
         var nested = new Dictionary<string, object>();
-        foreach (var kv in additionalParams)
+        foreach (var kv in additionalParams.Where(kv => kv.Key.Length > prefix.Length
+                     && kv.Key.StartsWith(prefix, StringComparison.Ordinal)))
         {
-            if (kv.Key.Length > prefix.Length && kv.Key.StartsWith(prefix, StringComparison.Ordinal))
-                nested[kv.Key.Substring(prefix.Length)] = kv.Value;
+            nested[kv.Key.Substring(prefix.Length)] = kv.Value;
         }
 
         if (nested.Count > 0)

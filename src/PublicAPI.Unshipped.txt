@@ -571,3 +571,4 @@ AiDotNet.ReinforcementLearning.Policies.DiscretePolicy<T>.DiscretePolicy(AiDotNe
 AiDotNet.ReinforcementLearning.Policies.MixedPolicy<T>.MixedPolicy(AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>! options) -> void
 AiDotNet.ReinforcementLearning.Policies.MultiModalPolicy<T>.MultiModalPolicy(AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>! options) -> void
 *REMOVED*AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.ExplorationStrategy.get -> AiDotNet.ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T>!
+AiDotNet.ReinforcementLearning.Agents.DeepReinforcementLearningAgentBase<T>.NextNetworkInitializationSeed() -> int?

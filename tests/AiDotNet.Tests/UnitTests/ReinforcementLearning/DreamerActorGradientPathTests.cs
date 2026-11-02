@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.ReinforcementLearning.Agents.Dreamer;
 using AiDotNet.Tensors.Helpers;
@@ -82,7 +83,13 @@ public class DreamerActorGradientPathTests
     public void Dreamer_actor_must_be_reachable_from_the_imagined_value()
     {
         var rng = RandomHelper.CreateSeededRandom(29);
-        using var agent = new DreamerAgent<double>();
+        // Exercise the same RSSM/imagined-value tape with small dimensions; the paper defaults exhaust CI memory.
+        using var agent = new DreamerAgent<double>(new DreamerOptions<double>
+        {
+            ObservationSize = 4, ActionSize = 2, DeterministicSize = 12, StochasticSize = 4,
+            HiddenSize = 16, BatchSize = 6, BatchLength = 10, ImaginationHorizon = 4,
+            ReplayBufferSize = 512, Seed = 29,
+        });
 
         var actor = PrivateNetwork(agent, "_actorNetwork");
         var dynamics = PrivateNetwork(agent, "_transitionInputNetwork");

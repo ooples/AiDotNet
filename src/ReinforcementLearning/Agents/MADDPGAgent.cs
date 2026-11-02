@@ -174,7 +174,10 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: _options.StateSize,
             outputSize: _options.ActionSize,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture,
             optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(_options.ActorLearningRate),
@@ -207,7 +210,10 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: 1,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture,
             optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(_options.CriticLearningRate),

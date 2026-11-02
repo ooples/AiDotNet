@@ -155,7 +155,10 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             complexity: NetworkComplexity.Medium,
             inputSize: _options.StateSize,
             outputSize: _options.ActionSize * 2,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture,
             optimizer: CreateNetworkOptimizer(_options.PolicyLearningRate),
@@ -181,7 +184,10 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             complexity: NetworkComplexity.Medium,
             inputSize: _options.StateSize,
             outputSize: 1,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture, optimizer: CreateNetworkOptimizer(_options.ValueLearningRate));
     }
@@ -206,7 +212,10 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: 1,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture,
             optimizer: CreateNetworkOptimizer(_options.QLearningRate),

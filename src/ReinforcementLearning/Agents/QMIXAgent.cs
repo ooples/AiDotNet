@@ -178,7 +178,10 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             complexity: NetworkComplexity.Medium,
             inputSize: _options.StateSize,
             outputSize: _options.ActionSize,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
     }
@@ -217,7 +220,10 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: 1,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
     }
