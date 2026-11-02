@@ -502,7 +502,9 @@ public partial class WGAN<T> : ImageGeneratorModelLayoutBase<T>
         var totalElements = checked(batchSize * noiseSize);
         var mean = NumOps.Zero;
         var stddev = NumOps.One;
-        var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev);
+        // From the model's seeded stream: unseeded, the engine drew from a process-shared generator, so two
+        // identically seeded models trained on different noise.
+        var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev, Random.Next());
         return Tensor<T>.FromVector(noiseVector, [batchSize, noiseSize]);
     }
 
