@@ -111,6 +111,12 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
     /// </summary>
     private readonly GriffinLim<T>? _griffinLim;
 
+    /// <summary>
+    /// The mel filterbank the acoustic model's output is expressed in (the library's log-mel at the model's sample
+    /// rate, FFT size, hop length and mel count), used to invert that output to a linear magnitude for Griffin-Lim.
+    /// </summary>
+    private MelSpectrogram<T>? _griffinLimMel;
+
     #endregion
 
     #region Shared Fields
@@ -820,7 +826,11 @@ public partial class TtsModel<T> : AudioNeuralNetworkBase<T>, ITextToSpeech<T>
             mel2D = melSpectrogram;
         }
 
-        return _griffinLim.Reconstruct(mel2D);
+        // Griffin-Lim estimates phase for a LINEAR magnitude of FftSize / 2 + 1 bins; the acoustic model emits NumMels
+        // log-mel bins, so they are inverted through the same filterbank first. Passed directly, the mel bins were
+        // read as the lowest linear frequencies.
+        _griffinLimMel ??= CreateMelSpectrogram(_options.SampleRate, _options.NumMels, _options.FftSize, _options.HopLength);
+        return _griffinLim.ReconstructFromMel(mel2D, _griffinLimMel);
     }
 
     private void ThrowIfDisposed()
