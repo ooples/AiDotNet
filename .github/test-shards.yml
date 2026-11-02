@@ -1568,6 +1568,8 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.DenseLayerInitializationRollbackTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.TransformerDecoderLayerDecoderOnlyTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.UNet3DCallerLayersTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.AutoIntTrainingGradientTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.PredictionCacheBoundaryTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.FeedForwardLayerCacheSkipParityTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GatedDeltaProductBroadcastRegressionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.InjectedSublayerBlockRoundTripTests.|
