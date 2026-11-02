@@ -656,6 +656,21 @@ public static class OptionSensitivityHarness
         if (element is not null && current is IEnumerable sequence)
         {
             var items = sequence.Cast<object?>().ToList();
+            // Stage arrays often require an exact length. Change one scalar element at a time
+            // as well as the length, without sharing mutable containers with the fixture.
+            var scalar = Nullable.GetUnderlyingType(element) ?? element;
+            if (IsNumeric(scalar) || scalar == typeof(bool) || scalar.IsEnum)
+            {
+                for (int index = 0; index < items.Count; index++)
+                {
+                    foreach (var value in Perturbations(element, items[index]))
+                    {
+                        var changed = new List<object?>(items);
+                        changed[index] = value;
+                        yield return BuildList(propertyType, element, changed);
+                    }
+                }
+            }
             var grown = new List<object?>(items);
             grown.Add(items.Count > 0 ? items[items.Count - 1] : DefaultElement(element));
             yield return BuildList(propertyType, element, grown);

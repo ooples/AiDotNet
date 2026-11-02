@@ -7,8 +7,49 @@ namespace AiDotNet.Tests.UnitTests.PaperFidelity;
 
 public class OptionPerturbationTests
 {
-    static OptionPerturbationTests() => CloneRegistry.Register(new ClonePlan(
-        typeof(ThresholdModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
+    static OptionPerturbationTests()
+    {
+        CloneRegistry.Register(new ClonePlan(
+            typeof(ThresholdModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
+        CloneRegistry.Register(new ClonePlan(
+            typeof(FixedArrayModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
+    }
+
+    public sealed class FixedArrayOptions : ModelOptions
+    {
+        public int[] Widths { get; set; } = new[] { 2, 4 };
+    }
+
+    public sealed class FixedArrayModel
+    {
+        private readonly FixedArrayOptions _options;
+        public FixedArrayModel(FixedArrayOptions options)
+        {
+            if (options.Widths.Length != 2 || options.Widths.Any(width => width <= 0))
+                throw new ArgumentException("Exactly two positive stage widths are required.");
+            _options = options;
+        }
+        public long Output => _options.Widths.Sum();
+    }
+
+    [Fact]
+    public void FixedLengthArrayCanChangeWithoutChangingItsLength()
+    {
+        var probe = new OptionSensitivityProbe<FixedArrayModel>(
+            () => new(new()), model => model.Output, train: null);
+        var result = OptionSensitivityHarness.Measure(typeof(FixedArrayModel), "Widths", probe);
+        Assert.Equal(OptionSensitivityOutcome.Sensitive, result.Outcome);
+    }
+
+    [Fact]
+    public void ArrayCandidatesChangeEachElementWithoutMutatingTheOriginal()
+    {
+        var original = new[] { 2, 4 };
+        var candidates = OptionSensitivityHarness.Perturbations(typeof(int[]), original).Cast<int[]>().ToArray();
+        Assert.Equal(new[] { 2, 4 }, original);
+        Assert.Contains(candidates, values => values.Length == 2 && values[0] != 2 && values[1] == 4);
+        Assert.Contains(candidates, values => values.Length == 2 && values[0] == 2 && values[1] != 4);
+    }
 
     public sealed class ThresholdOptions : ModelOptions
     {
