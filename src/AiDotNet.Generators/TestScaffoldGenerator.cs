@@ -1068,13 +1068,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // 120s on CPU (verified from the Generated N-P shard). Genuine foundation-scale compute — nightly
         // heavy lane, matching its MaskDINO sibling.
         "OMGSeg",
-        // DOVE (Video/Enhancement, VideoSuperResolutionBase): the same heavy VSR class as
-        // MGLDVSR — a deep residual conv super-resolution stack run over a multi-frame clip, so its
-        // Training_ShouldReduceLoss / LossStrictlyDecreases / MoreData all time out at 120/180s on CPU
-        // (verified from the Generated A-F shard). Genuine heavy conv compute, not a fixable pathology,
-        // so the whole DOVETests class runs in the nightly heavy lane at full scale like its VSR
-        // siblings (MGLDVSR), keeping it off the default per-test-timeout gate.
-        "DOVE",
     };
 
     /// <summary>
@@ -13739,15 +13732,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "DOVE" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
             {
-                // DOVE's native video-diffusion prior uses the same deep residual VSR stack as the
-                // other video models. Keep the architecture family intact but use a tiny legal CI
-                // fixture so training invariants stay inside the 120-second runner timeout.
+                // DOVE (Chen et al., NeurIPS 2025) keeps its whole topology at smoke width: the CogVideoX 1.5
+                // expert transformer (one block, one 16-wide head so the 3D rotary embedding splits, 2x2x2
+                // patches), the frozen empty-prompt embedding and the causal 3D VAE with temporal compression.
+                // Two 4x4 frames upscale 2x: the release's 8N + 1 frame padding (4N + 1 at compression 2) makes
+                // five frames, three latent frames, and one repeated first frame fills the temporal patch. The
+                // fixture stays on the latent-space adaptation stage (the default 10,000 iterations); the switch
+                // to pixel-space refinement has its own paper test, and the VGG16 of DISTS is left out (weight 0).
+                // No warmup, so the first steps train at the full rate. At the paper's 2e-5 the objective falls
+                // 0.75 % in 100 steps (0.90809 -> 0.90224 measured), short of the 1 % memorization threshold; 1e-4
+                // falls every step (0.90809 -> 0.88848), while 3e-4 turns back up after 50 steps.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
-                    "new AiDotNet.Video.Options.DOVEOptions { NumFeatures = 8, NumResBlocks = 1, " +
-                    "NumAttentionHeads = 1, NumDenoisingSteps = 1, ScaleFactor = 2, DropoutRate = 0.0 })";
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 4, inputWidth: 4, outputSize: 3 * 8 * 8), " +
+                    "new AiDotNet.Video.Options.DOVEOptions { Seed = 1, NumAttentionHeads = 1, AttentionHeadDim = 16, " +
+                    "NumLayers = 1, TimeEmbedDim = 8, TextEmbedDim = 8, MaxTextSeqLength = 4, VaeChannels = new[] { 32, 32 }, " +
+                    "VaeLayersPerBlock = 1, LatentChannels = 4, TemporalCompressionRatio = 2, ScaleFactor = 2, NumFrames = 2, " +
+                    "DistsWeight = 0.0, WarmupSteps = 0, LearningRate = 1e-4 })";
             }
             else if (model.ClassName == "RVRT" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
@@ -14694,6 +14696,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Matches the public-options fixture above: two 8x8 RGB frames and the x2 reconstruction.
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
+        }
+        else if (model.ClassName == "DOVE")
+        {
+            // Two RGB 4x4 frames upscaled 2x; see the constructor pin above.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 4, 4 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 8, 8 };");
         }
         else if (model.ClassName == "DAMVSR")
         {

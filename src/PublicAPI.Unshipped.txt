@@ -18280,3 +18280,78 @@ override AiDotNet.Video.Enhancement.DAMVSR<T>.SupportsFusedCompiledTraining.get 
 *REMOVED*AiDotNet.Video.Options.DAMVSROptions.WarmupSteps.set -> void
 *REMOVED*override AiDotNet.Video.Enhancement.DAMVSR<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.Video.Enhancement.DAMVSR<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+AiDotNet.Video.Options.DOVEOptions.AdaptationIterations.get -> int
+AiDotNet.Video.Options.DOVEOptions.AdaptationIterations.set -> void
+AiDotNet.Video.Options.DOVEOptions.AttentionHeadDim.get -> int
+AiDotNet.Video.Options.DOVEOptions.AttentionHeadDim.set -> void
+AiDotNet.Video.Options.DOVEOptions.BetaEnd.get -> double
+AiDotNet.Video.Options.DOVEOptions.BetaEnd.set -> void
+AiDotNet.Video.Options.DOVEOptions.BetaStart.get -> double
+AiDotNet.Video.Options.DOVEOptions.BetaStart.set -> void
+AiDotNet.Video.Options.DOVEOptions.DistsWeight.get -> double
+AiDotNet.Video.Options.DOVEOptions.DistsWeight.set -> void
+AiDotNet.Video.Options.DOVEOptions.FrameDifferenceWeight.get -> double
+AiDotNet.Video.Options.DOVEOptions.FrameDifferenceWeight.set -> void
+AiDotNet.Video.Options.DOVEOptions.ImageRatio.get -> double
+AiDotNet.Video.Options.DOVEOptions.ImageRatio.set -> void
+AiDotNet.Video.Options.DOVEOptions.LatentChannels.get -> int
+AiDotNet.Video.Options.DOVEOptions.LatentChannels.set -> void
+AiDotNet.Video.Options.DOVEOptions.LatentScale.get -> double
+AiDotNet.Video.Options.DOVEOptions.LatentScale.set -> void
+AiDotNet.Video.Options.DOVEOptions.MaxGradientNorm.get -> double
+AiDotNet.Video.Options.DOVEOptions.MaxGradientNorm.set -> void
+AiDotNet.Video.Options.DOVEOptions.MaxTextSeqLength.get -> int
+AiDotNet.Video.Options.DOVEOptions.MaxTextSeqLength.set -> void
+AiDotNet.Video.Options.DOVEOptions.NormEpsilon.get -> double
+AiDotNet.Video.Options.DOVEOptions.NormEpsilon.set -> void
+AiDotNet.Video.Options.DOVEOptions.NumFrames.get -> int
+AiDotNet.Video.Options.DOVEOptions.NumFrames.set -> void
+AiDotNet.Video.Options.DOVEOptions.NumLayers.get -> int
+AiDotNet.Video.Options.DOVEOptions.NumLayers.set -> void
+AiDotNet.Video.Options.DOVEOptions.NumTrainTimesteps.get -> int
+AiDotNet.Video.Options.DOVEOptions.NumTrainTimesteps.set -> void
+AiDotNet.Video.Options.DOVEOptions.PatchSize.get -> int
+AiDotNet.Video.Options.DOVEOptions.PatchSize.set -> void
+AiDotNet.Video.Options.DOVEOptions.PatchSizeT.get -> int
+AiDotNet.Video.Options.DOVEOptions.PatchSizeT.set -> void
+AiDotNet.Video.Options.DOVEOptions.RefinementLearningRate.get -> double
+AiDotNet.Video.Options.DOVEOptions.RefinementLearningRate.set -> void
+AiDotNet.Video.Options.DOVEOptions.TemporalCompressionRatio.get -> int
+AiDotNet.Video.Options.DOVEOptions.TemporalCompressionRatio.set -> void
+AiDotNet.Video.Options.DOVEOptions.TextEmbedDim.get -> int
+AiDotNet.Video.Options.DOVEOptions.TextEmbedDim.set -> void
+AiDotNet.Video.Options.DOVEOptions.TimeEmbedDim.get -> int
+AiDotNet.Video.Options.DOVEOptions.TimeEmbedDim.set -> void
+AiDotNet.Video.Options.DOVEOptions.Timestep.get -> int
+AiDotNet.Video.Options.DOVEOptions.Timestep.set -> void
+AiDotNet.Video.Options.DOVEOptions.VaeChannels.get -> int[]!
+AiDotNet.Video.Options.DOVEOptions.VaeChannels.set -> void
+AiDotNet.Video.Options.DOVEOptions.VaeLayersPerBlock.get -> int
+AiDotNet.Video.Options.DOVEOptions.VaeLayersPerBlock.set -> void
+AiDotNet.Video.Options.DOVEOptions.WeightDecay.get -> double
+AiDotNet.Video.Options.DOVEOptions.WeightDecay.set -> void
+override AiDotNet.Video.Enhancement.DOVE<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.Enhancement.DOVE<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.DOVE<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.DOVE<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.Enhancement.DOVE<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.Enhancement.DOVE<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.Enhancement.DOVE<T>.RegisterComponents() -> void
+override AiDotNet.Video.Enhancement.DOVE<T>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+override AiDotNet.Video.Enhancement.DOVE<T>.ResolveLazyLayerShapes() -> void
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.GuidanceScale.get -> double
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.GuidanceScale.set -> void
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.LatentDim.get -> int
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.LatentDim.set -> void
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.NumDenoisingSteps.get -> int
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.NumDenoisingSteps.set -> void
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.NumResBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.NumResBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.DOVEOptions.Variant.set -> void
+*REMOVED*override AiDotNet.Video.Enhancement.DOVE<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Video.Enhancement.DOVE<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
