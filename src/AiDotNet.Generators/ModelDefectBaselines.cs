@@ -128,7 +128,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>",
-            "AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>",
             "AiDotNet.Video.Enhancement.FlashVSR<T>",

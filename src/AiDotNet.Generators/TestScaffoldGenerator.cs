@@ -11828,24 +11828,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 8, outputSize: 16), new AiDotNet.NeuralNetworks.Options.JambaOptions { VocabSize = 16, ModelDimension = 32, NumLayers = 2, StateDimension = 8, AttentionInterval = 2, MaxSequenceLength = 8 })";
             }
-            else if (IsValleCodecLMModel(model.ClassName) && model.TypeParameterCount == 1
-                     && model.FullyQualifiedName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
-            {
-                // VALL-E-family models are neural codec language models: token
-                // IDs -> transformer text/codec LM -> codec logits. Use a
-                // smoke-scale config that preserves that paper contract without
-                // constructing the production 1024-wide, 12-layer stack for every
-                // generated invariant test.
-                string optionsType = GetValleCodecLMOptionsType(model.ClassName);
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    $"new {optionsType} {{ SampleRate = 24000, NumCodebooks = 1, CodebookSize = 16, " +
-                    "CodecFrameRate = 75, TextEncoderDim = 32, LLMDim = 32, NumEncoderLayers = 1, " +
-                    "NumLLMLayers = 1, NumHeads = 4, VocabSize = 64, MaxTextLength = 8, " +
-                    "DropoutRate = 0.0, LearningRate = 1e-3, WeightDecay = 0.0 })";
-            }
             else if (model.ClassName == "CSM" && model.TypeParameterCount == 1)
             {
                 // CSM is a Llama 3.2 1B backbone and a 100M audio decoder over Mimi's 32 codebooks; keep both Transformers at
@@ -15936,19 +15918,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine(useCodecSmokeIterations
                     ? "    protected override int MoreDataLongIterations => 2;"
                     : "    protected override int MoreDataLongIterations => 10;");
-                if (model.ClassName is "Bark" or "BarkModel"
-                    or "SeedTTS"
-                    || IsValleCodecLMModel(model.ClassName))
+                if (model.ClassName is "Bark" or "BarkModel" or "SeedTTS")
                 {
                     sb.AppendLine("    protected override int TrainingIterations => 2;");
-                    sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
-                }
-                else if (model.ClassName == "VALLEXClone")
-                {
-                    // The exact Generated U-Z shard proved the FP32, reduced VALL-E-X fixture still
-                    // exceeds the 180-second watchdog at the default 100 memorization updates. Cap
-                    // only that repeated probe; 15 real tape/AdamW steps preserve the convergence
-                    // invariant and the cross-lingual codec-LM topology remains unchanged.
                     sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
                 }
                 sb.AppendLine();
@@ -22251,8 +22223,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "CosyVoiceClone" or "Chatterbox"
             or "SeedTTS" or "SeedTTSClone"
             // SparkTTS exposes the same discrete codec-token contract.
-            or "SparkTTS"
-            || IsValleCodecLMModel(className);
+            or "SparkTTS";
     }
 
     /// <summary>
@@ -22265,7 +22236,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
         return className switch
         {
-            "VALLEXClone" => 16,
             "SeedTTS" => 16,
             "SeedTTSClone" => 16,
             "Bark" or "BarkModel" => 32,
@@ -22282,32 +22252,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         };
     }
 
-    private static bool IsValleCodecLMModel(string className)
-    {
-        int tickIdx = className.IndexOf('`');
-        if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className is "VALLEXClone";
-    }
-
     private static int CodecLMInputVocabSize(string className)
     {
         int tickIdx = className.IndexOf('`');
         if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return IsValleCodecLMModel(className)
-            || className is "Bark" or "BarkModel"
-            || className is "SeedTTS" or "SeedTTSClone"
+        return className is "Bark" or "BarkModel" or "SeedTTS" or "SeedTTSClone"
                 ? 64 : 256;
-    }
-
-    private static string GetValleCodecLMOptionsType(string className)
-    {
-        int tickIdx = className.IndexOf('`');
-        if (tickIdx > 0) className = className.Substring(0, tickIdx);
-        return className switch
-        {
-            "VALLEXClone" => "AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions",
-            _ => "AiDotNet.TextToSpeech.CodecBased.VALLEOptions",
-        };
     }
 
     /// <summary>

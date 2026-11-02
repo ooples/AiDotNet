@@ -2193,7 +2193,6 @@ override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.DetectionWeigh
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestamped<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestamped<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestamped<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
-override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperLiveOptions.MaxTextLength.get -> int
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperLiveOptions.MaxTextLength.set -> void
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperLiveOptions.Language.get -> string?
