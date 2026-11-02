@@ -1970,6 +1970,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // during its 250-step convergence probe. SpeakerVerifier is also training-bound and
         // shares the same audio scaffold. Apply the required precision-first mitigation.
         "RealESRGANVideo", "RevAI", "SeedASR", "SeedTTS", "SlowFast", "SpeakerVerifier",
+        // RealBasicVSR-Sharp: every generated training step is a generator and a spectral-norm U-Net
+        // discriminator update on 128x128 outputs, which put TrainingStep_ShouldDependOnTheTarget over
+        // 120 s at fp64 (the other 39 generated tests pass). Rung 1 of the ladder: precision only.
+        "RealBasicVSRSharp",
         // Generated Q-S BUDGET, rung 1 of the ladder (float -> cap -> shrink -> HeavyTimeout).
         // MEASURED per-class totals from the full Q-S run (run4, all correctness fixes in place):
         //   SALMONN 395.0s, SambaLanguageModel 374.1s, RecurrentGemmaLanguageModel 353.3s,
