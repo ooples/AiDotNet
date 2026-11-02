@@ -57,8 +57,11 @@ public class RWKVTransducerOptions : ModelOptions
         Vocabulary = (string[])other.Vocabulary.Clone();
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
+    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
+    /// <summary>Gets or sets the hidden width of the encoder.</summary>
     public int EncoderDim { get; set; } = 512;
     /// <summary>
     /// Gets or sets the number of encoder blocks. Default 18, the paper's value.
@@ -69,6 +72,7 @@ public class RWKVTransducerOptions : ModelOptions
     /// convention rather than this paper's, and depth is the axis the paper holds fixed.
     /// </remarks>
     public int NumEncoderLayers { get; set; } = 18;
+    /// <summary>Gets or sets the number of heads in each attention layer.</summary>
     public int NumAttentionHeads { get; set; } = 8;
     /// <summary>Width of the convolutional gating MLP branch.</summary>
     /// <value>The cgMLP width. Default 3072.</value>
@@ -91,6 +95,7 @@ public class RWKVTransducerOptions : ModelOptions
     /// transcribe recordings longer than <see cref="MaxAudioLengthSeconds"/>.</para>
     /// </remarks>
     public int MaxEncoderFrames { get; set; } = 750;
+    /// <summary>Gets or sets the number of mel filterbank channels in the input features.</summary>
     public int NumMels { get; set; } = 80;
     /// <summary>Output vocabulary size; must equal <see cref="Vocabulary"/>'s length.</summary>
     /// <value>The token count. Defaults to the built-in character tokenizer's size.</value>
@@ -100,6 +105,7 @@ public class RWKVTransducerOptions : ModelOptions
     /// <see cref="Vocabulary"/> to use a larger tokenizer; <c>Validate</c> requires the two to agree.
     /// </remarks>
     public int VocabSize { get; set; } = GetDefaultVocabulary().Length;
+    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
     public string? ModelPath { get; set; }
 
     /// <summary>
@@ -158,9 +164,13 @@ public class RWKVTransducerOptions : ModelOptions
     /// </remarks>
     public double LearningRate { get; set; } = 1e-3;
 
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the dropout probability of the native layers during training.</summary>
     public double DropoutRate { get; set; } = 0.1;
+    /// <summary>Gets or sets the language code (for example "en") reported for a transcript when none is passed or detected.</summary>
     public string Language { get; set; } = "en";
+    /// <summary>Gets or sets the token strings, indexed by token id, that native transcripts are spelled with. Index 0 is the CTC blank and "|" separates words.</summary>
     public string[] Vocabulary { get; set; } = GetDefaultVocabulary();
     private static string[] GetDefaultVocabulary() => new[] { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
 
