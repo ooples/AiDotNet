@@ -13678,25 +13678,26 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "DAMVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
             {
-                // DAM-VSR (SIGGRAPH 2025) — appearance/motion disentangled VSR. Its production
-                // defaults (scale x4, 64 features, 15 residual blocks) build the generic
-                // CreateDefaultVideoSuperResolutionLayers stack (~34 convs). At T=double, where the
-                // fused float-only training fast path can't engage, one Train() step costs ~2.8 s
-                // (measured), so the 100-step memorization and 50+200-step MoreData invariants blow
-                // the 180/120 s xUnit timeouts before they can assert. Same heaviness DualXVSR hit;
-                // apply the same fix — a small legal CI fixture (2 RGB frames @ 8x8, 8 features, 1
-                // residual block, 2x pixel shuffle) that runs at ~18 ms/step. Because it's that
-                // cheap, we keep the DEFAULT iteration counts and convergence thresholds (unlike
-                // DualXVSR's slower transformer, which also had to cut iterations) — only the model
-                // SCALE is reduced, so the convergence invariants keep their full strength.
+                // DAM-VSR (Kong et al., SIGGRAPH 2025) keeps its whole topology at smoke width: the SVD
+                // spatio-temporal U-Net with the backward pass's temporal projections, the video ControlNet,
+                // the CLIP image encoder, the KL VAE with the temporal decoder and the U-Net discriminator.
+                // Two 32-wide stages (GroupNorm(32) needs 32 channels) on both the U-Net and the VAE make the
+                // smallest legal output side 4, so two 4x4 frames upscale 2x to 8x8. The fixture stays on the
+                // ControlNet stage (the default 60,000 iterations): switching stage mid-probe would compare
+                // different objectives, and the stage switches have their own paper tests. Two sampling
+                // steps keep Predict cheap; the VGG19 is left out (perceptual weight 0).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, " +
-                    "outputSize: 4), " +
-                    "new AiDotNet.Video.Options.DAMVSROptions { " +
-                    "NumFeatures = 8, NumResBlocks = 1, ScaleFactor = 2, " +
-                    "NumFrames = 2, LearningRate = 2e-4, DropoutRate = 0.0 })";
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 4, inputWidth: 4, " +
+                    "outputSize: 3 * 8 * 8), " +
+                    "new AiDotNet.Video.Options.DAMVSROptions { Seed = 1, " +
+                    "UNetChannels = new[] { 32, 32 }, UNetHeads = new[] { 1, 1 }, LayersPerBlock = 1, " +
+                    "AddedTimeEmbedDim = 8, VaeChannels = new[] { 32, 32 }, VaeLayersPerBlock = 1, " +
+                    "ImageEncoderSize = 28, ImageEncoderPatchSize = 14, ImageEncoderWidth = 32, " +
+                    "ImageEncoderDepth = 1, ImageEncoderHeads = 2, ImageEncoderMlpDim = 64, ImageEmbedDim = 32, " +
+                    "ScaleFactor = 2, NumFrames = 2, NumInferenceSteps = 2, DecoderSamplingSteps = 1, " +
+                    "PerceptualWeight = 0.0, DiscriminatorChannels = 4 })";
             }
             else if (model.ClassName == "MIAVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
@@ -14691,7 +14692,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
         }
-        else if (model.ClassName == "DAMVSR" || model.ClassName == "FlashVSR")
+        else if (model.ClassName == "DAMVSR")
+        {
+            // Two RGB 4x4 frames upscaled 2x; see the constructor pin above.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 4, 4 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 8, 8 };");
+        }
+        else if (model.ClassName == "FlashVSR")
         {
             // Matches the small CI constructor above (2 frames, 3 channels, 8x8 input,
             // 2x pixel shuffle -> SR output [2, 3, 16, 16]). At ~18 ms/Train() step the

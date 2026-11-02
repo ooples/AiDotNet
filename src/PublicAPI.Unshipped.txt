@@ -18183,3 +18183,100 @@ override AiDotNet.Video.Enhancement.DualXVSR<T>.SupportsFusedCompiledTraining.ge
 *REMOVED*AiDotNet.Video.Options.DualXVSROptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
 *REMOVED*AiDotNet.Video.Options.DualXVSROptions.Variant.set -> void
 *REMOVED*override AiDotNet.Video.Enhancement.DualXVSR<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Video.Enhancement.DAMVSR<T>.ReferenceUpscaler.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+AiDotNet.Video.Enhancement.DAMVSR<T>.ReferenceUpscaler.set -> void
+AiDotNet.Video.Options.DAMVSROptions.AddedTimeEmbedDim.get -> int
+AiDotNet.Video.Options.DAMVSROptions.AddedTimeEmbedDim.set -> void
+AiDotNet.Video.Options.DAMVSROptions.BackwardIterations.get -> int
+AiDotNet.Video.Options.DAMVSROptions.BackwardIterations.set -> void
+AiDotNet.Video.Options.DAMVSROptions.BidirectionalSampling.get -> bool
+AiDotNet.Video.Options.DAMVSROptions.BidirectionalSampling.set -> void
+AiDotNet.Video.Options.DAMVSROptions.ControlNetIterations.get -> int
+AiDotNet.Video.Options.DAMVSROptions.ControlNetIterations.set -> void
+AiDotNet.Video.Options.DAMVSROptions.DecoderSamplingSteps.get -> int
+AiDotNet.Video.Options.DAMVSROptions.DecoderSamplingSteps.set -> void
+AiDotNet.Video.Options.DAMVSROptions.DiscriminatorChannels.get -> int
+AiDotNet.Video.Options.DAMVSROptions.DiscriminatorChannels.set -> void
+AiDotNet.Video.Options.DAMVSROptions.Fps.get -> int
+AiDotNet.Video.Options.DAMVSROptions.Fps.set -> void
+AiDotNet.Video.Options.DAMVSROptions.GANWeight.get -> double
+AiDotNet.Video.Options.DAMVSROptions.GANWeight.set -> void
+AiDotNet.Video.Options.DAMVSROptions.ImageEmbedDim.get -> int
+AiDotNet.Video.Options.DAMVSROptions.ImageEmbedDim.set -> void
+AiDotNet.Video.Options.DAMVSROptions.ImageEncoderDepth.get -> int
+AiDotNet.Video.Options.DAMVSROptions.ImageEncoderDepth.set -> void
+AiDotNet.Video.Options.DAMVSROptions.ImageEncoderHeads.get -> int
+AiDotNet.Video.Options.DAMVSROptions.ImageEncoderHeads.set -> void
+AiDotNet.Video.Options.DAMVSROptions.ImageEncoderMlpDim.get -> int
+AiDotNet.Video.Options.DAMVSROptions.ImageEncoderMlpDim.set -> void
+AiDotNet.Video.Options.DAMVSROptions.ImageEncoderPatchSize.get -> int
+AiDotNet.Video.Options.DAMVSROptions.ImageEncoderPatchSize.set -> void
+AiDotNet.Video.Options.DAMVSROptions.ImageEncoderSize.get -> int
+AiDotNet.Video.Options.DAMVSROptions.ImageEncoderSize.set -> void
+AiDotNet.Video.Options.DAMVSROptions.ImageEncoderWidth.get -> int
+AiDotNet.Video.Options.DAMVSROptions.ImageEncoderWidth.set -> void
+AiDotNet.Video.Options.DAMVSROptions.KarrasRho.get -> double
+AiDotNet.Video.Options.DAMVSROptions.KarrasRho.set -> void
+AiDotNet.Video.Options.DAMVSROptions.LatentScale.get -> double
+AiDotNet.Video.Options.DAMVSROptions.LatentScale.set -> void
+AiDotNet.Video.Options.DAMVSROptions.LayersPerBlock.get -> int
+AiDotNet.Video.Options.DAMVSROptions.LayersPerBlock.set -> void
+AiDotNet.Video.Options.DAMVSROptions.MotionBucketId.get -> int
+AiDotNet.Video.Options.DAMVSROptions.MotionBucketId.set -> void
+AiDotNet.Video.Options.DAMVSROptions.NoiseAugmentationStrength.get -> double
+AiDotNet.Video.Options.DAMVSROptions.NoiseAugmentationStrength.set -> void
+AiDotNet.Video.Options.DAMVSROptions.NumInferenceSteps.get -> int
+AiDotNet.Video.Options.DAMVSROptions.NumInferenceSteps.set -> void
+AiDotNet.Video.Options.DAMVSROptions.PerceptualWeight.get -> double
+AiDotNet.Video.Options.DAMVSROptions.PerceptualWeight.set -> void
+AiDotNet.Video.Options.DAMVSROptions.SdeditStrength.get -> double
+AiDotNet.Video.Options.DAMVSROptions.SdeditStrength.set -> void
+AiDotNet.Video.Options.DAMVSROptions.SigmaMax.get -> double
+AiDotNet.Video.Options.DAMVSROptions.SigmaMax.set -> void
+AiDotNet.Video.Options.DAMVSROptions.SigmaMin.get -> double
+AiDotNet.Video.Options.DAMVSROptions.SigmaMin.set -> void
+AiDotNet.Video.Options.DAMVSROptions.TrainingSigmaMean.get -> double
+AiDotNet.Video.Options.DAMVSROptions.TrainingSigmaMean.set -> void
+AiDotNet.Video.Options.DAMVSROptions.TrainingSigmaStd.get -> double
+AiDotNet.Video.Options.DAMVSROptions.TrainingSigmaStd.set -> void
+AiDotNet.Video.Options.DAMVSROptions.TransformerDepth.get -> int
+AiDotNet.Video.Options.DAMVSROptions.TransformerDepth.set -> void
+AiDotNet.Video.Options.DAMVSROptions.UNetChannels.get -> int[]!
+AiDotNet.Video.Options.DAMVSROptions.UNetChannels.set -> void
+AiDotNet.Video.Options.DAMVSROptions.UNetHeads.get -> int[]!
+AiDotNet.Video.Options.DAMVSROptions.UNetHeads.set -> void
+AiDotNet.Video.Options.DAMVSROptions.VaeChannels.get -> int[]!
+AiDotNet.Video.Options.DAMVSROptions.VaeChannels.set -> void
+AiDotNet.Video.Options.DAMVSROptions.VaeLayersPerBlock.get -> int
+AiDotNet.Video.Options.DAMVSROptions.VaeLayersPerBlock.set -> void
+AiDotNet.Video.Options.DAMVSROptions.WeightDecay.get -> double
+AiDotNet.Video.Options.DAMVSROptions.WeightDecay.set -> void
+override AiDotNet.Video.Enhancement.DAMVSR<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.Enhancement.DAMVSR<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.DAMVSR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.DAMVSR<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.Enhancement.DAMVSR<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.Enhancement.DAMVSR<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.Enhancement.DAMVSR<T>.OnTrainingStepEnded(bool succeeded) -> void
+override AiDotNet.Video.Enhancement.DAMVSR<T>.RegisterComponents() -> void
+override AiDotNet.Video.Enhancement.DAMVSR<T>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+override AiDotNet.Video.Enhancement.DAMVSR<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.Enhancement.DAMVSR<T>.SupportsFusedCompiledTraining.get -> bool
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.DeformableGroups.get -> int
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.DeformableGroups.set -> void
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.NumHeads.get -> int
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.NumHeads.set -> void
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.NumResBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.NumResBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.NumSamplingPoints.get -> int
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.NumSamplingPoints.set -> void
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.Variant.set -> void
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.WarmupSteps.get -> int
+*REMOVED*AiDotNet.Video.Options.DAMVSROptions.WarmupSteps.set -> void
+*REMOVED*override AiDotNet.Video.Enhancement.DAMVSR<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.Video.Enhancement.DAMVSR<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
