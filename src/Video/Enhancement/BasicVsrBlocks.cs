@@ -23,7 +23,9 @@ internal static class BasicVsrBlocks
     /// <param name="image">[N, C, H, W].</param>
     /// <param name="flow">[N, 2, H, W], (dx, dy) in pixels.</param>
     /// <param name="padding">Zeros for features, border for SPyNet's image warp.</param>
-    internal static Tensor<T> FlowWarp<T>(IEngine engine, Tensor<T> image, Tensor<T> flow, GridSamplePadding padding)
+    /// <param name="mode">Bilinear (flow_warp's default) or nearest (PSRT's patch alignment).</param>
+    internal static Tensor<T> FlowWarp<T>(IEngine engine, Tensor<T> image, Tensor<T> flow, GridSamplePadding padding,
+        GridSampleMode mode = GridSampleMode.Bilinear)
     {
         var ops = MathHelper.GetNumericOperations<T>();
         int n = image.Shape[0], h = image.Shape[2], w = image.Shape[3];
@@ -58,7 +60,7 @@ internal static class BasicVsrBlocks
             engine.Reshape(gx, new[] { n, h, w, 1 }),
             engine.Reshape(gy, new[] { n, h, w, 1 }),
         }, 3);
-        return engine.GridSample(image, grid, GridSampleMode.Bilinear, padding, true);
+        return engine.GridSample(image, grid, mode, padding, true);
     }
 
     /// <summary>mmagic's <c>default_init_weights(scale)</c>: Kaiming-normal (fan-in, ReLU gain) times scale, zero bias.</summary>
