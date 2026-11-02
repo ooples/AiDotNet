@@ -101,12 +101,12 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
     /// <summary>
     /// The optimizer for the generator network.
     /// </summary>
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
 
     /// <summary>
     /// The optimizer for the critic network.
     /// </summary>
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _criticOptimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _criticOptimizer;
 
     /// <summary>
     /// The coefficient for the gradient penalty term in the loss function.
