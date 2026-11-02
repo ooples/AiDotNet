@@ -351,7 +351,11 @@ public static class OptionSensitivityHarness
                 {
                     insensitive = new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Insensitive,
                         $"{option} {Describe(fixtureValue)} -> {{{string.Join(", ", measured)}}} reached the rebuilt model and "
-                        + "changed neither its parameters nor its outputs; this family has no generic training step to look further.");
+                        + "changed neither its parameters nor its outputs; "
+                        + (control.TrainingFailure is null
+                            ? "this family has no generic training step to look further."
+                            : $"the probe's training step failed on the unperturbed model ({control.TrainingFailure}), so "
+                              + "training-time effects were not observed."));
                     continue;
                 }
 
@@ -454,6 +458,8 @@ public static class OptionSensitivityHarness
         public long? Trained { get; set; }
         public string? Failure { get; set; }
         public OptionSensitivityOutcome FailureOutcome { get; set; }
+        /// <summary>Why the control could not take the probe's training step, when it could not.</summary>
+        public string? TrainingFailure { get; set; }
     }
 
     private static ControlFingerprint MeasureControl<TModel>(OptionSensitivityProbe<TModel> probe, Type declaredOptions)
@@ -508,7 +514,8 @@ public static class OptionSensitivityHarness
             {
                 // The fixture's model cannot take the generic training step; only the untrained
                 // comparison is available, and an option equal there is reported as insensitive with
-                // that limitation stated.
+                // that limitation -- and the exception that imposed it -- stated.
+                result.TrainingFailure = $"{Unwrap(ex).GetType().Name}: {Unwrap(ex).Message}";
                 return result;
             }
 

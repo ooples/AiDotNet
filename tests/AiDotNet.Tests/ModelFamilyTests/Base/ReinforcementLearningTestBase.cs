@@ -1340,6 +1340,8 @@ public abstract class ReinforcementLearningTestBase<T>
             model => ObserveAgent(model, battery),
             model =>
             {
+                if (TrainMultiAgent(model, stateA, stateB, steps)) return;
+
                 if (model is IRLAgent<T> agent)
                 {
                     for (int i = 0; i < steps; i++)
@@ -1365,6 +1367,77 @@ public abstract class ReinforcementLearningTestBase<T>
             },
             model => DescribeAgent(model, battery));
         OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
+    }
+
+    /// <summary>
+    /// Takes the probe's training steps through a multi-agent agent's own joint-transition API: each agent's action
+    /// from SelectActionForAgent, the joint transition through StoreMultiAgentExperience, then Train(). MADDPG and
+    /// QMIX refuse single-agent transitions, so the single-agent loop never reached their training-time options.
+    /// </summary>
+    /// <returns>True when <paramref name="model"/> is a multi-agent agent and has been trained.</returns>
+    private static bool TrainMultiAgent(IFullModel<T, Vector<T>, Vector<T>> model, Vector<T> stateA, Vector<T> stateB, int steps)
+    {
+        if (model is AiDotNet.ReinforcementLearning.Agents.MADDPG.MADDPGAgent<T> maddpg
+            && maddpg.GetOptions() is AiDotNet.Models.Options.MADDPGOptions<T> maddpgOptions)
+        {
+            for (int i = 0; i < steps; i++)
+            {
+                bool even = i % 2 == 0;
+                var states = AgentStates(even ? stateA : stateB, maddpgOptions.NumAgents, maddpgOptions.StateSize);
+                var next = AgentStates(even ? stateB : stateA, maddpgOptions.NumAgents, maddpgOptions.StateSize);
+                var actions = states.Select((state, agent) => maddpg.SelectActionForAgent(agent, state, training: true)).ToList();
+                var rewards = Enumerable.Range(0, maddpgOptions.NumAgents).Select(_ => ToT(even ? 1.0 : -1.0)).ToList();
+                maddpg.StoreMultiAgentExperience(states, actions, rewards, next, i % 16 == 15);
+                maddpg.Train();
+            }
+
+            return true;
+        }
+
+        if (model is AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T> qmix
+            && qmix.GetOptions() is AiDotNet.Models.Options.QMIXOptions<T> qmixOptions)
+        {
+            for (int i = 0; i < steps; i++)
+            {
+                bool even = i % 2 == 0;
+                var states = AgentStates(even ? stateA : stateB, qmixOptions.NumAgents, qmixOptions.StateSize);
+                var next = AgentStates(even ? stateB : stateA, qmixOptions.NumAgents, qmixOptions.StateSize);
+                var actions = states.Select((state, agent) => qmix.SelectActionForAgent(agent, state, training: true)).ToList();
+                qmix.StoreMultiAgentExperience(states, actions, ToT(even ? 1.0 : -1.0), next,
+                    GlobalState(states, qmixOptions.GlobalStateSize), GlobalState(next, qmixOptions.GlobalStateSize), i % 16 == 15);
+                qmix.Train();
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Per-agent observations of <paramref name="size"/> drawn from <paramref name="source"/>, offset per agent.</summary>
+    private static List<Vector<T>> AgentStates(Vector<T> source, int agents, int size)
+    {
+        var states = new List<Vector<T>>(agents);
+        for (int agent = 0; agent < agents; agent++)
+        {
+            var state = new Vector<T>(size);
+            for (int j = 0; j < size; j++)
+                state[j] = NumOps.Add(source[j % source.Length], ToT(0.1 * agent));
+            states.Add(state);
+        }
+
+        return states;
+    }
+
+    /// <summary>The agents' observations concatenated and cut or zero-padded to <paramref name="size"/>.</summary>
+    private static Vector<T> GlobalState(List<Vector<T>> states, int size)
+    {
+        var global = new Vector<T>(size);
+        int k = 0;
+        foreach (var state in states)
+            for (int j = 0; j < state.Length && k < size; j++)
+                global[k++] = state[j];
+        return global;
     }
 
     /// <summary><see cref="ObserveAgent"/> as named parts: the parameters, then the output on each battery state.</summary>
