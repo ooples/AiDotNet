@@ -280,12 +280,20 @@ public static class OptionSensitivityHarness
 
         OptionSensitivityReport? insensitive = null;
         var rejected = new List<string>();
+        var notHeld = new List<string>();
+        var measured = new List<string>();
         foreach (var candidate in Perturbations(property.PropertyType, fixtureValue))
         {
             TModel? perturbed;
+            // What the options property reads back after the set: a setter may clamp or normalise the candidate.
+            object? applied = candidate;
             try
             {
-                perturbed = Rebuild(probe, declaredOptions, options => property.SetValue(options, candidate));
+                perturbed = Rebuild(probe, declaredOptions, options =>
+                {
+                    property.SetValue(options, candidate);
+                    applied = property.GetValue(options);
+                });
             }
             catch (Exception ex) when (IsConstructionRejection(ex))
             {
@@ -295,13 +303,31 @@ public static class OptionSensitivityHarness
 
             try
             {
+                if (ValuesEqual(applied, fixtureValue))
+                {
+                    rejected.Add($"{Describe(candidate)} (the options setter keeps {Describe(applied)})");
+                    continue;
+                }
+
                 var routed = FindHeldOptions(perturbed, declaredOptions);
-                if (routed is null || !ValuesEqual(property.GetValue(routed), candidate))
+                if (routed is null)
                 {
                     return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.OptionsNotRouted,
-                        $"The rebuilt model does not hold {option} = {Describe(candidate)}: its clone plan does not pass the "
-                        + "options instance back into the constructor, so no perturbation can reach it.");
+                        $"The rebuilt model holds no {declaredOptions.Name}: its clone plan does not pass the options "
+                        + "instance back into the constructor, so no perturbation can reach it.");
                 }
+
+                // A model that resets an out-of-range candidate to the value it already had has not shown that the
+                // option is unrouted, only that this candidate is invalid for it; another candidate decides. A held
+                // value that differs from both is the model's own normalisation of the candidate, which is routed.
+                var held = property.GetValue(routed);
+                if (!ValuesEqual(held, applied) && ValuesEqual(held, fixtureValue))
+                {
+                    notHeld.Add(Describe(candidate));
+                    continue;
+                }
+
+                measured.Add(Describe(candidate));
 
                 long untrained;
                 try
@@ -324,8 +350,8 @@ public static class OptionSensitivityHarness
                 if (probe.Train is null || control.Trained is null)
                 {
                     insensitive = new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Insensitive,
-                        $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} reached the rebuilt model and changed neither its "
-                        + "parameters nor its outputs; this family has no generic training step to look further.");
+                        $"{option} {Describe(fixtureValue)} -> {{{string.Join(", ", measured)}}} reached the rebuilt model and "
+                        + "changed neither its parameters nor its outputs; this family has no generic training step to look further.");
                     continue;
                 }
 
@@ -346,7 +372,7 @@ public static class OptionSensitivityHarness
                     return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Sensitive,
                         $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} changes parameters or outputs after training.");
                 insensitive = new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Insensitive,
-                        $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} reached the rebuilt model, yet parameter count, "
+                        $"{option} {Describe(fixtureValue)} -> {{{string.Join(", ", measured)}}} reached the rebuilt model, yet parameter count, "
                         + "parameters and outputs are bit-identical to the control both before and after the fixed training steps. "
                         + "Read the option where the model is built or trained, or, if it genuinely cannot act at test scale, mark "
                         + "it [OptionBehaviourExempt(\"reason\")].");
@@ -358,6 +384,14 @@ public static class OptionSensitivityHarness
         }
 
         if (insensitive is not null) return insensitive;
+        if (notHeld.Count > 0)
+        {
+            return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.OptionsNotRouted,
+                $"The rebuilt model kept {option} = {Describe(fixtureValue)} for every candidate ({string.Join(", ", notHeld)}): "
+                + "its clone plan does not pass the options instance back into the constructor, or the model overwrites "
+                + "the option, so no perturbation can reach it.");
+        }
+
         return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.NoValidPerturbation,
             rejected.Count == 0
                 ? $"No generic perturbation exists for {option} of type {property.PropertyType.Name}."
@@ -653,6 +687,13 @@ public static class OptionSensitivityHarness
         }
 
         var element = ListElementType(propertyType);
+        if (element is not null && current is null)
+        {
+            // An unset list (null usually means "none") is perturbed to one default element.
+            yield return BuildList(propertyType, element, new List<object?> { DefaultElement(element) });
+            yield break;
+        }
+
         if (element is not null && current is IEnumerable sequence)
         {
             var items = sequence.Cast<object?>().ToList();
