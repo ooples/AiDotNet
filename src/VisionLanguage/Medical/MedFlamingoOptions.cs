@@ -42,6 +42,7 @@ public class MedFlamingoOptions : MedicalVLMOptions
         MaxFewShotExamples = other.MaxFewShotExamples;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MedFlamingoOptions()
     {
         VisionDim = 1024;

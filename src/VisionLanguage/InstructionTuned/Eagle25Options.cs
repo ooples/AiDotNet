@@ -40,6 +40,7 @@ public class Eagle25Options : InstructionTunedVLMOptions
         EnableLongContext = other.EnableLongContext;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public Eagle25Options()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

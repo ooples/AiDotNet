@@ -115,13 +115,6 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>, IShapeContract
     private readonly Tensor<T>[] _normBetas;
 
     // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    private Tensor<T>[]? _lastNormedInputs;
-    private Tensor<T>[]? _lastBlockOutputs;
-    private Tensor<T>[]? _lastResiduals;
     private int[]? _originalInputShape;
 
     // Gradients for norm parameters
@@ -239,30 +232,20 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = current;
-        _lastNormedInputs = new Tensor<T>[_blocks.Length];
-        _lastBlockOutputs = new Tensor<T>[_blocks.Length];
-        _lastResiduals = new Tensor<T>[_blocks.Length];
-
         // Process through each block: pre-norm -> block -> residual
         for (int i = 0; i < _blocks.Length; i++)
         {
-            _lastResiduals[i] = current;
-
             // Pre-norm: RMSNorm-style normalization
             var normed = ApplyRMSNorm(current, _normGammas[i], _normBetas[i], batchSize, seqLen);
-            _lastNormedInputs[i] = normed;
 
             // Run through sub-layer
             var blockOut = _blocks[i].Forward(normed);
-            _lastBlockOutputs[i] = blockOut;
 
             // Residual connection
             current = Engine.TensorAdd(current, blockOut);
         }
 
         var result = ApplyActivation(current);
-        _lastOutput = result;
 
         // Reshape back to original rank
         if (rank == 2)
@@ -386,11 +369,6 @@ public partial class HybridBlockScheduler<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastNormedInputs = null;
-        _lastBlockOutputs = null;
-        _lastResiduals = null;
         _originalInputShape = null;
         _normGammaGradients = null;
         _normBetaGradients = null;

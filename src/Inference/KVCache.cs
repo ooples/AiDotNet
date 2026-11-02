@@ -330,7 +330,7 @@ public class KVCache<T>
     /// Gets cached keys and values for a specific layer up to the current sequence length.
     /// </summary>
     /// <param name="layerIndex">The transformer layer index.</param>
-    /// <param name="batchSize">Batch size to return (must be <= MaxBatchSize).</param>
+    /// <param name="batchSize">Batch size to return (must be &lt;= MaxBatchSize).</param>
     /// <returns>Tuple of (keys, values) tensors containing cached entries.</returns>
     public (Tensor<T> Keys, Tensor<T> Values) GetCached(int layerIndex, int batchSize = 1)
     {

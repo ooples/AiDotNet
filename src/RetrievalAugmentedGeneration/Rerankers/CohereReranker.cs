@@ -52,11 +52,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies;
 /// 3. "Neural networks architecture guide" (NEW score: 0.72) ← Less relevant
 /// 
 /// ```csharp
-/// var reranker = new CohereReranker<double>(
+/// var store = new InMemoryDocumentStore&lt;double&gt;(vectorDimension: 384);
+/// var retriever = new DenseRetriever&lt;double&gt;(store, new StubEmbeddingModel&lt;double&gt;(384));
+/// var reranker = new CohereReranker&lt;double&gt;(
 ///     apiKey: "your-cohere-api-key",
 ///     model: "rerank-english-v3.0"
 /// );
 /// 
+/// string query = "How do vaccines train the immune system?";
 /// var initialResults = retriever.Retrieve(query, topK: 20);  // Get 20 candidates
 /// var reranked = reranker.Rerank(query, initialResults);      // Rerank to improve order
 /// var final = reranked.Take(5);                               // Return best 5
@@ -105,7 +108,7 @@ public class CohereReranker<T> : RerankerBase<T>
     /// 
     /// Typical usage:
     /// ```csharp
-    /// var reranker = new CohereReranker<double>(
+    /// var reranker = new CohereReranker&lt;double>(
     ///     apiKey: Environment.GetEnvironmentVariable("COHERE_API_KEY"),
     ///     model: "rerank-english-v3.0"
     /// );

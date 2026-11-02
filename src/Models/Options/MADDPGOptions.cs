@@ -70,25 +70,53 @@ public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
     public double ExplorationNoise { get; init; } = 0.1;
 
     /// <summary>Hidden layer sizes for each agent's actor network.</summary>
-    public List<int> ActorHiddenLayers { get; init; } = new List<int> { 128, 128 };
+    public List<int> ActorHiddenLayers { get; init; } = new List<int> { 64, 64 };
 
     /// <summary>Hidden layer sizes for each agent's critic network.</summary>
-    public List<int> CriticHiddenLayers { get; init; } = new List<int> { 128, 128 };
+    public List<int> CriticHiddenLayers { get; init; } = new List<int> { 64, 64 };
 
     /// <summary>
-    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
+    /// Gets or sets a factory for the optimizer each of this agent's actor and critic networks trains with.
     /// </summary>
-    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
+    /// <value>
+    /// A delegate that returns a new optimizer on each call, or <c>null</c> (the default): every actor then trains
+    /// with Adam at <see cref="ActorLearningRate"/> and every critic with Adam at <see cref="CriticLearningRate"/>.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// The agent invokes the factory once for every actor and critic it builds (two networks per agent), so the
+    /// factory must create a new optimizer instance on each call. A shared instance would share its step counter, and
+    /// Adam's bias correction would then advance on every network's step instead of only on that network's own.
+    /// </para>
+    /// <para><b>For Beginners:</b> The optimizer decides how the network weights change after each update. Leave this
+    /// empty to use Adam at the actor and critic learning rates. Supply a factory only to use a different optimizer,
+    /// and make it build a new optimizer every time it is called.</para>
+    /// </remarks>
+    public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 
     /// <summary>
-    /// Initializes a new instance with default values.
+    /// Initializes a new instance with the paper's training settings.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Lowe et al. 2017 (Sec. 5 and Appendix) train every actor and critic with Adam at a learning rate of 0.01,
+    /// soft-update the target networks with τ = 0.01, discount by γ = 0.95, sample minibatches of 1024 from a replay
+    /// buffer of 10^6 transitions, and use two-layer ReLU MLPs of 64 units. Those are this constructor's values; the
+    /// earlier 1e-4 / 1e-3 learning rates and τ = 0.001 were single-agent DDPG's, not MADDPG's. Any of them can
+    /// still be overridden in an object initializer.
+    /// </para>
+    /// <para><b>For Beginners:</b> Creating the options with no arguments gives you the settings the MADDPG paper
+    /// trained with.</para>
+    /// </remarks>
     public MADDPGOptions()
     {
         var numOps = MathHelper.GetNumericOperations<T>();
-        ActorLearningRate = numOps.FromDouble(0.0001);
-        CriticLearningRate = numOps.FromDouble(0.001);
-        TargetUpdateTau = numOps.FromDouble(0.001);
+        ActorLearningRate = numOps.FromDouble(0.01);
+        CriticLearningRate = numOps.FromDouble(0.01);
+        TargetUpdateTau = numOps.FromDouble(0.01);
+        DiscountFactor = numOps.FromDouble(0.95);
+        BatchSize = 1024;
+        ReplayBufferSize = 1000000;
     }
 
     /// <summary>
@@ -144,7 +172,7 @@ public class MADDPGOptions<T> : ReinforcementLearningOptions<T>
                 $"{nameof(other.CriticHiddenLayers)} must not be null.", nameof(other));
         }
         CriticHiddenLayers = new List<int>(other.CriticHiddenLayers);
-        Optimizer = other.Optimizer;
+        OptimizerFactory = other.OptimizerFactory;
     }
 
     /// <summary>

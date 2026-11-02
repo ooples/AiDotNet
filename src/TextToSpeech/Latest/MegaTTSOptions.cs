@@ -35,6 +35,7 @@ public class MegaTTSOptions : EndToEndTtsOptions
         NumPLLMHeads = other.NumPLLMHeads;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MegaTTSOptions()
     {
         NumEncoderLayers = 6;

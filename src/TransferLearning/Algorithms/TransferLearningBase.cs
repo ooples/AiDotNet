@@ -10,8 +10,8 @@ namespace AiDotNet.TransferLearning.Algorithms;
 /// Base class for transfer learning algorithms.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
-/// <typeparam name="TInput">The input data type (e.g., Matrix<T>, Tensor<T>).</typeparam>
-/// <typeparam name="TOutput">The output data type (e.g., Vector<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TInput">The input data type (e.g., Matrix&lt;T>, Tensor&lt;T>).</typeparam>
+/// <typeparam name="TOutput">The output data type (e.g., Vector&lt;T>, Tensor&lt;T>).</typeparam>
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> Transfer learning is like using knowledge from one task to help with another.

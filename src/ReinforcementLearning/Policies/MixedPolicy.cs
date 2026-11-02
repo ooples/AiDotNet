@@ -66,6 +66,39 @@ namespace AiDotNet.ReinforcementLearning.Policies
         {
         }
 
+        /// <summary>
+        /// Builds the policy from <paramref name="options"/>: dense ReLU networks of the options' hidden widths from
+        /// StateSize inputs, a DiscreteActionSize-logit head and a 2 × ContinuousActionSize head (means, then log standard
+        /// deviations); with <see cref="MixedPolicyOptions{T}.SharedFeatures"/>, one network carries both heads.
+        /// </summary>
+        /// <param name="options">The policy's configuration.</param>
+        public MixedPolicy(MixedPolicyOptions<T> options)
+            : this(BuildNetworks(options ?? throw new ArgumentNullException(nameof(options))), options)
+        {
+        }
+
+        private MixedPolicy((INeuralNetwork<T> Discrete, INeuralNetwork<T> Continuous) networks, MixedPolicyOptions<T> options)
+            : this(networks.Discrete, networks.Continuous, options.DiscreteActionSize, options.ContinuousActionSize,
+                options.DiscreteExplorationStrategy, options.ContinuousExplorationStrategy, options.SharedFeatures,
+                PolicyNetworks.RandomFor(options.Seed))
+        {
+        }
+
+        private static (INeuralNetwork<T> Discrete, INeuralNetwork<T> Continuous) BuildNetworks(MixedPolicyOptions<T> options)
+        {
+            const string name = nameof(MixedPolicyOptions<T>);
+            if (options.DiscreteActionSize <= 0 || options.ContinuousActionSize <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), name + ": DiscreteActionSize and ContinuousActionSize must be positive.");
+            if (options.SharedFeatures)
+            {
+                var trunk = PolicyNetworks.Build(options.StateSize, options.HiddenLayers,
+                    options.DiscreteActionSize + 2 * options.ContinuousActionSize, options.LossFunction, name);
+                return (trunk, trunk);
+            }
+            return (PolicyNetworks.Build(options.StateSize, options.HiddenLayers, options.DiscreteActionSize, options.LossFunction, name),
+                PolicyNetworks.Build(options.StateSize, options.HiddenLayers, 2 * options.ContinuousActionSize, options.LossFunction, name));
+        }
+
         /// <param name="discreteNetwork">Network for discrete action logits.</param>
         /// <param name="continuousNetwork">Network for continuous action parameters (mean and log_std).</param>
         /// <param name="discreteActionSize">Number of discrete actions.</param>
@@ -74,6 +107,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// <param name="continuousExploration">Exploration strategy for continuous actions.</param>
         /// <param name="sharedFeatures">Whether networks share feature extraction layers.</param>
         /// <param name="random">Optional random number generator.</param>
+
         public MixedPolicy(
             INeuralNetwork<T> discreteNetwork,
             INeuralNetwork<T> continuousNetwork,
@@ -97,6 +131,12 @@ namespace AiDotNet.ReinforcementLearning.Policies
             _discreteActionSize = discreteActionSize;
             Guard.Positive(continuousActionSize);
             _continuousActionSize = continuousActionSize;
+            // One trunk serves both heads: the same network, read as [logits, means, log standard deviations].
+            if (sharedFeatures && !ReferenceEquals(discreteNetwork, continuousNetwork))
+                throw new ArgumentException(
+                    "With sharedFeatures the discrete and continuous networks must be the same network, whose output is " +
+                    "[discreteActionSize logits, continuousActionSize means, continuousActionSize log standard deviations].",
+                    nameof(continuousNetwork));
             _sharedFeatures = sharedFeatures;
         }
 
@@ -143,8 +183,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             var stateTensor = Tensor<T>.FromVector(state);
 
             // Get discrete action (one-hot)
-            var discreteLogitsTensor = _discreteNetwork.Predict(stateTensor);
-            var discreteLogits = discreteLogitsTensor.ToVector();
+            var (discreteLogits, continuousOutput) = ReadHeads(stateTensor);
             var discreteProbabilities = Softmax(discreteLogits);
             // Inference takes each part's mode (the most probable discrete action, the Gaussian mean); training samples.
             var discreteAction = training ? SampleCategorical(discreteProbabilities) : OneHotArgMax(discreteLogits);
@@ -155,8 +194,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
             }
 
             // Get continuous action (Gaussian)
-            var continuousOutputTensor = _continuousNetwork.Predict(stateTensor);
-            var continuousOutput = continuousOutputTensor.ToVector();
 
             var continuousAction = new Vector<T>(_continuousActionSize);
             for (int i = 0; i < _continuousActionSize; i++)
@@ -213,8 +250,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             }
 
             // Discrete log prob
-            var discreteLogitsTensor = _discreteNetwork.Predict(stateTensor);
-            var discreteLogits = discreteLogitsTensor.ToVector();
+            var (discreteLogits, continuousOutput) = ReadHeads(stateTensor);
 
             int discreteActionIndex = 0;
             for (int i = 0; i < _discreteActionSize; i++)
@@ -235,8 +271,6 @@ namespace AiDotNet.ReinforcementLearning.Policies
             T discreteLogProb = NumOps.FromDouble(NumOps.ToDouble(discreteLogits[discreteActionIndex]) - maxLogit - Math.Log(expSum));
 
             // Continuous log prob
-            var continuousOutputTensor = _continuousNetwork.Predict(stateTensor);
-            var continuousOutput = continuousOutputTensor.ToVector();
 
             T continuousLogProb = NumOps.Zero;
             for (int i = 0; i < _continuousActionSize; i++)
@@ -261,7 +295,9 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// </summary>
         public override IReadOnlyList<INeuralNetwork<T>> GetNetworks()
         {
-            return new List<INeuralNetwork<T>> { _discreteNetwork, _continuousNetwork };
+            return _sharedFeatures
+                ? new List<INeuralNetwork<T>> { _discreteNetwork }
+                : new List<INeuralNetwork<T>> { _discreteNetwork, _continuousNetwork };
         }
 
         /// <summary>
@@ -271,6 +307,24 @@ namespace AiDotNet.ReinforcementLearning.Policies
         {
             _discreteExploration.Reset();
             _continuousExploration.Reset();
+        }
+
+        // The discrete logits and the continuous [means, log standard deviations]: two networks' outputs, or the one
+        // shared trunk's output split at discreteActionSize.
+        private (Vector<T> Logits, Vector<T> Continuous) ReadHeads(Tensor<T> stateTensor)
+        {
+            if (!_sharedFeatures)
+                return (_discreteNetwork.Predict(stateTensor).ToVector(), _continuousNetwork.Predict(stateTensor).ToVector());
+            var output = _discreteNetwork.Predict(stateTensor).ToVector();
+            int expected = _discreteActionSize + 2 * _continuousActionSize;
+            if (output.Length != expected)
+                throw new InvalidOperationException(string.Format(
+                    "The shared network outputs {0} values; a mixed policy reads {1}.", output.Length, expected));
+            var logits = new Vector<T>(_discreteActionSize);
+            for (int i = 0; i < _discreteActionSize; i++) logits[i] = output[i];
+            var continuous = new Vector<T>(2 * _continuousActionSize);
+            for (int i = 0; i < continuous.Length; i++) continuous[i] = output[_discreteActionSize + i];
+            return (logits, continuous);
         }
 
         // Helper methods

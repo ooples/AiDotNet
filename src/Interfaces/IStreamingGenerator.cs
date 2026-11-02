@@ -5,7 +5,7 @@ namespace AiDotNet.Interfaces;
 
 /// <summary>
 /// A generator that can stream its output incrementally (token/chunk deltas) as it is produced,
-/// in addition to the buffered <see cref="IGenerator{T}.Generate(string)"/>.
+/// in addition to the buffered <see cref="ITextGenerator.Generate(string)"/>.
 /// </summary>
 /// <remarks>
 /// <para>

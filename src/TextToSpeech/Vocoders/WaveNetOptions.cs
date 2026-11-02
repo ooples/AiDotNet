@@ -20,6 +20,7 @@ public class WaveNetOptions : VocoderOptions
         MuLawLevels = other.MuLawLevels;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public WaveNetOptions()
     {
         SampleRate = 24000;

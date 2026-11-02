@@ -25,7 +25,7 @@ public class TimeSeriesModelFactory<T, TInput, TOutput>
     /// </summary>
     /// <param name="modelType">The type of time series model to create.</param>
     /// <param name="options">Configuration options for the model.</param>
-    /// <returns>An implementation of ITimeSeriesModel<T> for the specified model type.</returns>
+    /// <returns>An implementation of ITimeSeriesModel&lt;T> for the specified model type.</returns>
     /// <exception cref="ArgumentException">Thrown when an unsupported model type is specified or when the options don't match the model type.</exception>
     /// <remarks>
     /// <para>
@@ -41,7 +41,7 @@ public class TimeSeriesModelFactory<T, TInput, TOutput>
     /// </para>
     /// <para>
     /// Note that you must provide options that match the model type. For example, if you specify 
-    /// TimeSeriesModelType.ARIMA, you must provide ARIMAOptions<T>.
+    /// TimeSeriesModelType.ARIMA, you must provide ARIMAOptions&lt;T>.
     /// </para>
     /// </remarks>
     public static ITimeSeriesModel<T> CreateModel(TimeSeriesModelType modelType, TimeSeriesRegressionOptions<T> options)
@@ -174,7 +174,7 @@ public class TimeSeriesModelFactory<T, TInput, TOutput>
     /// Creates a time series model of the specified type with default options.
     /// </summary>
     /// <param name="modelType">The type of time series model to create.</param>
-    /// <returns>An implementation of ITimeSeriesModel<T> for the specified model type.</returns>
+    /// <returns>An implementation of ITimeSeriesModel&lt;T> for the specified model type.</returns>
     /// <exception cref="ArgumentException">Thrown when an unsupported model type is specified.</exception>
     /// <remarks>
     /// <para>

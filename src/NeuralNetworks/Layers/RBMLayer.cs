@@ -340,7 +340,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// ```csharp
     /// // Create an RBM with 784 visible units (28x28 image), 200 hidden units,
     /// // and sigmoid activation function
-    /// var rbmLayer = new RBMLayer<float>(784, 200, new SigmoidActivation<float>());
+    /// var rbmLayer = new RBMLayer&lt;float>(784, 200, new SigmoidActivation&lt;float>());
     /// ```
     /// 
     /// The sigmoid activation is most common for RBMs because it produces probabilities
@@ -464,7 +464,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
     /// ```csharp
     /// // Create an RBM with 784 visible units, 200 hidden units,
     /// // and a vectorized sigmoid activation function
-    /// var rbmLayer = new RBMLayer<float>(784, 200, new VectorizedSigmoidActivation<float>());
+    /// var rbmLayer = new RBMLayer&lt;float>(784, 200, new VectorizedSigmoidActivation&lt;float>());
     /// ```
     /// 
     /// This approach is functionally equivalent to using scalar activation, but can be more
@@ -594,7 +594,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, [1, _visibleUnits])
             : Engine.Reshape(input, [flatBatch, _visibleUnits]);
 
-        _lastVisibleInput = visible2D;
+        SaveForBackward(ref _lastVisibleInput, visible2D);
 
         // Recompute the transpose every forward — caching it across forwards is
         // unsafe in a tape-trained network because the tape-based optimizer's
@@ -612,7 +612,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
         // negligible relative to the FusedLinear that follows it.
         Tensor<T> weightsT = Engine.TensorTranspose(_weights);
         Tensor<T> hiddenProbs = Engine.FusedLinear(visible2D, weightsT, _hiddenBiases, FusedActivationType.Sigmoid);
-        _lastHiddenOutput = hiddenProbs;
+        SaveForBackward(ref _lastHiddenOutput, hiddenProbs);
 
         if (rank == 1)
             return Engine.Reshape(hiddenProbs, [_hiddenUnits]);

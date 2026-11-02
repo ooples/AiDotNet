@@ -27,7 +27,7 @@ namespace AiDotNet.PromptEngineering.Templates;
 /// // Add current query
 /// template.AddUserMessage("What about 12 + 7?");
 ///
-/// var prompt = template.Format(new Dictionary<string, string>());
+/// var prompt = template.Format(new Dictionary&lt;string, string>());
 ///
 /// // Result:
 /// // System: You are a helpful math tutor for elementary students.

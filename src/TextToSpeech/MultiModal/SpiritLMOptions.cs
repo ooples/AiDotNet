@@ -8,6 +8,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// </remarks>
 public class SpiritLMOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public SpiritLMOptions()
     {
         TextEncoderDim = 256;

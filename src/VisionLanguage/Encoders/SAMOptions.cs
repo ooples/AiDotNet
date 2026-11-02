@@ -70,6 +70,7 @@ public class SAMOptions : VisionEncoderOptions
     /// </summary>
     public int WindowSize { get; set; } = 14;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SAMOptions()
     {
         ImageSize = 1024;

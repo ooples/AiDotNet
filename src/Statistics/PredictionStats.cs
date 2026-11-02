@@ -284,13 +284,6 @@ public class PredictionStats<T>
     public T RSquared => R2;
 
     /// <summary>
-    /// R-squared (R2) adjusted for the number of predictors in the model.
-    /// </summary>
-    /// <remarks>
-    /// For Beginners:
-    /// AdjustedR2 is a modified version of R2 that accounts for the number of features in your model.
-    /// 
-    /// Regular R2 always increases when you add more features, even if they don't actually improve predictions.
     /// R² adjusted for the number of predictors in the model.
     /// </summary>
     /// <remarks>

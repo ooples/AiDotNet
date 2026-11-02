@@ -111,18 +111,6 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    private Tensor<T>[]? _lastProjections;       // (order+1) projections: v, x_1, ..., x_N
-    private Tensor<T>[]? _lastProjectionsRaw;     // pre-activation raw projections
-    private Tensor<T>[]? _lastFilters;            // generated filter kernels [seqLen, modelDim]
-    private Tensor<T>[]? _lastFilterHidden;       // hidden states from filter MLPs
-    private Tensor<T>[]? _lastConvOutputs;        // results after each convolution
-    private Tensor<T>[]? _lastGatedOutputs;       // results after each gating step
-    [Scratch]
-    private Tensor<T>? _lastPreProjection;        // result before output projection
     private int[]? _originalInputShape;
 
     // Gradients for input projections
@@ -292,8 +280,6 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Compute (order + 1) linear projections
         // Projection 0 = v (value), projections 1..order = gates x_1..x_N
         var projections = new Tensor<T>[_order + 1];
@@ -319,9 +305,6 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
                 projections[i] = Engine.Swish(projectionsRaw[i]);
             }
         }
-
-        _lastProjections = projections;
-        _lastProjectionsRaw = projectionsRaw;
 
         // Step 2: Generate implicit convolution filters using the filter MLP
         // For each convolution stage, the MLP takes positional encodings [0/L, 1/L, ..., (L-1)/L]
@@ -356,9 +339,6 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
             filters[i] = filter;
         }
 
-        _lastFilters = filters;
-        _lastFilterHidden = filterHiddenStates;
-
         // Step 3: Apply the Hyena hierarchy
         // y = x_N * (h_N conv (x_{N-1} * (h_{N-1} conv ... (h_1 conv (x_1 * v)) ...)))
         // Start with: current = x_1 * v  (element-wise gate of v by first gate)
@@ -389,10 +369,6 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
             gatedOutputs[i + 1] = current;
         }
 
-        _lastConvOutputs = convOutputs;
-        _lastGatedOutputs = gatedOutputs;
-        _lastPreProjection = current;
-
         // Step 4: Output projection
         var currentFlat = Engine.Reshape(current, new[] { batchSize * seqLen, _modelDimension });
         var outputFlat = Engine.TensorAdd(
@@ -401,7 +377,6 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -568,15 +543,6 @@ public partial class HyenaLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastProjections = null;
-        _lastProjectionsRaw = null;
-        _lastFilters = null;
-        _lastFilterHidden = null;
-        _lastConvOutputs = null;
-        _lastGatedOutputs = null;
-        _lastPreProjection = null;
         _originalInputShape = null;
         _inputProjectionWeightsGradients = null;
         _inputProjectionBiasesGradients = null;

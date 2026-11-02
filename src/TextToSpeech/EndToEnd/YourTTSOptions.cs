@@ -19,6 +19,7 @@ public class YourTTSOptions : EndToEndTtsOptions
         NumLanguages = other.NumLanguages;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public YourTTSOptions()
     {
         SampleRate = 16000;
@@ -32,7 +33,9 @@ public class YourTTSOptions : EndToEndTtsOptions
         WeightDecay = 0.01;
     }
 
+    /// <summary>Gets or sets the width of the speaker embedding.</summary>
     public int SpeakerEmbeddingDim { get; set; } = 256;
+    /// <summary>Gets or sets the number of languages of the reference multilingual configuration. The native layers have no language embedding and do not read it.</summary>
     public int NumLanguages { get; set; } = 16;
 
     /// <summary>First AdamW moment coefficient used by the released YourTTS recipe.</summary>

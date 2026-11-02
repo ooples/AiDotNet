@@ -42,6 +42,7 @@ public class LLaVAVideoOptions : VideoLanguageOptions
         SystemPrompt = other.SystemPrompt;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public LLaVAVideoOptions()
     {
         VisionDim = 1024;

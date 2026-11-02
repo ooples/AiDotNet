@@ -20,6 +20,7 @@ public class StyleTTSOptions : EndToEndTtsOptions
         NumStyleDiffusionSteps = other.NumStyleDiffusionSteps;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public StyleTTSOptions()
     {
         NumEncoderLayers = 6;
@@ -28,6 +29,8 @@ public class StyleTTSOptions : EndToEndTtsOptions
         DropoutRate = 0.1;
     }
 
+    /// <summary>Gets or sets the width of the style vector that conditions synthesis.</summary>
     public int StyleDim { get; set; } = 128;
+    /// <summary>Gets or sets the number of denoising steps used to sample the style vector.</summary>
     public int NumStyleDiffusionSteps { get; set; } = 5;
 }

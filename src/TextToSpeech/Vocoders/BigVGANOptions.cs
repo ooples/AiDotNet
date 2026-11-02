@@ -20,6 +20,7 @@ public class BigVGANOptions : VocoderOptions
         SnakeAlpha = other.SnakeAlpha;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public BigVGANOptions()
     {
         SampleRate = 24000;
@@ -27,8 +28,12 @@ public class BigVGANOptions : VocoderOptions
         HopSize = 256;
     }
 
+    /// <summary>Gets or sets the channel width of the first upsampling block.</summary>
     public int HiddenChannels { get; set; } = 512;
+    /// <summary>Gets or sets the number of upsampling blocks between the mel frames and the waveform.</summary>
     public int NumUpsampleLayers { get; set; } = 4;
+    /// <summary>Gets or sets the number of periodic components summed in each anti-aliased multi-periodicity block.</summary>
     public int NumPeriods { get; set; } = 5;
+    /// <summary>Gets or sets the frequency alpha of the Snake activation x + sin^2(alpha x) / alpha.</summary>
     public double SnakeAlpha { get; set; } = 1.0;
 }

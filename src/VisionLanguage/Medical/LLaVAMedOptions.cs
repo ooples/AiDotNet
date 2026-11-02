@@ -41,6 +41,7 @@ public class LLaVAMedOptions : MedicalVLMOptions
         MaxOutputTokens = other.MaxOutputTokens;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public LLaVAMedOptions()
     {
         VisionDim = 1024;

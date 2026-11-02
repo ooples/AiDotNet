@@ -57,6 +57,23 @@ namespace AiDotNet.ReinforcementLearning.Policies
         }
 
         /// <summary>
+        /// Builds the policy from <paramref name="options"/>: a dense ReLU network of the options' hidden widths from
+        /// StateSize inputs to ActionSize outputs, explored with the options' strategy or, when it is null,
+        /// Ornstein-Uhlenbeck noise (θ = 0.15, σ = 0.2) sized to ActionSize.
+        /// </summary>
+        /// <param name="options">The policy's configuration.</param>
+        public DeterministicPolicy(DeterministicPolicyOptions<T> options)
+            : this(
+                PolicyNetworks.Build((options ?? throw new ArgumentNullException(nameof(options))).StateSize,
+                    options.HiddenLayers, options.ActionSize, options.LossFunction, nameof(DeterministicPolicyOptions<T>)),
+                options.ActionSize,
+                options.ExplorationStrategy ?? new OrnsteinUhlenbeckNoise<T>(Math.Max(1, options.ActionSize)),
+                options.UseTanhSquashing,
+                PolicyNetworks.RandomFor(options.Seed))
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of the DeterministicPolicy class.
         /// </summary>
         /// <param name="policyNetwork">The neural network that outputs actions.</param>

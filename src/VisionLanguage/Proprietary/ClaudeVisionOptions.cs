@@ -42,6 +42,7 @@ public class ClaudeVisionOptions : ProprietaryVLMOptions
         ExtendedThinking = other.ExtendedThinking;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ClaudeVisionOptions()
     {
         VisionDim = 1024;

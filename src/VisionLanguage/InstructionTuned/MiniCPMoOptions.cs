@@ -40,6 +40,7 @@ public class MiniCPMoOptions : InstructionTunedVLMOptions
         EnableRealtime = other.EnableRealtime;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MiniCPMoOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

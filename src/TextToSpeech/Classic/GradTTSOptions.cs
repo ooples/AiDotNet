@@ -20,6 +20,7 @@ public class GradTTSOptions : AcousticModelOptions
         BetaEnd = other.BetaEnd;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GradTTSOptions()
     {
         EncoderDim = 192;

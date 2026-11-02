@@ -23,6 +23,7 @@ public class PriorGradOptions : VocoderOptions
         MaxGradientNorm = other.MaxGradientNorm;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PriorGradOptions()
     {
         SampleRate = 22050;

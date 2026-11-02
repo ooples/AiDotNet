@@ -75,7 +75,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         // method from small real parts (SslFixtureArgs) and drives TrainStep (#2139).
         // PolicyBase is no longer excluded: the RL agent family asserted agent semantics a policy does not have
         // (Train is a no-op, sampling is stochastic), so policies have their own family, PolicyTestBase (#2139).
-        "ImageWatermarkerBase",      // Watermarking: wraps images, not a standalone model
+        // ImageWatermarkerBase is no longer excluded: the watermarkers embed and detect a keyed mark on their own, and
+        // KeyedWatermarkTestBase checks that round trip, the key and the false-positive side (#2139).
         "SupervisedAutoMLModelBase", // AutoML: wraps other models for hyperparameter search
         // VAEModelBase is no longer excluded: VAEs implement IVAEModel, not IDiffusionModel, so they now have their
         // own family (VAEModelTestBase) instead of being routed to a diffusion family that cannot construct them (#2139).
@@ -653,6 +654,11 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
     private static readonly System.Collections.Generic.HashSet<string> DeepfakeDetectorTestBaseMembers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         { "CreateDetector", "TargetArtifact" };
+
+    /// <summary>Overridable surface of <c>KeyedWatermarkTestBase</c>.</summary>
+    private static readonly System.Collections.Generic.HashSet<string> KeyedWatermarkTestBaseMembers =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        { "CreateModule", "CreateModuleWithKey", "ImageChannels", "ImageSize" };
 
     /// <summary>Overridable surface of <c>TextSafetyModuleTestBase</c>.</summary>
     private static readonly System.Collections.Generic.HashSet<string> TextSafetyModuleTestBaseMembers =
@@ -4016,6 +4022,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         bool extendsInstanceSegmenter = false;
         bool extendsVideoSafety = false;
         bool extendsTextSafety = false, extendsAudioSafety = false;
+        bool extendsImageWatermarker = false;
         bool extendsVae = false;
         bool extendsNoisePredictor = false;
         bool extendsSsl = false;
@@ -4227,6 +4234,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 extendsInstanceSegmenter = true;
             else if (baseName.StartsWith("VideoSafetyModuleBase", System.StringComparison.Ordinal))
                 extendsVideoSafety = true;
+            else if (baseName.StartsWith("ImageWatermarkerBase", System.StringComparison.Ordinal))
+                extendsImageWatermarker = true;
             else if (baseName.StartsWith("TextSafetyModuleBase", System.StringComparison.Ordinal))
                 extendsTextSafety = true;
             else if (baseName.StartsWith("AudioSafetyModuleBase", System.StringComparison.Ordinal))
@@ -4443,6 +4452,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsInstanceSegmenterBase = extendsInstanceSegmenter,
             ExtendsVideoSafetyModuleBase = extendsVideoSafety,
             ExtendsTextSafetyModuleBase = extendsTextSafety,
+            ExtendsImageWatermarkerBase = extendsImageWatermarker,
             ExtendsAudioSafetyModuleBase = extendsAudioSafety,
             ExtendsVAEModelBase = extendsVae,
             ExtendsNoisePredictorBase = extendsNoisePredictor,
@@ -5145,6 +5155,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         if (model.ExtendsVideoSafetyModuleBase)
             return TestFamily.VideoSafetyModule;
 
+        // An image watermarker is judged on its embed/detect round trip, which the vector fixture cannot express.
+        if (model.ExtendsImageWatermarkerBase)
+            return TestFamily.ImageWatermarker;
+
         // Text and audio safety modules judge text and waveforms, which the vector fixture cannot give them (#2139).
         if (model.ExtendsTextSafetyModuleBase)
             return TestFamily.TextSafetyModule;
@@ -5319,6 +5333,12 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         // Priority 8b: Speaker Recognition (leaf of AudioNN)
         if (model.ExtendsSpeakerRecognitionBase)
             return TestFamily.SpeakerRecognition;
+
+        // Priority 8c: a text-to-mel model built on the audio base (TtsModel) takes phoneme IDs and returns mel
+        // frames. The audio invariants assume a waveform in (silence in, near-silence out), which a phoneme sequence
+        // of token 0 is not, so it is judged with the other text-to-mel models.
+        if (model.ExtendsAudioNeuralNetworkBase && IsTextToMelTTS(model.ClassName))
+            return TestFamily.TTS;
 
         // Priority 8: Audio NN
         if (model.ExtendsAudioNeuralNetworkBase)
@@ -12034,14 +12054,23 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 // with a flattened observation whose size equals StateDim and an
                 // ActionSize equal to StateDim so the transition is accepted. The
                 // dense VAE (flattened observation -> DenseLayer stack) imposes no
-                // spatial minimum, so a 4x1x1 observation is legal. BatchSize=1 lets
-                // the single stored transition trigger a real VAE+RNN update, so
-                // Training_ShouldChangeParameters observes moved weights.
+                // spatial minimum, so a 4x1x1 observation is legal. BatchSize=8 lets
+                // the eighth stored transition trigger a real VAE update, so
+                // Training_ShouldChangeParameters observes moved weights. Train()
+                // walks the paper's V -> M -> C cycle (VAEEpochs passes of V,
+                // RNNEpochs passes of M, then one complete CMA-ES run in M's dream);
+                // the cycle is shrunk here (one epoch each, short sequences, a
+                // 2-generation CMA-ES of 4 candidates over 2 dreams of 8 steps) so
+                // the real-loop invariants reach M and C within their step budget
+                // instead of running the paper's 1800 generations x 64 x 16 x 1000.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.WorldModelsOptions<double> {{ " +
                     "ObservationWidth = 4, ObservationHeight = 1, ObservationChannels = 1, " +
-                    "ActionSize = 4, LatentSize = 4, RNNHiddenSize = 8, BatchSize = 1, " +
+                    "ActionSize = 4, LatentSize = 4, RNNHiddenSize = 8, BatchSize = 8, " +
                     "VAEEncoderChannels = new System.Collections.Generic.List<int> { 8 }, " +
-                    "ControllerLayers = new System.Collections.Generic.List<int> { 8 } })";
+                    "ControllerLayers = new System.Collections.Generic.List<int> { 8 }, " +
+                    "VAEEpochs = 1, RNNEpochs = 1, RNNSequenceLength = 16, " +
+                    "ControllerGenerations = 2, ControllerPopulationSize = 4, " +
+                    "ControllerEvaluationRollouts = 2, RolloutLength = 8 })";
             }
             else if ((model.ClassName is "PaLIX" or "PaLI" or "PaLI3" or "CoCa" or "GIT")
                      && model.TypeParameterCount == 1
@@ -13682,6 +13711,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             || baseClassName == "InstanceSegmenterTestBase"
             || baseClassName == "VideoSafetyModuleTestBase"
             || baseClassName == "TextSafetyModuleTestBase"
+            || baseClassName == "KeyedWatermarkTestBase"
             || baseClassName == "AudioSafetyModuleTestBase"
             || baseClassName == "VAEModelTestBase"
             || baseClassName == "NoisePredictorTestBase"
@@ -17006,6 +17036,11 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // - Dreamer (Hafner et al. 2020): model-based; the policy is improved against an IMAGINED
             //   value, so it follows the learned world model's reward head rather than the reward
             //   stream directly, and the world model needs far more than a unit-test budget to fit.
+            // - Decision Transformer (Chen et al. 2021): OFFLINE return-conditioned behaviour cloning.
+            //   It does no policy improvement at all; it imitates whichever dataset action accompanies
+            //   the return-to-go it is conditioned on, so it moves toward a paid action only when the
+            //   requested return happens to coincide with that action's return-to-go. Its own return-
+            //   conditioning is tested directly in DecisionTransformerPaperTests.
             if (model.ClassName == "A2CAgent"
                 || model.ClassName == "PPOAgent"
                 || model.ClassName == "TRPOAgent"
@@ -17013,7 +17048,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 || model.ClassName == "SARSALambdaAgent"
                 || model.ClassName == "CQLAgent"
                 || model.ClassName == "IQLAgent"
-                || model.ClassName == "DreamerAgent")
+                || model.ClassName == "DreamerAgent"
+                || model.ClassName == "DecisionTransformerAgent")
             {
                 sb.AppendLine("    protected override bool FollowsOnlineReward => false;");
             }
@@ -17958,6 +17994,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             TestFamily.InstanceSegmentation => InstanceSegmenterTestBaseMembers,
             TestFamily.VideoSafetyModule => VideoSafetyModuleTestBaseMembers,
             TestFamily.TextSafetyModule => TextSafetyModuleTestBaseMembers,
+            TestFamily.ImageWatermarker => KeyedWatermarkTestBaseMembers,
             TestFamily.AudioSafetyModule => AudioSafetyModuleTestBaseMembers,
             TestFamily.VAE => VAEModelTestBaseMembers,
             TestFamily.NoisePredictor => NoisePredictorTestBaseMembers,
@@ -18125,6 +18162,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 return model.ExtendsVideoSafetyModuleBase;
             case TestFamily.TextSafetyModule:
                 return model.ExtendsTextSafetyModuleBase;
+            case TestFamily.ImageWatermarker:
+                return model.ExtendsImageWatermarkerBase;
             case TestFamily.AudioSafetyModule:
                 return model.ExtendsAudioSafetyModuleBase;
             case TestFamily.VAE:
@@ -18221,6 +18260,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             if (afterMatch >= testName.Length) continue;
 
             string remainder = testName.Substring(afterMatch);
+            // A family test base is shared scaffolding, not a test of the model that its name happens to end with:
+            // counting TTSModelTestBase as coverage hid TtsModel from generation entirely.
+            if (remainder.StartsWith("TestBase", System.StringComparison.Ordinal)) continue;
             if (remainder.StartsWith("Tests", System.StringComparison.Ordinal) ||
                 remainder.StartsWith("Test", System.StringComparison.Ordinal) ||
                 remainder.StartsWith("_", System.StringComparison.Ordinal)) return true;
@@ -20529,6 +20571,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         /// <summary>True for a text safety module, which is judged on text through EvaluateText.</summary>
         public bool ExtendsTextSafetyModuleBase { get; set; }
 
+        /// <summary>True for a keyed image watermarker, which is judged on its embed/detect round trip.</summary>
+        public bool ExtendsImageWatermarkerBase { get; set; }
+
         /// <summary>True for an audio safety module, which is judged on waveforms through EvaluateAudio.</summary>
         public bool ExtendsAudioSafetyModuleBase { get; set; }
         /// <summary>True for a latent-diffusion VAE, which is judged on encode, decode and its latent contract.</summary>
@@ -20773,6 +20818,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         InstanceSegmentation,
         VideoSafetyModule,
         TextSafetyModule,
+        ImageWatermarker,
         AudioSafetyModule,
         VAE,
         NoisePredictor,
@@ -21077,6 +21123,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // ForwardTacotron, etc. all use CreateDefaultAcousticModelLayers.
             "FastSpeech" => true,
             "FastSpeech2" => true,
+            // TtsModel's native stack is CreateDefaultAcousticModelLayers, the FastSpeech2 stack: phoneme IDs in, mel
+            // frames out, like the acoustic models above.
+            "TtsModel" => true,
             "AdaSpeech" => true,
             "AdaSpeech2" => true,
             "AlignTTS" => true,
@@ -21622,6 +21671,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.InstanceSegmentation:  return "InstanceSegmenterTestBase";
             case TestFamily.VideoSafetyModule:     return "VideoSafetyModuleTestBase";
             case TestFamily.TextSafetyModule:      return "TextSafetyModuleTestBase";
+            case TestFamily.ImageWatermarker:      return "KeyedWatermarkTestBase";
             case TestFamily.AudioSafetyModule:     return "AudioSafetyModuleTestBase";
             case TestFamily.VAE:                   return "VAEModelTestBase";
             case TestFamily.NoisePredictor:        return "NoisePredictorTestBase";
@@ -21678,6 +21728,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             case TestFamily.SafetyModule:
             case TestFamily.VideoSafetyModule:
             case TestFamily.TextSafetyModule:
+            case TestFamily.ImageWatermarker:
             case TestFamily.AudioSafetyModule:
                 return "CreateModule";
             case TestFamily.DeepfakeDetector:
@@ -21760,6 +21811,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 return "AiDotNet.Interfaces.IVideoSafetyModule<double>";
             case TestFamily.TextSafetyModule:
                 return "AiDotNet.Interfaces.ITextSafetyModule<double>";
+            case TestFamily.ImageWatermarker:
+                return "AiDotNet.Safety.Watermarking.IImageWatermarker<double>";
             case TestFamily.AudioSafetyModule:
                 return "AiDotNet.Interfaces.IAudioSafetyModule<double>";
             case TestFamily.VAE:

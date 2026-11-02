@@ -24,6 +24,7 @@ public class OpenVoiceV2Options : VoiceCloningOptions
         WeightDecay = other.WeightDecay;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public OpenVoiceV2Options()
     {
         MinReferenceDurationSec = 3.0;
@@ -35,7 +36,9 @@ public class OpenVoiceV2Options : VoiceCloningOptions
         WeightDecay = 0.01;
     }
 
+    /// <summary>Gets or sets the encoder width of the reference configuration. The native layers size themselves from DecoderDim and do not read it.</summary>
     public int EncoderDim { get; set; } = 512;
+    /// <summary>Gets or sets the hidden width of the decoder.</summary>
     public int DecoderDim { get; set; } = 192;
 
     /// <summary>First AdamW moment coefficient used by the released recipe.</summary>

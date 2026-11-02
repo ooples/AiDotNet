@@ -47,6 +47,7 @@ public class KimiVLThinkingOptions : ReasoningVLMOptions
         EnableLongThinking = other.EnableLongThinking;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public KimiVLThinkingOptions()
     {
         VisionDim = 1024;

@@ -188,28 +188,6 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
     private readonly int _growthChannels;
     private readonly double _residualScale;
 
-    /// <summary>
-    /// Cached input for backpropagation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Cached conv1 output for trunk residual.
-    /// </summary>
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _conv1Output;
-
-    /// <summary>
-    /// Cached intermediate outputs for backpropagation.
-    /// </summary>
-    private Tensor<T>[]? _rrdbOutputs;
-
-    /// <summary>
-    /// Cached upsampling outputs for backpropagation.
-    /// </summary>
-    private Tensor<T>[]? _upsampleOutputs;
-
     #endregion
 
     #region Properties
@@ -442,41 +420,27 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        // #1668: gate every backward-only cache (the per-stage outputs + intermediate
-        // arrays). Forward uses the local `conv1Output`/`x`; the fields/arrays only hold
-        // references for an eager Backward, so in an InferenceMode arena loop nothing
-        // survives the per-step Reset.
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input : null;
-
         // Initial feature extraction
         var conv1Output = _convFirst.Forward(input);
-        _conv1Output = cacheBwd ? conv1Output : null;
         var x = conv1Output;
 
-        // Deep feature extraction through RRDB blocks. The array is always allocated
-        // (cheap — references only) but the per-block tensors are stored only when an
-        // eager Backward will read them (#1668).
-        _rrdbOutputs = new Tensor<T>[_rrdbBlocks.Length];
+        // Deep feature extraction through RRDB blocks. Only the running activation is
+        // held; the per-block outputs are not retained past the forward.
         for (int i = 0; i < _rrdbBlocks.Length; i++)
         {
             x = _rrdbBlocks[i].Forward(x);
-            if (cacheBwd) _rrdbOutputs[i] = x;
         }
 
         // Trunk convolution + global residual
         var trunk = _trunkConv.Forward(x);
         x = AddTensors(trunk, conv1Output); // Global residual connection
 
-        // Upsampling (array always allocated; tensors stored only for backward — #1668)
-        _upsampleOutputs = new Tensor<T>[_upsampleConvs.Length * 2]; // Conv output + PixelShuffle output
+        // Upsampling
         for (int i = 0; i < _upsampleConvs.Length; i++)
         {
             x = _upsampleConvs[i].Forward(x);
-            if (cacheBwd) _upsampleOutputs[i * 2] = x;
             x = _pixelShuffleLayers[i].Forward(x);
             x = ApplyLeakyReLU(x);
-            if (cacheBwd) _upsampleOutputs[i * 2 + 1] = x;
         }
 
         // HR convolution + activation
@@ -611,10 +575,6 @@ public partial class RRDBNetGenerator<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _conv1Output = null;
-        _rrdbOutputs = null;
-        _upsampleOutputs = null;
 
         _convFirst.ResetState();
         foreach (var rrdb in _rrdbBlocks)

@@ -40,6 +40,7 @@ public class NVLMOptions : InstructionTunedVLMOptions
         CrossAttentionDim = other.CrossAttentionDim;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public NVLMOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

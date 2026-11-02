@@ -16,11 +16,11 @@ namespace AiDotNet.VisionLanguage.Document;
 /// These are the defaults of HF <c>GotOcr2Config</c>.
 /// </para>
 /// <para>
-/// The inherited options mean the following here: <see cref="DocumentVLMOptions.VisionDim"/>,
-/// <see cref="DocumentVLMOptions.NumVisionLayers"/> and <see cref="DocumentVLMOptions.NumHeads"/> describe the
-/// ViTDet encoder. <see cref="DocumentVLMOptions.DecoderDim"/> and
-/// <see cref="DocumentVLMOptions.NumDecoderLayers"/> describe the Qwen decoder.
-/// <see cref="DocumentVLMOptions.MaxSequenceLength"/> bounds the full prompt plus answer.
+/// The inherited options mean the following here: <see cref="AiDotNet.VisionLanguage.Generative.GenerativeVLMOptions.VisionDim"/>,
+/// <see cref="AiDotNet.VisionLanguage.Generative.GenerativeVLMOptions.NumVisionLayers"/> and <see cref="AiDotNet.VisionLanguage.Generative.GenerativeVLMOptions.NumHeads"/> describe the
+/// ViTDet encoder. <see cref="AiDotNet.VisionLanguage.Generative.GenerativeVLMOptions.DecoderDim"/> and
+/// <see cref="AiDotNet.VisionLanguage.Generative.GenerativeVLMOptions.NumDecoderLayers"/> describe the Qwen decoder.
+/// <see cref="AiDotNet.VisionLanguage.Generative.GenerativeVLMOptions.MaxSequenceLength"/> bounds the full prompt plus answer.
 /// </para>
 /// </remarks>
 public class GOTOCR2Options : DocumentVLMOptions

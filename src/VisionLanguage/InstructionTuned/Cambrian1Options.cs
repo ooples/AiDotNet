@@ -40,6 +40,7 @@ public class Cambrian1Options : InstructionTunedVLMOptions
         EnableSpatialVisionAggregator = other.EnableSpatialVisionAggregator;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public Cambrian1Options()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

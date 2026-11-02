@@ -9,7 +9,7 @@ namespace AiDotNet.Interfaces;
 /// <b>For Beginners:</b> a multivariate model forecasts several series together because they
 /// influence each other (GDP and unemployment, temperature and energy use). Forecasting N
 /// steps produces N rows, one column per series. The unified
-/// <see cref="AiDotNet.Models.Results.AiModelResult{T, TInput, TOutput}.Predict"/> front routes
+/// <see cref="AiDotNet.Models.Results.AiModelResult{T, TInput, TOutput}.Predict(TInput)"/> front routes
 /// such models here and returns the result through the common <c>Vector&lt;T&gt;</c> output
 /// (the matrix flattened row-major, with the [horizon, variables] shape recorded on the
 /// result so it can be reshaped back to a matrix for the caller — no layout knowledge required).

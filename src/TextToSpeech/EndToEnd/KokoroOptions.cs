@@ -18,6 +18,7 @@ public class KokoroOptions : EndToEndTtsOptions
         StyleDim = other.StyleDim;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public KokoroOptions()
     {
         SampleRate = 24000;
@@ -27,5 +28,6 @@ public class KokoroOptions : EndToEndTtsOptions
         NumFlowSteps = 0;
     }
 
+    /// <summary>Gets or sets the width of the style vector that conditions synthesis.</summary>
     public int StyleDim { get; set; } = 128;
 }

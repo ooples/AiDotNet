@@ -34,6 +34,7 @@ public class MetaVoice1BOptions : VoiceCloningOptions
         CodebookSize = other.CodebookSize;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MetaVoice1BOptions()
     {
         MinReferenceDurationSec = 3.0;

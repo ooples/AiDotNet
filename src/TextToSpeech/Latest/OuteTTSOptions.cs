@@ -8,6 +8,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 public class OuteTTSOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public OuteTTSOptions()
     {
         SampleRate = 24000;

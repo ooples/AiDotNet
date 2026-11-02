@@ -82,6 +82,8 @@ namespace AiDotNet.Models.Results;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
+/// <typeparam name="TInput">The type of input data the model consumes, for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>.</typeparam>
+/// <typeparam name="TOutput">The type of output the model produces, for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>.</typeparam>
 [Serializable]
 [ModelMetadataExempt]
 public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, TOutput>
@@ -293,7 +295,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <summary>
     /// Postprocessing pipeline configured via
     /// <see cref="AiModelBuilder{T,TInput,TOutput}.ConfigurePostprocessing(AiDotNet.Postprocessing.PostprocessingPipeline{T,TOutput,TOutput})"/>.
-    /// Applied inside <see cref="Predict"/> after the model produces its
+    /// Applied inside <see cref="Predict(TInput)"/> after the model produces its
     /// raw output. Stored-but-not-consumed regression on this surface was
     /// detected by AiDotNet#1345 Bucket6 pre/post tests; wiring added here
     /// so the configured pipeline actually runs against predictions.
@@ -861,7 +863,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <para>
     /// This is populated when benchmarking is enabled through the facade (for example,
     /// <c>AiModelBuilder.ConfigureBenchmarking(...)</c>) or when
-    /// <see cref="EvaluateBenchmarksAsync"/> is called.
+    /// <see cref="EvaluateBenchmarksAsync(BenchmarkingOptions, CancellationToken)"/> is called.
     /// </para>
     /// <para><b>For Beginners:</b> This is the "report card" from running standardized benchmark suites.</para>
     /// </remarks>
@@ -1729,6 +1731,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Program Synthesis (optional)
         ProgramSynthesisModel = options.ProgramSynthesisModel;
         ProgramSynthesisServingClientOptions = options.ProgramSynthesisServingClientOptions;
+        CodeSyntaxProvider = options.CodeSyntaxProvider;
         ProgramSynthesisServingClient =
             options.ProgramSynthesisServingClient ??
             (options.ProgramSynthesisServingClientOptions is not null
@@ -2042,6 +2045,42 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
+    /// Watermarks a generated image with the configured secret key when image watermarking is enabled.
+    /// </summary>
+    /// <param name="image">The generated image (CHW or HWC format).</param>
+    /// <returns>
+    /// The watermarked image, or <paramref name="image"/> unchanged when no safety pipeline is configured or
+    /// <c>Watermarking.ImageWatermarking</c> is off.
+    /// </returns>
+    /// <remarks>
+    /// <para>
+    /// <see cref="EvaluateImageSafety"/> only checks an image; it never marks one. Call this on every image the model
+    /// produces before handing it out, so the mark can later be detected with the same
+    /// <c>Watermarking.ImageWatermarkKey</c>.
+    /// </para>
+    /// <para>
+    /// <b>For Beginners:</b> a watermark is an invisible signature that proves an image came from your model:
+    /// <code>
+    /// var published = result.WatermarkGeneratedImage(generatedImage);
+    /// </code>
+    /// </para>
+    /// </remarks>
+    public Tensor<T> WatermarkGeneratedImage(Tensor<T> image)
+    {
+        if (image == null)
+        {
+            throw new ArgumentNullException(nameof(image));
+        }
+
+        if (SafetyPipeline == null || !SafetyPipeline.Config.Watermarking.EffectiveImageWatermarking)
+        {
+            return image;
+        }
+
+        return SafetyPipeline.EmbedImageWatermark(image);
+    }
+
+    /// <summary>
     /// Evaluates audio content for safety using the configured safety pipeline.
     /// </summary>
     /// <param name="audioSamples">The audio samples to evaluate.</param>
@@ -2318,69 +2357,46 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
-    /// Makes predictions using the model on the provided input data.
-    /// </summary>
-    /// <param name="newData">A matrix of input features, where each row represents an observation and each column represents a feature.</param>
-    /// <returns>A vector of predicted values, one for each observation in the input matrix.</returns>
-    /// <exception cref="InvalidOperationException">Thrown when the Model or Normalizer is not initialized.</exception>
-    /// <remarks>
-    /// <para>
-    /// This method makes predictions using the model on the provided input data. It first normalizes the input data using
-    /// the normalizer from the NormalizationInfo property, then passes the normalized data to the model's Predict method,
-    /// and finally denormalizes the model's outputs to obtain the final predictions. This process ensures that the input
-    /// data is preprocessed in the same way as the training data was, and that the predictions are in the same scale as
-    /// the original target variable.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method makes predictions on new data using the trained model.
-    /// 
-    /// The Predict method:
-    /// - Takes a matrix of input features as its parameter
-    /// - Normalizes the input data to match how the model was trained
-    /// - Passes the normalized data to the model for prediction
-    /// - Denormalizes the results to convert them back to the original scale
-    /// - Returns a vector of predictions, one for each row in the input matrix
-    /// 
-    /// This method will throw an exception if:
-    /// - The Model property is null (not initialized)
-    /// - The Normalizer in NormalizationInfo is null (not initialized)
-    /// 
-    /// For example, if you have a matrix of house features (square footage, bedrooms, etc.),
-    /// this method will return a vector of predicted house prices.
-    /// </para>
-    /// </remarks>
-    /// <summary>
     /// Multi-horizon <c>Predict</c> overload: predicts <paramref name="horizon"/> future steps at once from a single
     /// <paramref name="lookback"/> window. Same method name as the normal <see cref="Predict(TInput)"/> — beginners
     /// just call <c>Predict</c>. Requires the trained model to be a time-series model; models with a native direct
     /// multi-step head (e.g. N-BEATS) emit all steps at once, others use the recursive strategy.
     /// </summary>
+    /// <param name="lookback">The most recent observations of the series, oldest first, that the forecast starts from.</param>
+    /// <param name="horizon">How many future steps to predict.</param>
+    /// <returns>A vector of <paramref name="horizon"/> forecasts, one per future step.</returns>
     /// <exception cref="NotSupportedException">The built model is not a time-series forecasting model.</exception>
     public Vector<T> Predict(Vector<T> lookback, int horizon)
     {
         if (EnsureModel is AiDotNet.TimeSeries.TimeSeriesModelBase<T> timeSeriesModel)
         {
-            var forecast = timeSeriesModel.Predict(lookback, horizon);
-
-            // Apply the SAME denormalization + postprocessing tail as Predict(TInput) so a configured target
-            // scaler / postprocessing pipeline is honored — otherwise this overload silently returns forecasts
-            // on the model's normalized scale, inconsistent with Predict(TInput). Those transforms are typed on
-            // TOutput; a time-series result has TOutput == Vector<T> (feature matrix -> target vector), so route
-            // the forecast through them only in that case (else there is nothing configured to apply).
-            if (typeof(TOutput) == typeof(Vector<T>) && forecast is TOutput forecastAsOutput)
+            if (lookback is null)
             {
-                var denormalized = PreprocessingInfo?.IsTargetFitted == true
-                    ? PreprocessingInfo.InverseTransformPredictions(forecastAsOutput)
-                    : forecastAsOutput;
+                throw new ArgumentNullException(nameof(lookback));
+            }
 
-                if (PostprocessingPipeline is not null && PostprocessingPipeline.Count > 0)
-                {
-                    denormalized = PostprocessingPipeline.Transform(denormalized);
-                }
+            // The lookback continues the target series unless the model is genuinely multivariate, in which case
+            // target scaling (fitted to the target alone) covers neither the lookback nor the forecast.
+            bool forecastsTarget = timeSeriesModel is not IMultivariateForecastModel<T> { VariableCount: > 1 };
 
-                if (denormalized is Vector<T> denormalizedVector)
-                {
-                    return denormalizedVector;
-                }
+            // The model was trained on the scaled target, so a lookback given in the target's original units is
+            // scaled the same way before it reaches the model. The target transforms are typed on TOutput; a
+            // time-series result has TOutput == Vector<T> (feature matrix -> target vector), so they apply only then.
+            var modelLookback = lookback;
+            if (forecastsTarget && PreprocessingInfo?.IsTargetFitted == true && PreprocessingInfo.TargetPipeline is { } targetPipeline
+                && lookback is TOutput lookbackAsOutput
+                && targetPipeline.Transform(lookbackAsOutput) is Vector<T> scaledLookback)
+            {
+                modelLookback = scaledLookback;
+            }
+
+            var forecast = timeSeriesModel.Predict(modelLookback, horizon);
+
+            // Apply the SAME denormalization + postprocessing tail as Predict(TInput), so the forecast comes back in
+            // the target's original units rather than on the model's normalized scale.
+            if (forecast is TOutput forecastAsOutput && FinishForecast(forecastAsOutput, forecastsTarget) is Vector<T> finished)
+            {
+                return finished;
             }
 
             return forecast;
@@ -2392,13 +2408,20 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
-    /// Produces an N-step-ahead forecast for a time-series model through the unified <see cref="Predict"/> front:
+    /// Produces an N-step-ahead forecast for a time-series model through the unified <see cref="Predict(TInput)"/> front:
     /// the row count of <paramref name="newData"/> is the horizon, and the forecast extends the series the model was
     /// trained on.
     /// </summary>
+    /// <param name="model">The time-series model.</param>
+    /// <param name="newData">The input; its row count is the horizon.</param>
+    /// <param name="forecastsTarget">
+    /// True when the forecast continues the target series (univariate, exogenous, or a multivariate model collapsed to
+    /// the target); false when a multivariate model forecasts its feature series, which target scaling does not cover.
+    /// </param>
     private TOutput ForecastWithTimeSeriesModelInternal(
-        AiDotNet.TimeSeries.TimeSeriesModelBase<T> model, TInput newData)
+        AiDotNet.TimeSeries.TimeSeriesModelBase<T> model, TInput newData, out bool forecastsTarget)
     {
+        forecastsTarget = true;
         // The forecast horizon is the row count of the input matrix.
         int horizon = (object?)newData is Matrix<T> matrix ? matrix.Rows : 1;
         if (horizon <= 0)
@@ -2448,6 +2471,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             else if (mvTraining != null && (object?)mvTraining.X is Matrix<T> trainX)
             {
                 mvHistory = trainX;
+                forecastsTarget = false;
             }
             Matrix<T> mvForecast = multivariate.ForecastMultivariate(mvHistory, horizon);
             LastForecastShape = new[] { mvForecast.Rows, mvForecast.Columns };
@@ -2482,13 +2506,13 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
 
     /// <summary>
     /// The [horizon, variables] shape of the most recent <b>multivariate</b> forecast returned
-    /// through <see cref="Predict"/>, or <c>null</c> if the last forecast was univariate /
+    /// through <see cref="Predict(TInput)"/>, or <c>null</c> if the last forecast was univariate /
     /// exogenous. Pair with <see cref="ReshapeForecastToMatrix"/> to recover the 2-D form.
     /// </summary>
     public int[]? LastForecastShape { get; private set; }
 
     /// <summary>
-    /// Reshapes a flat multivariate forecast vector (as returned by <see cref="Predict"/> for a
+    /// Reshapes a flat multivariate forecast vector (as returned by <see cref="Predict(TInput)"/> for a
     /// multivariate model) back into its [horizon x variables] matrix using
     /// <see cref="LastForecastShape"/> — so callers recover the natural 2-D forecast without
     /// needing to know the row-major flatten layout.
@@ -2518,6 +2542,46 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return reshaped;
     }
 
+    /// <summary>
+    /// Inverts fitted target scaling and applies the postprocessing pipeline to a time-series forecast: the tail every
+    /// other prediction path applies, so a forecast is in the target's original units.
+    /// </summary>
+    private TOutput DenormalizeForecast(TOutput forecast)
+    {
+        var denormalized = PreprocessingInfo?.IsTargetFitted == true
+            ? PreprocessingInfo.InverseTransformPredictions(forecast)
+            : forecast;
+        if (PostprocessingPipeline is not null && PostprocessingPipeline.Count > 0)
+        {
+            denormalized = PostprocessingPipeline.Transform(denormalized);
+        }
+        return denormalized;
+    }
+
+    /// <summary>
+    /// The tail of a forecast: a forecast of the target is denormalized and postprocessed (see
+    /// <see cref="DenormalizeForecast"/>); a multivariate model's forecast of its feature series is returned as is,
+    /// and refused when a postprocessing pipeline is configured, since that pipeline was built for the target and
+    /// silently skipping it would hand back results the caller believes were postprocessed.
+    /// </summary>
+    private TOutput FinishForecast(TOutput forecast, bool forecastsTarget)
+    {
+        if (forecastsTarget)
+        {
+            return DenormalizeForecast(forecast);
+        }
+
+        if (PostprocessingPipeline is not null && PostprocessingPipeline.Count > 0)
+        {
+            throw new InvalidOperationException(
+                "A postprocessing pipeline is configured, but this multivariate model forecasts its feature series, " +
+                "which the pipeline (built for the target) does not apply to. Remove the postprocessing pipeline, or " +
+                "use a model that forecasts the target.");
+        }
+
+        return forecast;
+    }
+
     private static Vector<T> FlattenRowMajor(Matrix<T> source)
     {
         var flat = new Vector<T>(source.Rows * source.Columns);
@@ -2528,6 +2592,37 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         return flat;
     }
 
+    /// <summary>
+    /// Makes predictions using the trained model on the provided input data.
+    /// </summary>
+    /// <param name="newData">The input features, in the same layout the model was trained on (for example a
+    /// <c>Matrix&lt;T&gt;</c> with one row per observation and one column per feature).</param>
+    /// <returns>The predictions, in the original units of the training target.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the model is not initialized, or when a configured
+    /// safety filter rejects the input.</exception>
+    /// <remarks>
+    /// <para>
+    /// Prediction runs the same steps the training data went through, in order: the fitted input preprocessing
+    /// pipeline (if any) transforms the features; the configured safety filter (if any) validates and may sanitize
+    /// them; the feature subset chosen during training is selected; the model predicts; fitted target scaling is
+    /// inverted; the postprocessing pipeline (if any) is applied; and the safety filter may filter the output. Before
+    /// these steps, the builder's JIT-compilation and determinism settings are re-applied on the calling thread.
+    /// </para>
+    /// <para>
+    /// Time-series models skip the input steps: for them the number of rows in <paramref name="newData"/> is the
+    /// forecast horizon, and the forecast continues the series the model was trained on. Fitted target scaling is
+    /// still inverted and the postprocessing pipeline still applied, so forecasts are in the target's original units.
+    /// The safety filter applies only to <c>Vector&lt;T&gt;</c> and <c>Matrix&lt;T&gt;</c> inputs and outputs;
+    /// <c>Tensor&lt;T&gt;</c> values pass through it unfiltered.
+    /// </para>
+    /// <para><b>For Beginners:</b> This method makes predictions on new data using the trained model. You pass raw
+    /// data in the same shape as your training features, and you get answers back in the same scale as your
+    /// training labels — all the scaling and cleanup that was learned during training is applied for you.
+    ///
+    /// For example, if you have a matrix of house features (square footage, bedrooms, etc.),
+    /// this method will return a vector of predicted house prices.
+    /// </para>
+    /// </remarks>
     public TOutput Predict(TInput newData)
     {
         if (Model == null)
@@ -2541,7 +2636,11 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // behavior; this only changes the facade-facing result.Predict.)
         if (Model is AiDotNet.TimeSeries.TimeSeriesModelBase<T> timeSeriesModel)
         {
-            return ForecastWithTimeSeriesModelInternal(timeSeriesModel, newData);
+            // The model was trained on scaled targets when target scaling was configured: undo it, as every other
+            // prediction path does, so forecasts come back in the target's original units. A genuinely multivariate
+            // model forecasts the feature series instead, which the target scaler was never fitted to.
+            var forecast = ForecastWithTimeSeriesModelInternal(timeSeriesModel, newData, out bool forecastsTarget);
+            return FinishForecast(forecast, forecastsTarget);
         }
 
         // Bridge builder-configured JIT compilation flags into this thread's
@@ -2710,7 +2809,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     }
 
     /// <summary>
-    /// Single-source-of-truth inference dispatch for <see cref="Predict"/>.
+    /// Single-source-of-truth inference dispatch for <see cref="Predict(TInput)"/>.
     /// Picks the InferenceOptimizationConfig fast path, then the JIT
     /// compiled function, then the standard <see cref="Model"/>.Predict.
     /// Returning a single <typeparamref name="TOutput"/> lets the caller
@@ -3120,7 +3219,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <remarks>
     /// <para>
     /// This type intentionally keeps inference internals behind the facade. Users create sequences via
-    /// <see cref="CreateSequence"/> and run inference via <see cref="InferenceSequence.Predict(TInput)"/>.
+    /// <see cref="CreateSequence()"/> and run inference via <see cref="InferenceSequence.Predict(TInput)"/>.
     /// </para>
     /// </remarks>
     public sealed class InferenceSession : IDisposable
@@ -4340,7 +4439,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Detects and quantifies feature interactions using Friedman's H-statistic.
     /// </summary>
     /// <param name="data">The data matrix to analyze.</param>
-    /// <param name="numSamples">Number of samples to use (for performance).</param>
+    /// <param name="gridSize">Number of grid points used to approximate the partial-dependence functions (at least 2).
+    /// Higher values give more accurate H-statistics but are slower.</param>
     /// <returns>Feature interaction results including pairwise H-statistics.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> H-statistic measures how much two features interact in the model.
@@ -4349,7 +4449,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///
     /// Example:
     /// <code>
-    /// var interactions = result.GetFeatureInteractions(trainingData, 500);
+    /// var interactions = result.GetFeatureInteractions(trainingData, gridSize: 20);
     /// var topPairs = interactions.GetTopInteractions(5);
     /// // Shows the 5 most interacting feature pairs
     /// </code>
@@ -4500,7 +4600,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Explains a prediction using DeepLIFT attribution.
     /// </summary>
     /// <param name="instance">The input instance to explain.</param>
-    /// <param name="reference">Reference input (baseline) for comparison.</param>
+    /// <param name="baseline">Reference input (baseline) for comparison, or <c>null</c> for a zero vector.</param>
     /// <param name="rule">The propagation rule to use (Rescale or RevealCancel).</param>
     /// <returns>DeepLIFT attributions showing feature contributions.</returns>
     /// <remarks>
@@ -4513,7 +4613,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///
     /// Example:
     /// <code>
-    /// var deepLiftResult = result.ExplainWithDeepLIFT(instance, referenceInput);
+    /// var deepLiftResult = result.ExplainWithDeepLIFT(instance, baseline: referenceInput);
     /// // deepLiftResult.Attributions[i] shows feature i's contribution
     /// </code>
     /// </para>
@@ -4545,6 +4645,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="instance">The input instance to explain.</param>
     /// <param name="backgroundData">Background dataset for sampling baselines.</param>
     /// <param name="numSamples">Number of baseline samples to use.</param>
+    /// <param name="numSteps">Number of integration steps between each baseline and the instance.</param>
     /// <returns>GradientSHAP attributions with variance estimates.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> GradientSHAP combines the efficiency of gradient-based methods
@@ -4595,6 +4696,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     /// <param name="instance">The input instance to explain.</param>
     /// <param name="rule">The LRP propagation rule to use.</param>
+    /// <param name="epsilon">The stabilizing epsilon used by the LRP-epsilon rule.</param>
     /// <returns>LRP explanation with relevance scores per feature.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> LRP explains neural network predictions by backpropagating
@@ -4641,7 +4743,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </summary>
     /// <param name="instance">The input instance to explain.</param>
     /// <param name="method">The saliency method to use.</param>
-    /// <param name="numSamples">Number of samples for SmoothGrad methods.</param>
+    /// <param name="smoothGradSamples">Number of noisy samples averaged by the SmoothGrad methods.</param>
+    /// <param name="smoothGradNoise">Standard deviation of the noise SmoothGrad adds to each sample (must not be negative).</param>
     /// <returns>Saliency map showing feature importance via gradients.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> Saliency maps show which input features the model is most
@@ -4693,7 +4796,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <param name="instance">The input instance to explain.</param>
     /// <param name="prototypes">The set of prototype examples.</param>
     /// <param name="prototypeLabels">Optional labels for each prototype.</param>
-    /// <param name="numPrototypes">Number of similar prototypes to return.</param>
+    /// <param name="numNeighbors">Number of nearest prototypes to return.</param>
     /// <param name="metric">Distance metric to use.</param>
     /// <returns>Prototype explanation with similar and contrasting examples.</returns>
     /// <remarks>
@@ -6134,9 +6237,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// - The factory knows how to create the right type of model based on information in the saved file
     /// 
     /// For example, you might load a model with:
-    /// `var model = AiModelResult<double, Matrix<double>, Vector<double>>.LoadModel(
+    /// `var model = AiModelResult&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;.LoadModel(
     ///     "C:\\Models\\house_price_predictor.model", 
-    ///     metadata => new LinearRegressionModel<double>());`
+    ///     metadata => new LinearRegressionModel&lt;double&gt;());`
     /// </para>
     /// </remarks>
     public static AiModelResult<T, TInput, TOutput> LoadModel(
@@ -7426,6 +7529,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Solves a problem using advanced reasoning strategies like Chain-of-Thought, Tree-of-Thoughts, or Self-Consistency.
     /// </summary>
     /// <param name="problem">The problem or question to solve.</param>
+    /// <param name="chatClient">The chat client (language model) the reasoner sends its prompts to.</param>
     /// <param name="mode">The reasoning mode to use (default: Auto selects based on problem complexity).</param>
     /// <param name="config">Optional reasoning configuration (uses pre-configured settings if null).</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
@@ -7451,6 +7555,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <code>
     /// var result = await modelResult.ReasonAsync(
     ///     "If a train travels 60 mph for 2.5 hours, how far does it go?",
+    ///     chatClient,
     ///     ReasoningMode.ChainOfThought
     /// );
     /// // Result is available in the returned value  // "150 miles"
@@ -7483,6 +7588,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Quickly solves a problem with minimal reasoning overhead for fast answers.
     /// </summary>
     /// <param name="problem">The problem or question to solve.</param>
+    /// <param name="chatClient">The chat client (language model) the reasoner sends its prompts to.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The final answer as a string.</returns>
     /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
@@ -7497,7 +7603,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     ///
     /// **Example:**
     /// <code>
-    /// string answer = await modelResult.QuickReasonAsync("What is 15% of 240?");
+    /// string answer = await modelResult.QuickReasonAsync("What is 15% of 240?", chatClient);
     /// // Result is available in the returned value  // "36"
     /// </code>
     /// </para>
@@ -7516,6 +7622,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Performs deep, thorough reasoning on a complex problem using extensive exploration and verification.
     /// </summary>
     /// <param name="problem">The complex problem to analyze.</param>
+    /// <param name="chatClient">The chat client (language model) the reasoner sends its prompts to.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>A comprehensive reasoning result with extensive exploration.</returns>
     /// <exception cref="InvalidOperationException">Thrown when agent configuration is not set up.</exception>
@@ -7538,7 +7645,8 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// **Example:**
     /// <code>
     /// var result = await modelResult.DeepReasonAsync(
-    ///     "Design an algorithm to find the shortest path in a weighted graph"
+    ///     "Design an algorithm to find the shortest path in a weighted graph",
+    ///     chatClient
     /// );
     /// // Result includes multiple explored approaches and verification
     /// </code>
@@ -7558,6 +7666,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// Solves a problem multiple times using different approaches and returns the consensus answer.
     /// </summary>
     /// <param name="problem">The problem to solve.</param>
+    /// <param name="chatClient">The chat client (language model) the reasoner sends its prompts to.</param>
     /// <param name="numAttempts">Number of independent solving attempts (default: 5).</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>The consensus result with voting statistics.</returns>
@@ -7581,6 +7690,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// <code>
     /// var result = await modelResult.ReasonWithConsensusAsync(
     ///     "What is the derivative of x^3?",
+    ///     chatClient,
     ///     numAttempts: 5
     /// );
     /// // If 4 out of 5 attempts say "3x^2", that's the answer

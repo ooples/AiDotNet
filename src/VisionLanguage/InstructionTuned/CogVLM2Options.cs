@@ -41,6 +41,7 @@ public class CogVLM2Options : InstructionTunedVLMOptions
         EnableVideo = other.EnableVideo;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public CogVLM2Options()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.VisualExpert;

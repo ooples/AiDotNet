@@ -21,6 +21,7 @@ public class DeepVoice3Options : AcousticModelOptions
         ConverterDim = other.ConverterDim;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public DeepVoice3Options()
     {
         EncoderDim = 256;

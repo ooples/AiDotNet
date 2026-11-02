@@ -41,6 +41,7 @@ public class RSGPTOptions : RemoteSensingVLMOptions
         GroundSampleDistance = other.GroundSampleDistance;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public RSGPTOptions()
     {
         VisionDim = 1408;

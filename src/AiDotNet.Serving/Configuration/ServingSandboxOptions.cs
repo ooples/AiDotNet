@@ -5,6 +5,7 @@ namespace AiDotNet.Serving.Configuration;
 /// </summary>
 public sealed class ServingSandboxOptions
 {
+    /// <summary>Gets or sets the sandbox limits applied to requests from the Free tier.</summary>
     public ServingSandboxLimitOptions Free { get; set; } = new()
     {
         TimeLimitSeconds = 3,
@@ -17,6 +18,7 @@ public sealed class ServingSandboxOptions
         MaxConcurrentExecutions = 2
     };
 
+    /// <summary>Gets or sets the sandbox limits applied to requests from the Premium tier.</summary>
     public ServingSandboxLimitOptions Premium { get; set; } = new()
     {
         TimeLimitSeconds = 10,
@@ -29,6 +31,7 @@ public sealed class ServingSandboxOptions
         MaxConcurrentExecutions = 8
     };
 
+    /// <summary>Gets or sets the sandbox limits applied to requests from the Enterprise tier.</summary>
     public ServingSandboxLimitOptions Enterprise { get; set; } = new()
     {
         TimeLimitSeconds = 30,

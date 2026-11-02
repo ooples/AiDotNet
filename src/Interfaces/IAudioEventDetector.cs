@@ -69,7 +69,6 @@ public interface IAudioEventDetector<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
     /// Detects audio events in the audio stream.
     /// </summary>
     /// <param name="audio">Audio waveform tensor [samples] or [channels, samples].</param>
-    /// <param name="threshold">Detection threshold (0.0 to 1.0). Lower = more sensitive.</param>
     /// <returns>Event detection result with detected events.</returns>
     /// <remarks>
     /// <para>

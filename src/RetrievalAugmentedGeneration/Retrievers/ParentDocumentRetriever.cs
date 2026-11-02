@@ -44,8 +44,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// Returns: Full page containing introduction + detailed process + diagram
 /// 
 /// ```csharp
-/// var retriever = new ParentDocumentRetriever<double>(
+/// var documentStore = new InMemoryDocumentStore&lt;double&gt;(vectorDimension: 384);
+/// var retriever = new ParentDocumentRetriever&lt;double&gt;(
 ///     documentStore,
+///     new StubEmbeddingModel&lt;double&gt;(384),
 ///     chunkSize: 256,                    // Small chunks for precision
 ///     parentSize: 2048,                  // Large parents for context
 ///     includeNeighboringChunks: true     // Add nearby chunks too

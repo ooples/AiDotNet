@@ -16,7 +16,7 @@ namespace AiDotNet.PromptEngineering.FewShot;
 ///
 /// Example:
 /// ```csharp
-/// var selector = new RandomExampleSelector<double>();
+/// var selector = new RandomExampleSelector&lt;double>();
 ///
 /// // Add examples
 /// selector.AddExample(new FewShotExample { Input = "Hello", Output = "Hola" });

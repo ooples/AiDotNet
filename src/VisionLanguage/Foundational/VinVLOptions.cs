@@ -58,6 +58,7 @@ public class VinVLOptions : FoundationalVLMOptions
     /// <summary>Gets or sets the object detection confidence threshold.</summary>
     public double DetectionThreshold { get; set; } = 0.2;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public VinVLOptions()
     {
         FusionType = FusionType.SingleStream;

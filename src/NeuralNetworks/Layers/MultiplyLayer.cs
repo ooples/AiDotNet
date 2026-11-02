@@ -60,16 +60,6 @@ public partial class MultiplyLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>[]? _lastInputs;
 
     /// <summary>
-    /// The output tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the output tensor from the most recent forward pass, which is needed
-    /// during the backward pass for gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -252,7 +242,7 @@ public partial class MultiplyLayer<T> : LayerBase<T>, IShapeContract
     /// If you call this method, you'll get an error message directing you to use the
     /// correct Forward method that accepts multiple input tensors.
     /// 
-    /// Always use Forward(params Tensor<T>[] inputs) instead of Forward(input) with this layer.
+    /// Always use Forward(params Tensor&lt;T>[] inputs) instead of Forward(input) with this layer.
     /// </para>
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
@@ -296,21 +286,13 @@ public partial class MultiplyLayer<T> : LayerBase<T>, IShapeContract
             throw new ArgumentException("MultiplyLayer requires at least two inputs.");
         }
 
-        _lastInputs = inputs;
+        SaveForBackward(ref _lastInputs, inputs);
 
         // Use Engine.TensorMultiplyMany for GPU/CPU accelerated element-wise multiplication of all tensors
         // This is production-grade: no loops, single optimized call that batches all multiplications
         var result = Engine.TensorMultiplyMany(inputs);
 
-        var activated = ApplyActivation(result);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = activated;
-        }
-
-        return activated;
+        return ApplyActivation(result);
     }
 
     /// <inheritdoc/>
@@ -405,6 +387,5 @@ public partial class MultiplyLayer<T> : LayerBase<T>, IShapeContract
     {
         // Clear cached values from forward pass
         _lastInputs = null;
-        _lastOutput = null;
     }
 }

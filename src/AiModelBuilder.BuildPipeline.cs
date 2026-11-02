@@ -2381,6 +2381,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// Performs true streaming supervised training without materializing all data in memory.
     /// </summary>
     /// <param name="streamingLoader">The streaming data loader to train from.</param>
+    /// <param name="cancellationToken">A token that cancels training.</param>
     /// <returns>The result of training including the trained model.</returns>
     /// <remarks>
     /// <para>
@@ -2970,6 +2971,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ProgramSynthesisModel = _programSynthesisModel,
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            CodeSyntaxProvider = _codeSyntaxProvider,
             InferenceOptimizationConfig = _inferenceOptimizationConfig,
             ServingDraftModel = _servingDraftModel,
             JitCompilationConfig = _jitCompilationConfig,
@@ -3125,35 +3127,10 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return numOps.Divide(sum, numOps.FromDouble(count));
     }
 
-    /// <summary>
-    /// Collects all data from a streaming data loader into aggregated features and labels.
-    /// </summary>
-    /// <param name="streamingLoader">The streaming data loader to collect from.</param>
-    /// <returns>A tuple containing the aggregated features and labels.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This method reads all batches from a streaming data loader
-    /// and combines them into single feature and label collections. This allows streaming
-    /// loaders to work with the existing training infrastructure while preserving the
-    /// benefit of on-demand data loading from files or other sources.
-    /// </para>
-    /// </remarks>
-    /// <summary>
-    /// Attempts to stack an array of single-sample tensors along a new
-    /// leading batch dimension. Returns false (with <paramref name="stacked"/>
-    /// set to null) when shapes are heterogeneous so callers can fall back
-    /// to per-sample handling rather than throwing.
-    /// </summary>
-    /// <remarks>
-    /// Even for samples.Length == 1 this still adds the leading batch dim,
-    /// producing a [1, *sampleShape] tensor rather than passing the
-    /// unbatched sample through. Subclass training overrides like
-    /// Transformer.Train don't call NormalizeBatchDim, so a final batch of
-    /// size 1 would otherwise reach the layer pipeline at rank-N while
-    /// every other batch of the same epoch reaches it at rank-(N+1) —
-    /// a class of bug that bites only when the loader's last batch
-    /// happens to be unevenly-sized (review-comment #1265.hc8I).
-    /// </remarks>
     /// <summary>Gathers the given leading-batch rows into a new tensor.</summary>
+    /// <param name="source">The tensor to read rows from; axis 0 is the batch (row) axis.</param>
+    /// <param name="rows">The row indices to copy, in output order.</param>
+    /// <returns>A new tensor with <c>rows.Count</c> rows and the remaining dimensions of <paramref name="source"/>.</returns>
     private static Tensor<T> GatherRows(Tensor<T> source, IReadOnlyList<int> rows)
     {
         int sourceRows = source.Rank >= 1 ? source.Shape[0] : 1;
@@ -3181,6 +3158,26 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return new Tensor<T>(shape, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(data));
     }
 
+    /// <summary>
+    /// Attempts to stack an array of single-sample tensors along a new
+    /// leading batch dimension. Returns false (with <paramref name="stacked"/>
+    /// set to null) when shapes are heterogeneous so callers can fall back
+    /// to per-sample handling rather than throwing.
+    /// </summary>
+    /// <param name="samples">The single-sample tensors to stack.</param>
+    /// <param name="stacked">The stacked <c>[samples.Length, *sampleShape]</c> tensor, or <c>null</c> on failure.</param>
+    /// <returns><c>true</c> if <paramref name="samples"/> is non-empty and every sample is non-null with the same
+    /// shape; otherwise <c>false</c>.</returns>
+    /// <remarks>
+    /// Even for samples.Length == 1 this still adds the leading batch dim,
+    /// producing a [1, *sampleShape] tensor rather than passing the
+    /// unbatched sample through. Subclass training overrides like
+    /// Transformer.Train don't call NormalizeBatchDim, so a final batch of
+    /// size 1 would otherwise reach the layer pipeline at rank-N while
+    /// every other batch of the same epoch reaches it at rank-(N+1) —
+    /// a class of bug that bites only when the loader's last batch
+    /// happens to be unevenly-sized (review-comment #1265.hc8I).
+    /// </remarks>
     private static bool TryStackTensorBatch(Tensor<T>[] samples, out Tensor<T>? stacked)
     {
         stacked = null;
@@ -3222,6 +3219,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return true;
     }
 
+    /// <summary>
+    /// Collects all data from a streaming data loader into aggregated features and labels.
+    /// </summary>
+    /// <param name="streamingLoader">The streaming data loader to collect from.</param>
+    /// <returns>A tuple containing the aggregated features and labels.</returns>
+    /// <remarks>
+    /// <para><b>For Beginners:</b> This method reads all batches from a streaming data loader
+    /// and combines them into single feature and label collections. This allows streaming
+    /// loaders to work with the existing training infrastructure while preserving the
+    /// benefit of on-demand data loading from files or other sources.
+    /// </para>
+    /// </remarks>
     private async Task<(TInput Features, TOutput Labels)> CollectStreamingDataAsync(
         IStreamingDataLoader<T, TInput, TOutput> streamingLoader)
     {
@@ -3265,9 +3274,6 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     private TOutput AggregateStreamingOutputs(List<TOutput> outputs) =>
         DataAggregationHelper.Aggregate<T, TOutput>(outputs, "output");
 
-    /// <summary>
-    /// Internal method that performs supervised training with the provided input features and output values.
-    /// This contains all the core supervised learning logic.
     /// <summary>
     /// Image-only training path (#1834). Drives the image-space training loop when the caller
     /// configured an <c>IDataLoader&lt;ImageView&lt;T&gt;, PixelBatch&lt;T&gt;&gt;</c> and an
@@ -3407,17 +3413,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
-    /// Standard supervised training entry point. Runs the full data-preparation +
-    /// optimizer.Optimize pipeline against the given training tensors.
-    /// </summary>
-    /// <param name="x">Matrix of input features.</param>
-    /// <param name="y">Vector of output values.</param>
-    /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
-    /// <summary>
     /// Builds a <c>DatasetResult</c> by evaluating <paramref name="model"/> on the given partition, or
     /// <c>null</c> when the partition is empty (e.g. no held-out split was produced). Used to populate the
     /// direct-training branch's TestResult so configured test metrics have data to evaluate.
     /// </summary>
+    /// <param name="model">The trained model to evaluate.</param>
+    /// <param name="dataX">The partition's input features.</param>
+    /// <param name="dataY">The partition's target values.</param>
+    /// <param name="featureCount">The number of input features, used for the error and prediction statistics.</param>
+    /// <returns>The populated dataset result, or <c>null</c> if the partition is empty or evaluation fails.</returns>
     private OptimizationResult<T, TInput, TOutput>.DatasetResult? BuildDirectBranchDatasetResult(
         IFullModel<T, TInput, TOutput> model, TInput dataX, TOutput dataY, int featureCount)
     {
@@ -3460,6 +3464,15 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         _ => false,
     };
 
+    /// <summary>
+    /// Standard supervised training entry point. Runs the full data-preparation +
+    /// optimizer.Optimize pipeline against the given training data; this contains all
+    /// the core supervised learning logic.
+    /// </summary>
+    /// <param name="x">The input features.</param>
+    /// <param name="y">The target values.</param>
+    /// <param name="cancellationToken">A token that cancels training.</param>
+    /// <returns>A task that represents the asynchronous operation, containing the trained model.</returns>
     private async Task<AiModelResult<T, TInput, TOutput>> BuildSupervisedInternalAsync(
         TInput x, TOutput y, CancellationToken cancellationToken)
     {
@@ -5715,6 +5728,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             ProgramSynthesisModel = _programSynthesisModel,
             ProgramSynthesisServingClient = _programSynthesisServingClient,
             ProgramSynthesisServingClientOptions = _programSynthesisServingClientOptions,
+            CodeSyntaxProvider = _codeSyntaxProvider,
             PromptTemplate = null,
             PromptOptimizer = null,
             FewShotExampleSelector = null,

@@ -43,6 +43,7 @@ public class ThreeDVLAOptions : VisionLanguageActionOptions
         WorldModelDim = other.WorldModelDim;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ThreeDVLAOptions()
     {
         VisionDim = 1024;

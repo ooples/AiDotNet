@@ -112,7 +112,7 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// 
     /// The simple rule is:
     /// - If input = threshold: Output = 1 (neuron fires)
-    /// - If input < threshold: Output = 0 (neuron stays silent)
+    /// - If input &lt; threshold: Output = 0 (neuron stays silent)
     /// 
     /// This binary (on/off) behavior is what gives spiking neurons their distinctive property
     /// and makes them more similar to biological neurons than traditional artificial neurons.
@@ -134,7 +134,7 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// 
     /// For each neuron in the input:
     /// - If its value = threshold: Output = 1 (neuron fires)
-    /// - If its value < threshold: Output = 0 (neuron stays silent)
+    /// - If its value &lt; threshold: Output = 0 (neuron stays silent)
     /// 
     /// The result is a binary pattern of active and inactive neurons, similar to how
     /// groups of neurons in your brain form firing patterns when processing information.
@@ -230,7 +230,7 @@ public class BinarySpikingActivation<T> : ActivationFunctionBase<T>
     /// 
     /// It applies the same binary threshold rule to every element in the tensor:
     /// - If element = threshold: Output = 1 (neuron fires)
-    /// - If element < threshold: Output = 0 (neuron stays silent)
+    /// - If element &lt; threshold: Output = 0 (neuron stays silent)
     /// 
     /// This is useful for processing structured data like images or time sequences in
     /// spiking neural networks while preserving the structure of the data.

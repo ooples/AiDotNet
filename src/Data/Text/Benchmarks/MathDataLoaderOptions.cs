@@ -18,16 +18,23 @@ namespace AiDotNet.Data.Text.Benchmarks;
 /// </remarks>
 public sealed class MathDataLoaderOptions
 {
+    /// <summary>Gets or sets which split of the dataset is loaded.</summary>
     public DatasetSplit Split { get; set; } = DatasetSplit.Train;
+    /// <summary>Gets or sets the dataset root directory; null uses the default data directory for this dataset.</summary>
     public string? DataPath { get; set; }
+    /// <summary>Gets or sets whether the dataset is downloaded into the data directory when it is not there.</summary>
     public bool AutoDownload { get; set; } = true;
     /// <summary>Optional subject filter (case-insensitive substring of subject directory name). Null = all 7 subjects.</summary>
     public string? SubjectFilter { get; set; }
     /// <summary>Difficulty level filter (1..5). Null = all levels.</summary>
     public int? LevelFilter { get; set; }
+    /// <summary>Gets or sets the token length each problem statement is padded or truncated to.</summary>
     public int MaxProblemLength { get; set; } = 256;
+    /// <summary>Gets or sets the token length each solution is padded or truncated to.</summary>
     public int MaxSolutionLength { get; set; } = 512;
+    /// <summary>Gets or sets the most distinct tokens in the vocabulary built from the loaded text.</summary>
     public int VocabularySize { get; set; } = 16000;
+    /// <summary>Gets or sets the most samples loaded; null loads the whole split.</summary>
     public int? MaxSamples { get; set; }
 
     /// <summary>Validates that all option values are within acceptable ranges.</summary>

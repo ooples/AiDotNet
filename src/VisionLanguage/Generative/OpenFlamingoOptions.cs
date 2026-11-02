@@ -37,6 +37,7 @@ public class OpenFlamingoOptions : GenerativeVLMOptions
         NumPerceiverHeads = other.NumPerceiverHeads;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public OpenFlamingoOptions()
     {
         ArchitectureType = GenerativeArchitectureType.PerceiverResampler;

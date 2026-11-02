@@ -40,6 +40,12 @@ public sealed class ServingProgramSynthesisLimitOptions
     /// </summary>
     public int MaxTaskTimeSeconds { get; set; } = 5;
 
+    /// <summary>
+    /// Throws when a limit cannot be enforced: a non-positive request, result, list, concurrency or time limit, or a
+    /// negative corpus limit.
+    /// </summary>
+    /// <param name="tierName">The tier these limits belong to, used in the error message; blank reads as "Unknown".</param>
+    /// <exception cref="InvalidOperationException">A limit is out of range.</exception>
     public void Validate(string tierName)
     {
         if (string.IsNullOrWhiteSpace(tierName))

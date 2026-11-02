@@ -15,8 +15,11 @@ namespace AiDotNet.Data.Audio.Benchmarks;
 /// </remarks>
 public sealed class NsynthDataLoaderOptions
 {
+    /// <summary>Gets or sets which split of the dataset is loaded.</summary>
     public DatasetSplit Split { get; set; } = DatasetSplit.Train;
+    /// <summary>Gets or sets the dataset root directory; null uses the default data directory for this dataset.</summary>
     public string? DataPath { get; set; }
+    /// <summary>Gets or sets whether the dataset is downloaded into the data directory when it is not there.</summary>
     public bool AutoDownload { get; set; } = true;
     /// <summary>
     /// Source-file sample rate. NSynth audio is shipped at 16 kHz; this loader does
@@ -25,6 +28,7 @@ public sealed class NsynthDataLoaderOptions
     public int SampleRate { get; set; } = 16000;
     /// <summary>Samples per clip (4 sec * 16 kHz = 64,000).</summary>
     public int Samples { get; set; } = 16000 * 4;
+    /// <summary>Gets or sets the most samples loaded; null loads the whole split.</summary>
     public int? MaxSamples { get; set; }
 
     /// <summary>Validates that all option values are within acceptable ranges.</summary>

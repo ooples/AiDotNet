@@ -557,7 +557,7 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
     /// For example, to create a network that predicts house prices based on 5 features:
     /// 
     /// ```csharp
-    /// var architecture = new NeuralNetworkArchitecture<double>(
+    /// var architecture = new NeuralNetworkArchitecture&lt;double>(
     ///     inputFeatures: 5,  // 5 features (size, bedrooms, etc.)
     ///     outputSize: 1      // 1 output (price)
     /// );
@@ -607,7 +607,7 @@ public class NeuralNetworkArchitecture<T> : IConfigurationCloneable
     /// For example, to create a network that classifies flowers into 3 species based on 4 features:
     /// 
     /// ```csharp
-    /// var architecture = new NeuralNetworkArchitecture<double>(
+    /// var architecture = new NeuralNetworkArchitecture&lt;double>(
     ///     inputFeatures: 4,  // 4 features (petal length, width, etc.)
     ///     numClasses: 3      // 3 classes (setosa, versicolor, virginica)
     /// );

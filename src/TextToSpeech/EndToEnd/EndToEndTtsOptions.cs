@@ -23,6 +23,7 @@ public class EndToEndTtsOptions : TtsModelOptions
         DecoderDim = other.DecoderDim;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public EndToEndTtsOptions()
     {
         SampleRate = 22050;

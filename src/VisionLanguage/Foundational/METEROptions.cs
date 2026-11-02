@@ -55,6 +55,7 @@ public class METEROptions : FoundationalVLMOptions
     /// <summary>Gets or sets the text encoder type.</summary>
     public TextEncoderVariant TextEncoder { get; set; } = TextEncoderVariant.RoBERTa;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public METEROptions()
     {
         FusionType = FusionType.CoAttention;

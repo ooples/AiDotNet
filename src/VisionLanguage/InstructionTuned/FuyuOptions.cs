@@ -39,6 +39,7 @@ public class FuyuOptions : InstructionTunedVLMOptions
         PatchSize = other.PatchSize;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public FuyuOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.DirectPatch;

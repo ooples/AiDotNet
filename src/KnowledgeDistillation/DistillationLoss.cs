@@ -40,7 +40,7 @@ namespace AiDotNet.KnowledgeDistillation;
 /// better relationships between concepts.</para>
 ///
 /// <para><b>References:</b>
-/// - Hinton, G., Vinyals, O., & Dean, J. (2015). Distilling the Knowledge in a Neural Network. arXiv:1503.02531</para>
+/// - Hinton, G., Vinyals, O., &amp; Dean, J. (2015). Distilling the Knowledge in a Neural Network. arXiv:1503.02531</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

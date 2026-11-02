@@ -37,6 +37,7 @@ public class InstructBLIPOptions : GenerativeVLMOptions
         NumQFormerHeads = other.NumQFormerHeads;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public InstructBLIPOptions()
     {
         ArchitectureType = GenerativeArchitectureType.QFormerBridge;

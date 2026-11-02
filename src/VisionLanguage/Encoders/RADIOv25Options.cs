@@ -58,6 +58,7 @@ public class RADIOv25Options : VisionEncoderOptions
     /// </summary>
     public int AdapterDim { get; set; } = 1280;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public RADIOv25Options()
     {
         ImageSize = 432;

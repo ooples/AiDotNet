@@ -19,6 +19,7 @@ public class SeedTTSOptions : CodecTtsOptions
     {
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SeedTTSOptions()
     {
         SampleRate = 24000;

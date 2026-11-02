@@ -118,3 +118,13 @@ jobs:
       # a regex can know. Ratchet the ceiling DOWN as examples are converted.
       - name: Facade conformance in doc examples (ratchet)
         run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- "$DOC_XML" --facade-check --max-facade-violations 0
+
+      # Repo-wide XML documentation ratchet (#2393). The facade, the Options classes and src/Interfaces build
+      # with every XML-doc diagnostic as an error; everything else still compiles with those codes off. This
+      # counts what that leaves undocumented (the members CS1591 would report) and holds the count to a ceiling
+      # that may only fall: above it, a change added undocumented API; below it, the ceiling must be lowered to the
+      # reported number in the same change so the gain cannot regress. Members of public interfaces are held at
+      # zero in every folder. Runs even when an earlier gate failed, so its number is always reported.
+      - name: XML documentation coverage (ratchet)
+        if: ${{ !cancelled() }}
+        run: dotnet run --project tools/XmlDocCoverage $TOOL_ARGS -- --max-undocumented 0

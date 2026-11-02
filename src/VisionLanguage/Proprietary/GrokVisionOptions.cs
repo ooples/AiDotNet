@@ -42,6 +42,7 @@ public class GrokVisionOptions : ProprietaryVLMOptions
         RealTimeAccess = other.RealTimeAccess;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GrokVisionOptions()
     {
         VisionDim = 1024;

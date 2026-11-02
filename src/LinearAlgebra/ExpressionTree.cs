@@ -1238,7 +1238,7 @@ public partial class ExpressionTree<T, TInput, TOutput> : ModelBase<T, TInput, T
     }
 
     /// <summary>
-    /// Helper method to convert output to Vector<T> for loss computation.
+    /// Helper method to convert output to Vector&lt;T> for loss computation.
     /// </summary>
     private Vector<T> ConvertOutputToVector(TOutput output)
     {

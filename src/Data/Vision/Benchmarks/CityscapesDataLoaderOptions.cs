@@ -21,15 +21,21 @@ namespace AiDotNet.Data.Vision.Benchmarks;
 /// </remarks>
 public sealed class CityscapesDataLoaderOptions
 {
+    /// <summary>Gets or sets which split of the dataset is loaded.</summary>
     public DatasetSplit Split { get; set; } = DatasetSplit.Train;
+    /// <summary>Gets or sets the dataset root directory; null uses the default data directory for this dataset.</summary>
     public string? DataPath { get; set; }
     /// <summary>Auto-download is OFF by default — Cityscapes requires manual sign-up.</summary>
     public bool AutoDownload { get; set; } = false;
+    /// <summary>Gets or sets the height, in pixels, images are resized to.</summary>
     public int ImageHeight { get; set; } = 512;
+    /// <summary>Gets or sets the width, in pixels, images are resized to.</summary>
     public int ImageWidth { get; set; } = 1024;
+    /// <summary>Gets or sets whether pixel values are scaled to [0, 1].</summary>
     public bool Normalize { get; set; } = true;
     /// <summary>Map the 30 source classes to the 19 evaluation classes (CityscapesScripts ID2trainID). Default true.</summary>
     public bool MapToTrainIds { get; set; } = true;
+    /// <summary>Gets or sets the most samples loaded; null loads the whole split.</summary>
     public int? MaxSamples { get; set; }
 
     /// <summary>Validates that all option values are within acceptable ranges.</summary>

@@ -50,7 +50,7 @@ namespace AiDotNet.Clustering.Streaming;
 /// var options = new MiniBatchKMeansOptions&lt;double&gt;();
 /// var miniBatchKMeans = new MiniBatchKMeans&lt;double&gt;(options);
 /// miniBatchKMeans.Train(dataMatrix);
-/// Vector<double> labels = miniBatchKMeans.Labels;
+/// Vector&lt;double> labels = miniBatchKMeans.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

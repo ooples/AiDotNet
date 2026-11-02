@@ -21,6 +21,7 @@ public class MeloTTSOptions : EndToEndTtsOptions
         Epsilon = other.Epsilon;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MeloTTSOptions()
     {
         SampleRate = 44100;
@@ -32,6 +33,7 @@ public class MeloTTSOptions : EndToEndTtsOptions
         WeightDecay = 0.01;
     }
 
+    /// <summary>Gets or sets a speaking-speed multiplier. It is not read: synthesis runs at the speed the durations predict.</summary>
     public double SpeedFactor { get; set; } = 1.0;
 
     /// <summary>First AdamW moment coefficient used by the released MeloTTS recipe.</summary>

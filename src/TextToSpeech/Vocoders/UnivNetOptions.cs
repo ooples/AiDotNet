@@ -18,6 +18,7 @@ public class UnivNetOptions : VocoderOptions
         NumLMBlocks = other.NumLMBlocks;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public UnivNetOptions()
     {
         SampleRate = 24000;
@@ -25,6 +26,8 @@ public class UnivNetOptions : VocoderOptions
         HopSize = 256;
     }
 
+    /// <summary>Gets or sets the number of location-variable kernels of the paper's configuration. The native layers do not read it.</summary>
     public int NumKernels { get; set; } = 3;
+    /// <summary>Gets or sets the number of location-variable convolution blocks. The paper-faithful layers fix them, so a non-default value is reported as not applied.</summary>
     public int NumLMBlocks { get; set; } = 5;
 }
