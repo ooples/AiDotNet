@@ -5182,8 +5182,27 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
         foreach (var tensor in GetExtraTrainableTensors())
             Add(tensor);
+        foreach (var tensor in TrainableComponentTensors())
+            Add(tensor);
 
         return SelectTrainableParametersForTraining(allParameters);
+    }
+
+    // The live tensors of registered parameter components whose role is Trainable. They are part of
+    // GetParameters and the finite-difference walk, so leaving them out made ComputeGradients write an
+    // exact zero for every one of them and Train() leave them where they started. Frozen, buffer and
+    // learned-state components stay out, and so does a component whose layout is not resolved yet (its
+    // weights do not exist, as with a lazy layer before its first forward) or that exposes only a copy.
+    private IEnumerable<Tensor<T>> TrainableComponentTensors()
+    {
+        var components = ParameterComponents;
+        if (components.Count == 0 || !_parameterRegistry.HasOptimizerUpdatableComponents
+            || !_parameterRegistry.ParameterLayout.ParameterCount.HasValue)
+            return Array.Empty<Tensor<T>>();
+        return _parameterRegistry.GetParameterStateChunks()
+            .Where(chunk => chunk.Role == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && chunk.IsWritableInPlace)
+            .Select(chunk => chunk.SourceTensor)
+            .ToList();
     }
 
     private IReadOnlyList<Tensor<T>>? CollectFusedExtraTrainableTensors()

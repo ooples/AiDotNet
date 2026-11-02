@@ -191,6 +191,30 @@ public class DAMVSRPaperTests
         Assert.False(Changed(unet, model.UNetParameters));
     }
 
+    // The VAE decoder is a trainable parameter component, not a layer: its analytic gradient must reach the flat
+    // gradient vector rather than being zero-padded there.
+    [Fact(Timeout = 300000)]
+    public async Task ComputeGradients_ReachesTheTrainableDecoderComponent()
+    {
+        await Task.Yield();
+        var model = Small();
+        var (input, target) = (Input(), Target());
+        model.Predict(input);
+        var gradients = model.ComputeGradients(input, target);
+
+        int offset = 0;
+        double decoderMagnitude = 0;
+        foreach (var chunk in model.GetParameterStateChunks())
+        {
+            if (chunk.StableId.StartsWith("components/DAMVSR.VaeDecoder", StringComparison.Ordinal))
+                for (int i = 0; i < chunk.Tensor.Length; i++) decoderMagnitude += Math.Abs(gradients[offset + i]);
+            offset += chunk.Tensor.Length;
+        }
+
+        Assert.Equal(gradients.Length, offset);
+        Assert.True(decoderMagnitude > 0, "the decoder component received an all-zero analytic gradient");
+    }
+
     [Fact(Timeout = 300000)]
     public async Task Training_ReducesTheControlNetObjective()
     {
