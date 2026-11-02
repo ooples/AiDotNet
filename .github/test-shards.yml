@@ -1472,6 +1472,9 @@ shard:
     # 133 classes, about 344 s of test time measured locally (before ModelInputMeetsFirstLayerTests moved to the survey shard).
     filter: >-
       Category!=GPU&Category!=Stress&Category!=Sweep&(
+      FullyQualifiedName~AiDotNet.Tests.Helpers.ZlibDeflateTests.|
+      FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Lfm2ReferenceTests.|
+      FullyQualifiedName~AiDotNet.Tests.Video.FloRNNPaperTests.|
       FullyQualifiedName~AiDotNet.Tests.NeuralNetworks.Graph.ConformanceWindowTableTests.|
       FullyQualifiedName~AiDotNet.Tests.IntegrationTests.StableModelShardingTests.|
       FullyQualifiedName~AiDotNet.Tests.ActivationFunctions.ActivationFunctionBehaviorTests.|
