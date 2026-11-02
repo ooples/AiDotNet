@@ -5087,6 +5087,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             matched += gradient.Length;
         }
 
+        // Trainable registered components are trained through the same tape (CollectModelTrainableTensors), so their
+        // gradients belong on the surface too; a step that trains only a component otherwise published nothing.
+        foreach (var tensor in TrainableComponentTensors())
+        {
+            if (tensor is null || tensor.Length == 0 ||
+                !grads.TryGetValue(tensor, out var gradient) || gradient is null ||
+                gradient.Length != tensor.Length)
+            {
+                continue;
+            }
+
+            extras ??= new Dictionary<Tensor<T>, Vector<T>>(
+                Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+            var copy = new Vector<T>(gradient.Length);
+            gradient.AsSpan().CopyTo(copy.AsWritableSpan());
+            extras[tensor] = copy;
+            matched += gradient.Length;
+        }
+
         _publishedExtraTensorGradients = extras;
         _hasPublishedParameterGradients = matched > 0;
         return matched;
@@ -5338,6 +5357,25 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             else if (_hasPublishedParameterGradients)
             {
                 allGradients.Add(new Vector<T>(tensor.Length));
+            }
+        }
+
+        // The registered components are GetParameters' tail, chunk by chunk in the registry's order: a published
+        // gradient where the step produced one, zero for frozen chunks and chunks it did not reach.
+        if (_hasPublishedParameterGradients && _parameterRegistry.HasComponents)
+        {
+            foreach (var chunk in _parameterRegistry.GetParameterStateChunks())
+            {
+                if (_publishedExtraTensorGradients is not null && chunk.SourceTensor is not null &&
+                    _publishedExtraTensorGradients.TryGetValue(chunk.SourceTensor, out var gradient) &&
+                    gradient.Length == chunk.Tensor.Length)
+                {
+                    allGradients.Add(gradient);
+                }
+                else
+                {
+                    allGradients.Add(new Vector<T>(chunk.Tensor.Length));
+                }
             }
         }
 
