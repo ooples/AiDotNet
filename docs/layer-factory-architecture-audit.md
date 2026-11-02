@@ -15,6 +15,10 @@ count as uses. The self-test checks those boundaries, forwarding, qualified
 type names and expression bodies. The gate exits unsuccessfully when an active
 factory accepts an architecture without referencing it.
 
+The `Layer factory architecture contracts` workflow runs these commands when
+the helpers, audit tool or architecture regression tests change, and retains
+the complete JSON inventory as an artifact.
+
 On 2026-11-02 the combined #2294 branch has 184 such overloads. Of those, 89
 never reference the parameter, and **all 89 are marked obsolete**. Of these,
 88 forward to overloads without the unused architecture argument. The remaining
