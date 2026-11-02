@@ -763,6 +763,14 @@ public partial class LLaVANeuralNetwork<T> : MultimodalModelLayoutBase<T>, ILLaV
         if (_patchEmbedding is null)
             throw new InvalidOperationException("Patch embedding layer not initialized.");
 
+        // The positional table holds one row per patch of an ImageSize x ImageSize image, so any other
+        // size is a caller error; name it here rather than as a positional-table overflow deep inside.
+        int rank = image.Rank;
+        if (rank is not (3 or 4) || image.Shape[rank - 2] != _imageSize || image.Shape[rank - 1] != _imageSize)
+            throw new ArgumentException(
+                $"Image must be [C,{_imageSize},{_imageSize}] or [B,C,{_imageSize},{_imageSize}] for ImageSize {_imageSize}; " +
+                $"got [{string.Join(", ", image.Shape.ToArray())}].", nameof(image));
+
         var output = _patchEmbedding.Forward(image);
 
         if (_visionClsToken is not null)
