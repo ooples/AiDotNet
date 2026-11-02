@@ -9,7 +9,7 @@ using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Training;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
 
@@ -242,21 +242,13 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
             parameters.AddRange(layer.GetTrainableParameters());
         try
         {
-            using var tape = new GradientTape<T>();
-            var loss = objective();
-            var gradients = tape.ComputeGradients(loss, parameters);
-            T value = loss[0];
             // The objective already averages over the batch; do not divide its gradients again.
-            foreach (var parameter in parameters.Distinct())
-                if (gradients.TryGetValue(parameter, out var gradient))
-                {
-                    Engine.TensorSubtractInPlace(parameter, Engine.TensorMultiplyScalar(gradient, learningRate));
-                    Engine.InvalidatePersistentTensor(parameter);
-                }
-            return value;
+            return TapeTrainingStepper<T>.EagerSgdObjectiveStep(() => parameters, objective, learningRate);
         }
         finally
         {
+            foreach (var parameter in parameters.Distinct())
+                Engine.InvalidatePersistentTensor(parameter);
             ResetState();
         }
     }
