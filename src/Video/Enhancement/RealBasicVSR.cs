@@ -90,6 +90,14 @@ public partial class RealBasicVSR<T> : VideoSuperResolutionBase<T>
         InitializeLayers();
     }
 
+    /// <inheritdoc/>
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        base.RegisterState(state);
+        // Predict evaluates with the averaged weights, which the parameter vector does not carry.
+        state.Declare(nameof(RealBasicVSR<T>) + ".EmaWeights", () => _average?.ToVector(), restored => _average?.Restore(restored));
+    }
+
     /// <summary>Creates a RealBasicVSR model in native training mode.</summary>
     public RealBasicVSR(NeuralNetworkArchitecture<T> architecture, RealBasicVSROptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)

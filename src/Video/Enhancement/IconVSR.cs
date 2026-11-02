@@ -65,7 +65,7 @@ namespace AiDotNet.Video.Enhancement;
                         + "basicvsr_2xb4_reds4.py: lr 2e-4, betas (0.9, 0.99), SPyNet lr_mult 0.125, SPyNet and EDVR frozen "
                         + "for fix_iter = 5000, "
                         + "CosineRestartLR over 300k iterations to eta_min 1e-7.")]
-public partial class IconVSR<T> : VideoSuperResolutionBase<T>
+public partial class IconVSR<T> : VideoSuperResolutionBase<T>, ITrainingObjectiveProvider<T>
 {
     #region Fields
 
@@ -264,6 +264,20 @@ public partial class IconVSR<T> : VideoSuperResolutionBase<T>
                 Parameters = TrainableParameters,
             }
         };
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc />
+    /// <remarks>The Charbonnier loss training minimizes, between the network's output and the target both scaled to
+    /// [0, 1]; a loss on the 0-255 outputs is a different objective whose minimizer need not coincide on small data.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        if (_usingCustomLayers || !_useNativeMode) return LossFunction.ComputeTapeLoss(Predict(input), target)[0];
+        return LossFunction.ComputeTapeLoss(RunClips(PreprocessFrames(input)), NormalizeFrames(target))[0];
     }
 
     /// <inheritdoc />

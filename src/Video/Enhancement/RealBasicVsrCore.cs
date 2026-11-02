@@ -156,14 +156,52 @@ internal sealed class ParameterAverage<T>
 {
     private readonly double _momentum;
     private List<T[]>? _average;
+    private Vector<T>? _restored;
 
     internal ParameterAverage(double momentum) => _momentum = momentum;
 
     /// <summary>Whether an average exists yet (it starts as a copy of the weights at the first update).</summary>
-    internal bool HasAverage => _average is not null;
+    internal bool HasAverage => _average is not null || _restored is not null;
+
+    /// <summary>The average as one flat vector in parameter order, for serialization; null before the first update.</summary>
+    internal Vector<T>? ToVector()
+    {
+        if (_average is null) return _restored;
+        var flat = new Vector<T>(_average.Sum(a => a.Length));
+        int offset = 0;
+        foreach (var block in _average)
+            for (int i = 0; i < block.Length; i++) flat[offset++] = block[i];
+        return flat;
+    }
+
+    /// <summary>
+    /// Restores a serialized average. The per-tensor split needs the parameters, which a deserialized model creates
+    /// lazily, so the vector is kept until the next <see cref="Update"/> or <see cref="WithAverage"/> splits it.
+    /// </summary>
+    internal void Restore(Vector<T>? flat)
+    {
+        _average = null;
+        _restored = flat;
+    }
+
+    private void Split(IReadOnlyList<Tensor<T>> parameters)
+    {
+        if (_restored is not { } flat) return;
+        _restored = null;
+        if (parameters.Sum(p => p.Length) != flat.Length) return;
+        _average = new List<T[]>(parameters.Count);
+        int offset = 0;
+        foreach (var p in parameters)
+        {
+            var block = new T[p.Length];
+            for (int i = 0; i < block.Length; i++) block[i] = flat[offset++];
+            _average.Add(block);
+        }
+    }
 
     internal void Update(IReadOnlyList<Tensor<T>> parameters)
     {
+        Split(parameters);
         var ops = MathHelper.GetNumericOperations<T>();
         if (_average is null || _average.Count != parameters.Count)
         {
@@ -182,6 +220,7 @@ internal sealed class ParameterAverage<T>
     /// <summary>Runs <paramref name="action"/> with the averaged weights in place, restoring the trained ones after.</summary>
     internal TResult WithAverage<TResult>(IReadOnlyList<Tensor<T>> parameters, Func<TResult> action)
     {
+        Split(parameters);
         if (_average is null || _average.Count != parameters.Count) return action();
         var saved = parameters.Select(p => p.ToArray()).ToList();
         try

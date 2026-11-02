@@ -94,6 +94,14 @@ public partial class RealESRGANVideo<T> : VideoSuperResolutionBase<T>
         InitializeLayers();
     }
 
+    /// <inheritdoc/>
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        base.RegisterState(state);
+        // Predict evaluates with the averaged weights, which the parameter vector does not carry.
+        state.Declare(nameof(RealESRGANVideo<T>) + ".EmaWeights", () => _average?.ToVector(), restored => _average?.Restore(restored));
+    }
+
     /// <summary>Creates a Real-ESRGAN Video model in native training mode.</summary>
     /// <param name="architecture">The input description.</param>
     /// <param name="options">The configuration; the release's defaults when null.</param>
