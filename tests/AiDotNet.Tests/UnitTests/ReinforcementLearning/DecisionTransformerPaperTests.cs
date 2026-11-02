@@ -612,6 +612,27 @@ public class DecisionTransformerPaperTests
     }
 
     /// <summary>
+    /// The discrete action loss is the exact cross-entropy -log softmax(z)_y on both its tape and its CPU path, also
+    /// for a confidently wrong row: logits (0, 40) labelled 0 cost 40 + log(1 + e^-40). Fails if the log-probability
+    /// is taken as log(softmax + eps), which caps the loss at -log(eps) = 18.4 and starves that row of gradient.
+    /// </summary>
+    [Fact]
+    public void DiscreteActionLoss_IsExactCrossEntropy_ForAConfidentlyWrongRow()
+    {
+        var loss = new DecisionTransformerActionLoss<double>(new[] { 0 }, 2, continuous: false,
+            new AiDotNet.LossFunctions.MeanSquaredErrorLoss<double>());
+        double expected = 40.0 + Math.Log(1.0 + Math.Exp(-40.0));
+
+        double tape = loss.ComputeTapeLoss(
+            new Tensor<double>(new[] { 0.0, 40.0 }, new[] { 1, 2 }),
+            new Tensor<double>(new[] { 1.0, 0.0 }, new[] { 1, 2 }))[0];
+        double cpu = loss.CalculateLoss(V(0.0, 40.0), V(1.0, 0.0));
+
+        Assert.Equal(expected, tape, 9);
+        Assert.Equal(expected, cpu, 9);
+    }
+
+    /// <summary>
     /// ReturnScale divides every return-to-go before it is embedded, so target R at scale c must act exactly like
     /// target R / c at scale 1 with the same weights. Fails if the scale is ignored.
     /// </summary>

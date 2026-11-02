@@ -801,9 +801,10 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var rewardTerm = Engine.TensorSquare(Engine.TensorSubtract(rewardPrediction, rewardTarget));
 
-        // Logistic loss: log(1 + e^l) - y l.
+        // Logistic loss: log(1 + e^l) - y l, with log(1 + e^l) as the stable softplus: the literal form overflows
+        // to +inf once e^l does (l > ~88 in float), and the loss and every gradient then go to NaN.
         var doneTerm = Engine.TensorSubtract(
-            Engine.TensorLog(Engine.TensorAddScalar(Engine.TensorExp(doneLogit), NumOps.One)),
+            Engine.Softplus(doneLogit),
             Engine.TensorMultiply(doneTarget, doneLogit));
 
         var perStep = Engine.TensorMultiply(Engine.TensorAdd(Engine.TensorAdd(latentTerm, rewardTerm), doneTerm), mask);
