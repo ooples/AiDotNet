@@ -15,10 +15,9 @@ namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Judged over five seeds, not one. A single run is one draw of exploration and minibatch order, and a rounding change
-/// can move it onto another trajectory (an unseeded CI run once rose to 0.31 and then collapsed to "hold"; Intel and AMD
-/// exp kernels once sent SegNeXt's Adam down different paths). Four of five seeds must rise and so must their average,
-/// so one unlucky draw does not fail the test while a regression in the update still does.
+/// Judged per seed, each one fixed so a run is a repeatable trajectory rather than one draw of exploration and minibatch
+/// order: every seed must rise AND end above 0.05, since random drift alone can rise. Seeds 0, 1 and 42 are master's;
+/// 2 to 5 widen the sample.
 /// </para>
 /// <para>
 /// The rollout is one 200-step episode (RolloutLength = 200), a setting chosen for this environment: the paper's 2048
@@ -30,37 +29,50 @@ public class PpoOracleLearningRegressionTests
 {
     private const int Episodes = 60;
     private const int StepsPerEpisode = 200;
-    private static readonly int[] Seeds = { 1, 2, 3, 4, 5 };
 
-    [Fact(Timeout = 600000)]
-    public async Task Ppo_training_reward_rises_on_a_perfect_oracle()
+    [Theory(Timeout = 600000)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(42)]
+    public async Task Ppo_training_reward_rises_on_a_perfect_oracle(int seed)
     {
         await Task.Yield();
-        AssertRises("PPO<double>", Seeds.Select(seed => Curve(seed, (data, options) => new FinancialPPOAgent<double>(
+        AssertRises("PPO<double>", seed, Curve(seed, (data, options) => new FinancialPPOAgent<double>(
             new NeuralNetworkArchitecture<double>(inputFeatures: options.StateSize, outputSize: options.ActionSize),
             new NeuralNetworkArchitecture<double>(inputFeatures: options.StateSize, outputSize: 1), options), Prices<double>(),
-            v => v)).ToArray());
+            v => v));
     }
 
-    [Fact(Timeout = 600000)]
-    public async Task Ppo_training_reward_rises_on_a_perfect_oracle_float()
+    [Theory(Timeout = 600000)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(42)]
+    public async Task Ppo_training_reward_rises_on_a_perfect_oracle_float(int seed)
     {
         // The downstream platform trains agents in float, whose kernels differ from double's.
         await Task.Yield();
-        AssertRises("PPO<float>", Seeds.Select(seed => Curve(seed, (data, options) => new FinancialPPOAgent<float>(
+        AssertRises("PPO<float>", seed, Curve(seed, (data, options) => new FinancialPPOAgent<float>(
             new NeuralNetworkArchitecture<float>(inputFeatures: options.StateSize, outputSize: options.ActionSize),
             new NeuralNetworkArchitecture<float>(inputFeatures: options.StateSize, outputSize: 1), options), Prices<float>(),
-            v => (double)v)).ToArray());
+            v => (double)v));
     }
 
-    private static void AssertRises(string name, double[][] curves)
+    private static void AssertRises(string name, int seed, double[] curve)
     {
-        var early = curves.Select(c => c.Take(20).Average()).ToArray();
-        var late = curves.Select(c => c.Skip(40).Average()).ToArray();
-        int rising = early.Zip(late, (e, l) => l > e).Count(r => r);
-        string report = string.Join("; ", Seeds.Select((seed, i) => $"seed {seed}: {early[i]:F3} -> {late[i]:F3}"));
-        Assert.True(rising >= 4 && late.Average() > early.Average(),
-            $"{name} is not learning a PERFECT oracle: {rising} of {Seeds.Length} seeds rose ({report}).");
+        double early = curve.Take(20).Average();
+        double late = curve.Skip(40).Average();
+        // Require a meaningful positive reward as well as improvement; random drift alone can rise.
+        Assert.True(late > early && late > 0.05,
+            $"{name} (seed {seed}) is not learning a PERFECT oracle: early-episodes avg {early:F3} vs late {late:F3} " +
+            $"(full curve: {string.Join(",", curve.Select(r => r.ToString("F2")))})");
     }
 
     // An 8-bar zig-zag of +-1% returns, one asset.
