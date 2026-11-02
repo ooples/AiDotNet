@@ -105,7 +105,7 @@ jobs:
           python3 scripts/verify-playground-package.py ./publish-execution --execution
 
       - name: Upload verified deployment artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playground-functions
           path: |
@@ -134,7 +134,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Download verified deployment artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: playground-functions
           path: .
@@ -154,7 +154,7 @@ jobs:
           done
 
       - name: Sign in to Azure without publishing passwords
-        uses: azure/login@8216e11d8cd9b42fe925c852af8e76311ff067ac # v2
+        uses: azure/login@7184910d9eb2b1c5e48f7073824a90609bb9b6d6 # v2
         with:
           client-id: ${{ vars.AZURE_PLAYGROUND_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
