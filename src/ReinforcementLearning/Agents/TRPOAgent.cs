@@ -123,33 +123,19 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     {
         int outputSize = _options.IsContinuous ? _options.ActionSize * 2 : _options.ActionSize;
 
-        // Create initial architecture for LayerHelper
-        var tempArchitecture = new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.Regression,
-            complexity: NetworkComplexity.Medium,
-            inputSize: _options.StateSize,
-            outputSize: outputSize);
-
-        // Use LayerHelper to create production-ready network layers
-        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
-            tempArchitecture,
-            hiddenLayerCount: _options.PolicyHiddenLayers.Count,
-            hiddenLayerSize: _options.PolicyHiddenLayers.FirstOrDefault() > 0 ? _options.PolicyHiddenLayers.First() : 128
-        ).ToList();
-
-        // Override output layer activation for continuous vs discrete actions
-        if (!_options.IsContinuous)
+        if (_options.PolicyHiddenLayers is null || _options.PolicyHiddenLayers.Count == 0)
+            throw new ArgumentException("Policy hidden layers must contain at least one positive width.", nameof(_options.PolicyHiddenLayers));
+        var layers = new List<ILayer<T>>();
+        foreach (int width in _options.PolicyHiddenLayers)
         {
-            // For discrete actions, use softmax activation
-            // Note: Just rebuild the last layer with correct activation
-            int lastInputSize = _options.PolicyHiddenLayers.LastOrDefault() > 0 ? _options.PolicyHiddenLayers.Last() : 128;
-            layers[layers.Count - 1] = new DenseLayer<T>(
-                outputSize,
-                (IActivationFunction<T>)new SoftmaxActivation<T>()
-            );
+            if (width <= 0)
+                throw new ArgumentOutOfRangeException(nameof(_options.PolicyHiddenLayers), "Every policy hidden width must be positive.");
+            layers.Add(new DenseLayer<T>(width, (IActivationFunction<T>)new ReLUActivation<T>()));
         }
-
+        IActivationFunction<T> outputActivation = _options.IsContinuous
+            ? new IdentityActivation<T>()
+            : new SoftmaxActivation<T>();
+        layers.Add(new DenseLayer<T>(outputSize, outputActivation));
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.Regression,
@@ -163,20 +149,16 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
     private INeuralNetwork<T> CreateValueNetwork()
     {
-        // Create initial architecture for LayerHelper
-        var tempArchitecture = new NeuralNetworkArchitecture<T>(
-            inputType: InputType.OneDimensional,
-            taskType: NeuralNetworkTaskType.Regression,
-            complexity: NetworkComplexity.Medium,
-            inputSize: _options.StateSize,
-            outputSize: 1);
-
-        // Use LayerHelper to create production-ready network layers
-        var layers = LayerHelper<T>.CreateDefaultFeedForwardLayers(
-            tempArchitecture,
-            hiddenLayerCount: _options.ValueHiddenLayers.Count,
-            hiddenLayerSize: _options.ValueHiddenLayers.FirstOrDefault() > 0 ? _options.ValueHiddenLayers.First() : 128
-        ).ToList();
+        if (_options.ValueHiddenLayers is null || _options.ValueHiddenLayers.Count == 0)
+            throw new ArgumentException("Value hidden layers must contain at least one positive width.", nameof(_options.ValueHiddenLayers));
+        var layers = new List<ILayer<T>>();
+        foreach (int width in _options.ValueHiddenLayers)
+        {
+            if (width <= 0)
+                throw new ArgumentOutOfRangeException(nameof(_options.ValueHiddenLayers), "Every value hidden width must be positive.");
+            layers.Add(new DenseLayer<T>(width, (IActivationFunction<T>)new ReLUActivation<T>()));
+        }
+        layers.Add(new DenseLayer<T>(1, (IActivationFunction<T>)new IdentityActivation<T>()));
 
         var architecture = new NeuralNetworkArchitecture<T>(
             inputType: InputType.OneDimensional,
