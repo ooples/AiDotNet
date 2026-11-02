@@ -131,8 +131,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>",
-            "AiDotNet.Video.Denoising.ShiftNet<T>",
-            "AiDotNet.Video.Denoising.UDVD<T>",
             "AiDotNet.Video.Enhancement.BasicVSR<T>",
             "AiDotNet.Video.Enhancement.DAMVSR<T>",
             "AiDotNet.Video.Enhancement.DOVE<T>",
