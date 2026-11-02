@@ -126,24 +126,24 @@ public partial class DreamerAgent<T> : DeepReinforcementLearningAgentBase<T>
     // same weights for any network that had not materialized yet (Clone_ShouldProduceSamePolicy).
     private const int UnseededInitializationBase = 9001;
 
-    private DreamerOptions<T> _options;
+    private readonly DreamerOptions<T> _options;
 
     // ----- World model (RSSM + heads) -----
-    private NeuralNetwork<T> _encoderNetwork;           // o_t -> e_t (three dense ELU layers)
-    private NeuralNetwork<T> _transitionInputNetwork;   // [z_{t-1}, a_{t-1}] -> x_t (dense ELU)
-    private NeuralNetwork<T> _gruGateNetwork;           // [x_t, h_{t-1}] -> reset and update gate pre-activations
-    private NeuralNetwork<T> _gruCandidateNetwork;      // [x_t, r_t * h_{t-1}] -> candidate pre-activation
-    private NeuralNetwork<T> _priorNetwork;             // h_t -> (mean, std) of p(z_t | h_t)
-    private NeuralNetwork<T> _posteriorNetwork;         // [h_t, e_t] -> (mean, std) of q(z_t | h_t, e_t)
-    private NeuralNetwork<T> _observationNetwork;       // s_t -> mean of q(o_t | s_t)
-    private NeuralNetwork<T> _rewardNetwork;            // s_t -> mean of q(r_t | s_t)
-    private NeuralNetwork<T> _continueNetwork;          // s_t -> logit of the discount predictor
+    private readonly NeuralNetwork<T> _encoderNetwork;           // o_t -> e_t (three dense ELU layers)
+    private readonly NeuralNetwork<T> _transitionInputNetwork;   // [z_{t-1}, a_{t-1}] -> x_t (dense ELU)
+    private readonly NeuralNetwork<T> _gruGateNetwork;           // [x_t, h_{t-1}] -> reset and update gate pre-activations
+    private readonly NeuralNetwork<T> _gruCandidateNetwork;      // [x_t, r_t * h_{t-1}] -> candidate pre-activation
+    private readonly NeuralNetwork<T> _priorNetwork;             // h_t -> (mean, std) of p(z_t | h_t)
+    private readonly NeuralNetwork<T> _posteriorNetwork;         // [h_t, e_t] -> (mean, std) of q(z_t | h_t, e_t)
+    private readonly NeuralNetwork<T> _observationNetwork;       // s_t -> mean of q(o_t | s_t)
+    private readonly NeuralNetwork<T> _rewardNetwork;            // s_t -> mean of q(r_t | s_t)
+    private readonly NeuralNetwork<T> _continueNetwork;          // s_t -> logit of the discount predictor
 
     // ----- Behaviour -----
-    private NeuralNetwork<T> _actorNetwork;             // s_t -> (mean, std) before the tanh of q(a_t | s_t)
-    private NeuralNetwork<T> _valueNetwork;             // s_t -> v(s_t)
+    private readonly NeuralNetwork<T> _actorNetwork;             // s_t -> (mean, std) before the tanh of q(a_t | s_t)
+    private readonly NeuralNetwork<T> _valueNetwork;             // s_t -> v(s_t)
 
-    private SequenceReplay _replay;
+    private readonly SequenceReplay _replay;
     private int _updateCount;
 
     // The agent's filtered belief for acting (Figure 3c: "encodes the history of the episode to compute the current

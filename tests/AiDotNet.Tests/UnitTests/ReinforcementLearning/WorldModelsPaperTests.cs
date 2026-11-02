@@ -445,6 +445,39 @@ public class WorldModelsPaperTests
         head.SetParameters(new Vector<double>(headValues));
     }
 
+    /// <summary>A controller that ignores [z, h] and always outputs <paramref name="action"/>: zero weights, bias atanh(a).</summary>
+    private static Vector<double> ConstantActionController(WorldModelsAgent<double> agent, double[] action)
+    {
+        var parameters = agent.GetControllerParameters();
+        for (int i = 0; i < parameters.Length; i++) parameters[i] = 0.0;
+        // The paper's linear controller: weights [L + H, A] row-major, then the A biases last.
+        for (int a = 0; a < action.Length; a++)
+            parameters[parameters.Length - action.Length + a] = 0.5 * Math.Log((1 + action[a]) / (1 - action[a]));
+        return parameters;
+    }
+
+    [Fact]
+    public void Memory_LearnsTheRewardOfTheActionTaken()
+    {
+        // The other half of "C follows the reward": C maximises M's predicted reward (the dream test below), so M
+        // has to learn which action the real environment paid for. Fill pays r = a_0 for random actions; after M's
+        // epochs, a one-step dream taking a_0 = +0.8 must collect more predicted reward than one taking -0.8 -- 1.6
+        // for an exact reward head. One step, because r_t has to come from the a_t M has just consumed: over a longer
+        // constant-action dream a reward head shifted by a step (predicting r_{t-1}) would score the same.
+        const int length = 1;
+        var agent = new WorldModelsAgent<double>(Small(rnnEpochs: 150, sequenceLength: 16, rolloutLength: length,
+            evaluationRollouts: 8, learningRate: 0.01));
+        Fill(agent, 256, seed: 41);
+        for (int call = 0; call < 10000 && agent.CurrentStage != WorldModelsTrainingStage.Controller; call++) agent.Train();
+        Assert.Equal(WorldModelsTrainingStage.Controller, agent.CurrentStage);
+
+        double paid = agent.DreamReturn(ConstantActionController(agent, new[] { 0.8, 0.0 }));
+        double punished = agent.DreamReturn(ConstantActionController(agent, new[] { -0.8, 0.0 }));
+        Assert.True(paid - punished > 0.5 * length * 1.6,
+            $"M did not learn the reward of the action: dream return {paid} taking a_0 = +0.8 vs {punished} taking -0.8 "
+            + $"(an exact reward head separates them by {length * 1.6}).");
+    }
+
     [Fact]
     public void Controller_LearnsInTheDream_ToTakeTheRewardedAction()
     {
