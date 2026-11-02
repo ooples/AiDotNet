@@ -97,9 +97,8 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
             // Only member accesses whose name is some options property's name can be a read that
             // matters, so the semantic lookup is skipped for every other member access in the assembly.
             var candidateNames = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var type in SourceTypes(start.Compilation.Assembly.GlobalNamespace))
+            foreach (var type in SourceTypes(start.Compilation.Assembly.GlobalNamespace).Where(t => DerivesFrom(t, modelOptions)))
             {
-                if (!DerivesFrom(type, modelOptions)) continue;
                 foreach (var property in type.GetMembers().OfType<IPropertySymbol>())
                     candidateNames.Add(property.Name);
             }
@@ -146,10 +145,9 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
                 var reportedProperties = new HashSet<IPropertySymbol>(SymbolEqualityComparer.Default);
                 foreach (var options in optionsTypes)
                 {
-                    foreach (var property in ConfigurableProperties(options, modelOptions))
+                    foreach (var property in ConfigurableProperties(options, modelOptions).Where(p => !read.ContainsKey(p)))
                     {
                         if (!reportedProperties.Add(property)) continue;
-                        if (read.ContainsKey(property)) continue;
                         string key = PropertyKey(property);
                         unread.Add(key);
                         if (OptionsFidelityBaselines.UnreadOptions.Contains(key)) continue;
@@ -235,12 +233,8 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
         var seen = new HashSet<string>(StringComparer.Ordinal);
         for (INamedTypeSymbol? walk = options.OriginalDefinition; walk is not null; walk = walk.BaseType?.OriginalDefinition)
         {
-            foreach (var property in walk.GetMembers().OfType<IPropertySymbol>())
+            foreach (var property in walk.GetMembers().OfType<IPropertySymbol>().Where(IsConfigurable))
             {
-                if (property.IsStatic || property.IsIndexer || property.IsOverride) continue;
-                if (property.DeclaredAccessibility != Accessibility.Public) continue;
-                if (property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }) continue;
-                if (!property.Locations.Any(l => l.IsInSource)) continue;
                 if (!seen.Add(property.Name)) continue;
                 yield return property;
             }
@@ -248,6 +242,12 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
             if (SymbolEqualityComparer.Default.Equals(walk, modelOptions)) yield break;
         }
     }
+
+    private static bool IsConfigurable(IPropertySymbol property)
+        => !property.IsStatic && !property.IsIndexer && !property.IsOverride
+            && property.DeclaredAccessibility == Accessibility.Public
+            && property.SetMethod is { DeclaredAccessibility: Accessibility.Public }
+            && property.Locations.Any(l => l.IsInSource);
 
     private static void RecordRead(
         SyntaxNodeAnalysisContext context,

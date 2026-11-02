@@ -26,12 +26,9 @@ internal static class PaperTestDetection
         foreach (var method in type.GetMembers().OfType<IMethodSymbol>())
         {
             var attributes = method.GetAttributes();
-            foreach (var attribute in attributes)
+            foreach (var attribute in attributes.Where(IsTestAttribute))
             {
-                string? name = attribute.AttributeClass?.Name;
-                bool fact = name is "FactAttribute" or "SkippableFactAttribute";
-                bool theory = name is "TheoryAttribute" or "SkippableTheoryAttribute";
-                if (!fact && !theory) continue;
+                bool theory = attribute.AttributeClass?.Name is "TheoryAttribute" or "SkippableTheoryAttribute";
                 bool staticallySkipped = attribute.NamedArguments.Any(argument =>
                     argument.Key == "Skip" && argument.Value.Value is string reason && reason.Length > 0);
                 if (staticallySkipped) continue;
@@ -43,6 +40,10 @@ internal static class PaperTestDetection
 
         return false;
     }
+
+    private static bool IsTestAttribute(AttributeData attribute)
+        => attribute.AttributeClass?.Name is "FactAttribute" or "SkippableFactAttribute"
+            or "TheoryAttribute" or "SkippableTheoryAttribute";
 
     // InlineData, MemberData, ClassData and any custom source: every xUnit data attribute derives from DataAttribute.
     private static bool IsDataSource(AttributeData attribute)
