@@ -376,18 +376,7 @@ public partial class MobileNetV2Network<T> : ImageClassifierModelLayoutBase<T>
         var (batchedInput, batchedTarget) = EnsureBatchForCnnTraining(input, target);
         return (batchedInput, batchedTarget);
     }
-    /// <inheritdoc/>
-    /// <remarks>The batch-normalization statistics stay frozen during training: those layers run in inference mode.</remarks>
-    public override void SetTrainingMode(bool isTraining)
-    {
-        base.SetTrainingMode(isTraining);
-        if (!isTraining) return;
-        foreach (var layer in Layers)
-        {
-            if (layer is BatchNormalizationLayer<T>)
-                layer.SetTrainingMode(false);
-        }
-    }
+
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
     // exactly the same enumeration, so this said nothing the base does not already say.
     /// <inheritdoc />

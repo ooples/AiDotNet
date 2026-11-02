@@ -118,18 +118,14 @@ public class ReLU6Activation<T> : ActivationFunctionBase<T>, Fused.IFusedActivat
     }
 
     /// <summary>
-    /// Applies the ReLU6 activation function to each element in a tensor via Engine ops
-    /// so the gradient tape records the full chain. Decomposes as
-    /// <c>ReLU(x) - ReLU(x - 6)</c>: for x≤0 both terms are 0; for 0&lt;x&lt;6 the first
-    /// term is x and the second is 0; for x≥6 the first term is x and the second is
-    /// x-6 so the result saturates at 6.
+    /// Applies the ReLU6 activation function to each element in a tensor through the engine's ReLU6 op, which the
+    /// gradient tape records with its own backward (gradient 1 where 0 &lt; x &lt; 6, as PyTorch's ReLU6). It was
+    /// composed as <c>ReLU(x) - ReLU(x - 6)</c>: four full passes and three intermediate tensors per activation, about
+    /// a quarter of a MobileNetV2 predict on the CPU.
     /// </summary>
     public override Tensor<T> Activate(Tensor<T> input)
     {
-        var left = Engine.ReLU(input);
-        var shifted = Engine.TensorSubtractScalar(input, _six);
-        var right = Engine.ReLU(shifted);
-        return Engine.TensorSubtract(left, right);
+        return Engine.TensorReLU6(input);
     }
 
     /// <summary>

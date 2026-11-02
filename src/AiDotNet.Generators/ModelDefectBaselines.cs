@@ -108,7 +108,7 @@ internal static class ModelDefectBaselines
             "CreateVITSLayers",
         };
 
-    /// <summary>ADNDEF003: models on a factory shared across papers with no [ArchitectureFromPaper], 426 types.</summary>
+    /// <summary>ADNDEF003: models on a factory shared across papers with no [ArchitectureFromPaper], 425 types.</summary>
     internal static readonly System.Collections.Generic.HashSet<string> UndeclaredSharedFactoryModels =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {

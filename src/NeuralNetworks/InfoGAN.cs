@@ -259,16 +259,15 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
 
     /// <summary>
     /// Creates an InfoGAN with default architectures derived from a single architecture.
-    /// Per Chen et al. 2016: latent code size 10, mutual info coefficient 1.0.
+    /// Per Chen et al. 2016 (MNIST): one 10-way categorical code and two continuous codes, mutual info coefficient 1.0.
     /// </summary>
     /// <param name="architecture">The shared architecture used for generator, discriminator, and Q network.</param>
-    /// <param name="latentCodeSize">The size of the latent code. Default is 10.</param>
-    /// <param name="mutualInfoCoefficient">The coefficient for mutual information loss. Default is 1.0.</param>
-    /// <param name="options">Optional InfoGAN options.</param>
+    /// <param name="options">Optional InfoGAN options; their code layout sets the latent code width.</param>
     public InfoGAN(
         NeuralNetworkArchitecture<T> architecture,
         InfoGANOptions? options = null)
-        : this(architecture, architecture, architecture, options?.LatentCodeSize ?? 10, architecture.InputType, options: options)
+        : this(architecture, architecture, architecture, (options ?? new InfoGANOptions()).LatentCodeSize, architecture.InputType,
+               options: options ?? new InfoGANOptions())
     {
     }
 
@@ -331,17 +330,26 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
         : base(CreateInfoGANArchitecture(generatorArchitecture, discriminatorArchitecture, inputType),
                lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(generatorArchitecture.TaskType))
     {
-        _options = options ?? new InfoGANOptions();
+        // Without options the explicit code width keeps its historical meaning: every code continuous.
+        // With options, the width has to be the categorical and continuous layout they describe.
+        if (latentCodeSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(latentCodeSize), latentCodeSize, "Latent code size must be positive.");
+        _options = options ?? new InfoGANOptions { NumCategoricalCodes = 0, NumContinuousCodes = latentCodeSize };
         _options.Validate();
         Options = _options;
+        if (options is not null && latentCodeSize != _options.LatentCodeSize)
+        {
+            throw new ArgumentException(
+                $"latentCodeSize ({latentCodeSize}) must equal the options' code layout: {_options.NumCategoricalCodes} " +
+                $"categorical code(s) of {_options.CategoricalCodeDimension} values plus {_options.NumContinuousCodes} " +
+                $"continuous code(s) = {_options.LatentCodeSize}.", nameof(latentCodeSize));
+        }
         if (generatorArchitecture is null)
             throw new ArgumentNullException(nameof(generatorArchitecture));
         if (discriminatorArchitecture is null)
             throw new ArgumentNullException(nameof(discriminatorArchitecture));
         if (qNetworkArchitecture is null)
             throw new ArgumentNullException(nameof(qNetworkArchitecture));
-        if (latentCodeSize <= 0)
-            throw new ArgumentOutOfRangeException(nameof(latentCodeSize), latentCodeSize, "Latent code size must be positive.");
         if (_options.MutualInfoCoefficient < 0)
             throw new ArgumentOutOfRangeException(nameof(_options.MutualInfoCoefficient), _options.MutualInfoCoefficient, "Mutual information coefficient must be non-negative.");
 
@@ -468,7 +476,7 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
                         Discriminator.ForwardFrozenOnTape(generated), targetIsReal: true);
                     return Engine.TensorAdd(
                         adversarialLoss,
-                        Engine.TensorMultiplyScalar(CodeSquaredError(QNetwork.ForwardForTraining(generated), codes), _mutualInfoCoefficient));
+                        Engine.TensorMultiplyScalar(CodeLoss(QNetwork.ForwardForTraining(generated), codes), _mutualInfoCoefficient));
                 })
             {
                 Network = Generator,
@@ -477,7 +485,7 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
             },
             new Training.TrainingObjective<T>(
                 new[] { fakeImages, latentCodes },
-                data => CodeSquaredError(QNetwork.ForwardForTraining(data[0]), data[1]))
+                data => CodeLoss(QNetwork.ForwardForTraining(data[0]), data[1]))
             {
                 Network = QNetwork,
                 Optimizer = _qNetworkOptimizer,
@@ -485,53 +493,37 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
             },
         };
     }
-    /// <summary>The mean squared error between predicted and true latent codes, recorded for the step.</summary>
-    private Tensor<T> CodeSquaredError(Tensor<T> predictedCodes, Tensor<T> codes)
-    {
-        var codeError = Engine.TensorSubtract(predictedCodes, codes);
-        return Engine.ReduceMean(
-            Engine.TensorMultiply(codeError, codeError),
-            Enumerable.Range(0, codeError.Shape.Length).ToArray(),
-            keepDims: false);
-    }
     /// <summary>
-    /// Calculates mutual information loss (MSE between predicted and true codes).
+    /// The negative of InfoGAN's mutual-information lower bound, as a loss: the cross-entropy of each
+    /// categorical code's softmax prediction plus the squared error of the continuous codes' predicted means
+    /// (Chen et al. 2016, section 5).
     /// </summary>
-    private T CalculateMutualInfoLoss(Tensor<T> predictedCodes, Tensor<T> trueCodes, int batchSize)
+    internal Tensor<T> CodeLoss(Tensor<T> predictedCodes, Tensor<T> codes)
     {
-        T totalLoss = NumOps.Zero;
-
-        for (int b = 0; b < batchSize; b++)
+        int batch = predictedCodes.Shape[0];
+        int width = _options.CategoricalCodeDimension;
+        Tensor<T>? loss = null;
+        for (int code = 0; code < _options.NumCategoricalCodes; code++)
         {
-            for (int c = 0; c < _latentCodeSize; c++)
-            {
-                T diff = NumOps.Subtract(predictedCodes[b, c], trueCodes[b, c]);
-                T squaredDiff = NumOps.Multiply(diff, diff);
-                totalLoss = NumOps.Add(totalLoss, squaredDiff);
-            }
+            var logits = Engine.TensorSlice(predictedCodes, new[] { 0, code * width }, new[] { batch, width });
+            var oneHot = Engine.TensorSlice(codes, new[] { 0, code * width }, new[] { batch, width });
+            var labelled = Engine.ReduceSum(
+                Engine.TensorMultiply(Engine.TensorLogSoftmax(logits, 1), oneHot), new[] { 1 }, keepDims: false);
+            var crossEntropy = Engine.TensorNegate(Engine.ReduceMean(labelled, new[] { 0 }, keepDims: false));
+            loss = loss is null ? crossEntropy : Engine.TensorAdd(loss, crossEntropy);
         }
 
-        return NumOps.Divide(totalLoss, NumOps.FromDouble((double)batchSize * _latentCodeSize));
-    }
-
-    /// <summary>
-    /// Calculates gradients for mutual information loss.
-    /// </summary>
-    private Tensor<T> CalculateMutualInfoGradients(Tensor<T> predictedCodes, Tensor<T> trueCodes, int batchSize)
-    {
-        var gradients = new Tensor<T>(predictedCodes._shape);
-        T scale = NumOps.FromDouble(2.0 / ((double)batchSize * _latentCodeSize));
-
-        for (int b = 0; b < batchSize; b++)
+        if (_options.NumContinuousCodes > 0)
         {
-            for (int c = 0; c < _latentCodeSize; c++)
-            {
-                T diff = NumOps.Subtract(predictedCodes[b, c], trueCodes[b, c]);
-                gradients[b, c] = NumOps.Multiply(scale, diff);
-            }
+            int start = _options.NumCategoricalCodes * width;
+            var error = Engine.TensorSubtract(
+                Engine.TensorSlice(predictedCodes, new[] { 0, start }, new[] { batch, _options.NumContinuousCodes }),
+                Engine.TensorSlice(codes, new[] { 0, start }, new[] { batch, _options.NumContinuousCodes }));
+            var squaredError = Engine.ReduceMean(Engine.TensorMultiply(error, error), new[] { 0, 1 }, keepDims: false);
+            loss = loss is null ? squaredError : Engine.TensorAdd(loss, squaredError);
         }
 
-        return gradients;
+        return loss ?? throw new InvalidOperationException("InfoGAN has no latent code to score.");
     }
 
     /// <summary>
@@ -639,16 +631,24 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Generates random latent codes (continuous, uniform in [-1, 1]).
+    /// Generates random latent codes: each categorical code one-hot over a uniformly drawn value, then each
+    /// continuous code from Uniform(-1, 1).
     /// </summary>
     public Tensor<T> GenerateRandomLatentCodes(int batchSize)
     {
         var random = RandomHelper.ThreadSafeRandom;
         var codes = new Tensor<T>(new int[] { batchSize, _latentCodeSize });
+        int width = _options.CategoricalCodeDimension;
+        int continuousStart = _options.NumCategoricalCodes * width;
 
         for (int b = 0; b < batchSize; b++)
         {
-            for (int c = 0; c < _latentCodeSize; c++)
+            for (int code = 0; code < _options.NumCategoricalCodes; code++)
+            {
+                codes[b, code * width + random.Next(width)] = NumOps.One;
+            }
+
+            for (int c = continuousStart; c < _latentCodeSize; c++)
             {
                 codes[b, c] = NumOps.FromDouble(random.NextDouble() * 2.0 - 1.0);
             }
@@ -807,6 +807,9 @@ public partial class InfoGAN<T> : ImageGeneratorModelLayoutBase<T>
                 { "DiscriminatorParameters", Discriminator.GetParameterCount() },
                 { "QNetworkParameters", QNetwork.GetParameterCount() },
                 { "LatentCodeSize", _latentCodeSize },
+                { "NumCategoricalCodes", _options.NumCategoricalCodes },
+                { "CategoricalCodeDimension", _options.CategoricalCodeDimension },
+                { "NumContinuousCodes", _options.NumContinuousCodes },
                 { "MutualInfoCoefficient", NumOps.ToDouble(_mutualInfoCoefficient) }
             },
             ModelDataProvider = () => SerializeForMetadata()

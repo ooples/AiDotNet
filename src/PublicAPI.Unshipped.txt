@@ -14816,6 +14816,8 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*AiDotNet.NeuralNetworks.VisionScanPattern.CrossScan = 1 -> AiDotNet.NeuralNetworks.VisionScanPattern
 *REMOVED*AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
 *REMOVED*AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.StoreMultiAgentExperience(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentStates, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentActions, T teamReward, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! nextAgentStates, AiDotNet.Tensors.LinearAlgebra.Vector<T>! globalState, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextGlobalState, bool done) -> void
+*REMOVED*AiDotNet.MetaLearning.Algorithms.MbPAAdaptedModel<T, TInput, TOutput>.MbPAAdaptedModel(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! embeddingNetwork, AiDotNet.MetaLearning.Algorithms.MbPAEpisodicMemory<T>! memory, AiDotNet.Tensors.LinearAlgebra.Vector<T>! trainedOutputParams, AiDotNet.MetaLearning.Options.MbPAOptions<T, TInput, TOutput>! options) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Options.InfoGANOptions.LatentCodeSize.set -> void
 *REMOVED*AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold = 0.5) -> void
 *REMOVED*AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength = 0.5, int segmentSamples = 4096) -> void
 *REMOVED*AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.3) -> void
@@ -16746,6 +16748,8 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*override AiDotNet.NeuralNetworks.VisionMambaModel<T>.CopyGeneratedTrainableTensorsTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
 *REMOVED*override AiDotNet.NeuralNetworks.VisionMambaModel<T>.GetExtraTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 *REMOVED*override AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+*REMOVED*override AiDotNet.NeuralNetworks.MobileNetV2Network<T>.SetTrainingMode(bool isTraining) -> void
+*REMOVED*override AiDotNet.NeuralNetworks.MobileNetV3Network<T>.SetTrainingMode(bool isTraining) -> void
 *REMOVED*override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
 *REMOVED*override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
 *REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! content) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
@@ -17843,3 +17847,65 @@ override AiDotNet.Video.Enhancement.RealESRGANVideo<T>.GetInputDomain(int[]? inp
 override AiDotNet.Video.Enhancement.RealESRGANVideo<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
 override AiDotNet.Video.Enhancement.TTVSR<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
 override AiDotNet.Video.Enhancement.TTVSR<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultAutoEncoderLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBeliefNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBoltzmannMachineLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultGraphAttentionLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int numHeads = 8, int numLayers = 2, double dropoutRate = 0.6) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultNeuralNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultQuantumNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int numQubits = 4) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultRNNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSpikingLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Enums.SpikingNeuronType neuronType = AiDotNet.Enums.SpikingNeuronType.LeakyIntegrateAndFire, double tau = 10, double refractoryPeriod = 2, bool useLayerNormalization = false, bool useOutputConversion = true, int timeSteps = 20) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+AiDotNet.MetaLearning.Algorithms.MbPAAdaptedModel<T, TInput, TOutput>.MbPAAdaptedModel(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! embeddingNetwork, AiDotNet.MetaLearning.Algorithms.MbPAEpisodicMemory<T>! memory, AiDotNet.Tensors.LinearAlgebra.Vector<T>! trainedOutputParams, AiDotNet.MetaLearning.Options.MbPAOptions<T, TInput, TOutput>! options, AiDotNet.Tensors.LinearAlgebra.Vector<T>? keyEmbeddingParameters = null) -> void
+AiDotNet.NeuralNetworks.ColBERT<T>.EmbedQueryLateInteraction(string! query) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.NeuralNetworks.Options.AutoencoderOptions.LatentSize.get -> int?
+AiDotNet.NeuralNetworks.Options.AutoencoderOptions.LatentSize.set -> void
+AiDotNet.NeuralNetworks.Options.ColBERTOptions.MaxQueryLength.get -> int
+AiDotNet.NeuralNetworks.Options.ColBERTOptions.MaxQueryLength.set -> void
+AiDotNet.NeuralNetworks.Options.DeepBeliefNetworkOptions.HiddenLayers.get -> int[]!
+AiDotNet.NeuralNetworks.Options.DeepBeliefNetworkOptions.HiddenLayers.set -> void
+AiDotNet.NeuralNetworks.Options.DeepBoltzmannMachineOptions.HiddenLayers.get -> int[]?
+AiDotNet.NeuralNetworks.Options.DeepBoltzmannMachineOptions.HiddenLayers.set -> void
+AiDotNet.NeuralNetworks.Options.FastTextOptions.MaxNgramLength.get -> int
+AiDotNet.NeuralNetworks.Options.FastTextOptions.MaxNgramLength.set -> void
+AiDotNet.NeuralNetworks.Options.FastTextOptions.MinNgramLength.get -> int
+AiDotNet.NeuralNetworks.Options.FastTextOptions.MinNgramLength.set -> void
+AiDotNet.NeuralNetworks.Options.FeedForwardNeuralNetworkOptions.HiddenLayers.get -> int[]!
+AiDotNet.NeuralNetworks.Options.FeedForwardNeuralNetworkOptions.HiddenLayers.set -> void
+AiDotNet.NeuralNetworks.Options.GraphAttentionNetworkOptions.HiddenSize.get -> int
+AiDotNet.NeuralNetworks.Options.GraphAttentionNetworkOptions.HiddenSize.set -> void
+AiDotNet.NeuralNetworks.Options.InfoGANOptions.CategoricalCodeDimension.get -> int
+AiDotNet.NeuralNetworks.Options.InfoGANOptions.CategoricalCodeDimension.set -> void
+AiDotNet.NeuralNetworks.Options.InfoGANOptions.NumCategoricalCodes.get -> int
+AiDotNet.NeuralNetworks.Options.InfoGANOptions.NumCategoricalCodes.set -> void
+AiDotNet.NeuralNetworks.Options.InfoGANOptions.NumContinuousCodes.get -> int
+AiDotNet.NeuralNetworks.Options.InfoGANOptions.NumContinuousCodes.set -> void
+AiDotNet.NeuralNetworks.Options.NeuralNetworkDefaultOptions.HiddenLayers.get -> int[]?
+AiDotNet.NeuralNetworks.Options.NeuralNetworkDefaultOptions.HiddenLayers.set -> void
+AiDotNet.NeuralNetworks.Options.QuantumNeuralNetworkOptions.NumLayers.get -> int
+AiDotNet.NeuralNetworks.Options.QuantumNeuralNetworkOptions.NumLayers.set -> void
+AiDotNet.NeuralNetworks.Options.RadialBasisFunctionNetworkOptions.NumCenters.get -> int?
+AiDotNet.NeuralNetworks.Options.RadialBasisFunctionNetworkOptions.NumCenters.set -> void
+AiDotNet.NeuralNetworks.Options.RecurrentNeuralNetworkOptions.HiddenSize.get -> int?
+AiDotNet.NeuralNetworks.Options.RecurrentNeuralNetworkOptions.HiddenSize.set -> void
+AiDotNet.NeuralNetworks.Options.RecurrentNeuralNetworkOptions.NumLayers.get -> int
+AiDotNet.NeuralNetworks.Options.RecurrentNeuralNetworkOptions.NumLayers.set -> void
+AiDotNet.NeuralNetworks.Options.ResidualNeuralNetworkOptions.NumResidualBlocks.get -> int
+AiDotNet.NeuralNetworks.Options.ResidualNeuralNetworkOptions.NumResidualBlocks.set -> void
+AiDotNet.NeuralNetworks.Options.SpikingNeuralNetworkOptions.HiddenLayers.get -> int[]!
+AiDotNet.NeuralNetworks.Options.SpikingNeuralNetworkOptions.HiddenLayers.set -> void
+override AiDotNet.NeuralNetworks.DenseNetNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+override AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>.SetTrainingMode(bool isTraining) -> void
+override AiDotNet.NeuralNetworks.Layers.GRULayer<T>.SetTrainingMode(bool isTraining) -> void
+override AiDotNet.NeuralNetworks.Options.ColBERTOptions.Validate() -> void
+override AiDotNet.NeuralNetworks.ResNetNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+override AiDotNet.NeuralNetworks.VGGNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultAutoEncoderLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int latentSize = 0) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBeliefNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Collections.Generic.IReadOnlyList<int>? hiddenLayerSizes = null) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBoltzmannMachineLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Collections.Generic.IReadOnlyList<int>? hiddenLayerSizes = null) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultFeedForwardLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Collections.Generic.IReadOnlyList<int>! hiddenLayerSizes) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultGraphAttentionLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int numHeads = 8, int numLayers = 2, double dropoutRate = 0.6, int hiddenSize = 64) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultNeuralNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Collections.Generic.IReadOnlyList<int>? hiddenLayerSizes = null) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultQuantumNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int numQubits = 4, int numQuantumLayers = 2) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultRNNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int hiddenSize = 0, int recurrentLayerCount = 2) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSpikingLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Enums.SpikingNeuronType neuronType = AiDotNet.Enums.SpikingNeuronType.LeakyIntegrateAndFire, double tau = 10, double refractoryPeriod = 2, bool useLayerNormalization = false, bool useOutputConversion = true, int timeSteps = 20, System.Collections.Generic.IReadOnlyList<int>? hiddenLayerSizes = null) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+virtual AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.ReleasesInferenceIntermediates.get -> bool

@@ -66,6 +66,12 @@ namespace AiDotNet.NeuralNetworks;
                 Source = "He et al. 2016, Sec. 3.4 (Implementation): SGD, lr 0.1 divided by 10 when the error plateaus, momentum 0.9, weight decay 1e-4.")]
 public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
+    /// <summary>
+    /// The generated feed-forward CNN keeps nothing between calls, so each Predict frees its GPU intermediates when it
+    /// ends. Caller-supplied <c>Architecture.Layers</c> may carry a tensor between calls, so they keep the default.
+    /// </summary>
+    protected override bool ReleasesInferenceIntermediates => Architecture.Layers is not { Count: > 0 };
+
     private readonly ResNetOptions _options;
 
     /// <summary>
@@ -149,7 +155,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         ResNetOptions? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new ResNetOptions()).MaxGradNorm)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossForGeneratedLogitsHead(architecture), (options ??= new ResNetOptions()).MaxGradNorm)
     {
         _options = options;
         Options = _options;
@@ -271,10 +277,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         _trunk.InitializeLikeReference(random);
         if (config.IncludeClassifier)
         {
-            var outputActivation = Architecture.TaskType == NeuralNetworkTaskType.BinaryClassification
-                ? (IActivationFunction<T>)new ActivationFunctions.SigmoidActivation<T>()
-                : new ActivationFunctions.SoftmaxActivation<T>();
-            Classifier = new DenseLayer<T>(config.NumClasses, outputActivation);
+            Classifier = new DenseLayer<T>(config.NumClasses, activationFunction: new ActivationFunctions.IdentityActivation<T>());
             layers.Add(Classifier);
             // nn.Linear's default: U(±1/√in) for the weight and the bias.
             int inputs = config.Trunk.OutputChannels[3];
@@ -325,7 +328,10 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <para>
     /// <b>For Beginners:</b> This is how the network makes predictions. You give it an image
     /// (as a tensor), and it processes it through all the ResNet layers to produce a prediction.
-    /// The output contains probabilities for each class.
+    /// Generated heads return raw logits. For mutually exclusive classes, softmax gives probabilities and
+    /// the largest score selects the class. For binary or multi-label tasks, apply sigmoid to each logit
+    /// and threshold each probability independently. Supplied layers define their own output contract and
+    /// may already return probabilities; do not apply an activation twice.
     /// </para>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
@@ -385,7 +391,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// Makes a prediction using the ResNet network for the given input.
     /// </summary>
     /// <param name="input">The input tensor to make a prediction for.</param>
-    /// <returns>The predicted output tensor containing class probabilities.</returns>
+    /// <returns>The output tensor: raw logits for generated heads; the supplied head's output otherwise.</returns>
     /// <summary>
     /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> so the
     /// forward pass gets traced and replayed by <c>CompiledModelHost</c> after warmup —

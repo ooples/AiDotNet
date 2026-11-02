@@ -320,7 +320,7 @@ public partial class DeepBeliefNetwork<T> : VectorModelLayoutBase<T>
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultDeepBeliefNetworkLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultDeepBeliefNetworkLayers(Architecture, _options.HiddenLayers));
         }
 
         _rbmLayers.AddRange(Layers.OfType<RBMLayer<T>>());

@@ -395,25 +395,19 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
          (AiDotNet.Tensors #679), which the new AiDotNet targets need. 0.138.1 depends on AiDotNet.Evolution
          0.3.0, so Evolution moves with it.
 
-         Bumped 0.139.2 to 0.140.0 for AiDotNet.Tensors #1401, which removed native OpenBLAS and Intel MKL:
-         AiDotNet.Native.OpenBLAS is no longer published and nothing loads it, so its reference is gone.
-
-         Bumped 0.140.0 to 0.141.0 for AiDotNet.Tensors #1458, one exp kernel on every CPU vendor: Intel CPUs with
-         fast gathers took a table exp that rounds differently from the polynomial one AMD takes, and Adam amplified
-         the difference into another trajectory (SegNeXt's train/test-gap invariant failed only on Intel runners).
-
-         0.143.0 and Evolution 0.6.0 arrive from master's dependency bumps (#2372). -->
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.143.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.143.0" />
-    <PackageVersion Include="AiDotNet.Evolution" Version="0.6.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.143.0" />
+         Bumped 0.143.0 to 0.144.1 for AiDotNet.Tensors #1577: GruSequenceForward with resetAfter (GRULayer's fused
+         sequence), FusedConv2DBatchNorm and TensorScope. 0.144.1 depends on AiDotNet.Evolution 0.7.0. -->
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.144.2" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.144.2" />
+    <PackageVersion Include="AiDotNet.Evolution" Version="0.7.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.144.2" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
     <PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.11.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.ML" Version="3.0.1" />
-    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.31.0" />
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
     <PackageVersion Include="Microsoft.Research.SEALNet" Version="4.1.1" />
     <PackageVersion Include="Microsoft.Bcl.Numerics" Version="10.0.7" />
     <PackageVersion Include="System.Net.Http" Version="4.3.4" />
@@ -474,7 +468,7 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="5.0.0" />
     <!-- Public API contract gate for src/AiDotNet.csproj (PublicAPI.Shipped/Unshipped.txt, RS0016/RS0017). -->
-    <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.3.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.PublicApiAnalyzers" Version="5.6.0" />
     <PackageVersion Include="Basic.Reference.Assemblies.Net100" Version="1.8.3" />
     <!-- Media and visualization -->
     <PackageVersion Include="StbImageSharp" Version="2.30.16" />

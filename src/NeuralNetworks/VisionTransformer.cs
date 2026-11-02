@@ -351,83 +351,9 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
         // Use input4D for the forward pass
         input = input4D;
 
-        return Accelerate(input, () =>
-        {
-        var patchEmbeddings = Layers[0].Forward(input);
-
-        var sequenceWithCls = new Tensor<T>([batchSize, _numPatches + 1, _hiddenDim]);
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < _hiddenDim; d++)
-            {
-                sequenceWithCls[b, 0, d] = _clsToken[d];
-            }
-
-            for (int p = 0; p < _numPatches; p++)
-            {
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    sequenceWithCls[b, p + 1, d] = patchEmbeddings[b, p, d];
-                }
-            }
-        }
-
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int p = 0; p < _numPatches + 1; p++)
-            {
-                for (int d = 0; d < _hiddenDim; d++)
-                {
-                    sequenceWithCls[b, p, d] = NumOps.Add(
-                        sequenceWithCls[b, p, d],
-                        _positionalEmbeddings[p, d]);
-                }
-            }
-        }
-
-        var current = sequenceWithCls;
-        for (int i = 1; i < Layers.Count - 1; i++)
-        {
-            current = Layers[i].Forward(current);
-        }
-
-        var clsOutput = new Tensor<T>([batchSize, _hiddenDim]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < _hiddenDim; d++)
-            {
-                clsOutput[b, d] = current[b, 0, d];
-            }
-        }
-
-        var reshapedForClassification = new Tensor<T>([batchSize, 1, _hiddenDim]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int d = 0; d < _hiddenDim; d++)
-            {
-                reshapedForClassification[b, 0, d] = clsOutput[b, d];
-            }
-        }
-
-        if (_classificationHead is null)
-        {
-            throw new InvalidOperationException("Classification head not initialized.");
-        }
-
-        var output = _classificationHead.Forward(reshapedForClassification);
-
-        var finalOutput = new Tensor<T>([batchSize, _numClasses]);
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int c = 0; c < _numClasses; c++)
-            {
-                finalOutput[b, c] = output[b, 0, c];
-            }
-        }
-
-        return finalOutput;
-        });
+        // #2384: the same engine-op forward as training. The element-by-element CLS/positional/slice loops this
+        // replaced read every activation back to the host one indexer call at a time: half of a GPU b32 Predict.
+        return Accelerate(input, () => ForwardFromImages(input, batchSize));
     }
 
     /// <summary>
@@ -463,6 +389,16 @@ public partial class VisionTransformer<T> : ImageClassifierModelLayoutBase<T>
 
         int batchSize = input4D.Shape[0];
 
+        return ForwardFromImages(input4D, batchSize);
+    }
+
+    /// <summary>
+    /// The ViT forward from a validated [B, C, H, W] batch, on engine ops so it stays on the device and is
+    /// tape-tracked: patch embedding, CLS token, positional embeddings, encoder blocks, CLS slice, head.
+    /// <see cref="PredictCore"/> and <see cref="ForwardForTraining"/> both run it.
+    /// </summary>
+    private Tensor<T> ForwardFromImages(Tensor<T> input4D, int batchSize)
+    {
         // 1. Patch embedding (Layers[0]) — tape-tracked through layer.Forward.
         var patchEmbeddings = Layers[0].Forward(input4D); // [B, N, D]
 
