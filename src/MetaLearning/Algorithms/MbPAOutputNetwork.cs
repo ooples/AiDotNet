@@ -156,7 +156,17 @@ internal static class MbPAOutputNetwork<T>
         Vector<T> parameters, Vector<T> key, Vector<T> target, double weight,
         int featureDim, int outputDim, MbPAOutputDistribution distribution)
     {
-        var prediction = Forward(parameters, key, featureDim, outputDim, distribution);
+        // Evaluate categorical likelihood in logit space so underflow does not clip the objective.
+        var prediction = Forward(parameters, key, featureDim, outputDim, MbPAOutputDistribution.Gaussian);
+        double max = double.NegativeInfinity;
+        double logSum = 0.0;
+        if (distribution == MbPAOutputDistribution.Categorical)
+        {
+            for (int o = 0; o < outputDim; o++) max = Math.Max(max, Ops.ToDouble(prediction[o]));
+            double sum = 0.0;
+            for (int o = 0; o < outputDim; o++) sum += Math.Exp(Ops.ToDouble(prediction[o]) - max);
+            logSum = Math.Log(sum);
+        }
         double total = 0.0;
 
         for (int o = 0; o < outputDim; o++)
@@ -165,9 +175,7 @@ internal static class MbPAOutputNetwork<T>
             double p = Ops.ToDouble(prediction[o]);
             if (distribution == MbPAOutputDistribution.Categorical)
             {
-                // Clamped because softmax underflows to exactly zero for a confidently wrong class,
-                // and log(0) would poison the reported mean loss with -infinity for every later task.
-                total -= v * Math.Log(Math.Max(p, 1e-12));
+                total += v * ((max - p) + logSum);
             }
             else
             {

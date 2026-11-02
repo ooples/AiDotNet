@@ -20,6 +20,7 @@ public class GraphAttentionNetworkOptions : GraphEncoderOptions
         NumHeads = 8;
         NumLayers = 2;
         DropoutRate = 0.6;
+        HiddenSize = 64;
     }
 
     /// <summary>Initializes a new instance by copying another instance.</summary>
@@ -36,6 +37,7 @@ public class GraphAttentionNetworkOptions : GraphEncoderOptions
         NumHeads = other.NumHeads;
         NumLayers = other.NumLayers;
         DropoutRate = other.DropoutRate;
+        HiddenSize = other.HiddenSize;
         MaxGradNorm = other.MaxGradNorm;
     }
 
@@ -54,11 +56,28 @@ public class GraphAttentionNetworkOptions : GraphEncoderOptions
     /// </summary>
     public double DropoutRate { get; set; }
 
+    /// <summary>
+    /// Gets or sets the width of each hidden layer after its heads are concatenated. Default: 64.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Velickovic et al. 2018 (Cora) use 8 heads of 8 features each, 64 in all. Each head computes
+    /// HiddenSize / NumHeads features, so HiddenSize must be a multiple of NumHeads.
+    /// </para>
+    /// </remarks>
+    public int HiddenSize { get; set; }
+
     /// <summary>Throws if a value this model requires has been left unset or is not positive.</summary>
     /// <exception cref="ArgumentException">Thrown when a required dimension is zero or negative.</exception>
     public void Validate()
     {
         ValidateCore();
         Require(NumHeads, nameof(NumHeads));
+        Require(HiddenSize, nameof(HiddenSize));
+        if (HiddenSize % NumHeads != 0)
+        {
+            throw new ArgumentException(
+                $"HiddenSize ({HiddenSize}) must be a multiple of NumHeads ({NumHeads}); each head computes HiddenSize / NumHeads features.");
+        }
     }
 }

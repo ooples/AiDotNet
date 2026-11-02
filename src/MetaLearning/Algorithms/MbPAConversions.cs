@@ -148,4 +148,19 @@ internal static class MbPAConversions<T>
         for (int i = 0; i < copy; i++) result[i] = source[i];
         return result;
     }
+
+    /// <summary>Converts a categorical class index or a full distribution to a head target.</summary>
+    internal static Vector<T> CategoricalTarget(Vector<T> source, int classes)
+    {
+        if (source.Length == classes) return source;
+        if (source.Length != 1)
+            throw new ArgumentException("A categorical target must be one class index or one value per class.", nameof(source));
+        double index = Ops.ToDouble(source[0]);
+        if (double.IsNaN(index) || double.IsInfinity(index) || index != Math.Floor(index)
+            || index < 0 || index >= classes)
+            throw new ArgumentOutOfRangeException(nameof(source), "Class indices must be integers in the head's class range.");
+        var target = new Vector<T>(classes);
+        target[(int)index] = Ops.One;
+        return target;
+    }
 }
