@@ -1313,7 +1313,6 @@ internal static class DefectBaselines
             "global::AiDotNet.Safety.Watermarking.ImageWatermarker<T>",
             "global::AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>",
             "global::AiDotNet.Safety.Watermarking.LexicalWatermarker<T>",
-            "global::AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>",
             "global::AiDotNet.Safety.Watermarking.SamplingWatermarker<T>",
             "global::AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>",
             "global::AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>",

@@ -112,7 +112,7 @@ public class DQNOptions<T> : ModelOptions
         TargetUpdateFrequency = other.TargetUpdateFrequency;
         WarmupSteps = other.WarmupSteps;
         LossFunction = other.LossFunction;
-        Optimizer = other.Optimizer;
+        OptimizerFactory = other.OptimizerFactory;
         HiddenLayers = new List<int>(other.HiddenLayers);
     }
 }

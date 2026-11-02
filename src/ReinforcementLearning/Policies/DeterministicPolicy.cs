@@ -107,7 +107,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             : this(
                 policyNetwork,
                 (options ?? throw new ArgumentNullException(nameof(options))).ActionSize,
-                options.ExplorationStrategy,
+                options.ExplorationStrategy ?? new OrnsteinUhlenbeckNoise<T>(Math.Max(1, options.ActionSize)),
                 options.UseTanhSquashing,
                 RandomFromSeed(options.Seed))
         {
