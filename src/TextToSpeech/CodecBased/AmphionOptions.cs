@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class AmphionOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public AmphionOptions()
     {
         SampleRate = 24000;

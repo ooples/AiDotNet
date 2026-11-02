@@ -38,6 +38,7 @@ public class InternVLOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public InternVLOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

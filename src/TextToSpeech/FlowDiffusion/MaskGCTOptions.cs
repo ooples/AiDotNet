@@ -8,6 +8,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </remarks>
 public class MaskGCTOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public MaskGCTOptions()
     {
         SampleRate = 24000;

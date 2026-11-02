@@ -20,14 +20,21 @@ namespace AiDotNet.Data.Audio.Benchmarks;
 /// </remarks>
 public sealed class TimitDataLoaderOptions
 {
+    /// <summary>Gets or sets which split of the dataset is loaded.</summary>
     public DatasetSplit Split { get; set; } = DatasetSplit.Train;
+    /// <summary>Gets or sets the dataset root directory; null uses the default data directory for this dataset.</summary>
     public string? DataPath { get; set; }
     /// <summary>Always false — TIMIT requires LDC membership.</summary>
     public bool AutoDownload { get; set; } = false;
+    /// <summary>Gets or sets the sample rate TIMIT is recorded at (16 kHz). The loader reads the WAV samples as stored and does not resample, so it is not read.</summary>
     public int SampleRate { get; set; } = 16000;
+    /// <summary>Gets or sets the waveform length, in samples, each clip is zero-padded or truncated to.</summary>
     public int MaxAudioSamples { get; set; } = 16000 * 8;
+    /// <summary>Gets or sets the token length each transcript is padded or truncated to.</summary>
     public int MaxTextLength { get; set; } = 256;
+    /// <summary>Gets or sets the most distinct tokens in the vocabulary built from the loaded text.</summary>
     public int VocabularySize { get; set; } = 1024;
+    /// <summary>Gets or sets the most samples loaded; null loads the whole split.</summary>
     public int? MaxSamples { get; set; }
 
     /// <summary>Validates that all option values are within acceptable ranges.</summary>

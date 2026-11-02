@@ -8,6 +8,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// </remarks>
 public class SpeechT5Options : EndToEndTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public SpeechT5Options()
     {
         SampleRate = 16000;

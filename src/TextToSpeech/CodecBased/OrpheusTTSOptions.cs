@@ -12,6 +12,7 @@ public class OrpheusTTSOptions : CodecTtsOptions
     {
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public OrpheusTTSOptions()
     {
         SampleRate = 24000;

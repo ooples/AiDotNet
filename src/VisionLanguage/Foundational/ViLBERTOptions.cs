@@ -82,6 +82,7 @@ public class ViLBERTOptions : FoundationalVLMOptions
     /// <summary>Gets or sets the co-attention feed-forward width.</summary>
     public int FusionIntermediateDim { get; set; } = 1024;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ViLBERTOptions()
     {
         FusionType = FusionType.CoAttention;

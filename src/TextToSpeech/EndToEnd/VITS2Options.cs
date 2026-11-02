@@ -18,6 +18,7 @@ public class VITS2Options : EndToEndTtsOptions
         NumMixtureComponents = other.NumMixtureComponents;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public VITS2Options()
     {
         SampleRate = 22050;
@@ -31,6 +32,7 @@ public class VITS2Options : EndToEndTtsOptions
         WeightDecay = 0.01;
     }
 
+    /// <summary>Gets or sets the number of Gaussian components in the mixture prior over the latent frames.</summary>
     public int NumMixtureComponents { get; set; } = 4;
 
     /// <summary>First AdamW moment coefficient used by the released VITS2 recipe.</summary>

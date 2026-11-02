@@ -21,6 +21,7 @@ public class FishSpeechOptions : CodecTtsOptions
         MinReferenceSeconds = other.MinReferenceSeconds;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public FishSpeechOptions()
     {
         SampleRate = 44100;

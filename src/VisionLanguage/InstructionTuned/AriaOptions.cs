@@ -40,6 +40,7 @@ public class AriaOptions : InstructionTunedVLMOptions
         NumActiveExperts = other.NumActiveExperts;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public AriaOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// </remarks>
 public class APNet2Options : VocoderOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public APNet2Options()
     {
         SampleRate = 22050;

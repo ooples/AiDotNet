@@ -18,6 +18,7 @@ public class ISTFTNetOptions : VocoderOptions
         NumUpsampleLayers = other.NumUpsampleLayers;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ISTFTNetOptions()
     {
         SampleRate = 22050;
@@ -25,6 +26,8 @@ public class ISTFTNetOptions : VocoderOptions
         HopSize = 256;
     }
 
+    /// <summary>Gets or sets the inverse-STFT window length in samples; the network predicts StftWindow / 2 + 1 frequency bins.</summary>
     public int StftWindow { get; set; } = 1024;
+    /// <summary>Gets or sets the number of upsampling stages. The paper-faithful layers fix the stages, so a non-default value is reported as not applied.</summary>
     public int NumUpsampleLayers { get; set; } = 4;
 }

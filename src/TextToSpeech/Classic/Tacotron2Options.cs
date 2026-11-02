@@ -23,6 +23,7 @@ public class Tacotron2Options : AcousticModelOptions
         StopThreshold = other.StopThreshold;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public Tacotron2Options()
     {
         // Paper training configuration (Shen et al., 2018, S3): Adam at 10^-3, with exponential

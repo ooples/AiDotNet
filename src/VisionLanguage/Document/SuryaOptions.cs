@@ -41,6 +41,7 @@ public class SuryaOptions : DocumentVLMOptions
         EnableLayoutAnalysis = other.EnableLayoutAnalysis;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SuryaOptions()
     {
         VisionDim = 768;

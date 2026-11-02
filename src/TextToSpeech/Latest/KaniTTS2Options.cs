@@ -8,6 +8,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 public class KaniTTS2Options : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public KaniTTS2Options()
     {
         TextEncoderDim = 256;

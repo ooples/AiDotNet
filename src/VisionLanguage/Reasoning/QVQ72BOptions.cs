@@ -45,6 +45,7 @@ public class QVQ72BOptions : ReasoningVLMOptions
         TotalParameters = other.TotalParameters;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public QVQ72BOptions()
     {
         VisionDim = 1152;

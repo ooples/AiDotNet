@@ -42,6 +42,7 @@ public class RadFMOptions : MedicalVLMOptions
         Supports3DInput = other.Supports3DInput;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public RadFMOptions()
     {
         VisionDim = 768;

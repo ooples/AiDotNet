@@ -32,6 +32,7 @@ public class OscarOptions : FoundationalVLMOptions
     /// <summary>Gets or sets the contrastive loss weight for tag-text alignment.</summary>
     public double ContrastiveLossWeight { get; set; } = 1.0;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public OscarOptions()
     {
         FusionType = FusionType.SingleStream;

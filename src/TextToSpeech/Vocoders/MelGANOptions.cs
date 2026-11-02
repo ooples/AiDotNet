@@ -18,6 +18,7 @@ public class MelGANOptions : VocoderOptions
         NgfBase = other.NgfBase;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MelGANOptions()
     {
         SampleRate = 22050;
@@ -25,6 +26,8 @@ public class MelGANOptions : VocoderOptions
         HopSize = 256;
     }
 
+    /// <summary>Gets or sets the number of residual stacks. The paper-faithful layers fix them, so a non-default value is reported as not applied.</summary>
     public int NumResStacks { get; set; } = 3;
+    /// <summary>Gets or sets the channel width of the first generator block.</summary>
     public int NgfBase { get; set; } = 512;
 }

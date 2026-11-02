@@ -20,6 +20,7 @@ public class PromptTTSOptions : EndToEndTtsOptions
         NumPromptLayers = other.NumPromptLayers;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PromptTTSOptions()
     {
         NumFlowSteps = 0;
@@ -29,6 +30,8 @@ public class PromptTTSOptions : EndToEndTtsOptions
         DropoutRate = 0.1;
     }
 
+    /// <summary>Gets or sets the hidden width of the encoder for the text description of the voice.</summary>
     public int PromptEncoderDim { get; set; } = 128;
+    /// <summary>Gets or sets the number of layers in the description encoder.</summary>
     public int NumPromptLayers { get; set; } = 3;
 }

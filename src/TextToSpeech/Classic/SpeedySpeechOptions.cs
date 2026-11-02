@@ -17,6 +17,7 @@ public class SpeedySpeechOptions : AcousticModelOptions
         ResidualKernelSize = other.ResidualKernelSize;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SpeedySpeechOptions()
     {
         EncoderDim = 128;

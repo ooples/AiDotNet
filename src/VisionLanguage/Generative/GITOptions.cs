@@ -33,6 +33,7 @@ public class GITOptions : GenerativeVLMOptions
         WeightDecay = other.WeightDecay;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GITOptions()
     {
         ArchitectureType = GenerativeArchitectureType.EncoderDecoder;

@@ -40,6 +40,7 @@ public class LLaVAOneVisionOptions : InstructionTunedVLMOptions
         MaxVideoFrames = other.MaxVideoFrames;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public LLaVAOneVisionOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

@@ -103,7 +103,7 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
     public double DropoutRate { get; set; }
 
     /// <summary>
-    /// Gets or sets the ONNX runtime options used when <see cref="ModelPath"/> is supplied.
+    /// Gets or sets the ONNX runtime options used when the model is loaded from an ONNX file.
     /// </summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
 

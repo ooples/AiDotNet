@@ -41,6 +41,7 @@ public class PLLaVAOptions : VideoLanguageOptions
         EnableParameterFreePooling = other.EnableParameterFreePooling;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PLLaVAOptions()
     {
         VisionDim = 1024;

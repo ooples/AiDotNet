@@ -44,6 +44,7 @@ public class VideoChat2Options : VideoLanguageOptions
         NumQFormerHeads = other.NumQFormerHeads;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public VideoChat2Options()
     {
         VisionDim = 1024;

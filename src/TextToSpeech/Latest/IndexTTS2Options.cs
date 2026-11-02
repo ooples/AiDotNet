@@ -8,6 +8,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 public class IndexTTS2Options : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public IndexTTS2Options()
     {
         TextEncoderDim = 256;

@@ -19,6 +19,7 @@ public class MatchaTTSOptions : EndToEndTtsOptions
         FlowDim = other.FlowDim;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MatchaTTSOptions()
     {
         NumFlowSteps = 4;
@@ -27,5 +28,6 @@ public class MatchaTTSOptions : EndToEndTtsOptions
         DropoutRate = 0.1;
     }
 
+    /// <summary>Gets or sets the hidden width of the flow decoder that maps noise to the mel spectrogram.</summary>
     public int FlowDim { get; set; } = 256;
 }

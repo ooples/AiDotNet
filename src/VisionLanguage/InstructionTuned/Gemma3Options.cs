@@ -39,6 +39,7 @@ public class Gemma3Options : InstructionTunedVLMOptions
         EnableNativeDynamicResolution = other.EnableNativeDynamicResolution;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public Gemma3Options()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

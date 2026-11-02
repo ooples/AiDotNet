@@ -41,6 +41,7 @@ public class Qwen3VLOptions : InstructionTunedVLMOptions
         NumResamplerHeads = other.NumResamplerHeads;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public Qwen3VLOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.CrossAttentionResampler;

@@ -87,7 +87,7 @@ public class RWKVTransducerOptions : ModelOptions
     /// <value>The frame ceiling. Default 750, matching 30 s of audio after stride-4 subsampling at 10 ms hops.</value>
     /// <remarks>
     /// <para>
-    /// <see cref="RWKVLayer{T}"/> takes a sequence length at construction, so the encoder needs one.
+    /// <see cref="AiDotNet.NeuralNetworks.Layers.SSM.RWKVLayer{T}"/> takes a sequence length at construction, so the encoder needs one.
     /// Its recurrent state is constant-size regardless, which is the whole point of the architecture;
     /// this bounds the layer's own buffers, not the memory used per frame.
     /// </para>

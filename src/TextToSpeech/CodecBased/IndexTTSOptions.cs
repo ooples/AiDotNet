@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class IndexTTSOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public IndexTTSOptions()
     {
         // IndexTTS v1.5 reference configuration (Zhou et al., 2025):

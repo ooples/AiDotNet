@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class FishSpeechV15Options : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public FishSpeechV15Options()
     {
         TextEncoderDim = 256;

@@ -213,34 +213,9 @@ dotnet_diagnostic.CS1723.severity = error
 dotnet_diagnostic.CS1734.severity = error
 dotnet_diagnostic.CS1735.severity = error
 
-# Options classes in these namespaces are not documented yet; each is documented, and removed from this list,
-# in its own per-namespace PR (issue #2393). The list may only shrink: a section that matched no undocumented
-# member would hide nothing, so delete the namespace from it as soon as its Options classes are documented.
-# The AiDotNet.Serving classes listed are configuration the server does not bind yet; each is documented as it is
-# wired up (issue #2427).
-# CS1570 (malformed XML) is not listed: it stays an error everywhere (src/XmlDocDiagnostics.globalconfig).
-[src/{SpeechRecognition,TextToSpeech,VisionLanguage,Data,Audio}/**Options.cs]
-dotnet_diagnostic.CS1591.severity = none
-dotnet_diagnostic.CS1571.severity = none
-dotnet_diagnostic.CS1572.severity = none
-dotnet_diagnostic.CS1573.severity = none
-dotnet_diagnostic.CS1574.severity = none
-dotnet_diagnostic.CS1580.severity = none
-dotnet_diagnostic.CS1581.severity = none
-dotnet_diagnostic.CS1584.severity = none
-dotnet_diagnostic.CS1587.severity = none
-dotnet_diagnostic.CS1589.severity = none
-dotnet_diagnostic.CS1590.severity = none
-dotnet_diagnostic.CS1592.severity = none
-dotnet_diagnostic.CS0419.severity = none
-dotnet_diagnostic.CS1710.severity = none
-dotnet_diagnostic.CS1711.severity = none
-dotnet_diagnostic.CS1712.severity = none
-dotnet_diagnostic.CS1723.severity = none
-dotnet_diagnostic.CS1734.severity = none
-dotnet_diagnostic.CS1735.severity = none
-
-# Unbound AiDotNet.Serving configuration (issue #2427), excluded the same way.
+# AiDotNet.Serving configuration the server does not bind yet (issue #2427); each class is documented, and
+# removed from this list, as it is wired up. The list may only shrink. CS1570 (malformed XML) is not listed:
+# it stays an error everywhere (src/XmlDocDiagnostics.globalconfig).
 [src/AiDotNet.Serving/Configuration/{ServingSecurityOptions,ServingApiKeyOptions,StaticApiKeyOptions,ServingJwtAuthenticationOptions,ServingJwtTierOptions,AdminAuthorizationOptions,ServingDatabaseOptions}.cs]
 dotnet_diagnostic.CS1591.severity = none
 dotnet_diagnostic.CS1571.severity = none

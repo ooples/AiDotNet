@@ -47,6 +47,7 @@ public class KimiVLOptions : ReasoningVLMOptions
         EnableLongContext = other.EnableLongContext;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public KimiVLOptions()
     {
         VisionDim = 1024;

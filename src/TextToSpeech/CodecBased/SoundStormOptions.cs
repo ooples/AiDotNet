@@ -18,6 +18,7 @@ public class SoundStormOptions : CodecTtsOptions
         NumMaskGITSteps = other.NumMaskGITSteps;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SoundStormOptions()
     {
         SampleRate = 24000;
@@ -28,5 +29,6 @@ public class SoundStormOptions : CodecTtsOptions
         NumLLMLayers = 12;
     }
 
+    /// <summary>Gets or sets the number of MaskGIT parallel decoding iterations of the paper's configuration. The native decoder does not read it.</summary>
     public int NumMaskGITSteps { get; set; } = 8;
 }

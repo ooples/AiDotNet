@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class VALLE2Options : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public VALLE2Options()
     {
         TextEncoderDim = 256;

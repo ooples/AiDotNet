@@ -42,6 +42,7 @@ public class MiniGPTv2Options : InstructionTunedVLMOptions
         NumQFormerHeads = other.NumQFormerHeads;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MiniGPTv2Options()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.QFormerProjection;

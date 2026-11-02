@@ -41,6 +41,7 @@ public class JanusOptions : UnifiedVisionOptions
         EnableDecoupledEncoding = other.EnableDecoupledEncoding;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public JanusOptions()
     {
         VisionDim = 1024;

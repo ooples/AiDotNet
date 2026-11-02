@@ -15,6 +15,7 @@ public class NaturalSpeechOptions : EndToEndTtsOptions
     {
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public NaturalSpeechOptions()
     {
         InterChannels = 192;

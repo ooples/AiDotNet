@@ -21,6 +21,7 @@ public class DiTToTTSOptions : EndToEndTtsOptions
         NumFlowLayers = other.NumFlowLayers;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public DiTToTTSOptions()
     {
         NumEncoderLayers = 6;
@@ -29,6 +30,8 @@ public class DiTToTTSOptions : EndToEndTtsOptions
         DropoutRate = 0.1;
     }
 
+    /// <summary>Gets or sets the hidden width of the flow decoder that maps noise to the mel spectrogram.</summary>
     public int FlowDim { get; set; } = 256;
+    /// <summary>Gets or sets the number of layers in the flow decoder.</summary>
     public int NumFlowLayers { get; set; } = 4;
 }

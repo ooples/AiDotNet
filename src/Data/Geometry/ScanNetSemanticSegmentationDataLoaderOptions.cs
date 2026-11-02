@@ -5,6 +5,7 @@ namespace AiDotNet.Data.Geometry;
 /// </summary>
 public sealed class ScanNetSemanticSegmentationDataLoaderOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public ScanNetSemanticSegmentationDataLoaderOptions()
     {
         Split = DatasetSplit.Train;

@@ -39,6 +39,7 @@ public class VILAOptions : InstructionTunedVLMOptions
         EnableInterleavedData = other.EnableInterleavedData;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public VILAOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

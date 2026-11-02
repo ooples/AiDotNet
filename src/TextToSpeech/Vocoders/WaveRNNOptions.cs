@@ -21,6 +21,7 @@ public class WaveRNNOptions : VocoderOptions
         MaxGradientNorm = other.MaxGradientNorm;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public WaveRNNOptions()
     {
         SampleRate = 24000;
@@ -30,8 +31,12 @@ public class WaveRNNOptions : VocoderOptions
         WeightDecay = 0.0;
     }
 
+    /// <summary>Gets or sets the width of the recurrent layer.</summary>
     public int RnnDim { get; set; } = 512;
+    /// <summary>Gets or sets the width of the paper's fully connected output layers. The native layers do not read it.</summary>
     public int FcDim { get; set; } = 512;
+    /// <summary>Gets or sets the sample bit depth of the paper's mu-law output. The native model predicts samples directly and does not read it.</summary>
     public int Bits { get; set; } = 10;
+    /// <summary>Gets or sets the gradient-norm clip of the default optimizer; 0 disables clipping.</summary>
     public double MaxGradientNorm { get; set; } = 4.0;
 }

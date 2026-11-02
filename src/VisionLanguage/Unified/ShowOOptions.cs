@@ -27,6 +27,7 @@ public class ShowOOptions : UnifiedVisionOptions
         DiffusionSteps = other.DiffusionSteps;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ShowOOptions()
     {
         VisionDim = 2048;
