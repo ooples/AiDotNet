@@ -98,10 +98,11 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     }
 
     /// <summary>
-    /// Makes predictions (alias for Forward).
+    /// Makes predictions without retaining activations for a backward pass.
     /// </summary>
     public Tensor<T> Predict(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
     {
+        using var inference = InferenceMode.Enter();
         return Forward(numericalFeatures, categoricalIndices);
     }
 

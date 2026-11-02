@@ -150,7 +150,7 @@ public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             return action;
         }
 
-        var qValues = _qNetwork.Forward(state);
+        var qValues = _qNetwork.Predict(state);
         int bestAction = ArgMax(qValues);
 
         var greedyAction = new Vector<T>(_options.ActionSize);
@@ -159,7 +159,7 @@ public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
     }
 
     /// <inheritdoc/>
-    Vector<T> IActionValueProvider<T>.GetActionValues(Vector<T> state) => _qNetwork.Forward(state);
+    Vector<T> IActionValueProvider<T>.GetActionValues(Vector<T> state) => _qNetwork.Predict(state);
 
     /// <inheritdoc/>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
@@ -200,11 +200,11 @@ public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             else
             {
                 // Use online network to select action
-                var nextQValuesOnline = _qNetwork.Forward(experience.NextState);
+                var nextQValuesOnline = _qNetwork.Predict(experience.NextState);
                 int bestActionIndex = ArgMax(nextQValuesOnline);
 
                 // Use target network to evaluate
-                var nextQValuesTarget = _targetNetwork.Forward(experience.NextState);
+                var nextQValuesTarget = _targetNetwork.Predict(experience.NextState);
                 var selectedQ = nextQValuesTarget[bestActionIndex];
 
                 target = NumOps.Add(experience.Reward,
@@ -422,7 +422,7 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
     public void EnsureInitialized()
     {
         if (GetFlattenedParameters().Rows > 0) return;
-        Forward(new Vector<T>(_stateSize));
+        Predict(new Vector<T>(_stateSize));
     }
 
     public Vector<T> Forward(Vector<T> state)
@@ -496,10 +496,11 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
     /// <param name="input">The input state vector.</param>
     /// <returns>Q-values for all actions.</returns>
     /// <remarks>
-    /// This method is an alias for Forward and is provided for interface compatibility.
+    /// This method runs without retaining activations for a backward pass.
     /// </remarks>
     public Vector<T> Predict(Vector<T> input)
     {
+        using var inference = InferenceMode.Enter();
         return Forward(input);
     }
 

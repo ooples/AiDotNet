@@ -103,6 +103,7 @@ public class AutoIntClassifier<T> : AutoIntBase<T>
     /// </summary>
     public Tensor<T> PredictProbabilities(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
     {
+        using var inference = InferenceMode.Enter();
         var logits = Forward(numericalFeatures, categoricalIndices);
         var probabilities = ApplySoftmax(logits);
         return probabilities;
@@ -171,7 +172,7 @@ public class AutoIntClassifier<T> : AutoIntBase<T>
     /// </summary>
     public T TrainStep(Tensor<T> numericalFeatures, Vector<int> targets, T learningRate, Matrix<int>? categoricalIndices = null)
     {
-        var probabilities = PredictProbabilities(numericalFeatures, categoricalIndices);
+        var probabilities = ApplySoftmax(Forward(numericalFeatures, categoricalIndices));
         var loss = ComputeCrossEntropyLoss(probabilities, targets);
         UpdateParameters(learningRate);
         ResetState();
