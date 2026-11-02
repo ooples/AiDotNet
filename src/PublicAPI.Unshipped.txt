@@ -17598,3 +17598,157 @@ override AiDotNet.Video.Denoising.UDVD<T>.ResolveLazyLayerShapes() -> void
 *REMOVED*AiDotNet.Video.Options.UDVDOptions.TemporalBufferSize.set -> void
 *REMOVED*AiDotNet.Video.Options.UDVDOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
 *REMOVED*AiDotNet.Video.Options.UDVDOptions.Variant.set -> void
+AiDotNet.Video.Options.BasicVSROptions.CharbonnierEpsilon.get -> double
+AiDotNet.Video.Options.BasicVSROptions.CharbonnierEpsilon.set -> void
+AiDotNet.Video.Options.BasicVSROptions.CosineIterations.get -> int
+AiDotNet.Video.Options.BasicVSROptions.CosineIterations.set -> void
+AiDotNet.Video.Options.BasicVSROptions.FlowFreezeIterations.get -> int
+AiDotNet.Video.Options.BasicVSROptions.FlowFreezeIterations.set -> void
+AiDotNet.Video.Options.BasicVSROptions.MinLearningRate.get -> double
+AiDotNet.Video.Options.BasicVSROptions.MinLearningRate.set -> void
+AiDotNet.Video.Options.BasicVSROptions.SpyNetLearningRateMultiplier.get -> double
+AiDotNet.Video.Options.BasicVSROptions.SpyNetLearningRateMultiplier.set -> void
+override AiDotNet.Video.Enhancement.BasicVSR<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.Enhancement.BasicVSR<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.BasicVSR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.BasicVSR<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.Enhancement.BasicVSR<T>.ResolveLazyLayerShapes() -> void
+*REMOVED*AiDotNet.Video.Options.BasicVSROptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.BasicVSROptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.BasicVSROptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.BasicVSROptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.BasicVSROptions.ScaleFactor.get -> int
+*REMOVED*AiDotNet.Video.Options.BasicVSROptions.ScaleFactor.set -> void
+*REMOVED*AiDotNet.Video.Options.BasicVSROptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.BasicVSROptions.Variant.set -> void
+*REMOVED*AiDotNet.Video.Options.BasicVSROptions.WarmupSteps.get -> int
+*REMOVED*AiDotNet.Video.Options.BasicVSROptions.WarmupSteps.set -> void
+*REMOVED*override AiDotNet.Video.Enhancement.BasicVSR<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Video.Options.RealBasicVSROptions.CleaningLossWeight.get -> double
+AiDotNet.Video.Options.RealBasicVSROptions.CleaningLossWeight.set -> void
+AiDotNet.Video.Options.RealBasicVSROptions.EmaMomentum.get -> double?
+AiDotNet.Video.Options.RealBasicVSROptions.EmaMomentum.set -> void
+AiDotNet.Video.Options.RealBasicVSROptions.InferenceCleaningThreshold.get -> double
+AiDotNet.Video.Options.RealBasicVSROptions.InferenceCleaningThreshold.set -> void
+AiDotNet.Video.Options.RealBasicVSROptions.MidChannels.get -> int
+AiDotNet.Video.Options.RealBasicVSROptions.MidChannels.set -> void
+AiDotNet.Video.Options.RealBasicVSROptions.NumCleaningBlocks.get -> int
+AiDotNet.Video.Options.RealBasicVSROptions.NumCleaningBlocks.set -> void
+AiDotNet.Video.Options.RealBasicVSROptions.NumPropagationBlocks.get -> int
+AiDotNet.Video.Options.RealBasicVSROptions.NumPropagationBlocks.set -> void
+AiDotNet.Video.Options.RealBasicVSROptions.PixelLossWeight.get -> double
+AiDotNet.Video.Options.RealBasicVSROptions.PixelLossWeight.set -> void
+AiDotNet.Video.Options.RealBasicVSROptions.SharpenTarget.get -> bool
+AiDotNet.Video.Options.RealBasicVSROptions.SharpenTarget.set -> void
+AiDotNet.Video.Options.RealBasicVSROptions.UnsharpKernelSize.get -> int
+AiDotNet.Video.Options.RealBasicVSROptions.UnsharpKernelSize.set -> void
+AiDotNet.Video.Options.RealBasicVSROptions.UnsharpThreshold.get -> double
+AiDotNet.Video.Options.RealBasicVSROptions.UnsharpThreshold.set -> void
+AiDotNet.Video.Options.RealBasicVSROptions.UnsharpWeight.get -> double
+AiDotNet.Video.Options.RealBasicVSROptions.UnsharpWeight.set -> void
+override AiDotNet.Video.Enhancement.RealBasicVSR<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.Enhancement.RealBasicVSR<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.RealBasicVSR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.RealBasicVSR<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.Enhancement.RealBasicVSR<T>.OnTrainingStepEnded(bool succeeded) -> void
+override AiDotNet.Video.Enhancement.RealBasicVSR<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.Enhancement.RealBasicVSR<T>.SupportsFusedCompiledTraining.get -> bool
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.CleaningModuleBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.CleaningModuleBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.NumResBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.NumResBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.ScaleFactor.get -> int
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.ScaleFactor.set -> void
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.Variant.set -> void
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.WarmupSteps.get -> int
+*REMOVED*AiDotNet.Video.Options.RealBasicVSROptions.WarmupSteps.set -> void
+*REMOVED*override AiDotNet.Video.Enhancement.RealBasicVSR<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.CleaningLossWeight.get -> double
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.CleaningLossWeight.set -> void
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.DiscriminatorChannels.get -> int
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.DiscriminatorChannels.set -> void
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.DiscriminatorLearningRate.get -> double
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.DiscriminatorLearningRate.set -> void
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.EmaMomentum.get -> double?
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.EmaMomentum.set -> void
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.InferenceCleaningThreshold.get -> double
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.InferenceCleaningThreshold.set -> void
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.MidChannels.get -> int
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.MidChannels.set -> void
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.NumCleaningBlocks.get -> int
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.NumCleaningBlocks.set -> void
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.NumPropagationBlocks.get -> int
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.NumPropagationBlocks.set -> void
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.PixelLossWeight.get -> double
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.PixelLossWeight.set -> void
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.SharpenTarget.get -> bool
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.SharpenTarget.set -> void
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.UnsharpKernelSize.get -> int
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.UnsharpKernelSize.set -> void
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.UnsharpThreshold.get -> double
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.UnsharpThreshold.set -> void
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.UnsharpWeight.get -> double
+AiDotNet.Video.Options.RealBasicVSRSharpOptions.UnsharpWeight.set -> void
+override AiDotNet.Video.Enhancement.RealBasicVSRSharp<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.Enhancement.RealBasicVSRSharp<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.RealBasicVSRSharp<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.RealBasicVSRSharp<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.Enhancement.RealBasicVSRSharp<T>.OnTrainingStepEnded(bool succeeded) -> void
+override AiDotNet.Video.Enhancement.RealBasicVSRSharp<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.Enhancement.RealBasicVSRSharp<T>.SupportsFusedCompiledTraining.get -> bool
+*REMOVED*AiDotNet.Video.Options.RealBasicVSRSharpOptions.CleaningModuleBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.RealBasicVSRSharpOptions.CleaningModuleBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.RealBasicVSRSharpOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.RealBasicVSRSharpOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.RealBasicVSRSharpOptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.RealBasicVSRSharpOptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.RealBasicVSRSharpOptions.NumResBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.RealBasicVSRSharpOptions.NumResBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.RealBasicVSRSharpOptions.ScaleFactor.get -> int
+*REMOVED*AiDotNet.Video.Options.RealBasicVSRSharpOptions.ScaleFactor.set -> void
+*REMOVED*AiDotNet.Video.Options.RealBasicVSRSharpOptions.WarmupSteps.get -> int
+*REMOVED*AiDotNet.Video.Options.RealBasicVSRSharpOptions.WarmupSteps.set -> void
+*REMOVED*override AiDotNet.Video.Enhancement.RealBasicVSRSharp<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Video.Options.IconVSROptions.CharbonnierEpsilon.get -> double
+AiDotNet.Video.Options.IconVSROptions.CharbonnierEpsilon.set -> void
+AiDotNet.Video.Options.IconVSROptions.CosineIterations.get -> int
+AiDotNet.Video.Options.IconVSROptions.CosineIterations.set -> void
+AiDotNet.Video.Options.IconVSROptions.DeformableGroups.get -> int
+AiDotNet.Video.Options.IconVSROptions.DeformableGroups.set -> void
+AiDotNet.Video.Options.IconVSROptions.EdvrChannels.get -> int
+AiDotNet.Video.Options.IconVSROptions.EdvrChannels.set -> void
+AiDotNet.Video.Options.IconVSROptions.EdvrExtractionBlocks.get -> int
+AiDotNet.Video.Options.IconVSROptions.EdvrExtractionBlocks.set -> void
+AiDotNet.Video.Options.IconVSROptions.FlowFreezeIterations.get -> int
+AiDotNet.Video.Options.IconVSROptions.FlowFreezeIterations.set -> void
+AiDotNet.Video.Options.IconVSROptions.MidChannels.get -> int
+AiDotNet.Video.Options.IconVSROptions.MidChannels.set -> void
+AiDotNet.Video.Options.IconVSROptions.MinLearningRate.get -> double
+AiDotNet.Video.Options.IconVSROptions.MinLearningRate.set -> void
+AiDotNet.Video.Options.IconVSROptions.RefillPadding.get -> int
+AiDotNet.Video.Options.IconVSROptions.RefillPadding.set -> void
+AiDotNet.Video.Options.IconVSROptions.SpyNetLearningRateMultiplier.get -> double
+AiDotNet.Video.Options.IconVSROptions.SpyNetLearningRateMultiplier.set -> void
+override AiDotNet.Video.Enhancement.IconVSR<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.Enhancement.IconVSR<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.IconVSR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.IconVSR<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.Enhancement.IconVSR<T>.ResolveLazyLayerShapes() -> void
+*REMOVED*AiDotNet.Video.Options.IconVSROptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.IconVSROptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.IconVSROptions.NumEdemaBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.IconVSROptions.NumEdemaBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.IconVSROptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.IconVSROptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.IconVSROptions.ScaleFactor.get -> int
+*REMOVED*AiDotNet.Video.Options.IconVSROptions.ScaleFactor.set -> void
+*REMOVED*AiDotNet.Video.Options.IconVSROptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.IconVSROptions.Variant.set -> void
+*REMOVED*AiDotNet.Video.Options.IconVSROptions.WarmupSteps.get -> int
+*REMOVED*AiDotNet.Video.Options.IconVSROptions.WarmupSteps.set -> void
+*REMOVED*override AiDotNet.Video.Enhancement.IconVSR<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!

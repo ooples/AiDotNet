@@ -280,13 +280,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // they surface.)
         "BASIC", "Emu",
 
-        // IconVSR (Chan et al., CVPR 2021, BasicVSR family): a 30 residual-block, 4x pixel-shuffle
-        // video super-resolution net — conv-only heavy compute whose training invariants (up to
-        // 250 iters) time out at 120/180s on CPU. The manual IconVSRTests scaffold in
-        // ModelFamilyTests/Video runs the same residual-block + pixel-shuffle architecture at
-        // reduced scale (fewer blocks, 2x upscale, small resolution) in seconds.
-        "IconVSR",
-
         // WavLMSpeaker (Chen et al. 2022, WavLM) and UniVS (Li et al. 2024, universal video
         // segmentation): foundation-scale models whose ModelFamily training invariants time out on
         // CPU. WavLMSpeaker's defaults are a 12-layer / 768-dim / 3072-FFN transformer encoder;
@@ -12359,13 +12352,40 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
-                    "new AiDotNet.Video.Options.BasicVSROptions { NumFeatures = 16, " +
-                    "NumResBlocks = 2, MidChannels = 16, ScaleFactor = 2, NumFrames = 4, " +
-                    "DropoutRate = 0.0 })";
+                    "new AiDotNet.Video.Options.BasicVSROptions { Seed = 1, MidChannels = 16, " +
+                    "NumResBlocks = 2, NumFrames = 4 })";
+            }
+            else if (model.ClassName == "RealESRGANVideo" && model.TypeParameterCount == 1)
+            {
+                // Real-ESRGAN Video keeps the release's RealESRGAN_x4plus in production (RRDBNet with 64
+                // features, 23 blocks and growth 32, the 64-channel spectral-norm U-Net discriminator and
+                // the VGG19 perceptual loss). The same RRDB -> nearest x4 generator and U-Net
+                // discriminator run here at CI scale through public options. The perceptual weight is
+                // zero because VGG19's widths are fixed by the pretrained network (20M parameters), far
+                // beyond the fixture's budget; RealESRGANVideoPaperTests covers the perceptual loss.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.RealESRGANVideoOptions { Seed = 1, NumFeatures = 16, NumRRDBBlocks = 1, " +
+                    "GrowthChannels = 8, DiscriminatorChannels = 16, PerceptualWeight = 0 })";
+            }
+            else if (model.ClassName == "IconVSR" && model.TypeParameterCount == 1)
+            {
+                // IconVSR keeps the release's IconVSRNet in production (64 channels, 30 blocks per
+                // branch, EDVR-M refill with 64 channels, 8 deformable groups and 5 extraction blocks).
+                // The same SPyNet -> EDVR refill -> coupled propagation -> x4 topology runs here at
+                // CI scale through public options.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.IconVSROptions { Seed = 1, MidChannels = 16, NumResBlocks = 2, " +
+                    "NumFrames = 4, EdvrChannels = 16, DeformableGroups = 2, EdvrExtractionBlocks = 1 })";
             }
             else if (model.ClassName == "RealBasicVSR" && model.TypeParameterCount == 1)
             {
-                // RealBasicVSR keeps its paper defaults (64 propagation features, 30 backbone
+                // RealBasicVSR keeps its paper defaults (64 propagation features, 20 propagation
                 // blocks, 20 pre-cleaning blocks, 15 frames, and 4x reconstruction) in production.
                 // Its generated FP32 fixture still timed out in both TrainingError and MoreData.
                 // Exercise the same pre-cleaning -> bidirectional propagation -> pixel-shuffle
@@ -12374,9 +12394,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
-                    "new AiDotNet.Video.Options.RealBasicVSROptions { NumFeatures = 16, " +
-                    "NumResBlocks = 2, CleaningModuleBlocks = 2, ScaleFactor = 2, NumFrames = 4, " +
-                    "DropoutRate = 0.0 })";
+                    "new AiDotNet.Video.Options.RealBasicVSROptions { Seed = 1, MidChannels = 16, " +
+                    "NumPropagationBlocks = 2, NumCleaningBlocks = 2, NumFrames = 4 })";
             }
             else if (model.ClassName == "RealViformer" && model.TypeParameterCount == 1)
             {
@@ -12396,19 +12415,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "RealBasicVSRSharp" && model.TypeParameterCount == 1)
             {
-                // RealBasicVSR-Sharp retains the paper's 64-channel, 30-block, 4x production
-                // architecture. Its generated fixture is already FP32, but the first invariant
-                // still takes about 21 seconds and several per-test model instances grow the host
-                // past 3 GB. Exercise the same residual SR/pixel-shuffle topology through the
-                // public options at CI scale; production defaults and user customization remain
-                // unchanged.
+                // RealBasicVSR-Sharp keeps the release's second stage in production: RealBasicVSRNet
+                // (64 channels, 20 propagation and 20 cleaning blocks), the 64-channel spectral-norm
+                // U-Net discriminator and the VGG19 perceptual loss. The same generator ->
+                // discriminator topology runs here at CI scale through public options. The perceptual
+                // weight is zero because VGG19's widths are fixed by the pretrained network (20M
+                // parameters, about 20 GFLOP per 4-frame 128x128 forward), far beyond the fixture's
+                // budget; RealBasicVSRSharpPaperTests covers the perceptual loss itself.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
-                    "new AiDotNet.Video.Options.RealBasicVSRSharpOptions { NumFeatures = 16, " +
-                    "NumResBlocks = 2, CleaningModuleBlocks = 2, ScaleFactor = 2, NumFrames = 4, " +
-                    "DropoutRate = 0.0 })";
+                    "new AiDotNet.Video.Options.RealBasicVSRSharpOptions { Seed = 1, MidChannels = 16, " +
+                    "NumPropagationBlocks = 2, NumCleaningBlocks = 2, DiscriminatorChannels = 16, " +
+                    "NumFrames = 4, PerceptualWeight = 0 })";
             }
             else if (model.ClassName == "SlowFastLLaVA" && model.TypeParameterCount == 1)
             {
@@ -14785,8 +14805,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Halve the FRAMES, exactly as VideoCLIP does above and for the same reason: the RRDB
                 // stack (23 blocks x 5 dense layers at the paper default) runs once PER FRAME, so the
                 // frame count is a linear multiplier on every training step. Two frames still exercise
-                // the temporal alignment path that makes this a video super-resolution model rather
-                // than an image one.
+                // the per-frame batching of the release's video pipeline.
                 //
                 // Spatial size and ScaleFactor are deliberately untouched: this is a super-resolution
                 // model whose output is ScaleFactor x the input, so changing either would move the
