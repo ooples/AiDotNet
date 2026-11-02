@@ -21,8 +21,15 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// <typeparam name="T">The numeric type.</typeparam>
 public sealed class MbPAEpisodicMemory<T>
 {
-    private readonly List<(Vector<T> Key, Vector<T> Value)> _entries;
+    // KeyParameters: the embedding parameters the key was computed with, or null for a pair stored through the public
+    // Write, whose key the caller computed (taken to be the embedding the reading model was adapted with).
+    private readonly List<(Vector<T> Key, Vector<T> Value, object? Source, Vector<T>? KeyParameters)> _entries;
     private readonly int _capacity;
+
+    /// <summary>
+    /// Advances on every write or clear, so a view built from this memory can tell it is out of date.
+    /// </summary>
+    internal long Version { get; private set; }
 
     /// <summary>Gets the number of stored pairs.</summary>
     public int Count => _entries.Count;
@@ -42,20 +49,95 @@ public sealed class MbPAEpisodicMemory<T>
             throw new ArgumentOutOfRangeException(nameof(capacity), capacity, "Memory capacity must be positive.");
         }
         _capacity = capacity;
-        _entries = new List<(Vector<T>, Vector<T>)>(Math.Min(capacity, 1024));
+        _entries = new List<(Vector<T>, Vector<T>, object?, Vector<T>?)>(Math.Min(capacity, 1024));
     }
 
     /// <summary>
     /// Stores one <c>(embedding, target)</c> pair, evicting the oldest when at capacity.
     /// </summary>
-    public void Write(Vector<T> key, Vector<T> value)
+    public void Write(Vector<T> key, Vector<T> value) => Write(key, value, null, null);
+
+    /// <summary>
+    /// Stores one pair together with the example its key was embedded from and the embedding parameters that embedded
+    /// it, so a reader with a different embedding network can tell the key is not its own and recompute it.
+    /// </summary>
+    internal void Write(Vector<T> key, Vector<T> value, object? source, Vector<T>? keyParameters)
     {
         if (_entries.Count >= _capacity) _entries.RemoveAt(0);
-        _entries.Add((key, value));
+        _entries.Add((key, value, source, keyParameters));
+        Version++;
     }
 
     /// <summary>Removes every stored pair.</summary>
-    public void Clear() => _entries.Clear();
+    public void Clear()
+    {
+        _entries.Clear();
+        Version++;
+    }
+
+    /// <summary>
+    /// This memory as seen by an embedding network with <paramref name="current"/> parameters: itself when every key
+    /// was computed with those parameters, else a copy in which each key computed with other parameters is recomputed
+    /// from its source example by <paramref name="embed"/> (matching keys and all values are kept).
+    /// </summary>
+    /// <remarks>
+    /// Keys are only comparable with queries from the embedding network that produced them, and one memory collects
+    /// keys from whatever network wrote each entry: the meta-learner keeps training and writing after a model was
+    /// adapted from it, and an adapted model's own parameters can be changed. Each entry is checked, not the memory.
+    /// </remarks>
+    /// <param name="current">The reading embedding network's parameters.</param>
+    /// <param name="unstamped">The parameters a pair stored through the public <see cref="Write(Vector{T}, Vector{T})"/>
+    /// is taken to have been embedded with.</param>
+    /// <param name="sameParameters">Whether two parameter vectors are equal.</param>
+    /// <param name="embed">Recomputes a key from its source example with the reading network.</param>
+    /// <exception cref="InvalidOperationException">A key to recompute was written without its source example.</exception>
+    internal MbPAEpisodicMemory<T> KeyedFor(Vector<T> current, Vector<T> unstamped,
+        Func<Vector<T>, Vector<T>, bool> sameParameters, Func<object, Vector<T>> embed)
+    {
+        // One verdict per distinct parameter vector: entries written by one WriteToMemory call share theirs.
+        var verdicts = new List<(Vector<T> Parameters, bool Current)>();
+        bool IsCurrent(Vector<T>? keyParameters)
+        {
+            var parameters = keyParameters ?? unstamped;
+            foreach (var (seen, verdict) in verdicts)
+            {
+                if (ReferenceEquals(seen, parameters)) return verdict;
+            }
+            bool same = sameParameters(parameters, current);
+            verdicts.Add((parameters, same));
+            return same;
+        }
+
+        bool allCurrent = true;
+        foreach (var entry in _entries)
+        {
+            if (!IsCurrent(entry.KeyParameters))
+            {
+                allCurrent = false;
+                break;
+            }
+        }
+        if (allCurrent) return this;
+
+        var copy = new MbPAEpisodicMemory<T>(_capacity);
+        foreach (var (key, value, source, keyParameters) in _entries)
+        {
+            if (IsCurrent(keyParameters))
+            {
+                copy.Write(key, value, source, current);
+                continue;
+            }
+            if (source is null)
+            {
+                throw new InvalidOperationException(
+                    "An episodic-memory entry was written without its source example, so its key cannot be recomputed " +
+                    "for a model whose embedding network differs from the one that wrote it. Write entries through " +
+                    "MbPAAlgorithm.WriteToMemory.");
+            }
+            copy.Write(embed(source), value, source, current);
+        }
+        return copy;
+    }
 
     /// <summary>
     /// Returns the K entries whose keys are nearest to <paramref name="query"/> in Euclidean

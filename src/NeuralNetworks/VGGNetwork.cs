@@ -68,6 +68,12 @@ namespace AiDotNet.NeuralNetworks;
                 Source = "Simonyan and Zisserman 2015, Sec. 3.1 (Training): SGD, initial lr 0.01 divided by 10 on plateau, momentum 0.9, weight decay 5e-4.")]
 public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
 {
+    /// <summary>
+    /// The generated feed-forward CNN keeps nothing between calls, so each Predict frees its GPU intermediates when it
+    /// ends. Caller-supplied <c>Architecture.Layers</c> may carry a tensor between calls, so they keep the default.
+    /// </summary>
+    protected override bool ReleasesInferenceIntermediates => Architecture.Layers is not { Count: > 0 };
+
     private readonly VGGOptions _options;
 
     /// <summary>
@@ -152,7 +158,7 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         VGGOptions? options = null)
-        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new VGGOptions()).MaxGradNorm)
+        : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossForGeneratedLogitsHead(architecture), (options ??= new VGGOptions()).MaxGradNorm)
     {
         _options = options;
         Options = _options;
@@ -171,7 +177,7 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
+        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossForGeneratedLogitsHead(architecture);
 
         InitializeLayers();
     }
@@ -242,12 +248,15 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <remarks>
     /// <para>
     /// The forward pass sequentially processes the input through each layer of the network:
-    /// convolution blocks, pooling, fully connected layers, and produces class probabilities.
+    /// convolution blocks, pooling, and fully connected layers. Generated heads produce raw logits.
     /// </para>
     /// <para>
     /// <b>For Beginners:</b> This is how the network makes predictions. You give it an image
     /// (as a tensor), and it processes it through all the VGG layers to produce a prediction.
-    /// The output contains probabilities for each class.
+    /// Generated heads return raw logits. For mutually exclusive classes, softmax gives probabilities and
+    /// the largest score selects the class. For binary or multi-label tasks, apply sigmoid to each logit
+    /// and threshold each probability independently. Supplied layers define their own output contract and
+    /// may already return probabilities; do not apply an activation twice.
     /// </para>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
@@ -317,12 +326,11 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// Makes a prediction using the VGG network for the given input.
     /// </summary>
     /// <param name="input">The input tensor to make a prediction for.</param>
-    /// <returns>The predicted output tensor containing class probabilities.</returns>
+    /// <returns>The output tensor: raw logits for generated heads; the supplied head's output otherwise.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This is the main method you'll use after training. Give it an
-    /// image, and it returns probabilities for each class. The class with the highest
-    /// probability is the network's prediction.
+    /// image and interpret the output according to the task and head, as described in <see cref="Forward"/>.
     /// </para>
     /// </remarks>
     /// <summary>

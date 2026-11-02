@@ -122,6 +122,9 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
     // causal decoder while leaving single-token forwards (one position, no future) correct.
     private readonly bool _useCausalMask;
 
+    /// <summary>The table length the positional encoding was configured with (its <c>maxSequenceLength</c>).</summary>
+    private int _positionalMaxSequenceLength = 2048;
+
     // Shape-keyed cache of the flat causal row-pattern (see GetCausalMask): the [seqQ*seqKV] boolean plane
     // is computed once per (seqQ, seqKV) and block-replicated across batch*heads on demand.
     private readonly System.Collections.Concurrent.ConcurrentDictionary<(int, int), bool[]> _causalPatternCache = new();
@@ -417,6 +420,7 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         int maxSequenceLength = 2048)
     {
         PositionalEncoding = encodingType;
+        _positionalMaxSequenceLength = maxSequenceLength;
 
         // Unregister previous sub-layers before replacing
         if (_ropeLayer is not null) UnregisterSubLayer(_ropeLayer);
@@ -831,7 +835,8 @@ public partial class GroupedQueryAttentionLayer<T> : LayerBase<T>, IShapeContrac
         metadata["UseCausalMask"] = _useCausalMask.ToString();
         metadata["UseProjectionBias"] = _useProjectionBias.ToString();
         metadata["AttnLogitSoftcap"] = _attnLogitSoftcap.ToString(ci);
-        metadata["RoPETheta"] = RoPETheta.ToString(ci);
+        metadata["RoPETheta"] = RoPETheta.ToString("R", ci);
+        metadata["PositionalMaxSequenceLength"] = _positionalMaxSequenceLength.ToString(ci);
         return metadata;
     }
 
