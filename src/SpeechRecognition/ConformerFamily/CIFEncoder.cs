@@ -109,14 +109,29 @@ public partial class CIFEncoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
     {
         ThrowIfDisposed();
         var features = PreprocessAudio(audio);
-        var logits = IsOnnxMode && OnnxEncoder is not null ? OnnxEncoder.Run(features) : Predict(features);
+        var logits = TokenLogits(features);
         var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits); var text = TokensToText(tokens);
         double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
         return new TranscriptionResult<T> { Text = text, Language = language ?? _options.Language, Confidence = NumOps.FromDouble(confidence), DurationSeconds = duration, Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>() };
     }
 
+    /// <summary>
+    /// Runs one clip's [frames, mels] features through the model and returns [tokens, vocab] logits.
+    /// </summary>
+    /// <remarks>
+    /// The integrate-and-fire layer works on [batch, frames, dim], so a single clip is given a batch
+    /// axis of one and the logits lose it again; passed as-is, every native transcription threw.
+    /// </remarks>
+    private Tensor<T> TokenLogits(Tensor<T> features)
+    {
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(features);
+        var batched = features.Rank == 2 ? features.Reshape(1, features.Shape[0], features.Shape[1]) : features;
+        var logits = Predict(batched);
+        return logits.Rank == 3 && logits.Shape[0] == 1 ? logits.Reshape(logits.Shape[1], logits.Shape[2]) : logits;
+    }
+
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
+    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); var logits = TokenLogits(features); var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
     public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
     public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("CIFEncoder does not support streaming.");
 
@@ -156,7 +171,29 @@ public partial class CIFEncoder<T> : AudioNeuralNetworkBase<T>, ISpeechRecognize
 
 
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
+    /// <summary>Renders CTC token ids as text through the configured vocabulary.</summary>
+    /// <remarks>
+    /// Each id indexes <c>CIFEncoderOptions.Vocabulary</c>; casting ids to characters instead turned
+    /// token 6 into U+0006 rather than "a". Index 0 is the CTC blank, "|" is the word separator,
+    /// special pieces in angle brackets are dropped, and an id outside the vocabulary is skipped.
+    /// </remarks>
+    private string TokensToText(List<int> tokens)
+    {
+        var vocabulary = _options.Vocabulary;
+        var sb = new System.Text.StringBuilder();
+        foreach (var t in tokens)
+        {
+            if (t <= 0 || t >= vocabulary.Length) continue;
+
+            string piece = vocabulary[t];
+            if (piece == "|") { sb.Append(' '); continue; }
+            if (piece.Length > 1 && piece[0] == '<' && piece[piece.Length - 1] == '>') continue;
+
+            sb.Append(piece);
+        }
+
+        return sb.ToString().Trim();
+    }
     private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
     private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(CIFEncoder<T>)); }
