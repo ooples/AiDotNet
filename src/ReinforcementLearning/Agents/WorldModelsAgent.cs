@@ -138,15 +138,15 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         foreach (var network in Networks) RegisterParameterComponent(network);
     }
-    private WorldModelsOptions<T> _options;
+    private readonly WorldModelsOptions<T> _options;
 
     // V: VAE for spatial compression
-    private NeuralNetwork<T> _vaeEncoder;
-    private NeuralNetwork<T> _vaeDecoder;
+    private readonly NeuralNetwork<T> _vaeEncoder;
+    private readonly NeuralNetwork<T> _vaeDecoder;
 
     // M: MDN-RNN — the LSTM stack and its mixture-density head, also kept individually so a dream can step them
     // one time step at a time from a carried (h, c) state.
-    private NeuralNetwork<T> _mdnRnn;
+    private readonly NeuralNetwork<T> _mdnRnn;
     private readonly List<LSTMLayer<T>> _lstmLayers;
     private readonly DenseLayer<T> _mdnHead;
 
@@ -347,16 +347,23 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// identical across agent instances built from the same options — required
     /// for Clone() to reproduce the original's policy.
     /// </summary>
-    private static void AssignDeterministicSeeds(List<ILayer<T>> layers, int baseSeed)
+    private void AssignDeterministicSeeds(List<ILayer<T>> layers, int baseSeed)
     {
+        int seed = SeededBase(baseSeed);
         for (int i = 0; i < layers.Count; i++)
         {
             if (layers[i] is LayerBase<T> layer)
             {
-                layer.RandomSeed = baseSeed + i;
+                layer.RandomSeed = unchecked(seed + i);
             }
         }
     }
+
+    /// <summary>
+    /// A component's base seed: the fixed constant for an agent without a Seed (so Clone still reproduces it), mixed
+    /// with the options' Seed otherwise, so the Seed selects the initial weights as it does for every other agent.
+    /// </summary>
+    private int SeededBase(int baseSeed) => _options.Seed is int seed ? unchecked(seed * 31 + baseSeed * 1009) : baseSeed;
 
     private NeuralNetwork<T> CreateDecoderNetwork(int inputSize, int outputSize)
     {
@@ -412,7 +419,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         // Small uniform weights from a fixed seed, so two agents built from the same options start from the same
         // controller (Clone reproduces the policy) while different inputs still give different actions.
-        var random = RandomHelper.CreateSeededRandom(ControllerSeedBase);
+        var random = RandomHelper.CreateSeededRandom(SeededBase(ControllerSeedBase));
         var parameters = new Vector<T>(ControllerParameterCount(_controllerLayerSizes));
         for (int i = 0; i < parameters.Length; i++)
         {
@@ -801,9 +808,10 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         var rewardTerm = Engine.TensorSquare(Engine.TensorSubtract(rewardPrediction, rewardTarget));
 
-        // Logistic loss: log(1 + e^l) - y l.
+        // Logistic loss: log(1 + e^l) - y l, with log(1 + e^l) as the stable softplus: the literal form overflows
+        // to +inf once e^l does (l > ~88 in float), and the loss and every gradient then go to NaN.
         var doneTerm = Engine.TensorSubtract(
-            Engine.TensorLog(Engine.TensorAddScalar(Engine.TensorExp(doneLogit), NumOps.One)),
+            Engine.Softplus(doneLogit),
             Engine.TensorMultiply(doneTarget, doneLogit));
 
         var perStep = Engine.TensorMultiply(Engine.TensorAdd(Engine.TensorAdd(latentTerm, rewardTerm), doneTerm), mask);
@@ -881,28 +889,14 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     internal T DreamReturn(Vector<T> controllerParameters)
     {
         int rollouts = _options.ControllerEvaluationRollouts;
-        int obsSize = ObservationSize;
-        int latent = _options.LatentSize;
-        int block = MixtureBlock;
-        int outputSize = MdnOutputSize;
-
-        var starts = new Tensor<T>(new[] { rollouts, obsSize });
-        for (int b = 0; b < rollouts; b++)
-        {
-            var state = _replayBuffer.SequenceFromSlot(Random.Next(_replayBuffer.Count), 1)[0].State;
-            for (int j = 0; j < obsSize; j++) starts[b * obsSize + j] = state[j];
-        }
-        var (mean, logVar) = Encode(starts);
-        var z = SampleLatent(mean, logVar);
+        var z = SampleDreamStartLatents(rollouts);
 
         var controller = BuildController(controllerParameters);
         var hidden = new Tensor<T>?[_options.RNNLayers];
         var cell = new Tensor<T>?[_options.RNNLayers];
         var memory = new Tensor<T>(new[] { rollouts, _options.RNNHiddenSize });
-        var alive = new bool[rollouts];
-        for (int b = 0; b < rollouts; b++) alive[b] = true;
-        var returns = new T[rollouts];
-        for (int b = 0; b < rollouts; b++) returns[b] = NumOps.Zero;
+        var alive = Enumerable.Repeat(true, rollouts).ToArray();
+        var returns = Enumerable.Repeat(NumOps.Zero, rollouts).ToArray();
         int remaining = rollouts;
 
         var weights = new double[_options.NumMixtures];
@@ -913,33 +907,73 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
             memory = top;
             var output = _mdnHead.Forward(Engine.Reshape(top, new[] { rollouts, 1, _options.RNNHiddenSize }));
 
-            var nextZ = new Tensor<T>(new[] { rollouts, latent });
-            for (int b = 0; b < rollouts; b++)
-            {
-                int offset = b * outputSize;
-                for (int d = 0; d < latent; d++)
-                {
-                    nextZ[b * latent + d] = SampleMixtureLatent(output, offset, d, weights);
-                }
-
-                if (!alive[b]) continue;
-                returns[b] = NumOps.Add(returns[b], output[offset + 3 * block]);
-                // sigmoid(l) > 0.5 exactly when l > 0.
-                if (NumOps.GreaterThan(output[offset + 3 * block + 1], NumOps.Zero))
-                {
-                    alive[b] = false;
-                    remaining--;
-                }
-            }
-            z = nextZ;
+            z = SampleNextLatents(output, rollouts, weights);
+            remaining -= AccrueDreamStep(output, alive, returns);
             DreamStepsSimulated += rollouts;
         }
 
         DreamEvaluations++;
+        return NumOps.Divide(returns.Aggregate(NumOps.Zero, NumOps.Add), NumOps.FromDouble(rollouts));
+    }
 
-        T sum = NumOps.Zero;
-        for (int b = 0; b < rollouts; b++) sum = NumOps.Add(sum, returns[b]);
-        return NumOps.Divide(sum, NumOps.FromDouble(rollouts));
+    /// <summary>
+    /// z_0 for each dream rollout: V's posterior sample for a random stored observation.
+    /// </summary>
+    private Tensor<T> SampleDreamStartLatents(int rollouts)
+    {
+        int obsSize = ObservationSize;
+        var starts = new Tensor<T>(new[] { rollouts, obsSize });
+        for (int b = 0; b < rollouts; b++)
+        {
+            var state = _replayBuffer.SequenceFromSlot(Random.Next(_replayBuffer.Count), 1)[0].State;
+            for (int j = 0; j < obsSize; j++) starts[b * obsSize + j] = state[j];
+        }
+        var (mean, logVar) = Encode(starts);
+        return SampleLatent(mean, logVar);
+    }
+
+    /// <summary>
+    /// z_{t+1} for every rollout, sampled from M's mixture output. Finished rollouts are sampled too, so the random
+    /// stream does not depend on which rollouts are still running.
+    /// </summary>
+    private Tensor<T> SampleNextLatents(Tensor<T> output, int rollouts, double[] weights)
+    {
+        int latent = _options.LatentSize;
+        int outputSize = MdnOutputSize;
+        var nextZ = new Tensor<T>(new[] { rollouts, latent });
+        for (int b = 0; b < rollouts; b++)
+        {
+            int offset = b * outputSize;
+            for (int d = 0; d < latent; d++)
+            {
+                nextZ[b * latent + d] = SampleMixtureLatent(output, offset, d, weights);
+            }
+        }
+        return nextZ;
+    }
+
+    /// <summary>
+    /// Adds M's predicted reward to each running rollout's return and ends the rollouts M predicts done; returns how
+    /// many ended at this step.
+    /// </summary>
+    private int AccrueDreamStep(Tensor<T> output, bool[] alive, T[] returns)
+    {
+        int block = MixtureBlock;
+        int outputSize = MdnOutputSize;
+        int ended = 0;
+        for (int b = 0; b < alive.Length; b++)
+        {
+            if (!alive[b]) continue;
+            int offset = b * outputSize;
+            returns[b] = NumOps.Add(returns[b], output[offset + 3 * block]);
+            // sigmoid(l) > 0.5 exactly when l > 0.
+            if (NumOps.GreaterThan(output[offset + 3 * block + 1], NumOps.Zero))
+            {
+                alive[b] = false;
+                ended++;
+            }
+        }
+        return ended;
     }
 
     /// <summary>The number of controllers scored in the dream so far.</summary>

@@ -195,20 +195,41 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         // BN/Conv expect [N, C, H, W] format. Add batch dim if 3D [C, H, W].
         var x = input.Shape.Length == 3 ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]) : input;
 
-        // BN-ReLU-Conv1x1 (DenseNet paper: pre-activation bottleneck)
-        // The intermediates are locals: the tape keeps what backward needs, and a field would hold
-        // every dense layer's activations after the forward, in inference too (DenseNet-121 b16).
-        var bn1Out = _bn1.Forward(x);
-        // Scalar activation objects operate eagerly and therefore detach the value from the
-        // active GradientTape. Keep the DenseNet pre-activation on the engine graph so gradients
-        // reach BN1 and every layer before this block.
-        var relu1Out = Engine.ReLU(bn1Out);
-        var conv1Out = _conv1x1.Forward(relu1Out);
+        // In inference the pre-activation BN1 + ReLU runs as one pass, and BN2 + ReLU folds into the 1x1 convolution
+        // before it (the engine's FusedConv2DBatchNorm). Each stage declines on its own, so a fused BN1 is kept when
+        // the 1x1 fold declines; training and backward retain the ordinary engine graph without storing intermediates.
+        bool tryFuse = !ShouldCacheForBackward;
 
-        // BN-ReLU-Conv3x3
-        var bn2Out = _bn2.Forward(conv1Out);
-        var relu2Out = Engine.ReLU(bn2Out);
-        var output = _conv3x3.Forward(relu2Out);
+        // BN1-ReLU (DenseNet paper: pre-activation bottleneck)
+        Tensor<T> preActivated;
+        if (tryFuse && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(_bn1, x, FusedActivationType.ReLU, out var fusedPre))
+        {
+            preActivated = fusedPre;
+        }
+        else
+        {
+            var bn1Out = _bn1.Forward(x);
+            // Scalar activation objects operate eagerly and therefore detach the value from the
+            // active GradientTape. Keep the DenseNet pre-activation on the engine graph so gradients
+            // reach BN1 and every layer before this block.
+            preActivated = Engine.ReLU(bn1Out);
+        }
+
+        // Conv1x1-BN2-ReLU, then the 3x3 convolution
+        Tensor<T> bottleneck;
+        if (tryFuse
+            && ConvolutionBatchNormFolding<T>.TryForward(_conv1x1, _bn2, preActivated, FusedActivationType.ReLU, out var folded))
+        {
+            bottleneck = folded;
+        }
+        else
+        {
+            var conv1Out = _conv1x1.Forward(preActivated);
+            var bn2Out = _bn2.Forward(conv1Out);
+            bottleneck = Engine.ReLU(bn2Out);
+        }
+
+        var output = _conv3x3.Forward(bottleneck);
 
         // Remove batch dim if we added it
         if (input.Shape.Length == 3 && output.Shape.Length == 4 && output.Shape[0] == 1)

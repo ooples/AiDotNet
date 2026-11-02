@@ -140,7 +140,8 @@ public class RLAgentTrainingBehaviourTests
                 StepsPerUpdate = 16,
                 MiniBatchSize = 16,
                 TrainingEpochs = 1,
-                PolicyLearningRate = 0.05,
+                // Keep the first Adam step local: 0.05 can overshoot despite the entropy gradient's correct sign.
+                PolicyLearningRate = 0.001,
                 ValueLearningRate = 0.01,
                 EntropyCoefficient = beta,
                 Seed = 3,

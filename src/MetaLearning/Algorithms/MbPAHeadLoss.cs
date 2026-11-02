@@ -35,10 +35,8 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// </para>
 /// <para>
 /// <b>On batching.</b> The loss is handed whatever the model flattens its batch into, with no shape
-/// metadata, so the batch size is recovered as <c>actual.Length / outputDim</c> and the embedding
-/// stride as <c>predicted.Length / batch</c>. When either does not divide evenly the whole vector is
-/// treated as ONE example -- which is exactly right for the single-example case and is at worst a
-/// coarser gradient for a ragged one, rather than an index out of range in the middle of training.
+/// metadata, so each embedding has the configured feature width. Targets carry either one class
+/// index per categorical example or one full output vector per example. Invalid widths are rejected.
 /// </para>
 /// </remarks>
 internal sealed partial class MbPAHeadLoss<T> : ILossFunction<T>
@@ -65,6 +63,10 @@ internal sealed partial class MbPAHeadLoss<T> : ILossFunction<T>
         Vector<T> headParameters, int featureDim, int outputDim, MbPAOutputDistribution distribution)
     {
         _headParameters = headParameters ?? throw new ArgumentNullException(nameof(headParameters));
+        if (featureDim <= 0) throw new ArgumentOutOfRangeException(nameof(featureDim));
+        if (outputDim <= 0) throw new ArgumentOutOfRangeException(nameof(outputDim));
+        if (headParameters.Length != (featureDim + 1) * outputDim)
+            throw new ArgumentException("Head parameters must contain the output weights and biases.", nameof(headParameters));
         _featureDim = featureDim;
         _outputDim = outputDim;
         _distribution = distribution;
@@ -74,7 +76,8 @@ internal sealed partial class MbPAHeadLoss<T> : ILossFunction<T>
     public T CalculateLoss(Vector<T> predicted, Vector<T> actual)
     {
         double total = 0.0;
-        int batch = BatchSize(predicted, actual, out int stride);
+        int batch = BatchSize(predicted.Length, actual.Length, out int stride);
+        actual = NormalizeTargets(actual, batch);
 
         for (int i = 0; i < batch; i++)
         {
@@ -89,25 +92,39 @@ internal sealed partial class MbPAHeadLoss<T> : ILossFunction<T>
     /// <inheritdoc/>
     /// <summary>Tape-recorded loss, required by <see cref="ILossFunction{T}"/> since #1994.</summary>
     /// <remarks>
-    /// #1994 made the autodiff tape the only source of gradients and promoted ComputeTapeLoss onto
-    /// the interface. This head is a squared error averaged over every axis, matching
-    /// <see cref="CalculateLoss"/>: a mean loss with a summed gradient differ by the batch size,
-    /// which would make the effective learning rate depend on how the caller chunked its data.
+    /// Applies the fixed linear output head before categorical cross-entropy or Gaussian negative
+    /// log-likelihood. Both objectives sum over output coordinates and average over examples,
+    /// matching <see cref="CalculateLoss"/> and its embedding derivative.
     /// </remarks>
     public Tensor<T> ComputeTapeLoss(Tensor<T> predicted, Tensor<T> target)
     {
         var engine = AiDotNetEngine.Current;
-        var diff = engine.TensorSubtract(predicted, target);
+        int batch = BatchSize(predicted.Length, target.Length, out _);
+        if (batch == 0)
+            return engine.ReduceSum(predicted, Enumerable.Range(0, predicted.Rank).ToArray(), keepDims: false);
+        var weights = new Tensor<T>([_featureDim, _outputDim]);
+        var bias = new Tensor<T>([1, _outputDim]);
+        for (int o = 0; o < _outputDim; o++)
+        {
+            for (int f = 0; f < _featureDim; f++) weights[f * _outputDim + o] = _headParameters[o * _featureDim + f];
+            bias[o] = _headParameters[_featureDim * _outputDim + o];
+        }
+        var logits = engine.TensorAdd(engine.TensorMatMul(engine.Reshape(predicted, [batch, _featureDim]), weights), bias);
+        var normalized = new Tensor<T>([batch, _outputDim], NormalizeTargets(target.ToVector(), batch));
+        if (_distribution == MbPAOutputDistribution.Categorical)
+            return new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>().ComputeTapeLoss(logits, normalized);
+        var diff = engine.TensorSubtract(logits, normalized);
         var squared = engine.TensorMultiply(diff, diff);
-        var allAxes = Enumerable.Range(0, squared.Shape.Length).ToArray();
-        return engine.ReduceMean(squared, allAxes, keepDims: false);
+        return engine.TensorMultiplyScalar(engine.ReduceSum(squared, [0, 1], keepDims: false),
+            Ops.FromDouble(0.5 / batch));
     }
 
     public Vector<T> CalculateDerivative(Vector<T> predicted, Vector<T> actual)
     {
         var derivative = new Vector<T>(predicted.Length);
-        int batch = BatchSize(predicted, actual, out int stride);
+        int batch = BatchSize(predicted.Length, actual.Length, out int stride);
         if (batch == 0) return derivative;
+        actual = NormalizeTargets(actual, batch);
 
         // Averaged over the batch to match CalculateLoss. A loss that is a mean and a derivative that
         // is a sum differ by the batch size, which turns the effective learning rate into a function
@@ -153,20 +170,28 @@ internal sealed partial class MbPAHeadLoss<T> : ILossFunction<T>
         return (loss, gradient);
     }
 
-    private int BatchSize(Vector<T> predicted, Vector<T> actual, out int stride)
+    private int BatchSize(int predictedLength, int targetLength, out int stride)
     {
-        if (_outputDim > 0 && actual.Length >= _outputDim && actual.Length % _outputDim == 0)
-        {
-            int batch = actual.Length / _outputDim;
-            if (batch > 0 && predicted.Length % batch == 0)
-            {
-                stride = predicted.Length / batch;
-                return batch;
-            }
-        }
+        stride = _featureDim;
+        if (predictedLength % _featureDim != 0)
+            throw new ArgumentException("Embedding values must contain complete rows of the configured feature width.", nameof(predictedLength));
+        int batch = predictedLength / _featureDim;
+        bool indices = _distribution == MbPAOutputDistribution.Categorical && targetLength == batch;
+        if (!indices && targetLength != batch * _outputDim)
+            throw new ArgumentException("Target count must match the embedding batch and output width.", nameof(targetLength));
+        return batch;
+    }
 
-        stride = predicted.Length;
-        return predicted.Length > 0 ? 1 : 0;
+    private Vector<T> NormalizeTargets(Vector<T> actual, int batch)
+    {
+        if (actual.Length == batch * _outputDim) return actual;
+        var normalized = new Vector<T>(batch * _outputDim);
+        for (int i = 0; i < batch; i++)
+        {
+            var row = MbPAConversions<T>.CategoricalTarget(Slice(actual, i, 1), _outputDim);
+            for (int o = 0; o < _outputDim; o++) normalized[i * _outputDim + o] = row[o];
+        }
+        return normalized;
     }
 
     private static Vector<T> Slice(Vector<T> source, int offset, int length)

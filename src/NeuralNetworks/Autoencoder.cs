@@ -294,7 +294,7 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultAutoEncoderLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultAutoEncoderLayers(Architecture, _options.LatentSize ?? 0));
         }
 
         // EncodedSize = latent dimension = the bottleneck (narrowest) width in the
@@ -312,6 +312,22 @@ public partial class Autoencoder<T> : VectorModelLayoutBase<T>, IAuxiliaryLossLa
                 latent = Math.Min(latent, outShape[0]);
         }
         EncodedSize = latent == int.MaxValue ? 0 : latent;
+
+        // The default stack has a configured latent, and LatentSize may exceed the hidden width, so the narrowest
+        // layer is not necessarily the bottleneck there. Encode hands off at Layers.Count / 2, so the encoded size is
+        // the output width of the last encoder layer that reports one.
+        if (Architecture.Layers is null || Architecture.Layers.Count == 0)
+        {
+            for (int i = Layers.Count / 2 - 1; i >= 0; i--)
+            {
+                var outShape = Layers[i].GetOutputShape();
+                if (outShape is not null && outShape.Length > 0 && outShape[0] > 0)
+                {
+                    EncodedSize = outShape[0];
+                    break;
+                }
+            }
+        }
     }
 
     /// <summary>

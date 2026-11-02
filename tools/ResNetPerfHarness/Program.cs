@@ -204,24 +204,26 @@ internal static class Program
             {
                 var sww = Stopwatch.StartNew();
                 var ow = net.Predict(input);
+                _ = ow.ToArray();
                 sww.Stop();
                 Console.WriteLine($"[harness] warmup#{w + 1} forward: {sww.ElapsedMilliseconds} ms  outLen={ow.Length}");
             }
-            long ftotal = 0;
+            double ftotal = 0;
             for (int i = 0; i < iters; i++)
             {
                 long allocBefore = GC.GetTotalAllocatedBytes();
                 int g0 = GC.CollectionCount(0), g1 = GC.CollectionCount(1), g2 = GC.CollectionCount(2);
                 var swf = Stopwatch.StartNew();
                 var of = net.Predict(input);
+                _ = of.ToArray();   // a GPU predict is only done once its result reaches the host
                 swf.Stop();
-                ftotal += swf.ElapsedMilliseconds;
+                ftotal += swf.Elapsed.TotalMilliseconds;
                 double allocMB = (GC.GetTotalAllocatedBytes() - allocBefore) / (1024.0 * 1024.0);
                 Console.WriteLine(
-                    $"[harness] iter#{i + 1} forward: {swf.ElapsedMilliseconds,6} ms  outLen={of.Length}  " +
+                    $"[harness] iter#{i + 1} forward: {swf.Elapsed.TotalMilliseconds,8:F2} ms  outLen={of.Length}  " +
                     $"alloc={allocMB:F1} MB  GC(g0/g1/g2)=+{GC.CollectionCount(0) - g0}/+{GC.CollectionCount(1) - g1}/+{GC.CollectionCount(2) - g2}");
             }
-            Console.WriteLine($"[harness] avg forward over {iters} iters: {(double)ftotal / iters:F1} ms");
+            Console.WriteLine($"[harness] avg forward over {iters} iters: {ftotal / iters:F2} ms");
             return 0;
         }
 
@@ -300,7 +302,7 @@ internal static class Program
             case "t5xxl-ctor":
             {
                 var sw = Stopwatch.StartNew();
-                _ = new AiDotNet.Diffusion.Conditioning.T5TextConditioner<double>(ClipTokenizerFactory.CreateSimple(), AiDotNet.Enums.T5Variant.XXL);
+                _ = new AiDotNet.Diffusion.Conditioning.T5TextConditioner<double>(ClipTokenizerFactory.CreateSimple(), options: new AiDotNet.Diffusion.Conditioning.T5TextConditionerOptions { Variant = AiDotNet.Enums.T5Variant.XXL });
                 sw.Stop();
                 Console.WriteLine($"[harness] T5TextConditioner(T5-XXL) ctor: {sw.ElapsedMilliseconds} ms");
                 return true;

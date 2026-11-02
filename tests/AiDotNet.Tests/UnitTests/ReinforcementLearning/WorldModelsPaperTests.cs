@@ -191,6 +191,31 @@ public class WorldModelsPaperTests
         Assert.Equal(nll + rewardLoss + doneLoss, value, 9);
     }
 
+    /// <summary>
+    /// The done term is softplus(l) - y l evaluated stably: a done logit of 800 labelled done costs ~0, and the loss
+    /// stays finite. Fails if log(1 + e^l) is evaluated literally, where e^800 overflows and the loss becomes +inf.
+    /// </summary>
+    [Fact]
+    public void MdnObjective_DoneTerm_IsFiniteForALargeDoneLogit()
+    {
+        var agent = new WorldModelsAgent<double>(Small(latent: 1, mixtures: 2));
+        double[] step = { 0.0, 1.0, 0.5, -1.0, 0.0, Math.Log(0.5), 0.3, 800.0 };
+        var output = new Tensor<double>(new[] { 1, 1, 8 });
+        for (int j = 0; j < 8; j++) output[j] = step[j];
+        var z = new Tensor<double>(new[] { 1, 1, 1 }); z[0] = 0.2;
+        var reward = new Tensor<double>(new[] { 1, 1, 1 }); reward[0] = 1.0;
+        var done = new Tensor<double>(new[] { 1, 1, 1 }); done[0] = 1.0;
+        var mask = new Tensor<double>(new[] { 1, 1, 1 }); mask[0] = 1.0;
+
+        double Density(double x, double m, double s) => Math.Exp(-0.5 * ((x - m) / s) * ((x - m) / s)) / (s * Math.Sqrt(2 * Math.PI));
+        double p0 = 1.0 / (1.0 + Math.E), p1 = Math.E / (1.0 + Math.E);
+        double nll = -Math.Log(p0 * Density(0.2, 0.5, 1.0) + p1 * Density(0.2, -1.0, 0.5));
+        double rewardLoss = (0.3 - 1.0) * (0.3 - 1.0);
+
+        double value = agent.MdnObjective(output, z, reward, done, mask, 1.0)[0];
+        Assert.Equal(nll + rewardLoss, value, 9);
+    }
+
     [Fact]
     public void Temperature_FlattensTheMixtureWeights_AndScalesSigmaBySqrtTau()
     {
@@ -418,6 +443,39 @@ public class WorldModelsPaperTests
         for (int j = 0; j < hidden; j++) headValues[j * outputs + rewardIndex] = 1.0;
         headValues[outputs * hidden + rewardIndex + 1] = -10.0; // never done
         head.SetParameters(new Vector<double>(headValues));
+    }
+
+    /// <summary>A controller that ignores [z, h] and always outputs <paramref name="action"/>: zero weights, bias atanh(a).</summary>
+    private static Vector<double> ConstantActionController(WorldModelsAgent<double> agent, double[] action)
+    {
+        var parameters = agent.GetControllerParameters();
+        for (int i = 0; i < parameters.Length; i++) parameters[i] = 0.0;
+        // The paper's linear controller: weights [L + H, A] row-major, then the A biases last.
+        for (int a = 0; a < action.Length; a++)
+            parameters[parameters.Length - action.Length + a] = 0.5 * Math.Log((1 + action[a]) / (1 - action[a]));
+        return parameters;
+    }
+
+    [Fact]
+    public void Memory_LearnsTheRewardOfTheActionTaken()
+    {
+        // The other half of "C follows the reward": C maximises M's predicted reward (the dream test below), so M
+        // has to learn which action the real environment paid for. Fill pays r = a_0 for random actions; after M's
+        // epochs, a one-step dream taking a_0 = +0.8 must collect more predicted reward than one taking -0.8 -- 1.6
+        // for an exact reward head. One step, because r_t has to come from the a_t M has just consumed: over a longer
+        // constant-action dream a reward head shifted by a step (predicting r_{t-1}) would score the same.
+        const int length = 1;
+        var agent = new WorldModelsAgent<double>(Small(rnnEpochs: 150, sequenceLength: 16, rolloutLength: length,
+            evaluationRollouts: 8, learningRate: 0.01));
+        Fill(agent, 256, seed: 41);
+        for (int call = 0; call < 10000 && agent.CurrentStage != WorldModelsTrainingStage.Controller; call++) agent.Train();
+        Assert.Equal(WorldModelsTrainingStage.Controller, agent.CurrentStage);
+
+        double paid = agent.DreamReturn(ConstantActionController(agent, new[] { 0.8, 0.0 }));
+        double punished = agent.DreamReturn(ConstantActionController(agent, new[] { -0.8, 0.0 }));
+        Assert.True(paid - punished > 0.5 * length * 1.6,
+            $"M did not learn the reward of the action: dream return {paid} taking a_0 = +0.8 vs {punished} taking -0.8 "
+            + $"(an exact reward head separates them by {length * 1.6}).");
     }
 
     [Fact]

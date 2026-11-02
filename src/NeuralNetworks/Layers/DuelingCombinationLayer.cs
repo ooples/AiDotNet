@@ -87,13 +87,13 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
     // Hidden ReLU layers of each stream (Wang et al. 2016, Fig. 1: each stream is its own fully connected
     // layer before its output), in order. Empty arrays give the single-projection head.
     [AiDotNet.Attributes.TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private Tensor<T>[] _valueHiddenWeights;
+    private readonly Tensor<T>[] _valueHiddenWeights;
     [AiDotNet.Attributes.TrainableParameter(Role = PersistentTensorRole.Biases)]
-    private Tensor<T>[] _valueHiddenBiases;
+    private readonly Tensor<T>[] _valueHiddenBiases;
     [AiDotNet.Attributes.TrainableParameter(Role = PersistentTensorRole.Weights)]
-    private Tensor<T>[] _advantageHiddenWeights;
+    private readonly Tensor<T>[] _advantageHiddenWeights;
     [AiDotNet.Attributes.TrainableParameter(Role = PersistentTensorRole.Biases)]
-    private Tensor<T>[] _advantageHiddenBiases;
+    private readonly Tensor<T>[] _advantageHiddenBiases;
 
     private readonly int _numAtoms;
     private readonly int[] _valueHiddenWidths;

@@ -357,7 +357,7 @@ public partial class ResidualNeuralNetwork<T> : VectorModelLayoutBase<T>, IAuxil
         else
         {
             // Use default layer configuration if no layers are provided
-            Layers.AddRange(LayerHelper<T>.CreateDefaultResNetLayers(Architecture));
+            Layers.AddRange(LayerHelper<T>.CreateDefaultResNetLayers(Architecture, _options.NumResidualBlocks));
         }
 
         // Automatically add auxiliary classifiers for deep supervision if enabled

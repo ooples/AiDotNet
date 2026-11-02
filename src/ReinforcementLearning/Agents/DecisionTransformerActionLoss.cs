@@ -26,9 +26,6 @@ internal sealed class DecisionTransformerActionLoss<T> : ILossFunction<T>
 
     private static IEngine Engine => AiDotNetEngine.Current;
 
-    /// <summary>Guards the logarithm of a softmax probability, as PolicyDistributionHelper does.</summary>
-    private const double LogEpsilon = 1e-8;
-
     private readonly int[] _actionRows;
     private readonly int _actionSize;
     private readonly bool _continuous;
@@ -71,9 +68,10 @@ internal sealed class DecisionTransformerActionLoss<T> : ILossFunction<T>
         if (_continuous)
             return _continuousLoss.ComputeTapeLoss(predictedRows, targetRows);
 
-        // Cross-entropy -mean_i sum_a y_ia log softmax(z_i)_a, with one-hot targets y.
-        var logProbabilities = Engine.TensorLog(
-            Engine.TensorAddScalar(Engine.Softmax(predictedRows), NumOps.FromDouble(LogEpsilon)));
+        // Cross-entropy -mean_i sum_a y_ia log softmax(z_i)_a, with one-hot targets y. log_softmax is taken directly
+        // (z - logsumexp z), as torch's cross_entropy does: log(softmax + eps) caps the loss at -log(eps) and shrinks the
+        // gradient of a confidently wrong row by p / (p + eps), so the worst-predicted actions barely learned.
+        var logProbabilities = Engine.TensorLogSoftmax(predictedRows, axis: -1);
         var labelled = Engine.ReduceSum(Engine.TensorMultiply(logProbabilities, targetRows), [1], keepDims: false);
         return Engine.TensorNegate(Engine.ReduceMean(labelled, [0], keepDims: false));
     }
@@ -94,12 +92,9 @@ internal sealed class DecisionTransformerActionLoss<T> : ILossFunction<T>
         T total = NumOps.Zero;
         for (int i = 0; i < _actionRows.Length; i++)
         {
-            var probabilities = Softmax(gatheredPredicted, i * _actionSize);
+            var logProbabilities = LogSoftmax(gatheredPredicted, i * _actionSize);
             for (int a = 0; a < _actionSize; a++)
-            {
-                T logP = NumOps.Log(NumOps.Add(probabilities[a], NumOps.FromDouble(LogEpsilon)));
-                total = NumOps.Add(total, NumOps.Multiply(gatheredActual[i * _actionSize + a], logP));
-            }
+                total = NumOps.Add(total, NumOps.Multiply(gatheredActual[i * _actionSize + a], logProbabilities[a]));
         }
 
         return NumOps.Negate(NumOps.Divide(total, NumOps.FromDouble(_actionRows.Length)));
@@ -184,19 +179,24 @@ internal sealed class DecisionTransformerActionLoss<T> : ILossFunction<T>
     /// <summary>The softmax of one <c>actionSize</c>-wide row starting at <paramref name="offset"/>, max-shifted for stability.</summary>
     private T[] Softmax(Vector<T> logits, int offset)
     {
+        var result = LogSoftmax(logits, offset);
+        for (int a = 0; a < _actionSize; a++) result[a] = NumOps.Exp(result[a]);
+        return result;
+    }
+
+    /// <summary>log softmax of one <c>actionSize</c>-wide row: z_a - max - log sum_b exp(z_b - max).</summary>
+    private T[] LogSoftmax(Vector<T> logits, int offset)
+    {
         T max = logits[offset];
         for (int a = 1; a < _actionSize; a++)
             if (NumOps.GreaterThan(logits[offset + a], max)) max = logits[offset + a];
 
-        var result = new T[_actionSize];
         T sum = NumOps.Zero;
-        for (int a = 0; a < _actionSize; a++)
-        {
-            result[a] = NumOps.Exp(NumOps.Subtract(logits[offset + a], max));
-            sum = NumOps.Add(sum, result[a]);
-        }
+        for (int a = 0; a < _actionSize; a++) sum = NumOps.Add(sum, NumOps.Exp(NumOps.Subtract(logits[offset + a], max)));
+        T logNormalizer = NumOps.Add(max, NumOps.Log(sum));
 
-        for (int a = 0; a < _actionSize; a++) result[a] = NumOps.Divide(result[a], sum);
+        var result = new T[_actionSize];
+        for (int a = 0; a < _actionSize; a++) result[a] = NumOps.Subtract(logits[offset + a], logNormalizer);
         return result;
     }
 }

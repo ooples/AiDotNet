@@ -172,7 +172,10 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             inputSize: _options.StateSize,
             outputSize: _options.ActionSize,
             layers: layers
-        );
+        )
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture, optimizer: CreateNetworkOptimizer(_options.ActorLearningRate));
     }
@@ -199,7 +202,10 @@ public partial class DDPGAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             inputSize: inputSize,
             outputSize: 1,
             layers: layers
-        );
+        )
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture,
             optimizer: CreateNetworkOptimizer(_options.CriticLearningRate),

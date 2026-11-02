@@ -8,6 +8,7 @@ using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.ReinforcementLearning.Common;
 using AiDotNet.Validation;
 
@@ -158,7 +159,8 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             layers: layers);
 
         return new NeuralNetwork<T>(architecture,
-            optimizer: CreateNetworkOptimizer(_ppoOptions.PolicyLearningRate, _ppoOptions.MaxGradNorm));
+            optimizer: CreateNetworkOptimizer(_ppoOptions.PolicyLearningRate, _ppoOptions.MaxGradNorm),
+            options: new NeuralNetworkDefaultOptions { Seed = _ppoOptions.Seed });
     }
 
     private NeuralNetwork<T> BuildValueNetwork()
@@ -186,7 +188,8 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
         return new NeuralNetwork<T>(architecture,
             optimizer: CreateNetworkOptimizer(_ppoOptions.ValueLearningRate, _ppoOptions.MaxGradNorm),
-            lossFunction: _ppoOptions.ValueLossFunction);
+            lossFunction: _ppoOptions.ValueLossFunction,
+            options: new NeuralNetworkDefaultOptions { Seed = _ppoOptions.Seed is int seed ? unchecked(seed + 1) : null });
     }
 
     /// <inheritdoc/>

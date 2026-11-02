@@ -173,7 +173,10 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             inputSize: _sacOptions.StateSize,
             outputSize: _sacOptions.ActionSize * 2,
             layers: layers
-        );
+        )
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture, optimizer: CreateNetworkOptimizer(_sacOptions.PolicyLearningRate));
     }
@@ -201,7 +204,10 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             inputSize: inputSize,
             outputSize: 1,
             layers: layers
-        );
+        )
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture,
             optimizer: CreateNetworkOptimizer(_sacOptions.QLearningRate),

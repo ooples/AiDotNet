@@ -63,7 +63,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
     [
         // MetaLearnerBase and NeuralProcessBase are no longer excluded: MetaLearnerTestBase supplies the inner
         // model a meta-learner wraps, so the fixture only names the algorithm and its options type (#2139).
-        "MetaLearningModelBase",     // The adapted models Adapt returns: results of a meta-learner, not learners
+        // The adapted models Adapt returns: only adaptation can build one, so the generator cannot. They are covered by
+        // the hand-written AdaptedModelTestBase fixtures (AdaptedMetaModelTests and its siblings), which adapt (#2139).
+        "MetaLearningModelBase",
         // NoisePredictorBase is no longer excluded: NoisePredictorTestBase drives PredictNoise directly, and each
         // predictor is built at a reduced size from NoisePredictorFixtureArgs (#2139).
         // ShardedModelBase is no longer excluded: ShardedModelTestBase wraps a seeded network at world size 1, where
@@ -17041,6 +17043,17 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             //   the return-to-go it is conditioned on, so it moves toward a paid action only when the
             //   requested return happens to coincide with that action's return-to-go. Its own return-
             //   conditioning is tested directly in DecisionTransformerPaperTests.
+            // - World Models (Ha & Schmidhuber 2018): C is evolved only inside M's dream, so it follows
+            //   M's reward head, and the paper corrects M where C exploits it by collecting fresh rollouts
+            //   with C (section 5, "Iterative Training Procedure"; section 4.5, "Cheating the World
+            //   Model"). This probe feeds only its two fixed actions, so M never sees the actions C
+            //   searches and C settles wherever M extrapolates well. Measured on the fixture: across 800
+            //   steps (7 full V -> M -> C cycles) both arms end on bit-identical controllers; with M's
+            //   epochs raised twentyfold, five times the CMA-ES generations and actions 1.0 apart, the arms
+            //   separate by under 0.02 of the 0.25 required while M's dream returns reach 3 per rollout,
+            //   whether the paid action alternates or is drawn at random. Both links are tested directly in
+            //   WorldModelsPaperTests: Memory_LearnsTheRewardOfTheActionTaken (M learns the paid action)
+            //   and Controller_LearnsInTheDream_ToTakeTheRewardedAction (C maximises M's reward).
             if (model.ClassName == "A2CAgent"
                 || model.ClassName == "PPOAgent"
                 || model.ClassName == "TRPOAgent"
@@ -17049,6 +17062,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 || model.ClassName == "CQLAgent"
                 || model.ClassName == "IQLAgent"
                 || model.ClassName == "DreamerAgent"
+                || model.ClassName == "WorldModelsAgent"
                 || model.ClassName == "DecisionTransformerAgent")
             {
                 sb.AppendLine("    protected override bool FollowsOnlineReward => false;");

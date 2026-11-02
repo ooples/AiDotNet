@@ -11,6 +11,7 @@ using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Options;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Validation;
@@ -160,7 +161,8 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         // ComputeGradients report, so it is MSE rather than the value network's configurable loss.
         return new NeuralNetwork<T>(architecture,
             optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(_options.PolicyLearningRate),
-            lossFunction: new MeanSquaredErrorLoss<T>());
+            lossFunction: new MeanSquaredErrorLoss<T>(),
+            options: new NeuralNetworkDefaultOptions { Seed = _options.Seed });
     }
 
     private INeuralNetwork<T> CreateValueNetwork()
@@ -186,7 +188,8 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
         return new NeuralNetwork<T>(architecture,
             optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(_options.ValueLearningRate),
-            lossFunction: _options.ValueLossFunction);
+            lossFunction: _options.ValueLossFunction,
+            options: new NeuralNetworkDefaultOptions { Seed = _options.Seed is int seed ? unchecked(seed + 1) : null });
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
