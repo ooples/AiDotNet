@@ -1756,6 +1756,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         "PANNs", "PANNsModel", "PSRT", "OneFormer",
         // IART: PSRT-recurrent's SwinIRFM passes with an implicit warp; floated for the same reason as PSRT.
         "IART",
+        // RealViformer: a recurrent transformer U-Net per frame plus a discriminator step.
+        "RealViformer",
         // UNINEXT's ResNet-50 instance-perception stack exceeded the 120-second
         // MoreData gate in the exact Generated U-Z shard. Keep it explicitly
         // FP32 even if the temporary shard-wide precision rule is later removed.
@@ -12407,19 +12409,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "RealViformer" && model.TypeParameterCount == 1)
             {
-                // RealViformer keeps the paper's 64-feature, 20-block, 4x architecture in
-                // production. Its FP32 generated fixture timed out not only in the repeated
-                // convergence probes but also in the ordinary training invariant, so iteration
-                // caps alone are insufficient. Exercise the same channel-attention residual ->
-                // sparse temporal attention -> reconstruction topology at CI-smoke scale through
-                // public options; all production defaults and customization remain unchanged.
+                // RealViformer keeps the paper's network in production (48 channels, [2, 3, 4, 1] blocks, [1, 2, 4]
+                // heads, squeeze 4 with the channel mask, RealBasicVSR's 64-wide discriminator and VGG19). The same
+                // SPyNet -> CAF -> three-level masked transposed-attention U-Net -> x4 topology runs here at CI scale
+                // through public options. ReconstructionIterations = 0 trains every step in the adversarial stage, as
+                // RealBasicVSRSharp's fixture does, so the discriminator is exercised and the memorization probe compares
+                // one objective (a mid-probe stage switch changes the loss being measured). The perceptual weight is
+                // zero for the reason given for RealBasicVSRSharp; RealViformerPaperTests covers both stages and the switch.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputFrames: 4, inputDepth: 3, inputHeight: 32, inputWidth: 32, outputSize: 4), " +
-                    "new AiDotNet.Video.Options.RealViformerOptions { NumFeatures = 16, " +
-                    "NumResBlocks = 2, ScaleFactor = 2, ChannelReductionRatio = 4, " +
-                    "SparseTopKFactor = 2, DropoutRate = 0.0 })";
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.RealViformerOptions { Seed = 1, NumFeatures = 8, " +
+                    "NumBlocks = new[] { 1, 1, 1, 1 }, Heads = new[] { 1, 1, 1 }, MergeHeads = 1, SqueezeFactor = 2, " +
+                    "DiscriminatorChannels = 4, NumFrames = 2, PerceptualWeight = 0, ReconstructionIterations = 0 })";
             }
             else if (model.ClassName == "RealBasicVSRSharp" && model.TypeParameterCount == 1)
             {
@@ -13656,25 +13659,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "DualXVSR" && model.TypeParameterCount == 1)
             {
-                // DualX-VSR (Cao et al. 2025) is a real-world video
-                // super-resolution transformer whose paper configuration
-                // uses long clips and a 4x reconstruction head. The generic
-                // temporal-video scaffold used the production defaults
-                // (4x upscaling, 64 features, 8 axial blocks) on every
-                // invariant and consistently hit the xUnit 120 s timeout
-                // before assertions could run. Keep the same native VSR
-                // layer family and AdamW training path, but instantiate a
-                // small legal CI fixture: 2 RGB frames at 8x8, one axial
-                // block, 8 feature channels, and 2x pixel shuffle.
+                // DualXVSR keeps the paper's network in production (1,280-wide tokens, 6 + 6 dual axial blocks of
+                // 12 x 64 heads, 2x2 patches, two-block temporal transformers, x4, 127.8M parameters). The same
+                // conv -> temporal -> patch tokens -> vertical-temporal -> horizontal-temporal -> decode -> temporal ->
+                // pixel-shuffle topology runs here at CI scale through public options, at x2. The fixture stays in the
+                // Charbonnier stage, the 650k iterations that are almost all of the paper's training: its 25k-iteration
+                // GAN polish weights the pixel loss 0.01 at a 1e-5 rate, so memorization moved 0.8% in 100 steps there.
+                // DualXVSRPaperTests covers the GAN stage, the discriminator and the stage switch.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, " +
-                    "outputSize: 4), " +
-                    "new AiDotNet.Video.Options.DualXVSROptions { " +
-                    "NumFeatures = 8, NumAxialBlocks = 1, ScaleFactor = 2, " +
-                    "NumHeads = 1, TemporalWindow = 2, LearningRate = 2e-4, " +
-                    "WeightDecay = 0.01, DropoutRate = 0.0 })";
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
+                    "new AiDotNet.Video.Options.DualXVSROptions { Seed = 1, NumFeatures = 8, EmbedDim = 16, NumHeads = 2, " +
+                    "HeadDim = 8, EmbeddingTemporalDepth = 1, VerticalDepth = 1, HorizontalDepth = 1, " +
+                    "ReconstructionTemporalDepth = 1, ScaleFactor = 2, NumFrames = 2, DiscriminatorChannels = 4, " +
+                    "PerceptualWeight = 0 })";
             }
             else if (model.ClassName == "DAMVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
@@ -13754,16 +13753,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // The same SPyNet -> RSTB extraction -> four guided-deformable-attention passes -> RSTB
                 // reconstruction -> x4 topology runs here at CI scale through public options. Four frames make two
                 // clips, so every pass aligns a propagated clip (two frames would skip the attention entirely).
-                // Depth = 1 is the shrink rung after float and the HeavyTrainingTimeoutClassNames cap: xUnit pins the
-                // managed engine to one thread, where Depth 2 measured 2.3 s per update and the escalated
-                // target-dependence probe (12 + 36 updates) overran 120 s; Depth 1 measures 1.4 s. The shifted-window
-                // layer stays covered by RVRTPaperTests, which run the default depth.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputFrames: 4, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
                     "new AiDotNet.Video.Options.RVRTOptions { Seed = 1, EmbedDim = 12, NumHeads = 2, AttentionHeads = 2, " +
-                    "DeformableGroups = 2, PropagationBlocks = 1, NumFrames = 4, Depth = 1 })";
+                    "DeformableGroups = 2, PropagationBlocks = 1, NumFrames = 4 })";
             }
             else if (model.ClassName == "RealisVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
@@ -14556,6 +14551,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] InputShape => new[] { 4, 3, 32, 32 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 4, 32, 32 };");
         }
+        else if (model.ClassName == "RealViformer")
+        {
+            // Matches the public-options fixture above: two 8x8 RGB frames and the x4 reconstruction.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 32, 32 };");
+        }
         else if (model.ClassName == "IART")
         {
             // Matches the public-options fixture above: three 8x8 RGB frames and the x4 reconstruction.
@@ -14686,23 +14687,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (model.ClassName == "DualXVSR")
         {
-            // The CI constructor above uses 2 frames, 3 channels, 8x8 input,
-            // and 2x pixel shuffle, so the actual SR output is
-            // [2, 3, 16, 16]. Use that shape consistently for target
-            // generation and fallback shape checks.
+            // Matches the public-options fixture above: two 8x8 RGB frames and the x2 reconstruction.
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
-
-            // Even the reduced native VSR stack performs multiple spatial
-            // convolutions and a pixel-shuffle reconstruction per training
-            // step. Keep the invariants as smoke-level gradient checks so
-            // this model no longer monopolizes the shard.
-            sb.AppendLine("    protected override int TrainingIterations => 1;");
-            sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
-            sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
-            sb.AppendLine("    protected override double MoreDataTolerance => 0.5;");
-            sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
-            sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
         }
         else if (model.ClassName == "DAMVSR" || model.ClassName == "FlashVSR")
         {
