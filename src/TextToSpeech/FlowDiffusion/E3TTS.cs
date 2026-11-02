@@ -12,7 +12,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 
 /// <summary>E3 TTS: non-autoregressive end-to-end diffusion TTS without explicit duration modeling.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "Simple and Efficient Non-Autoregressive Text-to-Speech" (Gao et al., 2023)</item></list></para><para><b>For Beginners:</b> E3 TTS: non-autoregressive end-to-end diffusion TTS without explicit duration modeling.. This model converts text input into speech audio output.</para></remarks>
+/// <remarks><para><b>References:</b><list type="bullet"><item>Paper: "E3 TTS: Easy End-to-End Diffusion-based Text to Speech" (Gao et al., 2023)</item></list></para><para><b>For Beginners:</b> E3 TTS: non-autoregressive end-to-end diffusion TTS without explicit duration modeling.. This model converts text input into speech audio output.</para></remarks>
 /// <example>
 /// <code>
 /// // Create an E3 TTS model for simple non-autoregressive diffusion TTS
@@ -35,10 +35,10 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "Simple and Efficient Non-Autoregressive Text-to-Speech (E3 TTS)",
-    "https://arxiv.org/abs/2311.04571",
+    "E3 TTS: Easy End-to-End Diffusion-based Text to Speech",
+    "https://arxiv.org/abs/2311.00945",
     Year = 2023,
-    Authors = "Gao et al."
+    Authors = "Yuan Gao, Nobuyuki Morioka, Yu Zhang, Nanxin Chen"
 )]
 public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
