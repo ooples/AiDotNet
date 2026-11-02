@@ -166,7 +166,10 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             complexity: NetworkComplexity.Medium,
             inputSize: _options.StateSize,
             outputSize: duelingActionWidth
-        );
+        )
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         // Paper-faithful Rainbow dueling head (Wang et al. 2016 + Hessel
         // et al. 2018 §3.4): shared feature trunk → DuelingCombinationLayer.
@@ -195,7 +198,10 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             // sigma = sigma_0 / sqrt(p) for p inputs. The noisy layer sits between the trunk and both streams.
             layerList.Add(new NoisyDenseLayer<T>(trunkHidden, trunkHidden,
                 new ReLUActivation<T>() as IActivationFunction<T>,
-                sigmaInit: _options.NoisyNetSigma / Math.Sqrt(trunkHidden)));
+                sigmaInit: _options.NoisyNetSigma / Math.Sqrt(trunkHidden),
+                // The noisy layer draws its mu initialisation in its constructor, before any architecture seed
+                // reaches it, so it takes this network's seed directly.
+                seed: architecture.RandomSeed));
         }
 
         // The value and advantage streams (Wang et al. 2016, Fig. 1) each run their own hidden layers,
@@ -215,7 +221,10 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             inputSize: _options.StateSize,
             outputSize: duelingActionWidth,
             layers: layers.ToList()
-        );
+        )
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(finalArchitecture,
             optimizer: _options.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(LearningRate),

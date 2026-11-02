@@ -170,6 +170,29 @@ public abstract partial class DeepReinforcementLearningAgentBase<T> : Reinforcem
         return new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(null, options);
     }
 
+    /// <summary>
+    /// The weight-initialisation seed for the next network this agent builds, for its
+    /// <see cref="NeuralNetworkArchitecture{T}.RandomSeed"/>: derived from the options' Seed and the network's position
+    /// in construction order, so two agents built from the same options start from the same weights while each network
+    /// (twin critics included) gets its own stream. Null when the options carry no seed, which keeps entropy-seeded
+    /// initialisation.
+    /// </summary>
+    /// <returns>The architecture seed, or null for an unseeded agent.</returns>
+    /// <remarks>
+    /// Seed reached only the agent's exploration and sampling generator, so every seeded agent built without this
+    /// started from different weights: PPO's entropy-bonus test compared two different initialisations. A rebuilt
+    /// clone constructs its networks in the same order, so it draws the same seeds.
+    /// </remarks>
+    protected int? NextNetworkInitializationSeed()
+    {
+        int networkIndex = _networksSeeded++;
+        return Options.Seed is int seed ? unchecked(seed * 31 + networkIndex * 1009) : null;
+    }
+
+    // Construction bookkeeping only: a rebuilt agent recounts as it builds its networks, so it is not persisted.
+    [ExternalState]
+    private int _networksSeeded;
+
     /// <summary>The networks this agent registered, in <see cref="Networks"/> order.</summary>
     internal IReadOnlyList<INeuralNetwork<T>> GetNetworks() => Networks;
 

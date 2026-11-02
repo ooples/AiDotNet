@@ -492,3 +492,4 @@ virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.ReportThreshold.get 
 *REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.UseValuePrefix.init -> void
 *REMOVED*AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<T>.DuelingCombinationLayer(int featureDim, int actionSize, int? seed = null) -> void
 AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<T>.DuelingCombinationLayer(int featureDim, int actionSize, int numAtoms = 1, int[]? valueHiddenWidths = null, int[]? advantageHiddenWidths = null, int? seed = null) -> void
+AiDotNet.ReinforcementLearning.Agents.DeepReinforcementLearningAgentBase<T>.NextNetworkInitializationSeed() -> int?

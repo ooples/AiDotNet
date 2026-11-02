@@ -347,16 +347,23 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     /// identical across agent instances built from the same options — required
     /// for Clone() to reproduce the original's policy.
     /// </summary>
-    private static void AssignDeterministicSeeds(List<ILayer<T>> layers, int baseSeed)
+    private void AssignDeterministicSeeds(List<ILayer<T>> layers, int baseSeed)
     {
+        int seed = SeededBase(baseSeed);
         for (int i = 0; i < layers.Count; i++)
         {
             if (layers[i] is LayerBase<T> layer)
             {
-                layer.RandomSeed = baseSeed + i;
+                layer.RandomSeed = unchecked(seed + i);
             }
         }
     }
+
+    /// <summary>
+    /// A component's base seed: the fixed constant for an agent without a Seed (so Clone still reproduces it), mixed
+    /// with the options' Seed otherwise, so the Seed selects the initial weights as it does for every other agent.
+    /// </summary>
+    private int SeededBase(int baseSeed) => _options.Seed is int seed ? unchecked(seed * 31 + baseSeed * 1009) : baseSeed;
 
     private NeuralNetwork<T> CreateDecoderNetwork(int inputSize, int outputSize)
     {
@@ -412,7 +419,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
     {
         // Small uniform weights from a fixed seed, so two agents built from the same options start from the same
         // controller (Clone reproduces the policy) while different inputs still give different actions.
-        var random = RandomHelper.CreateSeededRandom(ControllerSeedBase);
+        var random = RandomHelper.CreateSeededRandom(SeededBase(ControllerSeedBase));
         var parameters = new Vector<T>(ControllerParameterCount(_controllerLayerSizes));
         for (int i = 0; i < parameters.Length; i++)
         {

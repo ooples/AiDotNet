@@ -142,7 +142,10 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             complexity: NetworkComplexity.Medium,
             inputSize: _options.StateSize,
             outputSize: outputSize,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture, lossFunction: _options.ValueLossFunction);
     }
@@ -166,7 +169,10 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             complexity: NetworkComplexity.Medium,
             inputSize: _options.StateSize,
             outputSize: 1,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture,
             optimizer: CreateNetworkOptimizer(_options.ValueLearningRate),
