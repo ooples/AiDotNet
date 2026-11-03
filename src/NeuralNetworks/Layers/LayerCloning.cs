@@ -628,9 +628,10 @@ public static class LayerCloning
             // were not saved: a layer that reconstructs today takes the identical path it took
             // before, so this can add successes but cannot change an existing one. The shapes are
             // copied so a factory cannot mutate the source layer's own arrays.
-            var withShapes = new Dictionary<string, object>(values, StringComparer.Ordinal);
+            var withShapes = new Dictionary<string, object>(values, StringComparer.OrdinalIgnoreCase);
             if (!withShapes.ContainsKey("inputShape")) withShapes["inputShape"] = (int[])source.GetInputShape().Clone();
             if (!withShapes.ContainsKey("outputShape")) withShapes["outputShape"] = (int[])source.GetOutputShape().Clone();
+            HarvestConstructorMembers(source, type, withShapes);
 
             if (!LayerFactoryRegistry<T>.TryCreate(
                     type,
@@ -656,5 +657,74 @@ public static class LayerCloning
         }
 
         return layer;
+    }
+
+    /// <summary>
+    /// Populates missing constructor parameter keys from matching fields or properties on <paramref name="source"/>.
+    /// </summary>
+    /// <remarks>
+    /// Layers defined in external consumer assemblies that do not run <c>AiDotNet.Generators</c> (or are not
+    /// marked <c>partial</c>) have no generated <c>WriteConstructionState</c> override. Harvesting matching
+    /// fields (<c>paramName</c>, <c>_paramName</c>, <c>m_paramName</c>) and readable properties as a last resort
+    /// lets <see cref="LayerFactoryRegistry{T}"/> rebuild hand-written external layers without manual factory registration.
+    /// </remarks>
+    private static void HarvestConstructorMembers<T>(
+        LayerBase<T> source,
+        Type layerType,
+        Dictionary<string, object> target)
+    {
+        const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+        foreach (var ctor in layerType.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+        {
+            foreach (var param in ctor.GetParameters())
+            {
+                var name = param.Name;
+                if (string.IsNullOrEmpty(name) || target.ContainsKey(name)) continue;
+
+                string[] candidateNames = [name, "_" + name, "m_" + name];
+                object? found = null;
+                bool matched = false;
+
+                for (Type? current = layerType; current is not null && current != typeof(object) && !matched; current = current.BaseType)
+                {
+                    foreach (var field in current.GetFields(Flags))
+                    {
+                        if (candidateNames.Any(c => string.Equals(field.Name, c, StringComparison.OrdinalIgnoreCase))
+                            && param.ParameterType.IsAssignableFrom(field.FieldType))
+                        {
+                            found = field.GetValue(source);
+                            matched = found is not null;
+                            if (matched) break;
+                        }
+                    }
+
+                    if (matched) break;
+
+                    foreach (var prop in current.GetProperties(Flags))
+                    {
+                        if (!prop.CanRead || prop.GetIndexParameters().Length != 0) continue;
+                        if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase)
+                            && param.ParameterType.IsAssignableFrom(prop.PropertyType))
+                        {
+                            try
+                            {
+                                found = prop.GetValue(source);
+                                matched = found is not null;
+                                if (matched) break;
+                            }
+                            catch (Exception)
+                            {
+                                // Ignore properties that throw during inspection.
+                            }
+                        }
+                    }
+                }
+
+                if (matched && found is not null)
+                {
+                    target[name] = found;
+                }
+            }
+        }
     }
 }
