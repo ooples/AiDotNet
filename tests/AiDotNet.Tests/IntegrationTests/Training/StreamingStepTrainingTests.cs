@@ -12,6 +12,7 @@ using AiDotNet.FitnessCalculators;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LossFunctions;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -701,6 +702,46 @@ public class StreamingStepTrainingTests : IDisposable
         Assert.Same(scheduler, optimizer.LearningRateScheduler);
         Assert.Equal(10, scheduler.CurrentStep);
         Assert.Equal(0.0, optimizer.GetCurrentLearningRate(), 12);
+    }
+
+    /// <summary>
+    /// A neural network's checkpoint JSON must not reflect over the live model: the network persists itself to the
+    /// state sidecar, which is what a resume restores from. The JSON used to carry every public property of every
+    /// layer (weights, caches, nested objects) -- unusable on reload, and for a 16.7M-parameter gated-DeltaNet LM it
+    /// overflowed the string builder and threw OutOfMemoryException at the first save.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task NeuralNetworkCheckpointJson_LeavesTheModelToTheStateSidecar_WhichRestoresIt()
+    {
+        await Task.Yield();
+        var dir = Path.Combine(_root, "json");
+        var manager = new CheckpointManager<float, Tensor<float>, Tensor<float>>(dir);
+        var optimizer = Optimizer(1);
+        var model = Model(optimizer);
+        var weights = InitialWeights();
+        model.SetParameters(weights.Clone());
+        var id = manager.SaveCheckpoint(model, optimizer, 0, 3, new Dictionary<string, float> { ["loss"] = 1f });
+
+        var jsonPath = Directory.GetFiles(dir, "checkpoint_*.json").Single();
+        var json = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(jsonPath));
+        Assert.Null(json.Property("Model"));
+        Assert.Equal(3, (int)json["Step"]!);
+        Assert.True(File.Exists(jsonPath + ".state"), "the model's state sidecar was not written");
+
+        var restored = Model(Optimizer(1));
+        Assert.True(manager.RestoreModelState(id, restored));
+        Assert.Equal(0.0, MaxAbsDiff(weights, restored.GetParameters()));
+    }
+
+    /// <summary>A model that does not persist itself keeps its JSON entry -- the only record the checkpoint has.</summary>
+    [Fact]
+    public void CheckpointJson_KeepsAModelThatHasNoStateSidecar()
+    {
+        var cp = new Checkpoint<float, Tensor<float>, Tensor<float>>(
+            model: "plain", optimizerState: new Dictionary<string, object>(), optimizerTypeName: "SGD",
+            epoch: 0, step: 1, metrics: new Dictionary<string, float>(), metadata: null);
+        var json = Newtonsoft.Json.Linq.JObject.Parse(Newtonsoft.Json.JsonConvert.SerializeObject(cp));
+        Assert.Equal("plain", (string)json["Model"]!);
     }
 
     [Fact(Timeout = 120000)]

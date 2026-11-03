@@ -27,6 +27,19 @@ public class Checkpoint<T, TInput, TOutput>
     public object? Model { get; set; }
 
     /// <summary>
+    /// Whether the checkpoint's JSON carries <see cref="Model"/> (Newtonsoft's <c>ShouldSerialize</c> convention).
+    /// </summary>
+    /// <remarks>
+    /// A model that persists itself (<see cref="ICheckpointableModel"/>, every neural network) is written to the
+    /// checkpoint's state sidecar, which is what a resume restores from. Reflecting over the live model as well put
+    /// every public property of every layer into the JSON -- weights, caches, nested objects -- which reloads only as
+    /// an un-rehydrated <c>JObject</c> and, for a 16.7M-parameter gated-DeltaNet language model, exceeded the
+    /// string builder's capacity and threw <see cref="OutOfMemoryException"/> at the first save. Other models keep
+    /// their JSON entry.
+    /// </remarks>
+    public bool ShouldSerializeModel() => Model is not ICheckpointableModel;
+
+    /// <summary>
     /// Gets or sets the optimizer state as a serializable dictionary.
     /// </summary>
     /// <remarks>
