@@ -194,10 +194,17 @@ internal sealed class WanLoraLinear<T>
     private readonly int _base;
     private readonly int[] _down = new int[Sets], _up = new int[Sets];
 
+    private readonly bool _adapted;
+
+    /// <param name="layers">The model's layer list.</param>
+    /// <param name="outputs">The output width.</param>
+    /// <param name="rank">The LoRA rank; zero or less builds the plain linear map with no adapters.</param>
     internal WanLoraLinear(List<ILayer<T>> layers, int outputs, int rank)
     {
         _base = layers.Count;
         layers.Add(RvrtBlocks.Linear<T>(outputs));
+        _adapted = rank > 0;
+        if (!_adapted) return;
         for (int s = 0; s < Sets; s++)
         {
             _down[s] = layers.Count;
@@ -208,10 +215,13 @@ internal sealed class WanLoraLinear<T>
     }
 
     internal Tensor<T> Forward(IEngine engine, IReadOnlyList<ILayer<T>> layers, Tensor<T> x, int set)
-        => engine.TensorAdd(layers[_base].Forward(x), layers[_up[set]].Forward(layers[_down[set]].Forward(x)));
+        => _adapted
+            ? engine.TensorAdd(layers[_base].Forward(x), layers[_up[set]].Forward(layers[_down[set]].Forward(x)))
+            : layers[_base].Forward(x);
 
     internal IEnumerable<int> Adapter(int set)
     {
+        if (!_adapted) yield break;
         yield return _down[set];
         yield return _up[set];
     }
@@ -310,6 +320,7 @@ internal sealed class WanDiTBlock<T>
 
     internal WanDiTBlock(List<ILayer<T>> layers, int dim, int heads, int ffnDim, int rank, double epsilon)
     {
+        FirstLayer = layers.Count;
         _dim = dim;
         _heads = heads;
         _epsilon = epsilon;
@@ -335,7 +346,14 @@ internal sealed class WanDiTBlock<T>
         layers.Add(new LayerNormalizationLayer<T>(dim, epsilon));
         _ffn0 = new WanLoraLinear<T>(layers, ffnDim, rank);
         _ffn2 = new WanLoraLinear<T>(layers, dim, rank);
+        EndLayer = layers.Count;
     }
+
+    /// <summary>The index of the block's first layer.</summary>
+    internal int FirstLayer { get; }
+
+    /// <summary>One past the index of the block's last layer.</summary>
+    internal int EndLayer { get; }
 
     internal IEnumerable<int> Adapter(int set)
         => new[] { _sq, _sk, _sv, _so, _cq, _ck, _cv, _co, _ffn0, _ffn2 }.SelectMany(linear => linear.Adapter(set));
@@ -421,30 +439,40 @@ internal sealed class WanDiT<T>
     /// <summary>The layer indices of one LoRA set.</summary>
     internal IEnumerable<int> Adapter(int set) => _blocks.SelectMany(block => block.Adapter(set));
 
+    /// <summary>The blocks, for a caller that runs them itself (a ControlNet branch adding into the main path).</summary>
+    internal IReadOnlyList<WanDiTBlock<T>> Blocks => _blocks;
+
+    /// <summary>The patch embedding's input: Conv3d's (c, 1, 2, 2) receptive field as one vector per token, in (f, h, w) order.</summary>
+    /// <param name="engine">The engine.</param>
     /// <param name="latents">[B, C, F, H, W] with H and W even.</param>
-    /// <param name="prompt">[B, Lt, textDim] prompt embeddings.</param>
-    /// <param name="lqTokens">Tokens [B, F·H/2·W/2, D] to add before each of the first blocks, or null.</param>
-    internal Tensor<T> Forward(IEngine engine, IReadOnlyList<ILayer<T>> layers, Tensor<T> latents, IReadOnlyList<double> timesteps,
-        Tensor<T> prompt, IReadOnlyList<Tensor<T>>? lqTokens, int set, WanAttentionMode mode, Func<int, int, int, WanSparsePlan>? sparsePlan)
+    internal static Tensor<T> Patches(IEngine engine, Tensor<T> latents)
     {
         int b = latents.Shape[0], c = latents.Shape[1], f = latents.Shape[2], h = latents.Shape[3] / 2, w = latents.Shape[4] / 2;
-        // Conv3d's (c, 1, 2, 2) receptive field as one patch vector per token, tokens in (f, h, w) order.
         var patches = engine.Reshape(latents, new[] { b, c, f, h, 2, w, 2 });
         patches = engine.TensorPermute(patches, new[] { 0, 2, 3, 5, 1, 4, 6 });
-        var x = layers[_patch].Forward(engine.Reshape(patches, new[] { b, f * h * w, c * 4 }));
+        return engine.Reshape(patches, new[] { b, f * h * w, c * 4 });
+    }
 
+    /// <summary>The embedded tokens [B, F·H/2·W/2, D] of latents [B, C, F, H, W].</summary>
+    internal Tensor<T> Tokens(IEngine engine, IReadOnlyList<ILayer<T>> layers, Tensor<T> latents)
+        => layers[_patch].Forward(Patches(engine, latents));
+
+    /// <summary>What every block reads besides its tokens: the embedded prompt, the time and its six modulations, the rotary tables.</summary>
+    internal WanConditioning<T> Condition(IEngine engine, IReadOnlyList<ILayer<T>> layers, IReadOnlyList<double> timesteps, Tensor<T> prompt,
+        int frames, int height, int width)
+    {
+        int b = prompt.Shape[0];
         var context = layers[_text2].Forward(layers[_text1].Forward(prompt));
         var time = layers[_time2].Forward(layers[_time1].Forward(SvdBlocks.Sinusoid<T>(timesteps, _frequencyDim)));
         var timeModulation = engine.Reshape(layers[_timeProjection].Forward(engine.Swish(time)), new[] { b, 6, _dim });
-        var (cos, sin) = WanRope.Build<T>(_dim / _heads, f, h, w);
-        var sparse = mode == WanAttentionMode.SparseCausal && sparsePlan is not null ? sparsePlan(f, h, w) : null;
+        var (cos, sin) = WanRope.Build<T>(_dim / _heads, frames, height, width);
+        return new WanConditioning<T>(context, time, timeModulation, cos, sin);
+    }
 
-        for (int i = 0; i < _blocks.Length; i++)
-        {
-            if (lqTokens is not null && i < lqTokens.Count) x = engine.TensorAdd(x, lqTokens[i]);
-            x = _blocks[i].Forward(engine, layers, x, context, timeModulation, set, sparse, cos, sin);
-        }
-
+    /// <summary>The head on tokens [B, F·h·w, D]: latents [B, C, F, 2h, 2w].</summary>
+    internal Tensor<T> Head(IEngine engine, IReadOnlyList<ILayer<T>> layers, Tensor<T> x, Tensor<T> time, int frames, int height, int width)
+    {
+        int b = x.Shape[0];
         // Head: modulation [1, 2, D] + time [B, D] (the release's broadcast, exact for one sample a batch).
         var learned = engine.Reshape(RealViformerBlocks.Read(layers, _headModulation), new[] { 1, 2, _dim });
         var t = engine.Reshape(time, new[] { b, 1, _dim });
@@ -452,10 +480,63 @@ internal sealed class WanDiT<T>
         var scale = engine.TensorAdd(engine.TensorBroadcastTo(engine.TensorNarrow(learned, 1, 1, 1), new[] { b, 1, _dim }), t);
         var output = layers[_head].Forward(WanOps.Modulate(engine, WanOps.LayerNorm(engine, x, _epsilon), shift, scale));
         // 'b (f h w) (x y z c) -> b c (f x) (h y) (w z)' with patch (1, 2, 2).
-        output = engine.Reshape(output, new[] { b, f, h, w, 2, 2, _channels });
+        output = engine.Reshape(output, new[] { b, frames, height, width, 2, 2, _channels });
         output = engine.TensorPermute(output, new[] { 0, 6, 1, 2, 4, 3, 5 });
-        return engine.Reshape(output, new[] { b, _channels, f, 2 * h, 2 * w });
+        return engine.Reshape(output, new[] { b, _channels, frames, 2 * height, 2 * width });
     }
+
+    /// <param name="engine">The engine.</param>
+    /// <param name="layers">The model's layers.</param>
+    /// <param name="latents">[B, C, F, H, W] with H and W even.</param>
+    /// <param name="timesteps">One timestep per sample.</param>
+    /// <param name="prompt">[B, Lt, textDim] prompt embeddings.</param>
+    /// <param name="lqTokens">Tokens [B, F·H/2·W/2, D] to add before each of the first blocks, or null.</param>
+    /// <param name="set">The LoRA adapter set.</param>
+    /// <param name="mode">Dense or sparse causal attention.</param>
+    /// <param name="sparsePlan">The sparse plan for a (frames, height, width) token grid.</param>
+    internal Tensor<T> Forward(IEngine engine, IReadOnlyList<ILayer<T>> layers, Tensor<T> latents, IReadOnlyList<double> timesteps,
+        Tensor<T> prompt, IReadOnlyList<Tensor<T>>? lqTokens, int set, WanAttentionMode mode, Func<int, int, int, WanSparsePlan>? sparsePlan)
+    {
+        int f = latents.Shape[2], h = latents.Shape[3] / 2, w = latents.Shape[4] / 2;
+        var x = Tokens(engine, layers, latents);
+        var c = Condition(engine, layers, timesteps, prompt, f, h, w);
+        var sparse = mode == WanAttentionMode.SparseCausal && sparsePlan is not null ? sparsePlan(f, h, w) : null;
+
+        for (int i = 0; i < _blocks.Length; i++)
+        {
+            if (lqTokens is not null && i < lqTokens.Count) x = engine.TensorAdd(x, lqTokens[i]);
+            x = _blocks[i].Forward(engine, layers, x, c.Context, c.TimeModulation, set, sparse, c.Cos, c.Sin);
+        }
+        return Head(engine, layers, x, c.Time, f, h, w);
+    }
+}
+
+/// <summary>The per-call inputs every Wan block shares.</summary>
+internal sealed class WanConditioning<T>
+{
+    internal WanConditioning(Tensor<T> context, Tensor<T> time, Tensor<T> timeModulation, Tensor<T> cos, Tensor<T> sin)
+    {
+        Context = context;
+        Time = time;
+        TimeModulation = timeModulation;
+        Cos = cos;
+        Sin = sin;
+    }
+
+    /// <summary>The embedded prompt [B, Lt, D].</summary>
+    internal Tensor<T> Context { get; }
+
+    /// <summary>The time embedding [B, D].</summary>
+    internal Tensor<T> Time { get; }
+
+    /// <summary>Its six projected modulations [B, 6, D].</summary>
+    internal Tensor<T> TimeModulation { get; }
+
+    /// <summary>The 3D rotary cosine table.</summary>
+    internal Tensor<T> Cos { get; }
+
+    /// <summary>The 3D rotary sine table.</summary>
+    internal Tensor<T> Sin { get; }
 }
 
 /// <summary>

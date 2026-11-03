@@ -1560,7 +1560,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // unchanged. If the measured FP32 fixture still overruns, cap repetitions next.
         "TransUNet",
         "SceneLLM",           // 3D scene LLM — LossStrictlyDecreases timeout
-        "RealisVSR",          // realistic video super-resolution — ScaledInput timeout
+        "RealisVSR",          // Wan 2.1 + ControlNet video super-resolution, run at float
         // Foundation self-supervised ASR family on CreateDefaultFoundationASRLayers (12-layer / 768-dim
         // wav2vec-2/HuBERT-style encoder + CTC head). Restoring the paper's RESIDUAL transformer blocks
         // fixed their uniform-output training collapse (DifferentInputs L2 ~= 1e-12), but the 12-layer
@@ -13731,17 +13731,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "RealisVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
             {
-                // RealisVSR — diffusion-based realistic VSR. Production defaults (320 features, 25 denoising
-                // steps, scale x4) make one forward run 25 denoise iterations over a heavy conv stack, so
-                // every training invariant times out at <double>. Same fix as DAMVSR/FlashVSR: a small legal
-                // CI fixture (2 RGB frames @ 8x8, 8 features, 1 res block, 2 denoising steps, 2x scale) that
-                // keeps the diffusion-VSR architecture but runs at CI-smoke cost. Only the model scale shrinks.
+                // RealisVSR (Zhao et al. 2025) keeps its whole topology at smoke width: the frozen Wan 2.1 DiT (two
+                // blocks, two 12-wide heads so the 3D rotary embedding splits), the one-block Consistency-Preserved
+                // ControlNet and Wan's four-stage VAE. Two 8x8 frames upscale 4x; the pipeline pads them to five frames
+                // (two 4x4 latents) and crops back, sampling in two Euler steps. HOG cells of 2 and blocks of 2 give the
+                // 4x4 latent one block, so the HR-Loss keeps all three terms.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
-                    "new AiDotNet.Video.Options.RealisVSROptions { NumFeatures = 8, NumResBlocks = 1, " +
-                    "ScaleFactor = 2, NumDenoisingSteps = 2 })";
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 3 * 32 * 32), " +
+                    "new AiDotNet.Video.Options.RealisVSROptions { Seed = 1, ModelDim = 24, FfnDim = 32, NumHeads = 2, " +
+                    "NumLayers = 2, ControlNetLayers = 1, FrequencyDim = 8, TextDim = 8, TextLength = 4, VaeDim = 4, " +
+                    "VaeDimMultipliers = new[] { 1, 1, 1, 1 }, VaeResidualBlocks = 1, ScaleFactor = 4, NumFrames = 2, " +
+                    "SamplingSteps = 2, HogCellSize = 2, HogBlockSize = 2 })";
             }
             else if (model.ClassName == "DPFlow" && model.TypeParameterCount == 1)
             {
@@ -14695,6 +14697,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 8, 8 };");
         }
         else if (model.ClassName == "FlashVSR")
+        {
+            // Two RGB 8x8 frames upscaled 4x; see the constructor pin above.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 32, 32 };");
+        }
+        else if (model.ClassName == "RealisVSR")
         {
             // Two RGB 8x8 frames upscaled 4x; see the constructor pin above.
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");

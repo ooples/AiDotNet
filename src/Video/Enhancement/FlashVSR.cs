@@ -259,10 +259,11 @@ public partial class FlashVSR<T> : VideoSuperResolutionBase<T>, ITrainingObjecti
     /// The flow-matching σ of each training timestep (DiffSynth's <c>FlowMatchScheduler</c> with Wan's shift and an extra
     /// step): N values from 1 down to 0 excluding the last, each shifted to s·σ / (1 + (s − 1)·σ). The timestep is 1000·σ.
     /// </summary>
-    internal static double[] Sigmas(FlashVSROptions options)
+    internal static double[] Sigmas(FlashVSROptions options) => Sigmas(options.NumTrainTimesteps, options.SigmaShift);
+
+    /// <summary>The same σ grid for a schedule of <paramref name="n"/> steps and shift <paramref name="shift"/>.</summary>
+    internal static double[] Sigmas(int n, double shift)
     {
-        int n = options.NumTrainTimesteps;
-        double shift = options.SigmaShift;
         var sigmas = new double[n];
         for (int i = 0; i < n; i++)
         {
