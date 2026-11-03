@@ -20,6 +20,7 @@
   -->
   <PropertyGroup>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <WarningsAsErrors>$(WarningsAsErrors);CS1570</WarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
