@@ -2280,14 +2280,29 @@ jobs:
           sudo rm -rf /usr/local/share/boost || true
           sudo apt-get clean || true
           df -h /
-          swapdir=/mnt
-          if [ ! -d "$swapdir" ] || [ "$(df --output=avail -BG "$swapdir" | tail -1 | tr -dc 0-9)" -lt 30 ]; then swapdir=/; fi
           sudo swapoff -a || true
           sudo rm -f /mnt/swapfile /swapfile || true
-          sudo fallocate -l 20G "$swapdir/sonar.swap"
-          sudo chmod 600 "$swapdir/sonar.swap"
-          sudo mkswap "$swapdir/sonar.swap"
-          sudo swapon "$swapdir/sonar.swap"
+          # Keep 12 GiB on the selected filesystem for checkout, caches and the instrumented build.
+          reserve_gib=12
+          target_gib=20
+          swapdir=/
+          available_bytes=$(df --output=avail -B1 / | tail -1 | tr -dc 0-9)
+          available_gib=$((available_bytes / 1073741824))
+          if [ -d /mnt ]; then
+            mnt_bytes=$(df --output=avail -B1 /mnt | tail -1 | tr -dc 0-9)
+            mnt_gib=$((mnt_bytes / 1073741824))
+            if [ "$mnt_gib" -gt "$available_gib" ]; then swapdir=/mnt; available_gib=$mnt_gib; fi
+          fi
+          swap_gib=$((available_gib - reserve_gib))
+          if [ "$swap_gib" -gt "$target_gib" ]; then swap_gib=$target_gib; fi
+          if [ "$swap_gib" -ge 1 ]; then
+            sudo fallocate -l "${swap_gib}G" "$swapdir/sonar.swap"
+            sudo chmod 600 "$swapdir/sonar.swap"
+            sudo mkswap "$swapdir/sonar.swap"
+            sudo swapon "$swapdir/sonar.swap"
+          else
+            echo "Skipping swap: ${available_gib} GiB available; preserving ${reserve_gib} GiB for the build."
+          fi
           free -m
           df -h / "$swapdir"
 

@@ -3480,39 +3480,40 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         GradientOptions.LearningRateScheduler = scheduler;
         SetLearningRate(scheduler.CurrentLearningRate);
     }
+    /// <summary>Supplies temporary checkpoint tensors one at a time; the writer disposes each after writing it.</summary>
+    private protected virtual IEnumerable<(Tensor<T> Parameter, Func<Tensor<T>> Create)> TransientTapeTensorStates(string fieldName)
+        => Enumerable.Empty<(Tensor<T>, Func<Tensor<T>>)>();
+
     private void WriteTapeTensorStateDictionary(BinaryWriter writer, FieldInfo field)
     {
-        var entries = new SortedDictionary<int, Tensor<T>>();
-
+        var entries = new SortedDictionary<int, (Tensor<T>? Existing, Func<Tensor<T>>? Create)>();
         lock (_tapeStateSync)
         {
             if (_pendingTapeTensorStates.TryGetValue(field.Name, out var pendingEntries))
-            {
                 foreach (var entry in pendingEntries)
-                {
-                    entries[entry.Key] = entry.Value;
-                }
-            }
-
+                    entries[entry.Key] = (entry.Value, null);
             if (field.GetValue(this) is ConcurrentDictionary<Tensor<T>, Tensor<T>> activeEntries)
-            {
                 foreach (var entry in activeEntries)
-                {
                     if (_tapeParameterIndices.TryGetValue(entry.Key, out int parameterIndex))
-                    {
-                        entries[parameterIndex] = entry.Value;
-                    }
-                }
-            }
+                        entries[parameterIndex] = (entry.Value, null);
+            foreach (var transient in TransientTapeTensorStates(field.Name))
+                if (_tapeParameterIndices.TryGetValue(transient.Parameter, out int index))
+                    entries[index] = (null, transient.Create);
         }
 
         writer.Write(entries.Count);
         foreach (var entry in entries)
         {
             writer.Write(entry.Key);
-            WriteTapeTensor(writer, entry.Value);
+            if (entry.Value.Create is { } create)
+            {
+                using var temporary = create();
+                WriteTapeTensor(writer, temporary);
+            }
+            else WriteTapeTensor(writer, entry.Value.Existing!);
         }
     }
+
 
     private Dictionary<int, Tensor<T>> ReadTapeTensorStateDictionary(BinaryReader reader)
     {

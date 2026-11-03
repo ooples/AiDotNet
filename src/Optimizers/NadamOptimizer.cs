@@ -476,7 +476,7 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         foreach (var param in context.Parameters)
         {
             // True sparse scatter NAdam: m + v + param at touched indices only.
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
             {
                 if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
                 if (!_tapeV2.TryGetValue(param, out var vSp)) { vSp = new Tensor<T>(param._shape); _tapeV2[param] = vSp; }

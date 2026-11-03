@@ -69,6 +69,9 @@ public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
         MaxBeta1 = other.MaxBeta1;
         MinBeta2 = other.MinBeta2;
         MaxBeta2 = other.MaxBeta2;
+        MomentStorage = other.MomentStorage;
+        Int8MomentBlockSize = other.Int8MomentBlockSize;
+        Int8MinQuantizedLength = other.Int8MinQuantizedLength;
     }
 
     /// <summary>

@@ -193,6 +193,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // Compressed moments have no AMSGrad kernel (its running max is a third moment); the eager step refuses the
         // combination with a clear error, so decline here rather than compile a plan that drops the storage request.
         if (_options.UseAMSGrad && _options.MomentStorage != OptimizerMomentStorage.Float32) return false;
+        if (_options.MomentStorage != OptimizerMomentStorage.Float32 && typeof(T) != typeof(float)) return false;
+        if (_options.MomentStorage == OptimizerMomentStorage.Int8Blockwise && _options.Int8MomentBlockSize <= 0) return false;
         // AdamW + AMSGrad runs the max-second-moment kernel with its decay switched to decoupled via Extras.
         config = new Fused.FusedOptimizerConfig(
             _options.UseAMSGrad
@@ -768,9 +770,10 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             // Compressed moments (MomentStorage bf16 / 8-bit): one state for the device and host steps, no 32-bit m/v.
             if (UsesCompressedMoments(param))
             {
-                if (SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var compressedGrad)
-                    && compressedGrad.Length == param.Length)
+                if (SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var compressedGrad))
                 {
+                    if (compressedGrad.Length != param.Length)
+                        throw new ArgumentException("Compressed AdamW gradient length must match the parameter length.", nameof(context));
                     CompressedMomentStep(param, compressedGrad, gpuAdam);
                 }
                 continue;

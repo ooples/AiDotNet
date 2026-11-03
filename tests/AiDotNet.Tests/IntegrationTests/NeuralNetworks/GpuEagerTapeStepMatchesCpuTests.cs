@@ -97,9 +97,11 @@ public class GpuEagerTapeStepMatchesCpuTests
     public void Gpu_eager_step_follows_the_cpu_trajectory()
     {
         DirectGpuTensorEngine? gpu = null;
-        try { gpu = new DirectGpuTensorEngine(); } catch { /* no backend */ }
+        gpu = new DirectGpuTensorEngine();
         try
         {
+            if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+                Assert.True(gpu.SupportsGpu && gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
             Skip.If(gpu is null || !gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
 
             // One shared initialization for both engines.

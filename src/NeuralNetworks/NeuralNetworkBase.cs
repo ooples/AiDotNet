@@ -19869,6 +19869,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         if (disposing)
         {
+            _lastDeviceGradientNorm?.Dispose();
+            _lastDeviceGradientNorm = null;
             // Release inference plans plus training plans/caches before layer disposal.
             // CompiledTapeTrainingStep keeps this model's plan (keyed by the model) and
             // the plan captures the live layer parameter tensors. Leaving that plan alive

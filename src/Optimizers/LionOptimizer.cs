@@ -431,7 +431,7 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         foreach (var param in context.Parameters)
         {
             // True sparse scatter Lion: m + param at touched indices only.
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
             {
                 if (!_tapeMomentum.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeMomentum[param] = mSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplyLionSparse(

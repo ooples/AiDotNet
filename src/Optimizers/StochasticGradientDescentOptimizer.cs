@@ -329,7 +329,7 @@ public partial class StochasticGradientDescentOptimizer<T, TInput, TOutput> : Gr
         foreach (var param in context.Parameters)
         {
             // True sparse scatter plain SGD.
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
             {
                 if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
                         param, velocity: null,

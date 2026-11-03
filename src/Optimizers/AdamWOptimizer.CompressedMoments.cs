@@ -15,10 +15,9 @@ namespace AiDotNet.Optimizers;
 /// step, <see cref="GpuOptimizer.TryAdamBf16Step"/> / <c>GpuOptimizer.TryAdam8BitStep</c>) or as host arrays (the host
 /// step, <see cref="HostCompressedMomentAdam"/>). Both use one byte layout, so a slot moves between them by upload or
 /// download, and the two steps produce the same bits.</para>
-/// <para>Checkpoints reuse the tape-state serializer: at save time every slot is written into the three
-/// parameter-shaped tensor dictionaries below as exact float values (a bf16 moment widens to float exactly; an 8-bit
-/// codebook index 0-255 is exact; the block scales occupy the leading entries), and a restored checkpoint rebuilds
-/// the slots from them.</para>
+/// <para>Checkpoints reuse the tape-state serializer, packing and releasing one tensor at a time as exact float
+/// values (bf16 widens exactly; codebook indices 0-255 are exact; block scales occupy the leading entries).
+/// A versioned header validates format-affecting options before restored state is committed.</para>
 /// </remarks>
 public partial class AdamWOptimizer<T, TInput, TOutput>
 {
@@ -226,37 +225,41 @@ public partial class AdamWOptimizer<T, TInput, TOutput>
             $"The checkpoint's AdamW compressed-moment state is missing its {what}.");
     }
 
-    /// <summary>Writes every slot into the persisted dictionaries (exact float values) for the tape-state serializer.</summary>
-    private void PackCompressedSlotsForSerialization()
+    /// <summary>Packs one checkpoint tensor on demand, avoiding full-model widened moment copies.</summary>
+    private Tensor<T> PackCompressedSlotTensor(Tensor<T> param, CompressedMomentSlot slot, string fieldName)
     {
+        slot.MoveToHost();
+        var packed = new Tensor<T>(param._shape);
+        try
+        {
+            var values = ((Tensor<float>)(object)packed).AsWritableSpan();
+            if (fieldName == nameof(_tapeCompressedScales))
+            {
+                slot.MScales.AsSpan().CopyTo(values);
+                slot.VScales.AsSpan().CopyTo(values.Slice(slot.Blocks));
+            }
+            else
+            {
+                var bytes = fieldName == nameof(_tapeCompressedM) ? slot.M : slot.V;
+                for (int i = 0; i < slot.Length; i++)
+                    values[i] = slot.Int8 ? bytes[i] : Bf16ToFloat(bytes, i);
+            }
+            return packed;
+        }
+        catch { packed.Dispose(); throw; }
+    }
+
+    private protected override IEnumerable<(Tensor<T> Parameter, Func<Tensor<T>> Create)> TransientTapeTensorStates(string fieldName)
+    {
+        if (fieldName != nameof(_tapeCompressedM) && fieldName != nameof(_tapeCompressedV)
+            && fieldName != nameof(_tapeCompressedScales)) yield break;
         foreach (var entry in _compressedSlots)
         {
-            var slot = entry.Value;
-            slot.MoveToHost();
-            var shape = entry.Key._shape;
-            var m = new Tensor<T>(shape);
-            var v = new Tensor<T>(shape);
-            var ms = (Span<float>)((Tensor<float>)(object)m).AsWritableSpan();
-            var vs = (Span<float>)((Tensor<float>)(object)v).AsWritableSpan();
-            for (int i = 0; i < slot.Length; i++)
-            {
-                ms[i] = slot.Int8 ? slot.M[i] : Bf16ToFloat(slot.M, i);
-                vs[i] = slot.Int8 ? slot.V[i] : Bf16ToFloat(slot.V, i);
-            }
-            _tapeCompressedM[entry.Key] = m;
-            _tapeCompressedV[entry.Key] = v;
-            if (slot.Int8)
-            {
-                if (2 * slot.Blocks > slot.Length)
-                    throw new InvalidOperationException("Too few elements to persist this tensor's block scales.");
-                var scales = new Tensor<T>(shape);
-                var sc = ((Tensor<float>)(object)scales).AsWritableSpan();
-                slot.MScales.AsSpan().CopyTo(sc);
-                slot.VScales.AsSpan().CopyTo(sc.Slice(slot.Blocks));
-                _tapeCompressedScales[entry.Key] = scales;
-            }
+            if (fieldName == nameof(_tapeCompressedScales) && !entry.Value.Int8) continue;
+            yield return (entry.Key, () => PackCompressedSlotTensor(entry.Key, entry.Value, fieldName));
         }
     }
+
 
     private void ClearPackedCompressedState()
     {
@@ -291,7 +294,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput>
 
         static byte ToByte(float value)
         {
-            if (!(value >= 0f && value <= 255f) || value != MathF.Floor(value))
+            if (!(value >= 0f && value <= 255f) || !MathF.Floor(value).Equals(value))
                 throw new InvalidOperationException($"Corrupt AdamW 8-bit moment state: {value} is not a codebook index.");
             return (byte)value;
         }
@@ -317,31 +320,55 @@ public partial class AdamWOptimizer<T, TInput, TOutput>
         ClearPackedCompressedState();
     }
 
+    private const string MomentFormatMarker = "AdamWMomentFormat";
+    private const int MomentFormatVersion = 1;
+
     /// <inheritdoc />
     private protected override void SerializeExtensionData(BinaryWriter writer)
     {
-        PackCompressedSlotsForSerialization();
-        try
-        {
-            base.SerializeExtensionData(writer);
-        }
-        finally
-        {
-            ClearPackedCompressedState();
-        }
+        base.SerializeExtensionData(writer);
+        writer.Write(MomentFormatMarker);
+        writer.Write(MomentFormatVersion);
+        writer.Write((int)_options.MomentStorage);
+        writer.Write(_options.Int8MomentBlockSize);
+        writer.Write(_options.Int8MinQuantizedLength);
     }
 
     /// <inheritdoc />
     private protected override Action StageExtensionData(BinaryReader reader, out bool hasFallibleCommit)
     {
-        var commit = base.StageExtensionData(reader, out hasFallibleCommit);
+        var applyBaseState = base.StageExtensionData(reader, out hasFallibleCommit);
+        try
+        {
+            if (reader.BaseStream.Position == reader.BaseStream.Length)
+            {
+                if (_options.MomentStorage != OptimizerMomentStorage.Float32)
+                    throw new InvalidOperationException("AdamW checkpoint has no compressed-moment format header.");
+            }
+            else
+            {
+                if (reader.ReadString() != MomentFormatMarker || reader.ReadInt32() != MomentFormatVersion)
+                    throw new InvalidOperationException("Unknown AdamW moment-format checkpoint header.");
+                var storage = (OptimizerMomentStorage)reader.ReadInt32();
+                int blockSize = reader.ReadInt32();
+                int minLength = reader.ReadInt32();
+                if (storage != _options.MomentStorage || blockSize != _options.Int8MomentBlockSize
+                    || minLength != _options.Int8MinQuantizedLength)
+                    throw new InvalidOperationException("AdamW checkpoint moment format does not match the target optimizer options.");
+                if (reader.BaseStream.Position != reader.BaseStream.Length)
+                    throw new InvalidOperationException("Unexpected trailing AdamW checkpoint data.");
+            }
+        }
+        catch (IOException error)
+        {
+            throw new InvalidOperationException("AdamW moment-format checkpoint header is truncated or corrupted.", error);
+        }
         return () =>
         {
-            // The restored checkpoint's compressed state (staged per parameter by the base) replaces the live slots.
+            applyBaseState();
             foreach (var slot in _compressedSlots.Values) slot.FreeDevice();
             _compressedSlots.Clear();
             ClearPackedCompressedState();
-            commit();
         };
     }
 }

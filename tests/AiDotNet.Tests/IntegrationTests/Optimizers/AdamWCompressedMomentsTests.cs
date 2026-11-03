@@ -25,6 +25,79 @@ public class AdamWCompressedMomentsTests
     private const float Lr = 1e-2f, Beta1 = 0.9f, Beta2 = 0.99f, Eps = 1e-8f, WeightDecay = 0.05f;
     private const int BlockSize = 256;
 
+    [Fact]
+    public void OptionsCopy_PreservesEveryMomentSetting()
+    {
+        var original = new AdamWOptimizerOptions<float, Matrix<float>, Vector<float>>
+        {
+            MomentStorage = OptimizerMomentStorage.Int8Blockwise,
+            Int8MomentBlockSize = 64,
+            Int8MinQuantizedLength = 128,
+        };
+        var copy = new AdamWOptimizerOptions<float, Matrix<float>, Vector<float>>(original);
+        Assert.Equal(original.MomentStorage, copy.MomentStorage);
+        Assert.Equal(original.Int8MomentBlockSize, copy.Int8MomentBlockSize);
+        Assert.Equal(original.Int8MinQuantizedLength, copy.Int8MinQuantizedLength);
+    }
+
+    [Theory]
+    [InlineData("block-size")]
+    [InlineData("minimum-length")]
+    [InlineData("bf16")]
+    [InlineData("fp32")]
+    public void Checkpoint_RejectsIncompatibleMomentFormatsWithoutChangingTarget(string mismatch)
+    {
+        var saved = AiDotNetEngine.Current;
+        AiDotNetEngine.Current = new CpuEngine();
+        try
+        {
+            var source = Optimizer(OptimizerMomentStorage.Int8Blockwise);
+            var param = new Tensor<float>(new[] { Length }, new Vector<float>(Rand(Length, 1)));
+            Step(source, param, Grad(1));
+            byte[] checkpoint = source.Serialize();
+            var options = new AdamWOptimizerOptions<float, Matrix<float>, Vector<float>>
+            {
+                MomentStorage = mismatch == "bf16" ? OptimizerMomentStorage.BFloat16
+                    : mismatch == "fp32" ? OptimizerMomentStorage.Float32 : OptimizerMomentStorage.Int8Blockwise,
+                Int8MomentBlockSize = mismatch == "block-size" ? 64 : BlockSize,
+                Int8MinQuantizedLength = mismatch == "minimum-length" ? 128 : 4096,
+                EnableGradientClipping = false,
+            };
+            var target = new AdamWOptimizer<float, Matrix<float>, Vector<float>>(null, options);
+            byte[] before = target.Serialize();
+            Assert.Throws<InvalidOperationException>(() => target.Deserialize(checkpoint));
+            Assert.Equal(before, target.Serialize());
+            // Rejected restore must leave the source usable and lossless on a compatible target.
+            var compatible = Optimizer(OptimizerMomentStorage.Int8Blockwise);
+            compatible.Deserialize(checkpoint);
+            var resumed = new Tensor<float>(new[] { Length }, new Vector<float>(param.ToArray()));
+            Step(compatible, resumed, Grad(2));
+            Step(source, param, Grad(2));
+            Assert.Equal(param.ToArray(), resumed.ToArray());
+        }
+        finally { AiDotNetEngine.Current = saved; }
+    }
+
+    [Fact]
+    public void CompressedStep_RejectsMismatchedGradientLength()
+    {
+        var optimizer = Optimizer(OptimizerMomentStorage.BFloat16);
+        Assert.Throws<ArgumentException>(() => Step(optimizer,
+            new Tensor<float>(new[] { 4 }), new Tensor<float>(new[] { 3 })));
+    }
+
+    [Fact]
+    public void FusedConfig_DeclinesUnsupportedCompressedRequests()
+    {
+        var nonFloat = new AdamWOptimizer<double, Matrix<double>, Vector<double>>(null,
+            new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>> { MomentStorage = OptimizerMomentStorage.BFloat16 });
+        Assert.False(((AiDotNet.Optimizers.Fused.IFusedOptimizerSpec)nonFloat).TryGetFusedOptimizerConfig(out _));
+        var zeroBlock = new AdamWOptimizer<float, Matrix<float>, Vector<float>>(null,
+            new AdamWOptimizerOptions<float, Matrix<float>, Vector<float>>
+            { MomentStorage = OptimizerMomentStorage.Int8Blockwise, Int8MomentBlockSize = 0 });
+        Assert.False(((AiDotNet.Optimizers.Fused.IFusedOptimizerSpec)zeroBlock).TryGetFusedOptimizerConfig(out _));
+    }
+
     private static float[] Rand(int n, int seed, double scale = 1.0)
     {
         var rng = new Random(seed);
