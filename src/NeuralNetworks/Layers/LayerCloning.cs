@@ -676,46 +676,53 @@ public static class LayerCloning
         const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
         foreach (var ctor in layerType.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
         {
-            foreach (var param in ctor.GetParameters())
+            foreach (var param in ctor.GetParameters().Where(p => !string.IsNullOrEmpty(p.Name) && !target.ContainsKey(p.Name!)))
             {
-                var name = param.Name;
-                if (string.IsNullOrEmpty(name) || target.ContainsKey(name)) continue;
-
+                var name = param.Name!;
                 string[] candidateNames = [name, "_" + name, "m_" + name];
                 object? found = null;
                 bool matched = false;
 
                 for (Type? current = layerType; current is not null && current != typeof(object) && !matched; current = current.BaseType)
                 {
-                    foreach (var field in current.GetFields(Flags))
+                    var matchingFields = current.GetFields(Flags).Where(field =>
+                        candidateNames.Any(c => string.Equals(field.Name, c, StringComparison.OrdinalIgnoreCase))
+                        && param.ParameterType.IsAssignableFrom(field.FieldType));
+
+                    foreach (var field in matchingFields)
                     {
-                        if (candidateNames.Any(c => string.Equals(field.Name, c, StringComparison.OrdinalIgnoreCase))
-                            && param.ParameterType.IsAssignableFrom(field.FieldType))
-                        {
-                            found = field.GetValue(source);
-                            matched = found is not null;
-                            if (matched) break;
-                        }
+                        found = field.GetValue(source);
+                        matched = found is not null;
+                        if (matched) break;
                     }
 
                     if (matched) break;
 
-                    foreach (var prop in current.GetProperties(Flags))
+                    var matchingProps = current.GetProperties(Flags).Where(prop =>
+                        prop.CanRead
+                        && prop.GetIndexParameters().Length == 0
+                        && string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase)
+                        && param.ParameterType.IsAssignableFrom(prop.PropertyType));
+
+                    foreach (var prop in matchingProps)
                     {
-                        if (!prop.CanRead || prop.GetIndexParameters().Length != 0) continue;
-                        if (string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase)
-                            && param.ParameterType.IsAssignableFrom(prop.PropertyType))
+                        try
                         {
-                            try
-                            {
-                                found = prop.GetValue(source);
-                                matched = found is not null;
-                                if (matched) break;
-                            }
-                            catch (Exception)
-                            {
-                                // Ignore properties that throw during inspection.
-                            }
+                            found = prop.GetValue(source);
+                            matched = found is not null;
+                            if (matched) break;
+                        }
+                        catch (TargetInvocationException)
+                        {
+                            // Ignore properties whose getter throws during reflection inspection.
+                        }
+                        catch (MemberAccessException)
+                        {
+                            // Ignore inaccessible properties during reflection inspection.
+                        }
+                        catch (NotSupportedException)
+                        {
+                            // Ignore unsupported property getters during reflection inspection.
                         }
                     }
                 }
