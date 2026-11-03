@@ -3424,7 +3424,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1::EpsilonDecay", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1::EpsilonEnd", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1::EpsilonStart", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1::ImaginationHorizon", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1::MaxGradientNorm", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1::ReplayBufferSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1::TargetUpdateFrequency", OptionSensitivityOutcome.Insensitive },
