@@ -888,7 +888,7 @@ public class ChronosOptions<T> : TimeSeriesRegressionOptions<T>
 
 /// <summary>
 /// Chronos transformer layer with causal multi-head self-attention and feed-forward network.
-/// Now uses Tensor<T> and proper backpropagation.
+/// Now uses Tensor&lt;T> and proper backpropagation.
 /// </summary>
 // Rank 1, in equals out - a pre-norm transformer block is shape-preserving by construction, and the
 // code says so twice. Both constructors declare the same width on each side

@@ -17,7 +17,7 @@ namespace AiDotNet.UncertaintyQuantification.Calibration;
 /// Temperature scaling fixes this by dividing the network's logits (pre-softmax values) by a learned
 /// temperature parameter before applying softmax:
 /// - Temperature > 1: Makes predictions less confident (softer)
-/// - Temperature < 1: Makes predictions more confident (sharper)
+/// - Temperature &lt; 1: Makes predictions more confident (sharper)
 /// - Temperature = 1: No change
 ///
 /// This is calibrated on a held-out validation set to find the temperature that makes the predicted

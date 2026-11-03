@@ -424,7 +424,7 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// For example, in a neural network for image classification:
     /// ```csharp
     /// // Create a batch normalization layer for 128 features
-    /// var batchNormLayer = new BatchNormalizationLayer<float>();
+    /// var batchNormLayer = new BatchNormalizationLayer&lt;float>();
     /// ```
     /// 
     /// The layer initializes with:

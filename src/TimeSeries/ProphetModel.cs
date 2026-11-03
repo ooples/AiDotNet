@@ -1449,7 +1449,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
     ///
     /// The difference between Actual and Predicted tells you the direction of the anomaly:
     /// - Actual > Predicted: Unexpectedly high value
-    /// - Actual < Predicted: Unexpectedly low value
+    /// - Actual &lt; Predicted: Unexpectedly low value
     /// </para>
     /// </remarks>
     public List<(int Index, T Actual, T Predicted, T Score)> DetectAnomaliesDetailed(Matrix<T> x, Vector<T> y)

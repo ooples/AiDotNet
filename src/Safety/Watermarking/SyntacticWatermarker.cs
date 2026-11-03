@@ -86,4 +86,8 @@ public class SyntacticWatermarker<T> : KeyedSubstitutionWatermarker<T>
         : base(ContractionGroups, watermarkStrength, key)
     {
     }
+
+    /// <summary>Preserves the original constructor signature using the default configuration.</summary>
+    public SyntacticWatermarker(double watermarkStrength) : this(watermarkStrength, null) { }
+
 }

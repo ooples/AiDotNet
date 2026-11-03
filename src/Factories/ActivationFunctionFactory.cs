@@ -22,7 +22,7 @@ public static class ActivationFunctionFactory<T>
     /// Creates a single-value activation function of the specified type.
     /// </summary>
     /// <param name="activationFunction">The type of activation function to create.</param>
-    /// <returns>An implementation of IActivationFunction<T> for the specified activation function type.</returns>
+    /// <returns>An implementation of IActivationFunction&lt;T> for the specified activation function type.</returns>
     /// <exception cref="NotSupportedException">Thrown when trying to create a Softmax activation function, which requires vector input.</exception>
     /// <exception cref="NotImplementedException">Thrown when the requested activation function type is not implemented.</exception>
     /// <remarks>
@@ -67,7 +67,7 @@ public static class ActivationFunctionFactory<T>
     /// Creates a vector activation function of the specified type.
     /// </summary>
     /// <param name="activationFunction">The type of activation function to create.</param>
-    /// <returns>An implementation of IVectorActivationFunction<T> for the specified activation function type.</returns>
+    /// <returns>An implementation of IVectorActivationFunction&lt;T> for the specified activation function type.</returns>
     /// <exception cref="NotImplementedException">Thrown when the requested vector activation function type is not implemented.</exception>
     /// <remarks>
     /// <para>

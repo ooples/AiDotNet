@@ -418,7 +418,7 @@ public partial class ADMMOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     /// Creates a regularization object based on the provided options.
     /// </summary>
     /// <param name="options">The ADMM optimizer options containing regularization settings.</param>
-    /// <returns>An instance of IRegularization<T> based on the specified regularization type.</returns>
+    /// <returns>An instance of IRegularization&lt;T> based on the specified regularization type.</returns>
     /// <remarks>
     /// <para><b>For Beginners:</b> This method chooses the right kind of regularization based on your settings.
     /// Regularization helps prevent overfitting, which is when a model performs well on training data but poorly on new data.

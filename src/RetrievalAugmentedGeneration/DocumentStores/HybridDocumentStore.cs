@@ -34,7 +34,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores
     /// Good for:
     /// - E-commerce product search
     /// - Document retrieval systems
-    /// - Q&A systems
+    /// - Q&amp;A systems
     /// - Any application needing both exact and semantic matches
     /// </para>
     /// </remarks>

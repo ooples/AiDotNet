@@ -81,7 +81,7 @@ public enum ConfidenceIntervalMethod
     /// proportions (like accuracy). Unlike the simple ± formula, it works well even
     /// when accuracy is very high (98%) or very low (2%).</para>
     /// <para><b>When to use:</b> Accuracy, precision, recall, and other proportions.</para>
-    /// <para><b>Research reference:</b> Wilson (1927), recommended by Agresti & Coull (1998).</para>
+    /// <para><b>Research reference:</b> Wilson (1927), recommended by Agresti &amp; Coull (1998).</para>
     /// </remarks>
     WilsonScore = 4,
 
@@ -107,7 +107,7 @@ public enum ConfidenceIntervalMethod
     /// before computing the normal approximation interval. This simple adjustment dramatically
     /// improves coverage, especially for extreme proportions.</para>
     /// <para><b>When to use:</b> Quick calculation with good coverage for proportions.</para>
-    /// <para><b>Research reference:</b> Agresti & Coull (1998) "Approximate is better than exact".</para>
+    /// <para><b>Research reference:</b> Agresti &amp; Coull (1998) "Approximate is better than exact".</para>
     /// </remarks>
     AgrestiCoull = 6,
 
