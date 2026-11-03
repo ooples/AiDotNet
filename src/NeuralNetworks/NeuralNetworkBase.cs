@@ -13067,11 +13067,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 deviceGrads.Add((AiDotNet.Tensors.LinearAlgebra.Tensor<float>)(object)g);
             }
             var deviceNorm = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryClipGradNorm(deviceGrads, maxNorm);
-            if (deviceNorm is not null)
+            if (deviceNorm is not null && deviceNorm.IsFinite)
             {
                 _lastDeviceGradientNorm = deviceNorm;
                 return;
             }
+            deviceNorm?.Dispose(); // Float accumulation can overflow on finite gradients; use the double host fallback.
         }
 
         // Step 1: total L2 norm across all gradient tensors, iterating in
@@ -14871,7 +14872,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // parameter whose device copy the plan just updated (and re-armed for a lazy host download) does not
                 // carry. Testing it invalidated every such parameter, dropping the device update: GPU training lost its
                 // first two updates whenever the weights were already resident at step 1 (one Predict was enough).
-                if (updatedOnDevice && wtensor.HasPendingGpuData && wtensor.TryGetGpuBuffer() is not null)
+                if (wtensor.HasPendingGpuData && wtensor.TryGetGpuBuffer() is not null)
                     continue;
                 gpuForInvalidate.InvalidateResidentWeightBuffer(wtensor);
             }

@@ -11,6 +11,8 @@ using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
+using AiDotNet.Tensors.Engines.DirectGpu;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
 
@@ -28,6 +30,32 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 public class GpuEagerTapeStepMatchesCpuTests
 {
     private const int Inputs = 16, Hidden = 32, Outputs = 4, Batch = 32, Steps = 6;
+
+    private sealed class ClipProbe : AdamWOptimizer<float, Tensor<float>, Tensor<float>>
+    {
+        public ClipProbe() : base(null) { }
+        public static void Clip(TapeStepContext<float> context) => ApplyTapeGlobalNormGradientClipping(context, 1.0);
+    }
+
+    [SkippableFact]
+    public void Gpu_norm_overflow_falls_back_to_double_precision_clipping()
+    {
+        using var gpu = new DirectGpuTensorEngine();
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+        var previous = AiDotNetEngine.Current;
+        AiDotNetEngine.Current = gpu;
+        try
+        {
+            var param = new Tensor<float>(new[] { 1 });
+            var grad = gpu.TensorMultiplyScalar(new Tensor<float>(new[] { 1 }, new Vector<float>(new[] { 3e19f })), 1f);
+            ClipProbe.Clip(new TapeStepContext<float>(new[] { param },
+                new Dictionary<Tensor<float>, Tensor<float>> { [param] = grad }, 0f));
+            Assert.InRange(grad.ToArray()[0], 0.99999f, 1.00001f);
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
 
     /// <summary>A network that always takes the eager tape step.</summary>
     private sealed class EagerNetwork : NeuralNetwork<float>
@@ -82,7 +110,11 @@ public class GpuEagerTapeStepMatchesCpuTests
             var losses = new List<double>();
             for (int s = 0; s < Steps; s++)
             {
+                long beforeDispatch = GpuLaunchProbe.AdamWDispatches;
                 net.Train(x, y);
+                if (engine is DirectGpuTensorEngine)
+                    Assert.True(GpuLaunchProbe.AdamWDispatches > beforeDispatch,
+                        $"step {s}: eager training did not dispatch GPU AdamW");
                 losses.Add(Convert.ToDouble(net.GetLastLoss()));
             }
             return losses;

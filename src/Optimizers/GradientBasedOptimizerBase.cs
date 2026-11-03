@@ -3770,7 +3770,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         if (DeviceTapeGradients(context) is { } deviceGrads)
         {
             using var deviceNorm = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryClipGradNorm(deviceGrads, maxNorm);
-            if (deviceNorm is not null) return;
+            if (deviceNorm is not null && deviceNorm.IsFinite) return;
         }
         var numOps = MathHelper.GetNumericOperations<T>();
         // Host engine: one parallel SIMD pass per tensor for the norm and for the scale (FusedOptimizer helpers);
