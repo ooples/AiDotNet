@@ -29,6 +29,12 @@ param(
     [string] $ResultsDirectory = 'artifacts/paper-fidelity',
     [int] $ChunkSize = 10,
     [int] $ChunkCapMinutes = 90,
+    # harden-xunit-runner.ps1 turns theory pre-enumeration off, so a class's whole
+    # Options_EachShouldChangeObservableBehaviour theory is ONE VSTest case and blame times all of its rows
+    # together. At 15 minutes blame killed TortoiseTTS (23 options, ~18 min) and DreamerAgent mid-theory and the
+    # classes queued behind them never ran (sweep 41587771162, slices 1 and 9). Kept under -ChunkCapMinutes so a
+    # real hang is still named by blame before the cap kills the chunk.
+    [int] $HangTimeoutMinutes = 60,
     # The slice's own budget, inside the job's timeout-minutes; a chunk that could not finish inside it is
     # recorded as not run rather than cancelled mid-way with no summary.
     [int] $BudgetMinutes = 330
@@ -36,6 +42,9 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+if ($HangTimeoutMinutes -ge $ChunkCapMinutes) {
+    throw "-HangTimeoutMinutes ($HangTimeoutMinutes) must be below -ChunkCapMinutes ($ChunkCapMinutes), or the cap kills a hung chunk before blame names the test."
+}
 . (Join-Path $PSScriptRoot 'PaperFidelity.ps1')
 
 if ($ChunkSize -lt 1) { throw "ChunkSize must be positive, not $ChunkSize" }
@@ -86,7 +95,7 @@ for ($i = 0; $i -lt $classes.Count; $i += $ChunkSize) {
     Write-Host "::group::$label ($($chunk.Count)): $($chunk -join ', ')"
     & timeout --kill-after=60s "$($ChunkCapMinutes)m" `
         dotnet test $project -c Release --framework $framework --no-build --no-restore `
-        --blame-hang --blame-hang-timeout 15m --blame-hang-dump-type none `
+        --blame-hang --blame-hang-timeout "$($HangTimeoutMinutes)m" --blame-hang-dump-type none `
         --filter $filter `
         --logger "trx;LogFileName=$label.trx" `
         --logger 'console;verbosity=normal' `
