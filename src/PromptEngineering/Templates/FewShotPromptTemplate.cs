@@ -26,7 +26,7 @@ namespace AiDotNet.PromptEngineering.Templates;
 ///     exampleFormat: "Text: {input}\nSentiment: {output}"
 /// );
 ///
-/// var prompt = template.Format(new Dictionary<string, string>
+/// var prompt = template.Format(new Dictionary&lt;string, string>
 /// {
 ///     ["text"] = "This movie was amazing!"
 /// });

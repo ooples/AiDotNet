@@ -30,11 +30,11 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 /// Problem: "Write a function to check if a number is prime"
 ///
 /// Step 1: "Define the problem: Check divisibility from 2 to sqrt(n)"
-/// Step 2: "Handle edge cases: numbers <= 1 are not prime"
+/// Step 2: "Handle edge cases: numbers &lt;= 1 are not prime"
 /// Step 3: "Implement the algorithm"
 /// ```python
 /// def is_prime(n):
-///     if n <= 1:
+///     if n &lt;= 1:
 ///         return False
 ///     for i in range(2, int(n**0.5) + 1):
 ///         if n % i == 0:

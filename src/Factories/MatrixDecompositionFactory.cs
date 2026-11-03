@@ -23,7 +23,7 @@ public static class MatrixDecompositionFactory
     /// <typeparam name="T">The data type used for calculations (typically float or double).</typeparam>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <param name="decompositionType">The type of decomposition to create.</param>
-    /// <returns>An implementation of IMatrixDecomposition<T> for the specified decomposition type.</returns>
+    /// <returns>An implementation of IMatrixDecomposition&lt;T> for the specified decomposition type.</returns>
     /// <exception cref="ArgumentException">Thrown when an unsupported decomposition type is specified.</exception>
     /// <remarks>
     /// <para>

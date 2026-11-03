@@ -43,7 +43,7 @@ namespace AiDotNet.Clustering.Density;
 /// var options = new OPTICSOptions&lt;double&gt;();
 /// var oPTICS = new OPTICS&lt;double&gt;(options);
 /// oPTICS.Train(dataMatrix);
-/// Vector<double> labels = oPTICS.Labels;
+/// Vector&lt;double> labels = oPTICS.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

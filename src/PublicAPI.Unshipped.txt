@@ -190,7 +190,6 @@ virtual AiDotNet.TimeSeries.TimeSeriesModelBase<T>.SetParameterChunks(System.Col
 *REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.ModuleName.get -> string!
 *REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.TextWatermarker(byte[]? secretKey = null, double greenListFraction = 0.5, double detectionThreshold = 4, int contextWidth = 1) -> void
 *REMOVED*AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.WatermarkDetector<T>.WatermarkDetector() -> void
 *REMOVED*abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
 *REMOVED*abstract AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(string! text) -> double
 *REMOVED*override AiDotNet.NeuralNetworks.MobileNetV2Network<T>.SetTrainingMode(bool isTraining) -> void
@@ -424,3 +423,12 @@ AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.Int8MomentBloc
 AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.Int8MomentBlockSize.set -> void
 AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.Int8MinQuantizedLength.get -> int
 AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.Int8MinQuantizedLength.set -> void
+AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold) -> void
+AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength, int segmentSamples) -> void
+AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold, double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioWatermarkerBase(double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.LexicalWatermarker(double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double watermarkStrength, int vocabSize, double greenListFraction) -> void
+AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength) -> void

@@ -318,7 +318,6 @@ public partial class StochasticGradientDescentOptimizer<T, TInput, TOutput> : Gr
         return $"{baseKey}_SGD_{CurrentLearningRate}_{_options.MaxIterations}";
     }
 
-    /// <summary>
     /// <inheritdoc />
     protected override void StepCore(TapeStepContext<T> context)
     {
@@ -353,6 +352,7 @@ public partial class StochasticGradientDescentOptimizer<T, TInput, TOutput> : Gr
         }
     }
 
+    /// <summary>
     /// Updates parameters on the GPU using vanilla SGD.
     /// </summary>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)

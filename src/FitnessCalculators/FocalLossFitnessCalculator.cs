@@ -63,7 +63,7 @@ public class FocalLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculatorB
     /// with different frequencies in your data.
     /// 
     /// - When alpha = 0.5: Both classes are treated equally
-    /// - When alpha < 0.5: Gives less weight to the positive class
+    /// - When alpha &lt; 0.5: Gives less weight to the positive class
     /// - When alpha > 0.5: Gives more weight to the positive class
     /// 
     /// Think of it like adjusting the scales of justice:

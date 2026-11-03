@@ -47,7 +47,7 @@ namespace AiDotNet.Clustering.AutoK;
 /// var options = new GMeansOptions&lt;double&gt;();
 /// var gMeans = new GMeans&lt;double&gt;(options);
 /// gMeans.Train(dataMatrix);
-/// Vector<double> labels = gMeans.Labels;
+/// Vector&lt;double> labels = gMeans.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

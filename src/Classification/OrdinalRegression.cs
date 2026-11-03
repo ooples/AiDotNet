@@ -112,7 +112,7 @@ public partial class OrdinalRegression<T> : ClassifierBase<T>,
 
     /// <summary>
     /// Threshold parameters (α_1, α_2, ..., α_{K-1}) where K is the number of classes.
-    /// These are in increasing order: α_1 < α_2 < ... < α_{K-1}.
+    /// These are in increasing order: α_1 &lt; α_2 &lt; ... &lt; α_{K-1}.
     /// </summary>
     [AiDotNet.Attributes.FittedParameter]
     private Vector<T> _thresholds = new Vector<T>(0);

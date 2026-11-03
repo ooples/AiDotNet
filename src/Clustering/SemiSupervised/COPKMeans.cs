@@ -46,7 +46,7 @@ namespace AiDotNet.Clustering.SemiSupervised;
 /// var options = new COPKMeansOptions&lt;double&gt;();
 /// var cOPKMeans = new COPKMeans&lt;double&gt;(options);
 /// cOPKMeans.Train(dataMatrix);
-/// Vector<double> labels = cOPKMeans.Labels;
+/// Vector&lt;double> labels = cOPKMeans.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

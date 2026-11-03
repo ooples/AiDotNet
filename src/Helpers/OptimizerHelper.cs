@@ -4,8 +4,8 @@ namespace AiDotNet.Helpers;
 /// Helper class that provides optimization-related functionality for machine learning models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
-/// <typeparam name="TInput">The type of input data (e.g., Matrix<T>, Tensor<T>).</typeparam>
-/// <typeparam name="TOutput">The type of output data (e.g., Vector<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T>, Tensor&lt;T>).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T>, Tensor&lt;T>).</typeparam>
 public static class OptimizerHelper<T, TInput, TOutput>
 {
     /// <summary>
@@ -90,7 +90,7 @@ public static class OptimizerHelper<T, TInput, TOutput>
     /// <summary>
     /// Creates a new input containing only the selected features from the original data.
     /// </summary>
-    /// <param name="X">The original feature input (Matrix<T> or Tensor<T>).</param>
+    /// <param name="X">The original feature input (Matrix&lt;T> or Tensor&lt;T>).</param>
     /// <param name="selectedFeatures">List of indices for features to keep.</param>
     /// <returns>A new input with only the selected features.</returns>
     public static TInput SelectFeatures(TInput X, List<int> selectedFeatures)
@@ -118,7 +118,7 @@ public static class OptimizerHelper<T, TInput, TOutput>
     /// <remarks>
     /// <para>
     /// This method creates a reduced version of the input data that contains only the selected features.
-    /// It supports different input types like Matrix<T> and Tensor<T>.
+    /// It supports different input types like Matrix&lt;T> and Tensor&lt;T>.
     /// </para>
     /// <para><b>For Beginners:</b> This method creates a simplified version of your dataset.
     /// 
@@ -327,7 +327,7 @@ public static class OptimizerHelper<T, TInput, TOutput>
     /// <summary>
     /// Creates a new input containing only the selected features from the original data.
     /// </summary>
-    /// <param name="X">The original feature input (Matrix<T> or Tensor<T>).</param>
+    /// <param name="X">The original feature input (Matrix&lt;T> or Tensor&lt;T>).</param>
     /// <param name="selectedFeatures">List of feature vectors representing important features.</param>
     /// <returns>A new input with only the selected features.</returns>
     public static TInput SelectFeatures(TInput X, List<Vector<T>> selectedFeatures)

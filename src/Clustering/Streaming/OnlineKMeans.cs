@@ -51,7 +51,7 @@ namespace AiDotNet.Clustering.Streaming;
 /// var options = new OnlineKMeansOptions&lt;double&gt;();
 /// var onlineKMeans = new OnlineKMeans&lt;double&gt;(options);
 /// onlineKMeans.Train(dataMatrix);
-/// Vector<double> labels = onlineKMeans.Labels;
+/// Vector&lt;double> labels = onlineKMeans.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

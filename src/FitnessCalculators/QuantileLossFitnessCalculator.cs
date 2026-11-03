@@ -31,7 +31,7 @@ namespace AiDotNet.FitnessCalculators;
 /// - It penalizes under-predictions and over-predictions differently based on the quantile you choose
 /// - For the median (0.5 quantile), it penalizes both equally (this is also called the Mean Absolute Error)
 /// - For higher quantiles (>0.5), it penalizes under-predictions more heavily
-/// - For lower quantiles (<0.5), it penalizes over-predictions more heavily
+/// - For lower quantiles (&lt;0.5), it penalizes over-predictions more heavily
 /// 
 /// Think of it like this:
 /// Imagine you're predicting package delivery times:
@@ -111,7 +111,7 @@ public class QuantileLossFitnessCalculator<T, TInput, TOutput> : FitnessCalculat
     /// - It penalizes under-predictions and over-predictions differently based on the quantile you chose
     /// - For the median (0.5 quantile), it treats both types of errors equally
     /// - For higher quantiles (>0.5), it penalizes under-predictions more heavily
-    /// - For lower quantiles (<0.5), it penalizes over-predictions more heavily
+    /// - For lower quantiles (&lt;0.5), it penalizes over-predictions more heavily
     /// 
     /// A lower score means better performance (0 would be perfect).
     /// 

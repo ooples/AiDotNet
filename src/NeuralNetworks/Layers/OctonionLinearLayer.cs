@@ -189,7 +189,7 @@ public partial class OctonionLinearLayer<T> : LayerBase<T>, IShapeContract
 
     /// <summary>
     /// Initializes weights using Xavier/Glorot initialization adapted for octonions.
-    /// Writes directly to the Tensor<T> components — no Octonion<T> object allocation.
+    /// Writes directly to the Tensor&lt;T> components — no Octonion&lt;T> object allocation.
     /// </summary>
     private void InitializeParameters()
     {
