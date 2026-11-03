@@ -1324,7 +1324,9 @@ public abstract class ReinforcementLearningTestBase<T>
     /// <param name="option">The options property to perturb.</param>
     protected void AssertOptionChangesObservableBehaviour(string option)
     {
-        using var _arena = TensorArena.Create();
+        // No TensorArena: it pins every buffer until disposal, and this check builds, observes and trains a
+        // control plus every candidate. Under one arena OpenSora held ~10 GB of attention tiles that gradient
+        // checkpointing should have freed, and its GuidanceScale check ran out of memory on the 16 GB runner.
         var rng = ModelTestHelpers.CreateSeededRandom();
         var battery = BuildStateBattery();
         var stateA = CreateRandomState(rng);
