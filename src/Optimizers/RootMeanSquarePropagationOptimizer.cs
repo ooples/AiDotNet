@@ -411,7 +411,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         {
             if (!requiresExtendedState
                 && !gpuRmsProp
-                && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+                && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeSqGrad.TryGetValue(param, out var sqGradSp))
                 {

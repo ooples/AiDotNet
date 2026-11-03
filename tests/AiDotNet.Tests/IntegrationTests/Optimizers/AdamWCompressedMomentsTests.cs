@@ -90,12 +90,23 @@ public class AdamWCompressedMomentsTests
     public void FusedConfig_DeclinesUnsupportedCompressedRequests()
     {
         var nonFloat = new AdamWOptimizer<double, Matrix<double>, Vector<double>>(null,
-            new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>> { MomentStorage = OptimizerMomentStorage.BFloat16 });
+            new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>
+            { MomentStorage = OptimizerMomentStorage.BFloat16, UseAdaptiveLearningRate = false, EnableGradientClipping = false });
         Assert.False(((AiDotNet.Optimizers.Fused.IFusedOptimizerSpec)nonFloat).TryGetFusedOptimizerConfig(out _));
+        var float32Control = new AdamWOptimizer<double, Matrix<double>, Vector<double>>(null,
+            new AdamWOptimizerOptions<double, Matrix<double>, Vector<double>>
+            { MomentStorage = OptimizerMomentStorage.Float32, UseAdaptiveLearningRate = false, EnableGradientClipping = false });
+        Assert.True(((AiDotNet.Optimizers.Fused.IFusedOptimizerSpec)float32Control).TryGetFusedOptimizerConfig(out _));
         var zeroBlock = new AdamWOptimizer<float, Matrix<float>, Vector<float>>(null,
             new AdamWOptimizerOptions<float, Matrix<float>, Vector<float>>
-            { MomentStorage = OptimizerMomentStorage.Int8Blockwise, Int8MomentBlockSize = 0 });
+            { MomentStorage = OptimizerMomentStorage.Int8Blockwise, Int8MomentBlockSize = 0,
+                UseAdaptiveLearningRate = false, EnableGradientClipping = false });
         Assert.False(((AiDotNet.Optimizers.Fused.IFusedOptimizerSpec)zeroBlock).TryGetFusedOptimizerConfig(out _));
+        var positiveBlockControl = new AdamWOptimizer<float, Matrix<float>, Vector<float>>(null,
+            new AdamWOptimizerOptions<float, Matrix<float>, Vector<float>>
+            { MomentStorage = OptimizerMomentStorage.Int8Blockwise, Int8MomentBlockSize = 64,
+                UseAdaptiveLearningRate = false, EnableGradientClipping = false });
+        Assert.True(((AiDotNet.Optimizers.Fused.IFusedOptimizerSpec)positiveBlockControl).TryGetFusedOptimizerConfig(out _));
     }
 
     private static float[] Rand(int n, int seed, double scale = 1.0)

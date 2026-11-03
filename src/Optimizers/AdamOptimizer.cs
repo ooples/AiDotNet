@@ -1065,7 +1065,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             // not maintained on the sparse path — vMax is dense and the scatter only
             // touches the indexed rows, which would let the AMSGrad invariant drift.
             // Take the dense path for AMSGrad to keep its monotonic-v̂ guarantee.
-            if (!useAmsgrad
+            if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param) && !useAmsgrad
                 && SparseEmbeddingOptimizerHelpers.TryApplyAdamSparse(
                     param, m, v, lr, b1, b2, bc1, bc2, eps, weightDecay: 0.0))
             {

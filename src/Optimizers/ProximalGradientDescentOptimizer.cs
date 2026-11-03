@@ -836,7 +836,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
             // operator may need to inspect every element).
             bool useSparseL1 = !gpuL1
                 && _regularization is AiDotNet.Regularization.L1Regularization<T, TInput, TOutput>
-                && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param);
+                && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param);
             if (useSparseL1)
             {
                 if (SparseEmbeddingOptimizerHelpers.TryApplyProximalL1Sparse(

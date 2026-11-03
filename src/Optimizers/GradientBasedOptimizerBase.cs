@@ -3763,6 +3763,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // overwrites every gradient element with NaN, distorting the next
         // optimizer step instead of being a no-op.
         if (maxNorm <= 0.0 || double.IsNaN(maxNorm) || double.IsInfinity(maxNorm)) return;
+        SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(context.Parameters, context.Gradients, AiDotNetEngine.Current);
 
         // GPU engine: clip_grad_norm_ on the device with no host read (PyTorch's foreach path). The host loops below
         // read every gradient through Data.Span, a download of each device-resident gradient per step. A non-finite
@@ -3821,6 +3822,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         TapeStepContext<T> context, double maxValue)
     {
         if (maxValue <= 0.0 || double.IsNaN(maxValue) || double.IsInfinity(maxValue)) return;
+        SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(context.Parameters, context.Gradients, AiDotNetEngine.Current);
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // GPU engine: clamp on the device (clip_grad_value_), written back into each gradient tensor. The

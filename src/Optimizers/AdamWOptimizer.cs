@@ -799,7 +799,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             // from Adam only in decoupled weight decay (θ ← θ(1 − lr·wd) − step),
             // which the helper applies per-row when weightDecay > 0. AMSGrad
             // keeps the dense path (vMax invariant requires touching every row).
-            if (configuredMask is null && !_options.UseAMSGrad
+            if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param)
+                && configuredMask is null && !_options.UseAMSGrad
                 && SparseEmbeddingOptimizerHelpers.TryApplyAdamSparse(
                     param, m, v,
                     NumOps.ToDouble(CurrentLearningRate),

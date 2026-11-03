@@ -320,14 +320,14 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             // True sparse scatter FTRL: z, n accumulators + param at touched indices.
             // FTRL's sqrt(n) schedule is encoded via lr_power = -0.5; pass that
             // explicitly so callers can override if they want a different power.
-            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeZ.TryGetValue(param, out var zSp)) { zSp = new Tensor<T>(param._shape); _tapeZ[param] = zSp; }
                 if (!_tapeN.TryGetValue(param, out var nSp)) { nSp = new Tensor<T>(param._shape); _tapeN[param] = nSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplyFtrlSparse(
                         param, zSp, nSp,
-                        NumOps.ToDouble(CurrentLearningRate),
-                        _options.Lambda1, _options.Lambda2, lrPower: -0.5))
+                        _options.Alpha,
+                        _options.Lambda1, _options.Lambda2, lrPower: -0.5, beta: _options.Beta))
                 {
                     continue;
                 }

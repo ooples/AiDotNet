@@ -486,7 +486,8 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
         foreach (var param in context.Parameters)
         {
             // True sparse scatter Adamax: per-row update of m + u + param.
-            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            // Existing momentum can still move rows absent from this step; retain the full update in that case.
+            if (!_tapeM.ContainsKey(param) && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
                 if (!_tapeU.TryGetValue(param, out var uSp)) { uSp = new Tensor<T>(param._shape); _tapeU[param] = uSp; }

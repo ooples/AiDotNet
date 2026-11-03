@@ -7422,6 +7422,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
                 var trainableParams = CollectModelTrainableTensors();
                 var allGrads = tape.ComputeGradients(lossTensor, sources: null);
+                SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(trainableParams, allGrads, Engine);
                 // Walk both the layer-collected params AND any network-
                 // level trainable tensors so the latter actually receive
                 // accumulated gradient updates.
@@ -12556,6 +12557,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             bool mpSkipOptimizerStep = false;
             if (mpCtx is not null && typeof(T) == typeof(float) && mpFp32Snapshots is not null)
             {
+                SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(trainableParams, grads, Engine);
                 double scale = mpCtx.LossScaler.Scale;
                 float inverseScaleF = (float)(1.0 / scale);
                 bool hasOverflow = false;
@@ -12638,7 +12640,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // The optimizer's regularization goes on BEFORE the clip, as its flat path orders it.
             ApplyOptimizerRegularization(opt, trainableParams, grads);
             double maxGradNorm = MaxGradNormValue;
-            if (maxGradNorm > 0.0 && grads.Count > 0)
+            if (maxGradNorm > 0.0)
             {
                 // Pass trainableParams as the iteration-order key so the
                 // total-norm sum is computed in a deterministic order
@@ -12977,6 +12979,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Dictionary<Tensor<T>, Tensor<T>> grads, double maxNorm,
         IReadOnlyList<Tensor<T>> iterationOrder)
     {
+        SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(iterationOrder, grads, Engine);
         LastStepHadNonFiniteGradients = false;
         _lastDeviceGradientNorm?.Dispose();
         _lastDeviceGradientNorm = null;
@@ -14820,6 +14823,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Dictionary<Tensor<T>, Tensor<T>> gradients)
     {
         if (OptimizerRegularizationOf(optimizer) is not { } regularization) return;
+        SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(parameters, gradients, Engine);
         foreach (var parameter in parameters)
         {
             if (!gradients.TryGetValue(parameter, out var gradient) || gradient is null) continue;

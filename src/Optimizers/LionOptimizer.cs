@@ -431,7 +431,8 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         foreach (var param in context.Parameters)
         {
             // True sparse scatter Lion: m + param at touched indices only.
-            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            // Existing momentum can still move rows absent from this step; retain the full update in that case.
+            if (!_tapeMomentum.ContainsKey(param) && _options.WeightDecay == 0.0 && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeMomentum.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeMomentum[param] = mSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplyLionSparse(

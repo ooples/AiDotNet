@@ -253,9 +253,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput>
     {
         if (fieldName != nameof(_tapeCompressedM) && fieldName != nameof(_tapeCompressedV)
             && fieldName != nameof(_tapeCompressedScales)) yield break;
-        foreach (var entry in _compressedSlots)
+        foreach (var entry in _compressedSlots.Where(entry => fieldName != nameof(_tapeCompressedScales) || entry.Value.Int8))
         {
-            if (fieldName == nameof(_tapeCompressedScales) && !entry.Value.Int8) continue;
             yield return (entry.Key, () => PackCompressedSlotTensor(entry.Key, entry.Value, fieldName));
         }
     }
@@ -320,49 +319,18 @@ public partial class AdamWOptimizer<T, TInput, TOutput>
         ClearPackedCompressedState();
     }
 
-    private const string MomentFormatMarker = "AdamWMomentFormat";
-    private const int MomentFormatVersion = 1;
-
     /// <inheritdoc />
     private protected override void SerializeExtensionData(BinaryWriter writer)
     {
         base.SerializeExtensionData(writer);
-        writer.Write(MomentFormatMarker);
-        writer.Write(MomentFormatVersion);
-        writer.Write((int)_options.MomentStorage);
-        writer.Write(_options.Int8MomentBlockSize);
-        writer.Write(_options.Int8MinQuantizedLength);
+        AdamWMomentFormatHeader.Write(writer, _options.MomentStorage, _options.Int8MomentBlockSize, _options.Int8MinQuantizedLength);
     }
 
     /// <inheritdoc />
     private protected override Action StageExtensionData(BinaryReader reader, out bool hasFallibleCommit)
     {
         var applyBaseState = base.StageExtensionData(reader, out hasFallibleCommit);
-        try
-        {
-            if (reader.BaseStream.Position == reader.BaseStream.Length)
-            {
-                if (_options.MomentStorage != OptimizerMomentStorage.Float32)
-                    throw new InvalidOperationException("AdamW checkpoint has no compressed-moment format header.");
-            }
-            else
-            {
-                if (reader.ReadString() != MomentFormatMarker || reader.ReadInt32() != MomentFormatVersion)
-                    throw new InvalidOperationException("Unknown AdamW moment-format checkpoint header.");
-                var storage = (OptimizerMomentStorage)reader.ReadInt32();
-                int blockSize = reader.ReadInt32();
-                int minLength = reader.ReadInt32();
-                if (storage != _options.MomentStorage || blockSize != _options.Int8MomentBlockSize
-                    || minLength != _options.Int8MinQuantizedLength)
-                    throw new InvalidOperationException("AdamW checkpoint moment format does not match the target optimizer options.");
-                if (reader.BaseStream.Position != reader.BaseStream.Length)
-                    throw new InvalidOperationException("Unexpected trailing AdamW checkpoint data.");
-            }
-        }
-        catch (IOException error)
-        {
-            throw new InvalidOperationException("AdamW moment-format checkpoint header is truncated or corrupted.", error);
-        }
+        AdamWMomentFormatHeader.Validate(reader, _options.MomentStorage, _options.Int8MomentBlockSize, _options.Int8MinQuantizedLength);
         return () =>
         {
             applyBaseState();

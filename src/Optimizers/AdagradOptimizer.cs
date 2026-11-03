@@ -416,7 +416,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         foreach (var param in context.Parameters)
         {
             // True sparse scatter: accumulator + param at touched rows only.
-            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeAccSqGrad.TryGetValue(param, out var accSqSp)) { accSqSp = new Tensor<T>(param._shape); _tapeAccSqGrad[param] = accSqSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplyAdagradSparse(
