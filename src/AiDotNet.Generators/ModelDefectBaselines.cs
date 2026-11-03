@@ -129,8 +129,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>",
             "AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>",
-            "AiDotNet.Video.Enhancement.FlashVSR<T>",
-            "AiDotNet.Video.Enhancement.MGLDVSR<T>",
             "AiDotNet.Video.Enhancement.RealisVSR<T>",
             "AiDotNet.Video.Enhancement.SeedVR<T>",
             "AiDotNet.Video.Enhancement.StreamDiffVSR<T>",

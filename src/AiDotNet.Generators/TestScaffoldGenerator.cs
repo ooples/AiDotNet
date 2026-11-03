@@ -1027,11 +1027,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // never fitted a 105M-parameter model. Fixed in the model; the tests now pass in the default
         // lane, so the tag is gone. If CI shows a genuine OOM on the 16 GB runner, it belongs back
         // here with an accurate reason — but it ran clean on a 15.4 GB box.
-        // MGLDVSR: motion-guided LATENT DIFFUSION for video super-resolution (Yang 2024). Each forward
-        // runs 20 denoising steps (20 U-Net passes) over video latents, and the training invariants
-        // (MoreData = 200 iterations) multiply that out well past the 120s per-test timeout on CPU.
-        // Genuine foundation-scale diffusion compute, not a correctness bug — same heavy lane.
-        "MGLDVSR",
+        // MGLDVSR was listed here, and runs in the default lane now: the release-faithful port's smoke-width
+        // fixture (two 32-wide UNet levels, two respaced sampling steps) runs its 35 invariants in 99 s on
+        // net10.0.
         // LISA (Lai et al. 2024): referring-segmentation FOUNDATION model = a multimodal LLM + SAM mask
         // decoder. Its single-forward tests pass, but MULTIPLE multi-iteration training invariants
         // (MoreData_ShouldNotDegrade timed out at 120s; LossStrictlyDecreasesOnMemorizationTask and
@@ -13776,20 +13774,43 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "FlashVSR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
             {
-                // FlashVSR (Zhuang et al. 2025) — one-step diffusion streaming VSR. Same story as
-                // DAMVSR/DualXVSR: production defaults (scale x4, 64 features, 8 LCSA blocks) drive
-                // the generic VSR conv stack at ~2.1 s per double-precision Train() step, so the
-                // 50+200-step MoreData invariant times out at 120 s. Small legal CI fixture keeps the
-                // native VSR layer family + AdamW training path but fits the timeout at ~18 ms/step;
-                // default iteration counts/thresholds retained (only model scale reduced).
+                // FlashVSR (Zhuang et al. 2025) keeps its whole topology at smoke width: the Wan 2.1 DiT (one block,
+                // two 12-wide heads so the 3D rotary embedding splits, LoRA rank 4 in three adapter sets), the LR
+                // projection, the tiny conditional decoder and Wan's four-stage VAE. Two 8x8 frames upscale 4x; the
+                // pipeline pads them to 25 frames and 32x32 (128x128 out, the (2, 8, 8)-token windows) and crops back.
+                // The fixture stays on the decoder stage (the default 20,000 iterations); the later stages have their
+                // own paper tests, and the VGG16 of LPIPS is left out (weight 0). At the paper's 1e-5 the decoder
+                // objective falls 0.15 % in 34 steps (3.4589 -> 3.4536 measured), short of the memorization
+                // threshold; 1e-4 falls 1.55 % (2.6906 -> 2.6488 on the probe clip) and keeps falling to step 100.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, " +
-                    "outputSize: 4), " +
-                    "new AiDotNet.Video.Options.FlashVSROptions { " +
-                    "NumFeatures = 8, NumLCSABlocks = 1, ScaleFactor = 2, " +
-                    "NumInputFrames = 2, NumDecoderBlocks = 1, LearningRate = 2e-4, DropoutRate = 0.0 })";
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 3 * 32 * 32), " +
+                    "new AiDotNet.Video.Options.FlashVSROptions { Seed = 1, ModelDim = 24, FfnDim = 32, NumHeads = 2, " +
+                    "NumLayers = 1, FrequencyDim = 8, TextDim = 8, TextLength = 4, LoraRank = 4, LqHiddenDim1 = 8, " +
+                    "LqHiddenDim2 = 8, DecoderChannels = new[] { 4, 4, 4, 4 }, VaeDim = 4, VaeDimMultipliers = new[] { 1, 1, 1, 1 }, " +
+                    "VaeResidualBlocks = 1, ScaleFactor = 4, NumFrames = 2, LpipsWeight = 0.0, LearningRate = 1e-4 })";
+            }
+            else if (model.ClassName == "MGLDVSR" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
+            {
+                // MGLD-VSR (Yang et al. 2024) keeps its whole topology at smoke width: the SD 2.1 UNet with SPADE and the
+                // middle block's temporal modules (two 32-wide levels, one 32-wide head), the time-aware structure
+                // encoder, SD's KL autoencoder with the CFW video decoder, the frozen RAFT and SPyNet. Two 8x8 frames
+                // upscale 4x to 32x32 (latents 4x4, a two-frame clip), sampled in two respaced DDPM steps. The fixture
+                // stays on the diffusion stage (the default 100,000 iterations); the decoder stage has its own paper
+                // test, and the VGG16 of LPIPS is left out (weight 0). The rate is pinned to 1e-4: at the release's 5e-5
+                // the declared eight-timestep objective falls 0.74% in 100 steps (1.0998 -> 1.0916), under the
+                // memorization probe's 1% bar, with only two frames per random-timestep draw; at 1e-4 it clears it.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 3 * 32 * 32), " +
+                    "new AiDotNet.Video.Options.MGLDVSROptions { Seed = 1, UNetChannels = 32, UNetMultipliers = new[] { 1, 1 }, " +
+                    "UNetResBlocks = 1, AttentionLevels = 1, HeadChannels = 32, ContextDim = 8, ContextLength = 4, NumFrames = 2, " +
+                    "StructureChannels = 32, StructureMultipliers = new[] { 1, 1 }, StructureResBlocks = 1, StructureHeads = 1, " +
+                    "VaeChannels = 32, VaeMultipliers = new[] { 1, 1, 1 }, VaeResBlocks = 1, FuseBlocks = 1, SamplingSteps = 2, " +
+                    "MinimumSide = 0, PerceptualWeight = 0.0, ScaleFactor = 4, LearningRate = 1e-4 })";
             }
             else if ((model.ClassName is "FlowFormer" or "FlowFormerPlusPlus")
                      && model.TypeParameterCount == 1
@@ -14675,16 +14696,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (model.ClassName == "FlashVSR")
         {
-            // Matches the small CI constructor above (2 frames, 3 channels, 8x8 input,
-            // 2x pixel shuffle -> SR output [2, 3, 16, 16]). At ~18 ms/Train() step the
-            // reduced model runs the convergence invariants at their FULL default
-            // iteration counts (100 memorization / 50+200 MoreData ~= 1.8-4.6 s) well
-            // inside the xUnit timeout, so — unlike DualXVSR — we deliberately do NOT
-            // override the iteration counts or relax MemorizationTaskLossThreshold /
-            // MoreDataTolerance. Only the model scale is reduced; the invariants keep
-            // full strength.
+            // Two RGB 8x8 frames upscaled 4x; see the constructor pin above.
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 32, 32 };");
+        }
+        else if (model.ClassName == "MGLDVSR")
+        {
+            // Two RGB 8x8 frames upscaled 4x; see the constructor pin above.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 32, 32 };");
         }
         else if (model.ClassName == "ConvTasNet")
         {
