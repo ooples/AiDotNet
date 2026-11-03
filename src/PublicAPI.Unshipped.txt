@@ -414,3 +414,13 @@ virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.ReportThreshold.get 
 *REMOVED*AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = true) -> void
 AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = false) -> void
 AiDotNet.Models.Checkpoint<T, TInput, TOutput>.ShouldSerializeModel() -> bool
+AiDotNet.Enums.OptimizerMomentStorage
+AiDotNet.Enums.OptimizerMomentStorage.Float32 = 0 -> AiDotNet.Enums.OptimizerMomentStorage
+AiDotNet.Enums.OptimizerMomentStorage.BFloat16 = 1 -> AiDotNet.Enums.OptimizerMomentStorage
+AiDotNet.Enums.OptimizerMomentStorage.Int8Blockwise = 2 -> AiDotNet.Enums.OptimizerMomentStorage
+AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.MomentStorage.get -> AiDotNet.Enums.OptimizerMomentStorage
+AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.MomentStorage.set -> void
+AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.Int8MomentBlockSize.get -> int
+AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.Int8MomentBlockSize.set -> void
+AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.Int8MinQuantizedLength.get -> int
+AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.Int8MinQuantizedLength.set -> void

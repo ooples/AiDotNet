@@ -39,6 +39,19 @@ internal readonly record struct FusedOptimizerConfig(
     public bool UseBf16Moments { get; init; }
 
     /// <summary>
+    /// The moment storage the optimizer was configured with; <see cref="AiDotNet.Enums.OptimizerMomentStorage.BFloat16"/>
+    /// and <see cref="AiDotNet.Enums.OptimizerMomentStorage.Int8Blockwise"/> request the fused plan's bf16 or 8-bit
+    /// block-wise moments. Init-only for the same reason as <see cref="UseBf16Moments"/>.
+    /// </summary>
+    public AiDotNet.Enums.OptimizerMomentStorage MomentStorage { get; init; }
+
+    /// <summary>Elements per scale block for <see cref="AiDotNet.Enums.OptimizerMomentStorage.Int8Blockwise"/>.</summary>
+    public int Int8MomentBlockSize { get; init; } = 256;
+
+    /// <summary>Shortest tensor given 8-bit moments; shorter ones keep 32-bit.</summary>
+    public int Int8MinQuantizedLength { get; init; } = 4096;
+
+    /// <summary>
     /// Optimizer-specific coefficients for the kernels that do not read them from the beta/epsilon
     /// slots: LARS (momentum, trust coefficient), FTRL (L1, L2, lr power), ASGD (lambd, alpha, t0) and
     /// Rprop (eta+/eta-, step bounds). Null for every other kernel, which needs none.

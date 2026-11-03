@@ -190,6 +190,9 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         bool clips = GradientOptions.EnableGradientClipping;
         if (clips && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByValue) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        // Compressed moments have no AMSGrad kernel (its running max is a third moment); the eager step refuses the
+        // combination with a clear error, so decline here rather than compile a plan that drops the storage request.
+        if (_options.UseAMSGrad && _options.MomentStorage != OptimizerMomentStorage.Float32) return false;
         // AdamW + AMSGrad runs the max-second-moment kernel with its decay switched to decoupled via Extras.
         config = new Fused.FusedOptimizerConfig(
             _options.UseAMSGrad
@@ -199,6 +202,10 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             _options.Beta1, _options.Beta2, _options.Epsilon,
             _options.WeightDecay, schedule)
         {
+            // The fused plan stores the same compressed moments (bf16, or 8-bit with decay inside the kernel).
+            MomentStorage = _options.MomentStorage,
+            Int8MomentBlockSize = _options.Int8MomentBlockSize,
+            Int8MinQuantizedLength = _options.Int8MinQuantizedLength,
             // The AMSGrad kernel's own decay is Adam's L2 (g += wd*p); AdamW's is decoupled, so say so -
             // otherwise the fused step silently ran L2-regularized AMSGrad instead of AdamW + AMSGrad.
             Extras = _options.UseAMSGrad
@@ -758,6 +765,17 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             if (!hasDenseGrad && !hasSparseGrad)
                 continue;
 
+            // Compressed moments (MomentStorage bf16 / 8-bit): one state for the device and host steps, no 32-bit m/v.
+            if (UsesCompressedMoments(param))
+            {
+                if (SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var compressedGrad)
+                    && compressedGrad.Length == param.Length)
+                {
+                    CompressedMomentStep(param, compressedGrad, gpuAdam);
+                }
+                continue;
+            }
+
             if (!_tapeM.TryGetValue(param, out var m))
             {
                 m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
@@ -1038,6 +1056,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         _tapeM.Clear();
         _tapeV.Clear();
         _tapeVMax.Clear();
+        ResetCompressedMoments();
         _tapeStep = 0;
     }
 
