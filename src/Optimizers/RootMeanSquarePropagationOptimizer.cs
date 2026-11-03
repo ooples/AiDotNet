@@ -405,7 +405,6 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         // Existing GPU and sparse kernels implement only uncentered, momentum-free RMSProp.
         bool gpuRmsProp = SupportsGpuUpdate
             && typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)

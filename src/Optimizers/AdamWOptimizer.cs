@@ -738,11 +738,10 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
         T weightDecay = NumOps.FromDouble(_options.WeightDecay);
 
-        // GPU-RESIDENT ADAMW (env AIDOTNET_GPU_ADAM=1): see AdamOptimizer.Step for the rationale — run the
+        // GPU-RESIDENT ADAMW: see AdamOptimizer.Step for the rationale — run the
         // update on the GPU (GpuOptimizer.TryAdamWStep -> backend.AdamWUpdate, decoupled weight decay) so grads
-        // never download. Moments are GPU-resident; falls back to the tensor-op path per-param otherwise. Gated off.
+        // never download. Moments are GPU-resident; falls back to the tensor-op path per-param otherwise.
         bool gpuAdam = configuredMask is null && typeof(T) == typeof(float) && !_options.UseAMSGrad
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         int maskOffset = 0;
@@ -806,7 +805,9 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                         (Tensor<float>)(object)m, (Tensor<float>)(object)v,
                         (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Beta1, (float)_options.Beta2,
                         (float)_options.Epsilon, (float)_options.WeightDecay, _tapeStep))
+                {
                     continue;
+                }
             }
 
             // Host fast path: one fused pass per parameter (m, v and the decayed parameter updated in place),

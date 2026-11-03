@@ -310,11 +310,9 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         var lambda1 = NumOps.FromDouble(_options.Lambda1);
         var lambda2 = NumOps.FromDouble(_options.Lambda2);
 
-        // The AIDOTNET_GPU_ADAM env var is the shared opt-in gate for all GPU-resident
-        // optimizer fast paths (named for the first optimizer it enabled); here it
-        // selects the FTRL GPU step, so use a purpose-named local.
+        // On a float GPU engine the FTRL step runs on the device (falls back per parameter when a
+        // tensor is not device-resident).
         bool useGpuOptimizer = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)

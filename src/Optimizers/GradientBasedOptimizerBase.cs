@@ -1983,6 +1983,10 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                 {
                     var updated = updatedParams[pi];
                     if (updated is null) continue;
+                    // Skip a parameter whose DEVICE copy the step just made authoritative (GpuOptimizer): the version
+                    // bump below would mark that buffer stale and the invalidation would drop it with its pending host
+                    // download, losing the update (see NeuralNetworkBase's eager tape step).
+                    if (updated.HasPendingGpuData) continue;
                     // Bump the version so a GPU engine's version gate re-uploads the mutated weights
                     // from the host backing store on the next forward.
                     updated.IncrementVersion();
@@ -3736,6 +3740,20 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// optimizer that opts in keeps that loss-explosion contained at the
     /// canonical PyTorch transformer default <c>MaxGradientNorm = 1.0</c>.
     /// </summary>
+    /// <summary>
+    /// The step's gradients as float tensors when the current engine is a GPU engine and T is float (the device
+    /// clip and finiteness paths); null otherwise.
+    /// </summary>
+    private static List<Tensor<float>>? DeviceTapeGradients(TapeStepContext<T> context)
+    {
+        if (typeof(T) != typeof(float) || AiDotNetEngine.Current is not AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
+            return null;
+        var list = new List<Tensor<float>>(context.Gradients.Count);
+        foreach (var kvp in context.Gradients)
+            if (kvp.Value is { Length: > 0 } grad) list.Add((Tensor<float>)(object)grad);
+        return list;
+    }
+
     protected static void ApplyTapeGlobalNormGradientClipping(
         TapeStepContext<T> context, double maxNorm)
     {
@@ -3744,6 +3762,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // overwrites every gradient element with NaN, distorting the next
         // optimizer step instead of being a no-op.
         if (maxNorm <= 0.0 || double.IsNaN(maxNorm) || double.IsInfinity(maxNorm)) return;
+
+        // GPU engine: clip_grad_norm_ on the device with no host read (PyTorch's foreach path). The host loops below
+        // read every gradient through Data.Span, a download of each device-resident gradient per step. A non-finite
+        // norm leaves the gradients unscaled on the device too.
+        if (DeviceTapeGradients(context) is { } deviceGrads)
+        {
+            using var deviceNorm = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryClipGradNorm(deviceGrads, maxNorm);
+            if (deviceNorm is not null) return;
+        }
         var numOps = MathHelper.GetNumericOperations<T>();
         // Host engine: one parallel SIMD pass per tensor for the norm and for the scale (FusedOptimizer helpers);
         // the per-element loops remain for other layouts.
@@ -3795,6 +3822,22 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         if (maxValue <= 0.0 || double.IsNaN(maxValue) || double.IsInfinity(maxValue)) return;
         var numOps = MathHelper.GetNumericOperations<T>();
 
+        // GPU engine: clamp on the device (clip_grad_value_), written back into each gradient tensor. The
+        // host loop below downloads every gradient and leaves the device copy to be re-uploaded.
+        if (AiDotNetEngine.Current.SupportsGpu)
+        {
+            var engine = AiDotNetEngine.Current;
+            T lo = numOps.FromDouble(-maxValue), hi = numOps.FromDouble(maxValue);
+            using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+            foreach (var kvp in context.Gradients)
+            {
+                var grad = kvp.Value;
+                if (grad is null || grad.Length == 0) continue;
+                engine.TensorCopy(engine.TensorClamp(grad, lo, hi), grad);   // in place: callers hold the tensor
+            }
+            return;
+        }
+
         foreach (var kvp in context.Gradients)
         {
             var grad = kvp.Value;
@@ -3825,6 +3868,16 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </summary>
     protected static bool HasAnomalousTapeGradients(TapeStepContext<T> context)
     {
+        // GPU engine: one device sum of squares over every gradient and one scalar read (PyTorch's GradScaler also
+        // reads its found-inf flag once per step). A finite sum proves every element finite. A non-finite one is
+        // confirmed by the exact element scan below (a backend that accumulates in float can overflow on finite
+        // gradients); that scan used to run, downloading every device-resident gradient, on every step.
+        if (DeviceTapeGradients(context) is { } deviceGrads)
+        {
+            using var deviceSum = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryGradientSumOfSquares(deviceGrads);
+            if (deviceSum is not null && deviceSum.IsFinite) return false;
+        }
+
         var numOps = MathHelper.GetNumericOperations<T>();
         bool hostFast = !AiDotNetEngine.Current.SupportsGpu;
         foreach (var kvp in context.Gradients)

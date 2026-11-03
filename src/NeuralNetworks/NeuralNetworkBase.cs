@@ -11706,7 +11706,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     // GPU resident-weight coherence: the streaming optimizer just mutated this
                     // weight's CPU backing in place; invalidate its resident device buffer so the
                     // next forward re-uploads current weights (parity with the eager/fused fixes).
-                    if (Engine is DirectGpuTensorEngine _sg) _sg.InvalidateResidentWeightBuffer(source);
+                    // A device-side streaming update leaves the device copy authoritative: keep it (see the eager step).
+                    if (Engine is DirectGpuTensorEngine _sg && !source.HasPendingGpuData)
+                        _sg.InvalidateResidentWeightBuffer(source);
                 });
         }
         else if (twoPass)
@@ -12676,7 +12678,17 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 if (Engine is DirectGpuTensorEngine residentGpuEngine)
                 {
                     foreach (var wtensor in trainableParams)
+                    {
+                        // A device-resident optimizer step (GpuOptimizer) leaves the parameter's device copy
+                        // authoritative, with a pending lazy host download. InvalidateResidentWeightBuffer's contract
+                        // is the opposite case -- the HOST copy was just written -- and it drops both the device buffer
+                        // and that pending download, so calling it here threw the update away: the next forward
+                        // re-uploaded the pre-step host weights and the loss stayed flat. Same predicate as the fused
+                        // path's invalidation below.
+                        if (wtensor.HasPendingGpuData)
+                            continue;
                         residentGpuEngine.InvalidateResidentWeightBuffer(wtensor);
+                    }
                 }
             }
 
@@ -12945,16 +12957,61 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <para>
     /// Reset at the start of every clipped step, so it always describes the latest one.
     /// </para>
+    /// <para>
+    /// On a GPU engine the global-norm clip runs on the device and the norm stays there; reading this property is
+    /// what reads it back (one scalar), as reading the tensor <c>clip_grad_norm_</c> returns does in PyTorch.
+    /// </para>
     /// </remarks>
-    public bool LastStepHadNonFiniteGradients { get; private set; }
+    public bool LastStepHadNonFiniteGradients
+    {
+        get => _lastDeviceGradientNorm is { } deviceNorm ? !deviceNorm.IsFinite : _lastStepHadNonFiniteGradients;
+        private set => _lastStepHadNonFiniteGradients = value;
+    }
+
+    private bool _lastStepHadNonFiniteGradients;
+
+    // The latest device-side clip's total norm (GPU engine, float): kept on the device until someone asks for it.
+    private AiDotNet.Tensors.Engines.Gpu.DeviceGradientNorm? _lastDeviceGradientNorm;
 
     private void ApplyGradientClipping(
         Dictionary<Tensor<T>, Tensor<T>> grads, double maxNorm,
         IReadOnlyList<Tensor<T>> iterationOrder)
     {
         LastStepHadNonFiniteGradients = false;
+        _lastDeviceGradientNorm?.Dispose();
+        _lastDeviceGradientNorm = null;
         if (UsesElementWiseGradientClipping)
         {
+            // GPU engine: the finiteness check is one device sum of squares and one scalar read, and the clamp runs on
+            // the device; the host loops below download every gradient. A non-finite sum is confirmed by the exact
+            // host scan (a float-accumulating backend can overflow on finite gradients).
+            if (Engine.SupportsGpu)
+            {
+                bool provenFinite = false;
+                if (typeof(T) == typeof(float))
+                {
+                    var deviceGrads = new List<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>(iterationOrder.Count);
+                    for (int p = 0; p < iterationOrder.Count; p++)
+                        if (grads.TryGetValue(iterationOrder[p], out var dg) && dg is { Length: > 0 })
+                            deviceGrads.Add((AiDotNet.Tensors.LinearAlgebra.Tensor<float>)(object)dg);
+                    using var deviceSum = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryGradientSumOfSquares(deviceGrads);
+                    provenFinite = deviceSum is not null && deviceSum.IsFinite;
+                }
+                if (provenFinite)
+                {
+                    T lo = NumOps.FromDouble(-maxNorm), hi = NumOps.FromDouble(maxNorm);
+                    using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+                    for (int p = 0; p < iterationOrder.Count; p++)
+                    {
+                        var key = iterationOrder[p];
+                        if (!grads.TryGetValue(key, out var g) || g is null || g.Length == 0) continue;
+                        // In place: the gradient tensor is shared with the published gradient set.
+                        Engine.TensorCopy(Engine.TensorClamp(g, lo, hi), g);
+                    }
+                    return;
+                }
+            }
+
             // Detect non-finite values before mutating any tensor. This preserves
             // the existing diagnostic contract: a poisoned step is left intact
             // so the originating layer can still be identified.
@@ -12993,6 +13050,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             }
 
             return;
+        }
+
+        // GPU engine: clip_grad_norm_ on the device (multi-tensor sum of squares, the coefficient computed on the
+        // device, one multi-tensor scale), as PyTorch does. The host loop below reads every gradient element through
+        // Data.Span, which downloads every device-resident gradient each step (measured on a 27M-parameter LM: 32
+        // transfers, 107 MB per step) and re-uploads them for the optimizer. A non-finite norm leaves the gradients
+        // unscaled there too, and LastStepHadNonFiniteGradients reads the device norm when asked.
+        if (typeof(T) == typeof(float) && Engine is DirectGpuTensorEngine)
+        {
+            var deviceGrads = new List<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>(iterationOrder.Count);
+            for (int p = 0; p < iterationOrder.Count; p++)
+            {
+                if (!grads.TryGetValue(iterationOrder[p], out var g)) continue;
+                if (g is null || g.Length == 0) continue;
+                deviceGrads.Add((AiDotNet.Tensors.LinearAlgebra.Tensor<float>)(object)g);
+            }
+            var deviceNorm = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryClipGradNorm(deviceGrads, maxNorm);
+            if (deviceNorm is not null)
+            {
+                _lastDeviceGradientNorm = deviceNorm;
+                return;
+            }
         }
 
         // Step 1: total L2 norm across all gradient tensors, iterating in
