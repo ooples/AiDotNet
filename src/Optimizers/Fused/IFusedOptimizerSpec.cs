@@ -46,10 +46,10 @@ internal readonly record struct FusedOptimizerConfig(
     public AiDotNet.Enums.OptimizerMomentStorage MomentStorage { get; init; }
 
     /// <summary>Elements per scale block for <see cref="AiDotNet.Enums.OptimizerMomentStorage.Int8Blockwise"/>.</summary>
-    public int Int8MomentBlockSize { get; init; } = 256;
+    public int Int8MomentBlockSize { get; init; } = AiDotNet.Enums.OptimizerMomentDefaults.BlockSize;
 
     /// <summary>Shortest tensor given 8-bit moments; shorter ones keep 32-bit.</summary>
-    public int Int8MinQuantizedLength { get; init; } = 4096;
+    public int Int8MinQuantizedLength { get; init; } = AiDotNet.Enums.OptimizerMomentDefaults.MinQuantizedLength;
 
     /// <summary>
     /// Optimizer-specific coefficients for the kernels that do not read them from the beta/epsilon

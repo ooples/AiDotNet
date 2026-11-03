@@ -1043,7 +1043,7 @@ public static class CompiledTapeTrainingStep<T>
         IReadOnlyList<Tensor<T>>? extraTensors = null,
         // > 0: 8-bit block-wise Adam/AdamW moments with this block size (bitsandbytes' Adam8bit / AdamW8bit).
         int int8MomentBlockSize = 0,
-        int int8MinQuantizedLength = 4096,
+        int int8MinQuantizedLength = AiDotNet.Enums.OptimizerMomentDefaults.MinQuantizedLength,
         // Optimizer-specific coefficients for the kernels that do not read them from the
         // beta/epsilon slots: LARS (momentum, trust coefficient), FTRL (L1, L2, lr power),
         // ASGD and Rprop. Null for every other kernel — see FusedOptimizerConfig.Extras for
@@ -1112,7 +1112,7 @@ public static class CompiledTapeTrainingStep<T>
         IReadOnlyList<Tensor<T>>? extraTensors = null,
         // > 0: 8-bit block-wise Adam/AdamW moments with this block size (bitsandbytes' Adam8bit / AdamW8bit).
         int int8MomentBlockSize = 0,
-        int int8MinQuantizedLength = 4096,
+        int int8MinQuantizedLength = AiDotNet.Enums.OptimizerMomentDefaults.MinQuantizedLength,
         // Optimizer-specific coefficients for the kernels that do not read them from the
         // beta/epsilon slots: LARS (momentum, trust coefficient), FTRL (L1, L2, lr power),
         // ASGD and Rprop. Null for every other kernel — see FusedOptimizerConfig.Extras for

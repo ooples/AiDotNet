@@ -2280,8 +2280,8 @@ jobs:
           sudo rm -rf /usr/local/share/boost || true
           sudo apt-get clean || true
           df -h /
-          sudo swapoff -a || true
-          sudo rm -f /mnt/swapfile /swapfile || true
+          # Preserve the runner image swap; df already accounts for its disk usage.
+          free -m
           # Keep 12 GiB on the selected filesystem for checkout, caches and the instrumented build.
           reserve_gib=12
           target_gib=20

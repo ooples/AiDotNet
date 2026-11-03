@@ -27,3 +27,9 @@ public enum OptimizerMomentStorage
     /// </summary>
     Int8Blockwise = 2,
 }
+
+internal static class OptimizerMomentDefaults
+{
+    internal const int BlockSize = 256;
+    internal const int MinQuantizedLength = 4096;
+}

@@ -1154,6 +1154,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// </summary>
     public override void DisposeGpuState()
     {
+        foreach (var slot in _compressedSlots.Values) slot.MoveToHost();
         _gpuM?.Dispose();
         _gpuM = null;
         _gpuV?.Dispose();

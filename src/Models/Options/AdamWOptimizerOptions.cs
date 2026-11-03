@@ -225,14 +225,23 @@ public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// Gets or sets the number of elements that share one scale in <see cref="OptimizerMomentStorage.Int8Blockwise"/>.
     /// </summary>
     /// <value>256 by default (bitsandbytes' block size).</value>
-    public int Int8MomentBlockSize { get; set; } = 256;
+    /// <remarks>
+    /// <para>Must be positive; a step throws <see cref="InvalidOperationException"/> otherwise.
+    /// Used only with <see cref="OptimizerMomentStorage.Int8Blockwise"/>.</para>
+    /// <para><b>For Beginners:</b> Each block shares a scale. Leave this at 256 unless measurements justify changing it.</para>
+    /// </remarks>
+    public int Int8MomentBlockSize { get; set; } = OptimizerMomentDefaults.BlockSize;
 
     /// <summary>
     /// Gets or sets the smallest tensor that gets 8-bit moments in <see cref="OptimizerMomentStorage.Int8Blockwise"/>;
     /// shorter tensors (biases, norms) keep 32-bit moments.
     /// </summary>
     /// <value>4096 by default (bitsandbytes' <c>min_8bit_size</c>).</value>
-    public int Int8MinQuantizedLength { get; set; } = 4096;
+    /// <remarks>
+    /// <para>Applies only with <see cref="OptimizerMomentStorage.Int8Blockwise"/>; shorter tensors retain 32-bit moments.</para>
+    /// <para><b>For Beginners:</b> Small tensors save little memory when compressed. This keeps their moments at full precision.</para>
+    /// </remarks>
+    public int Int8MinQuantizedLength { get; set; } = OptimizerMomentDefaults.MinQuantizedLength;
 
     /// <summary>
     /// Gets or sets whether to automatically adjust the Beta parameters during training.

@@ -27,6 +27,8 @@ public class SparseOptimizerReviewRegressionTests : IDisposable
             new NadamOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 0.01, EnableGradientClipping = false }),
         "Lion" => new LionOptimizer<double, Tensor<double>, Tensor<double>>(null,
             new LionOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 0.01, WeightDecay = 0, EnableGradientClipping = false }),
+        "LARS" => new LARSOptimizer<double, Tensor<double>, Tensor<double>>(null,
+            new LARSOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 0.01, WeightDecay = 0, Momentum = 0.9, EnableGradientClipping = false }),
         _ => throw new ArgumentException(nameof(kind)),
     };
 
@@ -35,6 +37,7 @@ public class SparseOptimizerReviewRegressionTests : IDisposable
     [InlineData("AdaMax")]
     [InlineData("Nadam")]
     [InlineData("Lion")]
+    [InlineData("LARS")]
     public void ChangingSparseRows_PreservesUntouchedMomentumUpdates(string kind)
     {
         var engine = AiDotNetEngine.Current;
