@@ -12058,7 +12058,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // The opt-out TryTrainWithFusedOptimizer honours applies to custom and declared-objective steps as well: a
             // model whose step builds its batch on the host (a posterior sample, timesteps, noise or flows drawn per
             // step) would otherwise replay the first step's draw for the whole run and descend a frozen objective.
-            GraphBreakReason = !SupportsFusedCompiledTraining || _parentOwnedTrainingGraph
+            // Parent-owned components may run an explicit custom objective (GAN generator/discriminator steps).
+            // Only their ordinary independent Train path must defer to the parent graph.
+            GraphBreakReason = !SupportsFusedCompiledTraining
                 ? "model opts out of fused compiled training (per-step host state)"
                 : null,
         };
