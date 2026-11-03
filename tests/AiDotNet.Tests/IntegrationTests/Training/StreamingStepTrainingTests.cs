@@ -683,6 +683,107 @@ public class StreamingStepTrainingTests : IDisposable
         }
     }
 
+    private const int Classes = 3;
+
+    /// <summary>
+    /// A 3-class classifier set: <c>[InDim]</c> features with a class-index target (a rank-0 tensor, so a batch
+    /// stacks to <c>[B]</c> against <c>[B, 3]</c> logits -- PyTorch's <c>cross_entropy</c> layout), or the same
+    /// classes one-hot (<c>[3]</c>, stacking to <c>[B, 3]</c>).
+    /// </summary>
+    private static StreamingDataLoader<float, Tensor<float>, Tensor<float>> ClassLoader(int seed, bool oneHot)
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
+        var x = new Tensor<float>[N];
+        var y = new Tensor<float>[N];
+        for (int i = 0; i < N; i++)
+        {
+            var xi = new Tensor<float>(new[] { InDim });
+            for (int d = 0; d < InDim; d++) xi[d] = (float)(rng.NextDouble() * 2 - 1);
+            int label = xi[0] + xi[1] > 0.4f ? 2 : xi[0] - xi[2] > 0f ? 1 : 0;
+            x[i] = xi;
+            if (oneHot)
+            {
+                var row = new float[Classes];
+                row[label] = 1f;
+                y[i] = new Tensor<float>(new[] { Classes }, new Vector<float>(row));
+            }
+            else
+            {
+                y[i] = new Tensor<float>(Array.Empty<int>(), new Vector<float>(new[] { (float)label }));
+            }
+        }
+        return new StreamingDataLoader<float, Tensor<float>, Tensor<float>>(
+            N, (i, _) => Task.FromResult((x[i], y[i])), BatchSize);
+    }
+
+    private static FeedForwardNeuralNetwork<float> Classifier(AdamOptimizer<float, Tensor<float>, Tensor<float>> optimizer)
+    {
+        var layers = new List<ILayer<float>>
+        {
+            new InputLayer<float>(InDim),
+            new DenseLayer<float>(8, activationFunction: new ReLUActivation<float>()),
+            new DenseLayer<float>(Classes, activationFunction: new IdentityActivation<float>()),
+        };
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: InDim, outputSize: Classes, layers: layers);
+        return new FeedForwardNeuralNetwork<float>(arch, optimizer: optimizer, lossFunction: new CrossEntropyWithLogitsLoss<float>());
+    }
+
+    /// <summary>
+    /// The logged validation loss is the training objective on the held-out batches: the loss function's tensor
+    /// objective over each stacked batch, averaged over batches. It used to flatten logits and targets to vectors:
+    /// class-index targets (a language model's token ids) are shorter than the logits, so validation threw, and
+    /// one-hot rows read as one flat vector are scored as a single distribution over B x C logits rather than a mean
+    /// of per-row cross-entropies.
+    /// </summary>
+    [Theory(Timeout = 120000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Validation_ScoresTheTrainingObjective_ForClassTargets(bool oneHot)
+    {
+        await Task.Yield();
+        var monitor = new CapturingMonitor();
+        var optimizer = Optimizer(epochs: 100);
+        var model = Classifier(optimizer);
+        await new AiModelBuilder<float, Tensor<float>, Tensor<float>>()
+            .ConfigureModel(model)
+            .ConfigureOptimizer(optimizer)
+            .ConfigureDataLoader(ClassLoader(1, oneHot))
+            .ConfigureTrainingMonitor(monitor)
+            .ConfigureStreamingTraining(new StreamingTrainingOptions<float, Tensor<float>, Tensor<float>>
+            {
+                Seed = 3,
+                MaxSteps = 6,
+                ValidationLoader = ClassLoader(99, oneHot),
+                ValidateEveryNSteps = 6,
+            })
+            .BuildAsync();
+
+        var history = monitor.GetMetricHistory(monitor.SessionId, "validation_loss");
+        Assert.Equal(new[] { 6 }, history.Select(entry => entry.Step).ToArray());
+
+        // The reference: the same loss's tensor objective on the same stacked held-out batches.
+        var validation = ClassLoader(99, oneHot);
+        await validation.LoadAsync();
+        var loss = new CrossEntropyWithLogitsLoss<float>();
+        double sum = 0;
+        int batches = 0;
+        await foreach (var (xs, ys) in validation.GetBatchesAsync(shuffle: false))
+        {
+            var logits = model.Predict(Stack(xs));
+            var targets = oneHot ? Stack(ys)
+                : new Tensor<float>(new[] { ys.Length }, new Vector<float>(ys.Select(t => t.Data.Span[0]).ToArray()));
+            sum += loss.ComputeTapeLoss(logits, targets).Data.Span[0];
+            batches++;
+        }
+        double expected = sum / batches;
+        float logged = history[0].Value;
+        Assert.True(Math.Abs(logged - expected) < 1e-4 * Math.Max(1, expected),
+            $"validation loss {logged} is not the training objective {expected} on the held-out batches");
+        Assert.True(expected > 0 && expected < 5, $"held-out CE {expected} out of range for 3 classes");
+    }
+
     [Fact(Timeout = 120000)]
     public async Task ConfigureLearningRateScheduler_DrivesTheOptimizer_OnTheStreamingPath()
     {
