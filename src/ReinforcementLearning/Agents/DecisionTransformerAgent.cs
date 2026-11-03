@@ -579,7 +579,9 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     /// <summary>The token sequence, label tensor and labelled row for one state at the start of an episode.</summary>
     private (Tensor<T> Tokens, Tensor<T> Targets, int[] Rows) BuildSingleStepExample(Vector<T> state, Vector<T> target)
     {
-        int sequenceTokens = SequenceTokenCount;
+        // A single supervised example has only one timestep. Causal attention cannot use trailing padding,
+        // and its loss is defined only at the state token, so exclude the unused context from the tape.
+        int sequenceTokens = TokensPerStep;
         int actionSize = _options.ActionSize;
 
         var tokens = new T[sequenceTokens * TokenFeatureCount];
