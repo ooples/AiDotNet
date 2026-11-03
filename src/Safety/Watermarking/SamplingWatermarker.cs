@@ -220,4 +220,8 @@ public class SamplingWatermarker<T> : TextWatermarkerBase<T>, IGenerationWaterma
         for (int j = 0; j <= _contextWidth; j++) parts[j] = tokens[position - _contextWidth + j].ToString(System.Globalization.CultureInfo.InvariantCulture);
         return string.Join(",", parts);
     }
+
+    /// <summary>Preserves the original constructor signature using the default configuration.</summary>
+    public SamplingWatermarker(double watermarkStrength, int vocabSize, double greenListFraction) : this(watermarkStrength, (int?)vocabSize, greenListFraction, null) { }
+
 }

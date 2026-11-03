@@ -210,6 +210,13 @@ public class LuDecomposition<T> : MatrixDecompositionBase<T>
         return (L, U, P);
     }
 
+    /// <summary>
+    /// Performs LU decomposition with complete pivoting.
+    /// </summary>
+    /// <param name="matrix">The square matrix to decompose.</param>
+    /// <returns>
+    /// A tuple containing:
+    /// - L: Lower triangular matrix with unit diagonal
     /// - U: Upper triangular matrix
     /// - P: Permutation vector for rows
     /// </returns>

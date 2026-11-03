@@ -125,8 +125,8 @@ public class ChiSquareTestResult<T>
     /// - It determines the shape of the Chi-Square distribution used to calculate the p-value
     /// - Higher degrees of freedom generally require larger Chi-Square values to be significant
     /// 
-    /// For example, a Chi-Square statistic of 7.5 with 1 degree of freedom is significant at p < 0.01,
-    /// but the same statistic with 3 degrees of freedom is not significant at p < 0.05.
+    /// For example, a Chi-Square statistic of 7.5 with 1 degree of freedom is significant at p &lt; 0.01,
+    /// but the same statistic with 3 degrees of freedom is not significant at p &lt; 0.05.
     /// </para>
     /// </remarks>
     public int DegreesOfFreedom { get; set; }

@@ -22,7 +22,7 @@ using System.Linq;
 ///    - Actual accuracy (fraction of correct predictions)
 /// 3. ECE is the weighted average of the absolute differences
 ///
-/// A well-calibrated model should have ECE < 0.05 (5%).
+/// A well-calibrated model should have ECE &lt; 0.05 (5%).
 ///
 /// This is the gold standard metric for evaluating uncertainty quantification in classification tasks.
 /// </para>
@@ -60,7 +60,7 @@ public class ExpectedCalibrationError<T>
     /// <b>For Beginners:</b> Pass in your model's predicted probabilities and the true labels.
     /// The method returns a score where:
     /// - 0.0 = Perfect calibration
-    /// - < 0.05 = Good calibration
+    /// - &lt; 0.05 = Good calibration
     /// - 0.05-0.10 = Moderate calibration
     /// - > 0.10 = Poor calibration (needs calibration methods like temperature scaling)
     /// </remarks>

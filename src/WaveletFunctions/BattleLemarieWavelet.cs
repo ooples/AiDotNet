@@ -397,11 +397,11 @@ public class BattleLemarieWavelet<T> : WaveletFunctionBase<T>
     /// They are smooth, bell-shaped functions with compact support (they're zero outside a finite interval).
     /// 
     /// This method implements a simple B-spline of order 2, which has the following properties:
-    /// - It equals 1 when |x| < 0.5 (a flat top in the middle)
+    /// - It equals 1 when |x| &lt; 0.5 (a flat top in the middle)
     /// - It transitions smoothly to 0 as |x| approaches 1.5
     /// - It equals 0 when |x| = 1.5
     /// 
-    /// The transition region (0.5 < |x| < 1.5) follows a quadratic curve: 0.5 * (1.5 - |x|)²
+    /// The transition region (0.5 &lt; |x| &lt; 1.5) follows a quadratic curve: 0.5 * (1.5 - |x|)²
     /// 
     /// This particular B-spline is chosen for its balance of smoothness and computational simplicity.
     /// Higher-order B-splines would be smoother but more complex to calculate.

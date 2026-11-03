@@ -7,7 +7,7 @@ namespace AiDotNet.Data.Audio.Benchmarks;
 /// </summary>
 /// <remarks>
 /// <para>
-/// UrbanSound8K contains 8,732 labeled sound excerpts (<=4s) of urban sounds in 10 classes:
+/// UrbanSound8K contains 8,732 labeled sound excerpts (&lt;=4s) of urban sounds in 10 classes:
 /// air conditioner, car horn, children playing, dog bark, drilling, engine idling,
 /// gun shot, jackhammer, siren, street music. 10 predefined cross-validation folds.
 /// </para>

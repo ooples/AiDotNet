@@ -471,7 +471,7 @@ public enum MetricType
     /// <para>
     /// <b>For Beginners:</b> F-Beta Score is a flexible version of the F1 Score where you can adjust the balance 
     /// between precision and recall. By changing the 'beta' value, you can decide whether precision or recall is 
-    /// more important for your specific problem. If beta > 1, recall is more important; if beta < 1, precision 
+    /// more important for your specific problem. If beta > 1, recall is more important; if beta &lt; 1, precision 
     /// is more important. It's like having a adjustable grading scale where you can decide whether it's more 
     /// important to get all the right answers (precision) or to not miss any important points (recall).
     /// </para>
@@ -609,7 +609,7 @@ public enum MetricType
     /// Think of it as measuring which way your data "leans":
     /// - Positive skewness (> 0): There's a longer tail on the right side - most values are on the left with a few high outliers
     /// - Zero skewness (= 0): The data is symmetric around the mean - balanced on both sides
-    /// - Negative skewness (< 0): There's a longer tail on the left side - most values are on the right with a few low outliers
+    /// - Negative skewness (&lt; 0): There's a longer tail on the left side - most values are on the right with a few low outliers
     /// 
     /// For example, income distribution often has positive skewness because most people have moderate incomes,
     /// but a few extremely wealthy individuals pull the right tail out.
@@ -627,7 +627,7 @@ public enum MetricType
     /// Think of it as measuring the shape of your data's peaks and tails:
     /// - High kurtosis (> 3): "Heavy-tailed" - more values in the extremes, with a sharper peak
     /// - Normal kurtosis (= 3): Follows a normal distribution (bell curve)
-    /// - Low kurtosis (< 3): "Light-tailed" - fewer outliers, with a flatter peak
+    /// - Low kurtosis (&lt; 3): "Light-tailed" - fewer outliers, with a flatter peak
     /// 
     /// For example, stock returns often have high kurtosis because they mostly have small changes day-to-day,
     /// but occasionally have extreme movements.
@@ -1313,7 +1313,7 @@ public enum MetricType
     /// <para>
     /// <b>For Beginners:</b> Absolute Relative Error measures the average error in depth predictions
     /// relative to the true depth. Lower values indicate better depth estimation accuracy.
-    /// Common thresholds (δ < 1.25^n) are also often reported.
+    /// Common thresholds (δ &lt; 1.25^n) are also often reported.
     /// </para>
     /// </remarks>
     AbsoluteRelativeError,

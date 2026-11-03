@@ -44,7 +44,7 @@ namespace AiDotNet.KnowledgeDistillation.Strategies;
 /// <para><b>Research Basis:</b>
 /// - Paraphrasing Complex Network (Kim et al., 2018)
 /// - FitNets: Hints for Thin Deep Nets (Romero et al., 2015)
-/// - Attention Transfer (Zagoruyko & Komodakis, 2017)</para>
+/// - Attention Transfer (Zagoruyko &amp; Komodakis, 2017)</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

@@ -6134,9 +6134,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// - The factory knows how to create the right type of model based on information in the saved file
     /// 
     /// For example, you might load a model with:
-    /// `var model = AiModelResult<double, Matrix<double>, Vector<double>>.LoadModel(
+    /// `var model = AiModelResult&lt;double, Matrix&lt;double>, Vector&lt;double>>.LoadModel(
     ///     "C:\\Models\\house_price_predictor.model", 
-    ///     metadata => new LinearRegressionModel<double>());`
+    ///     metadata => new LinearRegressionModel&lt;double>());`
     /// </para>
     /// </remarks>
     public static AiModelResult<T, TInput, TOutput> LoadModel(

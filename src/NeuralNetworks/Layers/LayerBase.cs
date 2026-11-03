@@ -3988,7 +3988,6 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
     /// <summary>
     /// True when this layer should populate its per-layer manual-backward activation
-
     /// caches (the bespoke <c>_lastInput</c> / pre-activation fields a layer's own
     /// eager <see cref="Backward(Tensor{T})"/> reads). This is the canonical guard
     /// every such cache write should be gated on:
@@ -9572,9 +9571,12 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     public virtual IReadOnlyList<ILayer<T>> GetSubLayers() => _registeredSubLayers;
 
-    /// </code>
-    /// </para>
-    /// </remarks>
+    /// <summary>
+    /// Tells the engine a trainable parameter tensor was changed outside it, so any cached (for example
+    /// device-resident) copy is refreshed before its next use.
+    /// </summary>
+    /// <param name="tensor">The parameter tensor whose values were rewritten.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="tensor"/> is null.</exception>
     protected void InvalidateTrainableParameter(Tensor<T> tensor)
     {
         if (tensor is null)

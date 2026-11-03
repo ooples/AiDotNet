@@ -132,4 +132,8 @@ public class AudioSealWatermarker<T> : AudioWatermarkerBase<T>
 
     /// <inheritdoc />
     protected override bool DetectionWeights(double[] band, double[] weights) => AdditiveWeights(band, weights);
+
+    /// <summary>Preserves the original constructor signature using the default configuration.</summary>
+    public AudioSealWatermarker(double watermarkStrength, int segmentSamples) : this(watermarkStrength, segmentSamples, null) { }
+
 }
