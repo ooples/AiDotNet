@@ -18663,3 +18663,77 @@ override AiDotNet.Video.Enhancement.RealisVSR<T>.SupportsFusedCompiledTraining.g
 *REMOVED*AiDotNet.Video.Options.RealisVSROptions.WarmupSteps.get -> int
 *REMOVED*AiDotNet.Video.Options.RealisVSROptions.WarmupSteps.set -> void
 *REMOVED*override AiDotNet.Video.Enhancement.RealisVSR<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Video.Options.SeedVROptions.ConditionNoiseScale.get -> double
+AiDotNet.Video.Options.SeedVROptions.ConditionNoiseScale.set -> void
+AiDotNet.Video.Options.SeedVROptions.ExpandRatio.get -> int
+AiDotNet.Video.Options.SeedVROptions.ExpandRatio.set -> void
+AiDotNet.Video.Options.SeedVROptions.GuidanceRescale.get -> double
+AiDotNet.Video.Options.SeedVROptions.GuidanceRescale.set -> void
+AiDotNet.Video.Options.SeedVROptions.GuidanceScale.get -> double
+AiDotNet.Video.Options.SeedVROptions.GuidanceScale.set -> void
+AiDotNet.Video.Options.SeedVROptions.HeadDim.get -> int
+AiDotNet.Video.Options.SeedVROptions.HeadDim.set -> void
+AiDotNet.Video.Options.SeedVROptions.LatentChannels.get -> int
+AiDotNet.Video.Options.SeedVROptions.LatentChannels.set -> void
+AiDotNet.Video.Options.SeedVROptions.LatentScaling.get -> double
+AiDotNet.Video.Options.SeedVROptions.LatentScaling.set -> void
+AiDotNet.Video.Options.SeedVROptions.ModelDim.get -> int
+AiDotNet.Video.Options.SeedVROptions.ModelDim.set -> void
+AiDotNet.Video.Options.SeedVROptions.NegativeTextLength.get -> int
+AiDotNet.Video.Options.SeedVROptions.NegativeTextLength.set -> void
+AiDotNet.Video.Options.SeedVROptions.NormEpsilon.get -> double
+AiDotNet.Video.Options.SeedVROptions.NormEpsilon.set -> void
+AiDotNet.Video.Options.SeedVROptions.NumFrames.get -> int
+AiDotNet.Video.Options.SeedVROptions.NumFrames.set -> void
+AiDotNet.Video.Options.SeedVROptions.NumLayers.get -> int
+AiDotNet.Video.Options.SeedVROptions.NumLayers.set -> void
+AiDotNet.Video.Options.SeedVROptions.QkBias.get -> bool
+AiDotNet.Video.Options.SeedVROptions.QkBias.set -> void
+AiDotNet.Video.Options.SeedVROptions.SamplingSteps.get -> int
+AiDotNet.Video.Options.SeedVROptions.SamplingSteps.set -> void
+AiDotNet.Video.Options.SeedVROptions.TextDim.get -> int
+AiDotNet.Video.Options.SeedVROptions.TextDim.set -> void
+AiDotNet.Video.Options.SeedVROptions.TextLength.get -> int
+AiDotNet.Video.Options.SeedVROptions.TextLength.set -> void
+AiDotNet.Video.Options.SeedVROptions.TrainingConditionNoiseScale.get -> double
+AiDotNet.Video.Options.SeedVROptions.TrainingConditionNoiseScale.set -> void
+AiDotNet.Video.Options.SeedVROptions.VaeChannels.get -> int[]!
+AiDotNet.Video.Options.SeedVROptions.VaeChannels.set -> void
+AiDotNet.Video.Options.SeedVROptions.VaeGroups.get -> int
+AiDotNet.Video.Options.SeedVROptions.VaeGroups.set -> void
+AiDotNet.Video.Options.SeedVROptions.VaeLayersPerBlock.get -> int
+AiDotNet.Video.Options.SeedVROptions.VaeLayersPerBlock.set -> void
+AiDotNet.Video.Options.SeedVROptions.WeightDecay.get -> double
+AiDotNet.Video.Options.SeedVROptions.WeightDecay.set -> void
+AiDotNet.Video.Options.SeedVROptions.WindowColumns.get -> int
+AiDotNet.Video.Options.SeedVROptions.WindowColumns.set -> void
+AiDotNet.Video.Options.SeedVROptions.WindowFrames.get -> int
+AiDotNet.Video.Options.SeedVROptions.WindowFrames.set -> void
+AiDotNet.Video.Options.SeedVROptions.WindowRows.get -> int
+AiDotNet.Video.Options.SeedVROptions.WindowRows.set -> void
+override AiDotNet.Video.Enhancement.SeedVR<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.Enhancement.SeedVR<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.SeedVR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.Enhancement.SeedVR<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.Enhancement.SeedVR<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.Enhancement.SeedVR<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.Enhancement.SeedVR<T>.RegisterComponents() -> void
+override AiDotNet.Video.Enhancement.SeedVR<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.Enhancement.SeedVR<T>.SupportsFusedCompiledTraining.get -> bool
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.NumDenoisingSteps.get -> int
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.NumDenoisingSteps.set -> void
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.NumDiTBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.NumDiTBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.PatchSize.get -> int
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.PatchSize.set -> void
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.Variant.set -> void
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.WarmupSteps.get -> int
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.WarmupSteps.set -> void
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.WindowSize.get -> int
+*REMOVED*AiDotNet.Video.Options.SeedVROptions.WindowSize.set -> void
+*REMOVED*override AiDotNet.Video.Enhancement.SeedVR<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!

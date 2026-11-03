@@ -13316,17 +13316,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "SeedVR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
             {
-                // SeedVR's production options retain the paper's 192-feature, 24-block,
-                // 50-step, 4x defaults. Those FP64 generated training probes repeatedly
-                // timed out and exhausted the runner. Use FP32 first and the model's public
-                // options to keep the same native video-restoration path at CI scale.
+                // SeedVR (Wang et al. 2025) keeps the released topology at smoke width: the window-attention MM-DiT (a
+                // regular and a shifted block, two 12-wide heads so the 3D rotary embedding has a pair per axis), both
+                // prompt embeddings with guidance, and the four-stage causal VAE (8-wide stages, 4 groups). Two 8x8
+                // frames upscale 4x; the pipeline pads them to five frames (two 4x4 latents) and crops back, sampling in
+                // two Euler steps.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 4), " +
-                    "new AiDotNet.Video.Options.SeedVROptions { NumFeatures = 8, NumDiTBlocks = 1, " +
-                    "PatchSize = 2, WindowSize = 4, NumHeads = 2, NumDenoisingSteps = 2, " +
-                    "ScaleFactor = 2, DropoutRate = 0.0 })";
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 3 * 32 * 32), " +
+                    "new AiDotNet.Video.Options.SeedVROptions { Seed = 1, ModelDim = 24, NumHeads = 2, HeadDim = 12, " +
+                    "ExpandRatio = 2, NumLayers = 2, TextDim = 8, TextLength = 3, NegativeTextLength = 4, " +
+                    "VaeChannels = new[] { 8, 8, 8, 8 }, VaeLayersPerBlock = 1, VaeGroups = 4, ScaleFactor = 4, " +
+                    "NumFrames = 2, SamplingSteps = 2 })";
             }
             else if (model.ClassName == "FloRNN" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Denoising.", System.StringComparison.Ordinal))
@@ -14728,10 +14730,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (model.ClassName == "SeedVR")
         {
-            // Keep the generated target aligned with the public CI fixture above:
-            // two RGB frames at 8x8 with 2x video super-resolution.
+            // Two RGB 8x8 frames upscaled 4x; see the constructor pin above.
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 16, 16 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 32, 32 };");
         }
         else if (model.ClassName == "E2FGVI")
         {
