@@ -479,9 +479,8 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
         T alpha = NumOps.Divide(CurrentLearningRate, NumOps.FromDouble(1 - Math.Pow(_options.Beta1, _tapeStep)));
         T epsilon = NumOps.FromDouble(1e-8);
 
-        // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
+        // GPU-resident step; CPU fallback per-param when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)

@@ -468,7 +468,6 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         T epsilon = NumOps.FromDouble(_options.Epsilon);
 
         bool gpuAdam = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)

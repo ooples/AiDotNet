@@ -409,9 +409,8 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
 
         T epsilon = NumOps.FromDouble(_options.Epsilon);
 
-        // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
+        // GPU-resident step; CPU fallback per-param when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)

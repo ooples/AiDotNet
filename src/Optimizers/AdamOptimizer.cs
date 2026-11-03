@@ -930,23 +930,15 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // That single gate respects AnomalyGuardMode and runs BEFORE
         // _tapeStep++ so a skipped step is a true no-op.
 
-        // GPU-RESIDENT ADAM (Phase 1, env AIDOTNET_GPU_ADAM=1): when on a GPU engine + float, run the Adam
-        // update on the GPU (GpuOptimizer.TryAdamStep -> backend.AdamUpdate) so gradients never download to
-        // host and weights/moments update in place — eliminating the per-step grad-download + weight-reupload
-        // that makes the step host-bound (and uncapturable as a CUDA graph). Moments are allocated GPU-resident
-        // (RentPinnedOnGpu) so TryGetGpuBuffer resolves them. Gated OFF by default; falls back to the CPU SIMD
-        // path per-parameter whenever any tensor isn't GPU-resident. AMSGrad uses the CPU path (no GPU vMax yet).
-        // cudaGraph-safety: the GPU-resident step is only host-read-free when NO
-        // host-side gradient scan runs first. The anomaly guard
-        // (ShouldRunAnomalyGuard -> AnyGradientIsAnomalous) and global-norm gradient
-        // clipping need the global gradient norm read back to the host (one scalar), so disable the GPU
-        // fast path whenever either is active — the step is not graph-capturable with that read in it.
-        bool hostGradientScanActive = ShouldRunAnomalyGuard()
-            || (GradientOptions.EnableGradientClipping
-                && GradientOptions.GradientClippingMethod == AiDotNet.Models.Options.GradientClippingMethod.ByNorm);
+        // GPU-RESIDENT ADAM: on a GPU engine + float, run the Adam update on the GPU (GpuOptimizer.TryAdamStep ->
+        // backend.AdamUpdate) so gradients never download and weights/moments update in place, instead of the
+        // per-step grad download + weight re-upload of the host path. Moments are allocated GPU-resident
+        // (RentPinnedOnGpu) so TryGetGpuBuffer resolves them. Falls back to the CPU SIMD path per parameter
+        // whenever a tensor is not GPU-resident. AMSGrad uses the CPU path (no GPU vMax yet).
+        // The anomaly guard and global-norm clipping above read one scalar back to the host. That keeps this eager
+        // tape step out of CUDA-graph capture, but it is not a reason to update on the host: graph capture is the
+        // compiled plan's path, which has its own fused optimizer, and this step is never captured.
         bool gpuAdam = isFloat && !_options.UseAMSGrad
-            && !hostGradientScanActive
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         // Per-parameter Adam updates are fully INDEPENDENT: each param's m/v/vMax

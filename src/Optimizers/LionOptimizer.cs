@@ -423,10 +423,9 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         var oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
         var oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);
 
-        // GPU-resident step (AIDOTNET_GPU_ADAM=1): see AdamOptimizer.Step. Gated off; falls back to the CPU
+        // GPU-resident step: see AdamOptimizer.Step; falls back to the CPU
         // tensor-op path per-parameter when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)

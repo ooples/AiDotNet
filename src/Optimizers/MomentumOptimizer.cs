@@ -400,7 +400,6 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         PrepareTapeState(context);
 
         bool gpuAdam = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)
