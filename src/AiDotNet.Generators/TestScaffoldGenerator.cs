@@ -124,6 +124,25 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         "EmuEdit",
     };
 
+    /// <summary>
+    /// Foundation-scale forecasting models built, like <see cref="FoundationScaleVisionLanguageModels"/>, with
+    /// generated test-scale options.
+    /// </summary>
+    /// <remarks>
+    /// Timer is GPT-2 small at paper scale (768 hidden, 12 layers, 12 heads, 512-step context): 85M parameters and
+    /// 9-12 s per training step on a CPU. Its option-sensitivity check rebuilds and trains it once per candidate, so
+    /// a single option ran past the 300 s budget on CI.
+    /// </remarks>
+    private static readonly System.Collections.Generic.HashSet<string> FoundationScaleForecastingModels =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+    {
+        "Timer",
+    };
+
+    /// <summary>Whether a model's generated fixture is built with generated test-scale options.</summary>
+    private static bool BuildsWithTestScaleOptions(string className)
+        => FoundationScaleVisionLanguageModels.Contains(className) || FoundationScaleForecastingModels.Contains(className);
+
     // Formerly a list of diffusion variants with non-standard UNet input
     // channels — they're now handled paper-faithfully by
     // DiffusionModelBase.Predict's CanonicalizeGenShape hook, which reads
@@ -1104,6 +1123,11 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // training-mode loss read 0.760, 0.792, 0.997, 0.582 ... 1.166 over twelve steps - one draw per fresh mask -
             // while the evaluation loss at the same weights fell 0.3263, 0.3243, 0.3224 ... 0.3194. Same remedy as above.
             { "MarbleNet", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
+
+            // Timer's training forward drops out (0.1) and masks a fresh random 40% of its patches every step, so
+            // GetLastLoss is one draw per mask: at test scale it read 0.374 after step 1 and 0.439 after step 20.
+            // Judge the same trained parameters in evaluation mode; the strict 1% decrease and 20 updates remain.
+            { "Timer", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
 
             // NaturalSpeech: the same shape, over a LONGER warm-up, and on every repeated-training
             // probe rather than just one. Measured evaluation loss on a fixed pair, from untrained:
@@ -3607,7 +3631,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
 
                 // Fail closed: a foundation-scale VLM whose options type has no generated test-scale bound
                 // would otherwise get a fixture that builds it at paper scale (~12 GB of fp64 weights).
-                if (FoundationScaleVisionLanguageModels.Contains(model.ClassName)
+                if (BuildsWithTestScaleOptions(model.ClassName)
                     && model.BoundedOptionsTypeName is null)
                 {
                     if (CoveredByScaffold())
@@ -13041,7 +13065,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 // above, so its bounded options have to be supplied here as a named argument - without
                 // it the fixture silently builds the paper-scale network the list exists to avoid.
                 string boundedArgs =
-                    FoundationScaleVisionLanguageModels.Contains(model.ClassName)
+                    BuildsWithTestScaleOptions(model.ClassName)
                     && model.BoundedOptionsTypeName is { } zeroArgBoundedOptions
                     && model.BoundedOptionsParameterName is { } zeroArgOptionsParameter
                         ? $"{zeroArgOptionsParameter}: ({zeroArgBoundedOptions})"
@@ -13580,8 +13604,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                         ", new " + optionsNamespace + "RecurrentGemmaOptions { VocabSize = 256, "
                             + "ModelDimension = 32, NumLayers = 1, MaxSequenceLength = 128 }",
                     "GriffinLanguageModel" or "HawkLanguageModel" => ", vocabSize: 4096",
-                    // Foundation-scale VLMs: generated test-scale options (see FoundationScaleVisionLanguageModels).
-                    _ when FoundationScaleVisionLanguageModels.Contains(model.ClassName)
+                    // Foundation-scale models: generated test-scale options (see BuildsWithTestScaleOptions).
+                    _ when BuildsWithTestScaleOptions(model.ClassName)
                            && model.BoundedOptionsTypeName is { } boundedOptions =>
                         $", options: ({boundedOptions})global::AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(typeof({boundedOptions}))",
                     _ => ""
@@ -21328,6 +21352,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // (see EmitGeneratedTestClass) to fix ParameterCount lazy-resolution + MoreData stability;
             // keep the InputShape context in lockstep with that reduced ContextLength.
             "Kronos" => 64,
+            // Timer is built with generated test-scale options (FoundationScaleForecastingModels), which bound its
+            // 512-step paper context to 32; the architecture's input size has to state the same length.
+            "Timer" => 32,
             "YingLong" => 1024,
             // TimeGrad is built at CI scale (ContextLength = 24) by its constructor special-case.
             "TimeGrad" => 24,
