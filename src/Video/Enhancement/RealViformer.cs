@@ -386,9 +386,24 @@ public partial class RealViformer<T> : VideoSuperResolutionBase<T>, ITrainingObj
         return loss[0];
     }
 
+    // Training steps run outside any ambient TensorArena. The step is eager (the spectral normalization's power
+    // iteration rules out a compiled plan), and inside an arena the eager float step had tensors it still needed
+    // reissued as other tensors: a saved discriminator kernel came back as a rank-2 temporary ("requires 4D kernel.
+    // Got rank 2."), and a gradient accumulator with a transposed kernel's shape.
+    private IDisposable? _arenaSuspension;
+
+    /// <inheritdoc />
+    protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
+    {
+        base.OnTrainingStepStarting(input, target);
+        _arenaSuspension = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
+    }
+
     /// <inheritdoc />
     protected override void OnTrainingStepEnded(bool succeeded)
     {
+        _arenaSuspension?.Dispose();
+        _arenaSuspension = null;
         base.OnTrainingStepEnded(succeeded);
         _lastFake = null;
         if (succeeded && !_usingCustomLayers) _average?.Update(GeneratorParameters());

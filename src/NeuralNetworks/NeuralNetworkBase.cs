@@ -12055,6 +12055,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // The eager fallback regularizes as TrainWithTape does, sparing the parameters excluded from weight decay.
             RegularizeGradients = (reached, gradients) => ApplyOptimizerRegularization(resolvedOptimizer, reached, gradients),
             OnGradients = ScatterFusedGradients,
+            // The opt-out TryTrainWithFusedOptimizer honours applies to custom and declared-objective steps as well: a
+            // model whose step builds its batch on the host (a posterior sample, timesteps, noise or flows drawn per
+            // step) would otherwise replay the first step's draw for the whole run and descend a frozen objective.
+            GraphBreakReason = !SupportsFusedCompiledTraining || _parentOwnedTrainingGraph
+                ? "model opts out of fused compiled training (per-step host state)"
+                : null,
         };
 
         // Both the plan and the eager step write the weights in place; an OOM from here on must not be retried.
