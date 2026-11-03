@@ -164,6 +164,9 @@ public static class OptionSensitivityHarness
     /// <summary>The layer-initialisation seed both builds share.</summary>
     public const int FixedSeed = 1337;
 
+    /// <summary>The most enum values one option is perturbed to; matches the largest numeric candidate set.</summary>
+    internal const int MaxEnumCandidates = 6;
+
     private static readonly ConcurrentDictionary<Type, Lazy<ControlFingerprint>> s_controls = new();
 
     /// <summary>
@@ -684,9 +687,17 @@ public static class OptionSensitivityHarness
         {
             var values = Enum.GetValues(underlying).Cast<object>().Distinct().ToList();
             int index = current is null ? -1 : values.FindIndex(v => v.Equals(current));
-            for (int step = 1; step <= values.Count; step++)
+            // Every candidate is a rebuild plus training, and an option that changes nothing is only concluded after
+            // all of them: TimeSeriesModelType's ~70 values ran Timer past the 300 s budget. Like the numeric
+            // candidates, at most MaxEnumCandidates, spread evenly over the enum from the next value so a small enum
+            // is still covered completely.
+            // An unset value has every member as a candidate; a set one has all the others.
+            int others = index < 0 ? values.Count : values.Count - 1;
+            int count = Math.Min(MaxEnumCandidates, others);
+            for (int i = 0; i < count; i++)
             {
-                var candidate = values[((index < 0 ? 0 : index) + step) % values.Count];
+                int step = 1 + (int)((long)i * others / count);
+                var candidate = values[(index + step) % values.Count];
                 if (!candidate.Equals(current)) yield return candidate;
             }
 

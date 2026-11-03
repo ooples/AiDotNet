@@ -253,4 +253,35 @@ public class OptionPerturbationTests
         var candidates = OptionSensitivityHarness.Perturbations(typeof(int[]), null).ToArray();
         Assert.Contains(candidates, value => value is int[] items && items.Length == 1);
     }
+
+    public enum ThreeWay { A, B, C }
+
+    [Fact]
+    public void SmallEnumIsCoveredCompletely()
+    {
+        Assert.Equal(new object?[] { ThreeWay.C, ThreeWay.A }, OptionSensitivityHarness.Perturbations(typeof(ThreeWay), ThreeWay.B).ToArray());
+        Assert.Equal(new object?[] { ThreeWay.A, ThreeWay.B, ThreeWay.C }, OptionSensitivityHarness.Perturbations(typeof(ThreeWay?), null).ToArray());
+    }
+
+    /// <summary>
+    /// Every enum candidate is a rebuild plus training, and an option that changes nothing tries them all:
+    /// TimeSeriesModelType's ~70 values ran Timer's ModelType check past its 300 s budget.
+    /// </summary>
+    [Fact]
+    public void LargeEnumIsSampledAcrossItsRange()
+    {
+        var values = Enum.GetValues(typeof(AiDotNet.Enums.TimeSeriesModelType)).Cast<object>().ToList();
+        Assert.True(values.Count > OptionSensitivityHarness.MaxEnumCandidates);
+        var current = values[3];
+
+        var candidates = OptionSensitivityHarness.Perturbations(typeof(AiDotNet.Enums.TimeSeriesModelType), current).ToList();
+
+        Assert.Equal(OptionSensitivityHarness.MaxEnumCandidates, candidates.Count);
+        Assert.Equal(candidates.Count, candidates.Distinct().Count());
+        Assert.DoesNotContain(current, candidates);
+        Assert.Equal(values[4], candidates[0]);
+        // Spread over the range rather than the next few neighbours.
+        var positions = candidates.Select(candidate => (values.IndexOf(candidate ?? current) - 3 + values.Count) % values.Count).ToList();
+        Assert.True(positions.Max() - positions.Min() >= values.Count / 2, $"Candidates sit at offsets {string.Join(", ", positions)}.");
+    }
 }
