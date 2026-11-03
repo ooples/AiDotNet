@@ -491,8 +491,8 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeAccSqGrad.TryGetValue(param, out var accSqGrad)) { accSqGrad = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) accSqGrad.AsWritableSpan().Clear(); _tapeAccSqGrad[param] = accSqGrad; }
-            if (!_tapeAccSqUpd.TryGetValue(param, out var accSqUpd)) { accSqUpd = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) accSqUpd.AsWritableSpan().Clear(); _tapeAccSqUpd[param] = accSqUpd; }
+            if (!_tapeAccSqGrad.TryGetValue(param, out var accSqGrad)) { accSqGrad = CreateOptimizerState(param._shape, onDevice: gpuAdam); _tapeAccSqGrad[param] = accSqGrad; }
+            if (!_tapeAccSqUpd.TryGetValue(param, out var accSqUpd)) { accSqUpd = CreateOptimizerState(param._shape, onDevice: gpuAdam); _tapeAccSqUpd[param] = accSqUpd; }
 
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdadeltaStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)accSqGrad, (Tensor<float>)(object)accSqUpd,

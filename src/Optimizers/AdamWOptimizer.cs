@@ -760,14 +760,12 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
 
             if (!_tapeM.TryGetValue(param, out var m))
             {
-                m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
-                if (gpuAdam) m.AsWritableSpan().Clear();
+                m = CreateOptimizerState(param._shape, onDevice: gpuAdam);
                 _tapeM[param] = m;
             }
             if (!_tapeV.TryGetValue(param, out var v))
             {
-                v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
-                if (gpuAdam) v.AsWritableSpan().Clear();
+                v = CreateOptimizerState(param._shape, onDevice: gpuAdam);
                 _tapeV[param] = v;
             }
 

@@ -338,18 +338,12 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
             if (!_tapeZ.TryGetValue(param, out var z))
             {
-                z = useGpuOptimizer
-                    ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape)
-                    : new Tensor<T>(param._shape);
-                if (useGpuOptimizer) z.AsWritableSpan().Clear();
+                z = CreateOptimizerState(param._shape, onDevice: useGpuOptimizer);
                 _tapeZ[param] = z;
             }
             if (!_tapeN.TryGetValue(param, out var n))
             {
-                n = useGpuOptimizer
-                    ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape)
-                    : new Tensor<T>(param._shape);
-                if (useGpuOptimizer) n.AsWritableSpan().Clear();
+                n = CreateOptimizerState(param._shape, onDevice: useGpuOptimizer);
                 _tapeN[param] = n;
             }
 

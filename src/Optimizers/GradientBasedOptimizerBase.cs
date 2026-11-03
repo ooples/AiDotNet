@@ -3728,6 +3728,24 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
+    /// Zero optimizer state (a moment, accumulator or velocity) shaped like a parameter. With
+    /// <paramref name="onDevice"/> (the GPU update path: float on a GPU engine) it is created on the device by
+    /// <see cref="AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.CreateStateTensor"/>, which the fused device kernels need:
+    /// TensorAllocator.RentPinnedOnGpu returned a host tensor unless a GPU offload allocator was registered, and
+    /// clearing it wrote the host copy, so every device step declined the state as not device-resident and fell back
+    /// to the host update. Otherwise, and when the device cannot hold it, an ordinary zeroed host tensor.
+    /// </summary>
+    private protected static Tensor<T> CreateOptimizerState(int[] shape, bool onDevice)
+    {
+        if (onDevice && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.CreateStateTensor(shape) is Tensor<T> deviceState
+            && deviceState.TryGetGpuBuffer() is not null)
+            return deviceState;
+        var state = new Tensor<T>(shape);
+        state.AsWritableSpan().Clear();   // an arena may rent the host array uninitialized
+        return state;
+    }
+
+    /// <summary>
     /// The step's gradients as float tensors when the current engine is a GPU engine and T is float (the device
     /// clip and finiteness paths); null otherwise.
     /// </summary>

@@ -933,7 +933,7 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         // GPU-RESIDENT ADAM: on a GPU engine + float, run the Adam update on the GPU (GpuOptimizer.TryAdamStep ->
         // backend.AdamUpdate) so gradients never download and weights/moments update in place, instead of the
         // per-step grad download + weight re-upload of the host path. Moments are allocated GPU-resident
-        // (RentPinnedOnGpu) so TryGetGpuBuffer resolves them. Falls back to the CPU SIMD path per parameter
+        // (CreateOptimizerState) so TryGetGpuBuffer resolves them. Falls back to the CPU SIMD path per parameter
         // whenever a tensor is not GPU-resident. AMSGrad uses the CPU path (no GPU vMax yet).
         // The anomaly guard and global-norm clipping above read one scalar back to the host. That keeps this eager
         // tape step out of CUDA-graph capture, but it is not a reason to update on the host: graph capture is the
@@ -1026,14 +1026,12 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             // TensorCopy throws "Destination array was not long enough".
             if (!_tapeM.TryGetValue(param, out var m) || !m._shape.SequenceEqual(param._shape))
             {
-                m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
-                m.AsWritableSpan().Clear();   // Arena-rented CPU/GPU Adam moments both start at 0.
+                m = CreateOptimizerState(param._shape, onDevice: gpuAdam);
                 _tapeM[param] = m;
             }
             if (!_tapeV.TryGetValue(param, out var v) || !v._shape.SequenceEqual(param._shape))
             {
-                v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
-                v.AsWritableSpan().Clear();
+                v = CreateOptimizerState(param._shape, onDevice: gpuAdam);
                 _tapeV[param] = v;
             }
             // AMSGrad running max of v̂. Initialised to a fresh zero tensor on
