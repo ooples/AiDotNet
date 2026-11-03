@@ -466,7 +466,7 @@ public partial class ProphetModel<T, TInput, TOutput> : TimeSeriesModelBase<T>
         {
             foreach (int period in configured)
             {
-                if (period >= 2 && 2 * period <= timeSpan) periods.Add(period);
+                if (period >= 2 && 2.0 * period <= timeSpan) periods.Add(period);
             }
         }
         else
