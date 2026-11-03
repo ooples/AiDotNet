@@ -13330,6 +13330,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "VaeChannels = new[] { 8, 8, 8, 8 }, VaeLayersPerBlock = 1, VaeGroups = 4, ScaleFactor = 4, " +
                     "NumFrames = 2, SamplingSteps = 2 })";
             }
+            else if (model.ClassName == "StreamDiffVSR" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
+            {
+                // Stream-DiffVSR (Shiu et al. 2025) keeps the released topology at smoke width: the four-level UNet (32
+                // wide, the narrowest 32-group width, two heads, only-cross-attention at the first three levels), the ARTG
+                // ControlNet copied from it, the temporal tiny autoencoder (8 wide, one block a level), the frozen RAFT
+                // with one update, AlexNet LPIPS and the PatchGAN. Two 8x8 frames upscale 4x in the released four DDIM
+                // steps; the second frame is guided by the first.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 3 * 32 * 32), " +
+                    "new AiDotNet.Video.Options.StreamDiffVSROptions { Seed = 1, BlockChannels = new[] { 32, 32, 32, 32 }, " +
+                    "LayersPerBlock = 1, AttentionHeads = 2, CrossAttentionDim = 8, PromptLength = 3, " +
+                    "ConditioningChannels = new[] { 8, 8, 8 }, VaeChannels = 8, EncoderBlocks = new[] { 1, 1, 1 }, " +
+                    "DecoderBlocks = new[] { 1, 1, 1 }, FlowIterations = 1, WarmupSteps = 0 })";
+            }
             else if (model.ClassName == "FloRNN" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Denoising.", System.StringComparison.Ordinal))
             {
@@ -14729,6 +14746,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 3, 3, 16, 16 };");
         }
         else if (model.ClassName == "SeedVR")
+        {
+            // Two RGB 8x8 frames upscaled 4x; see the constructor pin above.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 32, 32 };");
+        }
+        else if (model.ClassName == "StreamDiffVSR")
         {
             // Two RGB 8x8 frames upscaled 4x; see the constructor pin above.
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");

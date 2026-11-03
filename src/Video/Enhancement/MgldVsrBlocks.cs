@@ -367,7 +367,9 @@ internal sealed class MgldTemporalAttention<T>
 /// <summary>
 /// <c>SpatialTransformerV2</c> with linear projections (SD 2.1): GroupNorm (32, 1e-6), a linear map in, one
 /// <c>BasicTransformerBlockV2</c> (self-attention, cross-attention on the text context, a GEGLU feed-forward, each after
-/// a LayerNorm and added back), a zero-initialized linear map out, and the input added back.
+/// a LayerNorm and added back), a zero-initialized linear map out, and the input added back. With
+/// <c>only_cross_attention</c> (diffusers' <c>BasicTransformerBlock</c>) the first attention also reads the context, so
+/// both attentions are cross-attentions.
 /// </summary>
 internal sealed class MgldSpatialTransformer<T>
 {
@@ -375,14 +377,16 @@ internal sealed class MgldSpatialTransformer<T>
     private readonly MgldLinear<T> _projIn, _projOut, _ffIn, _ffOut;
     private readonly MgldLayerNorm<T> _norm1, _norm2, _norm3;
     private readonly MgldAttention<T> _attn1, _attn2;
+    private readonly bool _onlyCrossAttention;
 
-    public MgldSpatialTransformer(LazyModuleGroup<T> group, int channels, int heads, int headDim, int contextDim)
+    public MgldSpatialTransformer(LazyModuleGroup<T> group, int channels, int heads, int headDim, int contextDim, bool onlyCrossAttention = false)
     {
         int inner = heads * headDim;
+        _onlyCrossAttention = onlyCrossAttention;
         _norm = group.Add(new MgldGroupNorm<T>(channels, 1e-6));
         _projIn = group.Add(new MgldLinear<T>(channels, inner));
         _norm1 = group.Add(new MgldLayerNorm<T>(inner));
-        _attn1 = new MgldAttention<T>(group, inner, heads, headDim);
+        _attn1 = new MgldAttention<T>(group, inner, heads, headDim, onlyCrossAttention ? contextDim : null);
         _norm2 = group.Add(new MgldLayerNorm<T>(inner));
         _attn2 = new MgldAttention<T>(group, inner, heads, headDim, contextDim);
         _norm3 = group.Add(new MgldLayerNorm<T>(inner));
@@ -396,7 +400,7 @@ internal sealed class MgldSpatialTransformer<T>
         int n = x.Shape[0], c = x.Shape[1], h = x.Shape[2], w = x.Shape[3];
         var tokens = engine.Reshape(engine.TensorPermute(_norm.Forward(x), new[] { 0, 2, 3, 1 }), new[] { n, h * w, c });
         var y = _projIn.Forward(tokens);
-        y = engine.TensorAdd(y, _attn1.Forward(engine, _norm1.Forward(y)));
+        y = engine.TensorAdd(y, _attn1.Forward(engine, _norm1.Forward(y), _onlyCrossAttention ? context : null));
         y = engine.TensorAdd(y, _attn2.Forward(engine, _norm2.Forward(y), context));
         // GEGLU: the first half times GELU of the second.
         var projected = _ffIn.Forward(_norm3.Forward(y));
