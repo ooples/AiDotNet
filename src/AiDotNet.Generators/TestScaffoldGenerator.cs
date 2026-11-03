@@ -12066,6 +12066,15 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 1))";
             }
+            else if (model.ClassName == "DecisionTransformerAgent" && model.TypeParameterCount == 1)
+            {
+                // The paper's linear warmup runs over 10^5 updates (Chen et al. 2021, Appendix A), so across the
+                // bandit's 800 steps the rate never passes 0.8% of 1e-4 and the toy task's outcome was set by
+                // platform rounding: Learned on Linux, a 0.09 rise of the 0.50 required on Windows, every run.
+                // As the other RL fixtures do, the fixture drops the warmup; paper defaults are untouched.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.DecisionTransformerOptions<double> {{ " +
+                    "WarmupSteps = 0 })";
+            }
             else if (model.ClassName == "WorldModelsAgent" && model.TypeParameterCount == 1)
             {
                 // WorldModels (Ha & Schmidhuber 2018) defaults to a 64x64x3 =
