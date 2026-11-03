@@ -18539,3 +18539,57 @@ override AiDotNet.Video.Enhancement.MGLDVSR<T>.ResolveLazyLayerShapes() -> void
 override AiDotNet.Video.Enhancement.FlashVSR<T>.SupportsFusedCompiledTraining.get -> bool
 override AiDotNet.Video.Enhancement.MGLDVSR<T>.SupportsFusedCompiledTraining.get -> bool
 override AiDotNet.Video.Enhancement.RealViformer<T>.OnTrainingStepStarting(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> void
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.CodebookSize.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.CodecFrameRate.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.CosyVoiceClone(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions? options = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null) -> void
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.CosyVoiceClone(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! modelPath, AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions? options = null) -> void
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.DecodeFromTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.EncodeToTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.ExtractSpeakerEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.MaxTextLength.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.MinReferenceDuration.get -> double
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.NumCodebooks.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.SpeakerEmbeddingDim.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.SynthesizeWithVoice(string! text, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions.CosyVoiceCloneOptions() -> void
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions.CosyVoiceCloneOptions(AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions! other) -> void
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.CodebookSize.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.CodecFrameRate.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.DecodeFromTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.EncodeToTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.ExtractSpeakerEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.MaxTextLength.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.MinReferenceDuration.get -> double
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.NumCodebooks.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.SpeakerEmbeddingDim.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.SynthesizeWithVoice(string! text, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.VALLEXClone(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions? options = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null) -> void
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.VALLEXClone(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! modelPath, AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions? options = null) -> void
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions.VALLEXCloneOptions() -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.Dispose(bool disposing) -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.GetModelMetadata() -> AiDotNet.Models.ModelMetadata<T>!
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.InitializeLayers() -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.OutputFeatureWidth.get -> int
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.PostprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.SupportsParameterMutation.get -> bool
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.ThrowIfCannotTrain() -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.TrainingUnavailableReason.get -> string?
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.Dispose(bool disposing) -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.GetModelMetadata() -> AiDotNet.Models.ModelMetadata<T>!
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.InitializeLayers() -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.OutputFeatureWidth.get -> int
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.PostprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.SupportsParameterMutation.get -> bool
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.ThrowIfCannotTrain() -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.TrainingUnavailableReason.get -> string?
