@@ -13045,11 +13045,13 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 // optimizer moments too, and the performance census peaked at 32.6 GB and killed the 16 GB runner
                 // on every #2136 run. Same architecture as that constructor; the options go through the bounded
                 // scaler, which divides the widths and keeps HiddenDim divisible by NumHeads (DimensionDivisibility).
-                // Paper defaults are untouched - only the fixture is scaled.
+                // Paper defaults are untouched - only the fixture is scaled. The frames are 64x64: at 256x256 the
+                // bounded network still peaked at 18.6 GB across an option check's rebuilds and threw
+                // OutOfMemoryException on the 16 GB runner (GuidanceScale, sweep 41558837370).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
-                    "inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 256 * 256 * 3), " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 64 * 64 * 3), " +
                     "options: (AiDotNet.Video.Options.OpenSoraOptions)global::AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(" +
                     "typeof(AiDotNet.Video.Options.OpenSoraOptions)))";
             }
