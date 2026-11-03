@@ -11963,7 +11963,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         if (outcome == Training.FusedStepOutcome.Stepped)
         {
             CustomFusedStepCount++;
-            InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: true);
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
         }
         else
         {
@@ -13055,8 +13055,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // GPU engine: clip_grad_norm_ on the device (multi-tensor sum of squares, the coefficient computed on the
         // device, one multi-tensor scale), as PyTorch does. The host loop below reads every gradient element through
         // Data.Span, which downloads every device-resident gradient each step (measured on a 27M-parameter LM: 32
-        // transfers, 107 MB per step) and re-uploads them for the optimizer. A non-finite norm leaves the gradients
-        // unscaled there too, and LastStepHadNonFiniteGradients reads the device norm when asked.
+        // transfers, 107 MB per step) and re-uploads them for the optimizer. LastStepHadNonFiniteGradients reads the
+        // device norm when asked. A non-finite device norm (which left the gradients unscaled) falls through to the
+        // double-precision host pass: finite gradients whose float sum of squares overflowed must still be clipped,
+        // and only that pass tells them apart from NaN/Inf gradients.
         if (typeof(T) == typeof(float) && Engine is DirectGpuTensorEngine)
         {
             var deviceGrads = new List<AiDotNet.Tensors.LinearAlgebra.Tensor<float>>(iterationOrder.Count);
@@ -13067,11 +13069,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 deviceGrads.Add((AiDotNet.Tensors.LinearAlgebra.Tensor<float>)(object)g);
             }
             var deviceNorm = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryClipGradNorm(deviceGrads, maxNorm);
-            if (deviceNorm is not null)
+            if (deviceNorm is not null && deviceNorm.IsFinite)
             {
                 _lastDeviceGradientNorm = deviceNorm;
                 return;
             }
+            deviceNorm?.Dispose();
         }
 
         // Step 1: total L2 norm across all gradient tensors, iterating in
@@ -13619,7 +13622,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // The plan updated the weights in place; GPU-resident parameters were updated ON the device, which is
             // exactly the case the host-authoritative invalidation must skip. Without this flush, fused-compatible
             // training reuses frozen pre-step weights on the next forward and never learns.
-            InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: true);
+            InvalidateWeightCachesAfterSuccessfulWeightUpdate();
 
             if (Configuration.TrainingDiagnosticsConfig.Level
                 > Configuration.TrainingDiagnosticLevel.Silent)
@@ -14777,28 +14780,6 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
-    /// <summary>
-    /// Invalidates EVERY identity-keyed weight cache (GPU weight-buffer uploads
-    /// AND the CPU engine's derived-weight caches) after a successful in-place
-    /// weight update. Single source of truth for the "post-weight-write cache
-    /// flush" contract — every in-place parameter-write path (the training
-    /// entry points <see cref="TrainWithTape"/>, <c>TrainWithGradientAccumulation</c>,
-    /// <c>TrainWithCustomLoss</c>, <c>BackwardAndStepOnPrecomputedLoss</c>, and
-    /// the bulk-load paths <see cref="WithParameters"/> / <see cref="SetParameters"/>)
-    /// routes through this helper so they all keep the same coherency guarantee.
-    /// </summary>
-    /// <remarks>
-    /// Weight writes mutate the tensors IN PLACE, but DirectGpuTensorEngine's
-    /// weight-buffer cache keys by array REFERENCE and returns the cached upload
-    /// without re-checking contents. Without flushing here the next forward reads
-    /// STALE weights and the model NEVER LEARNS on GPU — loss frozen at ln(V) even
-    /// though the gradient is correct (it is recomputed each step). The GPU flush
-    /// is a no-op on the CPU engine (GpuEngine is null); the CPU flush below is
-    /// always live. Mirrors the OnParametersUpdated contract.
-    /// </remarks>
-    protected void InvalidateWeightCachesAfterSuccessfulWeightUpdate()
-        => InvalidateWeightCachesAfterSuccessfulWeightUpdate(updatedOnDevice: false);
-
     /// <summary>The optimizer's configured regularization, or null when it has none.</summary>
     private static IRegularization<T, Tensor<T>, Tensor<T>>? OptimizerRegularizationOf(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
@@ -14844,13 +14825,33 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             : regularization.Regularize(gradient, theta);
     }
 
-    /// <param name="updatedOnDevice">
-    /// True when the optimizer that just ran updated the parameters ON THE DEVICE (the compiled fused step with
-    /// GPU-resident parameters). Those parameters' device buffers already hold the new values and the plan re-armed
-    /// their host download, so they must NOT be treated as host-authoritative: doing so dropped the device update and
-    /// detached the buffer the plan keeps writing, and GPU Train() stopped learning after its first step.
-    /// </param>
-    private void InvalidateWeightCachesAfterSuccessfulWeightUpdate(bool updatedOnDevice)
+    /// <summary>
+    /// Invalidates EVERY identity-keyed weight cache (GPU weight-buffer uploads
+    /// AND the CPU engine's derived-weight caches) after a successful in-place
+    /// weight update. Single source of truth for the "post-weight-write cache
+    /// flush" contract — every in-place parameter-write path (the training
+    /// entry points <see cref="TrainWithTape"/>, <c>TrainWithGradientAccumulation</c>,
+    /// <c>TrainWithCustomLoss</c>, <c>BackwardAndStepOnPrecomputedLoss</c>, and
+    /// the bulk-load paths <see cref="WithParameters"/> / <see cref="SetParameters"/>)
+    /// routes through this helper so they all keep the same coherency guarantee.
+    /// </summary>
+    /// <remarks>
+    /// Weight writes mutate the tensors IN PLACE, but DirectGpuTensorEngine's
+    /// weight-buffer cache keys by array REFERENCE and returns the cached upload
+    /// without re-checking contents. Without flushing here the next forward reads
+    /// STALE weights and the model NEVER LEARNS on GPU — loss frozen at ln(V) even
+    /// though the gradient is correct (it is recomputed each step). The GPU flush
+    /// is a no-op on the CPU engine (GpuEngine is null); the CPU flush below is
+    /// always live. Mirrors the OnParametersUpdated contract.
+    /// <para>
+    /// A parameter the optimizer updated ON THE DEVICE (the compiled fused step, or the eager GpuOptimizer step) has
+    /// its new values only in its device buffer, with a host download re-armed; it must NOT be treated as
+    /// host-authoritative: invalidating it dropped the device update and detached the buffer the plan keeps writing,
+    /// and GPU Train() stopped learning after its first step. That holds whichever optimizer ran, so the test is the
+    /// parameter's own pending download, not the caller.
+    /// </para>
+    /// </remarks>
+    protected void InvalidateWeightCachesAfterSuccessfulWeightUpdate()
     {
         GpuEngine?.InvalidateAllWeightCaches();
         // InvalidateAllWeightCaches only clears the PERSISTENT + activation caches. It does NOT
@@ -14871,7 +14872,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // parameter whose device copy the plan just updated (and re-armed for a lazy host download) does not
                 // carry. Testing it invalidated every such parameter, dropping the device update: GPU training lost its
                 // first two updates whenever the weights were already resident at step 1 (one Predict was enough).
-                if (updatedOnDevice && wtensor.HasPendingGpuData && wtensor.TryGetGpuBuffer() is not null)
+                // Not gated on a bound device buffer either: invalidating drops the pending download itself, so a
+                // parameter whose device copy is reached another way (a view into a flat buffer) lost its update too.
+                if (wtensor.HasPendingGpuData)
                     continue;
                 gpuForInvalidate.InvalidateResidentWeightBuffer(wtensor);
             }

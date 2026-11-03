@@ -834,8 +834,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
             // True sparse scatter Proximal-L1: SGD step + L1 soft-threshold at touched
             // indices. Only used when the regularizer is L1 (otherwise the proximal
             // operator may need to inspect every element).
-            bool useSparseL1 = !gpuL1
-                && _regularization is AiDotNet.Regularization.L1Regularization<T, TInput, TOutput>
+            bool useSparseL1 = _regularization is AiDotNet.Regularization.L1Regularization<T, TInput, TOutput>
                 && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param);
             if (useSparseL1)
             {

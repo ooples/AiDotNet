@@ -475,7 +475,7 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
             // True sparse scatter AdaDelta: both EMAs (accSqGrad, accSqUpd) + param at
             // touched indices only. lr=1.0 (AdaDelta's adaptive step makes a base lr
             // unnecessary; some implementations expose one as a global multiplier).
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
             {
                 if (!_tapeAccSqGrad.TryGetValue(param, out var agSp)) { agSp = new Tensor<T>(param._shape); _tapeAccSqGrad[param] = agSp; }
                 if (!_tapeAccSqUpd.TryGetValue(param, out var auSp)) { auSp = new Tensor<T>(param._shape); _tapeAccSqUpd[param] = auSp; }

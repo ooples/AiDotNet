@@ -403,7 +403,7 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             // True sparse scatter AMSGrad: m + v + vMax + param at touched indices.
             // vMax updates only at touched (untouched vMax stays at previous max — consistent
             // with the sparse-history semantics for state buffers).
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
             {
                 if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
                 if (!_tapeV.TryGetValue(param, out var vSp)) { vSp = new Tensor<T>(param._shape); _tapeV[param] = vSp; }

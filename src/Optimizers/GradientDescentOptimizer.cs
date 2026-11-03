@@ -241,7 +241,7 @@ public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBase
         foreach (var param in context.Parameters)
         {
             // True sparse scatter plain SGD: param -= lr·g at touched indices.
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
             {
                 if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
                         param, velocity: null,

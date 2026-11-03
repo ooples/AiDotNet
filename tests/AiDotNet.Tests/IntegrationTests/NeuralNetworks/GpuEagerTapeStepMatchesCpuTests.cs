@@ -67,6 +67,11 @@ public class GpuEagerTapeStepMatchesCpuTests
         return (x, y);
     }
 
+    /// <summary>
+    /// The losses of <see cref="Steps"/> training steps; on a GPU engine also checks after each step that every
+    /// parameter is device-authoritative, which only the device optimizer leaves it (a host update writes the host
+    /// copy). The losses alone cannot tell the two apart: both apply the same AdamW rule.
+    /// </summary>
     private static List<double> Trajectory(IEngine engine, float[] initialParameters)
     {
         var previous = AiDotNetEngine.Current;
@@ -83,6 +88,14 @@ public class GpuEagerTapeStepMatchesCpuTests
             for (int s = 0; s < Steps; s++)
             {
                 net.Train(x, y);
+                if (engine is DirectGpuTensorEngine gpu)
+                {
+                    var parameters = AiDotNet.Training.TapeTrainingStep<float>.CollectParameters(net.Layers);
+                    Assert.NotEmpty(parameters);
+                    for (int p = 0; p < parameters.Count; p++)
+                        Assert.True(gpu.IsDeviceAuthoritative(parameters[p]),
+                            $"step {s}: parameter {p} was not updated on the device (the GPU optimizer step did not run)");
+                }
                 losses.Add(Convert.ToDouble(net.GetLastLoss()));
             }
             return losses;
@@ -96,11 +109,12 @@ public class GpuEagerTapeStepMatchesCpuTests
     [SkippableFact]
     public void Gpu_eager_step_follows_the_cpu_trajectory()
     {
-        DirectGpuTensorEngine? gpu = null;
-        try { gpu = new DirectGpuTensorEngine(); } catch { /* no backend */ }
+        // The constructor does not throw on a host without a GPU backend (it reports IsGpuAvailable = false), so any
+        // exception from it is a failure, not a skip.
+        var gpu = new DirectGpuTensorEngine();
         try
         {
-            Skip.If(gpu is null || !gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+            Skip.If(!gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
 
             // One shared initialization for both engines.
             float[] init;
@@ -118,7 +132,7 @@ public class GpuEagerTapeStepMatchesCpuTests
             }
 
             var cpu = Trajectory(new CpuEngine(), init);
-            var gpuLosses = Trajectory(gpu!, init);
+            var gpuLosses = Trajectory(gpu, init);
             string Show(List<double> l) => string.Join(" -> ", l.Select(v => v.ToString("G5")));
             Assert.True(cpu[^1] < 0.9 * cpu[0], $"the CPU reference did not learn: {Show(cpu)}");
             for (int s = 0; s < Steps; s++)
@@ -127,7 +141,7 @@ public class GpuEagerTapeStepMatchesCpuTests
         }
         finally
         {
-            gpu?.Dispose();
+            gpu.Dispose();
         }
     }
 }

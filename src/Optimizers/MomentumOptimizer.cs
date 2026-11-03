@@ -405,7 +405,7 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         foreach (var param in context.Parameters)
         {
             // True sparse scatter SGD-momentum: velocity + param at touched indices.
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
             {
                 if (!_tapeVelocity.TryGetValue(param, out var velSp)) { velSp = new Tensor<T>(param._shape); _tapeVelocity[param] = velSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(

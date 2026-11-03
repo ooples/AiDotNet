@@ -3728,19 +3728,6 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
-    /// Applies PyTorch-style global-norm gradient clipping across every gradient
-    /// in the tape step's <see cref="TapeStepContext{T}.Gradients"/> dictionary.
-    /// Mirrors <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>:
-    /// computes <c>sqrt(Σ_p ‖grad_p‖²)</c>; if it exceeds <paramref name="maxNorm"/>,
-    /// scales every gradient by <c>maxNorm / (globalNorm + 1e-6)</c> (PyTorch clip_grad_norm_) in place so the
-    /// post-clip global norm is <paramref name="maxNorm"/> to within that 1e-6. Without
-    /// clipping, randomly-initialised classifiers paired with CrossEntropyLoss
-    /// and non-distribution targets diverge in a few iterations (ODISE: initial
-    /// MSE 0.24 → final 184.69, 770× explosion). Pre-clipping every tape-path
-    /// optimizer that opts in keeps that loss-explosion contained at the
-    /// canonical PyTorch transformer default <c>MaxGradientNorm = 1.0</c>.
-    /// </summary>
-    /// <summary>
     /// The step's gradients as float tensors when the current engine is a GPU engine and T is float (the device
     /// clip and finiteness paths); null otherwise.
     /// </summary>
@@ -3754,6 +3741,19 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         return list;
     }
 
+    /// <summary>
+    /// Applies PyTorch-style global-norm gradient clipping across every gradient
+    /// in the tape step's <see cref="TapeStepContext{T}.Gradients"/> dictionary.
+    /// Mirrors <c>torch.nn.utils.clip_grad_norm_(params, max_norm)</c>:
+    /// computes <c>sqrt(Σ_p ‖grad_p‖²)</c>; if it exceeds <paramref name="maxNorm"/>,
+    /// scales every gradient by <c>maxNorm / (globalNorm + 1e-6)</c> (PyTorch clip_grad_norm_) in place so the
+    /// post-clip global norm is <paramref name="maxNorm"/> to within that 1e-6. Without
+    /// clipping, randomly-initialised classifiers paired with CrossEntropyLoss
+    /// and non-distribution targets diverge in a few iterations (ODISE: initial
+    /// MSE 0.24 → final 184.69, 770× explosion). Pre-clipping every tape-path
+    /// optimizer that opts in keeps that loss-explosion contained at the
+    /// canonical PyTorch transformer default <c>MaxGradientNorm = 1.0</c>.
+    /// </summary>
     protected static void ApplyTapeGlobalNormGradientClipping(
         TapeStepContext<T> context, double maxNorm)
     {
@@ -3763,13 +3763,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // optimizer step instead of being a no-op.
         if (maxNorm <= 0.0 || double.IsNaN(maxNorm) || double.IsInfinity(maxNorm)) return;
 
-        // GPU engine: clip_grad_norm_ on the device with no host read (PyTorch's foreach path). The host loops below
-        // read every gradient through Data.Span, a download of each device-resident gradient per step. A non-finite
-        // norm leaves the gradients unscaled on the device too.
+        // GPU engine: clip_grad_norm_ on the device (PyTorch's foreach path). The host loops below read every gradient
+        // through Data.Span, a download of each device-resident gradient per step. The device result is kept only when
+        // its norm is finite: a non-finite device norm left the gradients unscaled, which is right for a NaN/Inf
+        // gradient but not for finite gradients whose float sum of squares overflowed (a 3e19 element) on a backend
+        // that accumulates in float. The double-precision host pass below tells the two apart and clips the second.
         if (DeviceTapeGradients(context) is { } deviceGrads)
         {
             using var deviceNorm = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryClipGradNorm(deviceGrads, maxNorm);
-            if (deviceNorm is not null) return;
+            if (deviceNorm is not null && deviceNorm.IsFinite) return;
         }
         var numOps = MathHelper.GetNumericOperations<T>();
         // Host engine: one parallel SIMD pass per tensor for the norm and for the scale (FusedOptimizer helpers);
