@@ -271,7 +271,7 @@ public class NeuralNetworkBaseResolveShapesTests
     }
 
     [Fact]
-    public void ShapeContractFallback_DoesNotOverrideRejectedInputGeometry()
+    public void ShapePropagation_CarriesProjectedFeatureWidthToAttention()
     {
         // This is the model-agnostic shape pattern used by SALMONN and similar projection-based
         // architectures. The public input is [..., 4], but the first projection changes the
@@ -296,11 +296,12 @@ public class NeuralNetworkBaseResolveShapesTests
                     new FullyConnectedLayer<double>(8, (IActivationFunction<double>)new ReLUActivation<double>())
                 ]));
 
-        // The speculative architecture walk reaches attention with two invalid candidates:
-        // rank-1 [8] and stale [..., 4]. Its declarative output must not overrule either input
-        // rejection and pin downstreamProjection to the stale width.
+        // The shape walk carries the projection's feature width through the sequence axes.
+        // Attention can therefore reject rank-1 [8] and resolve from the valid [..., 8]
+        // fallback. Require the downstream layer to resolve to that width, never stale [..., 4].
         network.SetTrainingMode(false);
-        Assert.False(downstreamProjection.IsShapeResolved);
+        Assert.True(downstreamProjection.IsShapeResolved);
+        Assert.Equal(8, downstreamProjection.GetInputShape()[0]);
 
         var output = network.Predict(new Tensor<double>([1, 3, 4]));
 
