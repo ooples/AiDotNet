@@ -13,7 +13,7 @@ namespace AiDotNet.Preprocessing.TimeSeries;
 /// an asset and a benchmark, including alpha, beta, R², Sharpe ratio, and Sortino ratio.
 /// </para>
 /// <para><b>For Beginners:</b> This transformer helps you understand how an asset (like a stock)
-/// performs relative to a benchmark (like the S&P 500 market index).
+/// performs relative to a benchmark (like the S&amp;P 500 market index).
 ///
 /// Key features:
 /// - Beta: How much the asset moves when the market moves (sensitivity)

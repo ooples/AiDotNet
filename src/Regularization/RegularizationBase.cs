@@ -4,8 +4,8 @@ namespace AiDotNet.Regularization;
 /// Provides a base implementation for regularization techniques used to prevent overfitting in machine learning models.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
-/// <typeparam name="TInput">The input data structure type (e.g., Matrix<T>, Tensor<T>).</typeparam>
-/// <typeparam name="TOutput">The output data structure type (e.g., Vector<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TInput">The input data structure type (e.g., Matrix&lt;T>, Tensor&lt;T>).</typeparam>
+/// <typeparam name="TOutput">The output data structure type (e.g., Vector&lt;T>, Tensor&lt;T>).</typeparam>
 /// <remarks>
 /// <para>
 /// RegularizationBase serves as an abstract foundation for implementing various regularization strategies.

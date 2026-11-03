@@ -174,7 +174,6 @@ virtual AiDotNet.SurvivalAnalysis.SurvivalModelBase<T>.SetParameterChunks(System
 virtual AiDotNet.TimeSeries.TimeSeriesModelBase<T>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 virtual AiDotNet.TimeSeries.TimeSeriesModelBase<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
 virtual AiDotNet.TimeSeries.TimeSeriesModelBase<T>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
-*REMOVED*AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = true) -> void
 *REMOVED*AiDotNet.MetaLearning.Algorithms.MbPAAdaptedModel<T, TInput, TOutput>.MbPAAdaptedModel(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! embeddingNetwork, AiDotNet.MetaLearning.Algorithms.MbPAEpisodicMemory<T>! memory, AiDotNet.Tensors.LinearAlgebra.Vector<T>! trainedOutputParams, AiDotNet.MetaLearning.Options.MbPAOptions<T, TInput, TOutput>! options) -> void
 *REMOVED*AiDotNet.NeuralNetworks.Options.InfoGANOptions.LatentCodeSize.set -> void
 *REMOVED*AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold = 0.5) -> void
@@ -220,7 +219,6 @@ virtual AiDotNet.TimeSeries.TimeSeriesModelBase<T>.SetParameterChunks(System.Col
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultQuantumNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int numQubits = 4) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultRNNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 *REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSpikingLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Enums.SpikingNeuronType neuronType = AiDotNet.Enums.SpikingNeuronType.LeakyIntegrateAndFire, double tau = 10, double refractoryPeriod = 2, bool useLayerNormalization = false, bool useOutputConversion = true, int timeSteps = 20) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = false) -> void
 AiDotNet.MetaLearning.Algorithms.MbPAAdaptedModel<T, TInput, TOutput>.MbPAAdaptedModel(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! embeddingNetwork, AiDotNet.MetaLearning.Algorithms.MbPAEpisodicMemory<T>! memory, AiDotNet.Tensors.LinearAlgebra.Vector<T>! trainedOutputParams, AiDotNet.MetaLearning.Options.MbPAOptions<T, TInput, TOutput>! options, AiDotNet.Tensors.LinearAlgebra.Vector<T>? keyEmbeddingParameters = null) -> void
 AiDotNet.NeuralNetworks.ColBERT<T>.EmbedQueryLateInteraction(string! query) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
 AiDotNet.NeuralNetworks.Options.AutoencoderOptions.LatentSize.get -> int?
@@ -260,7 +258,6 @@ AiDotNet.NeuralNetworks.Options.ResidualNeuralNetworkOptions.NumResidualBlocks.s
 AiDotNet.NeuralNetworks.Options.SpikingNeuralNetworkOptions.HiddenLayers.get -> int[]!
 AiDotNet.NeuralNetworks.Options.SpikingNeuralNetworkOptions.HiddenLayers.set -> void
 AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold = 0.5, AiDotNet.Interfaces.IMultimodalEmbedding<T>? clipModel = null) -> void
-AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold) -> void
 AiDotNet.Safety.SafetyPipeline<T>.EmbedAudioWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.Safety.SafetyPipeline<T>.EmbedTextWatermark(string! text) -> string!
 AiDotNet.Safety.SafetyPipeline<T>.WatermarkLanguageModel(AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>! model) -> AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>!
@@ -269,14 +266,11 @@ AiDotNet.Safety.WatermarkConfig.TextKey.set -> void
 AiDotNet.Safety.WatermarkConfig.TextTokenizer.get -> AiDotNet.Agentic.Models.Local.IGenerationTokenizer?
 AiDotNet.Safety.WatermarkConfig.TextTokenizer.set -> void
 AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength = 0.5, int segmentSamples = 4096, string? key = null) -> void
-AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength, int segmentSamples) -> void
 AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.DetectSegments(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.Watermarking.WatermarkResult!>!
 AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.5, string? key = null) -> void
-AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold, double watermarkStrength) -> void
 AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AdditiveEmbed(double[]! band, double[]! pattern, double frameRms) -> void
 AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioResult(double z, int scoredUnits) -> AiDotNet.Safety.Watermarking.WatermarkResult!
 AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioWatermarkerBase(double watermarkStrength = 0.5, string? key = null) -> void
-AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioWatermarkerBase(double watermarkStrength) -> void
 AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
 AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.EmbedWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.FrameStatistics(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<(int StartSample, double Numerator, double Energy, int Count)>!
@@ -298,7 +292,6 @@ AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>.EmbedWatermark(stri
 AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>.GroupCount.get -> int
 AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>.KeyedSubstitutionWatermarker(System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string!>!>! groups, double watermarkStrength, string? key) -> void
 AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.LexicalWatermarker(double watermarkStrength = 0.5, string? key = null, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string!>!>? synonymGroups = null) -> void
-AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.LexicalWatermarker(double watermarkStrength) -> void
 AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.BiasLogits(AiDotNet.Tensors.LinearAlgebra.Vector<T>! logits, System.Collections.Generic.IReadOnlyList<int>! context) -> void
 AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.ContextWidth.get -> int
 AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.DetectTokens(System.Collections.Generic.IReadOnlyList<int>! tokenIds) -> AiDotNet.Safety.Watermarking.WatermarkResult!
@@ -306,17 +299,13 @@ AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.GreenListBias.get -> double
 AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.GreenListFraction.get -> double
 AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.IsGreen(System.Collections.Generic.IReadOnlyList<int>! context, int token) -> bool
 AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double watermarkStrength = 0.5, int? vocabSize = null, double greenListFraction = 0.25, string? key = null, AiDotNet.Agentic.Models.Local.IGenerationTokenizer? tokenizer = null, int contextWidth = 1, bool scoreRepeatedNgrams = false) -> void
-AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double watermarkStrength, int vocabSize, double greenListFraction) -> void
 AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.WatermarkModel(AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>! model) -> AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>!
 AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength = 0.5, string? key = null) -> void
-AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength) -> void
 AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength = 0.5, string? key = null) -> void
-AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength) -> void
 AiDotNet.Safety.Watermarking.TextWatermarker<T>.TextWatermarker(string? key = null, double greenListFraction = 0.25, double detectionThreshold = 4, int contextWidth = 1, AiDotNet.Agentic.Models.Local.IGenerationTokenizer? tokenizer = null, double watermarkStrength = 0.5) -> void
 AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.Key.get -> AiDotNet.Safety.Watermarking.WatermarkKey!
 AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextResult(double z, int scoredUnits) -> AiDotNet.Safety.Watermarking.WatermarkResult!
 AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength = 0.5, string? key = null) -> void
-AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength) -> void
 AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.UsesPublicKey.get -> bool
 AiDotNet.Safety.Watermarking.WatermarkDetector<T>.WatermarkDetector(string? key = null, AiDotNet.Agentic.Models.Local.IGenerationTokenizer? tokenizer = null) -> void
 AiDotNet.Safety.Watermarking.WatermarkKey
@@ -421,4 +410,15 @@ virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.MaxSamples.get -> l
 virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.ReportThreshold.get -> double
 virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(string! text) -> double
 virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.ReportThreshold.get -> double
+*REMOVED*AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = true) -> void
+AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = false) -> void
+AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold) -> void
+AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength, int segmentSamples) -> void
+AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold, double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioWatermarkerBase(double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.LexicalWatermarker(double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double watermarkStrength, int vocabSize, double greenListFraction) -> void
+AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength) -> void
 AiDotNet.NeuralNetworks.Tabular.AutoIntBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T

@@ -42,7 +42,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// - Chapter 10 summary: "Practical applications"
 /// 
 /// ```csharp
-/// var retriever = new MultiVectorRetriever<double>(
+/// var retriever = new MultiVectorRetriever&lt;double>(
 ///     documentStore,
 ///     vectorsPerDocument: 5,        // 5 vectors per document
 ///     aggregationMethod: "max"       // Use best match

@@ -224,8 +224,12 @@ public partial class MADDPGAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <summary>
-    /// Select action for a specific agent.
-
+    /// Selects an action for a specific agent from its own actor network.
+    /// </summary>
+    /// <param name="agentId">The agent's index, in [0, NumAgents).</param>
+    /// <param name="state">The agent's local observation.</param>
+    /// <param name="training">Whether to add exploration noise.</param>
+    /// <returns>The agent's action.</returns>
     public Vector<T> SelectActionForAgent(int agentId, Vector<T> state, bool training = true)
     {
         if (agentId < 0 || agentId >= _options.NumAgents)

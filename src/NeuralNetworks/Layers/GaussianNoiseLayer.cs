@@ -167,10 +167,10 @@ public partial class GaussianNoiseLayer<T> : LayerBase<T>, IShapeContract
     /// For example:
     /// ```csharp
     /// // Add mild noise to 28×28 grayscale images
-    /// var noiseLayer = new GaussianNoiseLayer<float>(new int[] { 28, 28, 1 }, 0.1);
+    /// var noiseLayer = new GaussianNoiseLayer&lt;float>(new int[] { 28, 28, 1 }, 0.1);
     /// 
     /// // Add stronger noise to 32×32 color images
-    /// var strongerNoise = new GaussianNoiseLayer<float>(new int[] { 32, 32, 3 }, 0.3);
+    /// var strongerNoise = new GaussianNoiseLayer&lt;float>(new int[] { 32, 32, 3 }, 0.3);
     /// ```
     /// 
     /// The standard deviation is the most important parameter as it controls

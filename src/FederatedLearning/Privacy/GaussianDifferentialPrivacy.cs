@@ -60,7 +60,7 @@ using AiDotNet.Tensors.Helpers;
 /// - Regulatory requirements (GDPR, HIPAA)
 /// - Publishing models or sharing with untrusted parties
 ///
-/// Reference: Dwork, C., & Roth, A. (2014). "The Algorithmic Foundations of Differential Privacy."
+/// Reference: Dwork, C., &amp; Roth, A. (2014). "The Algorithmic Foundations of Differential Privacy."
 /// Abadi, M., et al. (2016). "Deep Learning with Differential Privacy." CCS 2016.
 /// </remarks>
 /// <typeparam name="T">The numeric type for model parameters (e.g., double, float).</typeparam>

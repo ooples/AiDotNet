@@ -27,7 +27,7 @@ namespace AiDotNet.Finance.Interfaces;
 /// <b>Common Use Cases:</b>
 /// - Sentiment scoring of news to predict price movements
 /// - Named entity recognition for company names, stock tickers
-/// - Document classification (earnings, M&A, legal, regulatory)
+/// - Document classification (earnings, M&amp;A, legal, regulatory)
 /// - Relationship extraction from financial documents
 /// </para>
 /// </remarks>
