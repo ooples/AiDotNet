@@ -42,7 +42,7 @@ public class UnobservedComponentsOptions<T, TInput, TOutput> : TimeSeriesRegress
     public UnobservedComponentsOptions()
     {
         // No seasonal component unless one is requested.
-        SeasonalPeriod = 1;
+        SeasonalPeriod = 0;
     }
 
     /// <summary>Initializes a new instance as a copy of <paramref name="other"/>, with every setting copied.</summary>
