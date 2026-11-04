@@ -47,7 +47,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Provenance = RecipeProvenance.Stated,
     Source = "Le et al. 2023 Sec. 5.1 and Tables D13-D14: Adam at peak 1e-4, 5k linear warmup and linear decay; "
         + "the audio model clips gradient norm to 0.2.")]
-public partial class Voicebox<T> : TtsModelBase<T>
+public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interfaces.ITtsModel<T>
 {
     private readonly VoiceboxOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;

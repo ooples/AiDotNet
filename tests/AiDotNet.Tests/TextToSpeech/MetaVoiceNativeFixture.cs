@@ -22,7 +22,7 @@ internal static class MetaVoiceNativeFixture
             SecondStageDim = 8, NumSecondStageLayers = 2, SecondStageHeads = 2, SecondStageContext = 128,
             SpeakerHiddenDim = 8, SpeakerEmbeddingDim = 3, SpeakerMelChannels = 5, SwiGLUMultipleOf = 4,
             MaximumNewTokens = 8, FirstStageTopP = 1, TrainingDropout = 0, FineTuneLastBlocks = 1,
-            MinReferenceDurationSec = .001, RawDecoderOutput = true
+            MinReferenceDurationSec = .001, RawDecoderOutput = true, SynthesisSeed = 2294
         });
     }
 

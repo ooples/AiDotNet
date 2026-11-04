@@ -13,6 +13,7 @@ public partial class MetaVoice1B<T>
         ? TtsSupervision.CodecTokens | TtsSupervision.ReferenceRecording : TtsSupervision.None;
     public override bool TrainsOnSampleObjective => HasPaperPipeline;
     public override int CodecTokenCodebooks => 8;
+    public override int CodecTokenVocabulary => 1024;
 
     protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
         => _first is null ? parameters : TapeTrainingStep<T>.CollectParameters(

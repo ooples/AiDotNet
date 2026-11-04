@@ -101,6 +101,16 @@ public sealed class MetaVoicePublicPipelineTests
         Assert.Equal(model.GetParameters().ToArray(), copy.GetParameters().ToArray());
     }
 
+    [Fact]
+    public void SeededNativeSynthesis_ReplaysAcrossCallsAndCloneWithoutAuditCallbacks()
+    {
+        using var model = MetaVoiceNativeFixture.Create<double>();
+        var expected = model.Synthesize("hello world").ToArray();
+        Assert.Equal(expected, model.Synthesize("hello world").ToArray());
+        using var copy = (MetaVoice1B<double>)model.DeepCopy();
+        Assert.Equal(expected, copy.Synthesize("hello world").ToArray());
+    }
+
     private static void ControlNativeSampling(MetaVoice1B<double> model)
     {
         // Couple random draws across the comparison; actors, codec and all four

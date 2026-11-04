@@ -51,6 +51,7 @@ public class MetaVoice1BOptions : VoiceCloningOptions
         TrainingDropout = other.TrainingDropout;
         RawDecoderOutput = other.RawDecoderOutput;
         EnhanceOutput = other.EnhanceOutput;
+        SynthesisSeed = other.SynthesisSeed;
     }
 
     public MetaVoice1BOptions()
@@ -147,4 +148,7 @@ public class MetaVoice1BOptions : VoiceCloningOptions
     public bool RawDecoderOutput { get; set; }
     /// <summary>Runs the release's DeepFilterNet3 stage and returns 48 kHz audio. Ignored for raw decoder output.</summary>
     public bool EnhanceOutput { get; set; } = true;
+
+    /// <summary>Optional seed replayed for each synthesis. Null preserves the release's advancing random stream.</summary>
+    public int? SynthesisSeed { get; set; }
 }

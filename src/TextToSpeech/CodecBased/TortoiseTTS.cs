@@ -7,6 +7,7 @@ using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Vocoders;
@@ -106,6 +107,10 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
     /// <summary>Whether this instance owns all five native TorToiSe inference components.</summary>
     public bool HasPaperPipeline => _tokenizer is not null && _autoregressive is not null && _clvp is not null
         && _diffusion is not null && _univNet is not null;
+
+    /// <inheritdoc />
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) => HasPaperPipeline
+        ? LayerInputDomain.Indices(_options.VocabSize) : base.GetInputDomain(inputShape);
 
     /// <summary>Creates a zero-shot voice from a recording and resamples it to TorToiSe's 24 kHz output rate.</summary>
     public TtsVoice<T> CreateVoice(Tensor<T> recording, int sampleRate = 24000)

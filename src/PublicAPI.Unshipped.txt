@@ -20398,3 +20398,13 @@ static AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Indices(int minInclusive,
 override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
 AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.LoadAuthorConfiguration(string! configuration) -> void
 override AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.CodecTokenVocabulary.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SynthesisSeed.get -> int?
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SynthesisSeed.set -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain

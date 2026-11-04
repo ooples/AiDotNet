@@ -32,7 +32,8 @@ def record(text,*args,**kwargs):
 tokenizer.backend._espeak.text_to_phonemes=record
 cases=[]
 for text in ['Hello, world!', 'The quick brown fox.', 'Dr. Smith paid $3.50.', "Don't stop...", '  spaced   words  ',
-    'A; B: C?', 'Café déjà vu.', '(Hello) [world]!', '!!!', 'a test of zero-shot voice cloning', 'hello', 'hello world', 'hi']:
+    'A; B: C?', 'Café déjà vu.', '(Hello) [world]!', '!!!', 'a test of zero-shot voice cloning', 'hello', 'hello world', 'hi',
+    'Hello world.', 'a completely different sentence', 'the quick brown fox']:
     calls=[]
     phones=tokenizer(text)[0]
     cases.append(dict(text=text,phones=phones,calls=calls))

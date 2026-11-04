@@ -6,6 +6,7 @@ using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
@@ -93,6 +94,10 @@ public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
 
     /// <summary>Whether this instance owns the released universal codec and both Transformer scales.</summary>
     public bool HasPaperPipeline => _codec is not null && _languageModel is not null;
+
+    /// <inheritdoc />
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) => HasPaperPipeline
+        ? LayerInputDomain.Indices(_options.PhoneVocabularySize) : base.GetInputDomain(inputShape);
 
     /// <summary>The global Transformer's layer count.</summary>
     public int GlobalLayerCount => _languageModel?.GlobalLayerCount ?? 0;

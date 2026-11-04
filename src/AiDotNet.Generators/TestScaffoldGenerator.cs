@@ -1041,12 +1041,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // (verified: System.OutOfMemoryException in TensorAllocator.RentUninitialized during the train
         // step) — the activation/gradient footprint, not a correctness bug. Same heavy lane.
         "InternVideo2",
-        // TortoiseTTS (Betker 2023): foundation-scale codec-LM TTS — a 1024-dim / 12-layer decoder with
-        // an 8x1024-token codebook head (~150M params). Its <double> training invariants OOM the runner
-        // (verified: System.OutOfMemoryException in the train step) and even <float> can't fit the
-        // ~150M-param forward+backward + AdamW moments in the 120s gate. Genuine foundation-scale
-        // compute, not a correctness bug — deferred to the nightly heavy lane.
-        "TortoiseTTS",
+        // TortoiseTTS now uses all five native components at explicit smoke dimensions.
+        // Its generated invariants run in the default PR lane; released dimensions remain unchanged.
         // FastSpeech and FastSpeech2 were listed beside TortoiseTTS and never belonged: they are not
         // foundation-scale. Measured on net10.0 Release, each class runs its 34 invariants in under a
         // minute (42 s and 57 s) with the slowest single test at 11 s against the 120 s gate. The tag
@@ -7924,22 +7920,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      && typeName.StartsWith(
                          "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
             {
-                // SparkTTS keeps Qwen2.5's 1536-wide / 28-layer decoder over a 1x4096 codec head and OOM-killed the Q-S
-                // shard (System.OutOfMemoryException out of FusedLinearBackwardCore with the test host at ~10 GB
-                // resident), taking the rest of its own class down with it. Exercise the same embedding -> text encoder ->
-                // codec-LM -> token-head topology at smoke scale; dropout stays disabled so the deterministic-speaker
-                // assertion remains meaningful. It is on the IsCodecLMTokenModel list, so the fixture feeds the discrete
-                // token IDs its EmbeddingLayer-first stack declares.
-                string codecBasedOptionsType = "AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions";
+                // Every Qwen/XLSR/BiCodec component executes at bounded dimensions.
+                // Grammar-constrained sampling is explicit; original sampling has separate references.
                 pinInitSeed = true;
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    $"new {codecBasedOptionsType} {{ NumCodebooks = 1, " +
-                    "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
-                    "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
-                    "DropoutRate = 0.0 })";
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.SparkNativeFixture.Create<double>()";
             }
             else if (model.ClassName == "MARS5TTS" && model.TypeParameterCount == 1)
             {
@@ -10247,9 +10231,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 4, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions { TextEncoderDim = 32, LLMDim = 32, VocabSize = 64, " +
+                    "new AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions { TextEncoderDim = 32, LLMDim = 32, VocabSize = 256, " +
                     "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 1, " +
-                    "CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 16, DropoutRate = 0.0 })";
+                    "CodebookSize = 16, MaxTextLength = 128, MaxCodecFrames = 16, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "ShowO" && model.TypeParameterCount == 1)
             {
@@ -10955,10 +10939,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 4, outputSize: 16), " +
                     "new AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options { LLMDim = 32, NumLLMLayers = 1, NumHeads = 2, " +
-                    "KeyValueHeads = 2, LmFeedForwardDim = 64, NumCodebooks = 1, CodebookSize = 16, MelChannels = 16, " +
+                    "KeyValueHeads = 2, LmFeedForwardDim = 64, NumCodebooks = 1, CodebookSize = 6561, ReservedSpeechTokens = 4, MelChannels = 16, " +
                     "SpeakerEmbeddingDim = 16, HiftBaseChannels = 32, DiTInputDim = 16, PreLookaheadChannels = 32, " +
                     "DiTDim = 32, DiTDepth = 1, DiTHeads = 2, DiTHeadDim = 16, DiTFeedForwardMultiplier = 2, " +
-                    "MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0 })";
+                    "MaxTextLength = 128, MaxCodecFrames = 8, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "Chatterbox" && model.TypeParameterCount == 1)
             {
@@ -11002,20 +10986,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      && typeName.StartsWith(
                          "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
             {
-                // PR #1789's Generated T-Z run proved that float alone is
-                // insufficient for UniAudio's paper-scale 1024-wide, 12-layer
-                // codec LM: one generated training probe took 71 seconds and
-                // diverged while repeatedly driving runner memory below 300 MB.
-                // Exercise the same text-encoder -> codec-LM -> codebook-head
-                // structure at smoke scale through the public options object.
+                // Three RVQ codes per patch feed both actual Transformer scales.
+                // Keep the universal codec and public generation controller active.
                 pinInitSeed = true;
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.UniAudioOptions { TextEncoderDim = 32, " +
-                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, " +
-                    "NumCodebooks = 2, CodebookSize = 16, DropoutRate = 0.0 })";
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.UniAudioNativeFixture.Create<double>()";
             }
             else if (model.ClassName == "Moshi" && model.TypeParameterCount == 1
                      && typeName.StartsWith(
@@ -11107,29 +11081,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "VoiceCraft" && model.TypeParameterCount == 1 && typeName.Contains("CodecBased"))
             {
-                // VoiceCraft (Peng et al., 2024 — arXiv:2403.16973) codec-based LLM-TTS defaults to a
-                // foundation-scale codec-LM: TextEncoderDim 512, LLMDim 1024, 12 LLM layers, 8 heads, and
-                // an 8×1024 codebook (NumCodebooks*CodebookSize = 8192-wide output projection). Its training
-                // OOM-crashes the 16 GB runner at <double>, and — like its siblings FishSpeech/Qwen2Audio —
-                // float alone is insufficient at that width. Build the SAME architecture (text encoder ->
-                // semantic LLM -> codec heads) at CI-smoke width/depth via a small VoiceCraftOptions; only
-                // the scale shrinks (InitializeLayers reads these dims). Floatified to <float> by the
-                // generator since VoiceCraft is in Fp32TestClassNames. (Gated on CodecBased so it targets
-                // the failing TextToSpeech.CodecBased.VoiceCraft, not the Audio.Generation namesake.)
+                // Four delayed codebooks, the causal editor and real EnCodec all remain active.
                 pinInitSeed = true;
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions { TextEncoderDim = 32, " +
-                    "LLMDim = 32, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 2, CodebookSize = 16 })";
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.VoiceCraftNativeFixture.Create<double>()";
             }
-            else if (model.ClassName == "OpenVoiceV2" && model.TypeParameterCount == 1)
+            else if (model.ClassName is "OpenVoice" or "OpenVoiceV2" && model.TypeParameterCount == 1)
             {
-                // Predict consumes a recording. Training additionally owns an independent
-                // paired IPA transcript; both converter and native MeloTTS base remain real.
+                // Conversion reads recordings; its training transcript is independent IPA.
                 pinInitSeed = true;
-                constructorExpr = "AiDotNet.Tests.TextToSpeech.OpenVoiceNativeFixture.VersionTwo<double>()";
+                constructorExpr = model.ClassName == "OpenVoice"
+                    ? "AiDotNet.Tests.TextToSpeech.OpenVoiceNativeFixture.VersionOne<double>()"
+                    : "AiDotNet.Tests.TextToSpeech.OpenVoiceNativeFixture.VersionTwo<double>()";
             }
             else if (model.ClassName == "ViTCoMer" && model.TypeParameterCount == 1)
             {
@@ -11323,6 +11285,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "new AiDotNet.TextToSpeech.Vocoders.MelGANOptions { Ngf = 4, DiscriminatorWidthDivisor = 16 }" +
                     // The paper's Adam (0.5, 0.9) at 1e-4; the probes measure learning at a constant Adam rate of 1e-3.
                     ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
+            }
+            else if (model.ClassName == "TortoiseTTS" && model.TypeParameterCount == 1)
+            {
+                // FP32 alone timed out in public synthesis. Keep all five components,
+                // candidate ranking and classifier-free diffusion at bounded test dimensions.
+                pinInitSeed = true;
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.TortoiseNativeFixture.Create<double>()";
             }
             else if (model.ClassName == "Kokoro" && model.TypeParameterCount == 1)
             {
@@ -15758,8 +15727,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // Predict takes phone IDs; the two continuous flows and vocoder produce audio.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 640 };");
+                string scalarType = useFloat ? "float" : "double";
+                sb.AppendLine($"    protected override int WaveformSupervisionFrameCount(AiDotNet.TextToSpeech.TtsModelBase<{scalarType}> network, AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> recording)");
+                sb.AppendLine("        => 1 + recording.Length / network.HopSize;");
             }
-            else if (model.ClassName == "OpenVoiceV2")
+            else if (model.ClassName is "OpenVoice" or "OpenVoiceV2")
             {
                 // Conversion reads mono audio; its paired training transcript is IPA IDs.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 1024 };");
@@ -15775,11 +15747,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("        return base.SyntheticSupervision(ids, target, network);");
                 sb.AppendLine("    }");
             }
-            else if (model.ClassName is "MetaVoice1B" or "Kokoro")
+            else if (model.ClassName is "MetaVoice1B" or "Kokoro" or "DiTToTTS" or "TortoiseTTS" or "UniAudio" or "VoiceCraft")
             {
-                // Public Predict consumes offset byte-BPE IDs and renders a mono waveform.
-                // The native fixture loads both actors, the speaker encoder, eight-codebook
-                // EnCodec and all four diffusion bands; no neural forward is substituted.
+                // Public predictors consume text IDs and render mono audio.
+                // Their internal conditioning widths are not public input channels.
                 sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
                 sb.AppendLine("    protected override int[] OutputShape => new[] { 640 };");
             }

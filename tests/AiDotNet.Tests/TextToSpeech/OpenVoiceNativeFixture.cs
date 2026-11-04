@@ -8,6 +8,22 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// <summary>Native V2 converter, complete training graph and separate native MeloTTS base voice.</summary>
 internal static class OpenVoiceNativeFixture
 {
+    internal static OpenVoice<T> VersionOne<T>()
+    {
+        var architecture = new NeuralNetworkArchitecture<T>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Generative, inputSize: 1024, outputSize: 1024) { RandomSeed = 2294 };
+        return new OpenVoice<T>(architecture, new OpenVoiceOptions
+        {
+            HiddenDim = 4, InterChannels = 4, SpeakerEmbeddingDim = 3, FftSize = 512,
+            Training = new OpenVoiceTrainingOptions
+            {
+                IncludeTrainingComponents = true, IpaVocabularySize = 17, IpaFilterChannels = 8,
+                IpaHeads = 1, IpaLayers = 1, IpaDropout = 0, SegmentFrames = 4,
+                MelChannels = 4, DiscriminatorWidthDivisor = 64
+            }
+        });
+    }
+
     internal static OpenVoiceV2<T> VersionTwo<T>()
     {
         var architecture = new NeuralNetworkArchitecture<T>(InputType.OneDimensional,

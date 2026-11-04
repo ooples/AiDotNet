@@ -89,7 +89,7 @@ public class SparkTTSPaperTests
         Assert.False(beforeLast.SequenceEqual(last.GetParameters().ToArray()));
     }
 
-    private static SparkTTSOptions SmallOptions(
+    internal static SparkTTSOptions SmallOptions(
         SparkTTSTrainingComponent component = SparkTTSTrainingComponent.LanguageModel) => new()
         {
             SampleRate = 1600,
@@ -194,6 +194,10 @@ public class SparkTTSPaperTests
     {
         var model = Create();
         var metadata = model.GetModelMetadata();
+        var domain = model.GetInputDomain(new[] { 4 });
+        Assert.True(domain.IsIndices);
+        Assert.Equal(0, domain.MinInclusive);
+        Assert.Equal(128, domain.MaxExclusive);
 
         Assert.True(model.HasPaperPipeline);
         Assert.Equal("Qwen2.5-0.5B -> BiCodec(Vocos+FVQ, ECAPA+Perceiver+FSQ, WaveGenerator)",

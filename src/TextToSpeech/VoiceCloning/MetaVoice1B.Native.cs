@@ -96,7 +96,7 @@ public partial class MetaVoice1B<T>
             new Vector<T>(values.Select(x => NumOps.FromDouble(x))))), new[] { SpeakerEmbeddingDim });
     }
 
-    private double Uniform() => SamplingUniformForAudit?.Invoke() ?? _random.NextDouble();
+    private double Uniform(Random random) => SamplingUniformForAudit?.Invoke() ?? random.NextDouble();
 
     private Tensor<T> SynthesizeNative(string text, Tensor<T>? speaker)
     {
@@ -106,11 +106,12 @@ public partial class MetaVoice1B<T>
         if (!_options.RawDecoderOutput && _options.EnhanceOutput && _enhancer is null)
             throw new InvalidOperationException("Load the original DeepFilterNet3 checkpoint before released-output synthesis, or explicitly select raw decoder output.");
         using var noGrad = new NoGradScope<T>(); SetTrainingMode(false);
+        var random = _options.SynthesisSeed is { } seed ? new Random(seed) : _random;
         text = MetaVoiceText.Normalize(text);
         if (speaker is not null) speaker = Engine.Reshape(speaker, new[] { 1, SpeakerEmbeddingDim });
         var firstTokens = MetaVoiceGeneration.FirstStage(_firstTokenizer.Encode(text), _options.MaximumNewTokens,
             _options.FirstStageContext, (prefix, conditioned) => _first.Forward(new[] { prefix }, conditioned ? speaker : null,
-                lastOnly: true).Logits[0].ToArray().Select(x => NumOps.ToDouble(x)).ToArray(), _ => Uniform(), speaker is not null,
+                lastOnly: true).Logits[0].ToArray().Select(x => NumOps.ToDouble(x)).ToArray(), _ => Uniform(random), speaker is not null,
             _options.FirstStageTemperature, _options.FirstStageTopK, _options.FirstStageTopP,
             speaker is null ? null : (_options.SpeakerGuidance, _options.PromptGuidance));
         var firstAudio = MetaVoiceTokenAdapters.Decode(new[] { firstTokens }, true).Audio;
@@ -119,14 +120,14 @@ public partial class MetaVoice1B<T>
         var logits = _second.Forward(input, speaker).Logits;
         var arrays = logits.Select(x => x.ToArray().Select(value => NumOps.ToDouble(value)).ToArray()).ToArray();
         var predicted = MetaVoiceGeneration.NonCausal(6, _options.SecondStageContext,
-            (head, frame) => arrays[head].Skip(frame * 1025).Take(1025).ToArray(), (_, _) => Uniform(),
+            (head, frame) => arrays[head].Skip(frame * 1025).Take(1025).ToArray(), (_, _) => Uniform(random),
             _options.SecondStageTemperature, _options.SecondStageTopK);
         var audio = MetaVoiceTokenAdapters.Decode(input.Concat(predicted).ToArray(), false).Audio;
         if (audio[0].Length == 0) throw new InvalidOperationException("MetaVoice generated no complete eight-codebook frames.");
         var codes = new int[8, audio[0].Length];
         for (int q = 0; q < 8; q++) for (int t = 0; t < audio[0].Length; t++) codes[q, t] = audio[q][t];
         Tensor<T> Gaussian(int[] shape) => DiffusionGaussianForAudit?.Invoke(shape)
-            ?? new Tensor<T>(shape, TorchParameters.Gaussian<T>(_random, shape.Aggregate(1, (a, b) => a * b), 1));
+            ?? new Tensor<T>(shape, TorchParameters.Gaussian<T>(random, shape.Aggregate(1, (a, b) => a * b), 1));
         var waveform = DecoderForAudit is { } audit ? audit(codes) : _decoder!.Decode(codes,
             (_, shape) => Gaussian(shape), (_, _, shape) => Gaussian(shape));
         waveform = Engine.Reshape(waveform, new[] { waveform.Length });

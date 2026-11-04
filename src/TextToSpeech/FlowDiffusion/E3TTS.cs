@@ -99,6 +99,10 @@ public partial class E3TTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     internal E3WaveformUnet<T>? WaveformUnet { get; private set; }
     internal bool HasPaperModel => TextEncoder is not null && WaveformUnet is not null;
 
+    /// <inheritdoc />
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) => HasPaperModel
+        ? LayerInputDomain.Indices(_options.BertVocabularySize) : base.GetInputDomain(inputShape);
+
     int ITtsModel<T>.SampleRate => _options.SampleRate;
     public int MaxTextLength => Math.Min(_options.MaxTextLength, _options.BertMaxPositions);
     public new int HiddenDim => _options.HiddenDim;

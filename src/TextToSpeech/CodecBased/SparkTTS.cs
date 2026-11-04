@@ -5,6 +5,7 @@ using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -101,6 +102,10 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     /// <summary>Whether this instance owns the official Qwen/BiCodec component graph.</summary>
     public bool HasPaperPipeline => _languageModel is not null && _biCodec is not null;
+
+    /// <inheritdoc />
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) => HasPaperPipeline
+        ? LayerInputDomain.Indices(_options.VocabSize) : base.GetInputDomain(inputShape);
 
     /// <summary>Synthesizes with a configured voice prompt, or with the paper's neutral controllable-speaker path.</summary>
     public override Tensor<T> Synthesize(string text)

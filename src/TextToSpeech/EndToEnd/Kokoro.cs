@@ -211,6 +211,13 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => PredictCore(input);
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer() =>
+        _optimizer ?? base.GetOrCreateBaseOptimizer();
+
+    /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>

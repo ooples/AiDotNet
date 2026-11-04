@@ -87,6 +87,10 @@ public class VoiceCraftPaperTests
     public void CheckpointPhoneVocabularyPreservesIdsAndCopiesTheMapping()
     {
         using var model = new VoiceCraft<double>(Architecture(), SmallOptions());
+        var domain = model.GetInputDomain(new[] { 4 });
+        Assert.True(domain.IsIndices);
+        Assert.Equal(0, domain.MinInclusive);
+        Assert.Equal(100, domain.MaxExclusive);
         var vocabulary = VoiceCraftPhoneTokenizer.Vocabulary.ToDictionary(kv => kv.Key, kv => 79 - kv.Value);
         int[] expected = VoiceCraftPhoneTokenizer.Tokenize("hello", 32, phonemizer: RecordedPhones).Select(id => 79 - id).ToArray();
         model.SetPhoneVocabulary(vocabulary);
@@ -97,7 +101,7 @@ public class VoiceCraftPaperTests
         Assert.Throws<ArgumentException>(() => model.SetPhoneVocabulary(new Dictionary<string, int> { ["a"] = 1, ["b"] = 1 }));
     }
 
-    private static VoiceCraftOptions SmallOptions()
+    internal static VoiceCraftOptions SmallOptions()
     {
         var options = new VoiceCraftOptions
         {

@@ -35,7 +35,8 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
     {
         var network = CreateTtsNetwork();
         if (network is AiDotNet.TextToSpeech.TtsModelBase<T> tts
-            && tts.SynthesisVoiceRequirement != AiDotNet.TextToSpeech.TtsSupervision.None)
+            && tts.SynthesisVoiceRequirement != AiDotNet.TextToSpeech.TtsSupervision.None
+            && tts.Voice is null)
         {
             int melChannels = tts.MelChannels;
             int referenceFrames = VoiceReferenceFrames;
@@ -132,6 +133,10 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         return longer;
     }
 
+    /// <summary>Aligned acoustic/codec frames represented by a waveform target.</summary>
+    protected virtual int WaveformSupervisionFrameCount(AiDotNet.TextToSpeech.TtsModelBase<T> network, Tensor<T> recording)
+        => Math.Max(1, recording.Length / Math.Max(1, network.HopSize));
+
     protected virtual AiDotNet.TextToSpeech.TtsTrainingSample<T> SyntheticSupervision(Tensor<T> tokens, Tensor<T> target,
         AiDotNet.TextToSpeech.TtsModelBase<T>? network = null)
     {
@@ -139,13 +144,13 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         int channels = target.Rank >= 2 ? target.Shape[target.Rank - 1] : 1;
         var mel = new Tensor<T>(new[] { frames, channels }, target.ToVector());
         int tokenCount = tokens.Length;
+        var recording = network is not null && target.Rank == 1
+            ? AtLeastOneHopPerToken(target, tokenCount, network.HopSize) : null;
 
         // A model that reads codec tokens and durations of a waveform target (NaturalSpeech 2) counts its durations and
         // pitch in codec frames, one per hop, not in samples.
-        int alignedFrames = network is not null && target.Rank == 1
-            && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.CodecTokens) != 0
-            && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.Durations) != 0
-            ? Math.Max(1, target.Length / Math.Max(1, network.HopSize)) : frames;
+        int alignedFrames = recording is not null && network is not null
+            ? WaveformSupervisionFrameCount(network, recording) : frames;
         var durations = new int[tokenCount];
         for (int i = 0; i < tokenCount; i++) durations[i] = alignedFrames / tokenCount + (i < alignedFrames % tokenCount ? 1 : 0);
 
@@ -221,10 +226,11 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         return new AiDotNet.TextToSpeech.TtsTrainingSample<T>
         {
             Tokens = tokens.Rank == 1 ? tokens : new Tensor<T>(new[] { tokenCount }, tokens.ToVector()),
-            Mel = mel,
+            // A waveform is not a one-channel mel. Let each model derive its own
+            // paper frontend from Audio when the target is a recording.
+            Mel = target.Rank == 1 ? null : mel,
             // A model that reconstructs the recording (StyleTTS 2) and outputs a waveform trains on the target itself.
-            Audio = network is not null && target.Rank == 1 && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.Recording) != 0
-                ? AtLeastOneHopPerToken(target, tokenCount, network.HopSize) : null,
+            Audio = recording,
             Durations = durations,
             Pitch = pitch,
             Energy = energy,

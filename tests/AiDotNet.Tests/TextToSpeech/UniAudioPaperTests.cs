@@ -13,6 +13,16 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// <summary>Regression tests for UniAudio's universal codec and global/local multi-scale Transformer.</summary>
 public class UniAudioPaperTests
 {
+    [Fact]
+    public void PublicInputDomain_DescribesPhoneIdsRatherThanCodecAudio()
+    {
+        using var model = Create();
+        var domain = model.GetInputDomain(new[] { 4 });
+        Assert.True(domain.IsIndices);
+        Assert.Equal(0, domain.MinInclusive);
+        Assert.Equal(80, domain.MaxExclusive);
+    }
+
     private static UniAudioOptions SmallOptions() => new()
     {
         SampleRate = 320,

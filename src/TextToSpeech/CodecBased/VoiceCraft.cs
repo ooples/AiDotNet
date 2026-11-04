@@ -5,6 +5,7 @@ using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
@@ -115,6 +116,10 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
     public override bool TrainsOnSampleObjective => true;
 
     public bool HasPaperPipeline => _codec is not null && _network is not null;
+
+    /// <inheritdoc />
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) => HasPaperPipeline
+        ? LayerInputDomain.Indices(_options.TextVocabularySize) : base.GetInputDomain(inputShape);
     public int TransformerLayerCount => _network?.LayerCount ?? 0;
     public int PhoneVocabularySize => _phoneVocabulary?.Count ?? VoiceCraftPhoneTokenizer.Count;
 

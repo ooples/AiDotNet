@@ -108,6 +108,16 @@ public class TortoiseTTSPaperTests
         Assert.Equal(0, clvp.ContrastiveBatchLoss(texts.Take(1).ToArray(), speech.Take(1).ToArray(), new Random(1), training: false)[0]);
     }
 
+    [Fact]
+    public void PublicInputDomain_DescribesTextVocabularyRatherThanSpeechTokenizer()
+    {
+        using var model = Create();
+        var domain = model.GetInputDomain(new[] { 4 });
+        Assert.True(domain.IsIndices);
+        Assert.Equal(0, domain.MinInclusive);
+        Assert.Equal(256, domain.MaxExclusive);
+    }
+
     private static TortoiseTTSOptions SmallOptions(
         TortoiseTrainingComponent component = TortoiseTrainingComponent.Autoregressive) => new()
         {
