@@ -326,6 +326,43 @@ public class AdamWCompressedMomentsTests
         }
     }
 
+    /// <summary>
+    /// DisposeGpuState is a cleanup: when the compressed moments cannot be read back (the active engine is no longer
+    /// the GPU engine) it still frees their device buffers and resets the dense state, then reports the failure. The
+    /// read-back used to throw first, leaking every device buffer and leaving the optimizer marked initialized.
+    /// </summary>
+    [SkippableFact]
+    public void DisposeGpuState_FreesTheDeviceState_WhenTheReadBackFails()
+    {
+        DirectGpuTensorEngine? gpu = null;
+        try { gpu = new DirectGpuTensorEngine(); }
+        catch (Exception ex) when (ex is PlatformNotSupportedException or DllNotFoundException or InvalidOperationException) { }
+        Skip.If(gpu is null || !gpu.IsGpuAvailable, "GPU engine unavailable.");
+        var saved = AiDotNetEngine.Current;
+        try
+        {
+            AiDotNetEngine.Current = gpu!;
+            var optimizer = Optimizer(OptimizerMomentStorage.Int8Blockwise);
+            var param = gpu!.TensorMultiplyScalar(new Tensor<float>(new[] { Length }, new Vector<float>(Rand(Length, 1))), 1f);
+            Step(optimizer, param, gpu.TensorMultiplyScalar(Grad(1), 1f));
+            Skip.If(DeviceSlotCount(optimizer) == 0, "The backend kept the compressed moments on the host.");
+
+            AiDotNetEngine.Current = new CpuEngine();
+            Assert.Throws<InvalidOperationException>(() => optimizer.DisposeGpuState());
+            Assert.Equal(0, DeviceSlotCount(optimizer));
+            // Declared protected on GradientBasedOptimizerBase, so reachable through the derived type.
+            var initialized = typeof(AdamWOptimizer<float, Matrix<float>, Vector<float>>)
+                .GetField("_gpuStateInitialized", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                ?.GetValue(optimizer);
+            Assert.Equal(false, initialized);
+        }
+        finally
+        {
+            AiDotNetEngine.Current = saved;
+            gpu?.Dispose();
+        }
+    }
+
     /// <summary>The compiled (fused) plan gets the same storage request, and AMSGrad declines as the eager step refuses.</summary>
     [Theory]
     [InlineData(OptimizerMomentStorage.Int8Blockwise)]

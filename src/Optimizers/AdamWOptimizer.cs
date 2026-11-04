@@ -1152,14 +1152,42 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// Disposes GPU-allocated optimizer state.
     /// </summary>
+    /// <remarks>
+    /// Compressed moments are read back to the host first. A slot whose read-back fails (the active engine is no
+    /// longer the GPU engine, or the download throws) still has its device buffers freed, every other slot is still
+    /// read back, and the dense device moments are still disposed; the failures are rethrown afterwards, because the
+    /// failed slots' moments are lost and the caller must not continue as if they were kept.
+    /// </remarks>
     public override void DisposeGpuState()
     {
-        foreach (var slot in _compressedSlots.Values) slot.MoveToHost();
-        _gpuM?.Dispose();
-        _gpuM = null;
-        _gpuV?.Dispose();
-        _gpuV = null;
-        _gpuStateInitialized = false;
+        List<Exception>? failures = null;
+        try
+        {
+            foreach (var slot in _compressedSlots.Values)
+            {
+                try
+                {
+                    slot.MoveToHost();
+                }
+                catch (Exception ex)
+                {
+                    slot.FreeDevice();
+                    (failures ??= new List<Exception>()).Add(ex);
+                }
+            }
+        }
+        finally
+        {
+            _gpuM?.Dispose();
+            _gpuM = null;
+            _gpuV?.Dispose();
+            _gpuV = null;
+            _gpuStateInitialized = false;
+        }
+        if (failures is { Count: 1 })
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        if (failures is not null)
+            throw new AggregateException("AdamW could not read its compressed moments back from the GPU.", failures);
     }
 
     #endregion
