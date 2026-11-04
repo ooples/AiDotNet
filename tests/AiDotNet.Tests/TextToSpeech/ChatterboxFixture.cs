@@ -85,6 +85,17 @@ internal static class ChatterboxFixture
         new(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Generative,
             inputSize: 1, outputSize: 1) { RandomSeed = 7 }, Options());
 
+    /// <summary>Generates beyond the release's 20 ms zero prefix and 20 ms fade-in.</summary>
+    internal static Chatterbox<T> CreateForInvariants<T>()
+    {
+        var options = Options();
+        options.MaxTextLength = 128;
+        options.MaxSpeechTokens = 256;
+        options.MaxGeneratedSpeechTokens = 64;
+        return new Chatterbox<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Generative, inputSize: 8, outputSize: 1024) { RandomSeed = 7 }, options);
+    }
+
     internal static Tensor<T> Recording<T>(int seconds = 1)
     {
         var ops = MathHelper.GetNumericOperations<T>();

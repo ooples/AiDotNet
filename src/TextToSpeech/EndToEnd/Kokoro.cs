@@ -207,6 +207,7 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
         if (_native is null) throw new InvalidOperationException("Native Kokoro is required.");
         var ids = input.ToArray().Select(value => checked((int)NumOps.ToDouble(value))).ToArray();
+        _native.SynthesisSeed = _options.SynthesisSeed;
         return _native.Forward(ids, SelectVoiceStyle(Math.Max(1, ids.Length - 2)), _options.Speed).Audio;
     }
 

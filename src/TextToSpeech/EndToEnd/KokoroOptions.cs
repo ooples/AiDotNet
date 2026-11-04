@@ -17,6 +17,7 @@ public class KokoroOptions : EndToEndTtsOptions
 
         StyleDim = other.StyleDim;
         Speed = other.Speed;
+        SynthesisSeed = other.SynthesisSeed;
         UseNativeEnglishFallback = other.UseNativeEnglishFallback;
     }
 
@@ -36,6 +37,9 @@ public class KokoroOptions : EndToEndTtsOptions
 
     /// <summary>Duration scaling used by the released model: sum(sigmoid(duration logits)) / speed.</summary>
     public double Speed { get; set; } = 1;
+
+    /// <summary>Optional per-call seed for reproducible native excitation; null keeps the advancing random stream.</summary>
+    public int? SynthesisSeed { get; set; }
     /// <summary>Explicitly opts into the repository's approximate English frontend. Faithful raw text processing uses the official Misaki frontend through TextPhonemizer.</summary>
     public bool UseNativeEnglishFallback { get; set; }
 }

@@ -89,6 +89,8 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/AlbertGradientReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VoiceboxPhoneFrontEndTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/KokoroSignalBuffersReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/KokoroNativeFixture.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/KokoroPublicPipelineTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceNativeFixture.cs" />
     <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/*.json" Link="TextToSpeech/ReferenceData/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/*.safetensors" Link="TextToSpeech/ReferenceData/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

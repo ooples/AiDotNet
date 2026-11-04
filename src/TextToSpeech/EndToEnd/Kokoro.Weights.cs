@@ -96,6 +96,7 @@ public partial class Kokoro<T>
         ThrowIfDisposed();
         if (_native is null) throw new InvalidOperationException("Native Kokoro is required.");
         using var scope = new NoGradScope<T>();
+        _native.SynthesisSeed = _options.SynthesisSeed;
         return _native.Forward(EncodePhonemes(phonemes), voiceStyle, speed).Audio;
     }
 

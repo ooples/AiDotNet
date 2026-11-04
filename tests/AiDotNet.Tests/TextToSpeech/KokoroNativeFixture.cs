@@ -13,7 +13,7 @@ internal static class KokoroNativeFixture
         var operations = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         var model = new Kokoro<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional,
             NeuralNetworkTaskType.Generative, inputSize: 4, outputSize: 1200) { RandomSeed = 2294 },
-            new KokoroOptions { UseNativeEnglishFallback = true, Speed = 20 });
+            new KokoroOptions { UseNativeEnglishFallback = true, Speed = 20, LearningRate = 1e-5, SynthesisSeed = 2294 });
         model.LoadAuthorConfiguration(Path.Combine(AppContext.BaseDirectory, "TextToSpeech", "ReferenceData", "kokoro_author_config.json"));
         model.Voice = new TtsVoice<T>
         {

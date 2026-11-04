@@ -20408,3 +20408,5 @@ AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SynthesisSeed.get -> int?
 AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SynthesisSeed.set -> void
 override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
 override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+AiDotNet.TextToSpeech.EndToEnd.KokoroOptions.SynthesisSeed.get -> int?
+AiDotNet.TextToSpeech.EndToEnd.KokoroOptions.SynthesisSeed.set -> void

@@ -1152,6 +1152,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // Measure the same fixed example in evaluation mode at both endpoints; the strict
             // decrease assertion and iteration count remain unchanged.
             { "VMamba", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
+            // DiTTo samples a fresh timestep and Gaussian noise during each update.
+            // Compare its seeded evaluation objective at both endpoints, retaining 100 steps and 1%.
+            { "DiTToTTS", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
+            // Kokoro retains its complete 82M graph: the three-step preflight takes 48s.
+            // Bound repeated updates and compare deterministic eval loss; retain the 1% assertion.
+            { "Kokoro", new WarmupIterationOverride(memorization: 8, training: 3,
+                moreDataShort: 2, moreDataLong: 5, deterministicMemorizationLoss: true) },
 
             // wav2vec 2.0 pre-training draws a new time mask, new distractors and new Gumbel noise at every step, and
             // its paper schedule warms the rate up from zero, so the fixed-mask probe of its contrastive objective can
@@ -7354,7 +7361,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "BlockKernelSizes = new[] { 5, 5, 5, 5, 5, 3, 3, 3, 3, 3 }, BlockStrides = new[] { 2, 2, 2, 2, 4, 4, 2, 2, 2, 2 }, " +
                     "AdaptiveKernelCounts = new[] { 8, 8, 4, 4, 2, 0, 0, 0, 0, 0 }, AttentionHeads = new[] { 0, 0, 0, 0, 0, 2, 2, 2, 2, 2 }, " +
                     "GroupNormGroups = 4, TimeEmbeddingDim = 8, ConditionDim = 16, TrainingWaveformSamples = 4096, " +
-                    "InferenceWaveformSamples = 4096, NumDiffusionSteps = 1, SilenceBlockSize = 128, SamplingSeed = 3 })";
+                    "InferenceWaveformSamples = 4096, NumDiffusionSteps = 1, MinimumAlphaBar = 0.01, SilenceBlockSize = 128, SamplingSeed = 3 })";
             }
             else if (model.ClassName == "DLinearModel" && model.TypeParameterCount == 1)
             {
@@ -7977,7 +7984,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "DurationAttentionDropout = 0, DurationActivationDropout = 0, DurationConvPositionWidth = 3, " +
                     "DurationConvPositionGroups = 4, DurationConvPositionDepth = 1, OdeSteps = 1, " +
                     "MaximumAudioFrames = 64, MaximumPhoneDuration = 4, MaxTextLength = 64, " +
-                    "VocoderInitialChannels = 16, VocoderResBlockKernels = new[] { 3 }, " +
+                    "VocoderInitialChannels = 64, VocoderResBlockKernels = new[] { 3 }, " +
                     "VocoderResBlockDilations = new[] { new[] { 1 } }, LearningRate = 1e-3 })";
             }
             else if (model.ClassName == "ALIGN" && model.TypeParameterCount == 1)
@@ -10942,14 +10949,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "KeyValueHeads = 2, LmFeedForwardDim = 64, NumCodebooks = 1, CodebookSize = 6561, ReservedSpeechTokens = 4, MelChannels = 16, " +
                     "SpeakerEmbeddingDim = 16, HiftBaseChannels = 32, DiTInputDim = 16, PreLookaheadChannels = 32, " +
                     "DiTDim = 32, DiTDepth = 1, DiTHeads = 2, DiTHeadDim = 16, DiTFeedForwardMultiplier = 2, " +
-                    "MaxTextLength = 128, MaxCodecFrames = 8, DropoutRate = 0.0 })";
+                    "MaxTextLength = 128, MaxCodecFrames = 8, DropoutRate = 0.0 }, " +
+                    "optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
             }
             else if (model.ClassName == "Chatterbox" && model.TypeParameterCount == 1)
             {
                 // The release is a prompt-conditioned T3 decoder followed by S3Tokenizer-v2, causal flow and HiFT,
                 // not the generic embedding -> codec-logit placeholder this fixture used to describe. The shared
                 // fixture retains each released component at smoke scale and supplies an actual BPE tokenizer.
-                constructorExpr = "AiDotNet.Tests.TextToSpeech.ChatterboxFixture.Create<double>()";
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.ChatterboxFixture.CreateForInvariants<double>()";
             }
             else if (model.ClassName == "FireRedTTS" && model.TypeParameterCount == 1)
             {
@@ -15778,6 +15786,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 sb.AppendLine("        for (int i = 0; i < ids.Length; i++) ids[i] = operations.FromDouble(i + 2);");
                 sb.AppendLine("        return base.SyntheticSupervision(ids, target, network);");
                 sb.AppendLine("    }");
+            }
+            else if (model.ClassName == "Chatterbox")
+            {
+                // Use the shared contract-aware perturbation, not the legacy modulo-64 override.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1024 };");
             }
             else if (model.ClassName is "MetaVoice1B" or "Kokoro" or "DiTToTTS" or "TortoiseTTS" or "UniAudio" or "VoiceCraft")
             {

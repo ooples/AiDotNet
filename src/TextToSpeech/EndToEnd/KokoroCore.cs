@@ -20,6 +20,7 @@ internal sealed class KokoroCore<T>
     private readonly List<LayerBase<T>> _layers = new();
     private readonly Random _random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(2294);
     public IReadOnlyList<LayerBase<T>> Layers => _layers;
+    internal int? SynthesisSeed { get; set; }
 
     internal KokoroCore(IEngine engine, bool originalFloat32Buffers = true)
     {
@@ -62,14 +63,15 @@ internal sealed class KokoroCore<T>
         if (referenceStyle.Length != 256) throw new ArgumentException("Kokoro requires its 256-value voice style.", nameof(referenceStyle));
         if (double.IsNaN(speed) || double.IsInfinity(speed) || speed <= 0) throw new ArgumentOutOfRangeException(nameof(speed));
         int length = tokens.Count;
+        var random = SynthesisSeed is { } seed ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed) : _random;
         var style = _engine.Reshape(referenceStyle, new[] { 1, 256 });
         var acoustic = _engine.TensorSlice(style, new[] { 0, 0 }, new[] { 1, 128 });
         var prosodic = _engine.TensorSlice(style, new[] { 0, 128 }, new[] { 1, 128 });
-        var bert = _bert.Encode(tokens, false, _random);
+        var bert = _bert.Encode(tokens, false, random);
         var projected = _bertProjection.Forward(bert);
         var encoded = _prosody.EncodeText(_engine.Reshape(_engine.TensorTranspose(projected),
-            new[] { 1, 512, length }), prosodic, false, _random);
-        var logits = _prosody.Durations(encoded, false, _random);
+            new[] { 1, 512, length }), prosodic, false, random);
+        var logits = _prosody.Durations(encoded, false, random);
         var probabilities = _engine.Sigmoid(logits);
         var operations = MathHelper.GetNumericOperations<T>();
         var durations = new int[length];
@@ -86,13 +88,13 @@ internal sealed class KokoroCore<T>
             for (int i = 0; i < durations[token]; i++) alignment[token, frame++] = operations.One;
         var aligned = _engine.Reshape(_engine.TensorMatMul(_engine.TensorTranspose(encoded), alignment),
             new[] { 1, 640, frames });
-        var (pitch, energy) = _prosody.Prosody(aligned, prosodic, false, _random);
+        var (pitch, energy) = _prosody.Prosody(aligned, prosodic, false, random);
         var ids = new Tensor<T>(new[] { length });
         for (int i = 0; i < length; i++) ids[i] = operations.FromDouble(tokens[i]);
-        var text = _text.Forward(ids, false, _random);
+        var text = _text.Forward(ids, false, random);
         var asr = _engine.Reshape(_engine.TensorMatMul(_engine.Reshape(text, new[] { 512, length }), alignment),
             new[] { 1, 512, frames });
-        var audio = _decoder.Forward(asr, pitch, energy, acoustic, false, _random);
+        var audio = _decoder.Forward(asr, pitch, energy, acoustic, false, random);
         return (audio, durations, bert, projected, logits, pitch, energy, text);
     }
 
