@@ -227,7 +227,8 @@ public static class LayerFactoryRegistry<T>
             {
                 if (target.IsInstanceOfType(raw) || type.IsInstanceOfType(raw))
                 {
-                    value = raw;
+                    // Constructor-owned objects must be independent, just as in generated factories.
+                    value = state.CloneObject<object>(key);
                     return true;
                 }
                 if (raw is string json && !type.IsValueType && type != typeof(string))

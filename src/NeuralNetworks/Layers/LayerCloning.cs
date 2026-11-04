@@ -628,7 +628,8 @@ public static class LayerCloning
             // were not saved: a layer that reconstructs today takes the identical path it took
             // before, so this can add successes but cannot change an existing one. The shapes are
             // copied so a factory cannot mutate the source layer's own arrays.
-            var withShapes = new Dictionary<string, object>(values, StringComparer.OrdinalIgnoreCase);
+            var withShapes = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in values) withShapes[pair.Key] = pair.Value;
             if (!withShapes.ContainsKey("inputShape")) withShapes["inputShape"] = (int[])source.GetInputShape().Clone();
             if (!withShapes.ContainsKey("outputShape")) withShapes["outputShape"] = (int[])source.GetOutputShape().Clone();
             HarvestConstructorMembers(source, type, withShapes);
