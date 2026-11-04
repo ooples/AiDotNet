@@ -309,14 +309,12 @@ internal static class ModelDefectBaselines
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
             "AiDotNet.Audio.Enhancement.DCCRN<T>._encoderOutputs",
-            "AiDotNet.Audio.TextToSpeech.Tacotron2Model<T>._lastPrePostnetMel",
             "AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<T>._preAllocatedNorm1Out",
             "AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<T>._preAllocatedNorm2Out",
             "AiDotNet.FederatedLearning.Vertical.SplitNeuralNetwork<T>._lastTopHidden",
             "AiDotNet.FederatedLearning.Vertical.SplitNeuralNetwork<T>._lastTopInput",
             "AiDotNet.Finance.Forecasting.Foundation.TFC<T>._revinMeanTensor",
             "AiDotNet.Finance.Forecasting.Foundation.TFC<T>._revinStdTensor",
-            "AiDotNet.Finance.Forecasting.Neural.DeepAR<T>._lastSigma",
             "AiDotNet.Finance.Forecasting.Neural.NBEATSFinance<T>._cachedBlockHiddenOutputs",
             "AiDotNet.Finance.Trading.Agents.RecurrentPolicyAgent<T>._c",
             "AiDotNet.Finance.Trading.Agents.RecurrentPolicyAgent<T>._h",
@@ -458,8 +456,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.NeuralNetworks.Layers.ReservoirLayer<T>._reservoirState",
             "AiDotNet.NeuralNetworks.Layers.ResidualDenseBlock<T>._activationOutputs",
             "AiDotNet.NeuralNetworks.Layers.ResidualDenseBlock<T>._convOutputs",
-            "AiDotNet.NeuralNetworks.Layers.SAM2HieraImageEncoderLayer<T>._lastStride4",
-            "AiDotNet.NeuralNetworks.Layers.SAM2HieraImageEncoderLayer<T>._lastStride8",
             "AiDotNet.NeuralNetworks.Layers.SSM.ABCLayer<T>._lastForgetGate",
             "AiDotNet.NeuralNetworks.Layers.SSM.ABCLayer<T>._lastInput",
             "AiDotNet.NeuralNetworks.Layers.SSM.ABCLayer<T>._lastKey",
