@@ -82,11 +82,6 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     [TrainableParameter(Role = PersistentTensorRole.NormalizationParams,
         Shape = "_numChannels", Condition = nameof(Affine))]
     private Tensor<T> _beta;
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastMean;
-    [Scratch]
-    private Tensor<T>? _lastVariance;
     [Scratch]
     private Tensor<T>? _gammaGradient;
     [Scratch]
@@ -249,8 +244,6 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         if (channels != _numChannels)
             throw new ArgumentException($"Input has {channels} channels but layer expects {_numChannels} channels.");
 
-        _lastInput = flattenedInput;
-
         // Instance Normalization is Group Normalization with numGroups = numChannels
         // This means each channel is normalized independently
         var output = Engine.GroupNorm(
@@ -259,11 +252,8 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
             _gamma,
             _beta,
             NumOps.ToDouble(_epsilon),
-            out var mean,
-            out var variance);
-
-        _lastMean = mean;
-        _lastVariance = variance;
+            out _,
+            out _);
 
         // Reshape output back to original shape
         return Engine.Reshape(output, _originalInputShape);
@@ -296,9 +286,6 @@ public partial class InstanceNormalizationLayer<T> : LayerBase<T>, IShapeContrac
 
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastMean = null;
-        _lastVariance = null;
         _gammaGradient = null;
         _betaGradient = null;
         _gpuMean?.Dispose();

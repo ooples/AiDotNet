@@ -53,7 +53,9 @@ public class DeepEMDOptions<T, TInput, TOutput> : ModelOptions, IMetaLearnerOpti
 
     #region Standard Meta-Learning Properties
 
-    /// <inheritdoc cref="IMetaLearnerOptions{T}.InnerLearningRate"/>
+    /// <summary>
+    /// Not used by DeepEMD: its adaptation takes no gradient steps (see <see cref="AdaptationSteps"/>). Default: 0.01.
+    /// </summary>
     public double InnerLearningRate { get; set; } = 0.01;
     /// <inheritdoc cref="IMetaLearnerOptions{T}.OuterLearningRate"/>
     public double OuterLearningRate { get; set; } = 0.001;

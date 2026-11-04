@@ -97,11 +97,16 @@ jobs:
           $invariant = 'FullyQualifiedName~.MoreData_ShouldNotDegrade&Category!=HeavyTimeout&Category!=GPU&Category!=ModelPerformanceCensus'
           $listed = @(dotnet test $project -c Release -f net10.0 --no-build --no-restore --filter $invariant --list-tests 2>&1)
           if ($LASTEXITCODE -ne 0) { $listed | Select-Object -Last 40; throw "test discovery exited $LASTEXITCODE" }
-          $classes = @($listed | ForEach-Object { $_ -replace '\r', '' } |
+          # The discovered test names, exactly as the TRX reports them. The filter is a substring match, so it also
+          # selects MoreData_ShouldNotDegrade_Accuracy (classification) and _ClusterQuality (clustering); deriving the
+          # expected names as "<class>.MoreData_ShouldNotDegrade" listed tests that never exist, and every one of them
+          # read "no result" in all three configurations (20-25 per partition, the lane's whole red verdict).
+          $tests = @($listed | ForEach-Object { $_ -replace '\r', '' } |
             Where-Object { $_ -match '^\s{4}\S+\.\S+' } |
-            ForEach-Object { ($_.Trim() -split '\(')[0] } |
-            ForEach-Object { $_.Substring(0, $_.LastIndexOf('.')) } |
+            ForEach-Object { $_.Trim() } |
             Sort-Object -Unique)
+          $classOf = { param($test) $method = ($test -split '\(')[0]; $method.Substring(0, $method.LastIndexOf('.')) }
+          $classes = @($tests | ForEach-Object { & $classOf $_ } | Sort-Object -Unique)
           if ($classes.Count -eq 0) { $listed | Select-Object -Last 40; throw 'no MoreData_ShouldNotDegrade tests were discovered' }
 
           # Stable partition by class name, independent of discovery order.
@@ -114,7 +119,8 @@ jobs:
           # What every configuration must report: the comparator checks coverage against this, so a
           # chunk that produced nothing cannot pass as agreement.
           New-Item -ItemType Directory -Force -Path artifacts/cross-isa | Out-Null
-          $mine | ForEach-Object { "$_.MoreData_ShouldNotDegrade" } | Set-Content -LiteralPath artifacts/expected-tests.txt -Encoding utf8
+          $mineSet = [Collections.Generic.HashSet[string]]::new([string[]] $mine, [StringComparer]::Ordinal)
+          $tests | Where-Object { $mineSet.Contains((& $classOf $_)) } | Set-Content -LiteralPath artifacts/expected-tests.txt -Encoding utf8
 
           $configurations = [ordered]@{
             'default'    = @{}

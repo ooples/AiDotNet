@@ -3272,7 +3272,30 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // produced by Train (DCCRN consumes a complex STFT, while its public Train input is a raw
         // waveform). The census measures the real override below; it must not independently feed
         // public fixture input into an internal-only tape surface.
-        return trainMethod?.DeclaringType == typeof(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>);
+        if (trainMethod?.DeclaringType != typeof(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>))
+            return false;
+
+        // Since the base class took ownership of Train (#2295), a model owns its objective by overriding the hooks Train
+        // dispatches to instead: DefineTrainingObjectives (GOT-OCR2) or TryApplyLearningRule (WGAN-GP's critic/generator
+        // alternation, CLAP's contrastive pair, OpenSora's latent diffusion). Those models never feed public input to
+        // ForwardForTraining either, so probing it here reported four false failures where Train itself works.
+        return !OverridesTrainingHook(runtimeType, "DefineTrainingObjectives")
+            && !OverridesTrainingHook(runtimeType, "TryApplyLearningRule");
+    }
+
+    private static bool OverridesTrainingHook(Type runtimeType, string hookName)
+    {
+        var tensorType = typeof(Tensor<T>);
+        var hook = runtimeType.GetMethod(
+            hookName,
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
+            binder: null,
+            types: new[] { tensorType, tensorType },
+            modifiers: null);
+        if (hook is null)
+            throw new InvalidOperationException(
+                $"NeuralNetworkBase<T>.{hookName}(Tensor<T>, Tensor<T>) was not found; the census cannot tell whether {runtimeType.Name} owns its training objective.");
+        return hook.DeclaringType != typeof(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>);
     }
 
     private sealed class BlasDeterminismScope : IDisposable

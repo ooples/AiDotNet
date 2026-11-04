@@ -82,11 +82,6 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     private readonly AveragePoolingLayer<T> _pool;
     private readonly IActivationFunction<T> _relu;
 
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    private Tensor<T>? _bnOut;
-    private Tensor<T>? _reluOut;
-    private Tensor<T>? _convOut;
 
     /// <summary>
     /// Stores the original input shape for any-rank tensor support.
@@ -304,29 +299,29 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
             throw new ArgumentException($"TransitionLayer requires at least 3D input, got {rank}D");
         }
 
-        _lastInput = processInput;
-
         // BN → ReLU → Conv1x1 → AvgPool. In inference BN + ReLU is one pass (when the block's ReLU is exactly a ReLU);
-        // otherwise, and whenever the backward will read the intermediates, the stages run separately.
+        // otherwise, and whenever the backward will read the intermediates, the stages run separately. Locals, not
+        // fields: nothing reads them after the forward, and a field would keep this layer's activations alive between
+        // forwards.
+        Tensor<T> reluOut;
         if (!ShouldCacheForBackward && _relu.GetType() == typeof(ReLUActivation<T>)
             && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(_bn, processInput, FusedActivationType.ReLU, out var preActivated))
         {
-            _bnOut = null;
-            _reluOut = preActivated;
+            reluOut = preActivated;
         }
         else
         {
-            _bnOut = _bn.Forward(processInput);
-            _reluOut = _relu.Activate(_bnOut);
+            var bnOut = _bn.Forward(processInput);
+            reluOut = _relu.Activate(bnOut);
         }
-        _convOut = conv.Forward(_reluOut);
+        var convOut = conv.Forward(reluOut);
 
         // Handle batched input (4D) - use Engine.AvgPool2D directly
         // AveragePoolingLayer expects 3D input, so we handle 4D separately
         // [B, C, H, W] uses Engine directly, [C, H, W] uses the AveragePoolingLayer
-        Tensor<T> output = _convOut.Shape.Length == 4
-            ? Engine.AvgPool2D(_convOut, poolSize: 2, stride: 2, padding: 0)
-            : _pool.Forward(_convOut);
+        Tensor<T> output = convOut.Shape.Length == 4
+            ? Engine.AvgPool2D(convOut, poolSize: 2, stride: 2, padding: 0)
+            : _pool.Forward(convOut);
 
         // Restore original batch dimensions for any-rank support
         if (_originalInputShape != null && _originalInputShape.Length > 4)
@@ -439,10 +434,6 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
     /// </summary>
     public override void ResetState()
     {
-        _lastInput = null;
-        _bnOut = null;
-        _reluOut = null;
-        _convOut = null;
 
         _bn.ResetState();
         _conv?.ResetState();
