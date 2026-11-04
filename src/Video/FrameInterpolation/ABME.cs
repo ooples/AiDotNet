@@ -347,6 +347,23 @@ public partial class ABME<T> : FrameInterpolationBase<T>, ITrainingObjectiveProv
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
         => _usingCustomLayers ? base.ForwardForTraining(input) : RunPairs(PreprocessFrames(input));
 
+    /// <inheritdoc />
+    /// <remarks>The pipeline's stages: the symmetric motion, both asymmetric motions and the synthesized frame.</remarks>
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
+    {
+        if (!_useNativeMode || _usingCustomLayers) return base.GetNamedLayerActivations(input);
+        using var noGrad = new NoGradScope<T>();
+        var (frame0, frame1, _) = SplitPairs(PreprocessFrames(input));
+        var motion = EstimateMotion(frame0, frame1, refine: true);
+        return new Dictionary<string, Tensor<T>>
+        {
+            ["SymmetricMotion"] = motion.Symmetric,
+            ["AsymmetricMotionToFirst"] = motion.ToFirst,
+            ["AsymmetricMotionToSecond"] = motion.ToSecond,
+            ["Synthesis"] = Synthesize(frame0, frame1),
+        };
+    }
+
     #endregion
 
     #region Training

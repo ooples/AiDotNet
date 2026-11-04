@@ -2473,7 +2473,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Trim ONLY the repeated iterations: paper architectures, production defaults,
         // numerical tolerances and decrease thresholds are unchanged, and every training
         // assertion still executes against the real forward/backward path.
-        "AVID", "AMT", "ABME", "BiMVFI",
+        // (ABME's 18 s was the shared-factory placeholder; its paper port runs the full probes.)
+        "AVID", "AMT", "BiMVFI",
         // Second A-C wave, measured on the LOCAL 16 GB/4 CPU run rather than the CI log. The
         // cancelled CI job only reached 58% of the shard, so its slowest-class ranking was
         // badly skewed: these classes were either never reached or under-counted, yet they
@@ -13819,6 +13820,21 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 2), " +
                     $"{scaleArguments})";
             }
+            else if (model.ClassName == "ABME" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
+            {
+                // The release's three networks at CI width: the six-level estimator still reaches 1x1 at 64x64,
+                // with one-pixel cost volumes; topology, losses and stages are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 3), " +
+                    "options: new AiDotNet.Video.Options.ABMEOptions { " +
+                    "SymmetricEncoderWidths = new[] { 4, 4, 4, 4, 4, 4 }, SymmetricDecoderWidths = new[] { 4, 4, 4, 4, 4 }, " +
+                    "SymmetricDisplacements = new[] { 1, 1, 1, 1, 1 }, AsymmetricEncoderWidths = new[] { 4, 4 }, " +
+                    "AsymmetricDecoderWidths = new[] { 4, 4, 4, 4, 4 }, AsymmetricDisplacement = 1, " +
+                    "SynthesisWidths = new[] { 4, 4, 4 } })";
+            }
             else if (model.ClassName == "FILM" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
             {
@@ -18475,6 +18491,15 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         if (model.ClassName == "RepViTSAM")
         {
             sb.AppendLine("    protected override int? MeasuredTransientRecoveryBudget => 20;");
+        }
+
+        // ABME's start-up transient on the fixture's sample, MEASURED in float32 (untrained 25.169; the paper's loss,
+        // Charbonnier plus the census term that dominates it): step 10 25.396, 15 25.573, 20 25.497, 30 25.284, and
+        // below untrained by step 50. Finite differences agree with the analytic gradients of all three networks, and
+        // the 100-step memorization probe passes; the invariant itself is unchanged.
+        if (model.ClassName == "ABME" && model.TypeParameterCount == 1)
+        {
+            sb.AppendLine("    protected override int? MeasuredTransientRecoveryBudget => 50;");
         }
 
         // Cutie is categorized by its video-segmentation family before the model-specific
