@@ -115,7 +115,6 @@ internal static class ModelDefectBaselines
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
             "AiDotNet.Video.FrameInterpolation.DynamiCrafter<T>",
-            "AiDotNet.Video.FrameInterpolation.EMAVFI<T>",
             "AiDotNet.Video.FrameInterpolation.Figan<T>",
             "AiDotNet.Video.FrameInterpolation.FLAVR<T>",
             "AiDotNet.Video.FrameInterpolation.GIMMVFI<T>",

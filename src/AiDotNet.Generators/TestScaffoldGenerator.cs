@@ -2379,7 +2379,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // The exact serialized 4-core/16-GB D-F trace showed these otherwise-correct FP32 fixtures
         // spending several minutes in repeated training probes. They have already exhausted the
         // precision rung; bound only generated-test repetition while retaining their public-option topology.
-        "FLAVR", "FTTransformerNetwork", "EdgeSAM", "EMAVFI", "Emu3", "DocOwl",
+        "FLAVR", "FTTransformerNetwork", "EdgeSAM", "Emu3", "DocOwl",
         "DenseNetNetwork", "Donut", "Emu", "ExtremeLearningMachine", "FastText",
         "MCDropoutNeuralNetwork", "GPT4Point", "InternImage", "Janus",
         // InvestLM's 12-block decoder is floated for memory, but its generic
@@ -13835,6 +13835,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "CorrelationRadius = 1, FeatureEncoderWidths = new[] { 4, 4, 4 }, FeatureDim = 4, UpdateHiddenDim = 4, " +
                     "UpdateFlowDim = 4, UpdateCorrelationDim = 4, UpdateFusionDim = 4 })";
             }
+            else if (model.ClassName == "EMAVFI" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
+            {
+                // The release's MotionFormer, heads and U-Net at CI width: F = 4 (one and two heads), one block per
+                // convolution stage and two (an unshifted and a shifted) per attention stage, 4x4 windows that tile the
+                // 8x8 and 4x4 attention maps of a 64x64 frame. The warm-up starts at a zero rate, so it is dropped and
+                // the cosine shortened to 100 steps.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 3), " +
+                    "options: new AiDotNet.Video.Options.EMAVFIOptions { FeatureChannels = 4, WindowSize = 4, " +
+                    "Depths = new[] { 1, 1, 1, 2, 2 }, WarmupSteps = 0, TotalIterations = 100 })";
+            }
             else if (model.ClassName == "BiMVFI" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
             {
@@ -13873,7 +13887,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 3), " +
                     "options: new AiDotNet.Video.Options.FILMOptions { NumScales = 2, NumFeatures = 8 }" + ")";
             }
-            else if ((model.ClassName is "DynamiCrafter" or "EMAVFI" or "FLAVR")
+            else if ((model.ClassName is "DynamiCrafter" or "FLAVR")
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
             {
@@ -13882,7 +13896,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 string optionsExpr = model.ClassName switch
                 {
                     "DynamiCrafter" => "new AiDotNet.Video.Options.DynamiCrafterOptions { NumFeatures = 16, NumDiffusionSteps = 2, NumResBlocks = 1, NumHeads = 2, DropoutRate = 0.0 }",
-                    "EMAVFI" => "new AiDotNet.Video.Options.EMAVFIOptions { NumFeatures = 8, NumSwinBlocks = 1, NumHeads = 2, WindowSize = 4, NumScales = 1, DropoutRate = 0.0 }",
                     _ => "new AiDotNet.Video.Options.FLAVROptions { NumFeatures = 8, NumResBlocks = 1, NumLevels = 2, NumInputFrames = 4, DropoutRate = 0.0 }"
                 };
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
