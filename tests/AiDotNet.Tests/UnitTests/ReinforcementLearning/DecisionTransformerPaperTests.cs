@@ -459,6 +459,7 @@ public class DecisionTransformerPaperTests
             int features = agent.Network.StepWidth;
             var tokens = new Tensor<double>(new[] { 1, 4, features });
             for (int i = 0; i < tokens.Length; i++) tokens.SetFlat(i, rng.NextDouble());
+            for (int t = 0; t < tokens.Shape[1]; t++) tokens[0, t, features - 1] = t;
 
             network.SetTrainingMode(true);
             var first = network.ForwardForTraining(tokens).ToVector();

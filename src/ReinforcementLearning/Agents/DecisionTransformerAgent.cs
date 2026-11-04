@@ -282,7 +282,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         return new DecisionTransformerNetwork<T>(_options.StateSize, _options.ActionSize,
             _options.EmbeddingDim, _options.NumLayers, _options.NumHeads, _options.ContextLength,
             _options.MaxEpisodeLength, _options.DropoutRate, _options.IsContinuous,
-            NextNetworkInitializationSeed());
+            NextNetworkInitializationSeed(), _transformerOptimizer);
     }
 
     /// <summary>
