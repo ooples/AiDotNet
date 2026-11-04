@@ -413,6 +413,9 @@ virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.ReportThreshold.get 
 *REMOVED*AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = true) -> void
 AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = false) -> void
 AiDotNet.Models.Checkpoint<T, TInput, TOutput>.ShouldSerializeModel() -> bool
+AiDotNet.Models.Checkpoint<T, TInput, TOutput>.OptimizerDataInSidecar.get -> bool
+AiDotNet.Models.Checkpoint<T, TInput, TOutput>.OptimizerDataInSidecar.set -> void
+AiDotNet.Models.Checkpoint<T, TInput, TOutput>.ShouldSerializeOptimizerData() -> bool
 AiDotNet.Enums.OptimizerMomentStorage
 AiDotNet.Enums.OptimizerMomentStorage.Float32 = 0 -> AiDotNet.Enums.OptimizerMomentStorage
 AiDotNet.Enums.OptimizerMomentStorage.BFloat16 = 1 -> AiDotNet.Enums.OptimizerMomentStorage

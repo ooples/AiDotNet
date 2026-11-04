@@ -834,6 +834,73 @@ public class StreamingStepTrainingTests : IDisposable
         Assert.Equal(0.0, MaxAbsDiff(weights, restored.GetParameters()));
     }
 
+    /// <summary>
+    /// The optimizer payload (every moment tensor) is written to a binary sidecar, not base64 inside the JSON: there it
+    /// cost 4/3 of its size and one string the size of the whole payload (331 MB of JSON for a 16.7M-parameter AdamW
+    /// LM), and past about a gigabyte of moments the string could not be built at all. Loading reads the bytes back
+    /// unchanged, and deleting the checkpoint removes the sidecar.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task CheckpointOptimizerState_GoesToABinarySidecar_AndLoadsBackUnchanged()
+    {
+        await Task.Yield();
+        var dir = Path.Combine(_root, "optim");
+        var manager = new CheckpointManager<float, Tensor<float>, Tensor<float>>(dir);
+        var optimizer = Optimizer(1);
+        var model = Model(optimizer);
+        var id = manager.SaveCheckpoint(model, optimizer, 0, 3, new Dictionary<string, float> { ["loss"] = 1f });
+
+        var jsonPath = Directory.GetFiles(dir, "checkpoint_*.json").Single();
+        var json = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(jsonPath));
+        Assert.Null(json.Property("OptimizerData"));
+        Assert.True((bool)json["OptimizerDataInSidecar"]!);
+        var sidecar = File.ReadAllBytes(jsonPath + ".optim");
+        Assert.NotEmpty(sidecar);
+        Assert.Equal(sidecar.Length, (int)json["OptimizerState"]!["SerializedStateLengthBytes"]!);
+
+        // A fresh manager (the resume path) indexes the JSON and loads the payload from the sidecar.
+        var loaded = new CheckpointManager<float, Tensor<float>, Tensor<float>>(dir).LoadCheckpoint(id);
+        Assert.Equal(sidecar, loaded.OptimizerData);
+        Assert.True(loaded.TryRestoreOptimizer(Optimizer(1)));
+
+        manager.DeleteCheckpoint(id);
+        Assert.False(File.Exists(jsonPath + ".optim"), "deleting the checkpoint left its optimizer sidecar");
+    }
+
+    /// <summary>A checkpoint whose optimizer sidecar is gone fails to load instead of resuming with fresh moments.</summary>
+    [Fact(Timeout = 120000)]
+    public async Task CheckpointWithAMissingOptimizerSidecar_FailsToLoad()
+    {
+        await Task.Yield();
+        var dir = Path.Combine(_root, "optim-missing");
+        var manager = new CheckpointManager<float, Tensor<float>, Tensor<float>>(dir);
+        var optimizer = Optimizer(1);
+        var id = manager.SaveCheckpoint(Model(optimizer), optimizer, 0, 3, new Dictionary<string, float> { ["loss"] = 1f });
+        File.Delete(Directory.GetFiles(dir, "checkpoint_*.json").Single() + ".optim");
+
+        var ex = Assert.Throws<FileNotFoundException>(() => manager.LoadCheckpoint(id));
+        Assert.Contains(".optim", ex.Message);
+    }
+
+    /// <summary>A checkpoint written before the sidecar, with the payload inline in its JSON, still loads.</summary>
+    [Fact(Timeout = 120000)]
+    public async Task LegacyCheckpoint_WithTheOptimizerPayloadInline_StillLoads()
+    {
+        await Task.Yield();
+        var dir = Path.Combine(_root, "optim-legacy");
+        Directory.CreateDirectory(dir);
+        var optimizer = Optimizer(1);
+        var legacy = new Checkpoint<float, Tensor<float>, Tensor<float>>(
+            Model(optimizer), optimizer, 0, 3, new Dictionary<string, float> { ["loss"] = 1f });
+        Assert.NotEmpty(legacy.OptimizerData);
+        var text = Newtonsoft.Json.JsonConvert.SerializeObject(legacy);
+        Assert.Contains("\"OptimizerData\"", text);
+        File.WriteAllText(Path.Combine(dir, $"checkpoint_{legacy.CheckpointId}.json"), text);
+
+        var loaded = new CheckpointManager<float, Tensor<float>, Tensor<float>>(dir).LoadCheckpoint(legacy.CheckpointId);
+        Assert.Equal(legacy.OptimizerData, loaded.OptimizerData);
+    }
+
     /// <summary>A model that does not persist itself keeps its JSON entry -- the only record the checkpoint has.</summary>
     [Fact]
     public void CheckpointJson_KeepsAModelThatHasNoStateSidecar()

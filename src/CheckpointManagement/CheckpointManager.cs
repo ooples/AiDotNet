@@ -38,6 +38,22 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
     /// reads to bring a real, typed model back to the exact saved state.
     /// </summary>
     private const string StateSuffix = ".state";
+    private const string OptimizerSuffix = ".optim";
+
+    private static void WriteJsonFile(object value, string path)
+    {
+        using var file = File.Create(path);
+        using var text = new StreamWriter(file, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        using var json = new JsonTextWriter(text);
+        JsonSerializer.Create(JsonSettings).Serialize(json, value);
+    }
+
+    private static TResult? ReadJsonFile<TResult>(string path) where TResult : class
+    {
+        using var text = File.OpenText(path);
+        using var json = new JsonTextReader(text);
+        return JsonSerializer.Create(JsonSettings).Deserialize<TResult>(json);
+    }
 
     /// <summary>
     /// Saves a checkpoint of the current training state.
@@ -61,9 +77,14 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
             var checkpoint = new Checkpoint<T, TInput, TOutput>(model, optimizer, epoch, step, metrics, metadata);
             var checkpointPath = GetCheckpointFilePath(checkpoint.CheckpointId);
 
-            // Serialize checkpoint using Newtonsoft.Json
-            var json = SerializeToJson(checkpoint);
-            File.WriteAllText(checkpointPath, json);
+            // The optimizer payload (every moment tensor) goes to its own binary file, written before the JSON that
+            // indexes it; the JSON is then streamed to disk instead of being built as one string.
+            if (checkpoint.OptimizerData.Length > 0)
+            {
+                File.WriteAllBytes(checkpointPath + OptimizerSuffix, checkpoint.OptimizerData);
+                checkpoint.OptimizerDataInSidecar = true;
+            }
+            WriteJsonFile(checkpoint, checkpointPath);
 
             checkpoint.FilePath = checkpointPath;
 
@@ -117,11 +138,22 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
             // Validate the path is within the checkpoint directory
             ValidatePathWithinDirectory(metadata.FilePath, CheckpointDirectory);
 
-            var json = File.ReadAllText(metadata.FilePath);
-            var checkpoint = DeserializeFromJson<Checkpoint<T, TInput, TOutput>>(json);
+            var checkpoint = ReadJsonFile<Checkpoint<T, TInput, TOutput>>(metadata.FilePath);
 
             if (checkpoint == null)
                 throw new InvalidOperationException($"Failed to deserialize checkpoint: {checkpointId}");
+
+            if (checkpoint.OptimizerDataInSidecar)
+            {
+                // A checkpoint whose optimizer file is gone must not resume with fresh moments as if nothing were lost.
+                var optimizerPath = metadata.FilePath + OptimizerSuffix;
+                ValidatePathWithinDirectory(optimizerPath, CheckpointDirectory);
+                if (!File.Exists(optimizerPath))
+                    throw new FileNotFoundException(
+                        $"Checkpoint '{checkpointId}' keeps its optimizer state in '{optimizerPath}', which is missing.",
+                        optimizerPath);
+                checkpoint.OptimizerData = File.ReadAllBytes(optimizerPath);
+            }
 
             return checkpoint;
         }
@@ -275,13 +307,16 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
                 File.Delete(metadata.FilePath);
             }
 
-            // Delete the model-state sidecar written by SaveCheckpoint, if present.
+            // Delete the model-state and optimizer sidecars written by SaveCheckpoint, if present.
             if (metadata.FilePath != null)
             {
-                var statePath = metadata.FilePath + StateSuffix;
-                if (File.Exists(statePath))
+                foreach (var suffix in new[] { StateSuffix, OptimizerSuffix })
                 {
-                    File.Delete(statePath);
+                    var sidecarPath = metadata.FilePath + suffix;
+                    if (File.Exists(sidecarPath))
+                    {
+                        File.Delete(sidecarPath);
+                    }
                 }
             }
 
@@ -392,8 +427,7 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
                 // Validate the path is within the checkpoint directory
                 ValidatePathWithinDirectory(file, CheckpointDirectory);
 
-                var json = File.ReadAllText(file);
-                var checkpoint = DeserializeFromJson<Checkpoint<T, TInput, TOutput>>(json);
+                var checkpoint = ReadJsonFile<Checkpoint<T, TInput, TOutput>>(file);
 
                 if (checkpoint != null)
                 {
