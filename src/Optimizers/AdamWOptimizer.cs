@@ -1097,13 +1097,17 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// Gets whether this optimizer supports GPU-accelerated parameter updates.
     /// </summary>
-    public override bool SupportsGpuUpdate => _options.WeightDecayMask is null;
+    public override bool SupportsGpuUpdate =>
+        _options.WeightDecayMask is null && _options.MomentStorage == OptimizerMomentStorage.Float32;
 
     /// <summary>
     /// Initializes AdamW optimizer state on the GPU.
     /// </summary>
     public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
     {
+        if (_options.MomentStorage != OptimizerMomentStorage.Float32)
+            throw new NotSupportedException("The scalar GPU AdamW kernel supports only Float32 moments. Use the eager optimizer path for compressed moments.");
+
         if (_gpuStateInitialized && _gpuM != null && _gpuV != null)
             return;
 
@@ -1120,6 +1124,9 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// </summary>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
+        if (_options.MomentStorage != OptimizerMomentStorage.Float32)
+            throw new NotSupportedException("The scalar GPU AdamW kernel supports only Float32 moments. Use the eager optimizer path for compressed moments.");
+
         if (GetValidatedWeightDecayMask(parameterCount) is not null)
         {
             throw new NotSupportedException(

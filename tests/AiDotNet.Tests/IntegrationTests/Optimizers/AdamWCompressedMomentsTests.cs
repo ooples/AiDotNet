@@ -25,6 +25,17 @@ public class AdamWCompressedMomentsTests
     private const float Lr = 1e-2f, Beta1 = 0.9f, Beta2 = 0.99f, Eps = 1e-8f, WeightDecay = 0.05f;
     private const int BlockSize = 256;
 
+    [Theory]
+    [InlineData(OptimizerMomentStorage.BFloat16)]
+    [InlineData(OptimizerMomentStorage.Int8Blockwise)]
+    public void ScalarGpuPath_RejectsCompressedMomentsBeforeBackendAccess(OptimizerMomentStorage storage)
+    {
+        var optimizer = Optimizer(storage);
+        Assert.False(optimizer.SupportsGpuUpdate);
+        Assert.Throws<NotSupportedException>(() => optimizer.InitializeGpuState(Length, null!));
+        Assert.Throws<NotSupportedException>(() => optimizer.UpdateParametersGpu(null!, null!, Length, null!));
+    }
+
     [Fact]
     public void CompressedMomentLayout_DoesNotPreventLoadingOptimizerTypes()
     {
@@ -349,11 +360,12 @@ public class AdamWCompressedMomentsTests
 
             var backend = gpu.GetBackend();
             Assert.NotNull(backend);
-            optimizer.InitializeGpuState(Length, backend!);
+            // Compressed eager slots cannot be mixed with the Float32-only scalar GPU state.
+            Assert.Throws<NotSupportedException>(() => optimizer.InitializeGpuState(Length, backend!));
             var stateFlag = typeof(AdamWOptimizer<float, Matrix<float>, Vector<float>>)
                 .GetField("_gpuStateInitialized", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
             Assert.NotNull(stateFlag);
-            Assert.Equal(true, stateFlag!.GetValue(optimizer));
+            Assert.Equal(false, stateFlag!.GetValue(optimizer));
 
             AiDotNetEngine.Current = new CpuEngine();
             Assert.Throws<InvalidOperationException>(() => optimizer.DisposeGpuState());
