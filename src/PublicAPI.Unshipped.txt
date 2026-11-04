@@ -20584,3 +20584,59 @@ AiDotNet.Models.Options.QMIXOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IGra
 AiDotNet.Models.Options.QMIXOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
 AiDotNet.Models.Options.QMIXOptions<T>.OptimizerFactory.init -> void
 AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options) -> void
+AiDotNet.Enums.AbmeTrainingStage
+AiDotNet.Enums.AbmeTrainingStage.AsymmetricMotion = 1 -> AiDotNet.Enums.AbmeTrainingStage
+AiDotNet.Enums.AbmeTrainingStage.SymmetricMotion = 0 -> AiDotNet.Enums.AbmeTrainingStage
+AiDotNet.Enums.AbmeTrainingStage.Synthesis = 2 -> AiDotNet.Enums.AbmeTrainingStage
+AiDotNet.Video.Options.ABMEOptions.AsymmetricDecoderWidths.get -> int[]!
+AiDotNet.Video.Options.ABMEOptions.AsymmetricDecoderWidths.set -> void
+AiDotNet.Video.Options.ABMEOptions.AsymmetricDisplacement.get -> int
+AiDotNet.Video.Options.ABMEOptions.AsymmetricDisplacement.set -> void
+AiDotNet.Video.Options.ABMEOptions.AsymmetricEncoderWidths.get -> int[]!
+AiDotNet.Video.Options.ABMEOptions.AsymmetricEncoderWidths.set -> void
+AiDotNet.Video.Options.ABMEOptions.AsymmetricMilestones.get -> int[]!
+AiDotNet.Video.Options.ABMEOptions.AsymmetricMilestones.set -> void
+AiDotNet.Video.Options.ABMEOptions.CensusWeight.get -> double
+AiDotNet.Video.Options.ABMEOptions.CensusWeight.set -> void
+AiDotNet.Video.Options.ABMEOptions.CharbonnierEpsilon.get -> double
+AiDotNet.Video.Options.ABMEOptions.CharbonnierEpsilon.set -> void
+AiDotNet.Video.Options.ABMEOptions.DecayRate.get -> double
+AiDotNet.Video.Options.ABMEOptions.DecayRate.set -> void
+AiDotNet.Video.Options.ABMEOptions.Stage.get -> AiDotNet.Enums.AbmeTrainingStage
+AiDotNet.Video.Options.ABMEOptions.Stage.set -> void
+AiDotNet.Video.Options.ABMEOptions.SymmetricDecoderWidths.get -> int[]!
+AiDotNet.Video.Options.ABMEOptions.SymmetricDecoderWidths.set -> void
+AiDotNet.Video.Options.ABMEOptions.SymmetricDisplacements.get -> int[]!
+AiDotNet.Video.Options.ABMEOptions.SymmetricDisplacements.set -> void
+AiDotNet.Video.Options.ABMEOptions.SymmetricEncoderWidths.get -> int[]!
+AiDotNet.Video.Options.ABMEOptions.SymmetricEncoderWidths.set -> void
+AiDotNet.Video.Options.ABMEOptions.SymmetricMilestones.get -> int[]!
+AiDotNet.Video.Options.ABMEOptions.SymmetricMilestones.set -> void
+AiDotNet.Video.Options.ABMEOptions.SynthesisMilestones.get -> int[]!
+AiDotNet.Video.Options.ABMEOptions.SynthesisMilestones.set -> void
+AiDotNet.Video.Options.ABMEOptions.SynthesisWidths.get -> int[]!
+AiDotNet.Video.Options.ABMEOptions.SynthesisWidths.set -> void
+override AiDotNet.Video.FrameInterpolation.ABME<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.FrameInterpolation.ABME<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.ABME<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.ABME<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.ABME<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.FrameInterpolation.ABME<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.ABME<T>.RegisterComponents() -> void
+override AiDotNet.Video.FrameInterpolation.ABME<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.FrameInterpolation.ABME<T>.SupportsFusedCompiledTraining.get -> bool
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.AsymmetricMotion.get -> bool
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.AsymmetricMotion.set -> void
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.NumPyramidLevels.get -> int
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.NumPyramidLevels.set -> void
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.NumRefinementIters.get -> int
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.NumRefinementIters.set -> void
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.NumResBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.NumResBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.ABMEOptions.Variant.set -> void
+*REMOVED*override AiDotNet.Video.FrameInterpolation.ABME<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
