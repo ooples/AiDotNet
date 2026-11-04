@@ -124,21 +124,9 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
 
     // Cached values
     [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastProjectedInput;
-    [Scratch]
-    private Tensor<T>? _lastRecurrenceGate;
-    [Scratch]
-    private Tensor<T>? _lastInputGate;
-    [Scratch]
     private Tensor<T>? _lastHiddenStates;
     [Scratch]
     private Tensor<T>? _lastDecayFactors;
-    [Scratch]
-    private Tensor<T>? _lastRecurrenceOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -355,15 +343,12 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Input projection
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
         var projBias = Engine.Reshape(_inputProjectionBias, new[] { 1, _recurrenceDimension });
         projected = Engine.TensorAdd(projected, projBias);
         var projected3D = Engine.Reshape(projected, new[] { batchSize, seqLen, _recurrenceDimension });
-        _lastProjectedInput = projected3D;
 
         // Step 2: Compute every position's gates in two batched projections. The
         // previous timestep loop emitted O(sequence length) slices, matmuls,
@@ -379,12 +364,8 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
                 Engine.Reshape(_inputGateBias, new[] { 1, _recurrenceDimension }))),
             new[] { batchSize, seqLen, _recurrenceDimension });
 
-        _lastRecurrenceGate = recGate3D;
-        _lastInputGate = inpGate3D;
-
         // Step 3: Gated linear recurrence
         var output = GatedRecurrenceForward(projected3D, recGate3D, inpGate3D, batchSize, seqLen);
-        _lastRecurrenceOutput = output;
 
         // Step 4: Output projection
         var outFlat = Engine.Reshape(output, new[] { batchSize * seqLen, _recurrenceDimension });
@@ -406,7 +387,6 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
         output3D = Engine.TensorAdd(output3D, input3D);
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 1)
             return Engine.Reshape(result, new[] { _modelDimension });
@@ -516,14 +496,8 @@ public partial class RealGatedLinearRecurrenceLayer<T> : LayerBase<T>, IShapeCon
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastProjectedInput = null;
-        _lastRecurrenceGate = null;
-        _lastInputGate = null;
         _lastHiddenStates = null;
         _lastDecayFactors = null;
-        _lastRecurrenceOutput = null;
         _originalInputShape = null;
         _inputProjectionWeightsGradient = null;
         _inputProjectionBiasGradient = null;
