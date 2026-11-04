@@ -2251,15 +2251,24 @@ jobs:
             echo 'Non-runtime-only change; the SonarCloud check succeeds without analysis.'
           fi
 
-      - name: Free runner disk space
+      - name: Free runner disk space and add swap
         # The analysed run checks out full history, restores the ~1.3 GB NuGet cache and runs the
         # instrumented Release build. Run 41511223687 (PR #2412) ran out of space on ubuntu-latest while the
         # cache was still extracting ("No space left on device"), so this job frees the same unused
         # preinstalled toolchains as the build and traced CodeQL jobs. Java is installed after this step,
         # so the hosted Java cache is left alone.
+        #
+        # Swap: the analysed runs of master 40996396452 (10-30), 41163384956 (10-31) and 41570960245
+        # (11-03) and of the PR dispatches 41517541064 and 41519686106 all lost their runner inside
+        # "Build (Release)", 18-28 minutes in, while the main library compiled under Sonar's analyzers
+        # ("The runner has received a shutdown signal", no compiler error). The image has 16 GB of RAM
+        # and 3 GB of swap. With this 20 GB swap file on the temporary disk, run 41643755098 kept its
+        # runner: the compiler server peaked at 15 GB of resident memory with 10 GB swapped out. The
+        # build step logs memory, swap and the largest process every minute.
         if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         run: |
           df -h /
+          free -m
           sudo rm -rf /usr/local/lib/android || true
           sudo rm -rf /opt/ghc || true
           sudo rm -rf /opt/hostedtoolcache/CodeQL || true
@@ -2271,6 +2280,16 @@ jobs:
           sudo rm -rf /usr/local/share/boost || true
           sudo apt-get clean || true
           df -h /
+          swapdir=/mnt
+          if [ ! -d "$swapdir" ] || [ "$(df --output=avail -BG "$swapdir" | tail -1 | tr -dc 0-9)" -lt 30 ]; then swapdir=/; fi
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile /swapfile || true
+          sudo fallocate -l 20G "$swapdir/sonar.swap"
+          sudo chmod 600 "$swapdir/sonar.swap"
+          sudo mkswap "$swapdir/sonar.swap"
+          sudo swapon "$swapdir/sonar.swap"
+          free -m
+          df -h / "$swapdir"
 
       - name: Set up JDK 17
         if: ${{ fromJSON(env.SONAR_ANALYZE) }}
@@ -2427,15 +2446,32 @@ jobs:
         # already built above. A project that stops targeting net10.0 fails this step on purpose,
         # so it cannot silently drop out of analysis.
         #
+        # ONE BUILD. Building the projects one `dotnet build` at a time recompiled the main library
+        # under Sonar for every project that references it (nearly all of them): run 41643755098
+        # spent 20-23 minutes per project on it and was cancelled at the 90-minute limit before
+        # reaching the test project. The net10.0 projects are therefore built together through a
+        # generated solution filter, so MSBuild compiles each project, the main library included,
+        # once. The per-project check that every project targets net10.0 is kept.
+        #
         # -m:2 matches the memory-safe project concurrency of the artifact build: Sonar's compiler
         # instrumentation only increases the need to avoid large csc processes competing inside
-        # the 16-GB runner.
+        # the 16-GB runner (that run's compiler server peaked at 15 GB with 10 GB in swap).
         if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         shell: pwsh
         run: |
+          # One line a minute: RAM and swap in use, the largest process, free disk (see the swap step).
+          $monitorScript = Join-Path $env:RUNNER_TEMP 'runner-monitor.sh'
+          Set-Content -Path $monitorScript -Value @(
+            'while sleep 60; do'
+            '  mem=$(free -m | awk ''/^Mem/{printf "mem used %s/%s MB avail %s", $3, $2, $7} /^Swap/{printf ", swap %s/%s MB", $3, $2}'')'
+            '  top=$(ps -eo rss=,comm= --sort=-rss | head -1 | awk ''{printf "%s %d MB", $2, $1/1024}'')'
+            '  echo "[runner] $(date -u +%H:%M:%S) $mem, largest $top, disk free $(df --output=avail -h / | tail -1)"'
+            'done')
+          $monitor = Start-Process bash -NoNewWindow -PassThru -ArgumentList $monitorScript
           $projects = @(dotnet sln AiDotNet.sln list | Select-Object -Skip 2 |
             ForEach-Object { $_.Trim().Replace('\', '/') } | Where-Object { $_ })
           if ($projects.Count -eq 0) { throw 'AiDotNet.sln lists no projects' }
+          $net10 = @()
           foreach ($project in $projects) {
             $evaluated = dotnet msbuild $project -getProperty:TargetFrameworks -getProperty:TargetFramework | Out-String
             if ($LASTEXITCODE -ne 0) { throw "could not evaluate the target frameworks of $project" }
@@ -2443,20 +2479,24 @@ jobs:
             $frameworks = @(("$($properties.TargetFrameworks);$($properties.TargetFramework)").Split(';') |
               Where-Object { $_ })
             if ($frameworks -contains 'net10.0') {
-              Write-Host "::group::$project (net10.0 of $($frameworks -join ', '))"
-              dotnet build $project -c Release --no-restore -m:2 -f net10.0
+              Write-Host "$project (net10.0 of $($frameworks -join ', '))"
+              $net10 += $project
             }
             elseif ($project -eq 'src/AiDotNet.Generators/AiDotNet.Generators.csproj') {
-              Write-Host "::group::$project (analyzer, $($frameworks -join ', '))"
-              dotnet build $project -c Release --no-restore -m:2
+              Write-Host "$project (analyzer, $($frameworks -join ', '); built in the previous step)"
             }
             else {
               throw "$project targets $($frameworks -join ', ') and not net10.0; decide how Sonar should analyse it"
             }
-            $exit = $LASTEXITCODE
-            Write-Host '::endgroup::'
-            if ($exit -ne 0) { throw "Sonar-instrumented build of $project failed with exit code $exit" }
           }
+          $filter = 'sonar-net10.slnf'
+          @{ solution = @{ path = 'AiDotNet.sln'; projects = $net10 } } | ConvertTo-Json -Depth 4 |
+            Set-Content -Path $filter
+          dotnet build $filter -c Release --no-restore -m:2 -f net10.0
+          $exit = $LASTEXITCODE
+          Stop-Process -Id $monitor.Id -ErrorAction SilentlyContinue
+          Remove-Item $filter -ErrorAction SilentlyContinue
+          if ($exit -ne 0) { throw "Sonar-instrumented build of the net10.0 projects failed with exit code $exit" }
 
       - name: End SonarCloud analysis
         if: ${{ fromJSON(env.SONAR_ANALYZE) && (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250) }}
