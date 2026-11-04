@@ -36304,7 +36304,10 @@ public static partial class LayerHelper<T>
                 sequenceLength: maxSeqLen,
                 embeddingDimension: hiddenSize,
                 numHeads: numHeads,
-                numKVHeads: numKvHeads);
+                numKVHeads: numKvHeads,
+                // Register the full graph now; allocate multi-billion-parameter projections
+                // only when first used, as the conditioner construction contract requires.
+                deferAllocation: true);
             attn.ConfigurePositionalEncoding(PositionalEncodingType.Rotary, ropeTheta, maxSeqLen);
 
             yield return new PreLNTransformerBlock<T>(

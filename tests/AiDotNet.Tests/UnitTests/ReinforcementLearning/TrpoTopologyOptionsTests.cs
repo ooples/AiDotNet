@@ -27,6 +27,7 @@ public sealed class TrpoTopologyOptionsTests
         Assert.Equal(policyParameters, Network(agent, "_policyNetwork").GetParameters().Length);
         // A Gaussian policy predicts means; its state-independent log standard deviations are
         // separate trainable parameters, rather than a second state-dependent network output.
+        Assert.Equal(continuous ? 2 : 0, agent.LogStandardDeviations.Length);
         Assert.Equal(policyParameters + (continuous ? 2 : 0), agent.PolicyParameterCount);
         var value = Network(agent, "_valueNetwork");
         value.Predict(new Tensor<double>(state.ToArray(), new[] { 1, 4 }));

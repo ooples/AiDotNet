@@ -131,10 +131,10 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         RecomputeStateStatistics();
         _runningReturn = InitialReturnToGo();
 
+        _networkOptimizer = _options.OptimizerFactory?.Invoke() ?? CreatePaperOptimizer();
         _transformerNetwork = new DecisionTransformerNetwork<T>(_options.StateSize, _options.ActionSize, _options.EmbeddingDim,
             _options.NumLayers, _options.NumHeads, _options.ContextLength, _options.MaxEpisodeLength, _options.DropoutRate,
-            _options.IsContinuous, NextNetworkInitializationSeed());
-        _networkOptimizer = _options.OptimizerFactory?.Invoke() ?? CreatePaperOptimizer();
+            _options.IsContinuous, NextNetworkInitializationSeed(), _networkOptimizer);
 
         Networks.Add(_transformerNetwork);
     }

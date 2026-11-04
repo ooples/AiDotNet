@@ -44,7 +44,8 @@ internal sealed partial class DecisionTransformerNetwork<T> : NeuralNetworkBase<
     private readonly List<TransformerEncoderBlock<T>> _blocks = new();
 
     public DecisionTransformerNetwork(int stateSize, int actionSize, int embeddingDim, int numLayers, int numHeads,
-        int contextLength, int maxEpisodeLength, double dropoutRate, bool continuous, int? seed = null)
+        int contextLength, int maxEpisodeLength, double dropoutRate, bool continuous, int? seed = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? trainingOptimizer = null)
         : base(new NeuralNetworkArchitecture<T>(
                 inputType: InputType.TwoDimensional,
                 taskType: NeuralNetworkTaskType.Regression,
@@ -64,8 +65,14 @@ internal sealed partial class DecisionTransformerNetwork<T> : NeuralNetworkBase<
         _maxEpisodeLength = maxEpisodeLength;
         _dropoutRate = dropoutRate;
         _continuous = continuous;
+        _trainingOptimizer = trainingOptimizer;
         InitializeLayers();
     }
+
+    [Scratch]
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainingOptimizer;
+
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _trainingOptimizer;
 
     /// <summary>Width of one packed timestep: return-to-go, state, action, timestep.</summary>
     public int StepWidth => 1 + _stateSize + _actionSize + 1;

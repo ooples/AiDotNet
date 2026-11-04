@@ -20434,8 +20434,6 @@ override AiDotNet.Video.Enhancement.Upscale4KAgent<T>.SupportsFusedCompiledTrain
 *REMOVED*AiDotNet.Models.Options.RainbowDQNOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
 *REMOVED*AiDotNet.Models.Options.RainbowDQNOptions<T>.Optimizer.init -> void
 *REMOVED*AiDotNet.Models.Options.SACOptions<T>.TargetEntropy.get -> T?
-*REMOVED*AiDotNet.Models.Options.TRPOOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
-*REMOVED*AiDotNet.Models.Options.TRPOOptions<T>.Optimizer.init -> void
 *REMOVED*AiDotNet.Models.Options.WorldModelsOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
 *REMOVED*AiDotNet.Models.Options.WorldModelsOptions<T>.Optimizer.init -> void
 *REMOVED*AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<T>.DuelingCombinationLayer(int featureDim, int actionSize, int? seed = null) -> void
@@ -20531,6 +20529,26 @@ AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage.Visio
 override AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.OnRandomSeedAssigned() -> void
 override AiDotNet.ReinforcementLearning.Agents.A3C.A3CAgent<T>.Dispose() -> void
 static AiDotNet.ReinforcementLearning.Agents.DeepReinforcementLearningAgentBase<T>.CreateNetworkOptimizer(T learningRate, double? maxGradientNorm = null) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+*REMOVED*AiDotNet.Models.Options.TRPOOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.TRPOOptions<T>.Optimizer.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.IsContinuous.get -> bool
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.IsContinuous.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.MaxEpisodeLength.get -> int
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.MaxEpisodeLength.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.ReturnScale.get -> double
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.ReturnScale.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.LearningRateWarmupSteps.get -> int
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.LearningRateWarmupSteps.init -> void
+*REMOVED*override AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.WeightDecay.get -> double
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.WeightDecay.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.DecisionTransformerOptions() -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.NormalizeStates.get -> bool
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.NormalizeStates.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.TargetReturn.get -> double?
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.TargetReturn.init -> void
 AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null) -> void
 AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.Epsilon.get -> double
 AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.StoreMultiAgentExperience(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentStates, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentActions, T teamReward, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! nextAgentStates, AiDotNet.Tensors.LinearAlgebra.Vector<T>! globalState, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextGlobalState, bool done, bool truncated = false) -> void
@@ -20557,14 +20575,6 @@ AiDotNet.Models.Options.QMIXOptions<T>.RmsPropAlpha.init -> void
 AiDotNet.Models.Options.QMIXOptions<T>.RmsPropEpsilon.get -> double
 AiDotNet.Models.Options.QMIXOptions<T>.RmsPropEpsilon.init -> void
 AiDotNet.Models.Options.QMIXOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.IsContinuous.get -> bool
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.IsContinuous.init -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.MaxEpisodeLength.get -> int
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.MaxEpisodeLength.init -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.ReturnScale.get -> double
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.ReturnScale.init -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.LearningRateWarmupSteps.get -> int
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.LearningRateWarmupSteps.init -> void
 *REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.AgentHiddenLayers.get -> System.Collections.Generic.List<int>!
 *REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.AgentHiddenLayers.init -> void
 *REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.MixingHiddenLayers.get -> System.Collections.Generic.List<int>!
@@ -20572,15 +20582,6 @@ AiDotNet.Models.Options.DecisionTransformerOptions<T>.LearningRateWarmupSteps.in
 *REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
 *REMOVED*AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
 *REMOVED*AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.StoreMultiAgentExperience(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentStates, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentActions, T teamReward, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! nextAgentStates, AiDotNet.Tensors.LinearAlgebra.Vector<T>! globalState, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextGlobalState, bool done) -> void
-*REMOVED*override AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.OptimizerFactory.init -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.WeightDecay.get -> double
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.WeightDecay.init -> void
 AiDotNet.Models.Options.QMIXOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
 AiDotNet.Models.Options.QMIXOptions<T>.OptimizerFactory.init -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.DecisionTransformerOptions() -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.NormalizeStates.get -> bool
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.NormalizeStates.init -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.TargetReturn.get -> double?
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.TargetReturn.init -> void
+AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options) -> void

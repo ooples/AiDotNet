@@ -74,7 +74,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
     private readonly QMIXOptions<T> _options;
 
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _jointOptimizer;
 
     // The agent network every agent shares, and the mixing network.
     private INeuralNetwork<T> _agentNetwork;
@@ -122,6 +122,13 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     {
     }
 
+    /// <summary>Creates the native recurrent agent with the configured joint optimizer.</summary>
+    /// <param name="options">The recurrent-agent, mixer and training options.</param>
+    public QMIXAgent(QMIXOptions<T> options) : this(options, null)
+    {
+    }
+
+
     /// <summary>Creates a QMIX agent.</summary>
     /// <param name="options">The configuration; the defaults are the paper's.</param>
     /// <param name="optimizer">Replaces the paper's RMSprop (and <see cref="QMIXOptions{T}.Optimizer"/>).</param>
@@ -147,14 +154,9 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         if (options.LearningRate is null || NumOps.Equals(options.LearningRate, NumOps.Zero))
             LearningRate = NumOps.FromDouble(5e-4);
 
-        _optimizer = optimizer ?? options.OptimizerFactory?.Invoke() ?? options.Optimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(null,
-            new RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = NumOps.ToDouble(LearningRate),
-                Decay = options.RmsPropAlpha,
-                Epsilon = options.RmsPropEpsilon,
-                EnableGradientClipping = false,
-            });
+        _jointOptimizer = optimizer ?? options.Optimizer;
+        if (_jointOptimizer is null && options.OptimizerFactory is null)
+            _jointOptimizer = CreatePaperOptimizer();
 
         _episodes = new Episode?[options.ReplayBufferSize];
         _hidden = new Tensor<T>[options.NumAgents];
@@ -162,6 +164,17 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         ResetActingState();
         InitializeNetworks();
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer() =>
+        new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(null,
+            new RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = NumOps.ToDouble(LearningRate),
+                Decay = _options.RmsPropAlpha,
+                Epsilon = _options.RmsPropEpsilon,
+                EnableGradientClipping = false,
+            });
+
 
     /// <summary>The width of each agent's network input: observation, last action one-hot, agent id one-hot.</summary>
     private int AgentInputSize =>
@@ -618,7 +631,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             Target = packed,
             Forward = Loss,
             ComputeLoss = (value, _) => value,
-            Optimizer = _optimizer,
+            Optimizer = _jointOptimizer ??= _options.OptimizerFactory?.Invoke() ?? CreatePaperOptimizer(),
             ExtraParameters = TapeTrainingStep<T>.CollectParameters(layers),
             ModelGradientClip = _options.MaxGradientNorm,
         });

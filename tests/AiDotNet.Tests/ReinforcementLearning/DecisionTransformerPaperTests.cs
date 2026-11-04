@@ -115,6 +115,7 @@ public class DecisionTransformerPaperTests
         {
             StateSize = 2, ActionSize = 2, EmbeddingDim = 16, NumLayers = 1, NumHeads = 1, ContextLength = 2,
             DropoutRate = 0.0, MaxEpisodeLength = 16, TargetReturn = 5.0, Seed = 5,
+            NormalizeStates = false, // Isolate return/context updates from dataset-statistic updates on ResetEpisode.
         });
         var s = V(0.1, 0.2);
         var expected = agent.SelectActionWithReturn(s, 5.0, training: false);
