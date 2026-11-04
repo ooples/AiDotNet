@@ -34,10 +34,27 @@ internal static class SoftSplatOps
 
     /// <summary>
     /// softsplat_func: each source pixel's value added to the four pixels around its forward-displaced position with
-    /// bilinear weights; positions outside the image, and non-finite flows, are dropped. The weights carry the gradient
-    /// to the flow, as the release's softsplat_flow kernel does.
+    /// bilinear weights. The weights carry the gradient to the flow, as the release's softsplat_flow kernel does.
     /// </summary>
     internal static Tensor<T> Splat<T>(IEngine engine, Tensor<T> x, Tensor<T> flow)
+        => SplatCorners(engine, x, flow, (fracX, fracY) =>
+        {
+            var ops = MathHelper.GetNumericOperations<T>();
+            var restX = engine.ScalarMinusTensor(ops.One, fracX);
+            var restY = engine.ScalarMinusTensor(ops.One, fracY);
+            return new[]
+            {
+                engine.TensorMultiply(restX, restY), engine.TensorMultiply(fracX, restY),
+                engine.TensorMultiply(restX, fracY), engine.TensorMultiply(fracX, fracY),
+            };
+        });
+
+    /// <summary>
+    /// Adds each source pixel's value, times a weight per corner, to the four pixels around its forward-displaced
+    /// position (northwest, northeast, southwest, southeast); the weights are built from the fractional offsets
+    /// [N, 1, H, W] so they carry the gradient to the flow. Positions outside the image, and non-finite flows, are dropped.
+    /// </summary>
+    internal static Tensor<T> SplatCorners<T>(IEngine engine, Tensor<T> x, Tensor<T> flow, Func<Tensor<T>, Tensor<T>, Tensor<T>[]> cornerWeights)
     {
         var ops = MathHelper.GetNumericOperations<T>();
         int n = x.Shape[0], c = x.Shape[1], h = x.Shape[2], w = x.Shape[3], plane = h * w, total = n * plane;
@@ -69,14 +86,8 @@ internal static class SoftSplatOps
                 }
         var fracX = engine.TensorSubtract(engine.TensorAdd(baseX, engine.TensorNarrow(flow, 1, 0, 1)), floorX);
         var fracY = engine.TensorSubtract(engine.TensorAdd(baseY, engine.TensorNarrow(flow, 1, 1, 1)), floorY);
-        var restX = engine.ScalarMinusTensor(ops.One, fracX);
-        var restY = engine.ScalarMinusTensor(ops.One, fracY);
         // Northwest, northeast, southwest, southeast, matching the corner order of the indices.
-        var weights = new[]
-        {
-            engine.TensorMultiply(restX, restY), engine.TensorMultiply(fracX, restY),
-            engine.TensorMultiply(restX, fracY), engine.TensorMultiply(fracX, fracY),
-        };
+        var weights = cornerWeights(fracX, fracY);
         var shape = x.Shape.ToArray();
         var updates = weights.Select(weight =>
         {

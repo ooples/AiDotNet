@@ -20899,3 +20899,44 @@ override AiDotNet.Video.FrameInterpolation.SoftSplat<T>.SupportsFusedCompiledTra
 *REMOVED*AiDotNet.Video.Options.SoftSplatOptions.UseImportanceMetric.set -> void
 *REMOVED*AiDotNet.Video.Options.SoftSplatOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
 *REMOVED*AiDotNet.Video.Options.SoftSplatOptions.Variant.set -> void
+AiDotNet.Video.Options.XVFIOptions.EdgeConstant.get -> double
+AiDotNet.Video.Options.XVFIOptions.EdgeConstant.set -> void
+AiDotNet.Video.Options.XVFIOptions.LearningRateDecay.get -> double
+AiDotNet.Video.Options.XVFIOptions.LearningRateDecay.set -> void
+AiDotNet.Video.Options.XVFIOptions.LearningRateMilestones.get -> int[]!
+AiDotNet.Video.Options.XVFIOptions.LearningRateMilestones.set -> void
+AiDotNet.Video.Options.XVFIOptions.ReconstructionWeight.get -> double
+AiDotNet.Video.Options.XVFIOptions.ReconstructionWeight.set -> void
+AiDotNet.Video.Options.XVFIOptions.ScaleFactor.get -> int
+AiDotNet.Video.Options.XVFIOptions.ScaleFactor.set -> void
+AiDotNet.Video.Options.XVFIOptions.SmoothnessWeight.get -> double
+AiDotNet.Video.Options.XVFIOptions.SmoothnessWeight.set -> void
+AiDotNet.Video.Options.XVFIOptions.TestDepth.get -> int
+AiDotNet.Video.Options.XVFIOptions.TestDepth.set -> void
+AiDotNet.Video.Options.XVFIOptions.TrainingDepth.get -> int
+AiDotNet.Video.Options.XVFIOptions.TrainingDepth.set -> void
+override AiDotNet.Video.FrameInterpolation.XVFI<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.FrameInterpolation.XVFI<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.XVFI<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.XVFI<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.XVFI<T>.GetNamedLayerActivations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> System.Collections.Generic.Dictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.FrameInterpolation.XVFI<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.FrameInterpolation.XVFI<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.XVFI<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.XVFI<T>.RegisterComponents() -> void
+override AiDotNet.Video.FrameInterpolation.XVFI<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.FrameInterpolation.XVFI<T>.SupportsFusedCompiledTraining.get -> bool
+override AiDotNet.Video.FrameInterpolation.XVFI<T>.SupportsParameterMutation.get -> bool
+static AiDotNet.Video.Options.XVFIOptions.Vimeo() -> AiDotNet.Video.Options.XVFIOptions!
+*REMOVED*AiDotNet.Video.Options.XVFIOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.XVFIOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.XVFIOptions.NumAffineParams.get -> int
+*REMOVED*AiDotNet.Video.Options.XVFIOptions.NumAffineParams.set -> void
+*REMOVED*AiDotNet.Video.Options.XVFIOptions.NumPyramidLevels.get -> int
+*REMOVED*AiDotNet.Video.Options.XVFIOptions.NumPyramidLevels.set -> void
+*REMOVED*AiDotNet.Video.Options.XVFIOptions.NumResBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.XVFIOptions.NumResBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.XVFIOptions.UseComplementaryFlow.get -> bool
+*REMOVED*AiDotNet.Video.Options.XVFIOptions.UseComplementaryFlow.set -> void
+*REMOVED*AiDotNet.Video.Options.XVFIOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.XVFIOptions.Variant.set -> void
