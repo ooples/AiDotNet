@@ -421,6 +421,7 @@ AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double w
 AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength) -> void
 AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength) -> void
 AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength) -> void
+AiDotNet.NeuralNetworks.Tabular.AutoIntBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
 *REMOVED*AiDotNet.Models.Options.A2COptions<T>.ValueLossCoefficient.get -> T
 *REMOVED*AiDotNet.Models.Options.A2COptions<T>.ValueLossCoefficient.set -> void
 *REMOVED*AiDotNet.Models.Options.A3COptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?

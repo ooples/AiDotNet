@@ -132,17 +132,9 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
 
     // Cached values for backward pass
     [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastProjectedInput;
-    [Scratch]
     private Tensor<T>? _lastHiddenStatesReal;
     [Scratch]
     private Tensor<T>? _lastHiddenStatesImag;
-    [Scratch]
-    private Tensor<T>? _lastScanOutputReal;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -328,19 +320,15 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Input projection [batch*seq, modelDim] -> [batch*seq, modelDim]
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
         var bias2D = Engine.Reshape(_inputProjectionBias, new[] { 1, _modelDimension });
         var projectedWithBias = Engine.TensorAdd(projected, bias2D);
         var projected3D = Engine.Reshape(projectedWithBias, new[] { batchSize, seqLen, _modelDimension });
-        _lastProjectedInput = projected3D;
 
         // Step 2: ZOH discretization followed by one fused differentiable MIMO scan.
         var scanOutput = FusedMimoScanForward(projected3D, batchSize, seqLen);
-        _lastScanOutputReal = scanOutput;
 
         // Step 3: Output projection [batch*seq, modelDim] -> [batch*seq, modelDim]
         var scanFlat = Engine.Reshape(scanOutput, new[] { batchSize * seqLen, _modelDimension });
@@ -350,7 +338,6 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputWithBias, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -1003,12 +990,8 @@ public partial class S5Layer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastProjectedInput = null;
         _lastHiddenStatesReal = null;
         _lastHiddenStatesImag = null;
-        _lastScanOutputReal = null;
         _originalInputShape = null;
         _aRealGradient = null;
         _aImagGradient = null;

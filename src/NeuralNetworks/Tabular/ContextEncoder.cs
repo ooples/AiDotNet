@@ -43,14 +43,6 @@ public class ContextEncoder<T>
     // Label embedding
     private readonly FullyConnectedLayer<T> _labelEmbedding;
 
-    // Cached values
-    [Scratch]
-    private Tensor<T>? _queryCache;
-    [Scratch]
-    private Tensor<T>? _keyCache;
-    [Scratch]
-    private Tensor<T>? _valueCache;
-
     /// <summary>
     /// Gets the total parameter count.
     /// </summary>
@@ -100,14 +92,11 @@ public class ContextEncoder<T>
 
         // Project query, keys, values
         var queries = _queryProjection.Forward(queryEmbedding);
-        _queryCache = queries;
 
         // For keys and values, we need to flatten and project
         var flatContext = FlattenContext(combinedContext, batchSize, numNeighbors);
         var keys = ProjectContext(flatContext, _keyProjection, batchSize, numNeighbors);
         var values = ProjectContext(flatContext, _valueProjection, batchSize, numNeighbors);
-        _keyCache = keys;
-        _valueCache = values;
 
         // Cross-attention: query attends to retrieved context
         var attended = CrossAttention(queries, keys, values, context.AttentionWeights, batchSize, numNeighbors);
@@ -255,10 +244,6 @@ public class ContextEncoder<T>
     /// </summary>
     public void ResetState()
     {
-        _queryCache = null;
-        _keyCache = null;
-        _valueCache = null;
-
         _queryProjection.ResetState();
         _keyProjection.ResetState();
         _valueProjection.ResetState();

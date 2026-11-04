@@ -1477,6 +1477,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.ContinualLearning.ContinualLearningStrategyTests.|
       FullyQualifiedName~AiDotNet.Tests.Diagnostics.BroadcastBackwardRankTests.|
       FullyQualifiedName~AiDotNet.Tests.GateTests.Phase4GateTests.|
+      FullyQualifiedName~AiDotNet.Tests.Generators.ActivationCacheGuardAnalyzerTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.CloneAutomationAnalyzerTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedHeavyFixtureRuntimeTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedLayerScaffoldPrecisionTests.|
@@ -1571,6 +1572,8 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.DenseLayerInitializationRollbackTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.TransformerDecoderLayerDecoderOnlyTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.UNet3DCallerLayersTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.AutoIntTrainingGradientTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.PredictionCacheBoundaryTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.FeedForwardLayerCacheSkipParityTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.GatedDeltaProductBroadcastRegressionTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.InjectedSublayerBlockRoundTripTests.|

@@ -69,12 +69,6 @@ public partial class FeatureTokenizer<T>
     [AiDotNet.Attributes.TrainableParameter]
     private Tensor<T>? _clsTokenGrad;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _inputCache;
-    [Scratch]
-    private Matrix<int>? _categoricalIndicesCache;
-
     /// <summary>
     /// Gets the total number of features (numerical + categorical).
     /// </summary>
@@ -224,9 +218,6 @@ public partial class FeatureTokenizer<T>
         {
             throw new ArgumentException($"Expected {_numNumericalFeatures} numerical features, got {numNumerical}");
         }
-
-        _inputCache = numericalFeatures;
-        _categoricalIndicesCache = categoricalIndices;
 
         // Output: [batch, seq_len, embed_dim] where seq_len = 1 (CLS) + numFeatures
         int seqLen = SequenceLength;
