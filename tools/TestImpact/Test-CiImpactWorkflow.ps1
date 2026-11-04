@@ -1045,7 +1045,7 @@ Assert-Contract ($sonarBuild.Contains('dotnet sln AiDotNet.sln list') -and
         $sonarBuild.Contains('$net10 += $project') -and
         $sonarBuild.Contains("solution = @{ path = 'AiDotNet.sln'; projects = `$net10 }") -and
         $sonarBuild.Contains('dotnet build $filter -c Release --no-restore -m:2 -f net10.0') -and
-        -not $sonarBuild.Contains('dotnet build $project')) `
+        -not [Regex]::IsMatch($sonarBuild, 'dotnet build\s+["'']?\$project\b')) `
     'the Sonar build is not one net10.0 compile of the solution projects through a solution filter'
 Assert-Contract (-not [Regex]::IsMatch($sonarBuild, '(?m)^\s*(run:\s*)?dotnet build -c Release')) `
     'the Sonar build compiles the whole solution for every target framework again'
