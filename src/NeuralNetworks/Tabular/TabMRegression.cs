@@ -55,14 +55,6 @@ public class TabMRegression<T> : TabMBase<T>
     private readonly int _outputDimension;
     private readonly BatchEnsembleLayer<T> _regressionHead;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _backboneOutputCache;
-    [Scratch]
-    private Tensor<T>? _predictionsCache;
-    [Scratch]
-    private Tensor<T>? _memberPredictionsCache;
-
     /// <summary>
     /// Gets the output dimension.
     /// </summary>
@@ -105,11 +97,9 @@ public class TabMRegression<T> : TabMBase<T>
     {
         // Forward through backbone
         var backboneOutput = ForwardBackbone(features);
-        _backboneOutputCache = backboneOutput;
 
         // Forward through regression head
         var predictions = _regressionHead.Forward(backboneOutput);
-        _memberPredictionsCache = predictions;
 
         return predictions;
     }
@@ -123,7 +113,6 @@ public class TabMRegression<T> : TabMBase<T>
     {
         var memberPredictions = Forward(features);
         var averaged = AverageMemberOutputs(memberPredictions, _outputDimension);
-        _predictionsCache = averaged;
         return averaged;
     }
 
@@ -170,7 +159,6 @@ public class TabMRegression<T> : TabMBase<T>
         var variance = Engine.ReduceMean(squared, new[] { 1 }, keepDims: false);
         var uncertainty = Engine.TensorSqrt(variance);
 
-        _predictionsCache = predictions;
         return (predictions, uncertainty);
     }
 
@@ -389,9 +377,6 @@ public class TabMRegression<T> : TabMBase<T>
     public override void ResetState()
     {
         base.ResetState();
-        _backboneOutputCache = null;
-        _predictionsCache = null;
-        _memberPredictionsCache = null;
         _regressionHead.ResetGradients();
     }
 }

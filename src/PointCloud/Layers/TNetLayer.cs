@@ -68,11 +68,7 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
     private readonly List<ILayer<T>> _mlpLayers;
     private readonly List<ILayer<T>> _fcLayers;
     private readonly MaxPoolingLayer<T> _maxPooling;
-    [Scratch]
-    private Tensor<T>? _lastInput;
     private Matrix<T>? _transformMatrix;
-    [Scratch]
-    private Tensor<T>? _lastTransformVector;
 
     /// <summary>
     /// Initializes a new instance of the TNetLayer class.
@@ -162,7 +158,6 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = input;
 
         Tensor<T> features = input;
         foreach (var layer in _mlpLayers)
@@ -178,7 +173,6 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
             transformVector = layer.Forward(transformVector);
         }
 
-        _lastTransformVector = transformVector;
         _transformMatrix = BuildTransformMatrix(transformVector);
 
         // Apply transformation to input
@@ -297,9 +291,7 @@ public partial class TNetLayer<T> : LayerBase<T>, IShapeContract
     }
     public override void ResetState()
     {
-        _lastInput = null;
         _transformMatrix = null;
-        _lastTransformVector = null;
 
         foreach (var layer in _mlpLayers)
         {

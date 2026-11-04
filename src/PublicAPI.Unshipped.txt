@@ -18836,3 +18836,4 @@ override AiDotNet.Video.Enhancement.StreamDiffVSR<T>.SupportsFusedCompiledTraini
 *REMOVED*AiDotNet.Video.Options.StreamDiffVSROptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
 *REMOVED*AiDotNet.Video.Options.StreamDiffVSROptions.Variant.set -> void
 *REMOVED*override AiDotNet.Video.Enhancement.StreamDiffVSR<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.Tabular.AutoIntBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T

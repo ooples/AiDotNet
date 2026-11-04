@@ -114,27 +114,7 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached values for backward pass
     [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastQuery;
-    [Scratch]
-    private Tensor<T>? _lastKey;
-    [Scratch]
-    private Tensor<T>? _lastValue;
-    [Scratch]
-    private Tensor<T>? _lastReflectedQ;
-    [Scratch]
-    private Tensor<T>? _lastReflectedK;
-    [Scratch]
     private Tensor<T>? _lastAttentionWeights;
-    [Scratch]
-    private Tensor<T>? _lastGate;
-    [Scratch]
-    private Tensor<T>? _lastGateRaw;
-    [Scratch]
-    private Tensor<T>? _lastAttentionOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -334,35 +314,25 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Q, K, V projections
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var q = Engine.Reshape(Engine.TensorMatMul(inputFlat, _queryWeights), new[] { batchSize, seqLen, _modelDimension });
         var k = Engine.Reshape(Engine.TensorMatMul(inputFlat, _keyWeights), new[] { batchSize, seqLen, _modelDimension });
         var v = Engine.Reshape(Engine.TensorMatMul(inputFlat, _valueWeights), new[] { batchSize, seqLen, _modelDimension });
-        _lastQuery = q;
-        _lastKey = k;
-        _lastValue = v;
 
         // Step 2: Apply Householder reflections to Q and K
         var reflectedQ = ApplyHouseholderReflection(q, batchSize, seqLen);
         var reflectedK = ApplyHouseholderReflection(k, batchSize, seqLen);
-        _lastReflectedQ = reflectedQ;
-        _lastReflectedK = reflectedK;
 
         // Step 3: Compute attention with reflected Q and K
         var attnOutput = CausalLinearAttention.ScaledDotProduct(
             Engine, reflectedQ, reflectedK, v, _numHeads, causal: false);
-        _lastAttentionOutput = attnOutput;
 
         // Step 4: Output gate
         var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Sigmoid(gateRaw);
-        _lastGate = gate;
-        _lastGateRaw = gateRaw;
 
         // Step 5: Gated output
         var gatedOutput = Engine.TensorMultiply(attnOutput, gate);
@@ -375,7 +345,6 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -599,17 +568,7 @@ public partial class PaTHAttentionLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastReflectedQ = null;
-        _lastReflectedK = null;
         _lastAttentionWeights = null;
-        _lastGate = null;
-        _lastGateRaw = null;
-        _lastAttentionOutput = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

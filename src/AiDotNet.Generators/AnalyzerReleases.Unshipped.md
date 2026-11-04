@@ -101,3 +101,5 @@ ADNDEF002 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Transforme
 ADNDEF003 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Model reuses another paper's layer factory without declaring it
 ADNDEF004 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Model defect baseline entry is stale
 ADNDEF005 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Duplicate-model declaration contradicted by the code
+ADN0065 | AiDotNet.Performance | Error | ActivationCacheGuardAnalyzer, Backward-activation cache written without a training-pass guard (fields baselined in ModelDefectBaselines.UnguardedActivationCaches; a stale entry is ADNDEF004)
+ADN0068 | AiDotNet.Performance | Error | ActivationCacheGuardAnalyzer, [KeepsActivation] declared without a reason
