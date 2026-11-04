@@ -20529,8 +20529,6 @@ AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage.Visio
 override AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.OnRandomSeedAssigned() -> void
 override AiDotNet.ReinforcementLearning.Agents.A3C.A3CAgent<T>.Dispose() -> void
 static AiDotNet.ReinforcementLearning.Agents.DeepReinforcementLearningAgentBase<T>.CreateNetworkOptimizer(T learningRate, double? maxGradientNorm = null) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
-*REMOVED*AiDotNet.Models.Options.TRPOOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
-*REMOVED*AiDotNet.Models.Options.TRPOOptions<T>.Optimizer.init -> void
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.IsContinuous.get -> bool
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.IsContinuous.init -> void
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.MaxEpisodeLength.get -> int
@@ -20641,3 +20639,4 @@ override AiDotNet.Video.FrameInterpolation.ABME<T>.SupportsFusedCompiledTraining
 *REMOVED*AiDotNet.Video.Options.ABMEOptions.Variant.set -> void
 *REMOVED*override AiDotNet.Video.FrameInterpolation.ABME<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
 override AiDotNet.Video.FrameInterpolation.ABME<T>.GetNamedLayerActivations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> System.Collections.Generic.Dictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.ReinforcementLearning.Agents.DecisionTransformer.DecisionTransformerAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
