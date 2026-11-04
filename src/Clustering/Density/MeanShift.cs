@@ -49,7 +49,7 @@ namespace AiDotNet.Clustering.Density;
 /// var options = new MeanShiftOptions&lt;double&gt;();
 /// var meanShift = new MeanShift&lt;double&gt;(options);
 /// meanShift.Train(dataMatrix);
-/// Vector<double> labels = meanShift.Labels;
+/// Vector&lt;double> labels = meanShift.Labels;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

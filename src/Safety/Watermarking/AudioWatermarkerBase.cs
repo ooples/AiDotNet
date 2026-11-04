@@ -434,4 +434,8 @@ public abstract class AudioWatermarkerBase<T> : AudioSafetyModuleBase<T>, IAudio
             }
         }
     }
+
+    /// <summary>Preserves the original constructor signature using the default configuration.</summary>
+    protected AudioWatermarkerBase(double watermarkStrength) : this(watermarkStrength, null) { }
+
 }

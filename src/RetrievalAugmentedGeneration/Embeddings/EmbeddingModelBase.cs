@@ -123,7 +123,7 @@ public abstract class EmbeddingModelBase<T> : IEmbeddingModel<T>, IDisposable
     /// - Validate text length (already done)
     /// - Handle errors for invalid input (already done)
     /// 
-    /// Just focus on: Converting the text into a Vector<T> of size EmbeddingDimension.
+    /// Just focus on: Converting the text into a Vector&lt;T> of size EmbeddingDimension.
     /// </para>
     /// </remarks>
     protected abstract Vector<T> EmbedCore(string text);

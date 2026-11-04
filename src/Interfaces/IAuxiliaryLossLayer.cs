@@ -136,7 +136,7 @@ public interface IAuxiliaryLossLayer<T> : IDiagnosticsProvider
     ///
     /// The training loop should check this property:
     /// <code>
-    /// if (layer is IAuxiliaryLossLayer&lt;T&gt; auxLayer && auxLayer.UseAuxiliaryLoss)
+    /// if (layer is IAuxiliaryLossLayer&lt;T&gt; auxLayer &amp;&amp; auxLayer.UseAuxiliaryLoss)
     /// {
     ///     auxiliaryLoss = auxLayer.ComputeAuxiliaryLoss();
     /// }
@@ -236,7 +236,7 @@ public interface IAuxiliaryLossLayer<T> : IDiagnosticsProvider
     ///
     /// You might log these diagnostics periodically:
     /// <code>
-    /// if (iteration % 100 == 0 && layer is IAuxiliaryLossLayer&lt;T&gt; auxLayer)
+    /// if (iteration % 100 == 0 &amp;&amp; layer is IAuxiliaryLossLayer&lt;T&gt; auxLayer)
     /// {
     ///     var diagnostics = auxLayer.GetAuxiliaryLossDiagnostics();
     ///     foreach (var (key, value) in diagnostics)

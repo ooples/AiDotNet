@@ -30,8 +30,8 @@ namespace AiDotNet.Models;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-/// <typeparam name="TInput">The type of input data (e.g., Matrix<T> for regression, Tensor<T> for neural networks).</typeparam>
-/// <typeparam name="TOutput">The type of output data (e.g., Vector<T> for regression, Tensor<T> for neural networks).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T> for regression, Tensor&lt;T> for neural networks).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T> for regression, Tensor&lt;T> for neural networks).</typeparam>
 public class DataSetStats<T, TInput, TOutput>
 {
     /// <summary>

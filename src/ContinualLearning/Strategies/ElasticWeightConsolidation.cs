@@ -102,7 +102,7 @@ public class EWCOptions<T>
 /// </list>
 ///
 /// <para><b>Reference:</b> Kirkpatrick et al. "Overcoming catastrophic forgetting in neural networks" (2017)</para>
-/// <para><b>Online EWC Reference:</b> Schwarz et al. "Progress & Compress" (2018)</para>
+/// <para><b>Online EWC Reference:</b> Schwarz et al. "Progress &amp; Compress" (2018)</para>
 /// </remarks>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

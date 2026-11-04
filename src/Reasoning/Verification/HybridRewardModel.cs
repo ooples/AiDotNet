@@ -65,9 +65,9 @@ namespace AiDotNet.Reasoning.Verification;
 /// **Code example:**
 /// ```csharp
 /// // Create hybrid model (50/50 balance)
-/// var hybridModel = new HybridRewardModel<double>(
-///     prm: new ProcessRewardModel<double>(chatModel),
-///     orm: new OutcomeRewardModel<double>(chatModel),
+/// var hybridModel = new HybridRewardModel&lt;double>(
+///     prm: new ProcessRewardModel&lt;double>(chatModel),
+///     orm: new OutcomeRewardModel&lt;double>(chatModel),
 ///     processWeight: 0.5,
 ///     outcomeWeight: 0.5
 /// );

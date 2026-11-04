@@ -4,8 +4,8 @@ namespace AiDotNet.MetaLearning.Data;
 /// Represents a dataset that can sample episodic tasks for meta-learning.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
-/// <typeparam name="TInput">The input data type (e.g., Matrix<T>, Tensor<T>).</typeparam>
-/// <typeparam name="TOutput">The output data type (e.g., Vector<T>, Tensor<T>).</typeparam>
+/// <typeparam name="TInput">The input data type (e.g., Matrix&lt;T>, Tensor&lt;T>).</typeparam>
+/// <typeparam name="TOutput">The output data type (e.g., Vector&lt;T>, Tensor&lt;T>).</typeparam>
 /// <remarks>
 /// <para>
 /// <b>For Beginners:</b> An episodic dataset is a special kind of dataset used in meta-learning.

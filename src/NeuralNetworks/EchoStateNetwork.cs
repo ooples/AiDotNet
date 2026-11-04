@@ -753,8 +753,6 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     }
 
     /// <summary>
-    /// Normalizes a vector to unit length.
-    /// <summary>
     /// Updates the reservoir state based on the input.
     /// </summary>
     /// <param name="input">The input vector.</param>

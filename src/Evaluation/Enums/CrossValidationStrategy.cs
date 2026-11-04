@@ -218,7 +218,7 @@ public enum CrossValidationStrategy
     /// same CV score, you're being optimistic! Nested CV uses separate loops: the inner loop
     /// tunes parameters, the outer loop estimates true performance.</para>
     /// <para><b>When to use:</b> Hyperparameter optimization with unbiased evaluation.</para>
-    /// <para><b>Research reference:</b> Cawley & Talbot, "On Over-fitting in Model Selection"</para>
+    /// <para><b>Research reference:</b> Cawley &amp; Talbot, "On Over-fitting in Model Selection"</para>
     /// </remarks>
     NestedCV = 15,
 

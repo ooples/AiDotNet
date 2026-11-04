@@ -78,4 +78,8 @@ public partial class WatermarkDetector<T> : TextWatermarkerBase<T>
         if (double.IsNegativeInfinity(bestZ)) return TextResult(0, 0);
         return TextResult(WatermarkStatistics.BonferroniZ(bestZ, _detectors.Length), units);
     }
+
+    /// <summary>Preserves the original constructor signature using the default configuration.</summary>
+    public WatermarkDetector() : this(null, null) { }
+
 }

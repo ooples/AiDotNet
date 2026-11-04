@@ -174,6 +174,253 @@ virtual AiDotNet.SurvivalAnalysis.SurvivalModelBase<T>.SetParameterChunks(System
 virtual AiDotNet.TimeSeries.TimeSeriesModelBase<T>.GetParameterChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 virtual AiDotNet.TimeSeries.TimeSeriesModelBase<T>.GetParameterStateChunks() -> System.Collections.Generic.IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>!>!
 virtual AiDotNet.TimeSeries.TimeSeriesModelBase<T>.SetParameterChunks(System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! chunks) -> void
+*REMOVED*AiDotNet.MetaLearning.Algorithms.MbPAAdaptedModel<T, TInput, TOutput>.MbPAAdaptedModel(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! embeddingNetwork, AiDotNet.MetaLearning.Algorithms.MbPAEpisodicMemory<T>! memory, AiDotNet.Tensors.LinearAlgebra.Vector<T>! trainedOutputParams, AiDotNet.MetaLearning.Options.MbPAOptions<T, TInput, TOutput>! options) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Options.InfoGANOptions.LatentCodeSize.set -> void
+*REMOVED*AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength = 0.5, int segmentSamples = 4096) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.3) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioWatermarkerBase(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.LexicalWatermarker(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double watermarkStrength = 0.5, int vocabSize = 50000, double greenListFraction = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! content) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.IsReady.get -> bool
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.ModuleName.get -> string!
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.TextWatermarker(byte[]? secretKey = null, double greenListFraction = 0.5, double detectionThreshold = 4, int contextWidth = 1) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength = 0.5) -> void
+*REMOVED*abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
+*REMOVED*abstract AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.NeuralNetworks.MobileNetV2Network<T>.SetTrainingMode(bool isTraining) -> void
+*REMOVED*override AiDotNet.NeuralNetworks.MobileNetV3Network<T>.SetTrainingMode(bool isTraining) -> void
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! content) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.IsReady.get -> bool
+*REMOVED*override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.DetectWatermark(string! text) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultAutoEncoderLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBeliefNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBoltzmannMachineLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultGraphAttentionLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int numHeads = 8, int numLayers = 2, double dropoutRate = 0.6) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultNeuralNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultQuantumNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int numQubits = 4) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultRNNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSpikingLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Enums.SpikingNeuronType neuronType = AiDotNet.Enums.SpikingNeuronType.LeakyIntegrateAndFire, double tau = 10, double refractoryPeriod = 2, bool useLayerNormalization = false, bool useOutputConversion = true, int timeSteps = 20) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+AiDotNet.MetaLearning.Algorithms.MbPAAdaptedModel<T, TInput, TOutput>.MbPAAdaptedModel(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! embeddingNetwork, AiDotNet.MetaLearning.Algorithms.MbPAEpisodicMemory<T>! memory, AiDotNet.Tensors.LinearAlgebra.Vector<T>! trainedOutputParams, AiDotNet.MetaLearning.Options.MbPAOptions<T, TInput, TOutput>! options, AiDotNet.Tensors.LinearAlgebra.Vector<T>? keyEmbeddingParameters = null) -> void
+AiDotNet.NeuralNetworks.ColBERT<T>.EmbedQueryLateInteraction(string! query) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.NeuralNetworks.Options.AutoencoderOptions.LatentSize.get -> int?
+AiDotNet.NeuralNetworks.Options.AutoencoderOptions.LatentSize.set -> void
+AiDotNet.NeuralNetworks.Options.ColBERTOptions.MaxQueryLength.get -> int
+AiDotNet.NeuralNetworks.Options.ColBERTOptions.MaxQueryLength.set -> void
+AiDotNet.NeuralNetworks.Options.DeepBeliefNetworkOptions.HiddenLayers.get -> int[]!
+AiDotNet.NeuralNetworks.Options.DeepBeliefNetworkOptions.HiddenLayers.set -> void
+AiDotNet.NeuralNetworks.Options.DeepBoltzmannMachineOptions.HiddenLayers.get -> int[]?
+AiDotNet.NeuralNetworks.Options.DeepBoltzmannMachineOptions.HiddenLayers.set -> void
+AiDotNet.NeuralNetworks.Options.FastTextOptions.MaxNgramLength.get -> int
+AiDotNet.NeuralNetworks.Options.FastTextOptions.MaxNgramLength.set -> void
+AiDotNet.NeuralNetworks.Options.FastTextOptions.MinNgramLength.get -> int
+AiDotNet.NeuralNetworks.Options.FastTextOptions.MinNgramLength.set -> void
+AiDotNet.NeuralNetworks.Options.FeedForwardNeuralNetworkOptions.HiddenLayers.get -> int[]!
+AiDotNet.NeuralNetworks.Options.FeedForwardNeuralNetworkOptions.HiddenLayers.set -> void
+AiDotNet.NeuralNetworks.Options.GraphAttentionNetworkOptions.HiddenSize.get -> int
+AiDotNet.NeuralNetworks.Options.GraphAttentionNetworkOptions.HiddenSize.set -> void
+AiDotNet.NeuralNetworks.Options.InfoGANOptions.CategoricalCodeDimension.get -> int
+AiDotNet.NeuralNetworks.Options.InfoGANOptions.CategoricalCodeDimension.set -> void
+AiDotNet.NeuralNetworks.Options.InfoGANOptions.NumCategoricalCodes.get -> int
+AiDotNet.NeuralNetworks.Options.InfoGANOptions.NumCategoricalCodes.set -> void
+AiDotNet.NeuralNetworks.Options.InfoGANOptions.NumContinuousCodes.get -> int
+AiDotNet.NeuralNetworks.Options.InfoGANOptions.NumContinuousCodes.set -> void
+AiDotNet.NeuralNetworks.Options.NeuralNetworkDefaultOptions.HiddenLayers.get -> int[]?
+AiDotNet.NeuralNetworks.Options.NeuralNetworkDefaultOptions.HiddenLayers.set -> void
+AiDotNet.NeuralNetworks.Options.QuantumNeuralNetworkOptions.NumLayers.get -> int
+AiDotNet.NeuralNetworks.Options.QuantumNeuralNetworkOptions.NumLayers.set -> void
+AiDotNet.NeuralNetworks.Options.RadialBasisFunctionNetworkOptions.NumCenters.get -> int?
+AiDotNet.NeuralNetworks.Options.RadialBasisFunctionNetworkOptions.NumCenters.set -> void
+AiDotNet.NeuralNetworks.Options.RecurrentNeuralNetworkOptions.HiddenSize.get -> int?
+AiDotNet.NeuralNetworks.Options.RecurrentNeuralNetworkOptions.HiddenSize.set -> void
+AiDotNet.NeuralNetworks.Options.RecurrentNeuralNetworkOptions.NumLayers.get -> int
+AiDotNet.NeuralNetworks.Options.RecurrentNeuralNetworkOptions.NumLayers.set -> void
+AiDotNet.NeuralNetworks.Options.ResidualNeuralNetworkOptions.NumResidualBlocks.get -> int
+AiDotNet.NeuralNetworks.Options.ResidualNeuralNetworkOptions.NumResidualBlocks.set -> void
+AiDotNet.NeuralNetworks.Options.SpikingNeuralNetworkOptions.HiddenLayers.get -> int[]!
+AiDotNet.NeuralNetworks.Options.SpikingNeuralNetworkOptions.HiddenLayers.set -> void
+AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold = 0.5, AiDotNet.Interfaces.IMultimodalEmbedding<T>? clipModel = null) -> void
+AiDotNet.Safety.SafetyPipeline<T>.EmbedAudioWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Safety.SafetyPipeline<T>.EmbedTextWatermark(string! text) -> string!
+AiDotNet.Safety.SafetyPipeline<T>.WatermarkLanguageModel(AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>! model) -> AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>!
+AiDotNet.Safety.WatermarkConfig.TextKey.get -> string?
+AiDotNet.Safety.WatermarkConfig.TextKey.set -> void
+AiDotNet.Safety.WatermarkConfig.TextTokenizer.get -> AiDotNet.Agentic.Models.Local.IGenerationTokenizer?
+AiDotNet.Safety.WatermarkConfig.TextTokenizer.set -> void
+AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength = 0.5, int segmentSamples = 4096, string? key = null) -> void
+AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.DetectSegments(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.Watermarking.WatermarkResult!>!
+AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.5, string? key = null) -> void
+AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AdditiveEmbed(double[]! band, double[]! pattern, double frameRms) -> void
+AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioResult(double z, int scoredUnits) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioWatermarkerBase(double watermarkStrength = 0.5, string? key = null) -> void
+AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
+AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.EmbedWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.FrameStatistics(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<(int StartSample, double Numerator, double Energy, int Count)>!
+AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.Key.get -> AiDotNet.Safety.Watermarking.WatermarkKey!
+AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.UsesPublicKey.get -> bool
+AiDotNet.Safety.Watermarking.IAudioWatermarker<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+AiDotNet.Safety.Watermarking.IAudioWatermarker<T>.EmbedWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>
+AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>.BiasLogits(AiDotNet.Tensors.LinearAlgebra.Vector<T>! logits, System.Collections.Generic.IReadOnlyList<int>! context) -> void
+AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>.DetectTokens(System.Collections.Generic.IReadOnlyList<int>! tokenIds) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>.WatermarkModel(AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>! model) -> AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>!
+AiDotNet.Safety.Watermarking.IKeyedWatermarker
+AiDotNet.Safety.Watermarking.IKeyedWatermarker.UsesPublicKey.get -> bool
+AiDotNet.Safety.Watermarking.ITextWatermarkEmbedder<T>
+AiDotNet.Safety.Watermarking.ITextWatermarkEmbedder<T>.EmbedWatermark(string! text) -> string!
+AiDotNet.Safety.Watermarking.ITextWatermarker<T>.Detect(string! text) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>
+AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>.EmbedWatermark(string! text) -> string!
+AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>.GroupCount.get -> int
+AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>.KeyedSubstitutionWatermarker(System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string!>!>! groups, double watermarkStrength, string? key) -> void
+AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.LexicalWatermarker(double watermarkStrength = 0.5, string? key = null, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string!>!>? synonymGroups = null) -> void
+AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.BiasLogits(AiDotNet.Tensors.LinearAlgebra.Vector<T>! logits, System.Collections.Generic.IReadOnlyList<int>! context) -> void
+AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.ContextWidth.get -> int
+AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.DetectTokens(System.Collections.Generic.IReadOnlyList<int>! tokenIds) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.GreenListBias.get -> double
+AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.GreenListFraction.get -> double
+AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.IsGreen(System.Collections.Generic.IReadOnlyList<int>! context, int token) -> bool
+AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double watermarkStrength = 0.5, int? vocabSize = null, double greenListFraction = 0.25, string? key = null, AiDotNet.Agentic.Models.Local.IGenerationTokenizer? tokenizer = null, int contextWidth = 1, bool scoreRepeatedNgrams = false) -> void
+AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.WatermarkModel(AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>! model) -> AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>!
+AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength = 0.5, string? key = null) -> void
+AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength = 0.5, string? key = null) -> void
+AiDotNet.Safety.Watermarking.TextWatermarker<T>.TextWatermarker(string? key = null, double greenListFraction = 0.25, double detectionThreshold = 4, int contextWidth = 1, AiDotNet.Agentic.Models.Local.IGenerationTokenizer? tokenizer = null, double watermarkStrength = 0.5) -> void
+AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.Key.get -> AiDotNet.Safety.Watermarking.WatermarkKey!
+AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextResult(double z, int scoredUnits) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength = 0.5, string? key = null) -> void
+AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.UsesPublicKey.get -> bool
+AiDotNet.Safety.Watermarking.WatermarkDetector<T>.WatermarkDetector(string? key = null, AiDotNet.Agentic.Models.Local.IGenerationTokenizer? tokenizer = null) -> void
+AiDotNet.Safety.Watermarking.WatermarkKey
+AiDotNet.Safety.Watermarking.WatermarkKey.IsPublic.get -> bool
+AiDotNet.Safety.Watermarking.WatermarkKey.Seed(int salt, System.Collections.Generic.IReadOnlyList<int>! values) -> ulong
+AiDotNet.Safety.Watermarking.WatermarkKey.SignPattern(int salt, int stream, int count) -> double[]!
+AiDotNet.Safety.Watermarking.WatermarkKey.WatermarkKey(string! key) -> void
+AiDotNet.Safety.Watermarking.WatermarkResult.PValue.get -> double
+AiDotNet.Safety.Watermarking.WatermarkResult.PValue.init -> void
+AiDotNet.Safety.Watermarking.WatermarkResult.ScoredUnits.get -> int
+AiDotNet.Safety.Watermarking.WatermarkResult.ScoredUnits.init -> void
+AiDotNet.Safety.Watermarking.WatermarkResult.ZScore.get -> double
+AiDotNet.Safety.Watermarking.WatermarkResult.ZScore.init -> void
+AiDotNet.Safety.Watermarking.WatermarkStatistics
+AiDotNet.Safety.Watermarking.WatermarkedCausalLanguageModel<T>
+AiDotNet.Safety.Watermarking.WatermarkedCausalLanguageModel<T>.Biased(AiDotNet.Tensors.LinearAlgebra.Vector<T>! logits, System.Collections.Generic.IReadOnlyList<int>! context) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Safety.Watermarking.WatermarkedCausalLanguageModel<T>.NextTokenLogits(System.Collections.Generic.IReadOnlyList<int>! tokenIds) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Safety.Watermarking.WatermarkedCausalLanguageModel<T>.VocabularySize.get -> int
+AiDotNet.Safety.Watermarking.WatermarkedCausalLanguageModel<T>.WatermarkedCausalLanguageModel(AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>! inner, AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>! watermarker) -> void
+AiDotNet.Safety.Watermarking.WatermarkedCausalLanguageModel<T>.Watermarker.get -> AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>!
+AiDotNet.Safety.Watermarking.WatermarkedIncrementalCausalLanguageModel<T>
+AiDotNet.Safety.Watermarking.WatermarkedIncrementalCausalLanguageModel<T>.AppendToken(int tokenId) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Safety.Watermarking.WatermarkedIncrementalCausalLanguageModel<T>.ResetCache() -> void
+AiDotNet.Safety.Watermarking.WatermarkedIncrementalCausalLanguageModel<T>.StartSequence(System.Collections.Generic.IReadOnlyList<int>! promptTokenIds) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Safety.Watermarking.WatermarkedIncrementalCausalLanguageModel<T>.WatermarkedIncrementalCausalLanguageModel(AiDotNet.Agentic.Models.Local.IIncrementalCausalLanguageModel<T>! inner, AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>! watermarker) -> void
+abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.DetectionWeights(double[]! band, double[]! weights) -> bool
+abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.EmbedFrame(double[]! band, double[]! pattern, double frameRms) -> void
+abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.PatternSalt.get -> int
+abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.WatermarkDescription.get -> string!
+abstract AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>.SeedSalt.get -> int
+abstract AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.Detect(string! text) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+abstract AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.WatermarkDescription.get -> string!
+const AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.MinimumBandCoefficients = 16 -> int
+const AiDotNet.Safety.Watermarking.WatermarkKey.PublicKeyText = "aidotnet-public-watermark-key" -> string!
+const AiDotNet.Safety.Watermarking.WatermarkStatistics.FullConfidenceZ = 6 -> double
+const AiDotNet.Safety.Watermarking.WatermarkStatistics.ZeroConfidenceZ = 3 -> double
+override AiDotNet.NeuralNetworks.DenseNetNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+override AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>.SetTrainingMode(bool isTraining) -> void
+override AiDotNet.NeuralNetworks.Layers.GRULayer<T>.SetTrainingMode(bool isTraining) -> void
+override AiDotNet.NeuralNetworks.Options.ColBERTOptions.Validate() -> void
+override AiDotNet.NeuralNetworks.ResNetNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+override AiDotNet.NeuralNetworks.VGGNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.DetectionWeights(double[]! band, double[]! weights) -> bool
+override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.EmbedFrame(double[]! band, double[]! pattern, double frameRms) -> void
+override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.PatternSalt.get -> int
+override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.WatermarkDescription.get -> string!
+override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.DetectionWeights(double[]! band, double[]! weights) -> bool
+override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.EmbedFrame(double[]! band, double[]! pattern, double frameRms) -> void
+override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.PatternSalt.get -> int
+override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.ReportThreshold.get -> double
+override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.WatermarkDescription.get -> string!
+override AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+override AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>.Detect(string! text) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.SeedSalt.get -> int
+override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.WatermarkDescription.get -> string!
+override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.Detect(string! text) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.WatermarkDescription.get -> string!
+override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.BandHighHz.get -> double
+override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.BandLowHz.get -> double
+override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.DetectionWeights(double[]! band, double[]! weights) -> bool
+override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.EmbedFrame(double[]! band, double[]! pattern, double frameRms) -> void
+override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.PatternSalt.get -> int
+override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.WatermarkDescription.get -> string!
+override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SeedSalt.get -> int
+override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.WatermarkDescription.get -> string!
+override AiDotNet.Safety.Watermarking.TextWatermarker<T>.ModuleName.get -> string!
+override AiDotNet.Safety.Watermarking.TextWatermarker<T>.ReportThreshold.get -> double
+override AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.Detect(string! text) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.WatermarkDescription.get -> string!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultAutoEncoderLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int latentSize = 0) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBeliefNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Collections.Generic.IReadOnlyList<int>? hiddenLayerSizes = null) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBoltzmannMachineLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Collections.Generic.IReadOnlyList<int>? hiddenLayerSizes = null) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultFeedForwardLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Collections.Generic.IReadOnlyList<int>! hiddenLayerSizes) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultGraphAttentionLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int numHeads = 8, int numLayers = 2, double dropoutRate = 0.6, int hiddenSize = 64) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultNeuralNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Collections.Generic.IReadOnlyList<int>? hiddenLayerSizes = null) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultQuantumNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int numQubits = 4, int numQuantumLayers = 2) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultRNNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int hiddenSize = 0, int recurrentLayerCount = 2) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSpikingLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Enums.SpikingNeuronType neuronType = AiDotNet.Enums.SpikingNeuronType.LeakyIntegrateAndFire, double tau = 10, double refractoryPeriod = 2, bool useLayerNormalization = false, bool useOutputConversion = true, int timeSteps = 20, System.Collections.Generic.IReadOnlyList<int>? hiddenLayerSizes = null) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+static AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AdditiveWeights(double[]! band, double[]! weights) -> bool
+static AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.FrameSizeFor(int sampleRate) -> int
+static AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.PooledZ(System.Collections.Generic.IReadOnlyList<(int StartSample, double Numerator, double Energy, int Count)>! frames) -> double
+static AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.RobustSpread(double[]! values) -> double
+static AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.DefaultSynonymGroups.get -> System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string!>!>!
+static AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.ContractionGroups.get -> System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string!>!>!
+static AiDotNet.Safety.Watermarking.WatermarkKey.FromOptional(string? key) -> AiDotNet.Safety.Watermarking.WatermarkKey!
+static AiDotNet.Safety.Watermarking.WatermarkKey.Public.get -> AiDotNet.Safety.Watermarking.WatermarkKey!
+static AiDotNet.Safety.Watermarking.WatermarkKey.RequireSecret(string? key, string! settingName) -> AiDotNet.Safety.Watermarking.WatermarkKey!
+static AiDotNet.Safety.Watermarking.WatermarkKey.Uniform(ulong seed, int item) -> double
+static AiDotNet.Safety.Watermarking.WatermarkStatistics.BonferroniZ(double bestZ, int tests) -> double
+static AiDotNet.Safety.Watermarking.WatermarkStatistics.Confidence(double z) -> double
+static AiDotNet.Safety.Watermarking.WatermarkStatistics.CorrelationZ(double numerator, double sumOfSquaredWeights) -> double
+static AiDotNet.Safety.Watermarking.WatermarkStatistics.CountZ(int hits, int trials, double gamma) -> double
+static AiDotNet.Safety.Watermarking.WatermarkStatistics.UpperTailProbability(double z) -> double
+static AiDotNet.Safety.Watermarking.WatermarkStatistics.ZForUpperTail(double p) -> double
+virtual AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.ReleasesInferenceIntermediates.get -> bool
+virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.BandHighHz.get -> double
+virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.BandLowHz.get -> double
+virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.MaxSamples.get -> long
+virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.ReportThreshold.get -> double
+virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(string! text) -> double
+virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.ReportThreshold.get -> double
+*REMOVED*AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = true) -> void
+AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = false) -> void
+AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold) -> void
+AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength, int segmentSamples) -> void
+AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold, double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioWatermarkerBase(double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.LexicalWatermarker(double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double watermarkStrength, int vocabSize, double greenListFraction) -> void
+AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength) -> void
+AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength) -> void
 AiDotNet.Attributes.DistinctImplementationOfAttribute
 AiDotNet.Attributes.NotScaledAttribute
 AiDotNet.Attributes.RecipeProvenance.NamedReproduction = 4 -> AiDotNet.Attributes.RecipeProvenance
@@ -181,18 +428,6 @@ AiDotNet.Attributes.RecipeProvenance.ReleasedCode = 5 -> AiDotNet.Attributes.Rec
 AiDotNet.Attributes.SharedLayerReferenceAttribute
 AiDotNet.Attributes.SharedLayerReferenceAttribute.SharedLayerReferenceAttribute() -> void
 AiDotNet.Attributes.TaskVariantOfAttribute
-const AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.MinimumBandCoefficients = 16 -> int
-AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>
-AiDotNet.Safety.Watermarking.ITextWatermarkEmbedder<T>
-AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>
-AiDotNet.Safety.Watermarking.WatermarkedCausalLanguageModel<T>
-AiDotNet.Safety.Watermarking.WatermarkedIncrementalCausalLanguageModel<T>
-const AiDotNet.Safety.Watermarking.WatermarkKey.PublicKeyText = "aidotnet-public-watermark-key" -> string!
-AiDotNet.Safety.Watermarking.WatermarkKey
-AiDotNet.Safety.Watermarking.IKeyedWatermarker
-const AiDotNet.Safety.Watermarking.WatermarkStatistics.ZeroConfidenceZ = 3 -> double
-AiDotNet.Safety.Watermarking.WatermarkStatistics
-const AiDotNet.Safety.Watermarking.WatermarkStatistics.FullConfidenceZ = 6 -> double
 AiDotNet.Audio.Features.WindowType.Povey = 4 -> AiDotNet.Audio.Features.WindowType
 AiDotNet.Enums.OptimizerKind.DAdaptAdam = 16 -> AiDotNet.Enums.OptimizerKind
 AiDotNet.Audio.MusicGen.MusicGenStereoPattern
@@ -1975,7 +2210,6 @@ override AiDotNet.ContinualLearning.Strategies.LearningWithoutForgetting<T, TInp
 AiDotNet.ContinualLearning.Strategies.LearningWithoutForgetting<T, TInput, TOutput>.DistillationLoss.get -> AiDotNet.Interfaces.ILossFunction<T>!
 AiDotNet.ContinualLearning.Interfaces.IContinualLearningStrategy<T, TInput, TOutput>.AdjustGradients(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! model, AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradients) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 override AiDotNet.ContinualLearning.Strategies.GradientEpisodicMemory<T, TInput, TOutput>.AdjustGradients(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! model, AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradients) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = false) -> void
 override AiDotNet.ContinualLearning.Strategies.ExpectedGradientLength<T, TInput, TOutput>.AdjustGradients(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! model, AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradients) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.Configuration.EfficientNetConfiguration.DropConnectRate.init -> void
 AiDotNet.Configuration.EfficientNetConfiguration.DropConnectRate.get -> double
@@ -2121,50 +2355,10 @@ AiDotNet.SpeechRecognition.WhisperFamily.WhisperXOptions.Temperatures.get -> dou
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperXOptions.Temperatures.set -> void
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperX<T>.OutputFeatureWidth.get -> int
 AiDotNet.Tokenization.Specialized.T5TextTokenizer.Encode(string! text) -> int[]!
-static AiDotNet.Safety.Watermarking.WatermarkStatistics.Confidence(double z) -> double
-static AiDotNet.Safety.Watermarking.WatermarkStatistics.CountZ(int hits, int trials, double gamma) -> double
-static AiDotNet.Safety.Watermarking.WatermarkStatistics.CorrelationZ(double numerator, double sumOfSquaredWeights) -> double
-static AiDotNet.Safety.Watermarking.WatermarkStatistics.UpperTailProbability(double z) -> double
 override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-static AiDotNet.Safety.Watermarking.WatermarkStatistics.ZForUpperTail(double p) -> double
-static AiDotNet.Safety.Watermarking.WatermarkStatistics.BonferroniZ(double bestZ, int tests) -> double
-AiDotNet.Safety.Watermarking.WatermarkResult.ZScore.get -> double
-AiDotNet.Safety.Watermarking.WatermarkResult.ZScore.init -> void
-AiDotNet.Safety.Watermarking.WatermarkResult.PValue.get -> double
-AiDotNet.Safety.Watermarking.WatermarkResult.PValue.init -> void
-AiDotNet.Safety.Watermarking.WatermarkResult.ScoredUnits.init -> void
-AiDotNet.Safety.Watermarking.WatermarkResult.ScoredUnits.get -> int
-AiDotNet.Safety.Watermarking.IKeyedWatermarker.UsesPublicKey.get -> bool
-AiDotNet.Safety.Watermarking.WatermarkKey.WatermarkKey(string! key) -> void
-static AiDotNet.Safety.Watermarking.WatermarkKey.Public.get -> AiDotNet.Safety.Watermarking.WatermarkKey!
-AiDotNet.Safety.Watermarking.WatermarkKey.IsPublic.get -> bool
-static AiDotNet.Safety.Watermarking.WatermarkKey.FromOptional(string? key) -> AiDotNet.Safety.Watermarking.WatermarkKey!
-static AiDotNet.Safety.Watermarking.WatermarkKey.RequireSecret(string? key, string! settingName) -> AiDotNet.Safety.Watermarking.WatermarkKey!
-AiDotNet.Safety.Watermarking.WatermarkKey.SignPattern(int salt, int stream, int count) -> double[]!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperX<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperX<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperX<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
-AiDotNet.Safety.Watermarking.WatermarkKey.Seed(int salt, System.Collections.Generic.IReadOnlyList<int>! values) -> ulong
-static AiDotNet.Safety.Watermarking.WatermarkKey.Uniform(ulong seed, int item) -> double
-AiDotNet.Safety.Watermarking.WatermarkedIncrementalCausalLanguageModel<T>.WatermarkedIncrementalCausalLanguageModel(AiDotNet.Agentic.Models.Local.IIncrementalCausalLanguageModel<T>! inner, AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>! watermarker) -> void
-AiDotNet.Safety.Watermarking.WatermarkedIncrementalCausalLanguageModel<T>.ResetCache() -> void
-AiDotNet.Safety.Watermarking.WatermarkedIncrementalCausalLanguageModel<T>.StartSequence(System.Collections.Generic.IReadOnlyList<int>! promptTokenIds) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-AiDotNet.Safety.Watermarking.WatermarkedIncrementalCausalLanguageModel<T>.AppendToken(int tokenId) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-AiDotNet.Safety.Watermarking.WatermarkedCausalLanguageModel<T>.WatermarkedCausalLanguageModel(AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>! inner, AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>! watermarker) -> void
-AiDotNet.Safety.Watermarking.WatermarkedCausalLanguageModel<T>.Watermarker.get -> AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>!
-AiDotNet.Safety.Watermarking.WatermarkedCausalLanguageModel<T>.VocabularySize.get -> int
-AiDotNet.Safety.Watermarking.WatermarkedCausalLanguageModel<T>.NextTokenLogits(System.Collections.Generic.IReadOnlyList<int>! tokenIds) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-AiDotNet.Safety.Watermarking.WatermarkedCausalLanguageModel<T>.Biased(AiDotNet.Tensors.LinearAlgebra.Vector<T>! logits, System.Collections.Generic.IReadOnlyList<int>! context) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.WatermarkDescription.get -> string!
-AiDotNet.Safety.Watermarking.WatermarkDetector<T>.WatermarkDetector(string? key = null, AiDotNet.Agentic.Models.Local.IGenerationTokenizer? tokenizer = null) -> void
-override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.Detect(string! text) -> AiDotNet.Safety.Watermarking.WatermarkResult!
-AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength = 0.5, string? key = null) -> void
-AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.Key.get -> AiDotNet.Safety.Watermarking.WatermarkKey!
-AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.UsesPublicKey.get -> bool
-virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.ReportThreshold.get -> double
-abstract AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.WatermarkDescription.get -> string!
-abstract AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.Detect(string! text) -> AiDotNet.Safety.Watermarking.WatermarkResult!
-virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(string! text) -> double
 override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestampedOptions.MaxTextLength.get -> int
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestampedOptions.MaxTextLength.set -> void
@@ -2174,22 +2368,6 @@ AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestampedOptions.WordTimestamp
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestampedOptions.Temperatures.get -> double[]!
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestampedOptions.Temperatures.set -> void
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestamped<T>.OutputFeatureWidth.get -> int
-override AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextResult(double z, int scoredUnits) -> AiDotNet.Safety.Watermarking.WatermarkResult!
-override AiDotNet.Safety.Watermarking.TextWatermarker<T>.ModuleName.get -> string!
-override AiDotNet.Safety.Watermarking.TextWatermarker<T>.ReportThreshold.get -> double
-AiDotNet.Safety.Watermarking.TextWatermarker<T>.TextWatermarker(string? key = null, double greenListFraction = 0.25, double detectionThreshold = 4, int contextWidth = 1, AiDotNet.Agentic.Models.Local.IGenerationTokenizer? tokenizer = null, double watermarkStrength = 0.5) -> void
-static AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.ContractionGroups.get -> System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string!>!>!
-override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.WatermarkDescription.get -> string!
-override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SeedSalt.get -> int
-AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength = 0.5, string? key = null) -> void
-override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.WatermarkDescription.get -> string!
-override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.PatternSalt.get -> int
-override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.BandLowHz.get -> double
-override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.BandHighHz.get -> double
-AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength = 0.5, string? key = null) -> void
-override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.EmbedFrame(double[]! band, double[]! pattern, double frameRms) -> void
-override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.DetectionWeights(double[]! band, double[]! weights) -> bool
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestamped<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestamped<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperTimestamped<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
@@ -2206,23 +2384,13 @@ override AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.Synthesize(string! t
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperLive<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperLive<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperLive<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
-override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.WatermarkDescription.get -> string!
-AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.GreenListFraction.get -> double
-AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double watermarkStrength = 0.5, int? vocabSize = null, double greenListFraction = 0.25, string? key = null, AiDotNet.Agentic.Models.Local.IGenerationTokenizer? tokenizer = null, int contextWidth = 1, bool scoreRepeatedNgrams = false) -> void
-AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.GreenListBias.get -> double
-AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.ContextWidth.get -> int
-AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.IsGreen(System.Collections.Generic.IReadOnlyList<int>! context, int token) -> bool
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperLargeV3TurboOptions.Language.get -> string?
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperLargeV3TurboOptions.WordTimestamps.get -> bool
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperLargeV3TurboOptions.WordTimestamps.set -> void
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperLargeV3TurboOptions.Temperatures.get -> double[]!
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperLargeV3TurboOptions.Temperatures.set -> void
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperLargeV3Turbo<T>.OutputFeatureWidth.get -> int
-AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.BiasLogits(AiDotNet.Tensors.LinearAlgebra.Vector<T>! logits, System.Collections.Generic.IReadOnlyList<int>! context) -> void
-AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.WatermarkModel(AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>! model) -> AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>!
 override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.DetectTokens(System.Collections.Generic.IReadOnlyList<int>! tokenIds) -> AiDotNet.Safety.Watermarking.WatermarkResult!
-override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.Detect(string! text) -> AiDotNet.Safety.Watermarking.WatermarkResult!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperLargeV3Turbo<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperLargeV3Turbo<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperLargeV3Turbo<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
@@ -2530,65 +2698,6 @@ override AiDotNet.Video.Denoising.FloRNN<T>.GetExtraTrainableLayers() -> System.
 override AiDotNet.Video.Denoising.FloRNN<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
 override AiDotNet.Video.Denoising.FloRNN<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
 override AiDotNet.Video.Denoising.FloRNN<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
-static AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.DefaultSynonymGroups.get -> System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string!>!>!
-override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.WatermarkDescription.get -> string!
-override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.SeedSalt.get -> int
-AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.LexicalWatermarker(double watermarkStrength = 0.5, string? key = null, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string!>!>? synonymGroups = null) -> void
-AiDotNet.Safety.Watermarking.ITextWatermarker<T>.Detect(string! text) -> AiDotNet.Safety.Watermarking.WatermarkResult!
-AiDotNet.Safety.Watermarking.ITextWatermarkEmbedder<T>.EmbedWatermark(string! text) -> string!
-AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>.BiasLogits(AiDotNet.Tensors.LinearAlgebra.Vector<T>! logits, System.Collections.Generic.IReadOnlyList<int>! context) -> void
-AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>.DetectTokens(System.Collections.Generic.IReadOnlyList<int>! tokenIds) -> AiDotNet.Safety.Watermarking.WatermarkResult!
-AiDotNet.Safety.Watermarking.IGenerationWatermarker<T>.WatermarkModel(AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>! model) -> AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>!
-AiDotNet.Safety.Watermarking.IAudioWatermarker<T>.EmbedWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-AiDotNet.Safety.Watermarking.IAudioWatermarker<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Safety.Watermarking.WatermarkResult!
-override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.WatermarkDescription.get -> string!
-override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.PatternSalt.get -> int
-AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.5, string? key = null) -> void
-override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.ReportThreshold.get -> double
-override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.EmbedFrame(double[]! band, double[]! pattern, double frameRms) -> void
-override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.DetectionWeights(double[]! band, double[]! weights) -> bool
-override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.WatermarkDescription.get -> string!
-AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioWatermarkerBase(double watermarkStrength = 0.5, string? key = null) -> void
-AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.Key.get -> AiDotNet.Safety.Watermarking.WatermarkKey!
-AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.UsesPublicKey.get -> bool
-virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.BandLowHz.get -> double
-virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.BandHighHz.get -> double
-virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.MaxSamples.get -> long
-virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.ReportThreshold.get -> double
-abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.WatermarkDescription.get -> string!
-abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.PatternSalt.get -> int
-abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.DetectionWeights(double[]! band, double[]! weights) -> bool
-abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.EmbedFrame(double[]! band, double[]! pattern, double frameRms) -> void
-override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.PatternSalt.get -> int
-AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength = 0.5, int segmentSamples = 4096, string? key = null) -> void
-AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.DetectSegments(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.Watermarking.WatermarkResult!>!
-AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>.KeyedSubstitutionWatermarker(System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string!>!>! groups, double watermarkStrength, string? key) -> void
-abstract AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>.SeedSalt.get -> int
-AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>.GroupCount.get -> int
-AiDotNet.Safety.WatermarkConfig.TextTokenizer.set -> void
-AiDotNet.Safety.WatermarkConfig.TextTokenizer.get -> AiDotNet.Agentic.Models.Local.IGenerationTokenizer?
-AiDotNet.Safety.WatermarkConfig.TextKey.get -> string?
-AiDotNet.Safety.WatermarkConfig.TextKey.set -> void
-override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Safety.Watermarking.WatermarkResult!
-AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>.EmbedWatermark(string! text) -> string!
-AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.EmbedWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold = 0.5, AiDotNet.Interfaces.IMultimodalEmbedding<T>? clipModel = null) -> void
-override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.EmbedFrame(double[]! band, double[]! pattern, double frameRms) -> void
-override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.DetectionWeights(double[]! band, double[]! weights) -> bool
-virtual AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Safety.Watermarking.WatermarkResult!
-AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
-override AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioResult(double z, int scoredUnits) -> AiDotNet.Safety.Watermarking.WatermarkResult!
-AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.FrameStatistics(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<(int StartSample, double Numerator, double Energy, int Count)>!
-static AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.PooledZ(System.Collections.Generic.IReadOnlyList<(int StartSample, double Numerator, double Energy, int Count)>! frames) -> double
-AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AdditiveEmbed(double[]! band, double[]! pattern, double frameRms) -> void
-static AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AdditiveWeights(double[]! band, double[]! weights) -> bool
-static AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.RobustSpread(double[]! values) -> double
-static AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.FrameSizeFor(int sampleRate) -> int
-override AiDotNet.Safety.Watermarking.KeyedSubstitutionWatermarker<T>.Detect(string! text) -> AiDotNet.Safety.Watermarking.WatermarkResult!
-AiDotNet.Safety.SafetyPipeline<T>.EmbedAudioWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-AiDotNet.Safety.SafetyPipeline<T>.EmbedTextWatermark(string! text) -> string!
-AiDotNet.Safety.SafetyPipeline<T>.WatermarkLanguageModel(AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>! model) -> AiDotNet.Agentic.Models.Local.ICausalLanguageModel<T>!
 static AiDotNet.Training.CompiledStepHostValue<T>.Compute(string! name, AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]! inputs, int[]! shape, System.Action<AiDotNet.Tensors.LinearAlgebra.Tensor<T>![]!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! compute) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.VarianceAdaptorTtsModelBase<T>.VarianceAdaptorTtsModelBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
@@ -13595,8 +13704,6 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.Embed(AiDotNet.Tenso
 override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> System.Collections.Generic.Dictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 *REMOVED*abstract AiDotNet.ContinualLearning.Strategies.ContinualLearningStrategyBase<T, TInput, TOutput>.AdjustGradients(AiDotNet.Tensors.LinearAlgebra.Vector<T>! gradients) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
-*REMOVED*abstract AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
-*REMOVED*abstract AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(string! text) -> double
 *REMOVED*abstract AiDotNet.TextToSpeech.AcousticModelBase<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*abstract AiDotNet.TextToSpeech.TtsModelBase<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*AiDotNet.Audio.AudioLDM.AudioLDMModel<T>
@@ -14442,7 +14549,6 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*AiDotNet.ComputerVision.Segmentation.Referring.GLaMMOptions.Validate() -> void
 *REMOVED*AiDotNet.ComputerVision.Segmentation.Video.EfficientTAM<T>.EfficientTAM(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.Video.EfficientTAMOptions? options = null) -> void
 *REMOVED*AiDotNet.ComputerVision.VisionTaskModelBase<T>.PaperAdam(double learningRate) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
-*REMOVED*AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = true) -> void
 *REMOVED*AiDotNet.Configuration.YamlModelConfig.TextToSpeech.get -> AiDotNet.Configuration.YamlTypeSection?
 *REMOVED*AiDotNet.Configuration.YamlModelConfig.TextToSpeech.set -> void
 *REMOVED*AiDotNet.ContinualLearning.ElasticWeightConsolidation<T>
@@ -14814,23 +14920,6 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*AiDotNet.NeuralNetworks.VisionScanPattern.CrossScan = 1 -> AiDotNet.NeuralNetworks.VisionScanPattern
 *REMOVED*AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
 *REMOVED*AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.StoreMultiAgentExperience(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentStates, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentActions, T teamReward, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! nextAgentStates, AiDotNet.Tensors.LinearAlgebra.Vector<T>! globalState, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextGlobalState, bool done) -> void
-*REMOVED*AiDotNet.MetaLearning.Algorithms.MbPAAdaptedModel<T, TInput, TOutput>.MbPAAdaptedModel(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! embeddingNetwork, AiDotNet.MetaLearning.Algorithms.MbPAEpisodicMemory<T>! memory, AiDotNet.Tensors.LinearAlgebra.Vector<T>! trainedOutputParams, AiDotNet.MetaLearning.Options.MbPAOptions<T, TInput, TOutput>! options) -> void
-*REMOVED*AiDotNet.NeuralNetworks.Options.InfoGANOptions.LatentCodeSize.set -> void
-*REMOVED*AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength = 0.5, int segmentSamples = 4096) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.3) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.AudioWatermarkerBase<T>.AudioWatermarkerBase(double watermarkStrength = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.LexicalWatermarker(double watermarkStrength = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double watermarkStrength = 0.5, int vocabSize = 50000, double greenListFraction = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! content) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.IsReady.get -> bool
-*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.ModuleName.get -> string!
-*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarker<T>.TextWatermarker(byte[]? secretKey = null, double greenListFraction = 0.5, double detectionThreshold = 4, int contextWidth = 1) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength = 0.5) -> void
-*REMOVED*AiDotNet.Safety.Watermarking.WatermarkDetector<T>.WatermarkDetector() -> void
 *REMOVED*AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions.DropoutRate.get -> double
 *REMOVED*AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions.DropoutRate.set -> void
 *REMOVED*AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLargeOptions.DecoderDim.get -> int
@@ -16746,25 +16835,6 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*override AiDotNet.NeuralNetworks.VisionMambaModel<T>.CopyGeneratedTrainableTensorsTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
 *REMOVED*override AiDotNet.NeuralNetworks.VisionMambaModel<T>.GetExtraTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 *REMOVED*override AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
-*REMOVED*override AiDotNet.NeuralNetworks.MobileNetV2Network<T>.SetTrainingMode(bool isTraining) -> void
-*REMOVED*override AiDotNet.NeuralNetworks.MobileNetV3Network<T>.SetTrainingMode(bool isTraining) -> void
-*REMOVED*override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
-*REMOVED*override AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! content) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.AudioWatermarker<T>.IsReady.get -> bool
-*REMOVED*override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.DetectWatermark(string! text) -> double
-*REMOVED*override AiDotNet.Safety.Watermarking.LexicalWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.DetectWatermark(string! text) -> double
-*REMOVED*override AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> double
-*REMOVED*override AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.EvaluateAudio(AiDotNet.Tensors.LinearAlgebra.Vector<T>! audioSamples, int sampleRate) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.DetectWatermark(string! text) -> double
-*REMOVED*override AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.DetectWatermark(string! text) -> double
-*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.EvaluateText(string! text) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
-*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
-*REMOVED*override AiDotNet.Safety.Watermarking.WatermarkDetector<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*override AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected) -> bool
 *REMOVED*override AiDotNet.SpeechRecognition.ConformerFamily.ConformerCTC<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 *REMOVED*override AiDotNet.SpeechRecognition.ConformerFamily.ConvTransformer<T>.EnsureParametersReady() -> void
@@ -17845,68 +17915,6 @@ override AiDotNet.Video.Enhancement.RealESRGANVideo<T>.GetInputDomain(int[]? inp
 override AiDotNet.Video.Enhancement.RealESRGANVideo<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
 override AiDotNet.Video.Enhancement.TTVSR<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
 override AiDotNet.Video.Enhancement.TTVSR<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
-*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultAutoEncoderLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBeliefNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBoltzmannMachineLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultGraphAttentionLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int numHeads = 8, int numLayers = 2, double dropoutRate = 0.6) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultNeuralNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultQuantumNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int numQubits = 4) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultRNNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSpikingLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Enums.SpikingNeuronType neuronType = AiDotNet.Enums.SpikingNeuronType.LeakyIntegrateAndFire, double tau = 10, double refractoryPeriod = 2, bool useLayerNormalization = false, bool useOutputConversion = true, int timeSteps = 20) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-AiDotNet.MetaLearning.Algorithms.MbPAAdaptedModel<T, TInput, TOutput>.MbPAAdaptedModel(AiDotNet.Interfaces.IFullModel<T, TInput, TOutput>! embeddingNetwork, AiDotNet.MetaLearning.Algorithms.MbPAEpisodicMemory<T>! memory, AiDotNet.Tensors.LinearAlgebra.Vector<T>! trainedOutputParams, AiDotNet.MetaLearning.Options.MbPAOptions<T, TInput, TOutput>! options, AiDotNet.Tensors.LinearAlgebra.Vector<T>? keyEmbeddingParameters = null) -> void
-AiDotNet.NeuralNetworks.ColBERT<T>.EmbedQueryLateInteraction(string! query) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
-AiDotNet.NeuralNetworks.Options.AutoencoderOptions.LatentSize.get -> int?
-AiDotNet.NeuralNetworks.Options.AutoencoderOptions.LatentSize.set -> void
-AiDotNet.NeuralNetworks.Options.ColBERTOptions.MaxQueryLength.get -> int
-AiDotNet.NeuralNetworks.Options.ColBERTOptions.MaxQueryLength.set -> void
-AiDotNet.NeuralNetworks.Options.DeepBeliefNetworkOptions.HiddenLayers.get -> int[]!
-AiDotNet.NeuralNetworks.Options.DeepBeliefNetworkOptions.HiddenLayers.set -> void
-AiDotNet.NeuralNetworks.Options.DeepBoltzmannMachineOptions.HiddenLayers.get -> int[]?
-AiDotNet.NeuralNetworks.Options.DeepBoltzmannMachineOptions.HiddenLayers.set -> void
-AiDotNet.NeuralNetworks.Options.FastTextOptions.MaxNgramLength.get -> int
-AiDotNet.NeuralNetworks.Options.FastTextOptions.MaxNgramLength.set -> void
-AiDotNet.NeuralNetworks.Options.FastTextOptions.MinNgramLength.get -> int
-AiDotNet.NeuralNetworks.Options.FastTextOptions.MinNgramLength.set -> void
-AiDotNet.NeuralNetworks.Options.FeedForwardNeuralNetworkOptions.HiddenLayers.get -> int[]!
-AiDotNet.NeuralNetworks.Options.FeedForwardNeuralNetworkOptions.HiddenLayers.set -> void
-AiDotNet.NeuralNetworks.Options.GraphAttentionNetworkOptions.HiddenSize.get -> int
-AiDotNet.NeuralNetworks.Options.GraphAttentionNetworkOptions.HiddenSize.set -> void
-AiDotNet.NeuralNetworks.Options.InfoGANOptions.CategoricalCodeDimension.get -> int
-AiDotNet.NeuralNetworks.Options.InfoGANOptions.CategoricalCodeDimension.set -> void
-AiDotNet.NeuralNetworks.Options.InfoGANOptions.NumCategoricalCodes.get -> int
-AiDotNet.NeuralNetworks.Options.InfoGANOptions.NumCategoricalCodes.set -> void
-AiDotNet.NeuralNetworks.Options.InfoGANOptions.NumContinuousCodes.get -> int
-AiDotNet.NeuralNetworks.Options.InfoGANOptions.NumContinuousCodes.set -> void
-AiDotNet.NeuralNetworks.Options.NeuralNetworkDefaultOptions.HiddenLayers.get -> int[]?
-AiDotNet.NeuralNetworks.Options.NeuralNetworkDefaultOptions.HiddenLayers.set -> void
-AiDotNet.NeuralNetworks.Options.QuantumNeuralNetworkOptions.NumLayers.get -> int
-AiDotNet.NeuralNetworks.Options.QuantumNeuralNetworkOptions.NumLayers.set -> void
-AiDotNet.NeuralNetworks.Options.RadialBasisFunctionNetworkOptions.NumCenters.get -> int?
-AiDotNet.NeuralNetworks.Options.RadialBasisFunctionNetworkOptions.NumCenters.set -> void
-AiDotNet.NeuralNetworks.Options.RecurrentNeuralNetworkOptions.HiddenSize.get -> int?
-AiDotNet.NeuralNetworks.Options.RecurrentNeuralNetworkOptions.HiddenSize.set -> void
-AiDotNet.NeuralNetworks.Options.RecurrentNeuralNetworkOptions.NumLayers.get -> int
-AiDotNet.NeuralNetworks.Options.RecurrentNeuralNetworkOptions.NumLayers.set -> void
-AiDotNet.NeuralNetworks.Options.ResidualNeuralNetworkOptions.NumResidualBlocks.get -> int
-AiDotNet.NeuralNetworks.Options.ResidualNeuralNetworkOptions.NumResidualBlocks.set -> void
-AiDotNet.NeuralNetworks.Options.SpikingNeuralNetworkOptions.HiddenLayers.get -> int[]!
-AiDotNet.NeuralNetworks.Options.SpikingNeuralNetworkOptions.HiddenLayers.set -> void
-override AiDotNet.NeuralNetworks.DenseNetNetwork<T>.ReleasesInferenceIntermediates.get -> bool
-override AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>.SetTrainingMode(bool isTraining) -> void
-override AiDotNet.NeuralNetworks.Layers.GRULayer<T>.SetTrainingMode(bool isTraining) -> void
-override AiDotNet.NeuralNetworks.Options.ColBERTOptions.Validate() -> void
-override AiDotNet.NeuralNetworks.ResNetNetwork<T>.ReleasesInferenceIntermediates.get -> bool
-override AiDotNet.NeuralNetworks.VGGNetwork<T>.ReleasesInferenceIntermediates.get -> bool
-static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultAutoEncoderLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int latentSize = 0) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBeliefNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Collections.Generic.IReadOnlyList<int>? hiddenLayerSizes = null) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultDeepBoltzmannMachineLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Collections.Generic.IReadOnlyList<int>? hiddenLayerSizes = null) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultFeedForwardLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Collections.Generic.IReadOnlyList<int>! hiddenLayerSizes) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultGraphAttentionLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int numHeads = 8, int numLayers = 2, double dropoutRate = 0.6, int hiddenSize = 64) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultNeuralNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, System.Collections.Generic.IReadOnlyList<int>? hiddenLayerSizes = null) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultQuantumNetworkLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int numQubits = 4, int numQuantumLayers = 2) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultRNNLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, int hiddenSize = 0, int recurrentLayerCount = 2) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultSpikingLayers(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.Enums.SpikingNeuronType neuronType = AiDotNet.Enums.SpikingNeuronType.LeakyIntegrateAndFire, double tau = 10, double refractoryPeriod = 2, bool useLayerNormalization = false, bool useOutputConversion = true, int timeSteps = 20, System.Collections.Generic.IReadOnlyList<int>? hiddenLayerSizes = null) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-virtual AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.ReleasesInferenceIntermediates.get -> bool
 AiDotNet.Video.Options.RVRTOptions.AttentionHeads.get -> int
 AiDotNet.Video.Options.RVRTOptions.AttentionHeads.set -> void
 AiDotNet.Video.Options.RVRTOptions.CharbonnierEpsilon.get -> double

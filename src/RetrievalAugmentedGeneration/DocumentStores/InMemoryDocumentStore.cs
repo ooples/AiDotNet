@@ -35,7 +35,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.DocumentStores;
 /// - Development and testing
 /// - Session-based temporary data
 /// - Caching frequently accessed vectors
-/// - Small to medium datasets (< 100K documents)
+/// - Small to medium datasets (&lt; 100K documents)
 /// 
 /// Key characteristics:
 /// - O(log n) similarity search using HNSW approximate nearest neighbor indexing
