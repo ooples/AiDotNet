@@ -84,4 +84,8 @@ public class LexicalWatermarker<T> : KeyedSubstitutionWatermarker<T>
         : base(synonymGroups ?? DefaultSynonymGroups, watermarkStrength, key)
     {
     }
+
+    /// <summary>Preserves the original constructor signature using the default configuration.</summary>
+    public LexicalWatermarker(double watermarkStrength) : this(watermarkStrength, null, null) { }
+
 }

@@ -108,12 +108,6 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
     private int _inputHeight;
     private int _inputWidth;
     private readonly List<ConvolutionalLayer<T>> _basicModules;
-    [Scratch]
-    private Tensor<T>? _lastInput1;
-    [Scratch]
-    private Tensor<T>? _lastInput2;
-    [Scratch]
-    private Tensor<T>? _lastFlow;
 
     // Cached values for backward pass
     [Scratch]
@@ -276,12 +270,9 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
 
         // Split into two frames
         var (frame1, frame2) = SplitFrames(input, singleFrameChannels, hasBatch);
-        _lastInput1 = frame1;
-        _lastInput2 = frame2;
 
         // Estimate flow using spatial pyramid
         var flow = EstimateFlow(frame1, frame2, hasBatch);
-        _lastFlow = flow;
 
         return flow;
     }
@@ -294,12 +285,8 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>Optical flow tensor [2, H, W] representing (dx, dy) per pixel.</returns>
     public Tensor<T> EstimateFlow(Tensor<T> frame1, Tensor<T> frame2)
     {
-        _lastInput1 = frame1;
-        _lastInput2 = frame2;
-
         bool hasBatch = frame1.Rank == 4;
         var flow = EstimateFlow(frame1, frame2, hasBatch);
-        _lastFlow = flow;
 
         return flow;
     }
@@ -1001,9 +988,6 @@ public partial class SpyNetLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _lastInput1 = null;
-        _lastInput2 = null;
-        _lastFlow = null;
         foreach (var module in _basicModules)
         {
             module.ResetState();

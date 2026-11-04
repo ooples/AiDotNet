@@ -34,8 +34,8 @@ namespace AiDotNet.Models;
 /// </para>
 /// </remarks>
 /// <typeparam name="T">The numeric type used for calculations, typically float or double.</typeparam>
-/// <typeparam name="TInput">The type of input data (e.g., Matrix<T> for regression, Tensor<T> for neural networks).</typeparam>
-/// <typeparam name="TOutput">The type of output data (e.g., Vector<T> for regression, Tensor<T> for neural networks).</typeparam>
+/// <typeparam name="TInput">The type of input data (e.g., Matrix&lt;T> for regression, Tensor&lt;T> for neural networks).</typeparam>
+/// <typeparam name="TOutput">The type of output data (e.g., Vector&lt;T> for regression, Tensor&lt;T> for neural networks).</typeparam>
 public class OptimizationStepData<T, TInput, TOutput>
 {
     /// <summary>
@@ -105,7 +105,7 @@ public class OptimizationStepData<T, TInput, TOutput>
     /// <para>
     /// This property contains a subset of the training data used for this optimization step. The training data is used to 
     /// train the model and adjust its parameters. The structure of this data depends on the TInput type, which could be a 
-    /// Matrix<T> for traditional machine learning models or a Tensor<T> for neural networks. This subset might be created 
+    /// Matrix&lt;T> for traditional machine learning models or a Tensor&lt;T> for neural networks. This subset might be created 
     /// through techniques like random sampling, stratified sampling, or other data selection methods to focus on specific 
     /// aspects of the data or to reduce computational requirements.
     /// </para>
@@ -135,7 +135,7 @@ public class OptimizationStepData<T, TInput, TOutput>
     /// <para>
     /// This property contains a subset of the validation data used for this optimization step. The validation data is used to 
     /// evaluate the model during training and make decisions about hyperparameters or early stopping. The structure of this 
-    /// data depends on the TInput type, which could be a Matrix<T> for traditional machine learning models or a Tensor<T> for 
+    /// data depends on the TInput type, which could be a Matrix&lt;T> for traditional machine learning models or a Tensor&lt;T> for 
     /// neural networks. This subset might be created through techniques like random sampling, stratified sampling, or other 
     /// data selection methods to focus on specific aspects of the data or to reduce computational requirements.
     /// </para>
@@ -165,7 +165,7 @@ public class OptimizationStepData<T, TInput, TOutput>
     /// <para>
     /// This property contains a subset of the test data used for this optimization step. The test data is used to provide a 
     /// final, unbiased evaluation of the model after training and validation are complete. The structure of this data depends 
-    /// on the TInput type, which could be a Matrix<T> for traditional machine learning models or a Tensor<T> for neural networks. 
+    /// on the TInput type, which could be a Matrix&lt;T> for traditional machine learning models or a Tensor&lt;T> for neural networks. 
     /// This subset might be created through techniques like random sampling, stratified sampling, or other data selection methods 
     /// to focus on specific aspects of the data or to reduce computational requirements.
     /// </para>

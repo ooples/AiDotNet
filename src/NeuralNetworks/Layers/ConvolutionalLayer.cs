@@ -401,11 +401,6 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _kernelsGradient;
 
     /// <summary>
-    /// Gradient of the biases computed during backpropagation via autodiff.
-    /// </summary>
-    [Scratch]
-
-    /// <summary>
     /// Input shape the fast-route verification was performed for, or <c>null</c> if never verified.
     /// </summary>
     /// <remarks>
@@ -1841,7 +1836,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     public override bool HasUninitializedParameters => !_isInitialized && InputDepth <= 0;
 
     /// <summary>
-    /// Gets all parameter gradients of the layer as a single vector.
+    /// Clears the kernel and bias gradients along with the base layer's gradients.
+    /// </summary>
     public override void ClearGradients()
     {
         base.ClearGradients();

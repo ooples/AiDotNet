@@ -107,11 +107,11 @@ namespace AiDotNet.Reasoning.Training;
 /// ```csharp
 /// // Setup
 /// var chatModel = /* your chat model */;
-/// var prm = new ProcessRewardModel<double>(chatModel);
-/// var orm = new OutcomeRewardModel<double>(chatModel);
-/// var rewardModel = new HybridRewardModel<double>(prm, orm, 0.5, 0.5);
+/// var prm = new ProcessRewardModel&lt;double>(chatModel);
+/// var orm = new OutcomeRewardModel&lt;double>(chatModel);
+/// var rewardModel = new HybridRewardModel&lt;double>(prm, orm, 0.5, 0.5);
 ///
-/// var learner = new ReinforcementLearner<double>(
+/// var learner = new ReinforcementLearner&lt;double>(
 ///     chatModel,
 ///     rewardModel,
 ///     config: new RLConfig

@@ -92,4 +92,8 @@ public abstract class TextWatermarkerBase<T> : TextSafetyModuleBase<T>, ITextWat
     /// <summary>A text result for a z-score over <paramref name="scoredUnits"/> units.</summary>
     protected WatermarkResult TextResult(double z, int scoredUnits) =>
         WatermarkStatistics.Result(z, scoredUnits, "text", WatermarkDescription, ReportThreshold);
+
+    /// <summary>Preserves the original constructor signature using the default configuration.</summary>
+    protected TextWatermarkerBase(double watermarkStrength) : this(watermarkStrength, null) { }
+
 }

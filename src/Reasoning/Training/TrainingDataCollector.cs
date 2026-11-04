@@ -73,11 +73,11 @@ namespace AiDotNet.Reasoning.Training;
 ///
 /// **Usage example:**
 /// ```csharp
-/// var collector = new TrainingDataCollector<double>();
+/// var collector = new TrainingDataCollector&lt;double>();
 ///
 /// // Collect a training sample
 /// var chain = /* reasoning chain from solving a problem */;
-/// var sample = new TrainingSample<double>
+/// var sample = new TrainingSample&lt;double>
 /// {
 ///     Problem = "What is 15 × 12?",
 ///     ReasoningChain = chain,

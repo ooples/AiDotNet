@@ -89,7 +89,7 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 ///
 /// **Usage example:**
 /// ```csharp
-/// var reasoner = new ScientificReasoner<double>(chatModel);
+/// var reasoner = new ScientificReasoner&lt;double>(chatModel);
 ///
 /// // Physics problem
 /// var result = await reasoner.SolveAsync(

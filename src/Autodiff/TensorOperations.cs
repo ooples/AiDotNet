@@ -9416,7 +9416,7 @@ public static class TensorOperations<T>
     /// <returns>A new computation node with Sign applied using straight-through estimator.</returns>
     /// <remarks>
     /// <para>
-    /// Sign(x) = 1 if x > 0, -1 if x < 0, 0 if x = 0.
+    /// Sign(x) = 1 if x > 0, -1 if x &lt; 0, 0 if x = 0.
     /// Uses sigmoid surrogate gradient for backpropagation since the true derivative is zero almost everywhere.
     /// </para>
     /// <para><b>Surrogate Gradient:</b> beta * sigmoid(beta * x) * (1 - sigmoid(beta * x))</para>

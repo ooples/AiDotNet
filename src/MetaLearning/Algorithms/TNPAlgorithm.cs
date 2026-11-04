@@ -12,7 +12,7 @@ using AiDotNet.Data.Structures;
 
 namespace AiDotNet.MetaLearning.Algorithms;
 
-/// <summary>Implementation of Transformer Neural Process (Nguyen & Grover, ICML 2023).</summary>
+/// <summary>Implementation of Transformer Neural Process (Nguyen &amp; Grover, ICML 2023).</summary>
 [ModelDomain(ModelDomain.MachineLearning)]
 [ModelCategory(ModelCategory.MetaLearning)]
 [ModelCategory(ModelCategory.NeuralNetwork)]

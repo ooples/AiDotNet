@@ -116,4 +116,8 @@ public class SpectralAudioWatermarker<T> : AudioWatermarkerBase<T>
         int mid = sorted.Length / 2;
         return sorted.Length % 2 == 1 ? sorted[mid] : 0.5 * (sorted[mid - 1] + sorted[mid]);
     }
+
+    /// <summary>Preserves the original constructor signature using the default configuration.</summary>
+    public SpectralAudioWatermarker(double watermarkStrength) : this(watermarkStrength, null) { }
+
 }

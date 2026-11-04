@@ -725,7 +725,7 @@ internal class DecisionNode<T>
     public T Threshold { get; set; } = default;
 
     /// <summary>
-    /// The left child node (values <= threshold).
+    /// The left child node (values &lt;= threshold).
     /// </summary>
     public DecisionNode<T>? Left { get; set; }
 

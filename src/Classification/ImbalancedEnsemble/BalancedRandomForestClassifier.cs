@@ -717,7 +717,7 @@ public partial class BalancedRandomForestClassifier<T> : ClassifierBase<T>
         public double Threshold { get; set; }
 
         /// <summary>
-        /// Left child (values <= threshold).
+        /// Left child (values &lt;= threshold).
         /// </summary>
         public DecisionTreeNode? LeftChild { get; set; }
 

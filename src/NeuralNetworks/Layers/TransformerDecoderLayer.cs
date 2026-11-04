@@ -347,160 +347,6 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private LayerNormalizationLayer<T> _norm3;
 
     /// <summary>
-    /// The input tensor from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the decoder input tensor from the most recent forward pass, which is needed during the backward
-    /// pass to compute gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the decoder input (target sequence) from the last calculation.
-    /// 
-    /// Storing the input is necessary because:
-    /// - During training, the layer needs to remember what decoder input it processed
-    /// - This helps calculate the correct gradients during backpropagation
-    /// - It's part of the layer's "memory" for the learning process
-    /// 
-    /// This cached input helps the layer understand how to adjust its parameters
-    /// to improve its performance on future inputs.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// The encoder output tensor from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the encoder output tensor from the most recent forward pass, which is needed during the backward
-    /// pass to compute gradients for the cross-attention mechanism.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the encoder's output (source sequence information) from the last calculation.
-    /// 
-    /// Storing the encoder output is necessary because:
-    /// - The cross-attention mechanism needs this information during both forward and backward passes
-    /// - It represents the source sequence that the decoder is conditioning its generation on
-    /// - It needs to be available during training to compute proper gradients
-    /// 
-    /// For example, in translation, this would contain the processed representation of
-    /// the source language sentence that the decoder is translating.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastEncoderOutput;
-
-    /// <summary>
-    /// The output tensor of the self-attention sublayer from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the output tensor of the self-attention sublayer from the most recent forward pass,
-    /// which is needed during the backward pass to compute gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the result after the self-attention step from the last calculation.
-    /// 
-    /// Storing the self-attention output:
-    /// - Helps track the information flow through the network
-    /// - Is used to compute accurate gradients during training
-    /// - Forms part of the computational graph needed for backpropagation
-    /// 
-    /// These intermediate results are necessary for the layer to learn effectively,
-    /// as they show how each component contributed to the final output.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastSelfAttentionOutput;
-
-    /// <summary>
-    /// The output tensor after the first normalization from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the output tensor after the first layer normalization from the most recent forward pass,
-    /// which is needed during the backward pass to compute gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the result after normalizing the self-attention output.
-    /// 
-    /// Like other intermediate results, this:
-    /// - Tracks the data flow through the layer
-    /// - Helps compute the correct gradients during training
-    /// - Is part of the chain of calculations needed for learning
-    /// 
-    /// These saved states form a kind of "memory" that allows the network to understand
-    /// how it arrived at its final output, so it can learn to improve.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastNormalized1;
-
-    /// <summary>
-    /// The output tensor of the cross-attention sublayer from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the output tensor of the cross-attention sublayer from the most recent forward pass,
-    /// which is needed during the backward pass to compute gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the result after the cross-attention step from the last calculation.
-    /// 
-    /// Similar to the self-attention output, this:
-    /// - Records how the decoder attended to the encoder output
-    /// - Is used in training to calculate how parameters should be updated
-    /// - Helps track information flow between the encoder and decoder
-    /// 
-    /// This represents the information extracted from the source sequence that
-    /// was deemed relevant for generating the target sequence.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastCrossAttentionOutput;
-
-    /// <summary>
-    /// The output tensor after the second normalization from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the output tensor after the second layer normalization from the most recent forward pass,
-    /// which is needed during the backward pass to compute gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the result after normalizing the cross-attention output.
-    /// 
-    /// This intermediate result:
-    /// - Captures the state after cross-attention and before feed-forward processing
-    /// - Forms another link in the chain of computations
-    /// - Helps the network understand how information flowed through the layer
-    /// 
-    /// During training, these stored states help the network reconstruct exactly
-    /// how it arrived at its final output, enabling precise learning.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastNormalized2;
-
-    /// <summary>
-    /// The output tensor of the feed-forward sublayer from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the output tensor of the feed-forward sublayer from the most recent forward pass,
-    /// which is needed during the backward pass to compute gradients.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the result after the feed-forward processing step from the last calculation.
-    /// 
-    /// Like other intermediate results, this:
-    /// - Tracks how the final transformation affected the output
-    /// - Helps compute gradients for the feed-forward network during training
-    /// - Contributes to the layer's ability to learn from its mistakes
-    /// 
-    /// This represents the final processing step before the last normalization
-    /// and output of the complete decoder layer.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastFeedForwardOutput;
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -819,26 +665,23 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 nameof(encoderOutput));
         }
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-        _lastEncoderOutput = encoderOutput;
-
-        _lastSelfAttentionOutput = _selfAttention.Forward(input);
+        var selfAttentionOutput = _selfAttention.Forward(input);
 
         // residual1 = input + selfAttentionOutput
-        var residual1 = Engine.TensorAdd(input, _lastSelfAttentionOutput);
-        _lastNormalized1 = _norm1.Forward(residual1);
+        var residual1 = Engine.TensorAdd(input, selfAttentionOutput);
+        var normalized1 = _norm1.Forward(residual1);
 
-        _lastCrossAttentionOutput = _crossAttention.Forward(_lastNormalized1, encoderOutput);
+        var crossAttentionOutput = _crossAttention.Forward(normalized1, encoderOutput);
 
         // residual2 = normalized1 + crossAttentionOutput
-        var residual2 = Engine.TensorAdd(_lastNormalized1, _lastCrossAttentionOutput);
-        _lastNormalized2 = _norm2.Forward(residual2);
+        var residual2 = Engine.TensorAdd(normalized1, crossAttentionOutput);
+        var normalized2 = _norm2.Forward(residual2);
 
-        var feedForwardHidden = _feedForward.Forward(_lastNormalized2);
-        _lastFeedForwardOutput = _feedForwardProjection.Forward(feedForwardHidden);
+        var feedForwardHidden = _feedForward.Forward(normalized2);
+        var feedForwardOutput = _feedForwardProjection.Forward(feedForwardHidden);
 
         // residual3 = normalized2 + feedForwardOutput
-        var residual3 = Engine.TensorAdd(_lastNormalized2, _lastFeedForwardOutput);
+        var residual3 = Engine.TensorAdd(normalized2, feedForwardOutput);
         var output = _norm3.Forward(residual3);
 
         return output;
@@ -871,24 +714,17 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         EnsureInitializedFromInput(input);
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-        _lastEncoderOutput = null;
-
-        _lastSelfAttentionOutput = _selfAttention.Forward(input);
+        var selfAttentionOutput = _selfAttention.Forward(input);
 
         // residual1 = input + selfAttentionOutput
-        var residual1 = Engine.TensorAdd(input, _lastSelfAttentionOutput);
-        _lastNormalized1 = _norm1.Forward(residual1);
+        var residual1 = Engine.TensorAdd(input, selfAttentionOutput);
+        var normalized1 = _norm1.Forward(residual1);
 
-        // No cross-attention sublayer on this path, so nothing of it is cached.
-        _lastCrossAttentionOutput = null;
-        _lastNormalized2 = null;
-
-        var feedForwardHidden = _feedForward.Forward(_lastNormalized1);
-        _lastFeedForwardOutput = _feedForwardProjection.Forward(feedForwardHidden);
+        var feedForwardHidden = _feedForward.Forward(normalized1);
+        var feedForwardOutput = _feedForwardProjection.Forward(feedForwardHidden);
 
         // residual = normalized1 + feedForwardOutput
-        var residual = Engine.TensorAdd(_lastNormalized1, _lastFeedForwardOutput);
+        var residual = Engine.TensorAdd(normalized1, feedForwardOutput);
         return _norm3.Forward(residual);
     }
 
@@ -990,15 +826,6 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _feedForward.ResetState();
         _feedForwardProjection.ResetState();
         _norm3.ResetState();
-
-        // Clear cached tensors
-        _lastInput = null;
-        _lastEncoderOutput = null;
-        _lastSelfAttentionOutput = null;
-        _lastNormalized1 = null;
-        _lastCrossAttentionOutput = null;
-        _lastNormalized2 = null;
-        _lastFeedForwardOutput = null;
     }
 
     /// <summary>

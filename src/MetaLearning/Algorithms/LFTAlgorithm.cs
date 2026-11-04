@@ -58,6 +58,7 @@ namespace AiDotNet.MetaLearning.Algorithms;
 /// the feature ENCODER and the algorithm owns the metric head. The transformation sits BETWEEN them,
 /// which is what puts it in the gradient path: the head's update is computed from transformed
 /// features, so theta_f genuinely changes what the model learns.
+/// </para>
 /// <para>
 /// That placement is load-bearing, and getting it wrong is silent. An earlier revision here applied
 /// the transformation only to the reported loss while the model's own <c>ComputeGradients</c>

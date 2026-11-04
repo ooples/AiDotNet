@@ -33,7 +33,7 @@ namespace AiDotNet.Clustering.Evaluation;
 ///
 /// If b >> a: Point is clearly in the right place (+1)
 /// If b ≈ a: Point is between clusters (0)
-/// If b << a: Point might be in wrong cluster (-1)
+/// If b &lt;&lt; a: Point might be in wrong cluster (-1)
 ///
 /// The overall score is the average of all points.
 /// Higher is better!

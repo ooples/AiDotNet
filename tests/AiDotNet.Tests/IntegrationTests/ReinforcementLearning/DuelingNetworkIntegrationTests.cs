@@ -9,8 +9,10 @@ namespace AiDotNet.Tests.IntegrationTests.ReinforcementLearning;
 [Collection("NonParallelIntegration")]
 public class DuelingNetworkIntegrationTests
 {
-    [Fact]
-    public void Train_WithReplayExperience_UpdatesParameters()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Train_WithReplayExperience_UpdatesParameters(bool done)
     {
         var agent = new DuelingDQNAgent<double>(new DuelingDQNOptions<double>
         {
@@ -37,7 +39,7 @@ public class DuelingNetworkIntegrationTests
         var action = agent.SelectAction(state, training: true);
         var before = agent.GetParameters();
 
-        agent.StoreExperience(state, action, 1.0, nextState, done: true);
+        agent.StoreExperience(state, action, 1.0, nextState, done);
         var loss = agent.Train();
 
         Assert.False(double.IsNaN(loss));

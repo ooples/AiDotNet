@@ -104,14 +104,6 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     /// </summary>
     [Scratch]
     private Tensor<T>? _lastExcitationWeights;
-    [Scratch]
-    private Tensor<T>? _lastSqueezed;
-    [Scratch]
-    private Tensor<T>? _lastFc1Biased;
-    [Scratch]
-    private Tensor<T>? _lastFc1Activated;
-    [Scratch]
-    private Tensor<T>? _lastFc2Biased;
 
     /// <summary>
     /// The number of input and output channels in the layer.
@@ -241,51 +233,9 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     private Tensor<T> _bias2;
 
     /// <summary>
-    /// The input tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the input tensor from the most recent forward pass. It is used during the backward pass
-    /// to calculate gradients. The value is null if no forward pass has been performed yet or after ResetState is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like short-term memory of what the layer just processed.
-    /// 
-    /// During training:
-    /// - The layer needs to remember what input it received
-    /// - This helps it calculate how to improve itself
-    /// - It's like keeping your work when solving a math problem, so you can check your steps
-    /// 
-    /// This value is temporarily stored during training and is cleared when moving to a new sample.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-
-    /// <summary>
-    /// The output tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the output tensor from the most recent forward pass. It is used during the backward pass
-    /// to calculate gradients. The value is null if no forward pass has been performed yet or after ResetState is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is a record of what the layer just produced.
-    /// 
-    /// Similar to remembering the input:
-    /// - The layer also needs to remember what output it generated
-    /// - This helps determine how far off its prediction was
-    /// - It's needed to calculate how to improve the weights and biases
-    /// 
-    /// This is another piece of temporary memory used during training.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// The gradient of the loss with respect to _weights1 from the most recent backward pass.
@@ -742,30 +692,27 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
             squeezed = Engine.ReduceMean(input, spatialAxes, keepDims: false);
         }
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-        _lastSqueezed = squeezed;
-
         // 2. Excitation: FC1 + Activation
         // squeezed: [batchSize, channels], weights1: [channels, reducedChannels]
         var fc1Output = Engine.TensorMatMul(squeezed, _weights1);
         var fc1BiasReshaped = Engine.Reshape(_bias1, new[] { 1, _reducedChannels });
         var fc1Biased = Engine.TensorAdd(fc1Output, fc1BiasReshaped);
-        _lastFc1Biased = fc1Biased;
 
         var activated1 = ApplyTensorActivation(fc1Biased, isFirstActivation: true);
-        _lastFc1Activated = activated1;
 
         // Excitation: FC2 + Activation
         // activated1: [batchSize, reducedChannels], weights2: [reducedChannels, channels]
         var fc2Output = Engine.TensorMatMul(activated1, _weights2);
         var fc2BiasReshaped = Engine.Reshape(_bias2, new[] { 1, _channels });
         var fc2Biased = Engine.TensorAdd(fc2Output, fc2BiasReshaped);
-        _lastFc2Biased = fc2Biased;
 
         var excitation = ApplyTensorActivation(fc2Biased, isFirstActivation: false);
 
-        // Cache excitation weights for auxiliary loss computation
-        _lastExcitationWeights = excitation;
+        // Read only by ComputeAuxiliaryLoss, so keep it only when that loss is on and a training
+        // pass can consume it.
+        _lastExcitationWeights = UseAuxiliaryLoss && IsTrainingMode && !InferenceMode.IsActive
+            ? excitation
+            : null;
 
         // 3. Scale: input * excitation
         // Reshape excitation to match input rank for broadcasting
@@ -803,7 +750,6 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
 
         var output = Engine.TensorMultiply(input, excitationReshaped);
 
-        _lastOutput = output;
         return output;
     }
 
@@ -975,12 +921,6 @@ public partial class SqueezeAndExcitationLayer<T> : LayerBase<T>, IAuxiliaryLoss
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
-        _lastSqueezed = null;
-        _lastFc1Biased = null;
-        _lastFc1Activated = null;
-        _lastFc2Biased = null;
         _weights1Gradient = null;
         _bias1Gradient = null;
         _weights2Gradient = null;

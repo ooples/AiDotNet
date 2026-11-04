@@ -369,10 +369,10 @@ public partial class GatedLinearUnitLayer<T> : LayerBase<T>, IShapeContract
     /// For example:
     /// ```csharp
     /// // Create a GLU layer with 512 inputs, 256 outputs, and sigmoid gating
-    /// var gluLayer = new GatedLinearUnitLayer<float>(512, 256);
+    /// var gluLayer = new GatedLinearUnitLayer&lt;float>(512, 256);
     /// 
     /// // Create a GLU layer with custom activation for the gate
-    /// var customGluLayer = new GatedLinearUnitLayer<float>(100, 50, new TanhActivation<float>());
+    /// var customGluLayer = new GatedLinearUnitLayer&lt;float>(100, 50, new TanhActivation&lt;float>());
     /// ```
     /// 
     /// The sigmoid activation (default) produces gates between 0 and 1, where:
