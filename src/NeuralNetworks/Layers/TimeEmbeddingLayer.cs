@@ -115,24 +115,6 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _linear2Bias;
 
     /// <summary>
-    /// Cached sinusoidal embedding from last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastSinusoidalEmbed;
-
-    /// <summary>
-    /// Cached intermediate output after first linear + activation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastHidden;
-
-    /// <summary>
-    /// Cached input timesteps from last forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Gradient for first linear layer weights.
     /// </summary>
     [Scratch]
@@ -280,7 +262,6 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// <returns>Time embedding tensor with shape [batch, outputDim].</returns>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = input;
         int batch = input.Shape[0];
 
         // Flatten if needed
@@ -288,7 +269,6 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
 
         // Step 1: Compute sinusoidal embedding
         var sinEmbed = ComputeSinusoidalEmbedding(timesteps);
-        _lastSinusoidalEmbed = sinEmbed;
 
         // Step 2: First linear layer + SiLU activation
         // sinEmbed: [batch, embeddingDim] @ _linear1Weights: [embeddingDim, outputDim] -> [batch, outputDim]
@@ -298,7 +278,6 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
 
         // Swish is the SiLU activation and records its VJP through IEngine.
         var hidden = Engine.Swish(preActivation);
-        _lastHidden = hidden;
 
         // Step 3: Second linear layer
         // hidden: [batch, outputDim] @ _linear2Weights: [outputDim, outputDim] -> [batch, outputDim]
@@ -336,9 +315,6 @@ public partial class TimeEmbeddingLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _lastSinusoidalEmbed = null;
-        _lastHidden = null;
-        _lastInput = null;
         _linear1WeightsGradient = null;
         _linear1BiasGradient = null;
         _linear2WeightsGradient = null;

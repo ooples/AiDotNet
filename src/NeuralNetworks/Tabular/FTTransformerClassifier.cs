@@ -54,14 +54,6 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     private readonly int _numClasses;
     private readonly FullyConnectedLayer<T> _classificationHead;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _clsOutputCache;
-    [Scratch]
-    private Tensor<T>? _logitsCache;
-    [Scratch]
-    private Tensor<T>? _probabilitiesCache;
-
     /// <summary>
     /// Gets the number of output classes.
     /// </summary>
@@ -114,11 +106,9 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     {
         // Get [CLS] representation from backbone
         var clsOutput = ForwardBackbone(numericalFeatures, categoricalIndices);
-        _clsOutputCache = clsOutput;
 
         // Apply classification head: Linear(ReLU(LayerNorm(CLS)))
         var logits = _classificationHead.Forward(ActivateForHead(clsOutput));
-        _logitsCache = logits;
 
         return logits;
     }
@@ -156,7 +146,6 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     {
         var logits = Forward(numericalFeatures, categoricalIndices);
         var probabilities = ApplySoftmax(logits);
-        _probabilitiesCache = probabilities;
         return probabilities;
     }
 
@@ -468,9 +457,6 @@ public class FTTransformerClassifier<T> : FTTransformerBase<T>
     public override void ResetState()
     {
         base.ResetState();
-        _clsOutputCache = null;
-        _logitsCache = null;
-        _probabilitiesCache = null;
         _classificationHead.ResetState();
     }
 }

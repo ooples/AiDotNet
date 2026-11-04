@@ -109,3 +109,5 @@ ADNOPT002 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Options 
 ADNOPT003 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Invalid [PaperDefault] declaration
 ADNOPT004 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Option-sensitivity exemption has no reason
 ADNOPT005 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Options fidelity baseline entry is stale
+ADN0065 | AiDotNet.Performance | Error | ActivationCacheGuardAnalyzer, Backward-activation cache written without a training-pass guard (fields baselined in ModelDefectBaselines.UnguardedActivationCaches; a stale entry is ADNDEF004)
+ADN0068 | AiDotNet.Performance | Error | ActivationCacheGuardAnalyzer, [KeepsActivation] declared without a reason

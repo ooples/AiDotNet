@@ -53,12 +53,6 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     private readonly int _outputDimension;
     private readonly FullyConnectedLayer<T> _regressionHead;
 
-    // Cache
-    [Scratch]
-    private Tensor<T>? _backboneOutputCache;
-    [Scratch]
-    private Tensor<T>? _predictionsCache;
-
     /// <summary>
     /// Gets the output dimension.
     /// </summary>
@@ -97,19 +91,18 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     public Tensor<T> Forward(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
     {
         var backboneOutput = ForwardBackbone(numericalFeatures, categoricalIndices);
-        _backboneOutputCache = backboneOutput;
 
         var predictions = _regressionHead.Forward(backboneOutput);
-        _predictionsCache = predictions;
 
         return predictions;
     }
 
     /// <summary>
-    /// Makes predictions (alias for Forward).
+    /// Makes predictions without retaining activations for a backward pass.
     /// </summary>
     public Tensor<T> Predict(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
     {
+        using var inference = InferenceMode.Enter();
         return Forward(numericalFeatures, categoricalIndices);
     }
 
@@ -162,12 +155,13 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     /// </summary>
     public T TrainStep(Tensor<T> numericalFeatures, Tensor<T> targets, T learningRate, Matrix<int>? categoricalIndices = null)
     {
-        var predictions = Forward(numericalFeatures, categoricalIndices);
-        var loss = ComputeMSELoss(predictions, targets);
-        UpdateParameters(learningRate);
-        ResetState();
-
-        return loss;
+        return TrainWithTape(() =>
+        {
+            var predictions = Forward(numericalFeatures, categoricalIndices);
+            if (!predictions._shape.SequenceEqual(targets._shape))
+                throw new ArgumentException("Targets must match the prediction shape.", nameof(targets));
+            return new AiDotNet.LossFunctions.MeanSquaredErrorLoss<T>().ComputeTapeLoss(predictions, targets);
+        }, learningRate);
     }
 
     /// <summary>
@@ -216,8 +210,8 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     /// Computes the R² score by running a forward pass on the given features.
     /// </summary>
     /// <remarks>
-    /// This overload calls <see cref="Predict"/>, which overwrites internal caches
-    /// (<c>_backboneOutputCache</c>, <c>_predictionsCache</c>). Do not call this
+    /// This overload calls <see cref="Predict"/>, which runs a forward pass and so
+    /// overwrites the backbone's per-forward caches. Do not call this
     /// between <see cref="Forward"/> and <see cref="Backward"/> in a training loop.
     /// Use the <see cref="ComputeR2Score(Tensor{T}, Tensor{T})"/> overload with
     /// precomputed predictions instead.
@@ -270,8 +264,6 @@ public class AutoIntRegression<T> : AutoIntBase<T>
     public override void ResetState()
     {
         base.ResetState();
-        _backboneOutputCache = null;
-        _predictionsCache = null;
         _regressionHead.ResetState();
     }
 }
