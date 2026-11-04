@@ -77,10 +77,14 @@ public abstract class VisionTaskModelBase<T> : ModelBase<T, Tensor<T>, Tensor<T>
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _trainingOptimizer ??= CreateTrainingOptimizer();
 
+    /// <summary>Adam (Kingma and Ba 2015) with betas (0.9, 0.999) and epsilon 1e-8.</summary>
+    protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> PaperAdam(double learningRate)
+        => PaperAdam(learningRate, null);
+
     /// <summary>Adam (Kingma and Ba 2015) with betas (0.9, 0.999) and epsilon 1e-8, and the paper's learning-rate
     /// schedule when it states one (advanced once per minibatch, the unit papers count decay steps in).</summary>
     protected IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> PaperAdam(double learningRate,
-        AiDotNet.LearningRateSchedulers.ILearningRateScheduler? schedule = null)
+        AiDotNet.LearningRateSchedulers.ILearningRateScheduler? schedule)
         => new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
