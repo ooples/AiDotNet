@@ -504,8 +504,8 @@ public partial class AdaMaxOptimizer<T, TInput, TOutput> : GradientBasedOptimize
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeM[param] = m; }
-            if (!_tapeU.TryGetValue(param, out var u)) { u = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) u.AsWritableSpan().Clear(); _tapeU[param] = u; }
+            if (!_tapeM.TryGetValue(param, out var m)) { m = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeM[param] = m; }
+            if (!_tapeU.TryGetValue(param, out var u)) { u = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeU[param] = u; }
 
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdamaxStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m, (Tensor<float>)(object)u,

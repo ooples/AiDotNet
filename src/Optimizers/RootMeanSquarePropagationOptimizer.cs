@@ -433,10 +433,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
 
             if (!_tapeSqGrad.TryGetValue(param, out var sqGrad))
             {
-                sqGrad = gpuRmsProp
-                    ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape)
-                    : new Tensor<T>(param._shape);
-                if (gpuRmsProp) sqGrad.AsWritableSpan().Clear();
+                sqGrad = CreateOptimizerStateTensor(param._shape, gpuRmsProp);
                 _tapeSqGrad[param] = sqGrad;
             }
 

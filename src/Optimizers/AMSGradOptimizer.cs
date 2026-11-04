@@ -424,9 +424,9 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeM[param] = m; }
-            if (!_tapeV.TryGetValue(param, out var v)) { v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) v.AsWritableSpan().Clear(); _tapeV[param] = v; }
-            if (!_tapeVHat.TryGetValue(param, out var vHat)) { vHat = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) vHat.AsWritableSpan().Clear(); _tapeVHat[param] = vHat; }
+            if (!_tapeM.TryGetValue(param, out var m)) { m = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeM[param] = m; }
+            if (!_tapeV.TryGetValue(param, out var v)) { v = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeV[param] = v; }
+            if (!_tapeVHat.TryGetValue(param, out var vHat)) { vHat = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeVHat[param] = vHat; }
 
             // The GPU kernel is PyTorch's bias-corrected AMSGrad; KernelLearningRateAndEpsilon makes it compute the
             // configured variant exactly.

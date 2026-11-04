@@ -302,17 +302,20 @@ public class AdamWCompressedMomentsTests
     [InlineData(OptimizerMomentStorage.BFloat16)]
     public void DeviceSteps_MatchTheHost_AndTheStateMovesToTheHost(OptimizerMomentStorage storage)
     {
-        DirectGpuTensorEngine? gpu = null;
-        try { gpu = new DirectGpuTensorEngine(); }
-        catch (Exception ex) when (ex is PlatformNotSupportedException or DllNotFoundException or InvalidOperationException) { }
-        Skip.If(gpu is null || !gpu.IsGpuAvailable, "GPU engine unavailable.");
+        // A missing backend is reported through IsGpuAvailable; a constructor exception is a real failure.
+        var gpu = new DirectGpuTensorEngine();
+        if (!gpu.IsGpuAvailable)
+        {
+            gpu.Dispose();
+            Skip.If(true, "GPU engine unavailable.");
+        }
         var saved = AiDotNetEngine.Current;
         try
         {
-            AiDotNetEngine.Current = gpu!;
+            AiDotNetEngine.Current = gpu;
             var optimizer = Optimizer(storage);
             // Device-resident parameter and gradients: results of device ops.
-            var param = gpu!.TensorMultiplyScalar(new Tensor<float>(new[] { Length }, new Vector<float>(Rand(Length, 1))), 1f);
+            var param = gpu.TensorMultiplyScalar(new Tensor<float>(new[] { Length }, new Vector<float>(Rand(Length, 1))), 1f);
             for (int step = 1; step <= 2; step++)
                 Step(optimizer, param, gpu.TensorMultiplyScalar(Grad(step), 1f));
             AssertClose(Reference(storage, 2), param.ToArray(), $"{storage} device");
@@ -333,7 +336,7 @@ public class AdamWCompressedMomentsTests
         finally
         {
             AiDotNetEngine.Current = saved;
-            gpu?.Dispose();
+            gpu.Dispose();
         }
     }
 

@@ -448,7 +448,7 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeMomentum.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeMomentum[param] = m; }
+            if (!_tapeMomentum.TryGetValue(param, out var m)) { m = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeMomentum[param] = m; }
 
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryLionStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m,

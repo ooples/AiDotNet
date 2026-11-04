@@ -431,7 +431,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeAccSqGrad.TryGetValue(param, out var accSq)) { accSq = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) accSq.AsWritableSpan().Clear(); _tapeAccSqGrad[param] = accSq; }
+            if (!_tapeAccSqGrad.TryGetValue(param, out var accSq)) { accSq = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeAccSqGrad[param] = accSq; }
 
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdagradStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)accSq,

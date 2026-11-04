@@ -95,7 +95,21 @@ public class GpuEagerTapeStepMatchesCpuTests
         return (x, y);
     }
 
-    private static List<double> Trajectory(IEngine engine, float[] initialParameters)
+    /// <summary>
+    /// The eager path's own decision for models it cannot pack into one flat buffer (over the parameter threshold, or
+    /// with tied weights): every parameter is then its own tensor, and the post-step flush must still keep its device
+    /// update.
+    /// </summary>
+    private static void SkipParameterBuffer(EagerNetwork net)
+    {
+        var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        var baseType = typeof(NeuralNetworkBase<float>);
+        int version = (int)baseType.GetField("_layerStructureVersion", flags)!.GetValue(net)!;
+        baseType.GetField("_skipParameterBuffer", flags)!.SetValue(net, true);
+        baseType.GetField("_skipParameterBufferVersion", flags)!.SetValue(net, version);
+    }
+
+    private static List<double> Trajectory(IEngine engine, float[] initialParameters, bool withoutParameterBuffer)
     {
         var previous = AiDotNetEngine.Current;
         AiDotNetEngine.Current = engine;
@@ -107,6 +121,7 @@ public class GpuEagerTapeStepMatchesCpuTests
             net.Predict(x);                                   // materialize the lazy layers
             net.SetTrainingMode(true);
             net.UpdateParameters(new Vector<float>((float[])initialParameters.Clone()));
+            if (withoutParameterBuffer) SkipParameterBuffer(net);
             var losses = new List<double>();
             for (int s = 0; s < Steps; s++)
             {
@@ -125,8 +140,10 @@ public class GpuEagerTapeStepMatchesCpuTests
         }
     }
 
-    [SkippableFact]
-    public void Gpu_eager_step_follows_the_cpu_trajectory()
+    [SkippableTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Gpu_eager_step_follows_the_cpu_trajectory(bool withoutParameterBuffer)
     {
         DirectGpuTensorEngine? gpu = null;
         gpu = new DirectGpuTensorEngine();
@@ -151,8 +168,8 @@ public class GpuEagerTapeStepMatchesCpuTests
                 AiDotNetEngine.Current = previous;
             }
 
-            var cpu = Trajectory(new CpuEngine(), init);
-            var gpuLosses = Trajectory(gpu!, init);
+            var cpu = Trajectory(new CpuEngine(), init, withoutParameterBuffer);
+            var gpuLosses = Trajectory(gpu!, init, withoutParameterBuffer);
             string Show(List<double> l) => string.Join(" -> ", l.Select(v => v.ToString("G5")));
             Assert.True(cpu[^1] < 0.9 * cpu[0], $"the CPU reference did not learn: {Show(cpu)}");
             for (int s = 0; s < Steps; s++)

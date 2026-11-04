@@ -421,7 +421,7 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) vel.AsWritableSpan().Clear(); _tapeVelocity[param] = vel; }
+            if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeVelocity[param] = vel; }
 
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TrySgdMomentumStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)vel,

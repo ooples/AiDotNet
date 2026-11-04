@@ -360,6 +360,23 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// Optimize methods (review #1364 C4nLO).
     /// </summary>
     /// <param name="solution">The model being optimized.</param>
+    /// <summary>
+    /// A zero-filled optimizer-state tensor (a moment, accumulator or velocity) for a parameter of <paramref name="shape"/>.
+    /// With <paramref name="onDevice"/> (a float model on a GPU engine) it is created on the device, as PyTorch creates
+    /// optimizer state with <c>zeros_like(param)</c> on the parameter's device: the fused GPU step updates it in place
+    /// from the first step and a host read downloads it lazily. It used to be rented through the CUDA-only offload
+    /// allocator, so on every other backend the state was a host tensor: the first device step declined, the host
+    /// fallback ran, and engine ops left the state bound to a device copy the next device step then read.
+    /// </summary>
+    private protected static Tensor<T> CreateOptimizerStateTensor(int[] shape, bool onDevice)
+    {
+        if (onDevice && typeof(T) == typeof(float))
+            return (Tensor<T>)(object)AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.CreateStateTensor(shape);
+        var state = new Tensor<T>(shape);
+        state.AsWritableSpan().Clear();   // arena-rented storage is not guaranteed zero
+        return state;
+    }
+
     protected static void BeginOptimizeRun(object? solution)
     {
         (solution as AiDotNet.Interfaces.INeuralNetwork<T>)?.SetTrainingMode(true);
