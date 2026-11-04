@@ -2473,36 +2473,42 @@ jobs:
             '  top=$(ps -eo rss=,comm= --sort=-rss | head -1 | awk ''{printf "%s %d MB", $2, $1/1024}'')'
             '  echo "[runner] $(date -u +%H:%M:%S) $mem, largest $top, disk free $(df --output=avail -h / | tail -1)"'
             'done')
-          $monitor = Start-Process bash -NoNewWindow -PassThru -ArgumentList $monitorScript
-          $projects = @(dotnet sln AiDotNet.sln list | Select-Object -Skip 2 |
-            ForEach-Object { $_.Trim().Replace('\', '/') } | Where-Object { $_ })
-          if ($projects.Count -eq 0) { throw 'AiDotNet.sln lists no projects' }
-          $net10 = @()
-          foreach ($project in $projects) {
-            $evaluated = dotnet msbuild $project -getProperty:TargetFrameworks -getProperty:TargetFramework | Out-String
-            if ($LASTEXITCODE -ne 0) { throw "could not evaluate the target frameworks of $project" }
-            $properties = ($evaluated | ConvertFrom-Json).Properties
-            $frameworks = @(("$($properties.TargetFrameworks);$($properties.TargetFramework)").Split(';') |
-              Where-Object { $_ })
-            if ($frameworks -contains 'net10.0') {
-              Write-Host "$project (net10.0 of $($frameworks -join ', '))"
-              $net10 += $project
-            }
-            elseif ($project -eq 'src/AiDotNet.Generators/AiDotNet.Generators.csproj') {
-              Write-Host "$project (analyzer, $($frameworks -join ', '); built in the previous step)"
-            }
-            else {
-              throw "$project targets $($frameworks -join ', ') and not net10.0; decide how Sonar should analyse it"
-            }
-          }
           $filter = 'sonar-net10.slnf'
-          @{ solution = @{ path = 'AiDotNet.sln'; projects = $net10 } } | ConvertTo-Json -Depth 4 |
-            Set-Content -Path $filter
-          dotnet build $filter -c Release --no-restore -m:2 -f net10.0
-          $exit = $LASTEXITCODE
-          Stop-Process -Id $monitor.Id -ErrorAction SilentlyContinue
-          Remove-Item $filter -ErrorAction SilentlyContinue
-          if ($exit -ne 0) { throw "Sonar-instrumented build of the net10.0 projects failed with exit code $exit" }
+          $monitor = $null
+          try {
+            $monitor = Start-Process bash -NoNewWindow -PassThru -ArgumentList $monitorScript
+            $projects = @(dotnet sln AiDotNet.sln list | Select-Object -Skip 2 |
+              ForEach-Object { $_.Trim().Replace('\', '/') } | Where-Object { $_ })
+            if ($projects.Count -eq 0) { throw 'AiDotNet.sln lists no projects' }
+            $net10 = @()
+            foreach ($project in $projects) {
+              $evaluated = dotnet msbuild $project -getProperty:TargetFrameworks -getProperty:TargetFramework | Out-String
+              if ($LASTEXITCODE -ne 0) { throw "could not evaluate the target frameworks of $project" }
+              $properties = ($evaluated | ConvertFrom-Json).Properties
+              $frameworks = @(("$($properties.TargetFrameworks);$($properties.TargetFramework)").Split(';') |
+                Where-Object { $_ })
+              if ($frameworks -contains 'net10.0') {
+                Write-Host "$project (net10.0 of $($frameworks -join ', '))"
+                $net10 += $project
+              }
+              elseif ($project -eq 'src/AiDotNet.Generators/AiDotNet.Generators.csproj') {
+                Write-Host "$project (analyzer, $($frameworks -join ', '); built in the previous step)"
+              }
+              else {
+                throw "$project targets $($frameworks -join ', ') and not net10.0; decide how Sonar should analyse it"
+              }
+            }
+            @{ solution = @{ path = 'AiDotNet.sln'; projects = $net10 } } | ConvertTo-Json -Depth 4 |
+              Set-Content -Path $filter
+            dotnet build $filter -c Release --no-restore -m:2 -f net10.0
+            $exit = $LASTEXITCODE
+            if ($exit -ne 0) { throw "Sonar-instrumented build of the net10.0 projects failed with exit code $exit" }
+          } finally {
+            if ($null -ne $monitor) {
+              try { $monitor.Kill($true) } catch { }
+            }
+            Remove-Item -LiteralPath $filter -ErrorAction SilentlyContinue
+          }
 
       - name: End SonarCloud analysis
         if: ${{ fromJSON(env.SONAR_ANALYZE) && (github.event_name != 'pull_request' || github.event.pull_request.changed_files <= 250) }}
