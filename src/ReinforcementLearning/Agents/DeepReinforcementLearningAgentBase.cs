@@ -1,4 +1,4 @@
-﻿using AiDotNet.Autodiff;
+using AiDotNet.Autodiff;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;

@@ -1,4 +1,4 @@
-﻿global using System.Reflection;
+global using System.Reflection;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 
 namespace AiDotNet.Helpers;
