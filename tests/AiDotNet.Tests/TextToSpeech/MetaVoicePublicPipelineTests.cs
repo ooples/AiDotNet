@@ -111,6 +111,18 @@ public sealed class MetaVoicePublicPipelineTests
         Assert.Equal(expected, copy.Synthesize("hello world").ToArray());
     }
 
+    [Fact]
+    public void TokenPrediction_PreservesTokenizerInputWithoutRenormalizingBytes()
+    {
+        using var model = MetaVoiceNativeFixture.Create<double>();
+        Assert.Equal(model.Synthesize("hello world").ToArray(), model.Predict(model.TextToTokens("hello world")).ToArray());
+        Assert.Throws<ArgumentException>(() => model.Synthesize("\uFFFD"));
+        var tokens = new Tensor<double>(new[] { 4 }, new Vector<double>(new[] { 2177.0, 2178, 2179, 2561 }));
+        var waveform = model.Predict(tokens);
+        Assert.NotEmpty(waveform.ToArray());
+        Assert.All(waveform.ToArray(), value => Assert.False(double.IsNaN(value) || double.IsInfinity(value)));
+    }
+
     private static void ControlNativeSampling(MetaVoice1B<double> model)
     {
         // Couple random draws across the comparison; actors, codec and all four

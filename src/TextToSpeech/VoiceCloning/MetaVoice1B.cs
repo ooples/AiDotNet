@@ -110,7 +110,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         // The first EOT terminates the text; any remaining values are padding.
         int end = Array.IndexOf(ids, tokenizer.EndToken);
         if (end >= 0) ids = ids.Take(end).ToArray();
-        return SynthesizeNative(tokenizer.Decode(ids), ResolveVoice());
+        return SynthesizeNative(tokenizer.Decode(ids), ResolveVoice(), ids.Concat(new[] { tokenizer.EndToken }).ToArray());
     }
 
     protected override bool SupportsParameterMutation => _useNativeMode;

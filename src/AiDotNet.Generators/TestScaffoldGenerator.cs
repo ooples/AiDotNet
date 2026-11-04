@@ -6660,7 +6660,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputSize: 1, outputSize: 1), " +
                     "new AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions { HopSize = 4, FftSize = 16, MelChannels = 4, " +
                     "TextHiddenDim = 8, TextFeedForwardDim = 16, TextHeads = 2, TextEncoderLayers = 1, TextVocabulary = 81, MaxTextLength = 32, " +
-                    "LatentDim = 8, MelVaeChannels = 8, MelVaeMultipliers = new[] { 1, 1 }, MelVaeDownsampleFactor = 2, RvqDepth = 2, RvqVocabulary = 4, " +
+                    "LatentDim = 8, MelVaeChannels = 8, MelVaeMultipliers = new[] { 1, 1 }, MelVaeDownsampleFactor = 2, RvqDepth = 32, RvqVocabulary = 1024, " +
                     "DiTHiddenDim = 8, DiTLayers = 1, DiTHeads = 2, DiTFeedForwardMultiplier = 2, " +
                     "LengthHiddenDim = 8, LengthLayers = 1, LengthHeads = 2, LengthFeedForwardDim = 16, MaxLatentLength = 16, LengthTopK = 4, " +
                     "TrainingDiffusionSteps = 10, InferenceSteps = 2, BigVganInitialChannels = 8, BigVganUpsampleRates = new[] { 2 }, " +
@@ -15730,6 +15730,38 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 string scalarType = useFloat ? "float" : "double";
                 sb.AppendLine($"    protected override int WaveformSupervisionFrameCount(AiDotNet.TextToSpeech.TtsModelBase<{scalarType}> network, AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> recording)");
                 sb.AppendLine("        => 1 + recording.Length / network.HopSize;");
+            }
+            else if (model.ClassName == "UniAudio")
+            {
+                // An untrained RVQ can map different recordings to identical codes. Supply
+                // independent precomputed dataset codes to test the LM's target dependence.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 64 };");
+                string scalarType = useFloat ? "float" : "double";
+                sb.AppendLine($"    protected override AiDotNet.TextToSpeech.TtsTrainingSample<{scalarType}> SyntheticSupervision(AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> tokens, AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> target, AiDotNet.TextToSpeech.TtsModelBase<{scalarType}>? network = null)");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var codes = new AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}>(new[] {{ 2, 3 }});");
+                sb.AppendLine($"        var operations = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<{scalarType}>();");
+                sb.AppendLine("        for (int i = 0; i < codes.Length; i++)");
+                sb.AppendLine("        {");
+                sb.AppendLine("            int value = (int)System.Math.Floor(operations.ToDouble(target[i % target.Length]) * 997);");
+                sb.AppendLine("            codes[i] = operations.FromDouble(((value % 8) + 8) % 8);");
+                sb.AppendLine("        }");
+                sb.AppendLine($"        return new AiDotNet.TextToSpeech.TtsTrainingSample<{scalarType}> {{ Tokens = tokens, Audio = target, CodecTokens = codes, SpeakerReference = network?.Voice?.ReferenceAudio, Text = \"Hello world.\" }};");
+                sb.AppendLine("    }");
+            }
+            else if (model.ClassName is "SparkTTS" or "VoiceCraft")
+            {
+                // Predict returns LM logits, while the typed objective encodes paired recordings.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4, 128 };");
+                string scalarType = useFloat ? "float" : "double";
+                sb.AppendLine($"    protected override AiDotNet.TextToSpeech.TtsTrainingSample<{scalarType}> SyntheticSupervision(AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> tokens, AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> target, AiDotNet.TextToSpeech.TtsModelBase<{scalarType}>? network = null)");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var recording = new AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}>(new[] {{ 1280 }});");
+                sb.AppendLine("        for (int i = 0; i < recording.Length; i++) recording[i] = target[i % target.Length];");
+                sb.AppendLine($"        return new AiDotNet.TextToSpeech.TtsTrainingSample<{scalarType}> {{ Tokens = tokens, Audio = recording, Text = \"Hello world.\" }};");
+                sb.AppendLine("    }");
             }
             else if (model.ClassName is "OpenVoice" or "OpenVoiceV2")
             {

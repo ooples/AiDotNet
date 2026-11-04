@@ -98,7 +98,7 @@ public partial class MetaVoice1B<T>
 
     private double Uniform(Random random) => SamplingUniformForAudit?.Invoke() ?? random.NextDouble();
 
-    private Tensor<T> SynthesizeNative(string text, Tensor<T>? speaker)
+    private Tensor<T> SynthesizeNative(string text, Tensor<T>? speaker, int[]? firstStageTextTokens = null)
     {
         if (_first is null || _second is null || !_firstLoaded || !_secondLoaded || _firstTokenizer is null || _secondTokenizer is null)
             throw new InvalidOperationException("Load both original MetaVoice language-model checkpoints before synthesis.");
@@ -107,9 +107,11 @@ public partial class MetaVoice1B<T>
             throw new InvalidOperationException("Load the original DeepFilterNet3 checkpoint before released-output synthesis, or explicitly select raw decoder output.");
         using var noGrad = new NoGradScope<T>(); SetTrainingMode(false);
         var random = _options.SynthesisSeed is { } seed ? new Random(seed) : _random;
-        text = MetaVoiceText.Normalize(text);
+        // String synthesis owns normalization. Predict already receives tokenizer IDs:
+        // preserve those IDs, including byte sequences that are not normalized prose.
+        if (firstStageTextTokens is null) text = MetaVoiceText.Normalize(text);
         if (speaker is not null) speaker = Engine.Reshape(speaker, new[] { 1, SpeakerEmbeddingDim });
-        var firstTokens = MetaVoiceGeneration.FirstStage(_firstTokenizer.Encode(text), _options.MaximumNewTokens,
+        var firstTokens = MetaVoiceGeneration.FirstStage(firstStageTextTokens ?? _firstTokenizer.Encode(text), _options.MaximumNewTokens,
             _options.FirstStageContext, (prefix, conditioned) => _first.Forward(new[] { prefix }, conditioned ? speaker : null,
                 lastOnly: true).Logits[0].ToArray().Select(x => NumOps.ToDouble(x)).ToArray(), _ => Uniform(random), speaker is not null,
             _options.FirstStageTemperature, _options.FirstStageTopK, _options.FirstStageTopP,
