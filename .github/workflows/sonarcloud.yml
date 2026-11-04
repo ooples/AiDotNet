@@ -345,9 +345,10 @@ jobs:
     name: CodeQL Analysis (traced)
     runs-on: ubuntu-latest
     needs: [validation-source, select-shards]
-    # Recent traced runs took 66-71 minutes (about 26 traced build + 31 analysis) and trace Serving and
-    # the playground functions as well; 85 keeps the margin.
-    timeout-minutes: 85
+    # PR #2294's full traced build took 43 minutes, then its analysis was cancelled after
+    # another 37 minutes by the 85-minute job limit. Keep the full build and query suite,
+    # with enough time for analysis and upload on the expanded native model source.
+    timeout-minutes: 120
     if: "${{ always() && !cancelled() && github.event_name != 'pull_request' && fromJSON(needs.validation-source.outputs.execute_quality) && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read
