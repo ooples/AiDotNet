@@ -21038,3 +21038,54 @@ override AiDotNet.Video.FrameInterpolation.InterpAnyClearer<T>.SupportsFusedComp
 *REMOVED*AiDotNet.Video.Options.InterpAnyClearerOptions.UseVelocityGuidedWarping.set -> void
 *REMOVED*AiDotNet.Video.Options.InterpAnyClearerOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
 *REMOVED*AiDotNet.Video.Options.InterpAnyClearerOptions.Variant.set -> void
+AiDotNet.Video.Options.VFIformerOptions.CrossScaleAttention.get -> bool[]![]!
+AiDotNet.Video.Options.VFIformerOptions.CrossScaleAttention.set -> void
+AiDotNet.Video.Options.VFIformerOptions.Depths.get -> int[]!
+AiDotNet.Video.Options.VFIformerOptions.Depths.set -> void
+AiDotNet.Video.Options.VFIformerOptions.DropPathRate.get -> double
+AiDotNet.Video.Options.VFIformerOptions.DropPathRate.set -> void
+AiDotNet.Video.Options.VFIformerOptions.EmbedDim.get -> int
+AiDotNet.Video.Options.VFIformerOptions.EmbedDim.set -> void
+AiDotNet.Video.Options.VFIformerOptions.FlowWeight.get -> double
+AiDotNet.Video.Options.VFIformerOptions.FlowWeight.set -> void
+AiDotNet.Video.Options.VFIformerOptions.FlowWidths.get -> int[]!
+AiDotNet.Video.Options.VFIformerOptions.FlowWidths.set -> void
+AiDotNet.Video.Options.VFIformerOptions.L1Weight.get -> double
+AiDotNet.Video.Options.VFIformerOptions.L1Weight.set -> void
+AiDotNet.Video.Options.VFIformerOptions.MlpRatio.get -> double
+AiDotNet.Video.Options.VFIformerOptions.MlpRatio.set -> void
+AiDotNet.Video.Options.VFIformerOptions.RefineChannels.get -> int
+AiDotNet.Video.Options.VFIformerOptions.RefineChannels.set -> void
+AiDotNet.Video.Options.VFIformerOptions.TernaryWeight.get -> double
+AiDotNet.Video.Options.VFIformerOptions.TernaryWeight.set -> void
+AiDotNet.Video.Options.VFIformerOptions.TotalSteps.get -> int
+AiDotNet.Video.Options.VFIformerOptions.TotalSteps.set -> void
+AiDotNet.Video.Options.VFIformerOptions.WarmupSteps.get -> int
+AiDotNet.Video.Options.VFIformerOptions.WarmupSteps.set -> void
+AiDotNet.Video.Options.VFIformerOptions.WeightDecay.get -> double
+AiDotNet.Video.Options.VFIformerOptions.WeightDecay.set -> void
+AiDotNet.Video.Options.VFIformerOptions.WindowSize.get -> int
+AiDotNet.Video.Options.VFIformerOptions.WindowSize.set -> void
+override AiDotNet.Video.FrameInterpolation.VFIformer<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.FrameInterpolation.VFIformer<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.VFIformer<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.VFIformer<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.VFIformer<T>.GetNamedLayerActivations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> System.Collections.Generic.Dictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.FrameInterpolation.VFIformer<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.VFIformer<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.VFIformer<T>.RegisterComponents() -> void
+override AiDotNet.Video.FrameInterpolation.VFIformer<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.FrameInterpolation.VFIformer<T>.SupportsFusedCompiledTraining.get -> bool
+override AiDotNet.Video.FrameInterpolation.VFIformer<T>.SupportsParameterMutation.get -> bool
+*REMOVED*AiDotNet.Video.Options.VFIformerOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.VFIformerOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.VFIformerOptions.NumDecoderLayers.get -> int
+*REMOVED*AiDotNet.Video.Options.VFIformerOptions.NumDecoderLayers.set -> void
+*REMOVED*AiDotNet.Video.Options.VFIformerOptions.NumDeformablePoints.get -> int
+*REMOVED*AiDotNet.Video.Options.VFIformerOptions.NumDeformablePoints.set -> void
+*REMOVED*AiDotNet.Video.Options.VFIformerOptions.NumEncoderLayers.get -> int
+*REMOVED*AiDotNet.Video.Options.VFIformerOptions.NumEncoderLayers.set -> void
+*REMOVED*AiDotNet.Video.Options.VFIformerOptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.VFIformerOptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.VFIformerOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.VFIformerOptions.Variant.set -> void
