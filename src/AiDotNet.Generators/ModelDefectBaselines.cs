@@ -126,7 +126,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.Video.FrameInterpolation.TLBVFI<T>",
             "AiDotNet.Video.FrameInterpolation.ToonCrafter<T>",
             "AiDotNet.Video.FrameInterpolation.VFIMamba<T>",
-            "AiDotNet.Video.FrameInterpolation.VFIT<T>",
             "AiDotNet.Video.Inpainting.AVID<T>",
             "AiDotNet.Video.Inpainting.FlowLens<T>",
             "AiDotNet.Video.Inpainting.FuseFormer<T>",
