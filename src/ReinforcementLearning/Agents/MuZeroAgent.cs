@@ -814,39 +814,42 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
         Tensor<T> JointObjective(Tensor<T> step)
         {
             Tensor<T>? total = null;
-            for (int s = 0; s < sequenceCount; s++)
+            // Keep windows as rows so every unroll step uses batched network products instead of
+            // tracing a separate copy of all three networks for each sampled replay window.
+            var windows = Engine.Reshape(
+                Engine.TensorSlice(step, new[] { 0 }, new[] { sequenceCount * perSequence }),
+                new[] { sequenceCount, perSequence });
+            Tensor<T> Columns(Tensor<T> matrix, int first, int count) =>
+                Engine.TensorSlice(matrix, new[] { 0, first }, new[] { sequenceCount, count });
+            var h = repNet.ForwardForTraining(Columns(windows, 0, stateDim));
+            for (int k = 0; k < unroll; k++)
             {
-                int offset = s * perSequence;
-                var h = repNet.ForwardForTraining(Engine.TensorSlice(step, new[] { offset }, new[] { stateDim }));
-                for (int k = 0; k < unroll; k++)
-                {
-                    int at = offset + stateDim + k * perStep;
-                    var action = Engine.TensorSlice(step, new[] { at }, new[] { actionDim });
-                    var policyTarget = Engine.TensorSlice(step, new[] { at + actionDim }, new[] { actionDim });
-                    int scalars = at + 2 * actionDim;
-                    var mask = Engine.TensorSlice(step, new[] { scalars + 2 }, new[] { 1 });
+                int at = stateDim + k * perStep;
+                var action = Columns(windows, at, actionDim);
+                var policyTarget = Columns(windows, at + actionDim, actionDim);
+                int scalars = at + 2 * actionDim;
+                var mask = Columns(windows, scalars + 2, 1);
 
-                    var pred = predNet.ForwardForTraining(h);
-                    var logProbs = Engine.TensorLogSoftmax(Engine.TensorSlice(pred, new[] { 0 }, new[] { actionDim }), 0);
-                    var policyCrossEntropy = Engine.TensorNegate(Engine.ReduceSum(Engine.TensorMultiply(policyTarget, logProbs), null));
-                    var valueResidual = Engine.TensorSubtract(
-                        Engine.TensorSlice(pred, new[] { actionDim }, new[] { 1 }),
-                        Engine.TensorSlice(step, new[] { scalars }, new[] { 1 }));
+                var pred = predNet.ForwardForTraining(h);
+                var logProbs = Engine.TensorLogSoftmax(Columns(pred, 0, actionDim), 1);
+                var policyCrossEntropy = Engine.TensorNegate(
+                    Engine.ReduceSum(Engine.TensorMultiply(policyTarget, logProbs), new[] { 1 }, keepDims: true));
+                var valueResidual = Engine.TensorSubtract(
+                    Columns(pred, actionDim, 1), Columns(windows, scalars, 1));
 
-                    var dynOut = dynNet.ForwardForTraining(Engine.TensorConcatenate(new[] { h, action }, 0));
-                    var rewardResidual = Engine.TensorSubtract(
-                        Engine.TensorSlice(dynOut, new[] { latent }, new[] { 1 }),
-                        Engine.TensorSlice(step, new[] { scalars + 1 }, new[] { 1 }));
+                var dynOut = dynNet.ForwardForTraining(Engine.TensorConcatenate(new[] { h, action }, 1));
+                var rewardResidual = Engine.TensorSubtract(
+                    Columns(dynOut, latent, 1), Columns(windows, scalars + 1, 1));
 
-                    var squared = Engine.TensorAdd(
-                        policyCrossEntropy,
-                        Engine.TensorAdd(
-                            Engine.ReduceSum(Engine.TensorMultiply(valueResidual, valueResidual), null),
-                            Engine.ReduceSum(Engine.TensorMultiply(rewardResidual, rewardResidual), null)));
-                    var masked = Engine.TensorMultiply(Engine.Reshape(squared, new[] { 1 }), mask);
-                    total = total is null ? masked : Engine.TensorAdd(total, masked);
-                    h = Engine.TensorSlice(dynOut, new[] { 0 }, new[] { latent });
-                }
+                var squared = Engine.TensorAdd(
+                    policyCrossEntropy,
+                    Engine.TensorAdd(
+                        Engine.TensorMultiply(valueResidual, valueResidual),
+                        Engine.TensorMultiply(rewardResidual, rewardResidual)));
+                var masked = Engine.Reshape(
+                    Engine.ReduceSum(Engine.TensorMultiply(squared, mask), null), new[] { 1 });
+                total = total is null ? masked : Engine.TensorAdd(total, masked);
+                h = Columns(dynOut, 0, latent);
             }
             var scale = Engine.TensorSlice(step, new[] { step.Length - 1 }, new[] { 1 });
             return Engine.TensorMultiply(total ?? new Tensor<T>(new[] { 1 }), scale);

@@ -95,7 +95,8 @@ public class ShadowedOptionsTests
         yield return Case<GeneticAlgorithmOptimizerOptions<double, Matrix<double>, Vector<double>>>(new TabuSearchOptions<double, Matrix<double>, Vector<double>>(), "MaxMutationRate", 0.5, 0.4);
         yield return Case<TimeSeriesRegressionOptions<double>>(new SARIMAOptions<double>(), "SeasonalPeriod", 12, 4);
         yield return Case<TimeSeriesRegressionOptions<double>>(new STLDecompositionOptions<double>(), "SeasonalPeriod", 12, 4);
-        yield return Case<TimeSeriesRegressionOptions<double>>(new UnobservedComponentsOptions<double, Matrix<double>, Vector<double>>(), "SeasonalPeriod", 1, 4);
+        // Zero is the valid no-seasonality default; period one is rejected by TimeSeriesModelBase.
+        yield return Case<TimeSeriesRegressionOptions<double>>(new UnobservedComponentsOptions<double, Matrix<double>, Vector<double>>(), "SeasonalPeriod", 0, 4);
         yield return Case<DecisionTreeOptions>(new NGBoostRegressionOptions<double>(), "MinSamplesSplit", 2, 5);
         yield return Case<ReinforcementLearningOptions<double>>(new TD3Options<double>(), "WarmupSteps", 25000, 100);
 

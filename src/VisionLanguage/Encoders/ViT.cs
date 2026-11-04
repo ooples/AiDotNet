@@ -151,11 +151,18 @@ public partial class ViT<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
+        => ForwardImage(input);
+
+    /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+        => ForwardImage(input);
+
+    private Tensor<T> ForwardImage(Tensor<T> input)
     {
         ThrowIfDisposed();
+        var c = PreprocessImage(input);
         if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        var c = input;
+            return OnnxModel.Run(c);
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;

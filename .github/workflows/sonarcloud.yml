@@ -1543,9 +1543,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Free runner disk space
-        # A test-level-narrowed shard runs a handful of classes uninstrumented, so it skips the two
-        # minutes of deletions; every full shard still makes room.
-        if: matrix.shard.narrowed != true
+        # Narrowed shards still restore the full NuGet cache. Make room before extraction too;
+        # otherwise the runner can die before any test starts with ENOSPC.
         # ubuntu-latest images ship with Android SDK, .NET preinstalls, Haskell, CodeQL,
         # PowerShell, Boost, and ~14GB of unused tooling. Tests on the largest shards
         # (Diffusion A-C/D-I/J-M/N-R/S-prefix/T-Z, Unit-03 diffusion,
@@ -2022,6 +2021,13 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
           persist-credentials: false
+
+      - name: Free runner disk space before restoring packages
+        run: |
+          sudo rm -rf /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+          df -h /
+
 
       - name: Setup .NET 10.0
         uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0

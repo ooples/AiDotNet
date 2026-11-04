@@ -853,3 +853,4 @@ static AiDotNet.ReinforcementLearning.Policies.PolicyBase<T>.RandomFromSeed(int?
 *REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.Qwen2VL<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.Qwen3VL<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.QwenVL<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.VisionLanguage.Encoders.ViT<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!

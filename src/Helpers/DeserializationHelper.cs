@@ -4513,6 +4513,17 @@ public static class DeserializationHelper
             return;
         }
 
+        // Generated factories return before the constructor-specific fallback below. Restore the
+        // hosted attentions here as well, otherwise their post-construction settings are lost.
+        if (layer is TransformerEncoderBlock<T> encoder && encoder.AttentionLayer is MultiHeadAttentionLayer<T> encoderAttention)
+            RestoreNestedMultiHeadAttentionConfiguration(encoderAttention, additionalParams, TransformerEncoderBlock<T>.AttentionMetadataPrefix);
+        if (layer is TransformerDecoderBlock<T> decoder)
+        {
+            if (decoder.SelfAttentionLayer is MultiHeadAttentionLayer<T> selfAttention)
+                RestoreNestedMultiHeadAttentionConfiguration(selfAttention, additionalParams, TransformerDecoderBlock<T>.SelfAttentionMetadataPrefix);
+            RestoreNestedMultiHeadAttentionConfiguration(decoder.CrossAttentionLayer, additionalParams, TransformerDecoderBlock<T>.CrossAttentionMetadataPrefix);
+        }
+
         string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");
         if (string.IsNullOrWhiteSpace(positionalEncoding)
             || !Enum.TryParse<Enums.PositionalEncodingType>(
