@@ -66,6 +66,9 @@ public partial class RelativePositionTransformerBlock<T> : LayerBase<T>
     [SubLayerInput("_hidden")]
     private readonly LayerNormalizationLayer<T> _ffnNorm;
     private readonly DropoutLayer<T>? _dropout;
+    private readonly double _normalizationEpsilon;
+    [ExternalState]
+    private Func<string, int[], double[]>? _dropoutMasks;
 
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T>? _relativeKeys;
@@ -92,7 +95,8 @@ public partial class RelativePositionTransformerBlock<T> : LayerBase<T>
         [LayerState] double dropoutRate,
         [LayerState] int window,
         [LayerState] bool rotary = false,
-        [LayerState] bool positional = true)
+        [LayerState] bool positional = true,
+        [LayerState] double normalizationEpsilon = 1e-4)
         : base(new[] { hidden }, new[] { hidden })
     {
         if (hidden <= 0) throw new ArgumentOutOfRangeException(nameof(hidden));
@@ -117,10 +121,13 @@ public partial class RelativePositionTransformerBlock<T> : LayerBase<T>
         _key = new DenseLayer<T>(hidden, identity);
         _value = new DenseLayer<T>(hidden, identity);
         _output = new DenseLayer<T>(hidden, identity);
-        _attentionNorm = new LayerNormalizationLayer<T>(hidden, 1e-4);
+        if (normalizationEpsilon <= 0 || double.IsNaN(normalizationEpsilon) || double.IsInfinity(normalizationEpsilon))
+            throw new ArgumentOutOfRangeException(nameof(normalizationEpsilon));
+        _normalizationEpsilon = normalizationEpsilon;
+        _attentionNorm = new LayerNormalizationLayer<T>(hidden, normalizationEpsilon);
         _conv1 = new Conv1DLayer<T>(inputChannels: hidden, outputChannels: filter, kernelSize: kernelSize, activation: new ReLUActivation<T>());
         _conv2 = new Conv1DLayer<T>(inputChannels: filter, outputChannels: hidden, kernelSize: kernelSize);
-        _ffnNorm = new LayerNormalizationLayer<T>(hidden, 1e-4);
+        _ffnNorm = new LayerNormalizationLayer<T>(hidden, normalizationEpsilon);
         if (dropoutRate > 0) _dropout = new DropoutLayer<T>(dropoutRate);
 
         RegisterSubLayer(_query);
@@ -158,6 +165,34 @@ public partial class RelativePositionTransformerBlock<T> : LayerBase<T>
     internal DenseLayer<T> OutputProjection => _output;
     internal Tensor<T> RelativeKeys => _relativeKeys ?? throw new InvalidOperationException("Only a relative-position block has relative tables.");
     internal Tensor<T> RelativeValues => _relativeValues ?? throw new InvalidOperationException("Only a relative-position block has relative tables.");
+    internal LayerNormalizationLayer<T> AttentionNormalization => _attentionNorm;
+    internal LayerNormalizationLayer<T> FeedForwardNormalization => _ffnNorm;
+    internal Conv1DLayer<T> FeedForwardInput => _conv1;
+    internal Conv1DLayer<T> FeedForwardOutput => _conv2;
+
+    internal Tensor<T> ForwardWithDropoutMasks(Tensor<T> input, Func<string, int[], double[]> masks)
+    {
+        var previous = _dropoutMasks; _dropoutMasks = masks;
+        try { return Forward(input); }
+        finally { _dropoutMasks = previous; }
+    }
+
+    private Tensor<T> Drop(Tensor<T> input, string site)
+    {
+        if (_dropout is null || !IsTrainingMode) return input;
+        if (_dropoutMasks is null) return _dropout.Forward(input);
+        var values = _dropoutMasks(site, input.Shape.ToArray());
+        if (values.Length != input.Length) throw new ArgumentException("Dropout mask dimensions differ.");
+        double scale = 1 / (1 - _dropoutRate);
+        var mask = new Tensor<T>(input.Shape.ToArray());
+        for (int i = 0; i < values.Length; i++)
+        {
+            if (values[i] != 0 && Math.Abs(values[i] - scale) > 1e-12)
+                throw new ArgumentException("Expected inverted Bernoulli dropout masks.");
+            mask[i] = NumOps.FromDouble(values[i]);
+        }
+        return Engine.TensorMultiply(input, mask);
+    }
 
     /// <summary>The self-attention sublayer alone on one sequence <c>[time, hidden]</c>, before its residual and norm.</summary>
     internal Tensor<T> SelfAttention(Tensor<T> x) => Attention(x);
@@ -181,14 +216,14 @@ public partial class RelativePositionTransformerBlock<T> : LayerBase<T>
     private Tensor<T> Run(Tensor<T> x)
     {
         var attended = Attention(x);
-        if (_dropout is not null) attended = _dropout.Forward(attended);
+        attended = Drop(attended, "attention_output");
         x = _attentionNorm.Forward(Engine.TensorAdd(x, attended));
 
         var channelsFirst = Engine.Reshape(Engine.TensorTranspose(x), new[] { 1, _hidden, x.Shape[0] });
         var hidden = _conv1.Forward(channelsFirst);
-        if (_dropout is not null) hidden = _dropout.Forward(hidden);
+        hidden = Drop(hidden, "feed_forward_hidden");
         var ffn = Engine.TensorTranspose(Engine.Reshape(_conv2.Forward(hidden), new[] { _hidden, x.Shape[0] }));
-        if (_dropout is not null) ffn = _dropout.Forward(ffn);
+        ffn = Drop(ffn, "feed_forward_output");
         return _ffnNorm.Forward(Engine.TensorAdd(x, ffn));
     }
 
@@ -237,7 +272,7 @@ public partial class RelativePositionTransformerBlock<T> : LayerBase<T>
                     kh = Rotate(kh);
                 }
                 var rotaryProbabilities = Engine.TensorSoftmax(Engine.TensorMultiplyScalar(Engine.TensorMatMul(qh, Engine.TensorTranspose(kh)), scale), axis: 1);
-                if (_dropout is not null) rotaryProbabilities = _dropout.Forward(rotaryProbabilities);
+                rotaryProbabilities = Drop(rotaryProbabilities, "attention_probs." + h);
                 heads[h] = Engine.TensorMatMul(rotaryProbabilities, vh);
                 continue;
             }
@@ -248,7 +283,7 @@ public partial class RelativePositionTransformerBlock<T> : LayerBase<T>
                 Engine.TensorIndexSelect(Engine.Reshape(relative, new[] { length * span, 1 }), relToAbs, 0), new[] { length, length });
             var logits = Engine.TensorMultiplyScalar(Engine.TensorAdd(content, Engine.TensorMultiply(relativeAbs, relToAbsMask)), scale);
             var probabilities = Engine.TensorSoftmax(logits, axis: 1);
-            if (_dropout is not null) probabilities = _dropout.Forward(probabilities);
+            probabilities = Drop(probabilities, "attention_probs." + h);
 
             var output = Engine.TensorMatMul(probabilities, vh);                                    // [L, dk]
             var relativeWeights = Engine.TensorMultiply(Engine.Reshape(
@@ -307,6 +342,7 @@ public partial class RelativePositionTransformerBlock<T> : LayerBase<T>
         metadata["Window"] = _window.ToString(inv);
         metadata["Rotary"] = _rotary.ToString(inv);
         metadata["Positional"] = _positional.ToString(inv);
+        metadata["NormalizationEpsilon"] = _normalizationEpsilon.ToString("R", inv);
         return metadata;
     }
 }

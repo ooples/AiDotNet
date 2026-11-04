@@ -93,6 +93,9 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     /// <summary>The model's phoneme table (sorted into the vocabulary after the three frame tokens).</summary>
     protected abstract IReadOnlyList<string> PhonemeTable { get; }
 
+    /// <summary>A checkpoint's fixed token order, when it differs from the paper reproduction's sorted symbols.</summary>
+    protected virtual IReadOnlyList<string>? FixedTokenVocabulary => null;
+
     /// <summary>Rows of the language-ID table (0 for a monolingual model).</summary>
     protected virtual int LanguageCount => 0;
 
@@ -121,6 +124,11 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
 
     private (string[] Tokens, int WordSeparator) BuildVocabulary(Dictionary<string, int> ids)
     {
+        if (FixedTokenVocabulary is { } vocabulary)
+        {
+            for (int i = 0; i < vocabulary.Count; i++) ids[vocabulary[i]] = i;
+            return (vocabulary.ToArray(), ids["_"]);
+        }
         var symbols = PhonemeTable.Distinct(StringComparer.Ordinal).ToList();
         symbols.Sort(StringComparer.Ordinal);                      // Python's sorted(): code-point order
         var tokens = new List<string> { "<pad>", "<bos>", "<eos>" };
@@ -227,7 +235,8 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
         _core = new VallECore<T>(Engine, arLayers, narLayers, new VallEConfiguration(
             TextTokens: o.TextTokens, AudioTokens: o.CodebookSize, Codebooks: o.NumCodebooks, ModelDim: o.HiddenDim,
             Heads: o.NumHeads, Layers: o.NumDecoderLayers, FeedForwardDim: o.FeedForwardDim, Dropout: o.DropoutRate,
-            Languages: LanguageCount, LanguagePlacement: LanguagePlacement));
+            Languages: LanguageCount, LanguagePlacement: LanguagePlacement,
+            PrependBos: o.PrependBos, StopOnMostLikelyEndToken: o.StopOnMostLikelyEndToken));
         _core.InitializeLikePyTorch(initialization);
     }
 
@@ -244,7 +253,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     // ---------------------------------------------------------------- vocabulary and front end
 
     /// <summary>The token id of each phoneme symbol, without the <c>&lt;bos&gt; … &lt;eos&gt;</c> frame.</summary>
-    public int[] EncodePhonemes(IEnumerable<string> symbols)
+    public virtual int[] EncodePhonemes(IEnumerable<string> symbols)
     {
         var ids = new List<int>();
         foreach (var symbol in symbols)
@@ -297,8 +306,9 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
         return ToTensor(Frame(ids.Take(_options.MaxTextLength).ToArray()));
     }
 
-    private static int[] Frame(IReadOnlyList<int> ids)
+    private int[] Frame(IReadOnlyList<int> ids)
     {
+        if (FixedTokenVocabulary is not null) return ids.ToArray();
         var framed = new int[ids.Count + 2];
         framed[0] = BeginToken;
         for (int i = 0; i < ids.Count; i++) framed[i + 1] = ids[i];
@@ -307,8 +317,8 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Phoneme ids with or without their <c>&lt;bos&gt; … &lt;eos&gt;</c> frame, as framed ids.</summary>
-    protected static int[] Framed(int[] ids) =>
-        ids.Length >= 2 && ids[0] == BeginToken && ids[ids.Length - 1] == EndToken ? ids : Frame(ids);
+    protected int[] Framed(int[] ids) =>
+        FixedTokenVocabulary is not null || (ids.Length >= 2 && ids[0] == BeginToken && ids[ids.Length - 1] == EndToken) ? ids : Frame(ids);
 
     /// <summary>The symbol of token id <paramref name="id"/>.</summary>
     protected string Symbol(int id) => _tokens[id];
@@ -499,6 +509,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     /// </summary>
     protected int[] JoinPrompt(int[] enrolled, int[] target)
     {
+        if (FixedTokenVocabulary is not null) return enrolled.Concat(target).ToArray();
         var full = new List<int> { BeginToken };
         if (enrolled.Length > 0)
         {
@@ -556,7 +567,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
             if (!actual.SequenceEqual(shape))
                 throw new InvalidDataException($"'{name}' is [{string.Join(", ", actual)}] in the checkpoint but [{string.Join(", ", shape)}] " +
                     "in this model; build the model with the checkpoint's configuration.");
-            return tensor.ToVector().Select(v => (double)v).ToArray();
+            return tensor.ToArray().Select(v => (double)v).ToArray();
         });
     }
 

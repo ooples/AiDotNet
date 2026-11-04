@@ -144,7 +144,7 @@ internal abstract class Num2WordsBase
     }
 
     /// <summary><c>to_cardinal</c> of an integer.</summary>
-    public string ToCardinal(BigInteger value)
+    public virtual string ToCardinal(BigInteger value)
     {
         string prefix = "";
         if (value.Sign < 0)
@@ -159,7 +159,7 @@ internal abstract class Num2WordsBase
     }
 
     /// <summary><c>to_cardinal</c> of a float with a fractional part (<c>to_cardinal_float</c>).</summary>
-    public string ToCardinal(double value)
+    public virtual string ToCardinal(double value)
     {
         if (!double.IsNaN(value) && !double.IsInfinity(value) && Math.Floor(value) == value)
             return ToCardinal(new BigInteger(value));
@@ -206,13 +206,13 @@ internal abstract class Num2WordsBase
     /// <summary><c>to_year</c>: the cardinal, for both languages.</summary>
     public string ToYear(BigInteger value) => ToCardinal(value);
 
-    private static string Pluralize(BigInteger n, string[] forms) => n.IsOne ? forms[0] : forms[1];
+    protected virtual string Pluralize(BigInteger n, string[] forms) => n.IsOne ? forms[0] : forms[1];
 
     /// <summary>
     /// <c>to_currency(val, currency, cents=True, separator)</c> of a float: the amount rounded half-up to cents, the
     /// units and cents each as a cardinal with its currency word.
     /// </summary>
-    public string ToCurrency(double value, string currency, string separator)
+    public virtual string ToCurrency(double value, string currency, string separator)
     {
         var (units, cents, negative) = ParseCurrencyParts(value);
         if (!_currencyForms.TryGetValue(currency, out var forms))
@@ -225,7 +225,7 @@ internal abstract class Num2WordsBase
     protected virtual string FinishCurrency(string result, string currency, string separator) => result;
 
     // parse_currency_parts of a float: Decimal(value) (exact), quantized to 0.01 rounding half up, split at the point.
-    private static (BigInteger Units, BigInteger Cents, bool Negative) ParseCurrencyParts(double value)
+    protected static (BigInteger Units, BigInteger Cents, bool Negative) ParseCurrencyParts(double value)
     {
         if (double.IsNaN(value) || double.IsInfinity(value))
             throw new ArgumentException("A NaN or infinite amount cannot be quantized.", nameof(value));
@@ -253,7 +253,7 @@ internal abstract class Num2WordsBase
 }
 
 /// <summary>num2words' <c>Num2Word_ES</c>.</summary>
-internal sealed class Num2WordsSpanish : Num2WordsBase
+internal sealed partial class Num2WordsSpanish : Num2WordsBase
 {
     private static readonly Lazy<Num2WordsSpanish> SharedInstance = new(() => new Num2WordsSpanish(), isThreadSafe: true);
     private readonly HashSet<string> _currenciesUna;

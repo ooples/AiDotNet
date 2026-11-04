@@ -30,7 +30,7 @@ public class VallECoreParityTests
         return JObject.Parse(File.ReadAllText(output));
     }
 
-    private static (VallECore<double> Core, JObject Fixture) Load()
+    private static (VallECore<double> Core, JObject Fixture) Load(bool corruptTiedHead = false)
     {
         var fixture = Reference();
         var config = fixture["config"]!;
@@ -44,12 +44,21 @@ public class VallECoreParityTests
         {
             var weights = new WeightLoader().LoadWeights(path);
             var used = new HashSet<string>();
+            // The generator omits tied aliases from safetensors and restores them
+            // before loading the author model. Resolve the same stored tensors here.
+            var aliases = new Dictionary<string, string>();
+            if ((bool)config["share_embedding"]!)
+                for (int j = 0; j < (int)config["num_quantizers"]! - 2; j++)
+                    aliases[$"nar_predict_layers.{j}.weight"] = $"nar_audio_embeddings.{j + 2}.word_embeddings.weight";
             core.LoadTorchWeights((name, shape) =>
             {
-                var tensor = weights[name];
+                string storedName = !weights.ContainsKey(name) && aliases.TryGetValue(name, out var alias) ? alias : name;
+                var tensor = weights[storedName];
                 Assert.Equal(shape, tensor.Shape.ToArray());
-                used.Add(name);
-                return tensor.ToVector().Select(v => (double)v).ToArray();
+                used.Add(storedName);
+                var values = tensor.ToVector().Select(v => (double)v).ToArray();
+                if (corruptTiedHead && name == "nar_predict_layers.0.weight") values[0] += 1;
+                return values;
             });
             Assert.Equal(weights.Keys.OrderBy(k => k, StringComparer.Ordinal), used.OrderBy(k => k, StringComparer.Ordinal));
         }
@@ -59,6 +68,10 @@ public class VallECoreParityTests
         }
         return (core, fixture);
     }
+
+    [Fact]
+    public void TiedHeadDisagreement_IsStillRejected()
+        => Assert.Throws<InvalidDataException>(() => Load(corruptTiedHead: true));
 
     private static int[,] Matrix(JToken rows)
     {

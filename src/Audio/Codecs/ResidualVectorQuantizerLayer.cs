@@ -30,6 +30,7 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
     private readonly int _dim, _quantizers, _bins, _kmeansIterations, _deadCodeThreshold;
     private readonly double _decay, _epsilon;
     private readonly bool _commitmentAsMean;
+    private readonly bool _expireCodesAfterEma;
     private readonly Tensor<T>[] _embed, _embedAverage, _clusterSize;
     private readonly Tensor<T>[] _initialized;
     private Random _random;
@@ -44,9 +45,10 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
     /// <param name="deadCodeThreshold">The EMA usage below which a code is replaced (2; 0 never replaces).</param>
     /// <param name="commitmentAsMean">Whether the commitment loss is the mean over codebooks of the MSE (the reference
     /// code) rather than the sum over codebooks of squared norms (EnCodec Eq. 3; false).</param>
+    /// <param name="expireCodesAfterEma">Replace dead codes after updating EMA state, as in UniAudio's LSX quantizer.</param>
     public ResidualVectorQuantizerLayer([LayerState] int dim, [LayerState] int quantizers, [LayerState] int bins,
         [LayerState] double decay = 0.99, [LayerState] int kmeansIterations = 50, [LayerState] int deadCodeThreshold = 2,
-        [LayerState] bool commitmentAsMean = false)
+        [LayerState] bool commitmentAsMean = false, [LayerState] bool expireCodesAfterEma = false)
         : base(new[] { dim }, new[] { dim })
     {
         if (dim <= 0 || quantizers <= 0 || bins <= 0) throw new ArgumentOutOfRangeException(nameof(dim));
@@ -58,6 +60,7 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
         _kmeansIterations = kmeansIterations;
         _deadCodeThreshold = deadCodeThreshold;
         _commitmentAsMean = commitmentAsMean;
+        _expireCodesAfterEma = expireCodesAfterEma;
         _random = RandomSeed.HasValue
             ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
             : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
@@ -251,13 +254,7 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
     // embed = embed_avg / Laplace-smoothed cluster_size.
     private void UpdateCodebook(Tensor<T> rows, int[] codes, int q)
     {
-        if (_deadCodeThreshold > 0)
-        {
-            var replacements = Gather(rows, SampleRows(rows.Shape[0], _bins));
-            for (int k = 0; k < _bins; k++)
-                if (NumOps.ToDouble(_clusterSize[q][k]) < _deadCodeThreshold)
-                    for (int j = 0; j < _dim; j++) _embed[q][k, j] = replacements[k, j];
-        }
+        if (!_expireCodesAfterEma) ExpireCodes(rows, q);
         var onehot = OneHot(codes);
         var counts = Engine.ReduceSum(onehot, new[] { 0 }, keepDims: false);                                           // [bins]
         var sums = Engine.TensorMatMul(Engine.TensorTranspose(onehot), rows);                                          // [bins, dim]
@@ -273,7 +270,21 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
         Store(size, _clusterSize[q]);
         Store(average, _embedAverage[q]);
         Store(embed, _embed[q]);
+        if (_expireCodesAfterEma) ExpireCodes(rows, q);
         Invalidate(q);
+    }
+
+    private void ExpireCodes(Tensor<T> rows, int q)
+    {
+        if (_deadCodeThreshold <= 0) return;
+        bool anyExpired = false;
+        for (int k = 0; k < _bins; k++)
+            anyExpired |= NumOps.ToDouble(_clusterSize[q][k]) < _deadCodeThreshold;
+        if (!anyExpired && _expireCodesAfterEma) return;
+        var replacements = Gather(rows, SampleRows(rows.Shape[0], _bins));
+        for (int k = 0; k < _bins; k++)
+            if (NumOps.ToDouble(_clusterSize[q][k]) < _deadCodeThreshold)
+                for (int j = 0; j < _dim; j++) _embed[q][k, j] = replacements[k, j];
     }
 
     /// <inheritdoc />

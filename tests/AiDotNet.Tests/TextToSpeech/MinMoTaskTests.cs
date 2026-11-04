@@ -15,7 +15,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// (<c>tools/reference-data/minmo_projector_reference.py</c>).</summary>
 public class MinMoTaskTests
 {
-    // double.IsFinite is not on .NET Framework.
+    // TtsPaperNumerics.IsFinite is not on .NET Framework.
     private static bool Finite(double x) => !double.IsNaN(x) && !double.IsInfinity(x);
 
     [Fact(Timeout = 120000)]

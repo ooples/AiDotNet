@@ -16,16 +16,26 @@ public class KokoroOptions : EndToEndTtsOptions
             throw new ArgumentNullException(nameof(other));
 
         StyleDim = other.StyleDim;
+        Speed = other.Speed;
+        UseNativeEnglishFallback = other.UseNativeEnglishFallback;
     }
 
     public KokoroOptions()
     {
         SampleRate = 24000;
         MelChannels = 80;
-        HopSize = 256;
+        HopSize = 300;
         HiddenDim = 512;
         NumFlowSteps = 0;
+        VocabSize = 178;
+        NumEncoderLayers = 3;
+        DropoutRate = .2;
     }
 
     public int StyleDim { get; set; } = 128;
+
+    /// <summary>Duration scaling used by the released model: sum(sigmoid(duration logits)) / speed.</summary>
+    public double Speed { get; set; } = 1;
+    /// <summary>Explicitly opts into the repository's approximate English frontend. Faithful raw text processing uses the official Misaki frontend through TextPhonemizer.</summary>
+    public bool UseNativeEnglishFallback { get; set; }
 }

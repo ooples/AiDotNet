@@ -96,7 +96,7 @@ public class W2vBertPaperTests
         var audio = Voice(8000, 180);
         model.Train(audio, audio);
         var (c, d, m) = model.LastPretrainingLosses;
-        // double.IsFinite is .NET Core 2.1+; the net471 build needs the explicit form.
+        // TtsPaperNumerics.IsFinite is .NET Core 2.1+; the net471 build needs the explicit form.
         static bool Finite(double v) => !double.IsNaN(v) && !double.IsInfinity(v);
         Assert.True(Finite(c) && Finite(d) && Finite(m), $"Losses {c}, {d}, {m}.");
         Assert.True(m > 0, "The masked-prediction loss must cover the masked steps.");

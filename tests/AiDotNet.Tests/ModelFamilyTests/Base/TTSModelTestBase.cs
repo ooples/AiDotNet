@@ -132,7 +132,7 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
         return longer;
     }
 
-    private static AiDotNet.TextToSpeech.TtsTrainingSample<T> SyntheticSupervision(Tensor<T> tokens, Tensor<T> target,
+    protected virtual AiDotNet.TextToSpeech.TtsTrainingSample<T> SyntheticSupervision(Tensor<T> tokens, Tensor<T> target,
         AiDotNet.TextToSpeech.TtsModelBase<T>? network = null)
     {
         int frames = target.Rank >= 2 ? target.Shape[target.Rank - 2] : target.Length;

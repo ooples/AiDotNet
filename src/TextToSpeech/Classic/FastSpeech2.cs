@@ -46,13 +46,15 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ResearchPaper(
     "FastSpeech 2: Fast and High-Quality End-to-End Text to Speech",
     "https://arxiv.org/abs/2006.04558",
-    Year = 2020,
+    Year = 2021,
     Authors = "Ren et al."
 )]
 [PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
                 Schedule = LearningRateSchedulerType.Noam, WarmupSteps = 4000,
                 ReferenceBatchSize = 48,
                 Source = "Ren et al. 2021, Sec. 4.1: Adam with beta1 0.9, beta2 0.98, eps 1e-9 following the learning rate schedule of Vaswani et al. 2017, batch size 48 sentences, 160k steps. No constant rate is declared because that schedule states none.")]
+[ArchitectureFromPaper("https://arxiv.org/abs/1905.09263",
+    "FastSpeech 2 retains FastSpeech's feed-forward Transformer encoder and decoder while replacing distilled variance targets with ground truth and adding pitch and energy predictors (Ren et al. 2021, section 2).")]
 public partial class FastSpeech2<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel<T>
 {
     private readonly FastSpeech2Options _options;
@@ -90,7 +92,7 @@ public partial class FastSpeech2<T> : VarianceAdaptorTtsModelBase<T>, IAcousticM
         _useNativeMode = true;
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-            ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -103,6 +105,14 @@ public partial class FastSpeech2<T> : VarianceAdaptorTtsModelBase<T>, IAcousticM
     public new int MelChannels => _options.MelChannels;
     public new int HopSize => _options.HopSize;
     public int FftSize => _options.FftSize;
+
+    protected override Tensor<T> PreprocessText(string text)
+    {
+        var ids = FrontEnd.ClassicTtsText.Phonemes(text, true, _options.TextSymbols, _options.VocabSize, _options.MaxTextLength);
+        var tokens = new Tensor<T>(new[] { ids.Length });
+        for (int i = 0; i < ids.Length; i++) tokens[i] = NumOps.FromDouble(ids[i]);
+        return tokens;
+    }
 
     /// <summary>Generates a mel spectrogram from text (FastSpeech 2 is an acoustic model; pair it with a vocoder).</summary>
     public Tensor<T> TextToMel(string text) => Synthesize(text);

@@ -214,4 +214,18 @@ public class AdaSpeechPaperTests
             Tokens = Tokens(5), Mel = Mel(14, 0.0), Durations = new[] { 3, 3, 3, 3, 2 },
         }));
     }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConvertedCheckpoint_RestoresTheCompletePaperGraph()
+    {
+        await Task.Yield();
+        var source = CreateModel();
+        var expected = source.GetParameters().ToArray();
+        var restored = CreateModel();
+
+        restored.LoadConvertedWeights(name => name == "adaspeech.parameters" ? expected : null);
+
+        Assert.Equal(expected, restored.GetParameters().ToArray());
+        Assert.Throws<InvalidDataException>(() => restored.LoadConvertedWeights(_ => new double[expected.Length - 1]));
+    }
 }

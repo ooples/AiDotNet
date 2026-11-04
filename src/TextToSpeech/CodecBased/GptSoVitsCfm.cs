@@ -8,7 +8,8 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <summary>The sizes of GPT-SoVITS's v3/v4/V5 DiT (<c>DiT(dim=1024, depth=22, heads=16, ff_mult=2, text_dim=512,
 /// conv_layers=4)</c>).</summary>
 internal sealed record GptSoVitsDiTConfiguration(int Dim = 1024, int Depth = 22, int Heads = 16, int HeadDim = 64, int FfMult = 2,
-    int MelDim = 100, int TextDim = 512, int ConvLayers = 4, double Dropout = 0.1, bool UseStepEmbedding = true);
+    int MelDim = 100, int TextDim = 512, int ConvLayers = 4, double Dropout = 0.1, bool UseStepEmbedding = true,
+    int SpeakerDim = 0, bool CausalPosition = false, int StaticChunkSize = 0);
 
 /// <summary>
 /// GPT-SoVITS's diffusion Transformer (<c>f5_tts/model/backbones/dit.py</c>, after F5-TTS) for one sequence: the
@@ -56,9 +57,9 @@ internal sealed class GptSoVitsDiT<T>
             TextBlocks.Add(new ConvNeXt(MeloOps.Conv(layers, c.TextDim, c.TextDim, 7, 1, 3, c.TextDim), IndexTtsOps.LayerNorm(layers, c.TextDim, 1e-6),
                 IndexTtsOps.Linear(engine, layers, random, c.TextDim, 2 * c.TextDim), IndexTtsOps.Values(layers, new double[2 * c.TextDim]),
                 IndexTtsOps.Values(layers, new double[2 * c.TextDim]), IndexTtsOps.Linear(engine, layers, random, 2 * c.TextDim, c.TextDim)));
-        InputProjection = IndexTtsOps.Linear(engine, layers, random, 2 * c.MelDim + c.TextDim, c.Dim);
-        PositionConv1 = MeloOps.Conv(layers, c.Dim, c.Dim, 31, 1, 15, 16);
-        PositionConv2 = MeloOps.Conv(layers, c.Dim, c.Dim, 31, 1, 15, 16);
+        InputProjection = IndexTtsOps.Linear(engine, layers, random, 2 * c.MelDim + c.TextDim + c.SpeakerDim, c.Dim);
+        PositionConv1 = MeloOps.Conv(layers, c.Dim, c.Dim, 31, 1, c.CausalPosition ? 0 : 15, 16);
+        PositionConv2 = MeloOps.Conv(layers, c.Dim, c.Dim, 31, 1, c.CausalPosition ? 0 : 15, 16);
         for (int i = 0; i < c.Depth; i++)
             Blocks.Add(new Block(IndexTtsOps.Linear(engine, layers, random, c.Dim, 6 * c.Dim), IndexTtsOps.Linear(engine, layers, random, c.Dim, inner),
                 IndexTtsOps.Linear(engine, layers, random, c.Dim, inner), IndexTtsOps.Linear(engine, layers, random, c.Dim, inner),
@@ -149,10 +150,13 @@ internal sealed class GptSoVitsDiT<T>
     private Tensor<T> Mish(Tensor<T> x) => _engine.TensorMultiply(x, _engine.Tanh(_engine.Softplus(x)));
 
     // [T, C] through a [1, C, T] convolution.
-    private Tensor<T> ConvRows(NormedConv1DLayer<T> conv, Tensor<T> rows)
+    private Tensor<T> ConvRows(NormedConv1DLayer<T> conv, Tensor<T> rows, bool causal = false)
     {
         int t = rows.Shape[0], ci = rows.Shape[1];
-        var y = conv.Forward(_engine.Reshape(_engine.TensorTranspose(rows), new[] { 1, ci, t }));
+        var channels = _engine.Reshape(_engine.TensorTranspose(rows), new[] { 1, ci, t });
+        if (causal)
+            channels = _engine.TensorConcatenate(new[] { new Tensor<T>(new[] { 1, ci, 30 }), channels }, 2);
+        var y = conv.Forward(channels);
         return _engine.TensorTranspose(_engine.Reshape(y, new[] { y.Shape[1], t }));
     }
 
@@ -195,13 +199,20 @@ internal sealed class GptSoVitsDiT<T>
     /// features <paramref name="textEmbedding"/> <c>[T, text_dim]</c> and the time embedding <c>[1, dim]</c>.
     /// </summary>
     public Tensor<T> Forward(Tensor<T> x, Tensor<T> cond, Tensor<T> textEmbedding, Tensor<T> time, bool dropAudioCond, bool training = false,
-        Random? random = null)
+        Random? random = null, Tensor<T>? speaker = null, bool streaming = false)
     {
         var c = Configuration;
         int frames = x.Shape[0], inner = c.Heads * c.HeadDim;
         if (dropAudioCond) cond = new Tensor<T>(cond.Shape.ToArray());
-        var h = InputProjection.Forward(_engine.TensorConcatenate(new[] { x, cond, textEmbedding }, 1));
-        h = _engine.TensorAdd(Mish(ConvRows(PositionConv2, Mish(ConvRows(PositionConv1, h)))), h);
+        var inputs = new List<Tensor<T>> { x, cond, textEmbedding };
+        if (c.SpeakerDim > 0)
+        {
+            if (speaker is null || speaker.Length != c.SpeakerDim)
+                throw new ArgumentException($"The DiT needs a speaker conditioning vector with {c.SpeakerDim} values.", nameof(speaker));
+            inputs.Add(_engine.TensorBroadcastTo(_engine.Reshape(speaker, new[] { 1, c.SpeakerDim }), new[] { frames, c.SpeakerDim }));
+        }
+        var h = InputProjection.Forward(_engine.TensorConcatenate(inputs.ToArray(), 1));
+        h = _engine.TensorAdd(Mish(ConvRows(PositionConv2, Mish(ConvRows(PositionConv1, h, c.CausalPosition)), c.CausalPosition)), h);
         var silu = _engine.Swish(time);
         foreach (var b in Blocks)
         {
@@ -220,6 +231,16 @@ internal sealed class GptSoVitsDiT<T>
             Tensor<T> Split(Tensor<T> y) => _engine.TensorPermute(_engine.Reshape(y, new[] { frames, c.Heads, c.HeadDim }), new[] { 1, 0, 2 });
             var scores = _engine.TensorMultiplyScalar(_engine.BatchMatMul(Split(q), _engine.TensorPermute(Split(k), new[] { 0, 2, 1 })),
                 NumOps.FromDouble(1.0 / Math.Sqrt(c.HeadDim)));
+            if (streaming && c.StaticChunkSize > 0)
+            {
+                var mask = new Tensor<T>(new[] { 1, frames, frames });
+                for (int query = 0; query < frames; query++)
+                {
+                    int end = Math.Min(frames, (query / c.StaticChunkSize + 1) * c.StaticChunkSize);
+                    for (int key = end; key < frames; key++) mask[0, query, key] = NumOps.FromDouble(-1e9);
+                }
+                scores = _engine.TensorAdd(scores, _engine.TensorBroadcastTo(mask, new[] { c.Heads, frames, frames }));
+            }
             var attended = _engine.Reshape(_engine.TensorPermute(_engine.BatchMatMul(_engine.Softmax(scores, axis: 2), Split(v)), new[] { 1, 0, 2 }),
                 new[] { frames, inner });
             var attention = Drop(Project(b.Out, lora?.Out, attended), training, random);
@@ -361,9 +382,9 @@ internal sealed class GptSoVitsDiT<T>
             TorchParameters.Linear(b.GrnBeta, 1, 2 * c.TextDim, read(prefix + n + ".grn.beta"));
             Linear(b.Project, n + ".pwconv2", 2 * c.TextDim, c.TextDim);
         }
-        Linear(InputProjection, "input_embed.proj", 2 * c.MelDim + c.TextDim, c.Dim);
-        MeloOps.LoadConv(read, PositionConv1, prefix + "input_embed.conv_pos_embed.conv1d.0");
-        MeloOps.LoadConv(read, PositionConv2, prefix + "input_embed.conv_pos_embed.conv1d.2");
+        Linear(InputProjection, "input_embed.proj", 2 * c.MelDim + c.TextDim + c.SpeakerDim, c.Dim);
+        MeloOps.LoadConv(read, PositionConv1, prefix + (c.CausalPosition ? "input_embed.conv_pos_embed.conv1.0" : "input_embed.conv_pos_embed.conv1d.0"));
+        MeloOps.LoadConv(read, PositionConv2, prefix + (c.CausalPosition ? "input_embed.conv_pos_embed.conv2.0" : "input_embed.conv_pos_embed.conv1d.2"));
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];

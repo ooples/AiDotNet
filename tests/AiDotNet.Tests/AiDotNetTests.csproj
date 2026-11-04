@@ -136,6 +136,13 @@
     <Content Include="Audio\Codecs\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Audio\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="TextToSpeech\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TextToSpeech\ReferenceData\*.safetensors" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TextToSpeech\ReferenceData\metavoice_public_*.pt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TextToSpeech\ReferenceData\metavoice_invariant_*.pt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TextToSpeech\ReferenceData\xtts_wrapped_gpt_reference.pth" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TextToSpeech\ReferenceData\xtts_wrapped_decoder_reference.pth" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TextToSpeech\ReferenceData\uniaudio_wrapped_lm_reference.pth" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="TextToSpeech\ReferenceData\cosyvoice_legacy_weightnorm_reference.pth" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Tokenization\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="UnitTests\Optimizers\ReferenceData\*.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

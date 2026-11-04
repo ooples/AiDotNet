@@ -6655,16 +6655,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             else if ((model.ClassName is "DiTToTTS")
                      && model.TypeParameterCount == 1)
             {
-                // These generated TTS regression fixtures use two deliberately tiny
-                // optimization steps. Supply a conservative optimizer through the
-                // models' public constructor so the invariant measures the stored
-                // optimizer path instead of the generic AdamW rate. Production paper
-                // defaults and the complete public customization surface are unchanged.
+                // Exercise the complete SpeechT5/Mel-VAE/DiT/length/BigVGAN graph at bounded dimensions;
+                // the public defaults remain the paper's 152M-parameter Base system.
                 pinInitSeed = true;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
+                    "inputSize: 1, outputSize: 1), " +
+                    "new AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions { HopSize = 4, FftSize = 16, MelChannels = 4, " +
+                    "TextHiddenDim = 8, TextFeedForwardDim = 16, TextHeads = 2, TextEncoderLayers = 1, TextVocabulary = 81, MaxTextLength = 32, " +
+                    "LatentDim = 8, MelVaeChannels = 8, MelVaeMultipliers = new[] { 1, 1 }, MelVaeDownsampleFactor = 2, RvqDepth = 2, RvqVocabulary = 4, " +
+                    "DiTHiddenDim = 8, DiTLayers = 1, DiTHeads = 2, DiTFeedForwardMultiplier = 2, " +
+                    "LengthHiddenDim = 8, LengthLayers = 1, LengthHeads = 2, LengthFeedForwardDim = 16, MaxLatentLength = 16, LengthTopK = 4, " +
+                    "TrainingDiffusionSteps = 10, InferenceSteps = 2, BigVganInitialChannels = 8, BigVganUpsampleRates = new[] { 2 }, " +
+                    "BigVganUpsampleKernels = new[] { 4 }, BigVganResidualKernels = new[] { 3 }, BigVganResidualDilations = new[] { 1 }, DropoutRate = 0 }, " +
                     $"optimizer: {conservativeSmokeAdamWOptimizer})";
             }
             else if (model.ClassName == "DEVA" && model.TypeParameterCount == 1)
@@ -7343,11 +7347,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "E3TTS" && model.TypeParameterCount == 1)
             {
+                // Traverse E3's complete ten-pair raw-waveform U-Net at bounded widths. The strides, adaptive-kernel
+                // counts and attention placement remain Table 1; only channel widths and BERT depth are reduced.
+                pinInitSeed = true;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 16, outputSize: 8), new AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions { " +
-                    "DiffusionDim = 16, NumEncoderLayers = 1, NumHeads = 1, NumDiffusionSteps = 2, " +
-                    "HiddenDim = 16, MelChannels = 8, HopSize = 4, DropoutRate = 0.0 })";
+                    "inputSize: 1, outputSize: 1), new AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions { " +
+                    "BertHiddenDim = 8, BertLayers = 1, BertHeads = 2, BertIntermediateDim = 16, BertMaxPositions = 32, MaxTextLength = 32, BertDropout = 0, " +
+                    "BlockChannels = new[] { 4, 4, 8, 8, 12, 16, 16, 16, 16, 16 }, " +
+                    "BlockKernelSizes = new[] { 5, 5, 5, 5, 5, 3, 3, 3, 3, 3 }, BlockStrides = new[] { 2, 2, 2, 2, 4, 4, 2, 2, 2, 2 }, " +
+                    "AdaptiveKernelCounts = new[] { 8, 8, 4, 4, 2, 0, 0, 0, 0, 0 }, AttentionHeads = new[] { 0, 0, 0, 0, 0, 2, 2, 2, 2, 2 }, " +
+                    "GroupNormGroups = 4, TimeEmbeddingDim = 8, ConditionDim = 16, TrainingWaveformSamples = 4096, " +
+                    "InferenceWaveformSamples = 4096, NumDiffusionSteps = 1, SilenceBlockSize = 128, SamplingSeed = 3 })";
             }
             else if (model.ClassName == "DLinearModel" && model.TypeParameterCount == 1)
             {
@@ -7813,22 +7824,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "XTTSv2Clone" && model.TypeParameterCount == 1)
             {
-                // XTTSv2Clone's fixture passed no options, so it built the production stack: a
-                // 1024-wide 12-layer codec LM over 8x1024 codebooks with MaxCodecFrames = 3000.
-                // MoreData_ShouldNotDegrade runs two full training passes over that graph and threw
-                // OutOfMemoryException. Keep the fixture's architecture exactly as the default path
-                // emits it and bound only the public options, preserving the same
-                // text-encoder -> codec-LM -> speaker-conditioning topology at smoke scale.
-                // Dropout stays disabled so the voice-cloning determinism assertions stay meaningful.
+                // Exercise the canonical XTTS-v2 dVAE, conditioning encoder/Perceiver, GPT-2,
+                // H/ASP encoder and speaker-conditioned HiFi-GAN through its voice-cloning facade.
+                // Only widths and reference windows are reduced; all released component boundaries remain.
                 pinInitSeed = true;
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.TextToSpeech.VoiceCloning.XTTSv2CloneOptions { NumCodebooks = 1, " +
-                    "CodebookSize = 16, LLMDim = 32, NumLLMLayers = 1, TextEncoderDim = 32, " +
-                    "SpeakerEmbeddingDim = 32, MaxCodecFrames = 8, NumEncoderLayers = 1, " +
-                    "NumHeads = 4, DropoutRate = 0.0, LearningRate = 1e-3 })";
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.XTTSv2Fixture.CreateClone<double>()";
             }
             else if (model.ClassName == "WaveRNN" && model.TypeParameterCount == 1)
             {
@@ -7979,33 +7979,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.", System.StringComparison.Ordinal))
             {
-                // CodecTtsOptions models whose production defaults are foundation-scale codec LMs —
-                // a codec-token head behind a wide, deep autoregressive decoder.
-                // Voicebox joins from the T-Z shard, which ran only 23 classes
-                // before hitting the 45-min job timeout: measured there at 356s of test time. Voicebox
-                // additionally failed Training_ShouldReduceLoss and
-                // LossStrictlyDecreasesOnMemorizationTask, which the smaller fixture also settles
-                // by keeping training stable at the default step size.
-                // Exercise the same embedding -> text encoder -> codec-LM -> token-head topology
-                // at smoke scale through the public options, exactly as the SparkTTS bound above
-                // does for the same base. Production defaults are unchanged.
-                // NumCodebooks stays at 2, NOT 1. Several models routed here have a genuine
-                // MULTI-codebook contract that collapses at 1: Voicebox is non-autoregressive over
-                // multiple codec layers.
-                // At NumCodebooks = 1 there are no remaining codebooks, so the NAR half of those
-                // architectures is silently skipped by the fixture and the test stops covering the
-                // thing the paper is about. 2 is the smallest value that keeps both stages live, and
-                // it only widens the codec head from 1x16 to 2x16.
-                string codecOptionsType = "AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions";
+                // Both continuous flow networks and the neural vocoder remain active.
+                // The compatibility frontend is explicit; MFA inventories are audited separately.
                 pinInitSeed = true;
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    $"new {codecOptionsType} {{ NumCodebooks = 2, " +
-                    "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
-                    "NumLLMLayers = 2, NumHeads = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
-                    "DropoutRate = 0.0 })";
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, inputSize: 4, outputSize: 640), " +
+                    "new AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions { UseNativeEnglishFallback = true, " +
+                    "PhoneVocabularySize = 320, PhoneEmbeddingDim = 8, AudioModelDim = 16, AudioFeedForwardDim = 32, " +
+                    "AudioLayers = 2, AudioHeads = 4, AudioAttentionDropout = 0, AudioActivationDropout = 0, " +
+                    "AudioConvPositionWidth = 3, AudioConvPositionGroups = 4, AudioConvPositionDepth = 1, " +
+                    "DurationModelDim = 16, DurationFeedForwardDim = 32, DurationLayers = 2, DurationHeads = 4, " +
+                    "DurationAttentionDropout = 0, DurationActivationDropout = 0, DurationConvPositionWidth = 3, " +
+                    "DurationConvPositionGroups = 4, DurationConvPositionDepth = 1, OdeSteps = 1, " +
+                    "MaximumAudioFrames = 64, MaximumPhoneDuration = 4, MaxTextLength = 64, " +
+                    "VocoderInitialChannels = 16, VocoderResBlockKernels = new[] { 3 }, " +
+                    "VocoderResBlockDilations = new[] { new[] { 1 } }, LearningRate = 1e-3 })";
             }
             else if (model.ClassName == "ALIGN" && model.TypeParameterCount == 1)
             {
@@ -10925,6 +10914,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "Dimension = 8, SemanticDimension = 6, LstmLayers = 1, NumQuantizers = 3, CodebookSize = 16, " +
                     "TargetBandwidthKbps = 0.075 } })";
             }
+            else if (model.ClassName == "CosyVoiceClone" && model.TypeParameterCount == 1)
+            {
+                // CosyVoiceClone is the task facade over the real CosyVoice stack. Keep every
+                // released component present while bounding its LM, flow, HiFT, S3, and CAM++
+                // dimensions for generated construction and warmup tests.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
+                    "inputSize: 8, outputSize: 16), " +
+                    "new AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions { TextEncoderDim = 32, " +
+                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, LmFeedForwardDim = 64, " +
+                    "NumCodebooks = 1, CodebookSize = 16, SpeakerEmbeddingDim = 16, FlowDim = 32, FlowHeads = 2, " +
+                    "FlowFeedForwardDim = 64, FlowEncoderLayers = 1, DecoderChannels = new[] { 32 }, DecoderHeads = 2, " +
+                    "DecoderHeadDim = 16, DecoderBlocks = 1, DecoderMidBlocks = 1, HiftBaseChannels = 32, " +
+                    "SpeechTokenizerState = 32, SpeechTokenizerHeads = 2, SpeechTokenizerLayers = 1, " +
+                    "SpeakerEncoderChannels = 8, SpeakerEncoderGrowthRate = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
+                    "MinReferenceDurationSec = 0.1, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "AdaSpeech2" && model.TypeParameterCount == 1)
             {
                 // AdaSpeech 2 is AdaSpeech plus a mel-spectrogram encoder; keep that topology at the AdaSpeech fixture
@@ -10941,31 +10948,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                      && typeName.StartsWith(
                          "AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
             {
-                // Preserve the production 1024-wide semantic-token LM while
-                // exercising embedding, text encoder, codec transformer, and
-                // acoustic-token head through public options at CI scale.
+                // Exercise the released Qwen2 + causal DiT + CausalHiFT topology at CI scale. VocabSize remains large
+                // enough for the embedded Qwen tokenizer, while every trainable width/depth is reduced.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 4, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options { TextEncoderDim = 32, " +
-                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 2, NumHeads = 2, " +
-                    "NumCodebooks = 1, CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 8, " +
-                    "DropoutRate = 0.0 })";
+                    "new AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options { LLMDim = 32, NumLLMLayers = 1, NumHeads = 2, " +
+                    "KeyValueHeads = 2, LmFeedForwardDim = 64, NumCodebooks = 1, CodebookSize = 16, MelChannels = 16, " +
+                    "SpeakerEmbeddingDim = 16, HiftBaseChannels = 32, DiTInputDim = 16, PreLookaheadChannels = 32, " +
+                    "DiTDim = 32, DiTDepth = 1, DiTHeads = 2, DiTHeadDim = 16, DiTFeedForwardMultiplier = 2, " +
+                    "MaxTextLength = 8, MaxCodecFrames = 8, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "Chatterbox" && model.TypeParameterCount == 1)
             {
-                // Preserve Chatterbox's production 1024-wide, 16-layer, eight-codebook model.
-                // Generated invariants exercise the same embedding -> text encoder -> codec LM ->
-                // acoustic-token head through its public options at optimizer-safe smoke scale.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions { TextEncoderDim = 32, " +
-                    "LLMDim = 32, NumEncoderLayers = 1, NumLLMLayers = 2, NumHeads = 2, " +
-                    "NumCodebooks = 1, CodebookSize = 16, MaxTextLength = 8, MaxCodecFrames = 8, " +
-                    "DropoutRate = 0.0 })";
+                // The release is a prompt-conditioned T3 decoder followed by S3Tokenizer-v2, causal flow and HiFT,
+                // not the generic embedding -> codec-logit placeholder this fixture used to describe. The shared
+                // fixture retains each released component at smoke scale and supplies an actual BPE tokenizer.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.ChatterboxFixture.Create<double>()";
             }
             else if (model.ClassName == "FireRedTTS" && model.TypeParameterCount == 1)
             {
@@ -11126,22 +11126,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "OpenVoiceV2" && model.TypeParameterCount == 1)
             {
-                // OpenVoice's deep VITS/flow/HiFi-GAN stack is initialization-sensitive. Keep the
-                // strict trajectory invariant order-independent across xUnit workers.
+                // Predict consumes a recording. Training additionally owns an independent
+                // paired IPA transcript; both converter and native MeloTTS base remain real.
                 pinInitSeed = true;
-                // OpenVoice V2 (VITS) builds a 1-D conv encoder + normalizing flow + HiFi-GAN decoder
-                // whose first conv declares explicit input channels, so shape resolution propagates from
-                // that layer and the architecture dims are not load-bearing. A 1-D architecture keeps the
-                // base happy; the rank-3 [1, 80, 16] test input is set via the InputShape override.
-                // Its default AdamW rate overshoots on this bounded single-example trajectory even when
-                // evaluated deterministically (measured after 100 unchanged steps: 0.899512 -> 1.250786).
-                // Use the generator's shared 1e-5 smoke optimizer, as the other deep flow/diffusion stacks
-                // do. This changes neither OpenVoiceV2's production default nor the generated test's
-                // topology, iteration count, target, or strict-decrease assertion.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    $"inputSize: 1280, outputSize: 32), optimizer: {conservativeSmokeAdamWOptimizer})";
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.OpenVoiceNativeFixture.VersionTwo<double>()";
             }
             else if (model.ClassName == "ViTCoMer" && model.TypeParameterCount == 1)
             {
@@ -11336,28 +11324,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // The paper's Adam (0.5, 0.9) at 1e-4; the probes measure learning at a constant Adam rate of 1e-3.
                     ", optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
             }
-            else if (IsVoiceCloningTTS(model.ClassName) && model.TypeParameterCount == 1)
+            else if (model.ClassName == "Kokoro" && model.TypeParameterCount == 1)
             {
-                // MetaVoice-1B (metavoiceio/metavoice-src) defaults to its paper 1.2B scale: a
-                // firstStageDim=2048 × 24-layer causal GPT/LLaMA transformer + a 1024 × 12-layer
-                // non-causal second stage + a 512-channel HiFi-GAN vocoder — far too many parameters to
-                // Clone / serialize / train inside the CI memory + time budget. Build the SAME multi-stage
-                // architecture (RMSNorm + RoPE + SwiGLU two-stage transformers → conv-transpose vocoder)
-                // at CI-smoke width/depth via a small MetaVoice1BOptions; only the scale shrinks
-                // (InitializeLayers reads these dims). RoPE needs an even per-head dim: 32/2 = 16.
-                // The rank-3 [1, 8, 256] test input (see the matching InputShape override) carries the
-                // additive text+speaker conditioning embeddings; the 2-D architecture (inputWidth = 256)
-                // lets the base's lazy-shape walk resolve the first Dense to 256 up front. Floatified to
-                // <float> by the generator since MetaVoice1B is in Fp32TestClassNames.
                 pinInitSeed = true;
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputHeight: 8, inputWidth: 256, inputDepth: 1, outputSize: 4), " +
-                    "new AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions { FirstStageDim = 32, " +
-                    "NumFirstStageLayers = 1, SecondStageDim = 32, NumSecondStageLayers = 1, NumHeads = 2, " +
-                    "NumCodebooks = 2, FirstStageCodebooks = 1, CodecLatentDim = 16, VocoderChannels = 16, " +
-                    "VocoderUpsampleFactor = 2, SwiGLUMultipleOf = 8 })";
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.KokoroNativeFixture.Create<double>()";
+            }
+            else if (model.ClassName == "MetaVoice1B" && model.TypeParameterCount == 1)
+            {
+                // Use deterministic compact native checkpoints, retaining the released
+                // vocabularies, both actual GPTs, speaker LSTM, eight-codebook EnCodec
+                // and all four conditioned multiband diffusion processes.
+                pinInitSeed = true;
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.MetaVoiceNativeFixture.Create<double>()";
             }
             else if (model.ClassName == "PICK" && model.TypeParameterCount == 1)
             {
@@ -12151,22 +12129,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "XTTSv2" && model.TypeParameterCount == 1)
             {
-                // XTTSv2 (Coqui) is a GPT-2-based codec LM (text -> AR transformer -> VQ-VAE codec
-                // tokens), built via CreateDefaultCodecLMLayers exactly like CSM. Its paper defaults
-                // (LLMDim=1024, NumLLMLayers=30, CodebookSize=8192) make a single <double> train step
-                // through the 30-layer AR stack ~40 s, so MoreData / Training / memorization time out at
-                // the 120/180 s gate even at <float> and smoke iteration counts — the per-STEP cost, not
-                // the step COUNT, is the wall. Build the SAME codec-LM architecture (text encoder -> LLM
-                // transformer stack -> per-codebook logits) at CI-smoke scale, mirroring the CSM
-                // reduction above: 1 codebook x 16 = 16-way head, 64-wide LLM, 1 encoder + 2 LLM layers,
-                // 4 heads. The GPT-2 codec-LM structure is preserved; only width/depth shrink.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 80, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options { NumCodebooks = 1, " +
-                    "CodebookSize = 16, TextEncoderDim = 32, LLMDim = 64, NumEncoderLayers = 1, " +
-                    "NumLLMLayers = 2, NumHeads = 4, DropoutRate = 0.0 })";
+                // Exercise the released dVAE, conditioning encoder/Perceiver, GPT-2, H/ASP encoder and
+                // speaker-conditioned HiFi-GAN at smoke scale. The topology and supervision contract are
+                // unchanged; only widths, depth and reference windows are reduced for generated tests.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.XTTSv2Fixture.Create<double>()";
             }
             else if (model.ClassName == "CanaryQwen" && model.TypeParameterCount == 1)
             {
@@ -14583,9 +14549,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         }
         else if (model.ClassName == "E3TTS")
         {
-            sb.AppendLine("    protected override int[] InputShape => new[] { 1, 12 };");
-            sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 8 };");
-            sb.AppendLine("    protected override int TrainingIterations => 5;");
+            sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 4096 };");
+            sb.AppendLine("    protected override int TrainingIterations => 1;");
             sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
             sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
         }
@@ -15789,39 +15755,33 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // faithful token-ID input shape.
             if (model.ClassName == "Voicebox")
             {
-                // Le et al. 2023 section 3.3: the audio model regresses an
-                // 80-dimensional continuous velocity for every 80-bin log-mel frame.
-                sb.AppendLine("    protected override int[] InputShape => new[] { 8, 80 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 8, 80 };");
+                // Predict takes phone IDs; the two continuous flows and vocoder produce audio.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 640 };");
             }
             else if (model.ClassName == "OpenVoiceV2")
             {
-                // OpenVoice V2 is VITS-based (Qin et al. 2023): a token embedding, a 1-D conv encoder + invertible
-                // normalizing flow + HiFi-GAN transposed-conv decoder (CreateDefaultOpenVoiceV2Layers), channels-first
-                // [B, hidden, T] after the embedding. The decoder upsamples T by 2 (16 -> 32) and projects to a single
-                // waveform channel, so 16 ids [1, 16] -> [1, 1, 32] waveform.
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 16 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 32 };");
-                // The VITS/flow stack converges before the generic 50/200 comparison and then
-                // exhibits small finite optimizer drift. Compare its early learning trajectory.
-                sb.AppendLine("    protected override int MoreDataShortIterations => 5;");
-                sb.AppendLine("    protected override int MoreDataLongIterations => 15;");
+                // Conversion reads mono audio; its paired training transcript is IPA IDs.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 1024 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 1024 };");
+                string scalarType = useFloat ? "float" : "double";
+                sb.AppendLine($"    protected override AiDotNet.TextToSpeech.TtsTrainingSample<{scalarType}> SyntheticSupervision(");
+                sb.AppendLine($"        AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> recording, AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}> target,");
+                sb.AppendLine($"        AiDotNet.TextToSpeech.TtsModelBase<{scalarType}>? network = null)");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        var ids = new AiDotNet.Tensors.LinearAlgebra.Tensor<{scalarType}>(new[] {{ 4 }});");
+                sb.AppendLine($"        var operations = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<{scalarType}>();");
+                sb.AppendLine("        for (int i = 0; i < ids.Length; i++) ids[i] = operations.FromDouble(i + 2);");
+                sb.AppendLine("        return base.SyntheticSupervision(ids, target, network);");
+                sb.AppendLine("    }");
             }
-            else if (IsVoiceCloningTTS(model.ClassName) && model.ClassName != "SeedTTSClone")
+            else if (model.ClassName is "MetaVoice1B" or "Kokoro")
             {
-                // MetaVoice-1B (CreateDefaultMetaVoice1BLayers) is a multi-stage transformer voice cloner:
-                // RMSNorm+RoPE+SwiGLU causal first-stage GPT → non-causal second stage → conv-transpose
-                // HiFi-GAN vocoder. It consumes a rank-3 [B, seq, embedDim] text+speaker conditioning
-                // embedding sequence (embedDim = SpeakerEmbeddingDim = 256) and emits a [B, 1, seq·upsample]
-                // waveform. The conv vocoder requires a batch axis, hence rank-3 [1, 8, 256]. The token
-                // (sequence) axis is axis 1 — DifferentInputLengths_ShouldNotCrash must halve the tokens,
-                // NOT the final embedding dim (fixed by the first projection). OutputShape is a fallback;
-                // the base infers the true shape from a warm-up Predict.
-                sb.AppendLine("    protected override int[] InputShape => new[] { 1, 8, 256 };");
-                sb.AppendLine("    protected override int[] OutputShape => new[] { 1, 1, 16 };");
-                // NOTE: no VariableLengthAxis override here — TTSModelTestBase (which MetaVoice1BTests
-                // extends) does not declare that virtual (it's an AudioNNModelTestBase member), so
-                // emitting it produced CS0115 and broke the test build.
+                // Public Predict consumes offset byte-BPE IDs and renders a mono waveform.
+                // The native fixture loads both actors, the speaker encoder, eight-codebook
+                // EnCodec and all four diffusion bands; no neural forward is substituted.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 640 };");
             }
             else if (model.ImplementsVocoder && IsConv1DWaveformVocoder(model.ClassName))
             {
@@ -15892,6 +15852,19 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     // draw, so constant mels can sample the same classes. Two steps sharpen the softmaxes first.
                     sb.AppendLine("    protected override int InputSensitivityWarmUpSteps => 2;");
                 }
+            }
+            else if (model.ClassName is "XTTSv2" or "XTTSv2Clone")
+            {
+                // XTTS-v2's GPT predicts dVAE codes internally, but its public fine-tuning contract is not a generic
+                // codec-logit regression head: it consumes text ids, a target waveform and a reference recording.
+                // Keep the short token sequence while supplying enough 24 kHz audio for its real mel/dVAE path.
+                sb.AppendLine("    protected override int[] InputShape => new[] { 4 };");
+                sb.AppendLine("    protected override int[] OutputShape => new[] { 4096 };");
+                sb.AppendLine("    protected override int TrainingIterations => 2;");
+                sb.AppendLine("    protected override int MoreDataShortIterations => 1;");
+                sb.AppendLine("    protected override int MoreDataLongIterations => 2;");
+                sb.AppendLine("    protected override int MemorizationTaskIterations => 2;");
+                pinInitSeed = true;
             }
             else if (IsCodecLMTokenModel(model.ClassName))
             {
@@ -16161,7 +16134,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
-                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2" or "SoundStorm" or "SPEARTTS" or "ChatTTS" or "ParlerTTS" or "CosyVoice" or "CosyVoice2")
+                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2" or "SoundStorm" or "SPEARTTS" or "ChatTTS" or "ParlerTTS" or "CosyVoice" or "CosyVoice2" or "Chatterbox")
                 {
                     // Pheme, VALL-E and SPEAR-TTS read phoneme ids (SoundStorm text bytes, Parler-TTS T5 token ids) and train on codec tokens, one frame per target row (the TTS
                     // base synthesizes [16, codebooks] tokens from a [16, 1] target).
@@ -16189,7 +16162,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                     // CosyVoice trains at its recipe's Adam 1e-3 (no learning-rate option to raise, unlike ChatTTS): one step
                     // lowers the tiny LM's loss by 0.8%, under the probe's 1% bar, so the probe takes six.
-                    if (model.ClassName is "CosyVoice" or "CosyVoice2")
+                    if (model.ClassName is "CosyVoice" or "CosyVoice2" or "Chatterbox")
                         sb.AppendLine("    protected override int MemorizationTaskIterations => 6;");
                     // CosyVoice 2's recipe fine-tunes at a constant Adam 1e-5: six steps lower the tiny model's loss by about
                     // 1e-4 of itself (8.932988 -> 8.932038), a real descent ten times the threshold below but far from 1%.
@@ -22255,6 +22228,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             or "UniAudio" or "XTTSv2" or "XTTSv2Clone"
             or "CosyVoice3"
             or "Chatterbox"
+            or "CosyVoiceClone"
             or "SeedTTS" or "SeedTTSClone"
             // SparkTTS exposes the same discrete codec-token contract.
             or "SparkTTS";
@@ -22275,12 +22249,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             "Bark" or "BarkModel" => 32,
             "CosyVoice3" => 16,
             "Chatterbox" => 16,
+            "CosyVoiceClone" => 16,
             // SparkTTS: the CI-smoke fixture pins NumCodebooks = 1, CodebookSize = 16, so its codec
             // head is 1 x 16 wide (production stays 1 x 4096).
             "SparkTTS" => 16,
             "UniAudio" => 32,
             "XTTSv2" => 16,
-            "XTTSv2Clone" => 1024,
+            "XTTSv2Clone" => 16,
             _ => 1024,
         };
     }

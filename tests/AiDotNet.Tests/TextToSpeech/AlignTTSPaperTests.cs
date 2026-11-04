@@ -21,6 +21,35 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </remarks>
 public class AlignTTSPaperTests
 {
+    [Fact]
+    public void AlignmentObjective_IsTheSequenceNllWithoutAnExtraFrameNormalization()
+    {
+        using var model = CreateModel();
+        var scores = new Tensor<double>(new[] { 2, 4 });
+        double[,] probabilities = { { .8, .7, .2, .1 }, { .1, .3, .6, .9 } };
+        for (int p = 0; p < 2; p++) for (int t = 0; t < 4; t++) scores[p, t] = Math.Log(probabilities[p, t]);
+        double likelihood = .8 * .3 * .6 * .9 + .8 * .7 * .6 * .9 + .8 * .7 * .2 * .9;
+        Assert.Equal(-Math.Log(likelihood), model.AlignmentObjective(scores)[0], 12);
+    }
+
+    [Fact]
+    public void Defaults_MatchThePublishedSectionFourConfiguration()
+    {
+        var options = new AlignTTSOptions();
+
+        Assert.Equal(6, options.NumEncoderLayers);
+        Assert.Equal(6, options.NumDecoderLayers);
+        Assert.Equal(768, options.HiddenDim);
+        Assert.Equal(768, options.FftFilterSize);
+        Assert.Equal(2, options.NumHeads);
+        Assert.Equal(3, options.FftKernelSize);
+        Assert.Equal(2, options.DurationPredictorLayers);
+        Assert.Equal(128, options.DurationPredictorDim);
+        Assert.Equal(256, options.MixDensityHiddenSize);
+        Assert.Equal(80, options.MelChannels);
+        Assert.False(options.UsePostnet);
+    }
+
     private static AlignTTS<double> CreateModel() => new(
         new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 8, outputSize: 16),
         new AlignTTSOptions
@@ -125,5 +154,19 @@ public class AlignTTSPaperTests
         Assert.Equal(2, mel.Rank);
         Assert.Equal(8, mel.Shape[1]);
         for (int i = 0; i < mel.Length; i++) Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(mel[i]), $"mel[{i}] = {mel[i]}");
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConvertedCheckpoint_RestoresTheFeedForwardTransformerMdnAndDurationPredictor()
+    {
+        await Task.Yield();
+        var source = CreateModel();
+        var expected = source.GetParameters().ToArray();
+        var restored = CreateModel();
+
+        restored.LoadConvertedWeights(name => name == "aligntts.parameters" ? expected : null);
+
+        Assert.Equal(expected, restored.GetParameters().ToArray());
+        Assert.Throws<InvalidDataException>(() => restored.LoadConvertedWeights(_ => new double[expected.Length - 1]));
     }
 }

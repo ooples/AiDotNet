@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
@@ -187,6 +188,46 @@ internal sealed class MultiResolutionStftLoss<T>
         }
         return (_engine.TensorMultiplyScalar(sc!, NumOps.FromDouble(scale)), _engine.TensorMultiplyScalar(mag!, NumOps.FromDouble(scale)));
     }
+
+    /// <summary>Computes the Frobenius spectral ratio jointly over the batch, as UniAudio's sub-band loss does.</summary>
+    internal (Tensor<T> SpectralConvergence, Tensor<T> LogMagnitude) ForwardJointBatch(
+        IReadOnlyList<Tensor<T>> generated, IReadOnlyList<Tensor<T>> real)
+    {
+        if (generated.Count == 0 || generated.Count != real.Count)
+            throw new ArgumentException("Matching nonempty waveform batches are required.");
+        Tensor<T>? spectral = null, logarithmic = null;
+        foreach (var (fft, hop, cos, sin) in _resolutions)
+        {
+            Tensor<T>? squaredError = null, logError = null;
+            double targetEnergy = 0;
+            int elements = 0;
+            for (int i = 0; i < generated.Count; i++)
+            {
+                var prediction = Magnitude(generated[i], fft, hop, cos, sin);
+                Tensor<T> target;
+                using (new NoGradScope<T>())
+                {
+                    var value = Magnitude(real[i], fft, hop, cos, sin);
+                    target = new Tensor<T>(value.Shape.ToArray(), new Vector<T>(value.ToArray()));
+                }
+                var difference = _engine.TensorSubtract(prediction, target);
+                var term = _engine.ReduceSum(_engine.TensorMultiply(difference, difference), new[] { 0, 1 }, false);
+                squaredError = squaredError is null ? term : _engine.TensorAdd(squaredError, term);
+                term = _engine.ReduceSum(_engine.TensorAbs(_engine.TensorSubtract(_engine.TensorLog(prediction),
+                    _engine.TensorLog(target))), new[] { 0, 1 }, false);
+                logError = logError is null ? term : _engine.TensorAdd(logError, term);
+                targetEnergy += target.ToArray().Sum(value => NumOps.ToDouble(value) * NumOps.ToDouble(value));
+                elements += target.Length;
+            }
+            var sc = _engine.TensorMultiplyScalar(_engine.TensorPow(squaredError!, NumOps.FromDouble(.5)),
+                NumOps.FromDouble(1 / Math.Max(1e-12, Math.Sqrt(targetEnergy))));
+            var log = _engine.TensorMultiplyScalar(logError!, NumOps.FromDouble(1.0 / elements));
+            spectral = spectral is null ? sc : _engine.TensorAdd(spectral, sc);
+            logarithmic = logarithmic is null ? log : _engine.TensorAdd(logarithmic, log);
+        }
+        return (_engine.TensorMultiplyScalar(spectral!, NumOps.FromDouble(1.0 / _resolutions.Count)),
+            _engine.TensorMultiplyScalar(logarithmic!, NumOps.FromDouble(1.0 / _resolutions.Count)));
+    }
 }
 
 /// <summary>
@@ -204,9 +245,14 @@ internal sealed class CenteredLogMel<T>
     private readonly int _mels;
     private readonly double _floor;
     private readonly bool _naturalLog;
+    private readonly double _spectrumPower;
+    private readonly bool _logarithm;
+    private readonly bool _constantPadding;
     private readonly Tensor<T> _cos;
     private readonly Tensor<T> _sin;
     private readonly Tensor<T> _mel;
+
+    internal Tensor<T> MelFilterbank => _mel;
 
     /// <param name="htkScale">HTK mel filters without normalization (torchaudio's <c>MelSpectrogram</c> default) instead
     /// of librosa's Slaney ones.</param>
@@ -214,8 +260,13 @@ internal sealed class CenteredLogMel<T>
     /// <param name="normalizedWindow">Divide the STFT by √Σw² (torchaudio <c>Spectrogram(normalized=True)</c>,
     /// DiffWave's features).</param>
     public CenteredLogMel(IEngine engine, int sampleRate, int fftSize, int hopSize, int windowSize, int melChannels, double fMin, double fMax, double floor,
-        bool htkScale = false, bool naturalLog = false, bool normalizedWindow = false)
+        bool htkScale = false, bool naturalLog = false, bool normalizedWindow = false,
+        double spectrumPower = 1.0, bool htkAreaNormalization = false, bool logarithm = true, bool constantPadding = false)
     {
+        _logarithm = logarithm;
+        _constantPadding = constantPadding;
+        if (spectrumPower <= 0) throw new ArgumentOutOfRangeException(nameof(spectrumPower));
+        _spectrumPower = spectrumPower;
         _naturalLog = naturalLog;
         _engine = engine;
         _fft = fftSize;
@@ -241,6 +292,13 @@ internal sealed class CenteredLogMel<T>
         if (htkScale)
         {
             _mel = AiDotNet.TextToSpeech.EndToEnd.HaspSpeakerEncoder<T>.HtkMelFilterbank(bins, melChannels, sampleRate, fMin, fMax);
+            if (htkAreaNormalization)
+            {
+                double lowMel = 2595 * Math.Log10(1 + fMin / 700), highMel = 2595 * Math.Log10(1 + fMax / 700);
+                double Hz(int i) => 700 * (Math.Pow(10, (lowMel + i * (highMel - lowMel) / (melChannels + 1)) / 2595) - 1);
+                for (int m = 0; m < melChannels; m++) for (int k = 0; k < bins; k++)
+                    _mel[k, m] = NumOps.Multiply(_mel[k, m], NumOps.FromDouble(2 / (Hz(m + 2) - Hz(m))));
+            }
             return;
         }
         var basis = new TacotronSpectrogram(sampleRate, fftSize, hopSize, windowSize, melChannels, fMin, fMax).MelBasis;
@@ -257,13 +315,17 @@ internal sealed class CenteredLogMel<T>
         var index = new Tensor<int>(new[] { frames * _fft });
         for (int f = 0; f < frames; f++)
             for (int n = 0; n < _fft; n++)
-                index[f * _fft + n] = DifferentiableMel<T>.Reflect(f * _hop + n - pad, length);
-        var framed = _engine.Reshape(_engine.TensorIndexSelect(_engine.Reshape(audio, new[] { length, 1 }), index, 0), new[] { frames, _fft });
+                index[f * _fft + n] = _constantPadding ? f * _hop + n : DifferentiableMel<T>.Reflect(f * _hop + n - pad, length);
+        if (_constantPadding) audio = _engine.TensorConcatenate(new[]
+            { new Tensor<T>(new[] { pad }), _engine.Reshape(audio, new[] { length }), new Tensor<T>(new[] { pad }) }, 0);
+        var framed = _engine.Reshape(_engine.TensorIndexSelect(_engine.Reshape(audio, new[] { audio.Length, 1 }), index, 0), new[] { frames, _fft });
         var re = _engine.TensorMatMul(framed, _cos);
         var im = _engine.TensorMatMul(framed, _sin);
         var magnitude = _engine.TensorPow(_engine.TensorAddScalar(_engine.TensorAdd(_engine.TensorMultiply(re, re), _engine.TensorMultiply(im, im)),
-            NumOps.FromDouble(1e-20)), NumOps.FromDouble(0.5));
+            NumOps.FromDouble(1e-20)), NumOps.FromDouble(0.5 * _spectrumPower));
         var mel = _engine.TensorMatMul(magnitude, _mel);
+        if (!_logarithm)
+            return _engine.Reshape(_engine.TensorTranspose(mel), new[] { 1, _mels, frames });
         var floored = _engine.TensorAddScalar(_engine.ReLU(_engine.TensorAddScalar(mel, NumOps.FromDouble(-_floor))), NumOps.FromDouble(_floor));
         var logMel = _naturalLog ? _engine.TensorLog(floored)
             : _engine.TensorMultiplyScalar(_engine.TensorLog(floored), NumOps.FromDouble(1.0 / Math.Log(10.0)));       // [frames, mel]

@@ -9,11 +9,19 @@ using Xunit;
 namespace AiDotNet.Tests.TextToSpeech;
 
 /// <summary>
-/// CosyVoice 2's text tokenizer against transformers' Qwen2 tokenizer with CosyVoice's added tokens
+/// Generic Qwen2.5 tokenizer with CosyVoice-style added tokens (distinct from the released BlankEN tokenizer)
 /// (<c>tools/reference-data/qwen2_tokenizer_reference.py</c>).
 /// </summary>
 public class QwenTokenizerReferenceTests
 {
+    [Fact]
+    public void CosyVoice3_UsesTheReleasedBlankEnMergesRatherThanQwen25Merges()
+    {
+        // Actual CosyVoice3Tokenizer over Fun-CosyVoice3-0.5B-2512@29e01c4.
+        Assert.Equal(new[] { 15946, 16744, 57218, 6364, 220, 16, 17, 18 }, QwenTokenizer.CosyVoice3.Encode("中文与 English 123"));
+        Assert.Equal(new[] { 104811, 57218, 6364, 220, 16, 17, 18 }, QwenTokenizer.Spark.Encode("中文与 English 123"));
+    }
+
     private static readonly Lazy<JObject> Data = new(() =>
     {
         const string fileName = "qwen2_tokenizer_reference.json";
@@ -33,7 +41,7 @@ public class QwenTokenizerReferenceTests
     [Fact]
     public void Encode_MatchesTransformers_AndDecodesBack()
     {
-        var tokenizer = QwenTokenizer.CosyVoice2;
+        var tokenizer = new QwenTokenizer(QwenTokenizer.CosyVoice2Tokens);
         var texts = Data.Value["texts"]!.Select(t => (string)t!).ToArray();
         for (int i = 0; i < texts.Length; i++)
         {
@@ -46,9 +54,9 @@ public class QwenTokenizerReferenceTests
     }
 
     [Fact]
-    public void Vocabulary_AndAddedTokens_MatchCosyVoice2Tokenizer()
+    public void Vocabulary_AndAddedTokens_MatchQwen25WithCosyVoiceStyleTokens()
     {
-        var tokenizer = QwenTokenizer.CosyVoice2;
+        var tokenizer = new QwenTokenizer(QwenTokenizer.CosyVoice2Tokens);
         Assert.Equal((int)Data.Value["vocabulary"]!, tokenizer.VocabularySize);
         foreach (var pair in ((JObject)Data.Value["added"]!).Properties())
             Assert.Equal((int)pair.Value, tokenizer.AddedTokenId(pair.Name));

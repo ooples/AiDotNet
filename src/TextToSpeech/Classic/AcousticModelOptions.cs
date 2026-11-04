@@ -26,10 +26,14 @@ public class AcousticModelOptions : TtsModelOptions
         UsePostnet = other.UsePostnet;
         PostnetDim = other.PostnetDim;
         PostnetLayers = other.PostnetLayers;
+        TextSymbols = other.TextSymbols is null ? null : (string[])other.TextSymbols.Clone();
     }
 
     /// <summary>Gets or sets the encoder embedding dimension.</summary>
     public int EncoderDim { get; set; } = 256;
+
+    /// <summary>Ordered symbol inventory used to train the text embedding. Null selects this model's English inventory.</summary>
+    public string[]? TextSymbols { get; set; }
 
     /// <summary>Gets or sets the decoder output dimension (mel channels).</summary>
     public int DecoderDim { get; set; } = 80;

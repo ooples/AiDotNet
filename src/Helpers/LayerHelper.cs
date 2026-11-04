@@ -21763,11 +21763,9 @@ public static partial class LayerHelper<T>
         // Transformer layers with causal masking
         for (int i = 0; i < numLayers; i++)
         {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (hiddenDim) / (numHeads));
-            yield return new LayerNormalizationLayer<T>();
-            yield return new FullyConnectedLayer<T>(hiddenDim * 4, geluActivation);
-            yield return new FullyConnectedLayer<T>(hiddenDim, geluActivation);
-            yield return new LayerNormalizationLayer<T>();
+            // Preserve the transformer's attention and feed-forward residual paths. The former
+            // flat MHA/LN/FFN/LN chain discarded the block input at both sublayers.
+            yield return new TransformerEncoderLayer<T>(numHeads, hiddenDim * 4, hiddenDim);
             if (dropoutRate > 0) yield return new DropoutLayer<T>(dropoutRate);
         }
 

@@ -312,16 +312,26 @@ public partial class VarianceAdaptorLayer<T> : LayerBase<T>, IShapeContract
     {
         var durations = new int[logDuration.Length];
         int total = 0;
+        int longest = 0;
+        double longestContinuous = double.NegativeInfinity;
         for (int i = 0; i < durations.Length; i++)
         {
-            double d = Math.Round((Math.Exp(NumOps.ToDouble(logDuration[i])) - 1.0) * scale);
+            double continuous = Math.Max(0.0, (Math.Exp(NumOps.ToDouble(logDuration[i])) - 1.0) * scale);
+            if (continuous > longestContinuous)
+            {
+                longestContinuous = continuous;
+                longest = i;
+            }
+            double d = Math.Round(continuous);
             durations[i] = (int)Math.Max(0, d);
             total += durations[i];
         }
-        if (total == 0)
+        if (total == 0 && durations.Length > 0)
         {
-            // Every phoneme predicted to vanish: keep one frame per phoneme rather than synthesize nothing.
-            for (int i = 0; i < durations.Length; i++) durations[i] = 1;
+            // A fresh predictor may round every duration below half a frame. Preserve one frame at the most likely
+            // phoneme instead of inventing one frame for every phoneme: the latter made alpha scaling non-monotonic
+            // (a larger alpha could produce fewer frames once only some values crossed the rounding threshold).
+            durations[longest] = 1;
         }
         return durations;
     }

@@ -119,7 +119,8 @@ internal sealed class UpsampleConformerEncoder<T>
 /// <param name="SpeechChunk">Bistream speech tokens per chunk (<c>mix_ratio[1]</c>, 15).</param>
 internal sealed record CosyVoice2LmConfiguration(
     LlamaConfiguration Qwen, int SpeechVocabulary, int TextChunk = 5, int SpeechChunk = 15, double TopP = 0.8, int TopK = 25,
-    int RepetitionWindow = 10, double RepetitionRatio = 0.1, double MinTokenTextRatio = 2, double MaxTokenTextRatio = 20);
+    int RepetitionWindow = 10, double RepetitionRatio = 0.1, double MinTokenTextRatio = 2, double MaxTokenTextRatio = 20,
+    int SpeechSpecialTokens = 3, bool SpecialsInSpeechEmbedding = false, bool BiasFreeDecoder = false);
 
 /// <summary>
 /// CosyVoice 2's text-to-speech-token language model (FunAudioLLM/CosyVoice <c>cosyvoice/llm/llm.py</c> <c>Qwen2LM</c>):
@@ -142,6 +143,9 @@ internal sealed class CosyVoice2Lm<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private const int Ignore = -1;
     private readonly IEngine _engine;
+    private readonly TiedEmbeddingLayer<T>? _llmEmbedding;
+    private readonly DenseLayer<T>? _head;
+    private readonly BiasFreeLinearLayer<T>? _biasFreeHead;
 
     public CosyVoice2Lm(IEngine engine, List<LayerBase<T>> layers, CosyVoice2LmConfiguration configuration, Random initialization)
     {
@@ -153,30 +157,54 @@ internal sealed class CosyVoice2Lm<T>
         TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T> { layers.Add(layer); return layer; }
         Func<double> normal = () => Math.Sqrt(-2.0 * Math.Log(1.0 - initialization.NextDouble())) * Math.Cos(2.0 * Math.PI * initialization.NextDouble());
         int d = c.Qwen.Hidden;
-        LlmEmbedding = Add(new TiedEmbeddingLayer<T>(2, d));
-        LlmEmbedding.Reinitialize(normal);
+        if (!c.SpecialsInSpeechEmbedding)
+        {
+            _llmEmbedding = Add(new TiedEmbeddingLayer<T>(2, d));
+            _llmEmbedding.Reinitialize(normal);
+        }
         Qwen = new LlamaNetwork<T>(engine, layers, c.Qwen);
         Qwen.InitializeLikeReference(initialization);
         double bound = 1.0 / Math.Sqrt(d);
-        Head = Add(new DenseLayer<T>(c.SpeechVocabulary + 3, (IActivationFunction<T>)new IdentityActivation<T>()));
-        TorchParameters.Linear(engine, Head, d, c.SpeechVocabulary + 3,
-            Enumerable.Range(0, d * (c.SpeechVocabulary + 3)).Select(_ => bound * (2 * initialization.NextDouble() - 1)).ToArray(),
-            Enumerable.Range(0, c.SpeechVocabulary + 3).Select(_ => bound * (2 * initialization.NextDouble() - 1)).ToArray());
-        SpeechEmbedding = Add(new TiedEmbeddingLayer<T>(c.SpeechVocabulary + 3, d));
+        int outputs = c.SpeechVocabulary + c.SpeechSpecialTokens;
+        var weights = Enumerable.Range(0, d * outputs).Select(_ => bound * (2 * initialization.NextDouble() - 1)).ToArray();
+        if (c.BiasFreeDecoder)
+        {
+            _biasFreeHead = Add(new BiasFreeLinearLayer<T>(d, outputs));
+            TorchParameters.Linear(_biasFreeHead, d, outputs, weights);
+        }
+        else
+        {
+            _head = Add(new DenseLayer<T>(outputs, (IActivationFunction<T>)new IdentityActivation<T>()));
+            TorchParameters.Linear(engine, _head, d, outputs, weights,
+                Enumerable.Range(0, outputs).Select(_ => bound * (2 * initialization.NextDouble() - 1)).ToArray());
+        }
+        SpeechEmbedding = Add(new TiedEmbeddingLayer<T>(outputs, d));
         SpeechEmbedding.Reinitialize(normal);
     }
 
     public CosyVoice2LmConfiguration Configuration { get; }
-    public TiedEmbeddingLayer<T> LlmEmbedding { get; }
+    public TiedEmbeddingLayer<T> LlmEmbedding => _llmEmbedding ??
+        throw new InvalidOperationException("This release embeds SOS and task in the speech table.");
     public LlamaNetwork<T> Qwen { get; }
-    public DenseLayer<T> Head { get; }
+    public DenseLayer<T> Head => _head ?? throw new InvalidOperationException("This release has a bias-free decoder.");
+    public BiasFreeLinearLayer<T>? BiasFreeHead => _biasFreeHead;
     public TiedEmbeddingLayer<T> SpeechEmbedding { get; }
 
     /// <summary>The end-of-speech id.</summary>
-    public int EndToken => Configuration.SpeechVocabulary;
+    public int EndToken => Configuration.SpeechVocabulary + (Configuration.SpecialsInSpeechEmbedding ? 1 : 0);
 
     /// <summary>The bistream chunk's closing id.</summary>
-    public int FillToken => Configuration.SpeechVocabulary + 2;
+    public int FillToken => Configuration.SpeechVocabulary + (Configuration.SpecialsInSpeechEmbedding ? 3 : 2);
+
+    /// <summary>The start-of-speech row.</summary>
+    internal Tensor<T> StartRow() => Configuration.SpecialsInSpeechEmbedding
+        ? Rows(SpeechEmbedding, new[] { Configuration.SpeechVocabulary })
+        : Rows(LlmEmbedding, new[] { 0 });
+
+    /// <summary>The task/turn-of-speech row.</summary>
+    internal Tensor<T> TaskRow() => Configuration.SpecialsInSpeechEmbedding
+        ? Rows(SpeechEmbedding, new[] { Configuration.SpeechVocabulary + 2 })
+        : Rows(LlmEmbedding, new[] { 1 });
 
     private Tensor<T> TextEmbeddings(IReadOnlyList<int> text)
     {
@@ -197,7 +225,19 @@ internal sealed class CosyVoice2Lm<T>
     {
         int length = input.Shape[0], d = Configuration.Qwen.Hidden;
         var (hidden, _) = Qwen.Forward(_engine.Reshape(input, new[] { 1, length, d }));
-        return Head.Forward(_engine.Reshape(hidden, new[] { length, d }));
+        var rows = _engine.Reshape(hidden, new[] { length, d });
+        return _biasFreeHead?.Forward(rows) ?? Head.Forward(rows);
+    }
+
+    /// <summary>Teacher-forced acoustic-code logits for DiffRO; text positions and terminal/special targets are excluded.</summary>
+    internal Tensor<T> SpeechLogits(IReadOnlyList<int> text, IReadOnlyList<int> speech)
+    {
+        if (text.Count == 0 || speech.Count == 0) throw new ArgumentException("Text and speech must be nonempty.");
+        if (speech.Any(id => id < 0 || id >= Configuration.SpeechVocabulary))
+            throw new ArgumentException("The targets must be acoustic speech-code IDs.", nameof(speech));
+        var sequence = TrainingSequence(TextEmbeddings(text), speech, new Random(0), bistream: false);
+        return _engine.TensorSlice(LogitsOf(sequence.Input), new[] { text.Count + 1, 0 },
+            new[] { speech.Count, Configuration.SpeechVocabulary });
     }
 
     /// <summary>The training sequence and its targets (<c>prepare_lm_input_target</c> for one utterance): bistream with
@@ -209,7 +249,7 @@ internal sealed class CosyVoice2Lm<T>
     internal Tensor<T> SpeechRows(IReadOnlyList<int> ids) => Rows(SpeechEmbedding, ids);
 
     /// <summary>The LLM embedding's row for a special token: 0 sos, 1 the task id (MinMo's turn of speech).</summary>
-    internal Tensor<T> SpecialRow(int id) => Rows(LlmEmbedding, new[] { id });
+    internal Tensor<T> SpecialRow(int id) => id == 0 ? StartRow() : TaskRow();
 
     /// <summary>
     /// The training sequence for text given as embeddings <c>[N, d]</c> (MinMo's semantic vectors): after
@@ -222,8 +262,8 @@ internal sealed class CosyVoice2Lm<T>
         var c = Configuration;
         int n = textEmbeddings.Shape[0], d = textEmbeddings.Shape[1];
         Tensor<T> Slice(int start, int count) => _engine.TensorSlice(textEmbeddings, new[] { start, 0 }, new[] { count, d });
-        var sos = Rows(LlmEmbedding, new[] { 0 });
-        var task = Rows(LlmEmbedding, new[] { 1 });
+        var sos = StartRow();
+        var task = TaskRow();
         var parts = new List<Tensor<T>> { sos };
         var targets = new List<int> { Ignore };
         if (prefix is not null)
@@ -296,7 +336,7 @@ internal sealed class CosyVoice2Lm<T>
         var c = Configuration;
         var allText = promptText.Concat(text).ToList();
         int minLength = (int)(text.Count * c.MinTokenTextRatio), maxLength = (int)(text.Count * c.MaxTokenTextRatio);
-        var prefix = new List<Tensor<T>> { Rows(LlmEmbedding, new[] { 0 }), TextEmbeddings(allText), Rows(LlmEmbedding, new[] { 1 }) };
+        var prefix = new List<Tensor<T>> { StartRow(), TextEmbeddings(allText), TaskRow() };
         if (promptSpeech.Count > 0) prefix.Add(Rows(SpeechEmbedding, promptSpeech));
         var input = _engine.TensorConcatenate(prefix.ToArray(), 0);
         var generated = new List<int>();
@@ -306,8 +346,8 @@ internal sealed class CosyVoice2Lm<T>
             int last = logp.Shape[0] - 1, vocabulary = logp.Shape[1];
             var row = new double[vocabulary];
             for (int v = 0; v < vocabulary; v++) row[v] = NumOps.ToDouble(logp[last, v]);
-            if (i < minLength) row[EndToken] = double.NegativeInfinity;
-            int next = CosyVoiceLm<T>.SampleRepetitionAware(row, generated, c.TopP, c.TopK, c.RepetitionWindow, c.RepetitionRatio, random);
+            int next = CosyVoiceLm<T>.SampleForGeneration(row, generated, c.TopP, c.TopK,
+                c.RepetitionWindow, c.RepetitionRatio, random, EndToken, ignoreEnd: i < minLength);
             if (next >= c.SpeechVocabulary) break;
             generated.Add(next);
             input = _engine.TensorConcatenate(new[] { input, Rows(SpeechEmbedding, new[] { next }) }, 0);
@@ -320,10 +360,13 @@ internal sealed class CosyVoice2Lm<T>
     public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
     {
         var c = Configuration;
-        int d = c.Qwen.Hidden, outputs = c.SpeechVocabulary + 3;
-        LlmEmbedding.LoadTable(read(prefix + "llm_embedding.weight", new[] { 2, d }));
+        int d = c.Qwen.Hidden, outputs = c.SpeechVocabulary + c.SpeechSpecialTokens;
+        if (!c.SpecialsInSpeechEmbedding) LlmEmbedding.LoadTable(read(prefix + "llm_embedding.weight", new[] { 2, d }));
         Qwen.LoadTorchWeights(read, prefix + "llm.model.model.");
-        TorchParameters.Linear(_engine, Head, d, outputs, read(prefix + "llm_decoder.weight", new[] { outputs, d }), read(prefix + "llm_decoder.bias", new[] { outputs }));
+        if (_biasFreeHead is not null)
+            TorchParameters.Linear(_biasFreeHead, d, outputs, read(prefix + "llm_decoder.weight", new[] { outputs, d }));
+        else
+            TorchParameters.Linear(_engine, Head, d, outputs, read(prefix + "llm_decoder.weight", new[] { outputs, d }), read(prefix + "llm_decoder.bias", new[] { outputs }));
         SpeechEmbedding.LoadTable(read(prefix + "speech_embedding.weight", new[] { outputs, d }));
     }
 }

@@ -1,321 +1,79 @@
 using AiDotNet.Attributes;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
-using AiDotNet.LinearAlgebra;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
-using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
 
 namespace AiDotNet.TextToSpeech.VoiceCloning;
 
-/// <summary>XTTS v2: multilingual voice cloning using GPT-2 backbone with 6-second reference audio.</summary>
+/// <summary>Voice-cloning facade over the canonical XTTS-v2 zero-shot architecture.</summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <remarks><para><b>References:</b><list type="bullet"><item>Project: "XTTS v2: Massively Multilingual Zero-Shot Voice Cloning" (Coqui AI, 2023)</item></list></para><para><b>For Beginners:</b> XTTS v2: multilingual voice cloning using GPT-2 backbone with 6-second reference audio.. This model converts text input into speech audio output.</para></remarks>
-/// <example>
-/// <code>
-/// // Create an XTTS v2 Clone model for multilingual zero-shot voice cloning
-/// // using GPT-2 backbone with 6-second reference audio for speaker identity
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
-///
-/// // ONNX inference mode with pre-trained model
-/// var model = new XTTSv2Clone&lt;double&gt;(architecture, "xttsv2clone.onnx");
-///
-/// // Training mode with native layers
-/// var trainModel = new XTTSv2Clone&lt;double&gt;(architecture, new XTTSv2CloneOptions());
-/// </code>
-/// </example>
+/// <remarks>
+/// XTTS-v2 voice cloning is not a second model. This facade inherits the exact dVAE tokenizer, conditioning
+/// encoder/Perceiver, GPT-2, H/ASP speaker encoder and speaker-conditioned HiFi-GAN from <see cref="XTTSv2{T}"/>
+/// and adapts its reference-audio overload to <see cref="IVoiceCloner{T}"/>.
+/// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
 [ModelTask(ModelTask.Generation)]
-[ModelComplexity(ModelComplexity.Medium)]
+[ModelComplexity(ModelComplexity.High)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
-[ResearchPaper("XTTS: Massively Multilingual Text-to-Speech", "https://arxiv.org/abs/2406.04904")]
-public partial class XTTSv2Clone<T> : TtsModelBase<T>, ICodecTts<T>, IVoiceCloner<T>
+[ResearchPaper(
+    "XTTS: a Massively Multilingual Zero-Shot Text-to-Speech Model",
+    "https://arxiv.org/abs/2406.04904",
+    Year = 2024,
+    Authors = "Casanova et al.")]
+public partial class XTTSv2Clone<T> : XTTSv2<T>, IVoiceCloner<T>
 {
-    private readonly XTTSv2CloneOptions _options;
-
-    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
-    private bool _useNativeMode;
-    private bool _disposed;
+    private readonly XTTSv2CloneOptions _cloneOptions;
 
     public XTTSv2Clone(
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
-        XTTSv2CloneOptions? options = null
-    )
-        : base(architecture)
+        XTTSv2CloneOptions? options = null)
+        : base(architecture, modelPath, options ?? new XTTSv2CloneOptions())
     {
-        _options = options ?? new XTTSv2CloneOptions();
-        Options = _options;
-        _useNativeMode = false;
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
-        InitializeLayers();
+        _cloneOptions = options ?? new XTTSv2CloneOptions();
     }
 
     public XTTSv2Clone(
         NeuralNetworkArchitecture<T> architecture,
         XTTSv2CloneOptions? options = null,
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null
-    )
-        : base(architecture, new AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>(classAxis: -1))
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+        : base(architecture, options ?? new XTTSv2CloneOptions(), optimizer)
     {
-        _options = options ?? new XTTSv2CloneOptions();
-        Options = _options;
-        _useNativeMode = true;
-        _optimizer = optimizer ?? CreateDefaultOptimizer();
-        base.SampleRate = _options.SampleRate;
-        base.MelChannels = _options.MelChannels;
-        base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.LLMDim;
-        InitializeLayers();
+        _cloneOptions = options ?? new XTTSv2CloneOptions();
     }
 
-    int ITtsModel<T>.SampleRate => _options.SampleRate;
-    public int MaxTextLength => _options.MaxTextLength;
-    public int NumCodebooks => _options.NumCodebooks;
-    public int CodebookSize => _options.CodebookSize;
-    public int CodecFrameRate => _options.CodecFrameRate;
-    public double MinReferenceDuration => _options.MinReferenceDurationSec;
-    public int SpeakerEmbeddingDim => _options.SpeakerEmbeddingDim;
+    public double MinReferenceDuration => _cloneOptions.MinReferenceDurationSec;
+    public int SpeakerEmbeddingDim => _cloneOptions.SpeakerEmbeddingDim;
 
-    public override Tensor<T> Synthesize(string text)
-    {
-        ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        // XTTS v2 Clone: GPT-2 conditioned on reference audio latents (Coqui 2023)
-        // Reference audio speaker embedding (default when no reference provided)
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int codecFrames = textLen * 3;
-        double refEmb = 0.45; // placeholder reference embedding
-        double[] gptOut = new double[codecFrames];
-        double h = 0;
-        for (int f = 0; f < codecFrames; f++)
-        {
-            int ci = Math.Min(f * textLen / codecFrames, textLen - 1);
-            double e = (text[ci] % 128) / 128.0;
-            h = Math.Tanh(e * 0.65 + h * 0.2 + refEmb * 0.18 + Math.Sin(f * 0.07) * 0.06);
-            gptOut[f] = h;
-        }
-        int waveLen = codecFrames * (SampleRate / _options.CodecFrameRate);
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int fr = Math.Min(i * _options.CodecFrameRate / SampleRate, codecFrames - 1);
-            waveform[i] = NumOps.FromDouble(
-                gptOut[fr] * Math.Sin(i * 2.0 * Math.PI * 198 / SampleRate) * 0.71
-            );
-        }
-        return waveform;
-    }
-
+    /// <inheritdoc />
     public Tensor<T> SynthesizeWithVoice(string text, Tensor<T> referenceAudio)
     {
-        var embedding = ExtractSpeakerEmbedding(referenceAudio);
-        var baseAudio = Synthesize(text);
-        int embDim = embedding.Length;
-        for (int i = 0; i < baseAudio.Length; i++)
-        {
-            double s = NumOps.ToDouble(baseAudio[i]);
-            int d = i % embDim;
-            double spk = NumOps.ToDouble(embedding[d]);
-            double gain = 1.0 + spk * 0.3;
-            double pitch = spk * 0.1;
-            baseAudio[i] = NumOps.FromDouble(
-                Math.Tanh(s * gain + Math.Sin(i * 0.001 + pitch) * 0.05)
-            );
-        }
-        return baseAudio;
-    }
-
-    public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
-    {
-        if (referenceAudio.Length == 0)
-            throw new ArgumentException(
-                "Reference audio must not be empty.",
-                nameof(referenceAudio)
-            );
-        int embDim = _options.SpeakerEmbeddingDim;
-        var emb = new Tensor<T>([embDim]);
-        int hopLen = Math.Max(1, _options.HopSize);
-        int numFrames = Math.Max(1, referenceAudio.Length / hopLen);
-        for (int d = 0; d < embDim; d++)
-        {
-            double acc = 0;
-            for (int f = 0; f < numFrames; f++)
-            {
-                int idx = Math.Min(f * hopLen + d % hopLen, referenceAudio.Length - 1);
-                double val = NumOps.ToDouble(referenceAudio[idx]);
-                acc += Math.Tanh(val * Math.Sin((d + 1.0) * (f + 1.0) * 0.001) * 0.5);
-            }
-            emb[d] = NumOps.FromDouble(acc / numFrames);
-        }
-        double norm = 0;
-        for (int d = 0; d < embDim; d++)
-        {
-            double v = NumOps.ToDouble(emb[d]);
-            norm += v * v;
-        }
-        norm = Math.Sqrt(norm);
-        if (norm > 1e-8)
-            for (int d = 0; d < embDim; d++)
-                emb[d] = NumOps.FromDouble(NumOps.ToDouble(emb[d]) / norm);
-        return emb;
-    }
-
-    public Tensor<T> EncodeToTokens(Tensor<T> audio)
-    {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int frames = Math.Max(1, audio.Length / samplesPerFrame);
-        var tokens = new Tensor<T>([frames]);
-        for (int f = 0; f < frames; f++)
-        {
-            double sum = 0;
-            int start = f * samplesPerFrame;
-            int count = Math.Min(samplesPerFrame, audio.Length - start);
-            for (int s = 0; s < count; s++)
-                sum += NumOps.ToDouble(audio[start + s]);
-            double avg = sum / Math.Max(1, count);
-            int bin = (int)Math.Round((Math.Tanh(avg) + 1.0) * 0.5 * (_options.CodebookSize - 1));
-            bin = Math.Max(0, Math.Min(_options.CodebookSize - 1, bin));
-            tokens[f] = NumOps.FromDouble(bin);
-        }
-        return tokens;
-    }
-
-    public Tensor<T> DecodeFromTokens(Tensor<T> tokens)
-    {
-        int samplesPerFrame = Math.Max(1, SampleRate / _options.CodecFrameRate);
-        int waveLen = tokens.Length * samplesPerFrame;
-        var wave = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int f = Math.Min(i / samplesPerFrame, tokens.Length - 1);
-            double tokenVal = NumOps.ToDouble(tokens[f]);
-            double normalized = tokenVal / Math.Max(1, _options.CodebookSize - 1) * 2.0 - 1.0;
-            double phase = i * 2.0 * Math.PI * 200.0 / SampleRate;
-            wave[i] = NumOps.FromDouble(normalized * Math.Sin(phase) * 0.8);
-        }
-        return wave;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        if (text is null)
-            throw new ArgumentNullException(nameof(text));
-
-        // XTTS is a token language model. The native stack starts with an
-        // index-mode embedding, so fractional character values would all
-        // truncate to token zero and erase the multilingual text signal.
-        byte[] utf8 = System.Text.Encoding.UTF8.GetBytes(text);
-        int len = Math.Min(utf8.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(utf8[i]);
-        return t;
-    }
-
-    protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
-
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultCodecLMLayers(
-                    _options.TextEncoderDim,
-                    _options.LLMDim,
-                    _options.NumCodebooks * _options.CodebookSize,
-                    _options.NumEncoderLayers,
-                    _options.NumLLMLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    _options.VocabSize
-                )
-            );
-    }
-
-    protected override Tensor<T> PredictCore(Tensor<T> input)
-    {
-        ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        ValidateEnrollment(referenceAudio);
+        return Synthesize(text, _cloneOptions.Language, referenceAudio);
     }
 
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
-    protected override bool SupportsParameterMutation => _useNativeMode;
     public override ModelMetadata<T> GetModelMetadata()
     {
-        var m = new ModelMetadata<T>
-        {
-            Name = _useNativeMode ? "XTTSv2-Clone-Native" : "XTTSv2-Clone-ONNX",
-            Description = "XTTS v2: Multilingual Voice Cloning (Coqui AI, 2023)",
-            FeatureCount = _options.LLMDim,
-        };
-        m.AdditionalInfo["Architecture"] = "XTTSv2Clone";
-        m.AdditionalInfo["Mode"] = _useNativeMode ? "Native" : "ONNX";
-        m.AdditionalInfo["HiddenDim"] = base.HiddenDim;
-        m.AdditionalInfo["SampleRate"] = base.SampleRate;
-        m.AdditionalInfo["MelChannels"] = base.MelChannels;
-        m.AdditionalInfo["HopSize"] = base.HopSize;
-        return m;
+        var metadata = base.GetModelMetadata();
+        metadata.Name = metadata.Name.Replace("XTTS-v2", "XTTS-v2 Clone");
+        metadata.Description = "Voice-cloning facade over the canonical XTTS-v2 zero-shot graph";
+        metadata.AdditionalInfo["TaskFacade"] = "VoiceCloning";
+        metadata.AdditionalInfo["MinimumReferenceSeconds"] = MinReferenceDuration;
+        return metadata;
     }
 
-
-
-
-
-    private AdamWOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer() =>
-        new(
-            this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = _options.LearningRate,
-                WeightDecay = _options.WeightDecay,
-                Beta1 = _options.AdamBeta1,
-                Beta2 = _options.AdamBeta2,
-                Epsilon = _options.AdamEpsilon,
-                UseAdaptiveLearningRate = false,
-            }
-        );
-
-    private void ThrowIfDisposed()
+    private void ValidateEnrollment(Tensor<T> referenceAudio)
     {
-        if (_disposed)
-            throw new ObjectDisposedException(GetType().FullName ?? nameof(XTTSv2Clone<T>));
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (_disposed)
-            return;
-        _disposed = true;
-        base.Dispose(disposing);
+        Validation.Guard.NotNull(referenceAudio);
+        int minimum = checked((int)Math.Ceiling(MinReferenceDuration * _cloneOptions.SampleRate));
+        if (referenceAudio.Length < minimum)
+            throw new ArgumentException(
+                $"XTTS-v2 enrollment requires at least {MinReferenceDuration:0.###} seconds of reference audio "
+                + $"({minimum} samples at {_cloneOptions.SampleRate} Hz).", nameof(referenceAudio));
     }
 }

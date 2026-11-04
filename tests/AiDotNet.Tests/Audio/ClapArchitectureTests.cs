@@ -208,7 +208,7 @@ public class ClapArchitectureTests
         for (int step = 0; step < 16; step++)
             model.Train(audio, captions);
         double after = EvaluationContrastiveLoss(model, audio, captions);
-        // double.IsFinite does not exist on net471, so the check is spelled out.
+        // TtsPaperNumerics.IsFinite does not exist on net471, so the check is spelled out.
         Assert.False(double.IsNaN(after) || double.IsInfinity(after), $"Contrastive loss is not finite: {after}.");
         Assert.True(after < before, $"The evaluation contrastive loss went from {before:G6} to {after:G6} over 16 steps on two pairs.");
     }

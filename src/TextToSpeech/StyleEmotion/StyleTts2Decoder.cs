@@ -128,6 +128,13 @@ internal sealed class StyleTts2Source<T>
     /// are not reproducible).</summary>
     internal bool Stochastic { get; set; } = true;
 
+    /// <summary>Optional explicit excitation draws for reproducible synthesis; null samples from the supplied RNG.</summary>
+    internal double[]? InitialPhases { get; set; }
+    internal double[]? GaussianNoise { get; set; }
+    /// <summary>Kokoro explicitly computes its UV mask and noise amplitude in float32.</summary>
+    internal bool UseFloat32NoiseAmplitude { get; set; }
+
+
     private static double Gaussian(Random random) =>
         Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
 
@@ -136,6 +143,10 @@ internal sealed class StyleTts2Source<T>
     {
         int frames = f0.Length, samples = frames * UpsampleScale;
         var waves = new double[Harmonics][];
+        if (InitialPhases is not null && InitialPhases.Length != Harmonics)
+            throw new ArgumentException("Expected one initial phase per harmonic.");
+        if (GaussianNoise is not null && GaussianNoise.Length != samples * Harmonics)
+            throw new ArgumentException("Expected standard-normal excitation draws in [sample, harmonic] order.");
         var uv = new double[samples];
         for (int h = 0; h < Harmonics; h++)
         {
@@ -146,7 +157,7 @@ internal sealed class StyleTts2Source<T>
                 double f = NumOps.ToDouble(f0[i / UpsampleScale]) * (h + 1) / SampleRate;
                 rad[i] = f - Math.Floor(f);
             }
-            if (h > 0 && Stochastic) rad[0] += random.NextDouble();
+            if (h > 0 && Stochastic) rad[0] += InitialPhases is null ? random.NextDouble() : InitialPhases[h];
             // The phase integrated at the frame rate (linear interpolation down), scaled back and interpolated up.
             var coarse = StyleTts2Ops.Linear(rad, 1.0 / UpsampleScale, samples / UpsampleScale);
             var phase = new double[coarse.Length];
@@ -164,10 +175,12 @@ internal sealed class StyleTts2Source<T>
         var rows = new Tensor<T>(new[] { samples, Harmonics });
         for (int i = 0; i < samples; i++)
         {
-            double noiseAmp = uv[i] * NoiseStd + (1 - uv[i]) * SineAmplitude / 3;
+            double noiseAmp = UseFloat32NoiseAmplitude
+                ? (uv[i] != 0 ? (double)(float)NoiseStd : (double)((float)SineAmplitude / 3f))
+                : uv[i] * NoiseStd + (1 - uv[i]) * SineAmplitude / 3;
             for (int h = 0; h < Harmonics; h++)
             {
-                double noise = Stochastic ? noiseAmp * Gaussian(random) : 0.0;
+                double noise = Stochastic ? noiseAmp * (GaussianNoise is null ? Gaussian(random) : GaussianNoise[i * Harmonics + h]) : 0.0;
                 rows[i, h] = NumOps.FromDouble(waves[h][i] * uv[i] + noise);
             }
         }
@@ -256,6 +269,15 @@ internal sealed class StyleTts2Generator<T>
     public List<StyleTts2AdaInResBlock<T>> NoiseRes { get; } = new();
     public List<StyleTts2AdaInResBlock<T>> ResBlocks { get; } = new();
     public List<TiedEmbeddingLayer<T>> Alphas { get; } = new();
+    internal Func<Tensor<T>, Tensor<T>>? SourceSpectrumTransform { get; set; }
+
+    /// <summary>Loads the author's fixed analysis/synthesis window without changing learned parameters.</summary>
+    internal void LoadSynthesisWindow(double[] window)
+    {
+        if (_istft is null) throw new InvalidOperationException("The generator has no inverse STFT.");
+        _istft.LoadWindow(window);
+    }
+
     public NormedConv1DLayer<T> Post { get; }
     public int KernelCount { get; }
 
@@ -299,7 +321,8 @@ internal sealed class StyleTts2Generator<T>
         if (_type == StyleTts2DecoderType.IstftNet)
         {
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-                har = SourceSpectrum(Source.Forward(f0, random));
+                har = SourceSpectrumTransform is null ? SourceSpectrum(Source.Forward(f0, random))
+                    : SourceSpectrumTransform(Source.Forward(f0, random));
         }
         else
         {

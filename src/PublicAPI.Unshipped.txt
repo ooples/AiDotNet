@@ -1909,7 +1909,6 @@ virtual AiDotNet.Audio.Codecs.NeuralAudioCodecBase<T>.DiscriminatorLayersFor(int
 virtual AiDotNet.Audio.Codecs.NeuralAudioCodecBase<T>.DiscriminatorUpdateProbability.get -> double
 AiDotNet.Audio.Codecs.NeuralAudioCodecBase<T>.Quantizer.get -> AiDotNet.Audio.Codecs.IResidualVectorQuantizer<T>?
 virtual AiDotNet.Audio.Codecs.NeuralAudioCodecBase<T>.ReportedGeneratorLoss.get -> double?
-AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<T>.ResidualVectorQuantizerLayer(int dim, int quantizers, int bins, double decay = 0.99, int kmeansIterations = 50, int deadCodeThreshold = 2, bool commitmentAsMean = false) -> void
 override AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<T>.SupportsTraining.get -> bool
 AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<T>.Quantizers.get -> int
 AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<T>.Bins.get -> int
@@ -1934,7 +1933,6 @@ override AiDotNet.Audio.Codecs.NeuralAudioCodecBase<T>.GetExtraTrainableLayers()
 AiDotNet.Audio.Codecs.NeuralAudioCodecBase<T>.AsBatch(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 static AiDotNet.Audio.Codecs.Mp3Decoder.Decode(byte[]! mp3) -> AiDotNet.Audio.Codecs.Mp3Decoder.Result!
 AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<T>.CodebooksInitialized.get -> bool
-AiDotNet.Audio.Codecs.FactorizedVectorQuantizerLayer<T>.FactorizedVectorQuantizerLayer(int dim, int quantizers, int bins, int codeDim, bool lossesOnRawVectors = false) -> void
 override AiDotNet.Audio.Codecs.FactorizedVectorQuantizerLayer<T>.SupportsTraining.get -> bool
 AiDotNet.Audio.Codecs.FactorizedVectorQuantizerLayer<T>.LossesOnRawVectors.get -> bool
 AiDotNet.Audio.Codecs.FactorizedVectorQuantizerLayer<T>.ActiveQuantizers.get -> int
@@ -2355,7 +2353,6 @@ AiDotNet.SpeechRecognition.WhisperFamily.WhisperXOptions.Temperatures.get -> dou
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperXOptions.Temperatures.set -> void
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperX<T>.OutputFeatureWidth.get -> int
 AiDotNet.Tokenization.Specialized.T5TextTokenizer.Encode(string! text) -> int[]!
-override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperX<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperX<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperX<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
@@ -2380,7 +2377,6 @@ AiDotNet.SpeechRecognition.WhisperFamily.WhisperLiveOptions.Temperatures.get -> 
 AiDotNet.SpeechRecognition.WhisperFamily.WhisperLiveOptions.Temperatures.set -> void
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperLive<T>.OutputFeatureWidth.get -> int
 virtual AiDotNet.ComputerVision.Segmentation.InstanceSegmentation.InstanceSegmenterBase<T>.DataOutputIndices.get -> System.Collections.Generic.IReadOnlyCollection<int>!
-override AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperLive<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperLive<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.WhisperFamily.WhisperLive<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
@@ -7090,7 +7086,6 @@ override AiDotNet.TextToSpeech.CodecBased.Zonos<T>.Synthesize(string! text) -> A
 AiDotNet.TextToSpeech.CodecBased.Zonos<T>.Generate(string! text, double[]? speaker, int[,]? audioPrefix = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.Vocoders.APNet2<T>.AdversarialTerms(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! generated, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! real) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 virtual AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.DecodeCodes(int[,]! codes) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.EncodePhonemes(System.Collections.Generic.IEnumerable<string!>! symbols) -> int[]!
 AiDotNet.TextToSpeech.CodecBased.Vevo<T>.TimbreReference.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 AiDotNet.TextToSpeech.CodecBased.Vevo<T>.CreateVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate, string! transcript, string! language) -> AiDotNet.TextToSpeech.TtsVoice<T>!
 AiDotNet.TextToSpeech.CodecBased.Vevo<T>.TimbreReference.set -> void
@@ -7203,7 +7198,6 @@ AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.TextDropoutRate.get -> double
 AiDotNet.TextToSpeech.CodecBased.SoundStormOptions.TextDropoutRate.set -> void
 AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.ToIds(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tensor, string! name) -> int[]!
 override AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-static AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.Framed(int[]! ids) -> int[]!
 AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.Symbol(int id) -> string!
 AiDotNet.TextToSpeech.CodecBased.SoundStorm<T>.CurrentStage.get -> AiDotNet.TextToSpeech.CodecBased.SoundStormTrainingStage
 AiDotNet.TextToSpeech.CodecBased.SoundStorm<T>.CurrentStage.set -> void
@@ -9037,11 +9031,9 @@ AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.SplitText(string! text) -> Sys
 override AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
 override AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.SpeechTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate) -> int[]!
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.SpeakerEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.MelSpectrogram(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.CreateVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate, string? transcript = null) -> AiDotNet.TextToSpeech.TtsVoice<T>!
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.CreateVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! speakerEmbedding) -> AiDotNet.TextToSpeech.TtsVoice<T>!
 override AiDotNet.TextToSpeech.CodecBased.GPTSoVITS<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
 override AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T>.OnMutableConstructorConfigurationRestored() -> void
@@ -9065,11 +9057,8 @@ AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.Lookahead.set -> void
 override AiDotNet.TextToSpeech.CodecBased.FireRedTTS<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T>.LoadHeatz123Checkpoint(string! path) -> void
 AiDotNet.TextToSpeech.CodecBased.FireRedTTS<T>.LoadReferenceWeights(string! directory) -> void
-override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.GenerateSpeechTokens(System.Collections.Generic.IReadOnlyList<int>! text, System.Random! random) -> int[]!
 AiDotNet.TextToSpeech.CodecBased.FireRedTTS<T>.LoadSpeechTokenizer(string! codecPath, string! hubertPath) -> void
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.TokensToMel(System.Collections.Generic.IReadOnlyList<int>! tokens, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.MelToAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.CodecBased.CSM<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.PostprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -13271,7 +13260,6 @@ override AiDotNet.NeuralNetworks.Layers.RelativePositionTransformerBlock<T>.Supp
 AiDotNet.NeuralNetworks.Layers.ScaledPositionalEncodingLayer<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
 override AiDotNet.NeuralNetworks.Layers.ResidualConvReluNormLayer<T>.ForwardTraced(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.NeuralNetworks.Layers.ResidualConvReluNormLayer<T>.ResetState() -> void
-AiDotNet.NeuralNetworks.Layers.RelativePositionTransformerBlock<T>.RelativePositionTransformerBlock(int hidden, int heads, int filter, int kernelSize, double dropoutRate, int window, bool rotary = false, bool positional = true) -> void
 override AiDotNet.NeuralNetworks.Layers.ResidualConvReluNormLayer<T>.WriteConstructionState(System.Collections.Generic.Dictionary<string!, string!>! __metadata) -> void
 override AiDotNet.NeuralNetworks.Layers.ResidualConvReluNormLayer<T>.HasCompleteConstructionObjectState.get -> bool
 override AiDotNet.NeuralNetworks.Layers.ResidualConvReluNormLayer<T>.WriteConstructionObjects(System.Collections.Generic.Dictionary<string!, object!>! __values) -> void
@@ -16925,17 +16913,13 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*override AiDotNet.TextToSpeech.Classic.AdaSpeech2<T>.TrainingUnavailableReason.get -> string?
 *REMOVED*override AiDotNet.TextToSpeech.Classic.AdaSpeech<T>.Dispose(bool disposing) -> void
 *REMOVED*override AiDotNet.TextToSpeech.Classic.AdaSpeech<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*override AiDotNet.TextToSpeech.Classic.AdaSpeech<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.Classic.AdaSpeech<T>.ThrowIfCannotTrain() -> void
-*REMOVED*override AiDotNet.TextToSpeech.Classic.AlignTTS<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.Classic.DeepVoice3<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.Classic.FastSpeech2<T>.Dispose(bool disposing) -> void
 *REMOVED*override AiDotNet.TextToSpeech.Classic.FastSpeech2<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*override AiDotNet.TextToSpeech.Classic.FastSpeech2<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.Classic.FastSpeech2<T>.ThrowIfCannotTrain() -> void
 *REMOVED*override AiDotNet.TextToSpeech.Classic.FastSpeech<T>.Dispose(bool disposing) -> void
 *REMOVED*override AiDotNet.TextToSpeech.Classic.FastSpeech<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*override AiDotNet.TextToSpeech.Classic.FastSpeech<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.Classic.FastSpeech<T>.ThrowIfCannotTrain() -> void
 *REMOVED*override AiDotNet.TextToSpeech.Classic.ForwardTacotron<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.Classic.GlowTTS<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -17021,13 +17005,9 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*override AiDotNet.TextToSpeech.CodecBased.MARS5TTS<T>.OutputFeatureWidth.get -> int
 *REMOVED*override AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2<T>.EnsureParametersReady() -> void
 *REMOVED*override AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
-*REMOVED*override AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.CodecBased.SoundStorm<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
-*REMOVED*override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T>.OutputFeatureWidth.get -> int
 *REMOVED*override AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
-*REMOVED*override AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.CodecBased.VALLE2<T>.Dispose(bool disposing) -> void
 *REMOVED*override AiDotNet.TextToSpeech.CodecBased.VALLE2<T>.InitializeLayers() -> void
 *REMOVED*override AiDotNet.TextToSpeech.CodecBased.VALLE2<T>.OutputFeatureWidth.get -> int
@@ -17061,12 +17041,9 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*override AiDotNet.TextToSpeech.CodecBased.VALLEX<T>.ThrowIfCannotTrain() -> void
 *REMOVED*override AiDotNet.TextToSpeech.CodecBased.VALLEX<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
 *REMOVED*override AiDotNet.TextToSpeech.CodecBased.VALLEX<T>.TrainingUnavailableReason.get -> string?
-*REMOVED*override AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.DescriptionBased.ParlerTTS<T>.EnsureParametersReady() -> void
 *REMOVED*override AiDotNet.TextToSpeech.DescriptionBased.PromptTTS<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.DescriptionBased.PromptTTS<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*override AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.EndToEnd.MeloTTS<T>.EnsureParametersReady() -> void
 *REMOVED*override AiDotNet.TextToSpeech.EndToEnd.MeloTTS<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 *REMOVED*override AiDotNet.TextToSpeech.EndToEnd.MeloTTS<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -17114,12 +17091,10 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*override AiDotNet.TextToSpeech.EndToEnd.YourTTS<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
 *REMOVED*override AiDotNet.TextToSpeech.EndToEnd.YourTTS<T>.TrainingUnavailableReason.get -> string?
 *REMOVED*override AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*override AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.FlowDiffusion.E2TTS<T>.EnsureParametersReady() -> void
 *REMOVED*override AiDotNet.TextToSpeech.FlowDiffusion.E2TTS<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.FlowDiffusion.E2TTS<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.FlowDiffusion.E2TTS<T>.ThrowIfCannotTrain() -> void
-*REMOVED*override AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.FlowDiffusion.F5TTS<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.FlowDiffusion.F5TTS<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.FlowDiffusion.F5TTS<T>.ThrowIfCannotTrain() -> void
@@ -17459,7 +17434,6 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*override AiDotNet.TextToSpeech.Vocoders.WaveRNN<T>.TrainingUnavailableReason.get -> string?
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -18547,56 +18521,33 @@ override AiDotNet.Video.Enhancement.MGLDVSR<T>.ResolveLazyLayerShapes() -> void
 override AiDotNet.Video.Enhancement.FlashVSR<T>.SupportsFusedCompiledTraining.get -> bool
 override AiDotNet.Video.Enhancement.MGLDVSR<T>.SupportsFusedCompiledTraining.get -> bool
 override AiDotNet.Video.Enhancement.RealViformer<T>.OnTrainingStepStarting(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> void
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>
 *REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.CodebookSize.get -> int
 *REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.CodecFrameRate.get -> int
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.CosyVoiceClone(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions? options = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null) -> void
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.CosyVoiceClone(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! modelPath, AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions? options = null) -> void
 *REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.DecodeFromTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.EncodeToTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.ExtractSpeakerEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.MaxTextLength.get -> int
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.MinReferenceDuration.get -> double
 *REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.NumCodebooks.get -> int
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.SpeakerEmbeddingDim.get -> int
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.SynthesizeWithVoice(string! text, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions.CosyVoiceCloneOptions() -> void
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions.CosyVoiceCloneOptions(AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions! other) -> void
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>
 *REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.CodebookSize.get -> int
 *REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.CodecFrameRate.get -> int
 *REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.DecodeFromTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.EncodeToTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.ExtractSpeakerEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.MaxTextLength.get -> int
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.MinReferenceDuration.get -> double
 *REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.NumCodebooks.get -> int
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.SpeakerEmbeddingDim.get -> int
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.SynthesizeWithVoice(string! text, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.VALLEXClone(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions? options = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null) -> void
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.VALLEXClone(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! modelPath, AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions? options = null) -> void
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions
-*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions.VALLEXCloneOptions() -> void
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.Dispose(bool disposing) -> void
-*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.GetModelMetadata() -> AiDotNet.Models.ModelMetadata<T>!
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.InitializeLayers() -> void
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.OutputFeatureWidth.get -> int
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.PostprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.SupportsParameterMutation.get -> bool
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.ThrowIfCannotTrain() -> void
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceClone<T>.TrainingUnavailableReason.get -> string?
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.Dispose(bool disposing) -> void
-*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.GetModelMetadata() -> AiDotNet.Models.ModelMetadata<T>!
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.InitializeLayers() -> void
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.OutputFeatureWidth.get -> int
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.PostprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.SupportsParameterMutation.get -> bool
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.ThrowIfCannotTrain() -> void
 *REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
@@ -18837,3 +18788,1613 @@ override AiDotNet.Video.Enhancement.StreamDiffVSR<T>.SupportsFusedCompiledTraini
 *REMOVED*AiDotNet.Video.Options.StreamDiffVSROptions.Variant.set -> void
 *REMOVED*override AiDotNet.Video.Enhancement.StreamDiffVSR<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.NeuralNetworks.Tabular.AutoIntBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.CodebookSize.get -> int
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.CodecFrameRate.get -> int
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.DecodeFromTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.EncodeToTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.MaxTextLength.get -> int
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.NumCodebooks.get -> int
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.CodebookSize.get -> int
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.CodecFrameRate.get -> int
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.DecodeFromTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.EncodeToTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.NumCodebooks.get -> int
+*REMOVED*AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.DiffusionDim.get -> int
+*REMOVED*AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.DiffusionDim.set -> void
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.CodebookSize.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.CodecFrameRate.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.DecodeFromTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.EncodeToTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.MaxTextLength.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.NumCodebooks.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.CodebookSize.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.CodecFrameRate.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.DecodeFromTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.EncodeToTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.MaxTextLength.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.NumCodebooks.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.CodebookSize.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.CodecFrameRate.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.DecodeFromTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.EncodeToTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.ExtractSpeakerEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.MaxTextLength.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.NumCodebooks.get -> int
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.XTTSv2CloneOptions.AdamBeta1.get -> double
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.XTTSv2CloneOptions.AdamBeta1.set -> void
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.XTTSv2CloneOptions.AdamBeta2.get -> double
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.XTTSv2CloneOptions.AdamBeta2.set -> void
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.XTTSv2CloneOptions.AdamEpsilon.get -> double
+*REMOVED*AiDotNet.TextToSpeech.VoiceCloning.XTTSv2CloneOptions.AdamEpsilon.set -> void
+*REMOVED*override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.InitializeLayers() -> void
+*REMOVED*override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.OutputFeatureWidth.get -> int
+*REMOVED*override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.PostprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.SupportsParameterMutation.get -> bool
+*REMOVED*override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.ThrowIfCannotTrain() -> void
+*REMOVED*override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+*REMOVED*override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.TrainingUnavailableReason.get -> string?
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.Dispose(bool disposing) -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.InitializeLayers() -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.OutputFeatureWidth.get -> int
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.PostprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.SupportsParameterMutation.get -> bool
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.ThrowIfCannotTrain() -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.TrainingUnavailableReason.get -> string?
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.Dispose(bool disposing) -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.InitializeLayers() -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.OutputFeatureWidth.get -> int
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.PostprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.SupportsParameterMutation.get -> bool
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.ThrowIfCannotTrain() -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.TrainingUnavailableReason.get -> string?
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.Dispose(bool disposing) -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.InitializeLayers() -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.PostprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! output) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.PreprocessText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.SupportsParameterMutation.get -> bool
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.ThrowIfCannotTrain() -> void
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+*REMOVED*override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>.TrainingUnavailableReason.get -> string?
+AiDotNet.Audio.Codecs.FactorizedVectorQuantizerLayer<T>.FactorizedVectorQuantizerLayer(int dim, int quantizers, int bins, int codeDim, bool lossesOnRawVectors = false, bool useL1Loss = false) -> void
+AiDotNet.Audio.Codecs.ResidualVectorQuantizerLayer<T>.ResidualVectorQuantizerLayer(int dim, int quantizers, int bins, double decay = 0.99, int kmeansIterations = 50, int deadCodeThreshold = 2, bool commitmentAsMean = false, bool expireCodesAfterEma = false) -> void
+AiDotNet.Audio.Generation.EnCodec<T>.LoadAuthorWeights(string! path, string! prefix = "") -> void
+AiDotNet.Audio.Generation.EnCodecOptions.TimeGroupNormalization.get -> bool?
+AiDotNet.Audio.Generation.EnCodecOptions.TimeGroupNormalization.set -> void
+AiDotNet.NeuralNetworks.Layers.RelativePositionTransformerBlock<T>.RelativePositionTransformerBlock(int hidden, int heads, int filter, int kernelSize, double dropoutRate, int window, bool rotary = false, bool positional = true, double normalizationEpsilon = 0.0001) -> void
+AiDotNet.NeuralNetworks.Layers.TorchLstmCellLayer<T>
+AiDotNet.NeuralNetworks.Layers.TorchLstmCellLayer<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! state) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.Layers.TorchLstmCellLayer<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+AiDotNet.NeuralNetworks.Layers.TorchLstmCellLayer<T>.SplitState(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! state) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Hidden, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Cell)
+AiDotNet.NeuralNetworks.Layers.TorchLstmCellLayer<T>.TorchLstmCellLayer(int inputSize, int hiddenSize) -> void
+AiDotNet.TextToSpeech.Classic.AcousticModelOptions.TextSymbols.get -> string![]?
+AiDotNet.TextToSpeech.Classic.AcousticModelOptions.TextSymbols.set -> void
+AiDotNet.TextToSpeech.Classic.AdaSpeech<T>.LoadConvertedWeights(string! path) -> void
+AiDotNet.TextToSpeech.Classic.AlignTTS<T>.LoadConvertedWeights(string! path) -> void
+AiDotNet.TextToSpeech.Classic.FastSpeech2<T>.LoadConvertedWeights(string! path) -> void
+AiDotNet.TextToSpeech.Classic.FastSpeech<T>.LoadConvertedWeights(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.EvaluateDifferentiableReward(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample, AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>! referencePolicy, AiDotNet.TextToSpeech.CodecBased.ICosyVoiceTokenReward<T>! reward, AiDotNet.TextToSpeech.CodecBased.CosyVoiceDiffROOptions? options = null) -> T
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.LoadPretrainedWeights(string! modelDirectory) -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.TrainDifferentiableReward(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample, AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>! referencePolicy, AiDotNet.TextToSpeech.CodecBased.ICosyVoiceTokenReward<T>! reward, AiDotNet.TextToSpeech.CodecBased.CosyVoiceDiffROOptions? options = null, System.Random? random = null) -> T
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.CosyVoice3Options(AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options! other) -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTDepth.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTDepth.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTFeedForwardMultiplier.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTFeedForwardMultiplier.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTHeadDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTHeadDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTHeads.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTHeads.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTInferenceCfgRate.get -> double
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTInferenceCfgRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTInputDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTInputDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTSigmaMin.get -> double
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTSigmaMin.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTTimesteps.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTTimesteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTTrainingCfgRate.get -> double
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.DiTTrainingCfgRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.PreLookaheadChannels.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.PreLookaheadChannels.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.ReservedSpeechTokens.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.ReservedSpeechTokens.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.InitializeReleasedFrontends() -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.ResampleAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, int from, int to) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.TrainLanguageModelObjective(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokens, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective) -> T
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceDiffROOptions
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceDiffROOptions.CosyVoiceDiffROOptions() -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceDiffROOptions.KlCoefficient.get -> double
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceDiffROOptions.KlCoefficient.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceDiffROOptions.Temperature.get -> double
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceDiffROOptions.Temperature.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.MaxReferenceSeconds.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.MaxReferenceSeconds.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeakerEncoderOnnxPath.get -> string?
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeakerEncoderOnnxPath.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeechTokenizerPath.get -> string?
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeechTokenizerPath.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceToken2TextReward<T>
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceToken2TextReward<T>.CosyVoiceToken2TextReward(int speechVocabulary, int textVocabulary, int modelDim = 256, int feedForwardDim = 1024, int heads = 4, int encoderLayers = 4, int decoderLayers = 4, int decoderStartTokenId = 0, int initializationSeed = 2294) -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceToken2TextReward<T>.Layers.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceToken2TextReward<T>.LoadWeights(System.Func<string!, int[]!, double[]!>! read) -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceToken2TextReward<T>.LogReward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! softSpeechTokens, System.Collections.Generic.IReadOnlyList<int>! textTokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceToken2TextReward<T>.Parameters.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceToken2TextReward<T>.SpeechVocabularySize.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceToken2TextReward<T>.TextVocabularySize.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceToken2TextReward<T>.Train(System.Collections.Generic.IReadOnlyList<int>! speechTokens, System.Collections.Generic.IReadOnlyList<int>! textTokens, T learningRate) -> T
+AiDotNet.TextToSpeech.CodecBased.ICosyVoiceTokenReward<T>
+AiDotNet.TextToSpeech.CodecBased.ICosyVoiceTokenReward<T>.Layers.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!
+AiDotNet.TextToSpeech.CodecBased.ICosyVoiceTokenReward<T>.LogReward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! softSpeechTokens, System.Collections.Generic.IReadOnlyList<int>! textTokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.ICosyVoiceTokenReward<T>.SpeechVocabularySize.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.ExtractTimbreEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.HasPaperPipeline.get -> bool
+AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.LoadConvertedWeights(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.SynthesizeWithPrompt(string! text, string! promptText, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.TrainingComponent.get -> AiDotNet.TextToSpeech.CodecBased.SeedTTSTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.AcousticDimension.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.AcousticDimension.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.CodecRates.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.CodecRates.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiffusionBetaEnd.get -> double
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiffusionBetaEnd.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiffusionBetaStart.get -> double
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiffusionBetaStart.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiffusionLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiffusionLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiffusionSteps.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiffusionSteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiffusionTrainingSteps.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiffusionTrainingSteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiscriminatorChannels.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiscriminatorChannels.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiscriminatorWidthDivisor.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiscriminatorWidthDivisor.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiscriminatorWindows.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.DiscriminatorWindows.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.FramesPerTextToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.FramesPerTextToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.GenerationSeed.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.GenerationSeed.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.MaxPromptCodecFrames.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.MaxPromptCodecFrames.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.MinimumGeneratedCodecFrames.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.MinimumGeneratedCodecFrames.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.SamplesPerCodecFrame.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.Temperature.get -> double
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.Temperature.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.TokenizerChannels.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.TokenizerChannels.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.TokenizerCodeDimension.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.TokenizerCodeDimension.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.TopK.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.TopK.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.TrainingComponent.get -> AiDotNet.TextToSpeech.CodecBased.SeedTTSTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.TrainingComponent.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.TrainingMelBins.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.TrainingMelBins.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.TrainingMelWindows.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.TrainingMelWindows.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.VocoderHiddenDimension.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.VocoderHiddenDimension.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.SeedTTSTrainingComponent.AcousticVocoder = 2 -> AiDotNet.TextToSpeech.CodecBased.SeedTTSTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.SeedTTSTrainingComponent.SpeechTokenizer = 4 -> AiDotNet.TextToSpeech.CodecBased.SeedTTSTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.SeedTTSTrainingComponent.TimbreSelfDistillation = 3 -> AiDotNet.TextToSpeech.CodecBased.SeedTTSTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.SeedTTSTrainingComponent.TokenDiffusion = 1 -> AiDotNet.TextToSpeech.CodecBased.SeedTTSTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.SeedTTSTrainingComponent.TokenLanguageModel = 0 -> AiDotNet.TextToSpeech.CodecBased.SeedTTSTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.DecodeFromTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! semanticTokens, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! globalTokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.EncodeGlobalTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.HasPaperPipeline.get -> bool
+AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.LoadAuthorWeights(string! languageModelPath, string! biCodecPath, string! wav2VecPath) -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.LoadConvertedWeights(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.LoadLanguageModelWeights(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.LoadSpeakerTokenizerWeights(string! path, string! prefix = "speaker_encoder.") -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.SynthesizeControlled(string! text, bool female, AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel pitch, AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel speed) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.SynthesizeWithPrompt(string! text, string! promptText, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.TrainAnnotatedSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample, bool female, AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel pitch, AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel speed, int pitchMel, int syllablesPerSecond) -> T
+AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel
+AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel.High = 3 -> AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel
+AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel.Low = 1 -> AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel
+AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel.Moderate = 2 -> AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel
+AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel.VeryHigh = 4 -> AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel
+AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel.VeryLow = 0 -> AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.BiCodecDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.BiCodecDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.ConstrainedSpeechDecoding.get -> bool
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.ConstrainedSpeechDecoding.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.DiscriminatorBands.get -> double[]!
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.DiscriminatorBands.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.DiscriminatorChannels.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.DiscriminatorChannels.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.DiscriminatorWidthDivisor.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.DiscriminatorWidthDivisor.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.DiscriminatorWindows.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.DiscriminatorWindows.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.EndContentToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.EndContentToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.EndGlobalToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.EndGlobalToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.EndSemanticToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.EndSemanticToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.EndStyleLabelToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.EndStyleLabelToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.EndStylePromptToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.EndStylePromptToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.EosToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.EosToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.FeatureMatchingWeight.get -> double
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.FeatureMatchingWeight.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.FsqLevels.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.FsqLevels.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.GenderTokenOffset.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.GenderTokenOffset.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.GenerationSeed.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.GenerationSeed.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.GlobalCodebookSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.GlobalCodebookSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.GlobalTokenCount.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.GlobalTokenCount.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.GlobalTokenOffset.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.GlobalTokenOffset.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.GlobalTokenizerWarmupSteps.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.GlobalTokenizerWarmupSteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.KeyValueHeads.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.KeyValueHeads.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.LmIntermediateDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.LmIntermediateDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.MaximumPositionEmbeddings.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.MaximumPositionEmbeddings.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.MelFftSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.MelFftSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.MelLossWeight.get -> double
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.MelLossWeight.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.MelMinimumFrequency.get -> double
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.MelMinimumFrequency.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.MelWindowSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.MelWindowSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.MinimumGeneratedCodecFrames.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.MinimumGeneratedCodecFrames.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.PerceiverDepth.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.PerceiverDepth.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.PerceiverHeads.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.PerceiverHeads.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.PitchLabelOffset.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.PitchLabelOffset.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.PitchValueOffset.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.PitchValueOffset.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.PostnetLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.PostnetLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.PrenetLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.PrenetLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.ReferenceSegmentSeconds.get -> double
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.ReferenceSegmentSeconds.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.RmsNormEpsilon.get -> double
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.RmsNormEpsilon.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.RopeTheta.get -> double
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.RopeTheta.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SemanticCodeDimension.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SemanticCodeDimension.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SemanticCodebookWeight.get -> double
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SemanticCodebookWeight.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SemanticCommitmentWeight.get -> double
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SemanticCommitmentWeight.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SemanticEncoderLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SemanticEncoderLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SemanticTokenOffset.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SemanticTokenOffset.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SpeakerContextDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SpeakerEcapaChannels.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SpeakerEcapaChannels.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SpeakerLatentDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SpeakerLatentDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SpeedLabelOffset.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SpeedLabelOffset.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SpeedValueOffset.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.SpeedValueOffset.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.StartContentToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.StartContentToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.StartGlobalToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.StartGlobalToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.StartSemanticToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.StartSemanticToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.StartStyleLabelToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.StartStyleLabelToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.StartStylePromptToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.StartStylePromptToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TaskControllableTtsToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TaskControllableTtsToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TaskTtsToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TaskTtsToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Temperature.get -> double
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Temperature.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TextSymbols.get -> string![]?
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TextSymbols.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TieWordEmbeddings.get -> bool
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TieWordEmbeddings.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TopK.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TopK.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TopP.get -> double
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TopP.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TrainingComponent.get -> AiDotNet.TextToSpeech.CodecBased.SparkTTSTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TrainingComponent.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TrainingMelBins.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TrainingMelBins.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TrainingMelWindows.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.TrainingMelWindows.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.VocosDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.VocosDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.VocosIntermediateDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.VocosIntermediateDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecConvDims.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecConvDims.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecConvKernels.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecConvKernels.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecConvStrides.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecConvStrides.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecHeads.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecHeads.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecHiddenDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecHiddenDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecIntermediateDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecIntermediateDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecMixedLayers.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.Wav2VecMixedLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.WaveDecoderChannels.get -> int
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.WaveDecoderChannels.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.WaveDecoderKernels.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.WaveDecoderKernels.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.WaveDecoderRates.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions.WaveDecoderRates.set -> void
+AiDotNet.TextToSpeech.CodecBased.SparkTTSTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.SparkTTSTrainingComponent.BiCodec = 1 -> AiDotNet.TextToSpeech.CodecBased.SparkTTSTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.SparkTTSTrainingComponent.LanguageModel = 0 -> AiDotNet.TextToSpeech.CodecBased.SparkTTSTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.CreateVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate = 24000) -> AiDotNet.TextToSpeech.TtsVoice<T>!
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.EncodeToTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.HasPaperPipeline.get -> bool
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.LoadAuthorWeights(string! autoregressivePath, string! clvpPath, string! diffusionPath, string! speechTokenizerPath, string! vocoderPath, string? textTokenizerPath = null, string? melNormalizationPath = null, string! vocoderPrefix = "model_g.") -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.LoadAutoregressiveWeights(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.LoadClvpWeights(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.LoadConvertedWeights(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.LoadDiffusionWeights(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.LoadMelNormalization(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.LoadTextTokenizer(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.LoadTokenizerWeights(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.LoadVocoderWeights(string! path, string! prefix = "model_g.") -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.ScoreCandidate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! textTokens, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! speechTokens) -> double
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.SynthesizeWithVoice(string! text, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate = 24000) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.TokenizeText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.TrainClvpBatch(System.Collections.Generic.IReadOnlyList<AiDotNet.TextToSpeech.TtsTrainingSample<T>!>! samples) -> T
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.AutoregressiveFeedForwardDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.AutoregressiveFeedForwardDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.AutoregressiveFftSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.AutoregressiveFftSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.AutoregressiveHopSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.AutoregressiveHopSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.AutoregressiveMelChannels.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.AutoregressiveMelChannels.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.AutoregressiveMelNormalization.get -> double[]?
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.AutoregressiveMelNormalization.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClassifierFreeGuidanceScale.get -> double
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClassifierFreeGuidanceScale.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClvpDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClvpDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClvpHeads.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClvpHeads.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClvpLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClvpLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClvpSpeechLength.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClvpSpeechLength.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClvpTextLength.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClvpTextLength.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClvpTokenDropout.get -> double
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ClvpTokenDropout.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ConditioningSamples.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.ConditioningSamples.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionConditioningDropout.get -> double
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionConditioningDropout.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionConditioningSamples.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionConditioningSamples.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionHeads.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionHeads.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionInferenceSteps.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionInferenceSteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionTrainingSteps.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.DiffusionTrainingSteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.MaxConditioningInputs.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.MaxConditioningInputs.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.MaximumAutoregressiveTokens.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.MaximumAutoregressiveTokens.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.MinimumAutoregressiveTokens.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.MinimumAutoregressiveTokens.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.NumAutoregressiveSamples.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.NumAutoregressiveSamples.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.RepetitionPenalty.get -> double
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.RepetitionPenalty.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.SamplingSeed.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.SamplingSeed.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.SpeechStartToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.SpeechStartToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.SpeechStopToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.SpeechStopToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.Temperature.get -> double
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.Temperature.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TextLossWeight.get -> double
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TextLossWeight.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TextStartToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TextStartToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TextStopToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TextStopToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TextTokenizerPath.get -> string?
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TextTokenizerPath.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TokenizerCodeDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TokenizerCodeDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TokenizerCommitmentWeight.get -> double
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TokenizerCommitmentWeight.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TokenizerCompression.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TokenizerCompression.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TokenizerLatentDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TokenizerLatentDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TokenizerResidualBlocks.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TokenizerResidualBlocks.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TokenizerSampleRate.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TokenizerSampleRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TopP.get -> double
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TopP.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TrainingComponent.get -> AiDotNet.TextToSpeech.CodecBased.TortoiseTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.TrainingComponent.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetChannels.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetChannels.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetDilations.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetDilations.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetKernelPredictorConvSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetKernelPredictorConvSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetKernelPredictorHidden.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetKernelPredictorHidden.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetNoiseDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetNoiseDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetPaddingFrames.get -> int
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetPaddingFrames.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetUpsampleRates.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.UnivNetUpsampleRates.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.VocoderTraining.get -> AiDotNet.TextToSpeech.Vocoders.UnivNetOptions!
+AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions.VocoderTraining.set -> void
+AiDotNet.TextToSpeech.CodecBased.TortoiseTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.TortoiseTrainingComponent.Autoregressive = 0 -> AiDotNet.TextToSpeech.CodecBased.TortoiseTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.TortoiseTrainingComponent.Clvp = 1 -> AiDotNet.TextToSpeech.CodecBased.TortoiseTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.TortoiseTrainingComponent.Diffusion = 2 -> AiDotNet.TextToSpeech.CodecBased.TortoiseTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.TortoiseTrainingComponent.SpeechTokenizer = 3 -> AiDotNet.TextToSpeech.CodecBased.TortoiseTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.TortoiseTrainingComponent.UnivNet = 4 -> AiDotNet.TextToSpeech.CodecBased.TortoiseTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.CodecCodebooksInitialized.get -> bool
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.CreateVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate = 16000) -> AiDotNet.TextToSpeech.TtsVoice<T>!
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.EncodeToTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.GlobalLayerCount.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.HasPaperPipeline.get -> bool
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.LastCodecDiscriminatorLoss.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.LastCodecGeneratorLoss.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.LoadAuthorCodecDiscriminatorWeights(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.LoadAuthorWeights(string! languageModelPath, string! codecPath, string! codecPrefix = "") -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.LoadConvertedWeights(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.LocalLayerCount.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.SetCodecTrainingEpoch(int completedEpochs) -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.SynthesizeWithVoice(string! text, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate = 16000) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.TokenizePhones(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.TokenizeReleasedPhoneSequence(string! phones) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.AdversarialStartStep.get -> long
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.AdversarialStartStep.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.Bandwidths.get -> double[]!
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.Bandwidths.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.CommitmentWeight.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.CommitmentWeight.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.CompletedSteps.get -> long
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.CompletedSteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.DiscriminatorChannels.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.DiscriminatorChannels.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.DiscriminatorHops.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.DiscriminatorHops.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.Epoch.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.Epoch.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.EpochDecay.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.EpochDecay.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.FeatureMatchingWeight.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.FeatureMatchingWeight.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.FullFftSizes.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.FullFftSizes.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.FullHopSizes.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.FullHopSizes.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.FullStftWeight.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.FullStftWeight.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.FullWindowSizes.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.FullWindowSizes.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.LearningRate.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.LearningRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.SegmentSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.SegmentSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.SubFftSizes.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.SubFftSizes.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.SubHopSizes.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.SubHopSizes.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.SubStftWeight.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.SubStftWeight.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.SubWindowSizes.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.SubWindowSizes.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.Subbands.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.Subbands.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.UniAudioCodecTrainingOptions() -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.UniAudioCodecTrainingOptions(AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions! other) -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.WeightDecay.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions.WeightDecay.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.AudioEndToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.AudioEndToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.AudioPromptEndToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.AudioPromptEndToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.AudioPromptStartToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.AudioPromptStartToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.AudioStartToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.AudioStartToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.AudioTokenOffset.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.AudioTokenOffset.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecCodebookDecay.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecCodebookDecay.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecDeadCodeThreshold.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecDeadCodeThreshold.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecDimension.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecDimension.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecFilters.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecFilters.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecKMeansIterations.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecKMeansIterations.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecRatios.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecRatios.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecTotalQuantizers.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecTotalQuantizers.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecTraining.get -> AiDotNet.TextToSpeech.CodecBased.UniAudioCodecTrainingOptions!
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecTraining.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.ContinuousToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.ContinuousToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.EndToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.EndToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.GlobalFeedForwardDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.GlobalFeedForwardDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.GlobalStartToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.GlobalStartToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.IncludeCodecDiscriminators.get -> bool
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.IncludeCodecDiscriminators.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.JointVocabularySize.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.JointVocabularySize.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.LocalFeedForwardDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.LocalFeedForwardDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.LocalStartToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.LocalStartToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.MaxContextPatches.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.MaxContextPatches.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.MaximumGeneratedFrames.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.MaximumGeneratedFrames.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.MaximumLengthRatio.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.MaximumLengthRatio.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.MinimumGeneratedFrames.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.MinimumGeneratedFrames.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.MinimumLengthRatio.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.MinimumLengthRatio.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PadToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PadToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PhoneEndToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PhoneEndToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PhoneStartToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PhoneStartToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PhoneTokenOffset.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PhoneTokenOffset.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PhoneVocabularySize.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PhoneVocabularySize.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PrefixLanguageModel.get -> bool
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PrefixLanguageModel.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PromptSeconds.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.PromptSeconds.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.SamplingSeed.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.SamplingSeed.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.StartToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.StartToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.Temperature.get -> double
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.Temperature.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.TopK.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.TopK.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.TrainingComponent.get -> AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.TrainingComponent.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.TtsTaskToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.TtsTaskToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.UseReleasedTextFrontend.get -> bool
+AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.UseReleasedTextFrontend.set -> void
+AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent.LanguageModel = 0 -> AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent.UniversalCodec = 1 -> AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent
+AiDotNet.TextToSpeech.CodecBased.VALLEOptions.PrependBos.get -> bool
+AiDotNet.TextToSpeech.CodecBased.VALLEOptions.PrependBos.set -> void
+AiDotNet.TextToSpeech.CodecBased.VALLEOptions.StopOnMostLikelyEndToken.get -> bool
+AiDotNet.TextToSpeech.CodecBased.VALLEOptions.StopOnMostLikelyEndToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.LanguageCount.get -> int
+AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.LanguageCount.set -> void
+AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.SynthesisLanguage.get -> AiDotNet.TextToSpeech.CodecBased.VallEXLanguage?
+AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.SynthesisLanguage.set -> void
+AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.UseCommunityPhoneTokenizer.get -> bool
+AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.UseCommunityPhoneTokenizer.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.Framed(int[]! ids) -> int[]!
+AiDotNet.TextToSpeech.CodecBased.VallEXLanguage.Japanese = 2 -> AiDotNet.TextToSpeech.CodecBased.VallEXLanguage
+AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.CodecCodebooksInitialized.get -> bool
+AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.CreateVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, string! transcript, int sampleRate = 16000) -> AiDotNet.TextToSpeech.TtsVoice<T>!
+AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.DelayCodecTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.EditSpeech(string! targetTranscript, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! originalAudio, System.Collections.Generic.IReadOnlyList<(int StartFrame, int EndFrame)>! maskSpans, int sampleRate = 16000) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.EncodeToTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.HasPaperPipeline.get -> bool
+AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.LoadAuthorWeights(string! transformerPath, string! codecPath, string! codecPrefix = "") -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.LoadConvertedWeights(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.PhoneVocabularySize.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.SetPhoneVocabulary(System.Collections.Generic.IReadOnlyDictionary<string!, int>! vocabulary) -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.SynthesizeWithVoice(string! text, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, string! transcript, int sampleRate = 16000) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.TokenizeText(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.TransformerLayerCount.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.AudioEmbeddingDropout.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.AudioEmbeddingDropout.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.AudioPaddingToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.AudioPositionDropout.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.AudioPositionDropout.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.AudioVocabularySize.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.CodebookLossWeights.get -> double[]!
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.CodebookLossWeights.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.Codec.get -> AiDotNet.Audio.Generation.EnCodecOptions!
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.Codec.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.EdenEpoch.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.EdenEpoch.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.EdenStep.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.EdenStep.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.EdenWarmupSteps.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.EdenWarmupSteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.EmptyToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.EndOfGenerationToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.EndOfUtteranceToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.FeedForwardDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.FeedForwardDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.MaxMaskSpans.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.MaxMaskSpans.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.MaximumFramesPerPhone.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.MaximumFramesPerPhone.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.MaximumMaskFrames.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.MaximumMaskFrames.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.MinimumGapFrames.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.MinimumGapFrames.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.MinimumGeneratedFrames.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.MinimumGeneratedFrames.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.MinimumMaskFrames.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.MinimumMaskFrames.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.PseudoEpochSteps.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.PseudoEpochSteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.SampleBatchSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.SampleBatchSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.SamplingSeed.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.SamplingSeed.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.SilenceTokens.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.SilenceTokens.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.StopSilenceRepetition.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.StopSilenceRepetition.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.Temperature.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.Temperature.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TextEmbeddingDropout.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TextEmbeddingDropout.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TextPhonemizer.get -> System.Func<string!, System.Collections.Generic.IReadOnlyList<string!>!>?
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TextPhonemizer.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TextPositionDropout.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TextPositionDropout.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TextVocabularySize.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TextVocabularySize.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TopK.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TopK.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TopP.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TopP.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TotalTrainingSteps.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TotalTrainingSteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TransformerDropout.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.TransformerDropout.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.UseScaledAdam.get -> bool
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.UseScaledAdam.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.VoiceCraftOptions(AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions! other) -> void
+AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.AudioLayerCount.get -> int
+AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.CreateVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate, string! transcript, int[]! durations) -> AiDotNet.TextToSpeech.TtsVoice<T>!
+AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.DurationLayerCount.get -> int
+AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.HasPaperPipeline.get -> bool
+AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.Infill(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! normalizedMel, System.Collections.Generic.IReadOnlyList<int>! framePhoneIds, System.Collections.Generic.IReadOnlyList<bool>! mask) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.LoadConvertedWeights(string! path) -> void
+AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.MfaWordPhonemizer.get -> System.Func<string!, System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyList<string!>!>!>?
+AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.MfaWordPhonemizer.set -> void
+AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.NumberOfFunctionEvaluations.get -> int
+AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.PhoneTableSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.Phonemize(string! text) -> System.Collections.Generic.IReadOnlyList<string!>!
+AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.SetPhoneVocabulary(System.Collections.Generic.IReadOnlyDictionary<string!, int>! vocabulary) -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioActivationDropout.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioActivationDropout.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioAttentionDropout.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioAttentionDropout.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioConvPositionDepth.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioConvPositionDepth.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioConvPositionGroups.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioConvPositionGroups.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioConvPositionWidth.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioConvPositionWidth.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioFeedForwardDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioFeedForwardDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioHeads.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioHeads.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioModelDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.AudioModelDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.CodebookSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.CodebookSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.ConditionalDropout.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.ConditionalDropout.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationActivationDropout.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationActivationDropout.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationAttentionDropout.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationAttentionDropout.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationConvPositionDepth.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationConvPositionDepth.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationConvPositionGroups.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationConvPositionGroups.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationConvPositionWidth.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationConvPositionWidth.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationDropProbability.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationDropProbability.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationFeedForwardDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationFeedForwardDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationHeads.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationHeads.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationMaskMaximum.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationMaskMaximum.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationMaskMinimum.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationMaskMinimum.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationModelDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.DurationModelDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.FlowTimeScale.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.FlowTimeScale.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.GradientClipNorm.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.GradientClipNorm.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.GuidanceStrength.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.GuidanceStrength.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.LLMDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.LLMDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MaxCodecFrames.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MaxCodecFrames.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MaximumAudioFrames.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MaximumAudioFrames.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MaximumPhoneDuration.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MaximumPhoneDuration.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MelMaxFrequency.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MelMaxFrequency.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MelMean.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MelMean.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MelMinFrequency.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MelMinFrequency.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MelStandardDeviation.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.MelStandardDeviation.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumCodebooks.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumCodebooks.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumHeads.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumHeads.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumLLMLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.NumLLMLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.OdeSteps.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.OdeSteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.PhoneEmbeddingDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.PhoneEmbeddingDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.PhoneVocabulary.get -> System.Collections.Generic.Dictionary<string!, int>?
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.PhoneVocabulary.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.PhoneVocabularySize.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.PhoneVocabularySize.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.SamplingSeed.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.SamplingSeed.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.SigmaMinimum.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.SigmaMinimum.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.SpectrogramDropProbability.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.SpectrogramDropProbability.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.SpectrogramMaskMaximum.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.SpectrogramMaskMaximum.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.SpectrogramMaskMinimum.get -> double
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.SpectrogramMaskMinimum.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.TextEncoderDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.TextEncoderDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.TrainingUpdates.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.TrainingUpdates.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.UseNativeEnglishFallback.get -> bool
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.UseNativeEnglishFallback.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.VocoderInitialChannels.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.VocoderInitialChannels.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.VocoderResBlockDilations.get -> int[]![]!
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.VocoderResBlockDilations.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.VocoderResBlockKernels.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.VocoderResBlockKernels.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.VocoderUpsampleKernels.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.VocoderUpsampleKernels.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.VocoderUpsampleRates.get -> int[]!
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.VocoderUpsampleRates.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.WarmupSteps.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.WarmupSteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.WindowLength.get -> int
+AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions.WindowLength.set -> void
+AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.EncodePhonemes(string! phonemes) -> int[]!
+AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.LoadAuthorWeights(string! checkpoint, string! configuration) -> void
+AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.LoadVoice(string! path) -> void
+AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.SynthesizePhonemes(string! phonemes, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! voiceStyle, double speed = 1) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.TextPhonemizer.get -> System.Func<string!, string!>?
+AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.TextPhonemizer.set -> void
+AiDotNet.TextToSpeech.EndToEnd.KokoroOptions.Speed.get -> double
+AiDotNet.TextToSpeech.EndToEnd.KokoroOptions.Speed.set -> void
+AiDotNet.TextToSpeech.EndToEnd.KokoroOptions.UseNativeEnglishFallback.get -> bool
+AiDotNet.TextToSpeech.EndToEnd.KokoroOptions.UseNativeEnglishFallback.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCheckpointPaths
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCheckpointPaths.BigVgan.get -> string!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCheckpointPaths.BigVgan.init -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCheckpointPaths.DiTToCheckpointPaths() -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCheckpointPaths.DiffusionTransformer.get -> string!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCheckpointPaths.DiffusionTransformer.init -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCheckpointPaths.LengthPredictor.get -> string!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCheckpointPaths.LengthPredictor.init -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCheckpointPaths.MelVae.get -> string!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCheckpointPaths.MelVae.init -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCheckpointPaths.SpeechT5.get -> string!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCheckpointPaths.SpeechT5.init -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.AdversarialWeight.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.AdversarialWeight.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.CommitmentWeight.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.CommitmentWeight.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.DiTToCodecTrainingOptions() -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.DiTToCodecTrainingOptions(AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions! other) -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.DiscriminatorChannels.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.DiscriminatorChannels.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.DiscriminatorWindows.get -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.DiscriminatorWindows.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.FeatureMatchingWeight.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.FeatureMatchingWeight.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.LearningRate.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.LearningRate.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.ReconstructionWeight.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.ReconstructionWeight.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.ResolutionDivisors.get -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.ResolutionDivisors.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticDecoderLayers.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticDecoderLayers.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticFeedForwardDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticFeedForwardDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticHeads.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticHeads.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticKeyValueDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticKeyValueDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticModelDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticModelDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticVocabulary.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticVocabulary.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticWeight.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions.SemanticWeight.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToModelSize
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToModelSize.Base = 1 -> AiDotNet.TextToSpeech.FlowDiffusion.DiTToModelSize
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToModelSize.ExtraLarge = 3 -> AiDotNet.TextToSpeech.FlowDiffusion.DiTToModelSize
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToModelSize.Large = 2 -> AiDotNet.TextToSpeech.FlowDiffusion.DiTToModelSize
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToModelSize.Small = 0 -> AiDotNet.TextToSpeech.FlowDiffusion.DiTToModelSize
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.ComputeMel(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.CreateVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate, string? transcript = null) -> AiDotNet.TextToSpeech.TtsVoice<T>!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.CurrentStage.get -> AiDotNet.TextToSpeech.FlowDiffusion.DiTToTrainingStage
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.CurrentStage.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.LoadCodecSemanticDecoder(string! checkpoint) -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.LoadConvertedWeights(AiDotNet.TextToSpeech.FlowDiffusion.DiTToCheckpointPaths! checkpoints) -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.TokenizeText(string! text) -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.BigVganInitialChannels.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.BigVganInitialChannels.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.BigVganResidualDilations.get -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.BigVganResidualDilations.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.BigVganResidualKernels.get -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.BigVganResidualKernels.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.BigVganUpsampleKernels.get -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.BigVganUpsampleKernels.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.BigVganUpsampleRates.get -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.BigVganUpsampleRates.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.ClassifierFreeDropProbability.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.ClassifierFreeDropProbability.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.CodecTraining.get -> AiDotNet.TextToSpeech.FlowDiffusion.DiTToCodecTrainingOptions!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.CodecTraining.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.DiTFeedForwardMultiplier.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.DiTFeedForwardMultiplier.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.DiTHeads.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.DiTHeads.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.DiTHiddenDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.DiTHiddenDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.DiTLayers.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.DiTLayers.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.FullMaskProbability.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.FullMaskProbability.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.GuidanceScale.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.GuidanceScale.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.InferenceSteps.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.InferenceSteps.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.LatentDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.LatentDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.LengthFeedForwardDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.LengthFeedForwardDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.LengthHeads.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.LengthHeads.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.LengthHiddenDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.LengthHiddenDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.LengthLayers.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.LengthLayers.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.LengthTopK.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.LengthTopK.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.MaxLatentLength.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.MaxLatentLength.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.MaximumMaskRatio.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.MaximumMaskRatio.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.MelVaeChannels.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.MelVaeChannels.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.MelVaeDownsampleFactor.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.MelVaeDownsampleFactor.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.MelVaeMultipliers.get -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.MelVaeMultipliers.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.MinimumMaskRatio.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.MinimumMaskRatio.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.NoiseScheduleScale.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.NoiseScheduleScale.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.RvqDepth.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.RvqDepth.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.RvqVocabulary.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.RvqVocabulary.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.SamplingSeed.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.SamplingSeed.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.SentencePieceModelPath.get -> string?
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.SentencePieceModelPath.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextEncoderLayers.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextEncoderLayers.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextEosId.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextEosId.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextFeedForwardDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextFeedForwardDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextHeads.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextHeads.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextHiddenDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextHiddenDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextPadId.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextPadId.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextVocabulary.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TextVocabulary.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TrainingDiffusionSteps.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TrainingDiffusionSteps.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TrainingStage.get -> AiDotNet.TextToSpeech.FlowDiffusion.DiTToTrainingStage
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.TrainingStage.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions.UseSize(AiDotNet.TextToSpeech.FlowDiffusion.DiTToModelSize size) -> AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTSOptions!
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTrainingStage
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTrainingStage.Diffusion = 0 -> AiDotNet.TextToSpeech.FlowDiffusion.DiTToTrainingStage
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTrainingStage.LengthPredictor = 1 -> AiDotNet.TextToSpeech.FlowDiffusion.DiTToTrainingStage
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTrainingStage.MelVaePretraining = 2 -> AiDotNet.TextToSpeech.FlowDiffusion.DiTToTrainingStage
+AiDotNet.TextToSpeech.FlowDiffusion.DiTToTrainingStage.MelVaeSemanticFinetuning = 3 -> AiDotNet.TextToSpeech.FlowDiffusion.DiTToTrainingStage
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.AlphaBar(int step) -> double
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.CreateVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate, string! transcript) -> AiDotNet.TextToSpeech.TtsVoice<T>!
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.Edit(string! text, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! waveform, int startSample, int endSample, int speakerId = -1) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.LoadBertWeights(string! path) -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.LoadCheckpoints(AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths! checkpoints) -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.LoadConvertedWeights(string! path) -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.TokenizeText(string! text) -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.TrainingAlphaBar(int step) -> double
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths.<Clone>$() -> AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths!
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths.Bert.get -> string!
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths.Bert.init -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths.ConvertedUnet.get -> string!
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths.ConvertedUnet.init -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths.Deconstruct(out string! Bert, out string! ConvertedUnet) -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths.E3TTSCheckpointPaths(string! Bert, string! ConvertedUnet) -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths.Equals(AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths? other) -> bool
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.AdaptiveKernelCounts.get -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.AdaptiveKernelCounts.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.AttentionHeads.get -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.AttentionHeads.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertDropout.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertDropout.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertHeads.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertHeads.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertHiddenDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertHiddenDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertIntermediateDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertIntermediateDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertLayers.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertLayers.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertMaxPositions.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertMaxPositions.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertVocabularySize.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BertVocabularySize.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BlockChannels.get -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BlockChannels.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BlockKernelSizes.get -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BlockKernelSizes.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BlockRepetitions.get -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BlockRepetitions.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BlockStrides.get -> int[]!
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.BlockStrides.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.ConditionDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.ConditionDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.DefaultSpeakerId.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.DefaultSpeakerId.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.FreezeBert.get -> bool
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.FreezeBert.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.GroupNormEpsilon.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.GroupNormEpsilon.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.GroupNormGroups.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.GroupNormGroups.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.InferenceWaveformSamples.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.InferenceWaveformSamples.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.MinimumAlphaBar.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.MinimumAlphaBar.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.PaddingLossWeight.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.PaddingLossWeight.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.SamplingSeed.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.SamplingSeed.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.SilenceBlockSize.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.SilenceBlockSize.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.SilenceMagnitudeThreshold.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.SilenceMagnitudeThreshold.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.SpeakerCount.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.SpeakerCount.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.TimeEmbeddingDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.TimeEmbeddingDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.TrainingBetaEnd.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.TrainingBetaEnd.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.TrainingBetaStart.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.TrainingBetaStart.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.TrainingWaveformSamples.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.TrainingWaveformSamples.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.LoadPretrainedWeights(string! modelDirectory) -> void
+AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.WatermarkProcessor.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.WatermarkProcessor.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.ClassifierFreeGuidanceWeight.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.ClassifierFreeGuidanceWeight.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.DecoderReferenceSeconds.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.DecoderReferenceSeconds.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.EncoderReferenceSeconds.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.EncoderReferenceSeconds.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Exaggeration.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Exaggeration.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.GenerationTopP.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.GenerationTopP.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.KeyValueHeads.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.KeyValueHeads.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.LmFeedForwardDim.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.LmFeedForwardDim.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Lookahead.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Lookahead.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.MaxGeneratedSpeechTokens.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.MaxGeneratedSpeechTokens.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.MaxSpeechTokens.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.MaxSpeechTokens.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.MinP.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.MinP.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.PerceiverDropout.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.PerceiverDropout.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.PerceiverHeads.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.PerceiverHeads.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.PerceiverQueries.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.PerceiverQueries.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RepetitionPenalty.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RepetitionPenalty.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RmsEpsilon.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RmsEpsilon.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RopeHighFrequencyFactor.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RopeHighFrequencyFactor.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RopeLowFrequencyFactor.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RopeLowFrequencyFactor.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RopeOriginalMaxPositions.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RopeOriginalMaxPositions.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RopeScalingFactor.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RopeScalingFactor.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RopeTheta.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RopeTheta.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechConditionPromptTokens.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechConditionPromptTokens.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechLossWeight.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechLossWeight.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechStartToken.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechStartToken.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechStopToken.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechStopToken.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechVocabularySize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechVocabularySize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.StaticChunkSize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.StaticChunkSize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.T3SpeakerEmbeddingDim.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.T3SpeakerEmbeddingDim.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Temperature.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Temperature.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.TextLossWeight.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.TextLossWeight.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.TextStartToken.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.TextStartToken.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.TextStopToken.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.TextStopToken.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.TokenMelRatio.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.TokenMelRatio.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.TokenizerPath.get -> string?
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.TokenizerPath.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.VoiceEncoderHiddenDim.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.VoiceEncoderHiddenDim.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.VoiceEncoderLayers.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.VoiceEncoderLayers.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.VoiceEncoderMelChannels.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.VoiceEncoderMelChannels.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.VoiceEncoderPartialFrames.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.VoiceEncoderPartialFrames.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.VoiceEncoderPartialRate.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.VoiceEncoderPartialRate.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions.MinReferenceDurationSec.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.CosyVoiceCloneOptions.MinReferenceDurationSec.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.EncodeText(string! text) -> int[]!
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.ExtractSpeakerEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.HasPaperPipeline.get -> bool
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.LoadDecoderCheckpoints(string! encodecSafetensors, string! multibandCheckpoint) -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.LoadEnhancerCheckpoint(string! checkpoint) -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.LoadLanguageModelCheckpoints(string! firstStage, string! secondStage) -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.LoadPretrainedWeights(string! modelDirectory, string! encodecSafetensors, string! multibandCheckpoint) -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.LoadPretrainedWeights(string! modelDirectory, string! encodecSafetensors, string! multibandCheckpoint, string! deepFilterCheckpoint) -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.LoadSpeakerEncoderCheckpoint(string! checkpoint) -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.SynthesizeWithVoice(string! text, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio, int sampleRate) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.EnhanceOutput.get -> bool
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.EnhanceOutput.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.FineTuneLastBlocks.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.FineTuneLastBlocks.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.FirstStageContext.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.FirstStageContext.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.FirstStageTemperature.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.FirstStageTemperature.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.FirstStageTopK.get -> int?
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.FirstStageTopK.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.FirstStageTopP.get -> double?
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.FirstStageTopP.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.MaximumNewTokens.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.MaximumNewTokens.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.PromptGuidance.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.PromptGuidance.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.RawDecoderOutput.get -> bool
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.RawDecoderOutput.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.ReferenceSampleRate.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.ReferenceSampleRate.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SecondStageContext.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SecondStageContext.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SecondStageHeads.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SecondStageHeads.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SecondStageTemperature.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SecondStageTemperature.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SecondStageTopK.get -> int?
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SecondStageTopK.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SpeakerEncoderLayers.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SpeakerEncoderLayers.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SpeakerGuidance.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SpeakerGuidance.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SpeakerHiddenDim.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SpeakerHiddenDim.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SpeakerMelChannels.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.SpeakerMelChannels.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.TrainingDropout.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.TrainingDropout.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>.BaseSynthesizer.get -> AiDotNet.TextToSpeech.Interfaces.ITtsModel<T>!
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>.BaseSynthesizer.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>.ConvertVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sourceEmbedding, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targetEmbedding, double tau = 0.3, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? noise = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>.LoadConverterCheckpoint(string! path) -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceOptions.Training.get -> AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions!
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceOptions.Training.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.Beta1.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.Beta1.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.Beta2.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.Beta2.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.DiscriminatorWidthDivisor.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.DiscriminatorWidthDivisor.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.Epsilon.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.Epsilon.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.FeatureMatchingWeight.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.FeatureMatchingWeight.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IncludeTrainingComponents.get -> bool
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IncludeTrainingComponents.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IpaDropout.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IpaDropout.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IpaFilterChannels.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IpaFilterChannels.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IpaHeads.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IpaHeads.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IpaKernel.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IpaKernel.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IpaLayers.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IpaLayers.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IpaVocabularySize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.IpaVocabularySize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.KlWeight.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.KlWeight.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.LearningRate.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.LearningRate.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.LearningRateDecay.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.LearningRateDecay.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.MelChannels.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.MelChannels.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.MelLossWeight.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.MelLossWeight.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.MelMaxFrequency.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.MelMaxFrequency.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.OpenVoiceTrainingOptions() -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.OpenVoiceTrainingOptions(AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions! other) -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.SamplingSeed.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.SamplingSeed.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.SegmentFrames.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.SegmentFrames.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.TrainingSteps.get -> long
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.TrainingSteps.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.UpdatesPerEpoch.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.UpdatesPerEpoch.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.WeightDecay.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions.WeightDecay.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2<T>.BaseSynthesizer.get -> AiDotNet.TextToSpeech.Interfaces.ITtsModel<T>!
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2<T>.BaseSynthesizer.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2<T>.ConvertVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sourceEmbedding, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! targetEmbedding, double tau = 0.3, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? noise = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2<T>.LoadConverterCheckpoint(string! path) -> void
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.Training.get -> AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceTrainingOptions!
+AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.Training.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>.SynthesizeWithVoice(string! text, string! referenceText, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.VoiceCloning.SeedTTSCloneOptions.MinReferenceDurationSec.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.SeedTTSCloneOptions.MinReferenceDurationSec.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.SeedTTSCloneOptions.ReferenceText.get -> string!
+AiDotNet.TextToSpeech.VoiceCloning.SeedTTSCloneOptions.ReferenceText.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.SeedTTSCloneOptions.SeedTTSCloneOptions(AiDotNet.TextToSpeech.VoiceCloning.SeedTTSCloneOptions! other) -> void
+AiDotNet.TextToSpeech.VoiceCloning.VALLEXClone<T>.SynthesizeWithVoice(string! text, string! referenceText, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions.MinReferenceDurationSec.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions.MinReferenceDurationSec.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions.ReferenceText.get -> string!
+AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions.ReferenceText.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions.VALLEXCloneOptions(AiDotNet.TextToSpeech.CodecBased.VALLEXOptions! other) -> void
+AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions.VALLEXCloneOptions(AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions! other) -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.ConditioningAttentionBlocks.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.ConditioningLatentCount.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.CreateVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.TextToSpeech.TtsVoice<T>!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.DecodeTokensToMel(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokens) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.DvaeDownsampleFactor.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.ExtractConditioningLatents(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.ExtractSpeakerEmbedding(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.HasPaperPipeline.get -> bool
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.LoadAuthorWeights(string! modelCheckpoint, string! dvaeCheckpoint, string! tokenizerPath, string! melStatsPath) -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.LoadConvertedWeights(string! path) -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.LoadMelStats(string! path) -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.LoadReferenceWeights(string! convertedCheckpointPath, string! tokenizerPath, string! melStatsPath) -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.LoadTokenizer(string! path) -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.Synthesize(string! text, string! language, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.SynthesizeTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! textTokens, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! referenceAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.TokenizeText(string! text, string? language = null) -> int[]!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.TokenizerLoaded.get -> bool
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.TransformerLayerCount.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2CloneOptions.MinReferenceDurationSec.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2CloneOptions.MinReferenceDurationSec.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.AcousticTokenRate.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.AudioLossWeight.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.AudioLossWeight.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.AudioVocabularySize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.AudioVocabularySize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningBlocks.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningBlocks.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningChunkSeconds.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningChunkSeconds.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningFftSize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningFftSize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningHeads.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningHeads.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningHopSize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningHopSize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningSeconds.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningSeconds.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningWindowSize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ConditioningWindowSize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DecoderInitialChannels.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DecoderInitialChannels.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DecoderResblockDilations.get -> int[]![]!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DecoderResblockDilations.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DecoderResblockKernels.get -> int[]!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DecoderResblockKernels.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DecoderUpsampleKernels.get -> int[]!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DecoderUpsampleKernels.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DecoderUpsampleRates.get -> int[]!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DecoderUpsampleRates.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeCodebookDim.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeCodebookDim.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeFftSize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeFftSize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeHiddenDim.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeHiddenDim.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeHopSize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeHopSize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeLayers.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeLayers.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeResidualBlocks.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeResidualBlocks.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeWindowSize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.DvaeWindowSize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.GptCodeStride.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.GptCodeStride.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.GradientAccumulationSteps.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.GradientAccumulationSteps.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.InputSampleRate.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.InputSampleRate.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.Language.get -> string!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.Language.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.LearningRateGamma.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.LearningRateGamma.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.LearningRateMilestones.get -> int[]!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.LearningRateMilestones.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.LengthPenalty.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.LengthPenalty.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.MaxPromptTokens.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.MaxPromptTokens.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.MaximumReferenceSeconds.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.MaximumReferenceSeconds.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.MelMaxFrequency.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.MelMaxFrequency.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.MelStatsPath.get -> string?
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.MelStatsPath.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.MinimumConditioningChunkSeconds.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.MinimumConditioningChunkSeconds.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.PaperTextVocabularySize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.PaperTextVocabularySize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.PerceiverDepth.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.PerceiverDepth.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.PerceiverFeedForwardMultiple.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.PerceiverFeedForwardMultiple.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.PerceiverHeadDim.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.PerceiverHeadDim.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.PerceiverHeads.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.PerceiverHeads.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.PerceiverLatents.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.PerceiverLatents.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.RepetitionPenalty.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.RepetitionPenalty.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.SamplingSeed.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.SamplingSeed.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.SpeakerEncoderFilters.get -> int[]!
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.SpeakerEncoderFilters.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.Speed.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.Speed.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.StartAudioToken.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.StartAudioToken.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.StartTextToken.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.StartTextToken.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.StopAudioToken.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.StopAudioToken.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.StopTextToken.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.StopTextToken.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.Temperature.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.Temperature.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.TextLossWeight.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.TextLossWeight.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.TextVocabularySize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.TextVocabularySize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.TokenizerPath.get -> string?
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.TokenizerPath.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.TopK.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.TopK.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.TopP.get -> double
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.TopP.set -> void
+override AiDotNet.NeuralNetworks.Layers.TorchLstmCellLayer<T>.GetSubLayers() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>!
+override AiDotNet.NeuralNetworks.Layers.TorchLstmCellLayer<T>.RequiresMultipleInputs.get -> bool
+override AiDotNet.NeuralNetworks.Layers.TorchLstmCellLayer<T>.ResetState() -> void
+override AiDotNet.NeuralNetworks.Layers.TorchLstmCellLayer<T>.SupportsTraining.get -> bool
+override AiDotNet.TextToSpeech.Classic.AdaSpeech<T>.TargetWindowSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice2<T>.MelMaximumFrequency.get -> double
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.BuildFlow(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>! layers, System.Random! initialization) -> void
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.BuildLanguageModel(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>! layers, System.Random! initialization) -> void
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.BuildSpeechTokenizer(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>! layers, System.Random! initialization) -> void
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.BuildVocoder(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>! layers, System.Random! initialization) -> void
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.Detokenize(System.Collections.Generic.IEnumerable<int>! ids) -> string!
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.FlowTrainingLoss(System.Collections.Generic.IReadOnlyList<int>! speech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! xvector, bool training, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.ForwardSpeakerEncoder(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! features) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.GenerateWithLanguageModel(System.Collections.Generic.IReadOnlyList<int>! text, System.Collections.Generic.IReadOnlyList<int>! promptText, System.Collections.Generic.IReadOnlyList<int>! promptSpeech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? xvector, System.Random! random) -> int[]!
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.LanguageModelLoss(System.Collections.Generic.IReadOnlyList<int>! text, System.Collections.Generic.IReadOnlyList<int>! speech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! xvector, bool training, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.LoadFlowWeights(System.Func<string!, int[]!, double[]!>! read) -> void
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.LoadLanguageModel(System.Func<string!, int[]!, double[]!>! read) -> void
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.LoadSpeakerEncoderCheckpoint(string! modelDirectory) -> void
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.LoadSpeechTokenizerWeights(string! modelDirectory, string! speechTokenizerFile) -> void
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.LoadVocoderWeights(System.Func<string!, int[]!, double[]!>! read) -> void
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.MelMaximumFrequency.get -> double
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.Settings.get -> AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions!
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.SpeechTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate) -> int[]!
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.TextVocabularySize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.Tokenize(string! text) -> int[]!
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.TokensToMel(System.Collections.Generic.IReadOnlyList<int>! tokens, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.VocoderDecode(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! source) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.VocoderForward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.VocoderPredictF0(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.VocoderSource(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! f0, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.CodecTokenCodebooks.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.CodecTokenVocabulary.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>.TrainsOnSampleObjective.get -> bool
+override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.CodecTokenCodebooks.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.CodecTokenVocabulary.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.OutputFeatureWidth.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>.TrainsOnSampleObjective.get -> bool
+override AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.CodecTokenCodebooks.get -> int
+override AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.CodecTokenVocabulary.get -> int
+override AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.RequiredVoice.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>.TrainsOnSampleObjective.get -> bool
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.CodecTokenCodebooks.get -> int
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.CodecTokenVocabulary.get -> int
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.MaxGradNormValue.get -> double
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.OutputFeatureWidth.get -> int
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.RequiredVoice.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.CodecBased.UniAudio<T>.TrainsOnSampleObjective.get -> bool
+override AiDotNet.TextToSpeech.CodecBased.VALLEX<T>.EncodePhonemes(System.Collections.Generic.IEnumerable<string!>! symbols) -> int[]!
+override AiDotNet.TextToSpeech.CodecBased.VALLEX<T>.FixedTokenVocabulary.get -> System.Collections.Generic.IReadOnlyList<string!>?
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.CodecTokenCodebooks.get -> int
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.CodecTokenVocabulary.get -> int
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.GetExtraTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.GetGeneratedNestedNetworkLayerViews() -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>?>!
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.RequiredVoice.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>.TrainsOnSampleObjective.get -> bool
+override AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.CodecTokenCodebooks.get -> int
+override AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.CodecTokenVocabulary.get -> int
+override AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.OnMutableConstructorConfigurationRestored() -> void
+override AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.TargetFftSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.TargetWindowSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.CodecBased.Voicebox<T>.TrainsOnSampleObjective.get -> bool
+override AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared) -> AiDotNet.Models.Parameters.ParameterSlotRole
+override AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.TargetFftSize.get -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>.TrainsOnSampleObjective.get -> bool
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared) -> AiDotNet.Models.Parameters.ParameterSlotRole
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>.TrainsOnSampleObjective.get -> bool
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths.Equals(object? obj) -> bool
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths.GetHashCode() -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths.ToString() -> string!
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.BuildLanguageModel(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>! layers, System.Random! initialization) -> void
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.CreateVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate, string? transcript = null) -> AiDotNet.TextToSpeech.TtsVoice<T>!
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.Detokenize(System.Collections.Generic.IEnumerable<int>! ids) -> string!
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.GenerateWithLanguageModel(System.Collections.Generic.IReadOnlyList<int>! text, System.Collections.Generic.IReadOnlyList<int>! promptText, System.Collections.Generic.IReadOnlyList<int>! promptSpeech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? xvector, System.Random! random) -> int[]!
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.LanguageModelLoss(System.Collections.Generic.IReadOnlyList<int>! text, System.Collections.Generic.IReadOnlyList<int>! speech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! xvector, bool training, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.LoadLanguageModel(System.Func<string!, int[]!, double[]!>! read) -> void
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.RequiredVoice.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.SetTrainingMode(bool isTraining) -> void
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.Settings.get -> AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions!
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.TextVocabularySize.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.Tokenize(string! text) -> int[]!
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.CodecTokenCodebooks.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.SetTrainingMode(bool isTraining) -> void
+override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.TrainsOnSampleObjective.get -> bool
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>.OnMutableConstructorConfigurationRestored() -> void
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>.TrainsOnSampleObjective.get -> bool
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoice<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> bool
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2<T>.OnMutableConstructorConfigurationRestored() -> void
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2<T>.TrainsOnSampleObjective.get -> bool
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> bool
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.CodecTokenCodebooks.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.CodecTokenVocabulary.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.RequiredSupervision.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.RequiredVoice.get -> AiDotNet.TextToSpeech.TtsSupervision
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.TrainsOnSampleObjective.get -> bool
+static AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.CheckpointReader(string! path) -> System.Func<string!, int[]!, double[]!>!
+static AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.OfficialV1() -> AiDotNet.TextToSpeech.CodecBased.UniAudioOptions!
+static AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.CommunityCheckpoint() -> AiDotNet.TextToSpeech.CodecBased.VALLEXOptions!
+static AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.Official330M() -> AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions!
+static AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.Official330MTtsEnhanced() -> AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions!
+static AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.Official830M() -> AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions!
+static AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths.operator !=(AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths? left, AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths? right) -> bool
+static AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths.operator ==(AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths? left, AiDotNet.TextToSpeech.FlowDiffusion.E3TTSCheckpointPaths? right) -> bool
+static AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.NormalizeText(string! text) -> string!
+static AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions.CommunityCheckpoint() -> AiDotNet.TextToSpeech.VoiceCloning.VALLEXCloneOptions!
+static AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.NormalizeText(string! text, string! language) -> string!
+static AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.OfficialGptFineTuning() -> AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options!
+static readonly AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.ReleasedLanguages -> string![]!
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.BuildFlow(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>! layers, System.Random! initialization) -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.BuildSpeechTokenizer(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>! layers, System.Random! initialization) -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.BuildVocoder(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>! layers, System.Random! initialization) -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.CreateVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate, string? transcript = null) -> AiDotNet.TextToSpeech.TtsVoice<T>!
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.FlowTrainingLoss(System.Collections.Generic.IReadOnlyList<int>! speech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! xvector, bool training, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.ForwardSpeakerEncoder(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! features) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.LoadFlowWeights(System.Func<string!, int[]!, double[]!>! read) -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.LoadSpeakerEncoderCheckpoint(string! modelDirectory) -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.LoadSpeakerEncoderWeights(System.Func<string!, int[]!, double[]!>! read) -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.LoadSpeechTokenizerWeights(string! modelDirectory, string! speechTokenizerFile) -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.LoadVocoderWeights(System.Func<string!, int[]!, double[]!>! read) -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.MelMaximumFrequency.get -> double
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.MelToAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.SpeechTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate) -> int[]!
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.TokensToMel(System.Collections.Generic.IReadOnlyList<int>! tokens, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.VocoderDecode(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! source) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.VocoderForward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.VocoderPredictF0(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.VocoderSource(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! f0, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+virtual AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.EncodePhonemes(System.Collections.Generic.IEnumerable<string!>! symbols) -> int[]!
+virtual AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.FixedTokenVocabulary.get -> System.Collections.Generic.IReadOnlyList<string!>?
+override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.OnMutableConstructorConfigurationRestored() -> void
+static AiDotNet.NeuralNetworks.Layers.LayerInputDomain.Indices(int minInclusive, int maxExclusive) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.LoadAuthorConfiguration(string! configuration) -> void
+override AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain

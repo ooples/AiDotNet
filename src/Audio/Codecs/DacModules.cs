@@ -15,9 +15,9 @@ internal static class DacOps
     /// but under <c>torch.nn.utils.weight_norm</c> the weight is recomputed from g and V on every forward, so only the
     /// zero bias takes effect.</summary>
     public static NormedConv1DLayer<T> Conv<T>(int input, int output, int kernel, int stride, int dilation, int padding, bool transposed,
-        List<LayerBase<T>> owner)
+        List<LayerBase<T>> owner, int outputPadding = 0)
     {
-        var conv = new NormedConv1DLayer<T>(input, output, kernel, stride, dilation, 1, padding, transposed, ConvolutionNormalization.Weight);
+        var conv = new NormedConv1DLayer<T>(input, output, kernel, stride, dilation, 1, padding, transposed, ConvolutionNormalization.Weight, outputPadding: outputPadding);
         if (!transposed) conv.ZeroBias();
         owner.Add(conv);
         return conv;
@@ -161,7 +161,7 @@ internal sealed class DacDecoder<T>
     private readonly List<(SnakeLayer<T> Snake, NormedConv1DLayer<T> Up, DacResidualUnit<T>[] Units)> _blocks = new();
     private readonly SnakeLayer<T> _snake;
 
-    public DacDecoder(IEngine engine, int latent, int channels, int[] rates, List<LayerBase<T>> owner)
+    public DacDecoder(IEngine engine, int latent, int channels, int[] rates, List<LayerBase<T>> owner, bool exactStrideLengths = false)
     {
         _engine = engine;
         _first = DacOps.Conv<T>(latent, channels, 7, 1, 1, 3, false, owner);
@@ -172,7 +172,7 @@ internal sealed class DacDecoder<T>
             output = channels >> (i + 1);
             var snake = new SnakeLayer<T>(input);
             owner.Add(snake);
-            var up = DacOps.Conv<T>(input, output, 2 * s, s, 1, (s + 1) / 2, true, owner);
+            var up = DacOps.Conv<T>(input, output, 2 * s, s, 1, (s + 1) / 2, true, owner, outputPadding: exactStrideLengths ? s % 2 : 0);
             var units = new[] { 1, 3, 9 }.Select(dilation => new DacResidualUnit<T>(engine, output, dilation, owner)).ToArray();
             _blocks.Add((snake, up, units));
         }

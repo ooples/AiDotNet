@@ -105,3 +105,21 @@ Add `--write`:
 
 For the codec fixtures this keeps the stored weights and input audio and rewrites only the outputs, so the C# tests
 keep testing the same model. Run the matching C# tests afterwards, and look at `git diff` before committing.
+
+## DiTTo diffusion reference
+
+The DiTTo diffusion reference is a standalone generator and writes its fixture directly:
+
+```
+python tools/reference-data/ditto_diffusion_reference.py path/to/DiT/models.py
+```
+
+Use the original `facebookresearch/DiT` revision `ed81ce2229091fd4ecc9a223645f95cf379d582b` for `models.py`. With PyTorch 2.6.0, this generates the complete conditioned/unconditioned field, all 63 parameter gradients, and six complete neural DDIM sampling trajectories. The fixture records the author timestep file hash and separates original float32 timestep features from the labeled double-operator comparison. This is an independent DiTTo equation reference; see [the sampling review](../../docs/text-to-speech/ditto-sampling-review.md) for the numerical policies and limits.
+
+## CosyVoice 3 DiffRO reference
+
+```
+python tools/reference-data/cosyvoice_diffro_reference.py
+```
+
+With PyTorch 2.6.0 and transformers 5.2.0, this standalone generator writes `cosyvoice_diffro_reference.json`. Original Qwen and T5 forwards supply the complete policy/reward outputs, all 43 learned-tensor gradients, frozen-reference checks, and an actual reward-pretraining SGD step. Package versions and source-file hashes are recorded. The T5 token-to-text reward is an explicit native realization; original CosyVoice reward architecture, weights and fitted hyperparameters are not claimed. See [the DiffRO review](../../docs/text-to-speech/cosyvoice-diffro-review.md).

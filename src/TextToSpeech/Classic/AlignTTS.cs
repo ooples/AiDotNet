@@ -16,12 +16,12 @@ using AiDotNet.TextToSpeech.Interfaces;
 namespace AiDotNet.TextToSpeech.Classic;
 
 /// <summary>
-/// AlignTTS: alignment-free non-autoregressive TTS using feed-forward transformer with mix density network alignment.
+/// AlignTTS: alignment-free non-autoregressive TTS using a feed-forward Transformer and mix density network alignment.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para><b>References:</b>
-/// <list type="bullet"><item>Paper: "AlignTTS: Efficient Feed-Forward Text-to-Speech Model without Explicit Alignment" (Zeng et al., 2020)</item></list></para>
+/// <list type="bullet"><item>Paper: "AlignTTS: Efficient Feed-Forward Text-to-Speech System without Explicit Alignment" (Zeng et al., 2020)</item></list></para>
 /// <para><b>For Beginners:</b> AlignTTS is a non-autoregressive text-to-speech model that converts text input into speech audio output.</para>
 /// <example>
 /// <code>
@@ -46,7 +46,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper(
-    "AlignTTS: Efficient Feed-Forward Text-to-Speech Model without Explicit Alignment",
+    "AlignTTS: Efficient Feed-Forward Text-to-Speech System without Explicit Alignment",
     "https://arxiv.org/abs/2003.01950",
     Year = 2020,
     Authors = "Zeng et al."
@@ -66,6 +66,8 @@ namespace AiDotNet.TextToSpeech.Classic;
                 Phase = TrainingPhase.FineTuning,
                 Source = "Zeng et al. 2020, Sec. 4.1: fine-tuning the whole model uses a fixed learning "
                         + "rate of 1e-4 over 80K steps.")]
+[ArchitectureFromPaper("https://arxiv.org/abs/1905.09263",
+    "AlignTTS uses FastSpeech-style feed-forward Transformer encoder blocks while learning alignment without an external duration aligner (Zeng et al. 2020, sections 3.1 and 3.2).")]
 public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingObjectiveProvider<T>
 {
     private readonly AlignTTSOptions _options;
@@ -190,6 +192,14 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
+    protected override Tensor<T> PreprocessText(string text)
+    {
+        var ids = FrontEnd.ClassicTtsText.Characters(text, _options.TextSymbols, _options.VocabSize, _options.MaxTextLength);
+        var tokens = new Tensor<T>(new[] { ids.Length });
+        for (int i = 0; i < ids.Length; i++) tokens[i] = NumOps.FromDouble(ids[i]);
+        return tokens;
+    }
+
     /// <summary>
     /// Inference (§3.3): the character-side blocks encode the text, the duration predictor sets each character's
     /// length, the length regulator expands, and the mel-side blocks produce the spectrogram.
@@ -278,6 +288,9 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
     /// (2) the mel MSE on the mel side with Viterbi durations from the MDN; (3) both, durations recomputed each
     /// step; (4) the log-duration MSE of the duration predictor against the MDN's durations.
     /// </summary>
+    internal Tensor<T> AlignmentObjective(Tensor<T> logLikelihood)
+        => Engine.TensorNegate(MonotonicAlignment.LogLikelihood(logLikelihood));
+
     private Tensor<T> PhaseObjective(Tensor<T> tokens, Tensor<T> mel)
     {
         var melFrames = mel.Rank == 3 ? Engine.Reshape(mel, new[] { mel.Shape[1], mel.Shape[2] }) : mel;
@@ -285,8 +298,8 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
         var hidden = RunEncoder(tokens);
         var characterHidden = hidden.Rank == 3 ? Engine.Reshape(hidden, new[] { hidden.Shape[1], hidden.Shape[2] }) : hidden;
 
-        Tensor<T> AlignmentLoss(Tensor<T> logLikelihood)
-            => Engine.TensorMultiplyScalar(MonotonicAlignment.LogLikelihood(logLikelihood), NumOps.FromDouble(-1.0 / frames));
+        // Eq. 4/8 specifies the sequence NLL. Dividing by mel frames silently changes its weight against mel MSE.
+        Tensor<T> AlignmentLoss(Tensor<T> logLikelihood) => AlignmentObjective(logLikelihood);
 
         switch (CurrentPhase)
         {

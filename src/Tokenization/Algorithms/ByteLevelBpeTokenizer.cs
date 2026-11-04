@@ -2,6 +2,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Globalization;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -15,6 +16,7 @@ namespace AiDotNet.Tokenization.Algorithms
     /// normalizer, the <c>Split</c> pre-tokenizer's regular expression (isolated pieces) or ByteLevel's own, the GPT-2
     /// byte alphabet, and BPE by merge rank (with <c>ignore_merges</c>, a piece that is itself in the vocabulary is
     /// kept whole); with special tokens, the <c>TemplateProcessing</c> post-processor's single-sequence template.
+    /// Unicode BPE with the Whitespace pre-tokenizer (XTTS) uses scalar symbols instead of the byte alphabet.
     /// </summary>
     internal sealed class ByteLevelBpeTokenizer
     {
@@ -34,6 +36,8 @@ namespace AiDotNet.Tokenization.Algorithms
         private readonly bool _dropUnmatched;
         private readonly bool _nfc;
         private readonly bool _ignoreMerges;
+        private readonly bool _byteLevel;
+        private readonly int _unknownToken;
         // Pre-tokenizers before the regular expression, in order: Digits (individual) and Punctuation, each isolating.
         private readonly string[] _isolators;
         private readonly Dictionary<byte, char> _byteToChar = BpeTokenizer.BuildByteToUnicode();
@@ -45,9 +49,11 @@ namespace AiDotNet.Tokenization.Algorithms
         public ByteLevelBpeTokenizer(Dictionary<string, int> vocabulary, Dictionary<string, int> merges,
             IEnumerable<(string Content, int Id, bool Special)> addedTokens, string? splitPattern, bool nfc, bool ignoreMerges,
             int[]? templatePrefix = null, int[]? templateSuffix = null, IEnumerable<string>? isolators = null,
-            IEnumerable<string>? leftStripped = null, IEnumerable<string>? rightStripped = null, bool dropUnmatched = false)
+            IEnumerable<string>? leftStripped = null, IEnumerable<string>? rightStripped = null, bool dropUnmatched = false, bool byteLevel = true, int unknownToken = -1)
         {
             _dropUnmatched = dropUnmatched;
+            _byteLevel = byteLevel;
+            _unknownToken = unknownToken;
             _leftStripped = new HashSet<string>(leftStripped ?? Array.Empty<string>(), StringComparer.Ordinal);
             _rightStripped = new HashSet<string>(rightStripped ?? Array.Empty<string>(), StringComparer.Ordinal);
             _isolators = (isolators ?? Array.Empty<string>()).ToArray();
@@ -98,7 +104,7 @@ namespace AiDotNet.Tokenization.Algorithms
                     right = text.Substring(space + 1);
                 }
                 string key = left + "\u0001" + right;
-                if (!merges.ContainsKey(key)) merges[key] = rank;
+                merges[key] = rank; // HF's merged multilingual BPE files retain the last occurrence's rank.
                 rank++;
             }
             bool ignoreMerges = (bool?)model["ignore_merges"] ?? false;
@@ -111,6 +117,7 @@ namespace AiDotNet.Tokenization.Algorithms
                 else throw new NotSupportedException($"Normalizer {(string?)n["type"]} is not supported.");
             }
             bool dropUnmatched = false;
+            bool unicodeWhitespace = false;
             var added = new List<(string, int, bool)>();
             var leftStripped = new List<string>();
             var rightStripped = new List<string>();
@@ -147,6 +154,10 @@ namespace AiDotNet.Tokenization.Algorithms
                         if (((string?)step["behavior"] ?? "Isolated") != "Isolated") throw new NotSupportedException("Only an isolated Punctuation split is supported.");
                         isolators.Add("Punctuation");
                         break;
+                    case "Whitespace":
+                        if (steps.Count != 1) throw new NotSupportedException("Unicode Whitespace BPE must be the single pre-tokenizer.");
+                        unicodeWhitespace = true;
+                        break;
                     case "ByteLevel":
                         if ((bool?)step["add_prefix_space"] == true) throw new NotSupportedException("ByteLevel's add_prefix_space is not supported.");
                         if ((bool?)step["use_regex"] != false) pattern ??= Gpt2Pattern;
@@ -155,6 +166,11 @@ namespace AiDotNet.Tokenization.Algorithms
                         throw new NotSupportedException($"Pre-tokenizer {(string?)step["type"]} is not supported.");
                 }
             }
+            if (unicodeWhitespace && (!string.IsNullOrEmpty((string?)model["continuing_subword_prefix"])
+                || !string.IsNullOrEmpty((string?)model["end_of_word_suffix"])
+                || (bool?)model["fuse_unk"] == true || (bool?)model["byte_fallback"] == true || root["decoder"] is JObject))
+                throw new NotSupportedException("Unicode Whitespace BPE requires plain symbols, unfused unknowns and no decoder.");
+            int unknownToken = vocabulary.TryGetValue((string?)model["unk_token"] ?? string.Empty, out int unknownId) ? unknownId : -1;
             // The post-processor: ByteLevel (offsets only) and TemplateProcessing's single-sequence template.
             var prefix = new List<int>();
             var suffix = new List<int>();
@@ -185,7 +201,7 @@ namespace AiDotNet.Tokenization.Algorithms
                 }
             }
             return new ByteLevelBpeTokenizer(vocabulary, merges, added, pattern, nfc, ignoreMerges, prefix.ToArray(), suffix.ToArray(), isolators,
-                leftStripped, rightStripped, dropUnmatched);
+                leftStripped, rightStripped, dropUnmatched, byteLevel: !unicodeWhitespace, unknownToken: unknownToken);
         }
 
         /// <summary>The largest token id plus one.</summary>
@@ -241,6 +257,10 @@ namespace AiDotNet.Tokenization.Algorithms
         /// <summary>The text of ids, added tokens included unless <paramref name="skipSpecial"/>.</summary>
         public string Decode(IEnumerable<int> ids, bool skipSpecial = false)
         {
+            if (!_byteLevel)
+                return string.Join(" ", ids.Select(id => _tokens.TryGetValue(id, out var token) ? token
+                    : throw new ArgumentOutOfRangeException(nameof(ids), id, "Unknown token id."))
+                    .Where(token => !skipSpecial || !_special.Contains(token)));
             var output = new StringBuilder();
             var bytes = new List<byte>();
             void Flush()
@@ -311,6 +331,11 @@ namespace AiDotNet.Tokenization.Algorithms
 
         private void EncodeSplit(string text, List<int> ids)
         {
+            if (!_byteLevel)
+            {
+                foreach (var piece in UnicodeWhitespacePieces(text)) ids.AddRange(_cache.GetOrAdd(piece, Bpe));
+                return;
+            }
             if (text.Length == 0) return;
             int position = 0;
             foreach (Match match in _split.Matches(text))
@@ -323,10 +348,68 @@ namespace AiDotNet.Tokenization.Algorithms
             if (position < text.Length && !_dropUnmatched) ids.AddRange(_cache.GetOrAdd(text.Substring(position), Bpe));
         }
 
+        private static int ScalarLength(string text, int index)
+        {
+            if (!char.IsSurrogate(text[index])) return 1;
+            if (char.IsHighSurrogate(text[index]) && index + 1 < text.Length && char.IsLowSurrogate(text[index + 1])) return 2;
+            throw new ArgumentException("Unicode BPE input contains an unpaired surrogate.", nameof(text));
+        }
+
+        private static IEnumerable<string> UnicodeSymbols(string text)
+        {
+            for (int i = 0; i < text.Length;)
+            {
+                int length = ScalarLength(text, i);
+                yield return text.Substring(i, length);
+                i += length;
+            }
+        }
+
+        // Hugging Face Whitespace uses Rust regex \w+|[^\w\s]+: Unicode letters, marks, letter numbers,
+        // decimal digits, connector punctuation and join controls form words. Inspect scalar categories so
+        // combining Hindi vowels and supplementary-plane letters are never split into UTF-16 code units.
+        private static IEnumerable<string> UnicodeWhitespacePieces(string text)
+        {
+            int start = -1;
+            bool word = false;
+            for (int i = 0; i < text.Length;)
+            {
+                int length = ScalarLength(text, i);
+                if (char.IsWhiteSpace(text, i))
+                {
+                    if (start >= 0) yield return text.Substring(start, i - start);
+                    start = -1;
+                }
+                else
+                {
+                    var category = CharUnicodeInfo.GetUnicodeCategory(text, i);
+                    bool nextWord = category is UnicodeCategory.UppercaseLetter or UnicodeCategory.LowercaseLetter
+                        or UnicodeCategory.TitlecaseLetter or UnicodeCategory.ModifierLetter or UnicodeCategory.OtherLetter
+                        or UnicodeCategory.NonSpacingMark or UnicodeCategory.SpacingCombiningMark or UnicodeCategory.EnclosingMark
+                        or UnicodeCategory.LetterNumber or UnicodeCategory.DecimalDigitNumber or UnicodeCategory.ConnectorPunctuation
+                        || text[i] is '\u200C' or '\u200D';
+                    if (start >= 0 && nextWord != word)
+                    {
+                        yield return text.Substring(start, i - start);
+                        start = i;
+                    }
+                    if (start < 0) start = i;
+                    word = nextWord;
+                }
+                i += length;
+            }
+            if (start >= 0) yield return text.Substring(start);
+        }
+
         private int[] Bpe(string piece)
         {
-            var symbols = Encoding.UTF8.GetBytes(piece).Select(b => _byteToChar[b].ToString()).ToList();
+            var symbols = _byteLevel ? Encoding.UTF8.GetBytes(piece).Select(b => _byteToChar[b].ToString()).ToList()
+                : UnicodeSymbols(piece).ToList();
             if (_ignoreMerges && _vocabulary.TryGetValue(string.Concat(symbols), out int whole)) return new[] { whole };
+            // HF substitutes unknown scalar IDs before applying ranked merges.
+            if (_unknownToken >= 0)
+                for (int i = 0; i < symbols.Count; i++)
+                    if (!_vocabulary.ContainsKey(symbols[i])) symbols[i] = _tokens[_unknownToken];
             while (symbols.Count > 1)
             {
                 int best = -1, bestRank = int.MaxValue;
@@ -341,6 +424,7 @@ namespace AiDotNet.Tokenization.Algorithms
                 symbols.RemoveAt(best + 1);
             }
             return symbols.Select(s => _vocabulary.TryGetValue(s, out int id) ? id
+                : _unknownToken >= 0 ? _unknownToken
                 : throw new InvalidDataException($"The merges made '{s}', which the vocabulary lacks.")).ToArray();
         }
     }

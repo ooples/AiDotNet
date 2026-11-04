@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// pre-training, the two fine-tunings, the reward model and PPO.</summary>
 public class StepAudioTaskTests
 {
-    // double.IsFinite is not on .NET Framework.
+    // TtsPaperNumerics.IsFinite is not on .NET Framework.
     private static bool Finite(double x) => !double.IsNaN(x) && !double.IsInfinity(x);
 
     [Fact(Timeout = 300000)]

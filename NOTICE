@@ -76,7 +76,9 @@ CLBlast (Apache 2.0)
 CMU Pronouncing Dictionary (BSD-2-Clause)
   https://github.com/cmusphinx/cmudict
   Embedded in the library as the English G2P's pronunciation dictionary
-  (src/TextToSpeech/FrontEnd/Resources/cmudict.tsv.gz). Its license:
+  (src/TextToSpeech/FrontEnd/Resources/cmudict.tsv.gz), and as the CMUdict-derived
+  Kaldi pronunciation lexicon in UniAudio's released text frontend
+  (src/TextToSpeech/FrontEnd/Resources/uniaudio-align-lexicon.txt.gz). Its license:
 
     Copyright (C) 1993-2015 Carnegie Mellon University. All rights reserved.
 
@@ -163,6 +165,12 @@ NATSpeech utils/audio/cwt.py (MIT, Copyright (c) 2022 Yi Ren)
 CMU ARCTIC prompts (Carnegie Mellon University, Festvox license)
   Kominek and Black, "The CMU Arctic speech databases", 2003. Used as test data
   (tests/AiDotNet.Tests/TextToSpeech/ReferenceData/espeak_arctic_phonemes.json).
+
+Kokoro-82M (Apache-2.0, hexgrad)
+  https://huggingface.co/hexgrad/Kokoro-82M
+  Original configuration and phoneme vocabulary at revision
+  f3ff3571791e39611d31c381e3a41a3af07b4987 are retained as
+  tests/AiDotNet.Tests/TextToSpeech/ReferenceData/kokoro_author_config.json.
 
 For a complete list of dependencies and their licenses, see the project
 documentation or run dependency analysis tools on the source code.

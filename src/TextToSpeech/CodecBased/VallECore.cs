@@ -18,10 +18,12 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <c>share_embedding</c>, on).</param>
 /// <param name="Languages">Language-ID table rows (0: no language IDs, as in VALL-E; VALL-E X's languages).</param>
 /// <param name="LanguagePlacement">Where the language embedding is added (VALL-E X).</param>
+/// <param name="PrependBos">Use a separate beginning-of-audio embedding (community VALL-E-X).</param>
+/// <param name="StopOnMostLikelyEndToken">Also stop when EOS has the highest logit, as in the original VALL-E reproduction.</param>
 internal sealed record VallEConfiguration(
     int TextTokens, int AudioTokens, int Codebooks, int ModelDim, int Heads, int Layers, int FeedForwardDim,
     double Dropout, bool ShareEmbedding = true, int Languages = 0,
-    VallELanguagePlacement LanguagePlacement = VallELanguagePlacement.AcousticTokens);
+    VallELanguagePlacement LanguagePlacement = VallELanguagePlacement.AcousticTokens, bool PrependBos = false, bool StopOnMostLikelyEndToken = true);
 
 /// <summary>Where VALL-E X adds its language embedding.</summary>
 public enum VallELanguagePlacement
@@ -70,7 +72,7 @@ internal sealed class VallECore<T>
         var narStack = arStack with { AdaptiveNorm = true };
 
         ArTextEmbedding = Own(arLayers, new TiedEmbeddingLayer<T>(c.TextTokens, d));
-        ArAudioEmbedding = Own(arLayers, new TiedEmbeddingLayer<T>(c.AudioTokens + 1, d));
+        ArAudioEmbedding = Own(arLayers, new TiedEmbeddingLayer<T>(c.AudioTokens + (c.PrependBos ? 2 : 1), d));
         ArTextPosition = new VallEPositionalEncoding<T>(engine, arLayers, d, c.Dropout, learnScale: true);
         ArAudioPosition = new VallEPositionalEncoding<T>(engine, arLayers, d, c.Dropout, learnScale: true);
         ArDecoder = new VallETransformer<T>(engine, arLayers, arStack);
@@ -206,6 +208,11 @@ internal sealed class VallECore<T>
     public Tensor<T> ArLoss(IReadOnlyList<int> text, IReadOnlyList<int> codes, bool training, Random random,
         IReadOnlyList<int>? textLanguages = null, IReadOnlyList<int>? codeLanguages = null)
     {
+        if (Configuration.PrependBos)
+        {
+            codes = new[] { Configuration.AudioTokens + 1 }.Concat(codes).ToArray();
+            if (codeLanguages is not null) codeLanguages = new[] { codeLanguages.Count > 0 ? codeLanguages[0] : 0 }.Concat(codeLanguages).ToArray();
+        }
         var logits = ArLogits(text, codes, training, random, textLanguages, codeLanguages);                                                // [T, V]
         var targets = new int[codes.Count];
         for (int t = 0; t < codes.Count; t++) targets[t] = t + 1 < codes.Count ? codes[t + 1] : EndToken;
@@ -221,12 +228,13 @@ internal sealed class VallECore<T>
         int maxNewCodes, Random random, IReadOnlyList<int>? textLanguages = null, int promptLanguage = 0, int targetLanguage = 0)
     {
         var codes = new List<int>(prompt);
+        if (Configuration.PrependBos) codes.Insert(0, Configuration.AudioTokens + 1);
         var generated = new List<int>();
         while (generated.Count <= maxNewCodes)
         {
             // The prompt's codes speak the prompt's language, the new ones the target's.
             var codeLanguages = ArLanguageEmbedding is null ? null
-                : Enumerable.Range(0, codes.Count).Select(i => i < prompt.Count ? promptLanguage : targetLanguage).ToArray();
+                : Enumerable.Range(0, codes.Count).Select(i => i < prompt.Count + (Configuration.PrependBos ? 1 : 0) ? promptLanguage : targetLanguage).ToArray();
             var logits = ArLogits(text, codes, training: false, random, textLanguages, codeLanguages);
             int last = codes.Count - 1, vocabulary = logits.Shape[1];
             var row = new double[vocabulary];
@@ -237,7 +245,7 @@ internal sealed class VallECore<T>
                 if (row[v] > row[best]) best = v;
             }
             int sample = SampleTopK(row, temperature, topK, random);
-            if (best == EndToken || sample == EndToken || generated.Count == maxNewCodes)
+            if ((Configuration.StopOnMostLikelyEndToken && best == EndToken) || sample == EndToken || generated.Count == maxNewCodes)
                 break;
             codes.Add(sample);
             generated.Add(sample);
@@ -264,9 +272,10 @@ internal sealed class VallECore<T>
         for (int v = 0; v < n; v++)
         {
             draw -= scaled[v];
-            if (draw <= 0) return v;
+            if (scaled[v] > 0 && draw <= 0) return v;
         }
-        return n - 1;
+        for (int v = n - 1; v >= 0; v--) if (scaled[v] > 0) return v;
+        throw new InvalidOperationException("VALL-E sampling has no positive-probability candidate.");
     }
 
     // ---------------------------------------------------------------- NAR
@@ -397,7 +406,7 @@ internal sealed class VallECore<T>
         var c = Configuration;
         int d = c.ModelDim;
         ArTextEmbedding.LoadTable(read("ar_text_embedding.word_embeddings.weight", new[] { c.TextTokens, d }));
-        ArAudioEmbedding.LoadTable(read("ar_audio_embedding.word_embeddings.weight", new[] { c.AudioTokens + 1, d }));
+        ArAudioEmbedding.LoadTable(read("ar_audio_embedding.word_embeddings.weight", new[] { c.AudioTokens + (c.PrependBos ? 2 : 1), d }));
         ArTextPosition.Alpha!.LoadTable(read("ar_text_position.alpha", new[] { 1 }));
         ArAudioPosition.Alpha!.LoadTable(read("ar_audio_position.alpha", new[] { 1 }));
         ArDecoder.LoadTorchWeights(_engine, "ar_decoder", read);
@@ -416,6 +425,13 @@ internal sealed class VallECore<T>
             NarStageEmbeddings[j].LoadTable(read($"nar_stage_embeddings.{j}.word_embeddings.weight", new[] { 1, d }));
             if (NarOwnHeads[j] is { } head)
                 TorchParameters.Linear(head, d, c.AudioTokens, read($"nar_predict_layers.{j}.weight", new[] { c.AudioTokens, d }));
+            else
+            {
+                var output = read($"nar_predict_layers.{j}.weight", new[] { c.AudioTokens, d });
+                var embedding = read($"nar_audio_embeddings.{j + 2}.word_embeddings.weight", new[] { c.AudioTokens, d });
+                if (!output.SequenceEqual(embedding))
+                    throw new InvalidDataException($"NAR head {j} differs from its tied acoustic embedding.");
+            }
         }
         // Plachtaa/VALL-E-X's names for VALL-E X's language tables.
         ArLanguageEmbedding?.LoadTable(read("ar_language_embedding.word_embeddings.weight", new[] { c.Languages, d }));

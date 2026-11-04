@@ -75,6 +75,8 @@ namespace AiDotNet.TextToSpeech.Classic;
                 Source = "Chen et al. 2021, Sec. 3: the Adam optimizer with beta1 0.9, beta2 0.98 and "
                         + "epsilon 1e-9. The paper states no learning rate in its training description, "
                         + "so none is declared.")]
+[ArchitectureFromPaper("https://arxiv.org/abs/2006.04558",
+    "AdaSpeech follows the FastSpeech 2 acoustic-model configuration and adds acoustic-condition modeling plus conditional layer normalization (Chen et al. 2021, section 3).")]
 public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel<T>
 {
     private readonly AdaSpeechOptions _options;
@@ -161,9 +163,20 @@ public partial class AdaSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
     /// the paper uses MelGAN).</summary>
     public Tensor<T> TextToMel(string text) => Synthesize(text);
 
+    protected override Tensor<T> PreprocessText(string text)
+    {
+        var ids = FrontEnd.ClassicTtsText.Phonemes(text, true, _options.TextSymbols, _options.VocabSize, _options.MaxTextLength);
+        var tokens = new Tensor<T>(new[] { ids.Length });
+        for (int i = 0; i < ids.Length; i++) tokens[i] = NumOps.FromDouble(ids[i]);
+        return tokens;
+    }
+
     /// <inheritdoc />
     /// <remarks>The FastSpeech 2 backbone scores the mel spectrogram with mean absolute error (Ren et al. 2021, §3.1).</remarks>
     protected override bool UsesL1MelLoss => true;
+
+    /// <summary>The paper's 50 ms analysis window, independent of the zero-padded FFT size.</summary>
+    protected override int TargetWindowSize => (int)Math.Round(_options.SampleRate * 0.05);
 
     /// <inheritdoc />
     /// <remarks>Forced-alignment durations (MFA, §3) and the speaker's index in the speaker embedding table.</remarks>

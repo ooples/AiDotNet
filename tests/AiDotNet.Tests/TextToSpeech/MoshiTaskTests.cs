@@ -10,7 +10,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// (Eq. 5), the language model's stages and Mimi's adversarial training.</summary>
 public class MoshiTaskTests
 {
-    // double.IsFinite is not on .NET Framework.
+    // TtsPaperNumerics.IsFinite is not on .NET Framework.
     private static bool Finite(double x) => !double.IsNaN(x) && !double.IsInfinity(x);
 
     [Fact(Timeout = 120000)]

@@ -44,8 +44,46 @@ namespace AiDotNet.Tokenization.Algorithms
             "[vocalized-noise]", "[lipsmack]", "[mn]",
         };
 
+        /// <summary>The extra system, CMU phoneme and pinyin tokens added by the released CosyVoice 3 tokenizer.</summary>
+        public static readonly IReadOnlyList<string> CosyVoice3Tokens = CosyVoice2Tokens.Concat(new[]
+        {
+            "<|endofsystem|>",
+            "[AA]", "[AA0]", "[AA1]", "[AA2]", "[AE]", "[AE0]", "[AE1]", "[AE2]", "[AH]", "[AH0]", "[AH1]", "[AH2]",
+            "[AO]", "[AO0]", "[AO1]", "[AO2]", "[AW]", "[AW0]", "[AW1]", "[AW2]", "[AY]", "[AY0]", "[AY1]", "[AY2]",
+            "[B]", "[CH]", "[D]", "[DH]", "[EH]", "[EH0]", "[EH1]", "[EH2]", "[ER]", "[ER0]", "[ER1]", "[ER2]", "[EY]",
+            "[EY0]", "[EY1]", "[EY2]", "[F]", "[G]", "[HH]", "[IH]", "[IH0]", "[IH1]", "[IH2]", "[IY]", "[IY0]", "[IY1]",
+            "[IY2]", "[JH]", "[K]", "[L]", "[M]", "[N]", "[NG]", "[OW]", "[OW0]", "[OW1]", "[OW2]", "[OY]", "[OY0]",
+            "[OY1]", "[OY2]", "[P]", "[R]", "[S]", "[SH]", "[T]", "[TH]", "[UH]", "[UH0]", "[UH1]", "[UH2]", "[UW]",
+            "[UW0]", "[UW1]", "[UW2]", "[V]", "[W]", "[Y]", "[Z]", "[ZH]",
+            "[a]", "[ai]", "[an]", "[ang]", "[ao]", "[b]", "[c]", "[ch]", "[d]", "[e]", "[ei]", "[en]", "[eng]", "[f]",
+            "[g]", "[h]", "[i]", "[ian]", "[in]", "[ing]", "[iu]", "[ià]", "[iàn]", "[iàng]", "[iào]", "[iá]", "[ián]",
+            "[iáng]", "[iáo]", "[iè]", "[ié]", "[iòng]", "[ióng]", "[iù]", "[iú]", "[iā]", "[iān]", "[iāng]", "[iāo]",
+            "[iē]", "[iě]", "[iōng]", "[iū]", "[iǎ]", "[iǎn]", "[iǎng]", "[iǎo]", "[iǒng]", "[iǔ]", "[j]", "[k]", "[l]",
+            "[m]", "[n]", "[o]", "[ong]", "[ou]", "[p]", "[q]", "[r]", "[s]", "[sh]", "[t]", "[u]", "[uang]", "[ue]",
+            "[un]", "[uo]", "[uà]", "[uài]", "[uàn]", "[uàng]", "[uá]", "[uái]", "[uán]", "[uáng]", "[uè]", "[ué]", "[uì]",
+            "[uí]", "[uò]", "[uó]", "[uā]", "[uāi]", "[uān]", "[uāng]", "[uē]", "[uě]", "[uī]", "[uō]", "[uǎ]", "[uǎi]",
+            "[uǎn]", "[uǎng]", "[uǐ]", "[uǒ]", "[vè]", "[w]", "[x]", "[y]", "[z]", "[zh]", "[à]", "[ài]", "[àn]", "[àng]",
+            "[ào]", "[á]", "[ái]", "[án]", "[áng]", "[áo]", "[è]", "[èi]", "[èn]", "[èng]", "[èr]", "[é]", "[éi]", "[én]",
+            "[éng]", "[ér]", "[ì]", "[ìn]", "[ìng]", "[í]", "[ín]", "[íng]", "[ò]", "[òng]", "[òu]", "[ó]", "[óng]", "[óu]",
+            "[ù]", "[ùn]", "[ú]", "[ún]", "[ā]", "[āi]", "[ān]", "[āng]", "[āo]", "[ē]", "[ēi]", "[ēn]", "[ēng]", "[ě]",
+            "[ěi]", "[ěn]", "[ěng]", "[ěr]", "[ī]", "[īn]", "[īng]", "[ō]", "[ōng]", "[ōu]", "[ū]", "[ūn]", "[ǎ]", "[ǎi]",
+            "[ǎn]", "[ǎng]", "[ǎo]", "[ǐ]", "[ǐn]", "[ǐng]", "[ǒ]", "[ǒng]", "[ǒu]", "[ǔ]", "[ǔn]", "[ǘ]", "[ǚ]", "[ǜ]",
+        }).ToArray();
+
         private static readonly Lazy<(Dictionary<string, int> Vocabulary, Dictionary<string, int> Merges)> Released = new(Load);
-        private static readonly Lazy<QwenTokenizer> CosyVoice2Instance = new(() => new QwenTokenizer(CosyVoice2Tokens));
+        private static readonly Lazy<QwenTokenizer> CosyVoice2Instance = new(() => new QwenTokenizer(
+            QwenAddedTokens.Take(3), CosyVoice2Tokens, "AiDotNet.Tokenization.cosyvoice3-merges.txt.gz"));
+        private static readonly Lazy<QwenTokenizer> CosyVoice3Instance = new(() => new QwenTokenizer(
+            QwenAddedTokens.Take(3), CosyVoice3Tokens, "AiDotNet.Tokenization.cosyvoice3-merges.txt.gz"));
+        private static readonly Lazy<QwenTokenizer> SparkInstance = new(() =>
+        {
+            using var stream = typeof(QwenTokenizer).Assembly.GetManifestResourceStream("AiDotNet.TextToSpeech.FrontEnd.spark_added_tokens.json.gz")
+                ?? throw new InvalidDataException("Missing released Spark-TTS added-token vocabulary.");
+            using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
+            using var reader = new StreamReader(gzip);
+            return new QwenTokenizer(JsonConvert.DeserializeObject<string[]>(reader.ReadToEnd())
+                ?? throw new InvalidDataException("Invalid Spark-TTS added-token vocabulary."));
+        });
 
         private readonly Dictionary<string, int> _vocabulary;
         private readonly Dictionary<string, int> _merges;
@@ -65,11 +103,11 @@ namespace AiDotNet.Tokenization.Algorithms
         /// <c>add_special_tokens</c> extends it.</summary>
         public static QwenTokenizer Qwen2(IEnumerable<string> extraTokens) => new(QwenAddedTokens.Take(3), extraTokens);
 
-        private QwenTokenizer(IEnumerable<string> addedTokens, IEnumerable<string>? extraTokens)
+        private QwenTokenizer(IEnumerable<string> addedTokens, IEnumerable<string>? extraTokens, string? mergesResource = null)
         {
             var released = Released.Value;
             _vocabulary = released.Vocabulary;
-            _merges = released.Merges;
+            _merges = mergesResource is null ? released.Merges : LoadMerges(mergesResource);
             int next = _vocabulary.Count;
             foreach (var token in addedTokens.Concat(extraTokens ?? Array.Empty<string>()))
                 if (!_added.ContainsKey(token)) _added[token] = next++;
@@ -79,8 +117,14 @@ namespace AiDotNet.Tokenization.Algorithms
             _charToByte = _byteToChar.ToDictionary(p => p.Value, p => p.Key);
         }
 
-        /// <summary>CosyVoice 2's text tokenizer (151,682 ids).</summary>
+        /// <summary>CosyVoice 2's released BlankEN text tokenizer (151,663 ids; its merge file is shared with CosyVoice 3).</summary>
         public static QwenTokenizer CosyVoice2 => CosyVoice2Instance.Value;
+
+        /// <summary>CosyVoice 3's Qwen2 text tokenizer, including the release's phoneme vocabulary.</summary>
+        public static QwenTokenizer CosyVoice3 => CosyVoice3Instance.Value;
+
+        /// <summary>Spark-TTS's Qwen2.5 tokenizer, including all 13,493 added speech and attribute tokens.</summary>
+        public static QwenTokenizer Spark => SparkInstance.Value;
 
         /// <summary>The number of ids: the vocabulary and the added tokens.</summary>
         public int VocabularySize => _tokens.Length;
@@ -248,29 +292,35 @@ namespace AiDotNet.Tokenization.Algorithms
             return spaceEnd == end || run == 1 ? run : run - 1;
         }
 
+        private static string ReadResource(string resource)
+        {
+            using var stream = typeof(QwenTokenizer).Assembly.GetManifestResourceStream(resource)
+                ?? throw new InvalidDataException($"The embedded resource {resource} is missing.");
+            using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
+            using var reader = new StreamReader(gzip, Encoding.UTF8);
+            return reader.ReadToEnd();
+        }
+
         private static (Dictionary<string, int> Vocabulary, Dictionary<string, int> Merges) Load()
         {
-            var assembly = typeof(QwenTokenizer).Assembly;
-            string Read(string resource)
-            {
-                using var stream = assembly.GetManifestResourceStream(resource)
-                    ?? throw new InvalidDataException($"The embedded resource {resource} is missing.");
-                using var gzip = new System.IO.Compression.GZipStream(stream, System.IO.Compression.CompressionMode.Decompress);
-                using var reader = new StreamReader(gzip, Encoding.UTF8);
-                return reader.ReadToEnd();
-            }
-            var vocabulary = JsonConvert.DeserializeObject<Dictionary<string, int>>(Read(VocabularyResource))
+            var vocabulary = JsonConvert.DeserializeObject<Dictionary<string, int>>(ReadResource(VocabularyResource))
                 ?? throw new InvalidDataException("The Qwen2 vocabulary is empty.");
+            return (new Dictionary<string, int>(vocabulary, StringComparer.Ordinal), LoadMerges(MergesResource));
+        }
+
+        private static Dictionary<string, int> LoadMerges(string resource)
+        {
             var merges = new Dictionary<string, int>(StringComparer.Ordinal);
             int rank = 0;
-            foreach (var line in Read(MergesResource).Split('\n'))
+            foreach (var line in ReadResource(resource).Split('\n'))
             {
                 var trimmed = line.TrimEnd('\r');
                 if (trimmed.Length == 0 || trimmed.StartsWith("#version", StringComparison.Ordinal)) continue;
                 int space = trimmed.IndexOf(' ');
+                if (space <= 0 || space == trimmed.Length - 1) throw new InvalidDataException("Invalid Qwen merge pair.");
                 merges[trimmed.Substring(0, space) + "\u0001" + trimmed.Substring(space + 1)] = rank++;
             }
-            return (new Dictionary<string, int>(vocabulary, StringComparer.Ordinal), merges);
+            return merges;
         }
     }
 }

@@ -8,6 +8,36 @@ namespace AiDotNet.Audio.Generation;
 
 public partial class EnCodec<T>
 {
+    /// <summary>Loads the original weight-normalized SEANet state dictionary (as safetensors or a supported PyTorch archive).</summary>
+    public void LoadAuthorWeights(string path, string prefix = "")
+    {
+        ThrowIfDisposed();
+        if (!HasPaperLayers) throw new NotSupportedException("Author weights require the native codec.");
+        if (PaperOptions.TimeGroupNormalization ?? !PaperOptions.Causal)
+            throw new NotSupportedException("Use LoadPretrainedWeights for the time-group-normalized EnCodec preset.");
+        var state = new ComputerVision.Weights.WeightLoader().LoadWeights(path);
+        prefix = AuthorCheckpointPrefix(state, prefix);
+        double[] Read(string name, int[] shape)
+        {
+            if (!state.TryGetValue(name, out var tensor)) throw new InvalidDataException($"Codec checkpoint is missing '{name}'.");
+            if (!tensor.Shape.ToArray().SequenceEqual(shape))
+                throw new InvalidDataException($"Codec tensor '{name}' has an incompatible shape.");
+            return tensor.ToArray().Select(v => (double)v).ToArray();
+        }
+        var o = PaperOptions;
+        SeanetTorchWeights.Load(Read, _encoder!, _decoder!, _quantizer!, o.NumQuantizers, o.CodebookSize, o.Dimension, prefix);
+    }
+
+    internal static string AuthorCheckpointPrefix(IReadOnlyDictionary<string, Tensor<float>> state, string requestedPrefix)
+    {
+        if (!string.IsNullOrEmpty(requestedPrefix)) return requestedPrefix;
+        const string firstWeight = "encoder.model.0.conv.conv.weight_v";
+        if (state.ContainsKey(firstWeight)) return string.Empty;
+        // AudioCraft CompressionSolver.model_from_checkpoint selects best_state['model'] for inference.
+        if (state.ContainsKey("best_state.model." + firstWeight)) return "best_state.model.";
+        return state.ContainsKey("model." + firstWeight) ? "model." : string.Empty;
+    }
+
     /// <summary>
     /// Loads the official EnCodec weights from a safetensors file in the Hugging Face layout (for example
     /// <c>facebook/encodec_24khz</c>'s <c>model.safetensors</c>) into this model's encoder, quantizer and decoder.

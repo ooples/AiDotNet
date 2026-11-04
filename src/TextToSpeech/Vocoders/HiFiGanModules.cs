@@ -17,6 +17,7 @@ internal sealed class HiFiGanGenerator<T>
     private readonly List<LayerBase<T>> _layers = new();
     private readonly NormedConv1DLayer<T> _pre;
     private readonly List<NormedConv1DLayer<T>> _ups = new();
+    private readonly List<NormedConv1DLayer<T>> _stageConditions = new();
     private readonly List<List<(List<NormedConv1DLayer<T>> First, List<NormedConv1DLayer<T>> Second)>> _blocks = new();
     private readonly NormedConv1DLayer<T> _post;
     private readonly bool _resblockType1;
@@ -42,9 +43,12 @@ internal sealed class HiFiGanGenerator<T>
     /// <param name="initialization">The draws of the reference's <c>init_weights</c> — N(0, 0.01) for the transposed
     /// convolutions, the residual blocks and (unless <paramref name="plainEnds"/>) the output convolution; null keeps
     /// PyTorch's default initialization everywhere.</param>
+    /// <param name="conditionInEachUpsamplingLayer">Also project and add the global condition after every upsampler
+    /// (XTTS-v2's <c>cond_in_each_up_layer</c>).</param>
     public HiFiGanGenerator(IEngine engine, int inChannels, int initialChannels, int[] upsampleRates, int[] upsampleKernels,
         int[] resblockKernels, int[][] resblockDilations, bool resblockType1, int conditionChannels = 0, bool plainEnds = false,
-        int outputChannels = 1, bool tanhOutput = true, int outputReflectPad = 0, Random? initialization = null, bool plainOutputBias = false)
+        int outputChannels = 1, bool tanhOutput = true, int outputReflectPad = 0, Random? initialization = null, bool plainOutputBias = false,
+        bool conditionInEachUpsamplingLayer = false)
     {
         _engine = engine;
         _resblockType1 = resblockType1;
@@ -61,6 +65,9 @@ internal sealed class HiFiGanGenerator<T>
             int next = initialChannels >> (i + 1);
             _ups.Add(Add(new NormedConv1DLayer<T>(channels, next, upsampleKernels[i], upsampleRates[i], 1, 1,
                 (upsampleKernels[i] - upsampleRates[i]) / 2, true, ConvolutionNormalization.Weight)));
+            if (conditionInEachUpsamplingLayer)
+                _stageConditions.Add(Add(new NormedConv1DLayer<T>(conditionChannels, next, 1, 1, 1, 1, 0, false,
+                    ConvolutionNormalization.None)));
             channels = next;
             var stage = new List<(List<NormedConv1DLayer<T>>, List<NormedConv1DLayer<T>>)>();
             for (int j = 0; j < resblockKernels.Length; j++)
@@ -118,6 +125,7 @@ internal sealed class HiFiGanGenerator<T>
         for (int i = 0; i < _ups.Count; i++)
         {
             Load(_ups[i], $"{prefix}ups.{i}");
+            if (_stageConditions.Count > 0) Load(_stageConditions[i], $"{prefix}conds.{i}");
             for (int j = 0; j < _blocks[i].Count; j++)
             {
                 var (first, second) = _blocks[i][j];
@@ -157,6 +165,8 @@ internal sealed class HiFiGanGenerator<T>
         for (int i = 0; i < _ups.Count; i++)
         {
             x = _ups[i].Forward(LeakyRelu(x, Slope));
+            if (condition is not null && _stageConditions.Count > 0)
+                x = _engine.TensorAdd(x, _engine.TensorTile(_stageConditions[i].Forward(condition), new[] { 1, 1, x.Shape[2] }));
             Tensor<T>? sum = null;
             foreach (var (first, second) in _blocks[i])
             {

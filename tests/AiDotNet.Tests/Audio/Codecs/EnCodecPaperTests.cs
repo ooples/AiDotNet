@@ -28,6 +28,23 @@ namespace AiDotNet.Tests.Audio;
 /// </remarks>
 public class EnCodecPaperTests
 {
+    [Fact]
+    public void AudioCraftTrainingCheckpoint_SelectsBestModelAndRespectsExplicitPrefix()
+    {
+        const string first = "encoder.model.0.conv.conv.weight_v";
+        var state = new Dictionary<string, Tensor<float>>
+        {
+            ["model." + first] = new Tensor<float>(new[] { 1 }),
+            ["best_state.model." + first] = new Tensor<float>(new[] { 1 }),
+        };
+        Assert.Equal("best_state.model.", EnCodec<double>.AuthorCheckpointPrefix(state, ""));
+        Assert.Equal("model.", EnCodec<double>.AuthorCheckpointPrefix(state, "model."));
+        state.Remove("best_state.model." + first);
+        Assert.Equal("model.", EnCodec<double>.AuthorCheckpointPrefix(state, ""));
+        state[first] = new Tensor<float>(new[] { 1 });
+        Assert.Equal("", EnCodec<double>.AuthorCheckpointPrefix(state, ""));
+    }
+
     private static JObject Reference()
     {
         const string fileName = "encodec_official_layout_reference.json";

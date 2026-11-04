@@ -440,6 +440,10 @@
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\wetext_indextts_zh_tn_tagger.fst.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.wetext_indextts_zh_tn_tagger.fst.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\wetext_indextts_zh_tn_verbalizer.fst.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.wetext_indextts_zh_tn_verbalizer.fst.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\mecab_unidic_lite.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.mecab_unidic_lite.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\cutlet_unidic.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.cutlet_unidic.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\unidecode.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.unidecode.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\tortoise_tokenizer.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.tortoise_tokenizer.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\spark_added_tokens.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.spark_added_tokens.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\Latest\Resources\outetts_en_female_1_neutral.json" LogicalName="AiDotNet.TextToSpeech.Latest.outetts_en_female_1_neutral.json" />
 	  <EmbeddedResource Include="TextToSpeech\Latest\Resources\outetts_qwen3_added_tokens.json.gz" LogicalName="AiDotNet.TextToSpeech.Latest.outetts_qwen3_added_tokens.json.gz" />
 	  <EmbeddedResource Include="Audio\Whisper\Resources\whisper_mel_filters.gz" LogicalName="AiDotNet.Audio.Whisper.whisper_mel_filters.gz" />
@@ -452,10 +456,21 @@
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\cmudict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.cmudict.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\melo_cmudict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.melo_cmudict.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\g2pen_cmudict.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.g2pen_cmudict.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\uniaudio-phones.txt.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.uniaudio-phones.txt.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\uniaudio-align-lexicon.txt.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.uniaudio-align-lexicon.txt.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\uniaudio-cmudict-license.txt" LogicalName="AiDotNet.TextToSpeech.FrontEnd.uniaudio-cmudict-license.txt" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\uniaudio-uppercase.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.uniaudio-uppercase.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\g2pen_homographs.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.g2pen_homographs.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\g2pen_model.f32.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.g2pen_model.f32.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\perceptron_tagger_eng.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.perceptron_tagger_eng.json.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pypinyin050_chars.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pypinyin050_chars.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\xtts_pypinyin_chars.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.xtts_pypinyin_chars.tsv.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\num2words_english.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.num2words_english.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\num2words_european.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.num2words_european.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\num2words_slavic.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.num2words_slavic.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\num2words_arabic.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.num2words_arabic.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\xtts_cleaner_rules.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.xtts_cleaner_rules.json.gz" />
+	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\xtts_pypinyin_phrases.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.xtts_pypinyin_phrases.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\pypinyin050_phrases.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.pypinyin050_phrases.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_pos.tsv.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_pos.tsv.gz" />
 	  <EmbeddedResource Include="TextToSpeech\FrontEnd\Resources\jieba_posseg.json.gz" LogicalName="AiDotNet.TextToSpeech.FrontEnd.jieba_posseg.json.gz" />
@@ -485,6 +500,7 @@
 	  <EmbeddedResource Include="Tokenization\Resources\whisper-gpt2.tiktoken.gz" LogicalName="AiDotNet.Tokenization.whisper-gpt2.tiktoken.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\qwen2-vocab.json.gz" LogicalName="AiDotNet.Tokenization.qwen2-vocab.json.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\qwen2-merges.txt.gz" LogicalName="AiDotNet.Tokenization.qwen2-merges.txt.gz" />
+	  <EmbeddedResource Include="Tokenization\Resources\cosyvoice3-merges.txt.gz" LogicalName="AiDotNet.Tokenization.cosyvoice3-merges.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\llama3-vocab.json.gz" LogicalName="AiDotNet.Tokenization.llama3-vocab.json.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\llama3-merges.txt.gz" LogicalName="AiDotNet.Tokenization.llama3-merges.txt.gz" />
 	  <EmbeddedResource Include="Tokenization\Resources\llama3-special-tokens.json.gz" LogicalName="AiDotNet.Tokenization.llama3-special-tokens.json.gz" />

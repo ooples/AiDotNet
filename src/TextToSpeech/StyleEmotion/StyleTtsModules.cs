@@ -142,7 +142,7 @@ internal static class StyleTtsOps
 
 /// <summary>
 /// A PyTorch single-layer <c>nn.LSTM(bidirectional=True, batch_first=True)</c> on <c>[T, input]</c>, returning
-/// <c>[T, 2 · hidden]</c> (forward then backward), from two <see cref="LSTMCellLayer{T}"/> stepped over time.
+/// <c>[T, 2 · hidden]</c> (forward then backward), from two <see cref="TorchLstmCellLayer{T}"/> stepped over time.
 /// </summary>
 internal sealed class StyleTtsBiLstm<T>
 {
@@ -151,18 +151,18 @@ internal sealed class StyleTtsBiLstm<T>
     public StyleTtsBiLstm(IEngine engine, List<LayerBase<T>> layers, int input, int hidden)
     {
         _engine = engine;
-        ForwardCell = StyleTtsOps.Own(layers, new LSTMCellLayer<T>(input, hidden));
-        BackwardCell = StyleTtsOps.Own(layers, new LSTMCellLayer<T>(input, hidden));
+        ForwardCell = StyleTtsOps.Own(layers, new TorchLstmCellLayer<T>(input, hidden));
+        BackwardCell = StyleTtsOps.Own(layers, new TorchLstmCellLayer<T>(input, hidden));
         Hidden = hidden;
         Input = input;
     }
 
-    public LSTMCellLayer<T> ForwardCell { get; }
-    public LSTMCellLayer<T> BackwardCell { get; }
+    public TorchLstmCellLayer<T> ForwardCell { get; }
+    public TorchLstmCellLayer<T> BackwardCell { get; }
     public int Hidden { get; }
     public int Input { get; }
 
-    private Tensor<T> Run(LSTMCellLayer<T> cell, Tensor<T> rows, bool reverse)
+    private Tensor<T> Run(TorchLstmCellLayer<T> cell, Tensor<T> rows, bool reverse)
     {
         int t = rows.Shape[0];
         var state = new Tensor<T>(new[] { 1, 2 * Hidden });

@@ -99,6 +99,7 @@ public partial class CosyVoice<T> : CosyVoiceBase<T>
         // The text vocabulary is the tokenizer's, as text_token_size is.
         _options.VocabSize = _text.VocabularySize;
         Initialize();
+        InitializeReleasedFrontends();
     }
 
     /// <summary>
@@ -119,6 +120,7 @@ public partial class CosyVoice<T> : CosyVoiceBase<T>
         _text = WhisperTiktoken.Multilingual(_options.TextLanguages);
         _options.VocabSize = _text.VocabularySize;
         Initialize();
+        InitializeReleasedFrontends();
     }
 
     /// <inheritdoc />

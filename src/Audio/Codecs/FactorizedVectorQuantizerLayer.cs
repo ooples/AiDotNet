@@ -68,6 +68,7 @@ public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IR
 
     private readonly int _dim, _quantizers, _bins, _codeDim;
     private readonly bool _rawLosses;
+    private readonly bool _l1Losses;
     private readonly NormedConv1DLayer<T>[] _inProjection, _outProjection;
     private readonly Tensor<T>[] _codebooks;
 
@@ -79,7 +80,7 @@ public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IR
     /// <param name="lossesOnRawVectors">Whether the codebook and commitment losses compare the raw projection and code (the
     /// reference code) rather than their L2-normalized forms (App. A; false).</param>
     public FactorizedVectorQuantizerLayer([LayerState] int dim, [LayerState] int quantizers, [LayerState] int bins, [LayerState] int codeDim,
-        [LayerState] bool lossesOnRawVectors = false)
+        [LayerState] bool lossesOnRawVectors = false, [LayerState] bool useL1Loss = false)
         : base(new[] { dim }, new[] { dim })
     {
         if (dim <= 0 || quantizers <= 0 || bins <= 0 || codeDim <= 0) throw new ArgumentOutOfRangeException(nameof(dim));
@@ -88,6 +89,7 @@ public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IR
         _bins = bins;
         _codeDim = codeDim;
         _rawLosses = lossesOnRawVectors;
+        _l1Losses = useL1Loss;
         var random = RandomSeed.HasValue
             ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
             : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
@@ -171,7 +173,7 @@ public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IR
     private Tensor<T> Mse(Tensor<T> a, Tensor<T> b)
     {
         var d = Engine.TensorSubtract(a, b);
-        return Engine.ReduceMean(Engine.TensorMultiply(d, d), Enumerable.Range(0, d.Rank).ToArray(), keepDims: false);
+        return Engine.ReduceMean(_l1Losses ? Engine.TensorAbs(d) : Engine.TensorMultiply(d, d), Enumerable.Range(0, d.Rank).ToArray(), keepDims: false);
     }
 
     private static Tensor<T> Detach(Tensor<T> x) => new(x._shape, x.ToVector());
@@ -263,6 +265,7 @@ public sealed partial class FactorizedVectorQuantizerLayer<T> : LayerBase<T>, IR
         metadata["Bins"] = _bins.ToString(inv);
         metadata["CodeDim"] = _codeDim.ToString(inv);
         metadata["LossesOnRawVectors"] = _rawLosses.ToString(inv);
+        metadata["UseL1Loss"] = _l1Losses.ToString(inv);
         return metadata;
     }
 }

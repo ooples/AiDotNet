@@ -76,6 +76,7 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
     private SeanetConfig Config()
     {
         var o = PaperOptions;
+        bool timeGroupNorm = o.TimeGroupNormalization ?? !o.Causal;
         return new SeanetConfig
         {
             Channels = o.Channels,
@@ -83,8 +84,8 @@ public partial class EnCodec<T> : NeuralAudioCodecBase<T>
             Filters = o.Filters,
             ResidualLayers = o.ResidualLayers,
             Ratios = o.Ratios,
-            Normalization = o.Causal ? ConvolutionNormalization.Weight : ConvolutionNormalization.None,
-            TimeGroupNorm = !o.Causal,
+            Normalization = timeGroupNorm ? ConvolutionNormalization.None : ConvolutionNormalization.Weight,
+            TimeGroupNorm = timeGroupNorm,
             KernelSize = o.KernelSize,
             LastKernelSize = o.LastKernelSize,
             ResidualKernelSizes = o.ResidualKernelSizes,

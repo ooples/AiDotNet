@@ -467,7 +467,7 @@ internal sealed class CosyVoiceFlow<T>
 internal sealed record CosyVoiceLmConfiguration(
     int TextVocabulary, int SpeechVocabulary, int TextEncoderInputSize, int LlmSize, int SpeakerDim,
     WenetEncoderConfiguration TextEncoder, WenetEncoderConfiguration Llm, double TopP = 0.8, int TopK = 25, int RepetitionWindow = 10,
-    double RepetitionRatio = 0.1, double MinTokenTextRatio = 2, double MaxTokenTextRatio = 20);
+    double RepetitionRatio = 0.1, double MinTokenTextRatio = 2, double MaxTokenTextRatio = 20, bool ExcludeRepeatedTokenOnFallback = false);
 
 /// <summary>
 /// CosyVoice 1's text-to-speech-token language model (FunAudioLLM/CosyVoice <c>cosyvoice/llm/llm.py</c>
@@ -575,18 +575,25 @@ internal sealed class CosyVoiceLm<T>
     }
 
     /// <summary>
-    /// Repetition-aware sampling (<c>ras_sampling</c>): the nucleus draw, replaced by a draw from the whole distribution
-    /// (without it) when it already occurs at least <c>window · ratio</c> times among the last <c>window</c> tokens.
+    /// Repetition-aware sampling (<c>ras_sampling</c>): resample when a nucleus draw meets the window's repeat threshold.
+    /// Original 300M keeps the complete fallback distribution; the newer author profile excludes the repeated draw.
     /// </summary>
     internal static int SampleRepetitionAware(double[] logProbabilities, IReadOnlyList<int> decoded, CosyVoiceLmConfiguration c, Random random)
-        => SampleRepetitionAware(logProbabilities, decoded, c.TopP, c.TopK, c.RepetitionWindow, c.RepetitionRatio, random);
+        => SampleRepetitionAware(logProbabilities, decoded, c.TopP, c.TopK, c.RepetitionWindow, c.RepetitionRatio, random, c.ExcludeRepeatedTokenOnFallback);
 
     /// <inheritdoc cref="SampleRepetitionAware(double[], IReadOnlyList{int}, CosyVoiceLmConfiguration, Random)"/>
     internal static int SampleRepetitionAware(double[] logProbabilities, IReadOnlyList<int> decoded, double topP, int topK,
-        int repetitionWindow, double repetitionRatio, Random random)
+        int repetitionWindow, double repetitionRatio, Random random, bool excludeRepeatedTokenOnFallback = true)
     {
         var c = (TopP: topP, TopK: topK, RepetitionWindow: repetitionWindow, RepetitionRatio: repetitionRatio);
-        var probabilities = logProbabilities.Select(Math.Exp).ToArray();
+        // The author applies softmax even to already log-softmaxed or masked
+        // scores. Normalize stably so score shifts and EOS masking preserve it.
+        double maximum = logProbabilities.Max();
+        var probabilities = logProbabilities.Select(value => Math.Exp(value - maximum)).ToArray();
+        double total = probabilities.Sum();
+        if (!(total > 0) || double.IsInfinity(total))
+            throw new ArgumentException("Sampling requires at least one finite unmasked score.", nameof(logProbabilities));
+        for (int i = 0; i < probabilities.Length; i++) probabilities[i] /= total;
         var order = Enumerable.Range(0, probabilities.Length).OrderByDescending(v => probabilities[v]).ThenBy(v => v).ToList();
         var kept = new List<int>();
         double cumulative = 0;
@@ -600,11 +607,38 @@ internal sealed class CosyVoiceLm<T>
         int repeats = decoded.Skip(Math.Max(0, decoded.Count - c.RepetitionWindow)).Count(token => token == draw);
         if (repeats >= c.RepetitionWindow * c.RepetitionRatio)
         {
-            probabilities[draw] = 0;
+            // Original 300M/v2.0 resamples the original distribution; newer
+            // CosyVoice2/3 author code explicitly removes the repeated draw.
+            if (excludeRepeatedTokenOnFallback)
+            {
+                logProbabilities[draw] = double.NegativeInfinity;
+                probabilities[draw] = 0;
+            }
             var all = Enumerable.Range(0, probabilities.Length).ToList();
             draw = Draw(all, probabilities, random);
         }
         return draw;
+    }
+    internal static int SampleForGeneration(double[] scores, IReadOnlyList<int> decoded,
+        CosyVoiceLmConfiguration configuration, Random random, bool ignoreEnd)
+    {
+        // The original 300M sampling_ids rejects EOS rather than masking it.
+        // Its num_trials > 100 check permits 101 rejected draws before failure.
+        for (int trial = 0; trial <= 100; trial++)
+        {
+            int token = SampleRepetitionAware(scores, decoded, configuration, random);
+            if (!ignoreEnd || token != configuration.SpeechVocabulary) return token;
+        }
+        throw new InvalidOperationException("Original CosyVoice sampling exceeded the 100-retry initial-EOS limit.");
+    }
+
+    internal static int SampleForGeneration(double[] scores, IReadOnlyList<int> decoded,
+        double topP, int topK, int repetitionWindow, double repetitionRatio,
+        Random random, int endToken, bool ignoreEnd)
+    {
+        // Current CosyVoice2/3 sampling_ids masks EOS before the RAS softmax.
+        if (ignoreEnd) scores[endToken] = double.NegativeInfinity;
+        return SampleRepetitionAware(scores, decoded, topP, topK, repetitionWindow, repetitionRatio, random);
     }
 
     private static int Draw(IReadOnlyList<int> ids, double[] weights, Random random)
@@ -636,8 +670,7 @@ internal sealed class CosyVoiceLm<T>
             int last = logp.Shape[0] - 1, vocabulary = logp.Shape[1];
             var row = new double[vocabulary];
             for (int v = 0; v < vocabulary; v++) row[v] = NumOps.ToDouble(logp[last, v]);
-            if (i < minLength) row[EndToken] = double.NegativeInfinity;
-            int next = SampleRepetitionAware(row, generated, c, random);
+            int next = SampleForGeneration(row, generated, c, random, ignoreEnd: i < minLength);
             if (next == EndToken) break;
             generated.Add(next);
         }

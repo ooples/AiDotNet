@@ -28,17 +28,18 @@ public class FastSpeech2Options : AcousticModelOptions
 
     public FastSpeech2Options()
     {
+        VocabSize = 76;
         EncoderDim = 256;
         DecoderDim = 80;
         HiddenDim = 256;
         NumEncoderLayers = 4;
         NumDecoderLayers = 4;
         NumHeads = 2;
+        DropoutRate = 0.1;
         SampleRate = 22050;
         MelChannels = 80;
         HopSize = 256;
         FftSize = 1024;
-        VocabSize = 256;
         UsePostnet = false; // FastSpeech 2 has no postnet.
     }
 

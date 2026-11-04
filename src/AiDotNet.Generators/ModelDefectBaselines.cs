@@ -11,6 +11,8 @@ internal static class ModelDefectBaselines
     internal static readonly System.Collections.Generic.HashSet<string> DuplicatePapers =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
+            "AiDotNet.Audio.SpeechRecognition.Wav2Vec2Model<T>",
+            "AiDotNet.Audio.Foundations.Wav2Vec2<T>",
         };
 
     /// <summary>ADNDEF002: LayerHelper factories yielding a bare MultiHeadAttentionLayer, 102 entries; an overloaded factory is keyed by its signature.</summary>
@@ -95,7 +97,6 @@ internal static class ModelDefectBaselines
             "CreateDefaultVideoTemporalVLMLayers",
             "CreateDefaultVisionAdapterLayers",
             "CreateDefaultVisualExpertVLMLayers",
-            "CreateDefaultVoiceCraftLayers",
             "CreateDefaultWav2SmallLayers",
             "CreateDefaultWavLMSpeakerLayers",
             "CreateDefaultWhisperEncoderDecoderLayers",
@@ -113,23 +114,6 @@ internal static class ModelDefectBaselines
     internal static readonly System.Collections.Generic.HashSet<string> UndeclaredSharedFactoryModels =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
-            "AiDotNet.TextToSpeech.Classic.AdaSpeech<T>",
-            "AiDotNet.TextToSpeech.Classic.AlignTTS<T>",
-            "AiDotNet.TextToSpeech.Classic.FastSpeech<T>",
-            "AiDotNet.TextToSpeech.Classic.FastSpeech2<T>",
-            "AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>",
-            "AiDotNet.TextToSpeech.CodecBased.SeedTTS<T>",
-            "AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>",
-            "AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T>",
-            "AiDotNet.TextToSpeech.CodecBased.UniAudio<T>",
-            "AiDotNet.TextToSpeech.CodecBased.Voicebox<T>",
-            "AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T>",
-            "AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T>",
-            "AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>",
-            "AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>",
-            "AiDotNet.TextToSpeech.VoiceCloning.SeedTTSClone<T>",
-            "AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>",
-            "AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Clone<T>",
             "AiDotNet.Video.FrameInterpolation.ABME<T>",
             "AiDotNet.Video.FrameInterpolation.AMT<T>",
             "AiDotNet.Video.FrameInterpolation.BiMVFI<T>",
@@ -309,14 +293,12 @@ internal static class ModelDefectBaselines
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
             "AiDotNet.Audio.Enhancement.DCCRN<T>._encoderOutputs",
-            "AiDotNet.Audio.TextToSpeech.Tacotron2Model<T>._lastPrePostnetMel",
             "AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<T>._preAllocatedNorm1Out",
             "AiDotNet.Diffusion.NoisePredictors.DiffusionResBlock<T>._preAllocatedNorm2Out",
             "AiDotNet.FederatedLearning.Vertical.SplitNeuralNetwork<T>._lastTopHidden",
             "AiDotNet.FederatedLearning.Vertical.SplitNeuralNetwork<T>._lastTopInput",
             "AiDotNet.Finance.Forecasting.Foundation.TFC<T>._revinMeanTensor",
             "AiDotNet.Finance.Forecasting.Foundation.TFC<T>._revinStdTensor",
-            "AiDotNet.Finance.Forecasting.Neural.DeepAR<T>._lastSigma",
             "AiDotNet.Finance.Forecasting.Neural.NBEATSFinance<T>._cachedBlockHiddenOutputs",
             "AiDotNet.Finance.Trading.Agents.RecurrentPolicyAgent<T>._c",
             "AiDotNet.Finance.Trading.Agents.RecurrentPolicyAgent<T>._h",
@@ -458,8 +440,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.NeuralNetworks.Layers.ReservoirLayer<T>._reservoirState",
             "AiDotNet.NeuralNetworks.Layers.ResidualDenseBlock<T>._activationOutputs",
             "AiDotNet.NeuralNetworks.Layers.ResidualDenseBlock<T>._convOutputs",
-            "AiDotNet.NeuralNetworks.Layers.SAM2HieraImageEncoderLayer<T>._lastStride4",
-            "AiDotNet.NeuralNetworks.Layers.SAM2HieraImageEncoderLayer<T>._lastStride8",
             "AiDotNet.NeuralNetworks.Layers.SSM.ABCLayer<T>._lastForgetGate",
             "AiDotNet.NeuralNetworks.Layers.SSM.ABCLayer<T>._lastInput",
             "AiDotNet.NeuralNetworks.Layers.SSM.ABCLayer<T>._lastKey",

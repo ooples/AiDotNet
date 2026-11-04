@@ -59,6 +59,16 @@ public class WeightLoader
         };
     }
 
+    /// <summary>Loads selected named tensors without materializing unrelated PyTorch optimizer storages.</summary>
+    internal Dictionary<string, Tensor<float>> LoadWeights(string filePath, Func<string, bool> includeTensor)
+    {
+        if (includeTensor is null) throw new ArgumentNullException(nameof(includeTensor));
+        if (IsZipArchive(filePath) && !string.Equals(Path.GetExtension(filePath), ".npz", StringComparison.OrdinalIgnoreCase))
+            return LoadPyTorchZipFormat(filePath, includeTensor);
+        return LoadWeights(filePath).Where(pair => includeTensor(pair.Key))
+            .ToDictionary(pair => pair.Key, pair => pair.Value);
+    }
+
     private static bool IsZipArchive(string filePath)
     {
         using var stream = File.OpenRead(filePath);
@@ -101,7 +111,7 @@ public class WeightLoader
     /// into its storage, so it is materialized through its own offset and strides; several tensors may share a storage.
     /// Nested dictionaries (a checkpoint holding <c>{"state_dict": …}</c>) are flattened with dotted names.
     /// </remarks>
-    private Dictionary<string, Tensor<float>> LoadPyTorchZipFormat(string filePath)
+    private Dictionary<string, Tensor<float>> LoadPyTorchZipFormat(string filePath, Func<string, bool>? includeTensor = null)
     {
         var weights = new Dictionary<string, Tensor<float>>();
         using var archive = System.IO.Compression.ZipFile.OpenRead(filePath);
@@ -124,6 +134,7 @@ public class WeightLoader
         var storages = new Dictionary<string, byte[]>(StringComparer.Ordinal);
         foreach (var (name, data) in tensors)
         {
+            if (includeTensor is not null && !includeTensor(name)) continue;
             if (!storages.TryGetValue(data.StorageKey, out var bytes))
             {
                 var entry = archive.GetEntry(prefix + "data/" + data.StorageKey)
@@ -621,6 +632,7 @@ public class TensorData
 internal class PickleParser
 {
     private readonly BinaryReader _reader;
+    private readonly bool _preserveByteKeys;
     private readonly Stack<object?> _stack;
     private readonly Stack<object?> _metaStack;
     private readonly Dictionary<int, object?> _memo;
@@ -647,9 +659,9 @@ internal class PickleParser
     private const byte BINUNICODE8 = 0x8D;
     private const byte SHORT_BINSTRING = 0x55; // 'U'
     private const byte BINSTRING = 0x54; // 'T'
-    private const byte SHORT_BINBYTES = 0x8E;
+    private const byte SHORT_BINBYTES = 0x43; // 'C'
     private const byte BINBYTES = 0x42; // 'B'
-    private const byte BINBYTES8 = 0x8F;
+    private const byte BINBYTES8 = 0x8E;
     private const byte EMPTY_TUPLE = 0x29; // ')'
     private const byte TUPLE = 0x74; // 't'
     private const byte TUPLE1 = 0x85;
@@ -676,8 +688,9 @@ internal class PickleParser
     private const byte NEWOBJ_EX = 0x92;
     private const byte BINPERSID = 0x51; // 'Q'
 
-    public PickleParser(BinaryReader reader)
+    public PickleParser(BinaryReader reader, bool preserveByteKeys = false)
     {
+        _preserveByteKeys = preserveByteKeys;
         _reader = reader;
         _stack = new Stack<object?>();
         _metaStack = new Stack<object?>();
@@ -763,7 +776,10 @@ internal class PickleParser
                         break;
 
                     case BINFLOAT:
-                        _stack.Push(_reader.ReadDouble());
+                        var floatBytes = _reader.ReadBytes(8);
+                        if (floatBytes.Length != 8) throw new EndOfStreamException("Truncated pickle BINFLOAT.");
+                        if (BitConverter.IsLittleEndian) Array.Reverse(floatBytes);
+                        _stack.Push(BitConverter.ToDouble(floatBytes, 0));
                         break;
 
                     case SHORT_BINUNICODE:
@@ -868,7 +884,7 @@ internal class PickleParser
                         var siKey = _stack.Pop();
                         if (_stack.Peek() is Dictionary<string, object?> siDict && siKey != null)
                         {
-                            siDict[(siKey.ToString() ?? throw new InvalidOperationException("siKey.ToString() is null where it is required."))] = siValue;
+                            siDict[DictionaryKey(siKey)] = siValue;
                         }
                         break;
 
@@ -881,7 +897,7 @@ internal class PickleParser
                                 var key = setItems[i];
                                 if (key != null)
                                 {
-                                    sisDict[(key.ToString() ?? throw new InvalidOperationException("key.ToString() is null where it is required."))] = setItems[i + 1];
+                                    sisDict[DictionaryKey(key)] = setItems[i + 1];
                                 }
                             }
                         }
@@ -1057,18 +1073,50 @@ internal class PickleParser
             var key = items[i];
             if (key != null)
             {
-                dict[(key.ToString() ?? throw new InvalidOperationException("key.ToString() is null where it is required."))] = items[i + 1];
+                dict[DictionaryKey(key)] = items[i + 1];
             }
         }
 
         return dict;
     }
 
+    // Opt-in metadata mode preserves byte-keyed tokenizer vocabularies without executing Python reducers.
+    private string DictionaryKey(object key)
+    {
+        if (_preserveByteKeys)
+        {
+            if (key is byte[] bytes) return "bytes:" + Convert.ToBase64String(bytes);
+            if (key is ReduceResult reduced && reduced.Func is GlobalRef function && function.Module == "_codecs" &&
+                function.Name == "encode" && reduced.Args is object?[] arguments && arguments.Length >= 2 &&
+                arguments[0] is string text && arguments[1] is string encoding && (encoding == "latin1" || encoding == "latin-1"))
+            {
+                var value = new byte[text.Length];
+                for (int i = 0; i < text.Length; i++)
+                {
+                    if (text[i] > 255) throw new InvalidDataException("A Latin-1 byte key contains an out-of-range character.");
+                    value[i] = (byte)text[i];
+                }
+                return "bytes:" + Convert.ToBase64String(value);
+            }
+        }
+        return key.ToString() ?? throw new InvalidDataException("A pickle dictionary key has no string representation.");
+    }
+
+
     private object? HandleReduce(object? func, object? args)
     {
         if (func is GlobalRef gref)
         {
             // Handle PyTorch tensor reconstruction
+            if (gref.Module == "torch._tensor" && gref.Name == "_rebuild_from_type_v2" &&
+                args is object?[] wrapped && wrapped.Length >= 3 &&
+                wrapped[0] is GlobalRef rebuild && rebuild.Module == "torch._utils" && rebuild.Name == "_rebuild_tensor_v2" &&
+                wrapped[1] is GlobalRef tensorType && tensorType.Module == "torch" && tensorType.Name == "Tensor")
+            {
+                // Plain tensors with Python-side attributes use this wrapper. Read their storage descriptor;
+                // no Python constructor or attached metadata is executed.
+                return HandleRebuildTensor(wrapped[2]);
+            }
             if (gref.Module == "torch._utils" && gref.Name == "_rebuild_tensor_v2")
             {
                 return HandleRebuildTensor(args);

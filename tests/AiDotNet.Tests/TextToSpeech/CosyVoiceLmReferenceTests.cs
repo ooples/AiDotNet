@@ -133,19 +133,30 @@ public class CosyVoiceLmReferenceTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task RepetitionAwareSampling_LeavesTheNucleusOnARepeat()
+    public async Task RepetitionAwareSampling_UsesTheOriginal300MFallbackRule()
     {
         await Task.Yield();
         var c = new CosyVoiceLmConfiguration(10, 6, 4, 4, 2, new WenetEncoderConfiguration(4, 4, 1, 4, 1, WenetInputLayer.Linear, true, true),
             new WenetEncoderConfiguration(4, 4, 1, 4, 1, WenetInputLayer.LinearLegacy, false, false));
-        // Token 0 holds 90% of the mass: the nucleus (cumulative 0.8) is token 0 alone.
         var logp = new[] { Math.Log(0.9), Math.Log(0.04), Math.Log(0.03), Math.Log(0.02), Math.Log(0.01) };
-        var random = new Random(1);
-        Assert.All(Enumerable.Range(0, 50), _ => Assert.Equal(0, CosyVoiceLm<double>.SampleRepetitionAware(logp, new[] { 1, 2 }, c, random)));
-        // Once 0 occurs among the last 10 tokens (10 · 0.1 = 1 repeat), it is excluded and the draw is from the rest.
-        Assert.All(Enumerable.Range(0, 50), _ => Assert.NotEqual(0, CosyVoiceLm<double>.SampleRepetitionAware(logp, new[] { 0, 3 }, c, random)));
-        // A repeat older than the window does not count.
+        var original = JObject.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory,
+            "TextToSpeech", "ReferenceData", "cosyvoice_sampling_reference.json")))["sources"]![0]!["cases"]!;
+        Assert.Equal(original[0]!["token"]!.Value<int>(),
+            CosyVoiceLm<double>.SampleRepetitionAware(logp, new[] { 1, 2 }, c, new FixedSamplingRandom(.5)));
+        // The original author fallback may select the repeated token again.
+        Assert.Equal(original[1]!["token"]!.Value<int>(),
+            CosyVoiceLm<double>.SampleRepetitionAware(logp, new[] { 0, 3 }, c, new FixedSamplingRandom(.5)));
+        Assert.Equal(original[2]!["token"]!.Value<int>(),
+            CosyVoiceLm<double>.SampleRepetitionAware(logp, new[] { 0, 3 }, c, new FixedSamplingRandom(.95)));
         var old = new[] { 0 }.Concat(Enumerable.Repeat(4, 10)).ToArray();
-        Assert.Equal(0, CosyVoiceLm<double>.SampleRepetitionAware(logp, old, c, random));
+        Assert.Equal(original[3]!["token"]!.Value<int>(),
+            CosyVoiceLm<double>.SampleRepetitionAware(logp, old, c, new FixedSamplingRandom(.5)));
+    }
+
+    private sealed class FixedSamplingRandom : Random
+    {
+        private readonly double _value;
+        internal FixedSamplingRandom(double value) => _value = value;
+        public override double NextDouble() => _value;
     }
 }

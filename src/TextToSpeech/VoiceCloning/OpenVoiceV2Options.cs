@@ -22,14 +22,17 @@ public class OpenVoiceV2Options : VoiceCloningOptions
         Beta2 = other.Beta2;
         Epsilon = other.Epsilon;
         WeightDecay = other.WeightDecay;
+        Training = new OpenVoiceTrainingOptions(other.Training);
     }
 
     public OpenVoiceV2Options()
     {
+        SampleRate = 22050;
+        HiddenDim = 192;
         MinReferenceDurationSec = 3.0;
         NumEncoderLayers = 6;
         NumLLMLayers = 12;
-        NumHeads = 8;
+        NumHeads = 2;
         DropoutRate = 0.1;
         LearningRate = 3e-4;
         WeightDecay = 0.01;
@@ -46,5 +49,8 @@ public class OpenVoiceV2Options : VoiceCloningOptions
 
     /// <summary>AdamW numerical-stability epsilon used by the released recipe.</summary>
     public double Epsilon { get; set; } = 1e-9;
+
+    /// <summary>Auxiliary IPA prior, waveform reconstruction and adversarial training configuration.</summary>
+    public OpenVoiceTrainingOptions Training { get; set; } = new() { LearningRate = 3e-4 };
 
 }

@@ -52,7 +52,15 @@ public class VALLEOptions : TtsModelOptions
         MaxCodesPerTextToken = other.MaxCodesPerTextToken;
         Codec = (EnCodecOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(other.Codec);
         SamplingSeed = other.SamplingSeed;
+        PrependBos = other.PrependBos;
+        StopOnMostLikelyEndToken = other.StopOnMostLikelyEndToken;
     }
+
+    /// <summary>Prepend the separate beginning-of-audio token used by the community VALL-E-X checkpoint.</summary>
+    public bool PrependBos { get; set; }
+
+    /// <summary>Stop when EOS is the most likely token, even if sampling selected another token.</summary>
+    public bool StopOnMostLikelyEndToken { get; set; } = true;
 
     /// <summary>Feed-forward width of both Transformers (4096). Their width is <see cref="TtsModelOptions.HiddenDim"/>,
     /// their heads <see cref="TtsModelOptions.NumHeads"/>, their layers <see cref="TtsModelOptions.NumDecoderLayers"/>

@@ -566,6 +566,8 @@ internal sealed class PypinyinReader
 
     private static readonly Lazy<PypinyinReader> EmotiVoiceInstance =
         new(() => new PypinyinReader("emotivoice_pinyin_chars.tsv.gz", "emotivoice_pinyin_phrases.tsv.gz"), isThreadSafe: true);
+    private static readonly Lazy<PypinyinReader> XttsInstance =
+        new(() => new PypinyinReader("xtts_pypinyin_chars.tsv.gz", "xtts_pypinyin_phrases.tsv.gz"), isThreadSafe: true);
 
     private readonly Dictionary<string, string[]> _phrases = new(StringComparer.Ordinal);
     private readonly HashSet<string> _phrasePrefixes = new(StringComparer.Ordinal);
@@ -577,6 +579,8 @@ internal sealed class PypinyinReader
     /// <summary>pypinyin's TONE3 style with the neutral tone as 5, with pypinyin-dict's CC-CEDICT phrases loaded
     /// (EmotiVoice's front end; <c>tools/reference-data/emotivoice_frontend_reference.py</c>).</summary>
     public static PypinyinReader EmotiVoiceTone3 => EmotiVoiceInstance.Value;
+    /// <summary>XTTS's complete TONE3 syllables, with the neutral tone written as five.</summary>
+    public static PypinyinReader XttsTone3 => XttsInstance.Value;
 
     private PypinyinReader(string characters, string phrases)
     {
@@ -648,48 +652,33 @@ internal sealed class PypinyinReader
         int start = 0;
         while (start < text.Count)
         {
-            int lastValid = 0;
+            int matchedPrefix = 0;
             bool broke = false;
             for (int index = start; index < text.Count; index++)
             {
                 string candidate = string.Concat(text.GetRange(start, index - start + 1));
-                if (_phrasePrefixes.Contains(candidate))
-                {
-                    if (_phrases.ContainsKey(candidate)) lastValid = index - start + 1;
-                }
+                if (_phrasePrefixes.Contains(candidate)) matchedPrefix = index - start + 1;
                 else
                 {
-                    if (lastValid > 0)
-                    {
-                        yield return text.GetRange(start, lastValid);
-                        start += lastValid;
-                    }
-                    else
-                    {
-                        yield return text.GetRange(start, 1);
-                        start += 1;
-                    }
+                    // mmseg remembers the longest prefix, not the longest complete phrase. If that prefix
+                    // is not itself a phrase, it emits one character even when a shorter valid phrase exists.
+                    int count = matchedPrefix > 0 && _phrases.ContainsKey(string.Concat(text.GetRange(start, matchedPrefix)))
+                        ? matchedPrefix : 1;
+                    yield return text.GetRange(start, count);
+                    start += count;
                     broke = true;
                     break;
                 }
             }
             if (broke) continue;
-            // The whole remainder is a prefix.
-            if (lastValid > 0)
-            {
-                yield return text.GetRange(start, lastValid);
-                start += lastValid;
-            }
+            string remainder = string.Concat(text.GetRange(start, text.Count - start));
+            if (_phrases.ContainsKey(remainder)) yield return text.GetRange(start, text.Count - start);
             else
-            {
-                string remain = string.Concat(text.GetRange(start, text.Count - start));
-                if (_phrases.ContainsKey(remain)) yield return text.GetRange(start, text.Count - start);
-                else
-                    foreach (var c in text.GetRange(start, text.Count - start)) yield return new List<string> { c };
-                yield break;
-            }
+                foreach (var c in text.GetRange(start, text.Count - start)) yield return new List<string> { c };
+            yield break;
         }
     }
+
 
     // DefaultConverter.convert(word, BOPOMOFO, heteronym=False, errors="default"): the phrase's readings, or each
     // character's (a character without a reading is kept as written). mmseg yields phrases and single characters only.

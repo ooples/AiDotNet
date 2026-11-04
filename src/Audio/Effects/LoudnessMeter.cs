@@ -51,6 +51,32 @@ internal static class LoudnessMeter
         return data.Select(v => gain * v).ToArray();
     }
 
+    /// <summary>Torchaudio's mono loudness: clamped biquads, complete 400 ms blocks,
+    /// strict absolute/relative gates, and NaN when no block survives.</summary>
+    internal static double IntegratedTorchaudioLoudness(double[] data, int rate)
+    {
+        int block = (int)Math.Round(.4 * rate, MidpointRounding.ToEven);
+        int step = (int)Math.Round(block * .25, MidpointRounding.ToEven);
+        if (rate <= 0 || block <= 0 || step <= 0 || data.Length < block)
+            throw new ArgumentException("Torchaudio loudness requires one complete 400 ms block.", nameof(data));
+        static double[] Clamp(double[] values) => values.Select(x => Math.Max(-1, Math.Min(1, x))).ToArray();
+        var weighted = Clamp(Filter(Biquad(4, 1 / Math.Sqrt(2), 1500, rate, highShelf: true), data));
+        weighted = Clamp(Filter(Biquad(0, .5, 38, rate, highShelf: false), weighted));
+        int count = (data.Length - block) / step + 1;
+        var energies = new double[count]; var levels = new double[count];
+        for (int j = 0; j < count; j++)
+        {
+            double sum = 0;
+            for (int n = 0; n < block; n++) { double value = weighted[j * step + n]; sum += value * value; }
+            energies[j] = sum / block; levels[j] = -.691 + 10 * Math.Log10(energies[j]);
+        }
+        var absolute = Enumerable.Range(0, count).Where(i => levels[i] > -70).ToArray();
+        if (absolute.Length == 0) return double.NaN;
+        double relative = -.691 + 10 * Math.Log10(absolute.Average(i => energies[i])) - 10;
+        var selected = Enumerable.Range(0, count).Where(i => levels[i] > -70 && levels[i] > relative).ToArray();
+        return selected.Length == 0 ? double.NaN : -.691 + 10 * Math.Log10(selected.Average(i => energies[i]));
+    }
+
     /// <summary><c>pyloudnorm.normalize.peak</c>: the gain that moves the peak to the target (dBFS).</summary>
     public static double[] NormalizePeak(double[] data, double target)
     {

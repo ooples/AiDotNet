@@ -113,7 +113,15 @@ public partial class VALLEX<T> : VallEModelBase<T>
     protected override IReadOnlyList<string> PhonemeTable => Table.Value;
 
     /// <inheritdoc />
-    protected override int LanguageCount => 2;
+    protected override IReadOnlyList<string>? FixedTokenVocabulary => XOptions.UseCommunityPhoneTokenizer
+        ? VallEXCommunityPhoneTokenizer.Vocabulary : null;
+
+    /// <inheritdoc />
+    public override int[] EncodePhonemes(IEnumerable<string> symbols) => XOptions.UseCommunityPhoneTokenizer
+        ? VallEXCommunityPhoneTokenizer.Encode(symbols) : base.EncodePhonemes(symbols);
+
+    /// <inheritdoc />
+    protected override int LanguageCount => ((VALLEXOptions)Settings).LanguageCount;
 
     /// <inheritdoc />
     protected override VallELanguagePlacement LanguagePlacement => ((VALLEXOptions)Settings).LanguagePlacement;
@@ -209,12 +217,13 @@ public partial class VALLEX<T> : VallEModelBase<T>
         return languages;
     }
 
-    private bool IsBoundary(int id) => id < 3 || Symbol(id) == "_";
+    private bool IsBoundary(int id) => id < (XOptions.UseCommunityPhoneTokenizer ? 5 : 3) || Symbol(id) == "_";
 
     private int SampleLanguage(TtsTrainingSample<T> sample)
     {
         int language = sample.LanguageId ?? throw new ArgumentException("VALL-E X trains with the utterance's language.", nameof(sample));
-        if (language is < 0 or > 1) throw new ArgumentOutOfRangeException(nameof(sample), "VALL-E X's languages are 0 (English) and 1 (Mandarin).");
+        if (language < 0 || language >= LanguageCount)
+            throw new ArgumentOutOfRangeException(nameof(sample), $"Language id must lie in [0, {LanguageCount}).");
         return language;
     }
 
@@ -257,9 +266,24 @@ public partial class VALLEX<T> : VallEModelBase<T>
         var targetLanguages = TokenLanguages(target);
         int targetLanguage = targetLanguages.Length > 2 ? targetLanguages[1] : (int)VallEXLanguage.English;
         int promptLanguage = voice.LanguageId ?? (enrolled.Length > 0 ? fullLanguages[1] : targetLanguage);
+        if (XOptions.UseCommunityPhoneTokenizer)
+        {
+            targetLanguage = XOptions.SynthesisLanguage.HasValue ? (int)XOptions.SynthesisLanguage.Value
+                : targetLanguages.Length > 0 ? targetLanguages[0] : (int)VallEXLanguage.English;
+            promptLanguage = voice.LanguageId ?? (enrolled.Length > 0 ? fullLanguages[0] : targetLanguage);
+            if (targetLanguage < 0 || targetLanguage >= LanguageCount || promptLanguage < 0 || promptLanguage >= LanguageCount)
+                throw new ArgumentOutOfRangeException(nameof(voice), "The synthesis languages exceed the configured language table.");
+            fullLanguages = Enumerable.Range(0, full.Length).Select(i => i < enrolled.Length ? promptLanguage : targetLanguage).ToArray();
+            targetLanguages = Enumerable.Repeat(targetLanguage, target.Length).ToArray();
+        }
+        int maximum = Settings.MaxCodesPerTextToken * full.Length + 1;
+        // The community loop includes BOS in y.Length - prompt.Length when enforcing its cap.
+        if (XOptions.UseCommunityPhoneTokenizer && core.Configuration.PrependBos) maximum--;
         var first = core.ArGenerate(full, FirstCodebook(prompt), Settings.Temperature, Settings.TopK,
-            Settings.MaxCodesPerTextToken * full.Length + 1, random, OnText ? fullLanguages : null, promptLanguage, targetLanguage);
-        return core.NarGenerate(target, prompt, first.ToArray(), random, OnText ? targetLanguages : null);
+            maximum, random, OnText ? fullLanguages : null, promptLanguage, targetLanguage);
+        return XOptions.UseCommunityPhoneTokenizer
+            ? core.NarGenerate(full, prompt, first.ToArray(), random, OnText ? fullLanguages : null)
+            : core.NarGenerate(target, prompt, first.ToArray(), random, OnText ? targetLanguages : null);
     }
 
     /// <inheritdoc />

@@ -5,6 +5,16 @@ using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
+internal static class UnivNetTorchWeights
+{
+    internal static void Conv<T>(Func<string, int[], double[]> read, NormedConv1DLayer<T> layer, string name)
+    {
+        var shape = layer.TorchWeightShape;
+        layer.LoadTorchWeights(read(name + ".weight_v", shape), read(name + ".weight_g", new[] { shape[0], 1, 1 }),
+            read(name + ".bias", new[] { layer.OutputChannels }));
+    }
+}
+
 /// <summary>
 /// UnivNet's kernel predictor (Jang et al. 2021, §3.1; LVCNet, Zeng et al. 2021; reference maum-ai/univnet
 /// <c>KernelPredictor</c>): from the log-mel spectrogram, the kernels and biases of every location-variable convolution
@@ -39,6 +49,19 @@ internal sealed class UnivNetKernelPredictor<T>
         }
         owned.Add(_kernel = new NormedConv1DLayer<T>(hidden, inChannels * outChannels * kernelSize * layers, convSize, 1, 1, 1, pad, false, ConvolutionNormalization.Weight));
         owned.Add(_bias = new NormedConv1DLayer<T>(hidden, outChannels * layers, convSize, 1, 1, 1, pad, false, ConvolutionNormalization.Weight));
+    }
+
+    /// <summary>Loads the original weight-normalized kernel-predictor tensors.</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    {
+        UnivNetTorchWeights.Conv(read, _input, prefix + "input_conv.0");
+        for (int i = 0; i < _residual.Count; i++)
+        {
+            UnivNetTorchWeights.Conv(read, _residual[i].A, $"{prefix}residual_convs.{i}.1");
+            UnivNetTorchWeights.Conv(read, _residual[i].B, $"{prefix}residual_convs.{i}.3");
+        }
+        UnivNetTorchWeights.Conv(read, _kernel, prefix + "kernel_conv");
+        UnivNetTorchWeights.Conv(read, _bias, prefix + "bias_conv");
     }
 
     /// <summary>The kernels <c>[1, layers · in · out · kernel, frames]</c> and biases <c>[1, layers · out, frames]</c>.</summary>
@@ -120,6 +143,13 @@ internal sealed class UnivNetLvcBlock<T>
         return x;
     }
 
+    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    {
+        _predictor.LoadTorchWeights(read, prefix + "kernel_predictor.");
+        UnivNetTorchWeights.Conv(read, _up, prefix + "convt_pre.1");
+        for (int i = 0; i < _convs.Count; i++) UnivNetTorchWeights.Conv(read, _convs[i], $"{prefix}conv_blocks.{i}.1");
+    }
+
     // Reference location_variable_convolution (dilation 1): output sample t of frame l = t / hop is the kernel-k
     // convolution of the zero-padded input around t with frame l's kernel [in, out, k], plus frame l's bias.
     private Tensor<T> LocationVariableConvolution(Tensor<T> x, Tensor<T> kernel, Tensor<T> bias, int frames)
@@ -173,6 +203,13 @@ internal sealed class UnivNetGenerator<T>
     }
 
     public IReadOnlyList<LayerBase<T>> Layers => _layers;
+
+    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "")
+    {
+        UnivNetTorchWeights.Conv(read, _pre, prefix + "conv_pre");
+        for (int i = 0; i < _blocks.Count; i++) _blocks[i].LoadTorchWeights(read, $"{prefix}res_stack.{i}.");
+        UnivNetTorchWeights.Conv(read, _post, prefix + "conv_post.1");
+    }
 
     /// <summary>A waveform <c>[1, 1, frames · Π s]</c> from a mel spectrogram and noise <c>[1, noiseDim, frames]</c>.</summary>
     public Tensor<T> Forward(Tensor<T> mel, Tensor<T> noise)

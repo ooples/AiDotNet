@@ -7,7 +7,8 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 internal sealed record HiftConfiguration(
     int InChannels, int BaseChannels, int Harmonics, int SampleRate, double NsfAlpha, double NsfSigma, double VoicedThreshold,
     int[] UpsampleRates, int[] UpsampleKernels, int FftSize, int HopSize, int[] ResblockKernels, int[][] ResblockDilations,
-    int[] SourceKernels, int[][] SourceDilations, double LeakySlope, double AudioLimit, int F0Channels)
+    int[] SourceKernels, int[][] SourceDilations, double LeakySlope, double AudioLimit, int F0Channels,
+    bool Causal = false, int ConvPreLookRight = 4)
 {
     /// <summary>Waveform samples per mel frame: the upsampling rates' product times the iSTFT hop.</summary>
     public int UpsampleScale => UpsampleRates.Aggregate(1, (a, b) => a * b) * HopSize;
@@ -40,7 +41,7 @@ internal sealed class HiftGenerator<T>
     private readonly InverseStft<T> _istft;
 
     internal sealed record ResBlock(List<SnakeLayer<T>> Snakes1, List<NormedConv1DLayer<T>> Convs1, List<SnakeLayer<T>> Snakes2,
-        List<NormedConv1DLayer<T>> Convs2);
+        List<NormedConv1DLayer<T>> Convs2, int Kernel, int[] Dilations);
 
     public HiftGenerator(IEngine engine, List<LayerBase<T>> layers, HiftConfiguration configuration, Random initialization)
     {
@@ -64,16 +65,20 @@ internal sealed class HiftGenerator<T>
         for (int i = 0; i < 5; i++)
         {
             int input = i == 0 ? c.InChannels : c.F0Channels;
-            F0Convs.Add(Conv(input, c.F0Channels, 3, 1, 1, 1, true, Kaiming(input * 3)));
+            int kernel = c.Causal && i == 0 ? 4 : 3;
+            F0Convs.Add(Conv(input, c.F0Channels, kernel, 1, 1, c.Causal ? 0 : 1, true, Kaiming(input * kernel)));
         }
         F0Classifier = Conv(c.F0Channels, 1, 1, 1, 1, 0, false, Kaiming(c.F0Channels));
         SourceMerge = Conv(c.Harmonics + 1, 1, 1, 1, 1, 0, false, Kaiming(c.Harmonics + 1));
 
-        ConvPre = Conv(c.InChannels, c.BaseChannels, 7, 1, 1, 3, true, Kaiming(c.InChannels * 7));
+        int preKernel = c.Causal ? c.ConvPreLookRight + 1 : 7;
+        ConvPre = Conv(c.InChannels, c.BaseChannels, preKernel, 1, 1, c.Causal ? 0 : 3, true, Kaiming(c.InChannels * preKernel));
         for (int i = 0; i < c.UpsampleRates.Length; i++)
         {
             int u = c.UpsampleRates[i], k = c.UpsampleKernels[i];
-            Ups.Add(Conv(c.BaseChannels >> i, c.BaseChannels >> (i + 1), k, u, 1, (k - u) / 2, true, Normal(0.01), transposed: true));
+            Ups.Add(c.Causal
+                ? Conv(c.BaseChannels >> i, c.BaseChannels >> (i + 1), k, 1, 1, 0, true, Normal(0.01))
+                : Conv(c.BaseChannels >> i, c.BaseChannels >> (i + 1), k, u, 1, (k - u) / 2, true, Normal(0.01), transposed: true));
         }
         // Source downsampling: cumulative rates of [1] + reversed rates without its last, reversed again.
         var rates = new List<int> { 1 };
@@ -87,23 +92,23 @@ internal sealed class HiftGenerator<T>
             SourceDownKernels.Add(u == 1 ? 1 : u * 2);
             SourceDowns.Add(u == 1
                 ? Conv(c.FftSize + 2, channels, 1, 1, 1, 0, false, Kaiming(c.FftSize + 2))
-                : Conv(c.FftSize + 2, channels, u * 2, u, 1, u / 2, false, Kaiming((c.FftSize + 2) * u * 2)));
+                : Conv(c.FftSize + 2, channels, u * 2, u, 1, c.Causal ? 0 : u / 2, false, Kaiming((c.FftSize + 2) * u * 2)));
             SourceBlocks.Add(NewResBlock(channels, c.SourceKernels[i], c.SourceDilations[i]));
         }
         for (int i = 0; i < c.UpsampleRates.Length; i++)
             for (int j = 0; j < c.ResblockKernels.Length; j++)
                 ResBlocks.Add(NewResBlock(c.BaseChannels >> (i + 1), c.ResblockKernels[j], c.ResblockDilations[j]));
-        ConvPost = Conv(c.BaseChannels >> c.UpsampleRates.Length, c.FftSize + 2, 7, 1, 1, 3, true, Normal(0.01));
+        ConvPost = Conv(c.BaseChannels >> c.UpsampleRates.Length, c.FftSize + 2, 7, 1, 1, c.Causal ? 0 : 3, true, Normal(0.01));
 
         ResBlock NewResBlock(int channels, int kernel, int[] dilations)
         {
-            var block = new ResBlock(new(), new(), new(), new());
+            var block = new ResBlock(new(), new(), new(), new(), kernel, dilations);
             foreach (int d in dilations)
             {
                 block.Snakes1.Add(Add(new SnakeLayer<T>(channels)));
-                block.Convs1.Add(Conv(channels, channels, kernel, 1, d, (kernel * d - d) / 2, true, Normal(0.01)));
+                block.Convs1.Add(Conv(channels, channels, kernel, 1, d, c.Causal ? 0 : (kernel * d - d) / 2, true, Normal(0.01)));
                 block.Snakes2.Add(Add(new SnakeLayer<T>(channels)));
-                block.Convs2.Add(Conv(channels, channels, kernel, 1, 1, (kernel - 1) / 2, true, Normal(0.01)));
+                block.Convs2.Add(Conv(channels, channels, kernel, 1, 1, c.Causal ? 0 : (kernel - 1) / 2, true, Normal(0.01)));
             }
             return block;
         }
@@ -143,11 +148,35 @@ internal sealed class HiftGenerator<T>
     private Tensor<T> LeakyRelu(Tensor<T> x, double slope) =>
         _engine.TensorSubtract(_engine.ReLU(x), _engine.TensorMultiplyScalar(_engine.ReLU(_engine.TensorNegate(x)), NumOps.FromDouble(slope)));
 
+    private Tensor<T> Pad(Tensor<T> x, int left, int right)
+    {
+        if (left == 0 && right == 0) return x;
+        var parts = new List<Tensor<T>>(3);
+        if (left > 0) parts.Add(new Tensor<T>(new[] { x.Shape[0], x.Shape[1], left }));
+        parts.Add(x);
+        if (right > 0) parts.Add(new Tensor<T>(new[] { x.Shape[0], x.Shape[1], right }));
+        return _engine.TensorConcatenate(parts.ToArray(), 2);
+    }
+
+    // torch.nn.Upsample(mode="nearest"): every frame is repeated contiguously.  The reshape/broadcast route keeps
+    // the operation on the autodiff tape, unlike copying values into a new tensor.
+    private Tensor<T> NearestRepeat(Tensor<T> x, int factor)
+    {
+        int batch = x.Shape[0], channels = x.Shape[1], frames = x.Shape[2];
+        var expanded = _engine.Reshape(x, new[] { batch, channels, frames, 1 });
+        return _engine.Reshape(_engine.TensorBroadcastTo(expanded, new[] { batch, channels, frames, factor }),
+            new[] { batch, channels, frames * factor });
+    }
+
     /// <summary>The F0 per mel frame <c>[frames]</c> of a mel <c>[1, InChannels, frames]</c>.</summary>
     public Tensor<T> PredictF0(Tensor<T> mel)
     {
         var x = mel;
-        foreach (var conv in F0Convs) x = Elu(conv.Forward(x));
+        for (int i = 0; i < F0Convs.Count; i++)
+        {
+            if (Configuration.Causal) x = i == 0 ? Pad(x, 0, 3) : Pad(x, 2, 0);
+            x = Elu(F0Convs[i].Forward(x));
+        }
         var f0 = _engine.TensorAbs(F0Classifier.Forward(x));                                                // [1, 1, frames]
         return _engine.Reshape(f0, new[] { f0.Shape[2] });
     }
@@ -265,7 +294,12 @@ internal sealed class HiftGenerator<T>
     {
         for (int i = 0; i < block.Convs1.Count; i++)
         {
-            var xt = block.Convs2[i].Forward(block.Snakes2[i].Forward(block.Convs1[i].Forward(block.Snakes1[i].Forward(x))));
+            var first = block.Snakes1[i].Forward(x);
+            if (Configuration.Causal) first = Pad(first, (block.Kernel - 1) * block.Dilations[i], 0);
+            first = block.Convs1[i].Forward(first);
+            var second = block.Snakes2[i].Forward(first);
+            if (Configuration.Causal) second = Pad(second, block.Kernel - 1, 0);
+            var xt = block.Convs2[i].Forward(second);
             x = _engine.TensorAdd(xt, x);
         }
         return x;
@@ -293,10 +327,13 @@ internal sealed class HiftGenerator<T>
         var c = Configuration;
         // In the graph: the reference trains m_source.l_linear through the source's STFT and source_downs.
         var stft = SourceStft(source);
-        var x = ConvPre.Forward(mel);
+        var x = ConvPre.Forward(c.Causal ? Pad(mel, 0, c.ConvPreLookRight) : mel);
         for (int i = 0; i < Ups.Count; i++)
         {
-            x = Ups[i].Forward(LeakyRelu(x, c.LeakySlope));
+            x = LeakyRelu(x, c.LeakySlope);
+            x = c.Causal
+                ? Ups[i].Forward(Pad(NearestRepeat(x, c.UpsampleRates[i]), c.UpsampleKernels[i] - 1, 0))
+                : Ups[i].Forward(x);
             if (i == Ups.Count - 1)
             {
                 // ReflectionPad1d((1, 0)): the second frame, then the frames.
@@ -304,14 +341,19 @@ internal sealed class HiftGenerator<T>
                 var first = _engine.TensorSlice(x, new[] { 0, 0, 1 }, new[] { 1, channels, 1 });
                 x = _engine.TensorConcatenate(new[] { first, x }, 2);
             }
-            var si = RunResBlock(SourceBlocks[i], SourceDowns[i].Forward(stft));
+            var sourceInput = c.Causal && SourceDownKernels[i] > 1
+                ? Pad(stft, SourceDownKernels[i] / 2 - 1, 0)
+                : stft;
+            var si = RunResBlock(SourceBlocks[i], SourceDowns[i].Forward(sourceInput));
             x = _engine.TensorAdd(x, si);
             int kernels = c.ResblockKernels.Length;
             var sum = RunResBlock(ResBlocks[i * kernels], x);
             for (int j = 1; j < kernels; j++) sum = _engine.TensorAdd(sum, RunResBlock(ResBlocks[i * kernels + j], x));
             x = _engine.TensorMultiplyScalar(sum, NumOps.FromDouble(1.0 / kernels));
         }
-        x = ConvPost.Forward(LeakyRelu(x, 0.01));
+        x = LeakyRelu(x, 0.01);
+        if (c.Causal) x = Pad(x, 6, 0);
+        x = ConvPost.Forward(x);
         int halfBins = c.FftSize / 2 + 1, outFrames = x.Shape[2];
         var logMagnitude = _engine.TensorSlice(x, new[] { 0, 0, 0 }, new[] { 1, halfBins, outFrames });
         var phaseInput = _engine.TensorSlice(x, new[] { 0, halfBins, 0 }, new[] { 1, halfBins, outFrames });
@@ -349,15 +391,18 @@ internal sealed class HiftGenerator<T>
         for (int i = 0; i < F0Convs.Count; i++)
         {
             int input = i == 0 ? c.InChannels : c.F0Channels;
-            WeightNorm(F0Convs[i], $"f0_predictor.condnet.{2 * i}", new[] { c.F0Channels, input, 3 });
+            int kernel = c.Causal && i == 0 ? 4 : 3;
+            WeightNorm(F0Convs[i], $"f0_predictor.condnet.{2 * i}", new[] { c.F0Channels, input, kernel });
         }
         F0Classifier.LoadTorchWeights(read("f0_predictor.classifier.weight", new[] { 1, c.F0Channels }), null, read("f0_predictor.classifier.bias", new[] { 1 }));
         SourceMerge.LoadTorchWeights(read("m_source.l_linear.weight", new[] { 1, c.Harmonics + 1 }), null, read("m_source.l_linear.bias", new[] { 1 }));
-        WeightNorm(ConvPre, "conv_pre", new[] { c.BaseChannels, c.InChannels, 7 });
+        WeightNorm(ConvPre, "conv_pre", new[] { c.BaseChannels, c.InChannels, c.Causal ? c.ConvPreLookRight + 1 : 7 });
         for (int i = 0; i < Ups.Count; i++)
         {
             int input = c.BaseChannels >> i, output = c.BaseChannels >> (i + 1);
-            WeightNorm(Ups[i], $"ups.{i}", new[] { input, output, c.UpsampleKernels[i] });
+            WeightNorm(Ups[i], $"ups.{i}", c.Causal
+                ? new[] { output, input, c.UpsampleKernels[i] }
+                : new[] { input, output, c.UpsampleKernels[i] });
         }
         for (int i = 0; i < SourceDowns.Count; i++)
         {

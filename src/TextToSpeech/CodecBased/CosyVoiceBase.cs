@@ -105,11 +105,40 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     /// <summary>The S3 tokenizer the release ships.</summary>
     private protected abstract S3TokenizerConfiguration SpeechTokenizerConfiguration { get; }
 
+    /// <summary>The upper frequency of the flow's mel front end.</summary>
+    protected virtual double MelMaximumFrequency => 8000;
+
     /// <summary>The flow's configuration (CosyVoice 1's or CosyVoice 2's causal flow).</summary>
     private protected abstract CosyVoiceFlowConfiguration FlowConfiguration { get; }
 
     /// <summary>Builds the language model's layers into <paramref name="layers"/>.</summary>
     protected abstract void BuildLanguageModel(List<LayerBase<T>> layers, Random initialization);
+
+    /// <summary>Builds the release's speech-token-to-mel network.</summary>
+    protected virtual void BuildFlow(List<LayerBase<T>> layers, Random initialization) =>
+        _flow = new CosyVoiceFlow<T>(Engine, layers, FlowConfiguration, initialization);
+
+    /// <summary>Builds the release's mel-to-waveform network.</summary>
+    protected virtual void BuildVocoder(List<LayerBase<T>> layers, Random initialization)
+    {
+        var o = Settings;
+        int stages = o.HiftUpsampleRates.Length;
+        if (o.HiftUpsampleKernels.Length != stages || o.HiftSourceKernels.Length != stages)
+            throw new ArgumentException("HiFT needs one upsampling kernel and one source kernel per upsampling rate.");
+        var hift = new HiftConfiguration(InChannels: o.MelChannels, BaseChannels: o.HiftBaseChannels, Harmonics: o.HiftHarmonics,
+            SampleRate: o.SampleRate, NsfAlpha: 0.1, NsfSigma: 0.003, VoicedThreshold: 10, UpsampleRates: (int[])o.HiftUpsampleRates.Clone(),
+            UpsampleKernels: (int[])o.HiftUpsampleKernels.Clone(), FftSize: 16, HopSize: 4, ResblockKernels: new[] { 3, 7, 11 },
+            ResblockDilations: new[] { new[] { 1, 3, 5 }, new[] { 1, 3, 5 }, new[] { 1, 3, 5 } },
+            SourceKernels: (int[])o.HiftSourceKernels.Clone(), SourceDilations: Enumerable.Range(0, stages).Select(_ => new[] { 1, 3, 5 }).ToArray(),
+            LeakySlope: 0.1, AudioLimit: 0.99, F0Channels: o.HiftBaseChannels);
+        if (hift.UpsampleScale != o.HopSize)
+            throw new ArgumentException($"HiFT gives {hift.UpsampleScale} samples per mel frame; HopSize must be {hift.UpsampleScale}.");
+        _hift = new HiftGenerator<T>(Engine, layers, hift, initialization);
+    }
+
+    /// <summary>Builds the release's frozen speech tokenizer. A tokenizer provided by an external runtime may override this.</summary>
+    protected virtual void BuildSpeechTokenizer(List<LayerBase<T>> layers, Random initialization) =>
+        _speechTokenizer = new S3Tokenizer<T>(Engine, layers, SpeechTokenizerConfiguration, initialization);
 
     /// <summary>Speech tokens for text after an optional prompt (the language model's <c>inference</c>).</summary>
     protected abstract int[] GenerateWithLanguageModel(IReadOnlyList<int> text, IReadOnlyList<int> promptText,
@@ -162,9 +191,9 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         HasPaperLayers ? LayerInputDomain.Indices(TextVocabularySize) : base.GetInputDomain(inputShape);
 
     private protected CosyVoiceFlow<T> Flow => _flow ?? throw new InvalidOperationException("The flow exists in native mode only.");
-    private HiftGenerator<T> Hift => _hift ?? throw new InvalidOperationException("The vocoder exists in native mode only.");
-    private S3Tokenizer<T> SpeechTokenizer => _speechTokenizer ?? throw new InvalidOperationException("The speech tokenizer exists in native mode only.");
-    private CamPlusPlusEncoder<T> SpeakerEncoder => _speakerEncoder ?? throw new InvalidOperationException("The speaker encoder exists in native mode only.");
+    private protected HiftGenerator<T> Hift => _hift ?? throw new InvalidOperationException("The vocoder exists in native mode only.");
+    private protected S3Tokenizer<T> SpeechTokenizer => _speechTokenizer ?? throw new InvalidOperationException("The speech tokenizer exists in native mode only.");
+    private protected CamPlusPlusEncoder<T> SpeakerEncoder => _speakerEncoder ?? throw new InvalidOperationException("The speaker encoder exists in native mode only.");
 
     // The networks, for tests.
     internal CosyVoiceFlow<T>? FlowModel => _flow;
@@ -189,24 +218,11 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         var o = Settings;
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.SamplingSeed);
         BuildLanguageModel(_lmLayers, random);
-        _flow = new CosyVoiceFlow<T>(Engine, _flowLayers, FlowConfiguration, random);
-
-        // HiFTGenerator with ConvRNNF0Predictor: the release's upsampling and an iSTFT of 16 with hop 4.
-        var stages = o.HiftUpsampleRates.Length;
-        if (o.HiftUpsampleKernels.Length != stages || o.HiftSourceKernels.Length != stages)
-            throw new ArgumentException("HiFT needs one upsampling kernel and one source kernel per upsampling rate.");
-        var hift = new HiftConfiguration(InChannels: o.MelChannels, BaseChannels: o.HiftBaseChannels, Harmonics: o.HiftHarmonics,
-            SampleRate: o.SampleRate, NsfAlpha: 0.1, NsfSigma: 0.003, VoicedThreshold: 10, UpsampleRates: (int[])o.HiftUpsampleRates.Clone(),
-            UpsampleKernels: (int[])o.HiftUpsampleKernels.Clone(), FftSize: 16, HopSize: 4, ResblockKernels: new[] { 3, 7, 11 },
-            ResblockDilations: new[] { new[] { 1, 3, 5 }, new[] { 1, 3, 5 }, new[] { 1, 3, 5 } },
-            SourceKernels: (int[])o.HiftSourceKernels.Clone(), SourceDilations: Enumerable.Range(0, stages).Select(_ => new[] { 1, 3, 5 }).ToArray(),
-            LeakySlope: 0.1, AudioLimit: 0.99, F0Channels: o.HiftBaseChannels);
-        if (hift.UpsampleScale != o.HopSize)
-            throw new ArgumentException($"HiFT gives {hift.UpsampleScale} samples per mel frame; HopSize must be {hift.UpsampleScale}.");
-        _hift = new HiftGenerator<T>(Engine, _hiftLayers, hift, random);
+        BuildFlow(_flowLayers, random);
+        BuildVocoder(_hiftLayers, random);
 
         // The frozen front end: the S3 tokenizer and the CAM++ x-vector extractor.
-        _speechTokenizer = new S3Tokenizer<T>(Engine, _speechTokenizerLayers, SpeechTokenizerConfiguration, random);
+        BuildSpeechTokenizer(_speechTokenizerLayers, random);
         _speakerEncoder = new CamPlusPlusEncoder<T>(Engine, _speakerEncoderLayers, new CamPlusPlusConfiguration(
             EmbeddingSize: o.SpeakerEmbeddingDim, GrowthRate: o.SpeakerEncoderGrowthRate, InitialChannels: o.SpeakerEncoderChannels),
             random);
@@ -277,11 +293,13 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     /// The S3 speech tokens of a recording <c>[samples]</c> at <paramref name="sampleRate"/> (<c>_extract_speech_token</c>):
     /// resampled to 16 kHz, Whisper's 128-band log-mel, the release's S3 tokenizer.
     /// </summary>
-    public int[] SpeechTokens(Tensor<T> recording, int sampleRate)
+    public virtual int[] SpeechTokens(Tensor<T> recording, int sampleRate)
     {
         ThrowIfDisposed();
+        var released = SpeechTokensFromReleasedFrontend(recording, sampleRate);
+        if (released is not null) return released;
         using var _ = new NoGradScope<T>();
-        var audio = Resample(recording, sampleRate, PromptSampleRate);
+        var audio = ResampleAudio(recording, sampleRate, PromptSampleRate);
         var samples = new double[audio.Length];
         for (int i = 0; i < samples.Length; i++) samples[i] = NumOps.ToDouble(audio[i]);
         var logMel = S3Tokenizer<T>.LogMel(samples);
@@ -300,13 +318,17 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         using var _ = new NoGradScope<T>();
-        var audio = Resample(recording, sampleRate, PromptSampleRate);
+        var audio = ResampleAudio(recording, sampleRate, PromptSampleRate);
         _fbank ??= new KaldiFbank<T>(Engine, PromptSampleRate, 80, WindowType.Povey);
         var features = _fbank.Forward(audio);
         features = Engine.TensorSubtract(features, Engine.TensorBroadcastTo(Engine.ReduceMean(features, new[] { 0 }, true), features.Shape.ToArray()));
-        var embedding = SpeakerEncoder.Forward(Engine.Reshape(features, new[] { 1, features.Shape[0], features.Shape[1] }));
+        var embedding = ForwardSpeakerEncoder(Engine.Reshape(features, new[] { 1, features.Shape[0], features.Shape[1] }));
         return Engine.Reshape(embedding, new[] { Settings.SpeakerEmbeddingDim });
     }
+
+    /// <summary>Runs the frozen speaker network over batched, centered Kaldi features.</summary>
+    protected virtual Tensor<T> ForwardSpeakerEncoder(Tensor<T> features) =>
+        ForwardReleasedSpeakerEncoder(features) ?? SpeakerEncoder.Forward(features);
 
     /// <summary>
     /// The flow's mel <c>[frames, MelChannels]</c> of a recording at the model's sample rate (<c>_extract_speech_feat</c>:
@@ -316,7 +338,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     {
         if (audio is null) throw new ArgumentNullException(nameof(audio));
         var o = Settings;
-        _mel ??= new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.FftSize, o.MelChannels, 0, 8000);
+        _mel ??= new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.FftSize, o.MelChannels, 0, MelMaximumFrequency);
         return _mel.Forward(Engine.Reshape(audio, new[] { audio.Length }));
     }
 
@@ -327,13 +349,13 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     /// prompt's text and tokens. Without it, cross-lingual (<c>frontend_cross_lingual</c>): only the flow reads the prompt.
     /// A causal flow's prompt keeps <c>TokenMelRatio</c> mel frames per token, both trimmed to the shorter.
     /// </summary>
-    public TtsVoice<T> CreateVoice(Tensor<T> recording, int sampleRate, string? transcript = null)
+    public virtual TtsVoice<T> CreateVoice(Tensor<T> recording, int sampleRate, string? transcript = null)
     {
         ThrowIfDisposed();
         if (recording is null) throw new ArgumentNullException(nameof(recording));
         var tokens = SpeechTokens(recording, sampleRate);
         Tensor<T> mel;
-        using (new NoGradScope<T>()) mel = MelSpectrogram(Resample(recording, sampleRate, Settings.SampleRate));
+        using (new NoGradScope<T>()) mel = MelSpectrogram(ResampleAudio(recording, sampleRate, Settings.SampleRate));
         var flow = FlowConfiguration;
         if (flow.Causal)
         {
@@ -361,7 +383,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         return new TtsVoice<T> { SpeakerEmbedding = speakerEmbedding };
     }
 
-    private Tensor<T> Resample(Tensor<T> audio, int from, int to)
+    protected Tensor<T> ResampleAudio(Tensor<T> audio, int from, int to)
     {
         var flat = Engine.Reshape(audio, new[] { audio.Length });
         return from == to ? flat : AudioHelper<T>.ResampleBandLimited(Engine, flat, from, to);
@@ -408,7 +430,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     /// and these encoded together, the prompt's mel as the condition, Euler sampling from Gaussian noise, and the prompt's
     /// frames removed.
     /// </summary>
-    public Tensor<T> TokensToMel(IReadOnlyList<int> tokens, Random random)
+    public virtual Tensor<T> TokensToMel(IReadOnlyList<int> tokens, Random random)
     {
         if (tokens is null) throw new ArgumentNullException(nameof(tokens));
         if (tokens.Count == 0) throw new ArgumentException("There are no speech tokens to decode.", nameof(tokens));
@@ -429,12 +451,24 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>The waveform <c>[samples]</c> of a mel <c>[1, MelChannels, frames]</c> (<c>HiFTGenerator.inference</c>).</summary>
-    public Tensor<T> MelToAudio(Tensor<T> mel, Random random)
+    public virtual Tensor<T> MelToAudio(Tensor<T> mel, Random random)
     {
         if (mel is null) throw new ArgumentNullException(nameof(mel));
-        var audio = Hift.Forward(mel, random);
+        var audio = VocoderForward(mel, random);
         return Engine.Reshape(audio, new[] { audio.Length });
     }
+
+    /// <summary>The vocoder's differentiable inference path. Overridden by releases with another HiFT variant.</summary>
+    protected virtual Tensor<T> VocoderForward(Tensor<T> mel, Random random) => Hift.Forward(mel, random);
+
+    /// <summary>The vocoder's F0 predictor. Overridden by releases with another HiFT variant.</summary>
+    protected virtual Tensor<T> VocoderPredictF0(Tensor<T> mel) => Hift.PredictF0(mel);
+
+    /// <summary>The vocoder's neural source. Overridden by releases with another HiFT variant.</summary>
+    protected virtual Tensor<T> VocoderSource(Tensor<T> f0, Random random) => Hift.Source(f0, random);
+
+    /// <summary>The vocoder decoder. Overridden by releases with another HiFT variant.</summary>
+    protected virtual Tensor<T> VocoderDecode(Tensor<T> mel, Tensor<T> source) => Hift.Decode(mel, source);
 
     /// <inheritdoc />
     /// <remarks><paramref name="input"/> is text token ids (<see cref="PreprocessText"/>); the waveform <c>[samples]</c>
@@ -508,6 +542,17 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => objective(), StageOptimizer());
     }
 
+    /// <summary>Runs a language-model-only objective through the normal optimizer and parameter publication path.</summary>
+    protected T TrainLanguageModelObjective(Tensor<T> tokens, Func<Tensor<T>> objective)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode || !HasPaperLayers) throw new NotSupportedException("This objective needs the native language model.");
+        var previous = CurrentStage;
+        CurrentStage = CosyVoiceTrainingStage.LanguageModel;
+        try { return TrainWithCustomObjective(tokens, tokens, (_, _) => objective(), StageOptimizer()); }
+        finally { CurrentStage = previous; }
+    }
+
     /// <summary>
     /// One GAN step on an utterance (<c>HiFiGan.forward_discriminator</c>, then <c>forward_generator</c>): the recording
     /// cropped or padded to <see cref="CosyVoiceFamilyOptions.VocoderSegmentLength"/>, its mel, and its F0 (Harvest, as
@@ -521,7 +566,6 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
             "Training the vocoder needs HiFT's discriminators; build the model with IncludeDiscriminators = true.");
         var losses = _vocoderLosses ?? throw new InvalidOperationException("The vocoder losses are built with the discriminators.");
         var (real, mel, pitch) = VocoderTargets(sample, _trainingRandom);
-        var hift = Hift;
         var random = _trainingRandom;
 
         _discriminatorTurn = true;
@@ -532,7 +576,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
                 Tensor<T> generated;
                 using (new NoGradScope<T>())
                 {
-                    var audio = hift.Forward(mel, random);
+                    var audio = VocoderForward(mel, random);
                     generated = Engine.Reshape(audio, new[] { audio.Length });
                 }
                 return losses.Discriminator(discriminators.Forward(real), discriminators.Forward(generated));
@@ -553,11 +597,10 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         var discriminators = _discriminators ?? throw new InvalidOperationException(
             "Training the vocoder needs HiFT's discriminators; build the model with IncludeDiscriminators = true.");
         var losses = _vocoderLosses ?? throw new InvalidOperationException("The vocoder losses are built with the discriminators.");
-        var hift = Hift;
         return () =>
         {
-            var f0 = hift.PredictF0(mel);
-            var audio = hift.Decode(mel, hift.Source(f0, random));
+            var f0 = VocoderPredictF0(mel);
+            var audio = VocoderDecode(mel, VocoderSource(f0, random));
             var generated = Engine.Reshape(audio, new[] { audio.Length });
             return losses.Generator(real, generated, discriminators.Forward(real), discriminators.Forward(generated), f0, pitch).Total;
         };
@@ -708,8 +751,12 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
             mel = Engine.TensorSlice(mel, new[] { 0, 0 }, new[] { count * flowConfiguration.TokenMelRatio, o.MelChannels });
         }
         var target = Engine.Reshape(Engine.TensorTranspose(mel), new[] { 1, o.MelChannels, mel.Shape[0] });
-        return () => Flow.TrainingLoss(speech, target, xvector, training, random);
+        return () => FlowTrainingLoss(speech, target, xvector, training, random);
     }
+
+    /// <summary>The speech-token-to-mel network's paper objective.</summary>
+    protected virtual Tensor<T> FlowTrainingLoss(IReadOnlyList<int> speech, Tensor<T> target, Tensor<T> xvector,
+        bool training, Random random) => Flow.TrainingLoss(speech, target, xvector, training, random);
 
     // The utterance's x-vector: SpeakerReference when it is one ([SpeakerEmbeddingDim]), else CAM++'s of the recording
     // SpeakerReference or Audio holds, at the model's sample rate, as the recipe's data preparation extracts it.
@@ -768,39 +815,90 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     // ---------------------------------------------------------------- pretrained weights
 
     /// <summary>
-    /// Loads the released networks from a model directory, each a state dict converted to safetensors:
-    /// <c>llm.safetensors</c>, <c>flow.safetensors</c> and <c>hift.safetensors</c> (from <c>llm.pt</c>, <c>flow.pt</c>,
-    /// <c>hift.pt</c>), the S3 tokenizer (xingchensong/S3Tokenizer's PyTorch form of the release's ONNX tokenizer) as
-    /// <paramref name="speechTokenizerFile"/>, and <c>campplus.safetensors</c> (3D-Speaker's CAM++).
+    /// Loads original <c>llm.pt</c>, <c>flow.pt</c>, and <c>hift.pt</c> state dictionaries or their converted safetensors
+    /// counterparts. The model-specific hooks load <paramref name="speechTokenizerFile"/> and the frozen CAM++
+    /// encoder, using native converted parameters or the original ONNX graph according to the release.
     /// </summary>
     protected void LoadReleasedWeights(string modelDirectory, string speechTokenizerFile)
     {
         ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(modelDirectory)) throw new ArgumentException("The model directory is required.", nameof(modelDirectory));
-        LoadLanguageModel(Reader(Path.Combine(modelDirectory, "llm.safetensors")));
-        Flow.LoadTorchWeights(Reader(Path.Combine(modelDirectory, "flow.safetensors")), "");
-        Hift.LoadTorchWeights(Reader(Path.Combine(modelDirectory, "hift.safetensors")));
-        SpeechTokenizer.LoadTorchWeights(Reader(Path.Combine(modelDirectory, speechTokenizerFile)));
-        SpeakerEncoder.LoadTorchWeights(Reader(Path.Combine(modelDirectory, "campplus.safetensors")));
+        LoadLanguageModel(CheckpointReader(ComponentCheckpoint(modelDirectory, "llm")));
+        LoadFlowWeights(CheckpointReader(ComponentCheckpoint(modelDirectory, "flow")));
+        LoadVocoderWeights(CheckpointReader(ComponentCheckpoint(modelDirectory, "hift")));
+        LoadSpeechTokenizerWeights(modelDirectory, speechTokenizerFile);
+        LoadSpeakerEncoderCheckpoint(modelDirectory);
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
 
-    private static Func<string, int[], double[]> Reader(string path)
+    /// <summary>Loads the speech-token-to-mel state.</summary>
+    protected virtual void LoadFlowWeights(Func<string, int[], double[]> read) => Flow.LoadTorchWeights(read, "");
+
+    /// <summary>Loads the mel-to-waveform state.</summary>
+    protected virtual void LoadVocoderWeights(Func<string, int[], double[]> read) => Hift.LoadTorchWeights(read);
+
+    /// <summary>Loads or opens the frozen speech tokenizer.</summary>
+    protected virtual void LoadSpeechTokenizerWeights(string modelDirectory, string speechTokenizerFile)
+    {
+        if (!TryLoadReleasedSpeechTokenizer(modelDirectory, speechTokenizerFile))
+            SpeechTokenizer.LoadTorchWeights(CheckpointReader(Path.Combine(modelDirectory, speechTokenizerFile)));
+    }
+
+    /// <summary>Loads the frozen speaker encoder.</summary>
+    protected virtual void LoadSpeakerEncoderWeights(Func<string, int[], double[]> read) => SpeakerEncoder.LoadTorchWeights(read);
+
+    /// <summary>Loads the frozen speaker component; releases may provide its original ONNX graph.</summary>
+    protected virtual void LoadSpeakerEncoderCheckpoint(string modelDirectory)
+    {
+        if (!TryLoadReleasedSpeakerEncoder(modelDirectory))
+            LoadSpeakerEncoderWeights(CheckpointReader(Path.Combine(modelDirectory, "campplus.safetensors")));
+    }
+
+    private static string ComponentCheckpoint(string directory, string stem)
+    {
+        string converted = Path.Combine(directory, stem + ".safetensors");
+        string original = Path.Combine(directory, stem + ".pt");
+        return File.Exists(converted) || !File.Exists(original) ? converted : original;
+    }
+
+    /// <summary>Reads one original PyTorch state dictionary or converted safetensors file.</summary>
+    protected static Func<string, int[], double[]> CheckpointReader(string path)
     {
         if (!File.Exists(path)) throw new FileNotFoundException($"The checkpoint {path} is missing.", path);
+        if (path.EndsWith(".pt", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".pth", StringComparison.OrdinalIgnoreCase))
+        {
+            var state = new ComputerVision.Weights.WeightLoader().LoadWeights(path);
+            return (name, shape) =>
+            {
+                if (!state.TryGetValue(name, out var tensor) && !state.TryGetValue(LegacyWeightNormName(name), out tensor))
+                    throw new InvalidDataException($"The checkpoint {path} has no tensor '{name}'.");
+                if (shape.Length > 0 && !tensor.Shape.ToArray().SequenceEqual(shape))
+                    throw new InvalidDataException($"'{name}' has incompatible axes in the original checkpoint.");
+                return tensor.ToArray().Select(value => (double)value).ToArray();
+            };
+        }
         var file = AiDotNet.Agentic.Models.Local.SafetensorsReader.Read(File.ReadAllBytes(path));
         return (name, shape) =>
         {
-            var entry = file.Get(name) ?? throw new InvalidDataException($"The checkpoint {path} has no tensor '{name}'.");
+            string actualName = name;
+            var entry = file.Get(actualName);
+            if (entry is null) { actualName = LegacyWeightNormName(name); entry = file.Get(actualName); }
+            if (entry is null) throw new InvalidDataException($"The checkpoint {path} has no tensor '{name}'.");
+            if (shape.Length > 0 && !entry.Shape.SequenceEqual(shape.Select(dimension => (long)dimension)))
+                throw new InvalidDataException($"'{name}' has incompatible axes in the converted checkpoint.");
             // num_batches_tracked is an int64 scalar that nothing reads.
-            if (entry.DataType == "I64") return new[] { (double)BitConverter.ToInt64(file.GetRawBytes(name), 0) };
-            var values = file.ReadAsDouble(name);
+            if (entry.DataType == "I64") return new[] { (double)BitConverter.ToInt64(file.GetRawBytes(actualName), 0) };
+            var values = file.ReadAsDouble(actualName);
             if (shape.Length > 0 && values.Length != shape.Aggregate(1, (a, b) => a * b))
                 throw new InvalidDataException($"'{name}' has {values.Length} values in the checkpoint but [{string.Join(", ", shape)}] " +
                     "in this model; build the model with the checkpoint's configuration.");
             return values;
         };
     }
+
+    private static string LegacyWeightNormName(string name) => name
+        .Replace(".parametrizations.weight.original0", ".weight_g")
+        .Replace(".parametrizations.weight.original1", ".weight_v");
 
     // ---------------------------------------------------------------- housekeeping
 
@@ -826,6 +924,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         if (_disposed)
             return;
         _disposed = true;
+        if (disposing) DisposeReleasedFrontends();
         base.Dispose(disposing);
     }
 }

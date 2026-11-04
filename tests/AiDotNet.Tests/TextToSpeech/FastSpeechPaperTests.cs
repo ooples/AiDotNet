@@ -23,6 +23,7 @@ public class FastSpeechPaperTests
 {
     private static FastSpeechOptions SmallOptions() => new()
     {
+        VocabSize = 64,
         EncoderDim = 32,
         HiddenDim = 32,
         NumHeads = 2,
@@ -33,6 +34,24 @@ public class FastSpeechPaperTests
         DurationPredictorDropout = 0.0,
         DropoutRate = 0.0,
     };
+
+    [Fact]
+    public void Defaults_MatchThePublishedLjspeechTable()
+    {
+        var options = new FastSpeechOptions();
+
+        Assert.Equal(51, options.VocabSize);
+        Assert.Equal(6, options.NumEncoderLayers);
+        Assert.Equal(6, options.NumDecoderLayers);
+        Assert.Equal(384, options.HiddenDim);
+        Assert.Equal(2, options.NumHeads);
+        Assert.Equal(1536, options.FftFilterSize);
+        Assert.Equal(new[] { 3, 3 }, options.FftKernelSizes);
+        Assert.Equal(256, options.DurationPredictorFilterSize);
+        Assert.Equal(3, options.DurationPredictorKernelSize);
+        Assert.Equal(0.1, options.DropoutRate);
+        Assert.Equal(80, options.MelChannels);
+    }
 
     private static FastSpeech<double> CreateModel(FastSpeechOptions? options = null)
     {
@@ -116,5 +135,19 @@ public class FastSpeechPaperTests
         int slow = model.VarianceAdaptor.Adapt(hidden, targets: null, durationScale: 2.0).Durations.Sum();
         Assert.True(normal > 0);
         Assert.InRange(slow, 2 * normal - 6, 2 * normal + 6); // per-phoneme rounding: at most 1 frame each
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConvertedCheckpoint_RestoresEncoderDurationPredictorAndDecoder()
+    {
+        await Task.Yield();
+        var source = CreateModel();
+        var expected = source.GetParameters().ToArray();
+        var restored = CreateModel();
+
+        restored.LoadConvertedWeights(name => name == "fastspeech.parameters" ? expected : null);
+
+        Assert.Equal(expected, restored.GetParameters().ToArray());
+        Assert.Throws<InvalidDataException>(() => restored.LoadConvertedWeights(_ => new double[expected.Length - 1]));
     }
 }

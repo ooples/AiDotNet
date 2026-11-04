@@ -57,9 +57,9 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
 
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _direction;
-    [TrainableParameter(Role = PersistentTensorRole.Weights)]
+    [TrainableParameter(Role = PersistentTensorRole.Weights, Condition = nameof(UsesWeightNormalization))]
     private Tensor<T> _gain;
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Condition = nameof(HasBias))]
     private Tensor<T> _bias;
     [Buffer]
     private Tensor<T> _u;
@@ -140,8 +140,8 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         _v = NormalizedGaussian(per, random);
 
         RegisterTrainableParameter(_direction, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_gain, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
+        if (UsesWeightNormalization) RegisterTrainableParameter(_gain, PersistentTensorRole.Weights);
+        if (HasBias) RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     private Tensor<T> NormalizedGaussian(int length, Random random)
@@ -171,6 +171,7 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
 
     /// <summary>The weight reparameterization; without one, the gain tensor is unused.</summary>
     internal ConvolutionNormalization Normalization => _normalization;
+    private bool UsesWeightNormalization => _normalization == ConvolutionNormalization.Weight;
 
     /// <summary>Sets the bias to zero (references that initialize a convolution's bias with <c>nn.init.constant_(0)</c>).</summary>
     internal void ZeroBias()

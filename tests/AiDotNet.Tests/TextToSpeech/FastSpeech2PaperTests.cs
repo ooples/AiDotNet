@@ -22,6 +22,25 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </remarks>
 public class FastSpeech2PaperTests
 {
+    [Fact]
+    public void Defaults_MatchAppendixAAndTableSeven()
+    {
+        var options = new FastSpeech2Options();
+
+        Assert.Equal(76, options.VocabSize);
+        Assert.Equal(4, options.NumEncoderLayers);
+        Assert.Equal(4, options.NumDecoderLayers);
+        Assert.Equal(256, options.HiddenDim);
+        Assert.Equal(2, options.NumHeads);
+        Assert.Equal(1024, options.FftFilterSize);
+        Assert.Equal(new[] { 9, 1 }, options.FftKernelSizes);
+        Assert.Equal(256, options.VariancePredictorFilterSize);
+        Assert.Equal(3, options.VariancePredictorKernelSize);
+        Assert.Equal(0.5, options.VariancePredictorDropout);
+        Assert.Equal(0.1, options.DropoutRate);
+        Assert.Equal(80, options.MelChannels);
+    }
+
     private static FastSpeech2Options SmallOptions() => new()
     {
         EncoderDim = 32,
@@ -155,5 +174,19 @@ public class FastSpeech2PaperTests
 
         Assert.Equal(5, adapted.Durations.Length);
         Assert.Equal(adapted.Durations.Sum(), adapted.Expanded.Shape[0]);
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task ConvertedCheckpoint_RestoresEncoderVarianceAdaptorAndDecoder()
+    {
+        await Task.Yield();
+        var source = CreateModel();
+        var expected = source.GetParameters().ToArray();
+        var restored = CreateModel();
+
+        restored.LoadConvertedWeights(name => name == "fastspeech2.parameters" ? expected : null);
+
+        Assert.Equal(expected, restored.GetParameters().ToArray());
+        Assert.Throws<InvalidDataException>(() => restored.LoadConvertedWeights(_ => new double[expected.Length - 1]));
     }
 }

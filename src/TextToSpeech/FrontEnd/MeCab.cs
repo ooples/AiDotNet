@@ -546,6 +546,10 @@ internal sealed class MeCab
     /// <summary>The best path's surfaces, in order.</summary>
     public IReadOnlyList<string> Segment(string text) => Parse(text).Select(w => w.Surface).ToList();
 
+    /// <summary>Selected UniDic token identities, shared with the exported Cutlet readings.</summary>
+    internal IReadOnlyList<(string Surface, int Token)> ParseCutlet(string text) =>
+        BestPath(text).Select(w => (w.Surface, ReferenceEquals(w.Node.Source, _system) ? w.Node.Token : -1)).ToList();
+
     /// <summary>The best path's words and their part-of-speech tags (empty for a dictionary without tags).</summary>
     public IReadOnlyList<(string Surface, string Tag)> Parse(string text) =>
         BestPath(text).Select(w => (w.Surface, w.Node.Tag >= 0 ? _tags[w.Node.Tag] : "")).ToList();

@@ -8,6 +8,9 @@ public enum VallEXLanguage
 
     /// <summary>Mandarin Chinese (the reference's id 1).</summary>
     Mandarin = 1,
+
+    /// <summary>Japanese (id 2 in the community checkpoint; absent from the two-language paper configuration).</summary>
+    Japanese = 2,
 }
 
 /// <summary>Options for VALL-E X (Zhang et al. 2023, "Speak Foreign Languages with Your Own Voice: Cross-Lingual Neural
@@ -37,7 +40,30 @@ public class VALLEXOptions : VALLEOptions
         : base(other)
     {
         LanguagePlacement = other.LanguagePlacement;
+        LanguageCount = other.LanguageCount;
+        UseCommunityPhoneTokenizer = other.UseCommunityPhoneTokenizer;
+        SynthesisLanguage = other.SynthesisLanguage;
     }
+
+    /// <summary>Language embedding rows: two for the paper, three for the community checkpoint.</summary>
+    public int LanguageCount { get; set; } = 2;
+
+    /// <summary>Use the community's 70-token character BPE and unframed phoneme sequence.</summary>
+    public bool UseCommunityPhoneTokenizer { get; set; }
+
+    /// <summary>Explicit target language for synthesis, or null to infer English/Mandarin from phonemes.</summary>
+    public VallEXLanguage? SynthesisLanguage { get; set; }
+
+    /// <summary>Original Plachtaa/VALL-E-X checkpoint axes and decoding choices; this is a community reproduction.</summary>
+    public static VALLEXOptions CommunityCheckpoint() => new()
+    {
+        TextTokens = 2048,
+        LanguageCount = 3,
+        LanguagePlacement = VallELanguagePlacement.TextTokens,
+        PrependBos = true,
+        StopOnMostLikelyEndToken = false,
+        UseCommunityPhoneTokenizer = true,
+    };
 
     /// <summary>
     /// Where the language embedding is added: the AR model's acoustic-token embeddings (the paper, §3.3, the default)

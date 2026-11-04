@@ -74,6 +74,9 @@ public partial class CosyVoice2<T> : CosyVoiceBase<T>
     private CosyVoice2Lm<T>? _lm;
     private CosyVoiceFlowConfiguration? _flowConfiguration;
 
+    /// <inheritdoc />
+    protected override double MelMaximumFrequency => _options.SampleRate / 2.0;
+
     /// <summary>
     /// Initializes a new instance of the <see cref="CosyVoice2{T}"/> class in ONNX inference mode.
     /// </summary>
@@ -92,6 +95,7 @@ public partial class CosyVoice2<T> : CosyVoiceBase<T>
         _options.ModelPath = modelPath;
         Validate();
         Initialize();
+        InitializeReleasedFrontends();
     }
 
     /// <summary>
@@ -111,11 +115,12 @@ public partial class CosyVoice2<T> : CosyVoiceBase<T>
         Options = _options;
         Validate();
         Initialize();
+        InitializeReleasedFrontends();
     }
 
     private void Validate()
     {
-        // Qwen's token table is wider than the tokenizer (151,936 rows for 151,682 ids), as the release's is.
+        // The trained embedding table has 151,936 rows; the released BlankEN tokenizer has 151,663 IDs.
         if (_options.VocabSize < _text.VocabularySize)
             throw new ArgumentException($"VocabSize ({_options.VocabSize}) must cover the tokenizer's {_text.VocabularySize} ids.",
                 nameof(_options.VocabSize));

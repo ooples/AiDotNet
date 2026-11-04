@@ -62,10 +62,13 @@ public class EnCodecOptions : NeuralAudioCodecOptions
     /// <summary>Gets or sets the last convolution's kernel (7).</summary>
     public int LastKernelSize { get; set; } = 7;
 
-    /// <summary>Gets or sets whether the model is streamable: causal padding and weight normalization (true at 24 kHz);
-    /// otherwise padding is split evenly and each convolution is followed by a layer normalization over channels and
-    /// time (§3.1, "Non-streamable").</summary>
+    /// <summary>Gets or sets whether convolution padding is causal (true at 24 kHz). Otherwise padding is split
+    /// evenly. Normalization follows the standard preset unless <see cref="TimeGroupNormalization"/> is set.</summary>
     public bool Causal { get; set; } = true;
+
+    /// <summary>Overrides convolution normalization. Null uses the standard causal weight-normalized or non-causal
+    /// time-group-normalized preset; false also supports the non-causal, weight-normalized GigaSpeech codec.</summary>
+    public bool? TimeGroupNormalization { get; set; }
 
     /// <summary>Gets or sets whether convolution padding reflects the signal rather than zero-filling (true; reference).</summary>
     public bool ReflectPadding { get; set; } = true;

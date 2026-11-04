@@ -28,15 +28,18 @@ internal sealed class EspeakPhonemizer
     private readonly Func<string, string, string> _espeak;
     private readonly Regex _punctuation;
     private readonly bool _withStress;
+    private readonly bool _keepLanguageFlags;
 
     /// <param name="language">eSpeak's language code ("en-us", "fr-fr", "de", "ko", …).</param>
     /// <param name="marks">The punctuation marks kept (each one character).</param>
     /// <param name="espeak">eSpeak's phonemes of (language, text), clauses joined by spaces; null for the installed
     /// library.</param>
     /// <param name="withStress">Whether the stress marks are kept (phonemizer's <c>with_stress</c>; Zonos keeps them).</param>
-    public EspeakPhonemizer(string language, string marks, Func<string, string, string>? espeak = null, bool withStress = false)
+    public EspeakPhonemizer(string language, string marks, Func<string, string, string>? espeak = null, bool withStress = false,
+        bool keepLanguageFlags = false)
     {
         _withStress = withStress;
+        _keepLanguageFlags = keepLanguageFlags;
         _language = language ?? throw new ArgumentNullException(nameof(language));
         _espeak = espeak ?? ((lang, text) => EspeakNg.Instance.TextToPhonemes(lang, text));
         var set = new StringBuilder();
@@ -113,7 +116,7 @@ internal sealed class EspeakPhonemizer
         string line = espeak.Trim().Replace("\n", " ").Replace("  ", " ");
         line = RepeatedUnderscores.Replace(line, "_");
         line = line.Replace("_ ", " ");
-        line = LanguageFlags.Replace(line, "");
+        if (!_keepLanguageFlags) line = LanguageFlags.Replace(line, "");
         if (line.Length == 0) return "";
         return string.Join(wordSeparator, line.Split(' ').Select(word => (_withStress ? word.Trim() : StressMarks.Replace(word.Trim(), "")).Replace("_", phoneSeparator)));
     }

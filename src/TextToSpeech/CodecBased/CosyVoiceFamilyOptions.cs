@@ -45,7 +45,19 @@ public abstract class CosyVoiceFamilyOptions : CodecTtsOptions
         WarmupSteps = other.WarmupSteps;
         IncludeDiscriminators = other.IncludeDiscriminators;
         VocoderSegmentLength = other.VocoderSegmentLength;
+        MaxReferenceSeconds = other.MaxReferenceSeconds;
+        SpeechTokenizerPath = other.SpeechTokenizerPath;
+        SpeakerEncoderOnnxPath = other.SpeakerEncoderOnnxPath;
     }
+
+    /// <summary>Maximum prompt duration accepted by the released frontend (30 seconds).</summary>
+    public int MaxReferenceSeconds { get; set; } = 30;
+
+    /// <summary>Optional original frozen speech-tokenizer ONNX graph; release loading sets this path.</summary>
+    public string? SpeechTokenizerPath { get; set; }
+
+    /// <summary>Optional original frozen CAM++ graph; release loading sets this path.</summary>
+    public string? SpeakerEncoderOnnxPath { get; set; }
 
     /// <summary>The flow's width (<c>input_size</c>, its encoder's <c>output_size</c>).</summary>
     public int FlowDim { get; set; } = 512;

@@ -58,6 +58,8 @@ namespace AiDotNet.TextToSpeech.Classic;
                         + "2017 -- the inverse-square-root schedule, whose warmup is 4000 steps (Vaswani "
                         + "Sec. 5.3). The paper restates neither the peak rate nor the warmup length, so "
                         + "the provenance records that both come from the cited work. Batch 64 (Table 5).")]
+[ArchitectureFromPaper("https://arxiv.org/abs/2006.04558",
+    "The shared FastSpeech 2 factory reduces to FastSpeech's original duration-only length regulator when its pitch and energy branches are disabled; both papers use the same feed-forward Transformer blocks (Ren et al. 2019, sections 2.1 and 2.2; Ren et al. 2021, section 2).")]
 public partial class FastSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticModel<T>
 {
     private readonly FastSpeechOptions _options;
@@ -100,7 +102,7 @@ public partial class FastSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMo
         _useNativeMode = true;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -114,12 +116,20 @@ public partial class FastSpeech<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMo
     public new int HopSize => _options.HopSize;
     public int FftSize => _options.FftSize;
 
+    protected override Tensor<T> PreprocessText(string text)
+    {
+        var ids = FrontEnd.ClassicTtsText.Phonemes(text, false, _options.TextSymbols, _options.VocabSize, _options.MaxTextLength);
+        var tokens = new Tensor<T>(new[] { ids.Length });
+        for (int i = 0; i < ids.Length; i++) tokens[i] = NumOps.FromDouble(ids[i]);
+        return tokens;
+    }
+
     /// <summary>Generates a mel spectrogram from text (FastSpeech is an acoustic model; pair it with a vocoder).</summary>
     public Tensor<T> TextToMel(string text) => Synthesize(text);
 
     /// <inheritdoc />
-    /// <remarks>The paper states only the duration loss; the mel spectrogram is scored with squared error, as in its
-    /// reference implementations (FastSpeech 2 is where mean absolute error is specified).</remarks>
+    /// <remarks>The paper states only the duration loss; the teacher-distilled mel spectrogram is scored with squared
+    /// error, as in the paper's training pipeline (FastSpeech 2 is where mean absolute error is specified).</remarks>
     protected override bool UsesL1MelLoss => false;
 
     /// <inheritdoc />

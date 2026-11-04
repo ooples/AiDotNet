@@ -23,6 +23,9 @@ internal sealed record AlbertConfiguration
 
     public int TypeVocabSize { get; init; } = 2;
 
+    /// <summary>Word-embedding row excluded from lookup gradients, as Hugging Face's padding_idx (0); -1 disables it.</summary>
+    public int PadTokenId { get; init; } = 0;
+
     public double LayerNormEpsilon { get; init; } = 1e-12;
 
     /// <summary>Hidden and attention dropout (0, Hugging Face's AlbertConfig default); applied only in training.</summary>
@@ -49,6 +52,7 @@ internal sealed class AlbertNetwork<T>
         Configuration = configuration;
         var c = configuration;
         if (c.Hidden % c.Heads != 0) throw new ArgumentException("The width must divide by the head count.", nameof(configuration));
+        if (c.PadTokenId < -1 || c.PadTokenId >= c.VocabSize) throw new ArgumentOutOfRangeException(nameof(configuration));
         TLayer Add<TLayer>(TLayer layer) where TLayer : LayerBase<T>
         {
             layers.Add(layer);
@@ -56,6 +60,11 @@ internal sealed class AlbertNetwork<T>
         }
         DenseLayer<T> Linear(int outputs) => Add(new DenseLayer<T>(outputs, (IActivationFunction<T>)new IdentityActivation<T>()));
         WordEmbeddings = Add(new TiedEmbeddingLayer<T>(c.VocabSize, c.EmbeddingSize));
+        if (c.PadTokenId >= 0)
+        {
+            for (int column = 0; column < c.EmbeddingSize; column++) WordEmbeddings.Table[c.PadTokenId, column] = NumOps.Zero;
+            _engine.InvalidatePersistentTensor(WordEmbeddings.Table);
+        }
         PositionEmbeddings = Add(new TiedEmbeddingLayer<T>(c.MaxPositions, c.EmbeddingSize));
         TypeEmbeddings = Add(new TiedEmbeddingLayer<T>(c.TypeVocabSize, c.EmbeddingSize));
         EmbeddingNorm = Add(new LayerNormalizationLayer<T>(c.EmbeddingSize, c.LayerNormEpsilon));
@@ -103,7 +112,19 @@ internal sealed class AlbertNetwork<T>
         int length = ids.Count, heads = c.Heads, headDim = c.Hidden / heads;
         if (length > c.MaxPositions) throw new ArgumentException($"At most {c.MaxPositions} tokens.", nameof(ids));
         var positions = Enumerable.Range(0, length).ToArray();
-        var x = _engine.TensorAdd(_engine.TensorAdd(WordEmbeddings.Forward(Ids(ids)), TypeEmbeddings.Forward(Ids(new int[length]))),
+        var words = WordEmbeddings.Forward(Ids(ids));
+        if (c.PadTokenId >= 0 && ids.Any(id => id == c.PadTokenId))
+        {
+            // padding_idx suppresses the embedding-row gradient, not attention
+            // to the token or its loaded value (Kokoro also uses ID 0 as a boundary).
+            var mask = new Tensor<T>(new[] { length, c.EmbeddingSize });
+            var frozen = new Tensor<T>(new[] { length, c.EmbeddingSize });
+            for (int row = 0; row < length; row++) for (int column = 0; column < c.EmbeddingSize; column++)
+                if (ids[row] == c.PadTokenId) frozen[row, column] = WordEmbeddings.Table[c.PadTokenId, column];
+                else mask[row, column] = NumOps.One;
+            words = _engine.TensorAdd(_engine.TensorMultiply(words, mask), frozen);
+        }
+        var x = _engine.TensorAdd(_engine.TensorAdd(words, TypeEmbeddings.Forward(Ids(new int[length]))),
             PositionEmbeddings.Forward(Ids(positions)));
         x = Drop(EmbeddingNorm.Forward(x), training, random);
         x = EmbeddingMapping.Forward(x);                                                                    // [L, H]

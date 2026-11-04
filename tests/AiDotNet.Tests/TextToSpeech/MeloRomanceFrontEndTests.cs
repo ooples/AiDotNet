@@ -21,6 +21,8 @@ public class MeloRomanceFrontEndTests
     {
         const string name = "melo_romance_reference.json";
         string relative = Path.Combine("TextToSpeech", "ReferenceData", name);
+        string copied = Path.Combine(AppContext.BaseDirectory, relative);
+        if (File.Exists(copied)) return JsonDocument.Parse(File.ReadAllText(copied)).RootElement;
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "tests", "AiDotNet.Tests", relative))) dir = dir.Parent;
         string path = Path.Combine(dir?.FullName ?? throw new FileNotFoundException(name), "tests", "AiDotNet.Tests", relative);
