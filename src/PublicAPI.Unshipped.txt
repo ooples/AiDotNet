@@ -20544,7 +20544,6 @@ AiDotNet.Models.Options.DecisionTransformerOptions<T>.OptimizerFactory.get -> Sy
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.OptimizerFactory.init -> void
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.WeightDecay.get -> double
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.WeightDecay.init -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.DecisionTransformerOptions() -> void
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.NormalizeStates.get -> bool
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.NormalizeStates.init -> void
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.TargetReturn.get -> double?
