@@ -136,7 +136,13 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         // an ignored row (index outside [0, classes) after rounding, or NaN), so the sum matches the one-hot
         // numerator, and the supervised-row count below is the same "count the rows" rule, built from the
         // target alone as tensor ops (detached) so the compiled path re-evaluates it each step.
-        if (target.Shape.Length == predicted.Shape.Length - 1 && predicted.Shape.Length >= 2
+        bool isClassIndexTarget =
+            target.Shape.Length == predicted.Shape.Length - 1 ||
+            (target.Length != predicted.Length
+             && predicted.Shape[classAxis] > 1
+             && target.Length == predicted.Length / predicted.Shape[classAxis]);
+
+        if (isClassIndexTarget && predicted.Shape.Length >= 2
             && classAxis == predicted.Shape.Length - 1)
         {
             int classes = predicted.Shape[classAxis];
@@ -153,9 +159,23 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
             return Engine.TensorNegate(Engine.TensorDivide(pickedTotal, rowCount));
         }
 
-        if (target.Shape.Length == predicted.Shape.Length - 1)
+        if (isClassIndexTarget)
         {
-            target = ClassIndicesToOneHot(target, predicted.Shape[classAxis], classAxis, predicted.Shape.ToArray());
+            var indicesTarget = target;
+            if (indicesTarget.Shape.Length != predicted.Shape.Length - 1)
+            {
+                var compactShape = new int[predicted.Shape.Length - 1];
+                int dst = 0;
+                for (int axis = 0; axis < predicted.Shape.Length; axis++)
+                {
+                    if (axis == classAxis) continue;
+                    compactShape[dst++] = predicted.Shape[axis];
+                }
+                indicesTarget = compactShape.Length == 0
+                    ? new Tensor<T>(Array.Empty<int>(), new Vector<T>(new[] { target.Data.Span[0] }))
+                    : Engine.Reshape(target, compactShape);
+            }
+            target = ClassIndicesToOneHot(indicesTarget, predicted.Shape[classAxis], classAxis, predicted.Shape.ToArray());
         }
 
         // Dense targets over the last axis: the engine's single softmax cross-entropy op is exactly the objective
