@@ -96,18 +96,6 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
     private readonly DenseLayer<T> _mlpFc2;
 
     // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _cachedInput;
-    [Scratch]
-    private Tensor<T>? _cachedNorm1Output;
-    [Scratch]
-    private Tensor<T>? _cachedAttnOutput;
-    [Scratch]
-    private Tensor<T>? _cachedResidual1;
-    [Scratch]
-    private Tensor<T>? _cachedNorm2Output;
-    [Scratch]
-    private Tensor<T>? _cachedQkv; // [numWindows, windowArea, 3*dim]
     private int _cachedNumWindows;
     private int _cachedWindowArea;
     private int _cachedH;
@@ -254,9 +242,6 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
         int batch = input.Shape[0];
         int seqLen = input.Shape[1];
 
-        // Cache for backward
-        _cachedInput = input;
-
         // Infer spatial dimensions (assume square or find valid factorization)
         int h = (int)Math.Sqrt(seqLen);
         int w = seqLen / h;
@@ -278,18 +263,14 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
 
         // Pre-norm + Window attention + residual
         var normed1 = _norm1.Forward(input);
-        _cachedNorm1Output = normed1;
 
         var attnOut = WindowAttention(normed1, h, w, batch);
-        _cachedAttnOutput = attnOut;
 
         // Stochastic depth on the attention residual branch (Swin, Liu et al. 2021).
         var residual1 = AddTensors(input, DropPath(attnOut, batch));
-        _cachedResidual1 = residual1;
 
         // Pre-norm + MLP + residual
         var normed2 = _norm2.Forward(residual1);
-        _cachedNorm2Output = normed2;
 
         var mlpOut = ApplyMLP(normed2);
         // Stochastic depth on the MLP residual branch (independent draw from the attention branch).
@@ -455,7 +436,6 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
         var flatWindows = Engine.Reshape(windows, [numWindows * windowArea, c]);
         var flatQkv = _qkvProj.Forward(flatWindows);
         var qkv = Engine.Reshape(flatQkv, [numWindows, windowArea, 3 * c]);
-        _cachedQkv = qkv;
         _cachedNumWindows = numWindows;
         _cachedWindowArea = windowArea;
 
@@ -659,12 +639,6 @@ public partial class SwinTransformerBlockLayer<T> : LayerBase<T>, IShapeContract
         _outProj.ResetState();
         _mlpFc1.ResetState();
         _mlpFc2.ResetState();
-
-        _cachedInput = null;
-        _cachedNorm1Output = null;
-        _cachedAttnOutput = null;
-        _cachedResidual1 = null;
-        _cachedNorm2Output = null;
     }
 
     /// <inheritdoc/>

@@ -108,24 +108,6 @@ public partial class SplitLayer<T> : LayerBase<T>, IShapeContract
     private readonly int _numSplits;
 
     /// <summary>
-    /// Stores the input tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field caches the input to the layer during the forward pass, which is needed during the backward pass
-    /// to compute gradients. It is cleared when ResetState() is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the layer's short-term memory of what input it received.
-    /// 
-    /// During training, the layer needs to remember what input it processed so that it can
-    /// properly calculate how to improve. This temporary storage is cleared between batches
-    /// or when you explicitly reset the layer.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
@@ -293,7 +275,6 @@ public partial class SplitLayer<T> : LayerBase<T>, IShapeContract
             processInput = Engine.Reshape(input, [flatBatch, input.Shape[rank - 1]]);
         }
 
-        _lastInput = processInput;
         int inputSize = processInput.Shape[1];
         int splitSize = inputSize / _numSplits;
         var output = Engine.Reshape(processInput, new[] { batchSize, _numSplits, splitSize });
@@ -345,7 +326,5 @@ public partial class SplitLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward pass
-        _lastInput = null;
     }
 }

@@ -121,8 +121,6 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
     private bool _usesFallbackAdjacency;
     [Scratch]
     private Tensor<T>? _nodeEmbeddings;
-    [Scratch]
-    private Tensor<T>? _graphEmbedding;
     private int[]? _maxPoolingIndices; // Cached indices for max pooling backward pass
 
 
@@ -305,13 +303,12 @@ public partial class GraphClassificationModel<T> : GraphModelLayoutBase<T>
         {
             current = layer.Forward(current);
         }
-        _nodeEmbeddings = current;
+        // Read only by the pooling backward.
+        ManualBackwardCache<T>.SaveForBackward(IsTrainingMode, ref _nodeEmbeddings, current);
 
-        // Step 2: Pool node embeddings to graph embedding
-        _graphEmbedding = PoolGraph(_nodeEmbeddings);
-
-        // Step 3: For classification, apply softmax (done in loss computation)
-        return _graphEmbedding;
+        // Step 2: Pool node embeddings to graph embedding. Step 3, the classification softmax, is
+        // done in the loss computation.
+        return PoolGraph(current);
     }
 
     /// <summary>

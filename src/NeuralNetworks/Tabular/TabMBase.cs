@@ -71,8 +71,6 @@ public abstract partial class TabMBase<T>
 
     // Cache for backward pass
     [Scratch]
-    private Tensor<T>? _embeddedInputCache;
-    [Scratch]
     private readonly List<Tensor<T>> _hiddenOutputsCache;
 
     /// <summary>
@@ -225,12 +223,10 @@ public abstract partial class TabMBase<T>
                     }
                 }
             }
-            _embeddedInputCache = x;
         }
         else
         {
             x = features;
-            _embeddedInputCache = null;
         }
 
         // Step 2: Pass through BatchEnsemble hidden layers
@@ -418,7 +414,6 @@ public abstract partial class TabMBase<T>
     /// </summary>
     public virtual void ResetState()
     {
-        _embeddedInputCache = null;
         _featureEmbeddingsGrad = null;
         _hiddenOutputsCache.Clear();
 
