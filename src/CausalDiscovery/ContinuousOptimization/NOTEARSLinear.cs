@@ -150,6 +150,31 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
     /// <inheritdoc/>
     protected override Matrix<T> DiscoverStructureCore(Matrix<T> data)
     {
+        if (typeof(T) == typeof(float))
+        {
+            // The augmented penalty reaches 1e16; float loss/constraint arithmetic loses the
+            // precision required by the 1e-8 acyclicity tolerance and destabilizes line search.
+            // Keep the public float boundary while solving the small weight matrix in double.
+            var preciseData = new Matrix<double>(data.Rows, data.Columns);
+            for (int row = 0; row < data.Rows; row++)
+                for (int column = 0; column < data.Columns; column++)
+                    preciseData[row, column] = NumOps.ToDouble(data[row, column]);
+            var solver = new NOTEARSLinear<double>(new CausalDiscoveryOptions
+            {
+                SparsityPenalty = Lambda1, EdgeThreshold = WThreshold, MaxIterations = MaxIterations,
+                AcyclicityTolerance = HTolerance, MaxPenalty = _rhoMax, LossType = LossType
+            });
+            var preciseWeights = solver.DiscoverStructureCore(preciseData);
+            _lastIterations = solver._lastIterations;
+            _lastH = solver._lastH;
+            _lastLoss = solver._lastLoss;
+            var weights = new Matrix<T>(data.Columns, data.Columns);
+            for (int row = 0; row < weights.Rows; row++)
+                for (int column = 0; column < weights.Columns; column++)
+                    weights[row, column] = NumOps.FromDouble(preciseWeights[row, column]);
+            return weights;
+        }
+
         // Standardize data for numerical stability — the NOTEARS acyclicity constraint
         // h(W) = tr(exp(W∘W)) - d uses matrix exponential which explodes for large W entries.
         // Without standardization, loss gradients are proportional to data magnitude,
@@ -258,9 +283,16 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
             {
                 int row = i / d;
                 int col = i % d;
-                if (row != col) // Skip diagonal
+                if (row == col)
                 {
-                    g[i] += Lambda1 * Math.Sign(w[i]);
+                    // Self edges are fixed at zero, so their gradients are not feasible directions.
+                    g[i] = 0.0;
+                }
+                else
+                {
+                    g[i] = w[i] != 0.0
+                        ? g[i] + Lambda1 * Math.Sign(w[i])
+                        : Math.Sign(g[i]) * Math.Max(0.0, Math.Abs(g[i]) - Lambda1);
                 }
             }
 
@@ -361,6 +393,7 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
 
             // Update L-BFGS memory (skip first iteration since we have no valid previous gradient)
             var newGrad = FlattenMatrix(ComputeAugmentedLagrangianGradient(X, UnflattenMatrix(w, d), alpha, rho, d).Gradient, d);
+            for (int i = 0; i < d; i++) newGrad[i * d + i] = 0.0;
 
             if (prevGrad != null)
             {
