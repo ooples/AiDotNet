@@ -1036,11 +1036,17 @@ foreach ($stepName in @(
         "SonarCloud step '$stepName' can run for a non-runtime change or outside the nightly run"
 }
 # The Sonar build must compile each project once for net10.0. The whole-solution build compiled the
-# library and tests for three frameworks under analyzers and never finished inside the job limit.
+# library and tests for three frameworks under analyzers and never finished inside the job limit, and a
+# build per project recompiled the main library under Sonar for every project referencing it (run
+# 41643755098 hit the job limit). Every solution project is checked for net10.0, and the net10.0 ones
+# are built together through one generated solution filter.
 $sonarBuild = Get-StepBlock -JobBlock $sonarJob -Step 'Build (Release)'
-Assert-Contract ($sonarBuild.Contains('dotnet build $project -c Release --no-restore -m:2 -f net10.0') -and
-        $sonarBuild.Contains('dotnet sln AiDotNet.sln list')) `
-    'the Sonar build is not scoped to one net10.0 compile per solution project'
+Assert-Contract ($sonarBuild.Contains('dotnet sln AiDotNet.sln list') -and
+        $sonarBuild.Contains('$net10 += $project') -and
+        $sonarBuild.Contains("solution = @{ path = 'AiDotNet.sln'; projects = `$net10 }") -and
+        $sonarBuild.Contains('dotnet build $filter -c Release --no-restore -m:2 -f net10.0') -and
+        -not $sonarBuild.Contains('dotnet build $project')) `
+    'the Sonar build is not one net10.0 compile of the solution projects through a solution filter'
 Assert-Contract (-not [Regex]::IsMatch($sonarBuild, '(?m)^\s*(run:\s*)?dotnet build -c Release')) `
     'the Sonar build compiles the whole solution for every target framework again'
 Assert-Contract ($sonarBuild.Contains('and not net10.0; decide how Sonar should analyse it')) `
