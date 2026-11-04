@@ -167,7 +167,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput>
         {
             bool done = slot.Int8
                 ? GpuOptimizer.TryAdam8BitStep(p, g, slot.DeviceM, slot.DeviceV, slot.DeviceMScales, slot.DeviceVScales,
-                    lr, b1, b2, eps, 1f - MathF.Pow(b1, _tapeStep), 1f - MathF.Pow(b2, _tapeStep), slot.BlockSize,
+                    lr, b1, b2, eps, 1f - (float)Math.Pow(b1, _tapeStep), 1f - (float)Math.Pow(b2, _tapeStep), slot.BlockSize,
                     wd, decoupledWeightDecay: true)
                 : GpuOptimizer.TryAdamBf16Step(p, g, slot.DeviceM, slot.DeviceV, lr, b1, b2, eps, wd, _tapeStep,
                     decoupledWeightDecay: true);
@@ -293,7 +293,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput>
 
         static byte ToByte(float value)
         {
-            if (!(value >= 0f && value <= 255f) || !MathF.Floor(value).Equals(value))
+            if (!(value >= 0f && value <= 255f) || !Math.Floor(value).Equals((double)value))
                 throw new InvalidOperationException($"Corrupt AdamW 8-bit moment state: {value} is not a codebook index.");
             return (byte)value;
         }

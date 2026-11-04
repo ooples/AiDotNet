@@ -29,7 +29,7 @@ public class AdamWCompressedMomentsTests
     public void CompressedMomentLayout_DoesNotPreventLoadingOptimizerTypes()
     {
         var optimizerType = typeof(AdamWOptimizer<,,>);
-        Assert.Contains(optimizerType, optimizerType.Assembly.GetTypes());
+        Assert.Null(Record.Exception(() => optimizerType.Assembly.GetTypes()));
     }
 
 
@@ -346,6 +346,14 @@ public class AdamWCompressedMomentsTests
             var param = gpu!.TensorMultiplyScalar(new Tensor<float>(new[] { Length }, new Vector<float>(Rand(Length, 1))), 1f);
             Step(optimizer, param, gpu.TensorMultiplyScalar(Grad(1), 1f));
             Skip.If(DeviceSlotCount(optimizer) == 0, "The backend kept the compressed moments on the host.");
+
+            var backend = gpu.GetBackend();
+            Assert.NotNull(backend);
+            optimizer.InitializeGpuState(Length, backend!);
+            var stateFlag = typeof(AdamWOptimizer<float, Matrix<float>, Vector<float>>)
+                .GetField("_gpuStateInitialized", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            Assert.NotNull(stateFlag);
+            Assert.Equal(true, stateFlag!.GetValue(optimizer));
 
             AiDotNetEngine.Current = new CpuEngine();
             Assert.Throws<InvalidOperationException>(() => optimizer.DisposeGpuState());
