@@ -78,6 +78,8 @@ public readonly struct LayerStateBag
     /// <summary><c>true</c> when a value is present for <paramref name="key"/>.</summary>
     public bool Has(string key) => TryRaw(key, out _);
 
+    internal bool TryGetRaw(string key, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out object? value) => TryRaw(key, out value);
+
     // [NotNullWhen(true)] states the contract the body already keeps: value is non-null on
     // every true return. Without it each caller sees object? and needs its own suppression,
     // which is how `null!` spreads outward from one place that knew better.
