@@ -20544,7 +20544,6 @@ AiDotNet.Models.Options.DecisionTransformerOptions<T>.OptimizerFactory.get -> Sy
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.OptimizerFactory.init -> void
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.WeightDecay.get -> double
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.WeightDecay.init -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.DecisionTransformerOptions() -> void
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.NormalizeStates.get -> bool
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.NormalizeStates.init -> void
 AiDotNet.Models.Options.DecisionTransformerOptions<T>.TargetReturn.get -> double?
@@ -20585,3 +20584,8 @@ AiDotNet.Models.Options.QMIXOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IGra
 AiDotNet.Models.Options.QMIXOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
 AiDotNet.Models.Options.QMIXOptions<T>.OptimizerFactory.init -> void
 AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>.TRPOAgent(AiDotNet.Models.Options.TRPOOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
+AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>.TRPOAgent(AiDotNet.Models.Options.TRPOOptions<T>! options) -> void
+
+override AiDotNet.ReinforcementLearning.Agents.DecisionTransformer.DecisionTransformerAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+

@@ -80,9 +80,6 @@ public class TRPOOptions<T> : ReinforcementLearningOptions<T>
     /// baseline.</summary>
     public List<int> ValueHiddenLayers { get; init; } = new List<int> { 64, 64 };
 
-    /// <summary>Optional legacy vector optimizer; value-network training uses ValueLearningRate.</summary>
-    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
-
     /// <summary>Creates options with the default values.</summary>
     public TRPOOptions()
     {
