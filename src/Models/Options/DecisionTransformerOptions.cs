@@ -33,6 +33,15 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
 {
+    /// <summary>Creates the paper's Gym training defaults.</summary>
+    public DecisionTransformerOptions()
+    {
+        LearningRate = MathHelper.GetNumericOperations<T>().FromDouble(1e-4);
+        BatchSize = 64;
+        MaxGradientNorm = 0.25;
+        WarmupSteps = 100000;
+    }
+
     /// <summary>Number of features in one observation of the environment state.</summary>
     public int StateSize { get; init; } = 16;
     /// <summary>Number of discrete actions, or the dimension of the action vector for a continuous action space.</summary>
@@ -60,11 +69,14 @@ public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
     /// <summary>Returns-to-go are divided by this before embedding. Default: 1; the authors' Gym runs used 1000.</summary>
     public double ReturnScale { get; init; } = 1.0;
 
-    /// <summary>The return an episode is conditioned on at its start (section 3: "e.g. 1 for success"). Default: 1.</summary>
-    public double TargetReturn { get; init; } = 1.0;
+    /// <summary>The initial conditioning return; null uses the best completed episode return in the dataset.</summary>
+    public double? TargetReturn { get; init; }
+
+    /// <summary>Standardizes states using the retained offline dataset's mean and population standard deviation.</summary>
+    public bool NormalizeStates { get; init; } = true;
 
     /// <summary>Linear learning rate warmup steps. Default: 100000 (appendix A.2).</summary>
-    public int LearningRateWarmupSteps { get; init; } = 100000;
+    public int LearningRateWarmupSteps { get => WarmupSteps; init => WarmupSteps = value; }
 
     // Training parameters
     /// <summary>Maximum number of transitions kept in the trajectory buffer.</summary>
@@ -74,4 +86,9 @@ public class DecisionTransformerOptions<T> : ReinforcementLearningOptions<T>
     /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
     /// </summary>
     public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
+    /// <summary>Decoupled AdamW weight decay when no optimizer factory is supplied.</summary>
+    public double WeightDecay { get; init; } = 1e-4;
+
+    /// <summary>Creates the transformer optimizer. A supplied optimizer owns its schedule, decay and clipping.</summary>
+    public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 }

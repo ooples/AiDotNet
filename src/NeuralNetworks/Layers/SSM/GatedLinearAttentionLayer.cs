@@ -105,20 +105,6 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
     private const double ResidualNormEpsilon = 1e-5;
 
     // Cached values
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastQuery;
-    [Scratch]
-    private Tensor<T>? _lastKey;
-    [Scratch]
-    private Tensor<T>? _lastValue;
-    [Scratch]
-    private Tensor<T>? _lastGate;
-    [Scratch]
-    private Tensor<T>? _lastAttnOutput; // Pre-output-projection attention output
     private int[]? _originalInputShape;
 
     // Gradients
@@ -251,8 +237,6 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         int totalDim = _numHeads * _headDimension;
 
         // Project Q, K, V, G
@@ -266,11 +250,6 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
         gFlat = Engine.TensorAdd(gFlat, gBias);
         var gate = Engine.Sigmoid(Engine.Reshape(gFlat, new[] { batchSize, seqLen, totalDim }));
 
-        _lastQuery = q;
-        _lastKey = k;
-        _lastValue = v;
-        _lastGate = gate;
-
         // The recurrence consumes one scalar gate per head. Extract the first channel from each
         // head exactly as the original implementation did, but keep the extraction and scan on the
         // tape. GlaScanForward records one analytic BPTT node instead of detaching through scalar
@@ -283,8 +262,6 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
                 index: 0),
             new[] { batchSize, seqLen, _numHeads });
         var output = Engine.GlaScanForward(q, k, v, gateByHead, _numHeads);
-
-        _lastAttnOutput = output;
 
         // Output projection
         var outFlat = Engine.Reshape(output, new[] { batchSize * seqLen, totalDim });
@@ -307,7 +284,6 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
             _residualNormGamma, _residualNormBeta, ResidualNormEpsilon, out _, out _);
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -370,13 +346,6 @@ public partial class GatedLinearAttentionLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastGate = null;
-        _lastAttnOutput = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

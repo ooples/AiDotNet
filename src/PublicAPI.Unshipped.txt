@@ -10096,12 +10096,10 @@ override AiDotNet.TextToSpeech.Latest.IndexTTS2<T>.TryApplyLearningRule(AiDotNet
 override AiDotNet.TextToSpeech.Latest.IndexTTS2<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
 override AiDotNet.TextToSpeech.Latest.IndexTTS2<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
 override AiDotNet.TextToSpeech.Latest.MegaTTS<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
-AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null) -> void
 override AiDotNet.TextToSpeech.Latest.MegaTTS3<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 override AiDotNet.TextToSpeech.Latest.MegaTTS<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
 override AiDotNet.TextToSpeech.Latest.MegaTTS<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
 override AiDotNet.TextToSpeech.Latest.MegaTTS<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
-AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.Epsilon.get -> double
 override AiDotNet.TextToSpeech.Latest.MegaTTS3<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
 override AiDotNet.TextToSpeech.Latest.MegaTTS<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
 override AiDotNet.TextToSpeech.Latest.MegaTTS3<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
@@ -10115,7 +10113,6 @@ AiDotNet.TextToSpeech.MultiModal.WhisperSpeechConditions.WhisperSpeechConditions
 override AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>.GetModelMetadata() -> AiDotNet.Models.ModelMetadata<T>!
 override AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>.Dispose(bool disposing) -> void
 override AiDotNet.TextToSpeech.Latest.MegaTTS3<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
-AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.StoreMultiAgentExperience(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentStates, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentActions, T teamReward, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! nextAgentStates, AiDotNet.Tensors.LinearAlgebra.Vector<T>! globalState, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextGlobalState, bool done, bool truncated = false) -> void
 static AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.CreateReleaseCodec() -> AiDotNet.Audio.Generation.EnCodecOptions!
 AiDotNet.TextToSpeech.Latest.IndexTTS2<T>.LoadReferenceWeights(AiDotNet.TextToSpeech.Latest.IndexTts2Checkpoints! checkpoints) -> void
 override AiDotNet.TextToSpeech.Latest.MegaTTS2<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
@@ -12977,29 +12974,6 @@ AiDotNet.Models.Options.RootMeanSquarePropagationOptimizerOptions<T, TInput, TOu
 AiDotNet.Models.Options.RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>.InitialAccumulatorValue.set -> void
 AiDotNet.Models.Options.RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>.EpsilonInsideRoot.get -> bool
 AiDotNet.Models.Options.RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>.EpsilonInsideRoot.set -> void
-AiDotNet.Models.Options.QMIXOptions<T>.RnnHiddenDim.get -> int
-AiDotNet.Models.Options.QMIXOptions<T>.RnnHiddenDim.init -> void
-AiDotNet.Models.Options.QMIXOptions<T>.MixingEmbedDim.get -> int
-AiDotNet.Models.Options.QMIXOptions<T>.MixingEmbedDim.init -> void
-AiDotNet.Models.Options.QMIXOptions<T>.HypernetLayers.get -> int
-AiDotNet.Models.Options.QMIXOptions<T>.HypernetLayers.init -> void
-AiDotNet.Models.Options.QMIXOptions<T>.HypernetEmbed.get -> int
-AiDotNet.Models.Options.QMIXOptions<T>.HypernetEmbed.init -> void
-AiDotNet.Models.Options.QMIXOptions<T>.IncludeLastAction.get -> bool
-AiDotNet.Models.Options.QMIXOptions<T>.IncludeLastAction.init -> void
-AiDotNet.Models.Options.QMIXOptions<T>.IncludeAgentId.get -> bool
-AiDotNet.Models.Options.QMIXOptions<T>.IncludeAgentId.init -> void
-AiDotNet.Models.Options.QMIXOptions<T>.DoubleQ.get -> bool
-AiDotNet.Models.Options.QMIXOptions<T>.DoubleQ.init -> void
-AiDotNet.Models.Options.QMIXOptions<T>.MeanLoss.get -> bool
-AiDotNet.Models.Options.QMIXOptions<T>.EpsilonAnnealSteps.init -> void
-AiDotNet.Models.Options.QMIXOptions<T>.MeanLoss.init -> void
-AiDotNet.Models.Options.QMIXOptions<T>.EpsilonAnnealSteps.get -> int
-AiDotNet.Models.Options.QMIXOptions<T>.RmsPropAlpha.get -> double
-AiDotNet.Models.Options.QMIXOptions<T>.RmsPropAlpha.init -> void
-AiDotNet.Models.Options.QMIXOptions<T>.RmsPropEpsilon.get -> double
-AiDotNet.Models.Options.QMIXOptions<T>.RmsPropEpsilon.init -> void
-AiDotNet.Models.Options.QMIXOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
 AiDotNet.Models.Options.PATEGANOptions<T>.Epsilon.get -> double
 AiDotNet.Models.Options.PATEGANOptions<T>.Epsilon.set -> void
 AiDotNet.Models.Options.PATEGANOptions<T>.Delta.get -> double
@@ -13054,16 +13028,6 @@ AiDotNet.Models.Options.FinancialSACAgentOptions<T>.TemperatureParameter.set -> 
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.ObservationClipRange.set -> void
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.MaxGradientNorm.get -> double?
 AiDotNet.Models.Options.FinancialPPOAgentOptions<T>.MaxGradientNorm.set -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.IsContinuous.get -> bool
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.IsContinuous.init -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.MaxEpisodeLength.get -> int
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.MaxEpisodeLength.init -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.ReturnScale.get -> double
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.ReturnScale.init -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.TargetReturn.get -> double
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.TargetReturn.init -> void
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.LearningRateWarmupSteps.get -> int
-AiDotNet.Models.Options.DecisionTransformerOptions<T>.LearningRateWarmupSteps.init -> void
 AiDotNet.Models.Options.DAdaptAdamOptimizerOptions<T, TInput, TOutput>.BatchSize.set -> void
 AiDotNet.Models.Options.DAdaptAdamOptimizerOptions<T, TInput, TOutput>.BatchSize.get -> int
 override AiDotNet.Models.Options.DAdaptAdamOptimizerOptions<T, TInput, TOutput>.InitialLearningRate.get -> double
@@ -14797,11 +14761,6 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*AiDotNet.Models.Options.PATEGANOptions<T>.StudentDropout.set -> void
 *REMOVED*AiDotNet.Models.Options.PATEGANOptions<T>.VGMModes.get -> int
 *REMOVED*AiDotNet.Models.Options.PATEGANOptions<T>.VGMModes.set -> void
-*REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.AgentHiddenLayers.get -> System.Collections.Generic.List<int>!
-*REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.AgentHiddenLayers.init -> void
-*REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.MixingHiddenLayers.get -> System.Collections.Generic.List<int>!
-*REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.MixingHiddenLayers.init -> void
-*REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
 *REMOVED*AiDotNet.Models.Options.Tacotron2ModelOptions
 *REMOVED*AiDotNet.Models.Options.Tacotron2ModelOptions.AttentionDim.get -> int
 *REMOVED*AiDotNet.Models.Options.Tacotron2ModelOptions.AttentionDim.set -> void
@@ -14905,8 +14864,6 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*AiDotNet.NeuralNetworks.VisionScanPattern.Bidirectional = 0 -> AiDotNet.NeuralNetworks.VisionScanPattern
 *REMOVED*AiDotNet.NeuralNetworks.VisionScanPattern.Continuous = 2 -> AiDotNet.NeuralNetworks.VisionScanPattern
 *REMOVED*AiDotNet.NeuralNetworks.VisionScanPattern.CrossScan = 1 -> AiDotNet.NeuralNetworks.VisionScanPattern
-*REMOVED*AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
-*REMOVED*AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.StoreMultiAgentExperience(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentStates, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentActions, T teamReward, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! nextAgentStates, AiDotNet.Tensors.LinearAlgebra.Vector<T>! globalState, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextGlobalState, bool done) -> void
 *REMOVED*AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions.DropoutRate.get -> double
 *REMOVED*AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions.DropoutRate.set -> void
 *REMOVED*AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLargeOptions.DecoderDim.get -> int
@@ -16821,7 +16778,6 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*override AiDotNet.NeuralNetworks.SyntheticData.PATEGANGenerator<T>.SetTrainingMode(bool isTraining) -> void
 *REMOVED*override AiDotNet.NeuralNetworks.VisionMambaModel<T>.CopyGeneratedTrainableTensorsTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
 *REMOVED*override AiDotNet.NeuralNetworks.VisionMambaModel<T>.GetExtraTrainableTensors() -> System.Collections.Generic.IEnumerable<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
-*REMOVED*override AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
 *REMOVED*override AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected) -> bool
 *REMOVED*override AiDotNet.SpeechRecognition.ConformerFamily.ConformerCTC<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 *REMOVED*override AiDotNet.SpeechRecognition.ConformerFamily.ConvTransformer<T>.EnsureParametersReady() -> void
@@ -20454,3 +20410,177 @@ override AiDotNet.Video.Enhancement.Upscale4KAgent<T>.SupportsFusedCompiledTrain
 *REMOVED*AiDotNet.Video.Options.Upscale4KAgentOptions.Variant.set -> void
 *REMOVED*override AiDotNet.Video.Enhancement.Upscale4KAgent<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*override AiDotNet.Video.Enhancement.Upscale4KAgent<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+*REMOVED*AiDotNet.Models.Options.A2COptions<T>.ValueLossCoefficient.get -> T
+*REMOVED*AiDotNet.Models.Options.A2COptions<T>.ValueLossCoefficient.set -> void
+*REMOVED*AiDotNet.Models.Options.A3COptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.A3COptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.A3COptions<T>.ValueLossCoefficient.get -> T
+*REMOVED*AiDotNet.Models.Options.A3COptions<T>.ValueLossCoefficient.init -> void
+*REMOVED*AiDotNet.Models.Options.CQLOptions<T>.TargetEntropy.get -> T?
+*REMOVED*AiDotNet.Models.Options.DQNOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+*REMOVED*AiDotNet.Models.Options.DQNOptions<T>.Optimizer.set -> void
+*REMOVED*AiDotNet.Models.Options.DreamerOptions<T>.LatentSize.get -> int
+*REMOVED*AiDotNet.Models.Options.DreamerOptions<T>.LatentSize.init -> void
+*REMOVED*AiDotNet.Models.Options.DreamerOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.DreamerOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.MADDPGOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.MADDPGOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.UseValuePrefix.get -> bool
+*REMOVED*AiDotNet.Models.Options.MuZeroOptions<T>.UseValuePrefix.init -> void
+*REMOVED*AiDotNet.Models.Options.PPOOptions<T>.ValueLossCoefficient.get -> T
+*REMOVED*AiDotNet.Models.Options.PPOOptions<T>.ValueLossCoefficient.set -> void
+*REMOVED*AiDotNet.Models.Options.RainbowDQNOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.RainbowDQNOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.SACOptions<T>.TargetEntropy.get -> T?
+*REMOVED*AiDotNet.Models.Options.TRPOOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.TRPOOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.Models.Options.WorldModelsOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.Models.Options.WorldModelsOptions<T>.Optimizer.init -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<T>.DuelingCombinationLayer(int featureDim, int actionSize, int? seed = null) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.A3C.A3CAgent<T>.A3CAgent(AiDotNet.Models.Options.A3COptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent<T>.DreamerAgent(AiDotNet.Models.Options.DreamerOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.MADDPG.MADDPGAgent<T>.MADDPGAgent(AiDotNet.Models.Options.MADDPGOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.Rainbow.RainbowDQNAgent<T>.RainbowDQNAgent(AiDotNet.Models.Options.RainbowDQNOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
+*REMOVED*override AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.NeedsDeclaredSubLayerInitialization.get -> bool
+*REMOVED*override AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+AiDotNet.Models.Options.A3COptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.A3COptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.CQLOptions<T>.TargetEntropy.get -> double?
+AiDotNet.Models.Options.DQNOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.DQNOptions<T>.OptimizerFactory.set -> void
+AiDotNet.Models.Options.DreamerOptions<T>.ActorLearningRate.get -> T
+AiDotNet.Models.Options.DreamerOptions<T>.ActorLearningRate.init -> void
+AiDotNet.Models.Options.DreamerOptions<T>.FreeNats.get -> double
+AiDotNet.Models.Options.DreamerOptions<T>.FreeNats.init -> void
+AiDotNet.Models.Options.DreamerOptions<T>.Lambda.get -> double
+AiDotNet.Models.Options.DreamerOptions<T>.Lambda.init -> void
+AiDotNet.Models.Options.DreamerOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.DreamerOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.DreamerOptions<T>.ValueLearningRate.get -> T
+AiDotNet.Models.Options.DreamerOptions<T>.ValueLearningRate.init -> void
+AiDotNet.Models.Options.MADDPGOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.MADDPGOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.MuZeroOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.MuZeroOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.MuZeroOptions<T>.VisitTemperature.get -> double
+AiDotNet.Models.Options.MuZeroOptions<T>.VisitTemperature.init -> void
+AiDotNet.Models.Options.RainbowDQNOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.RainbowDQNOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.SACOptions<T>.TargetEntropy.get -> double?
+AiDotNet.Models.Options.WorldModelsOptions<T>.ControllerEvaluationRollouts.get -> int
+AiDotNet.Models.Options.WorldModelsOptions<T>.ControllerEvaluationRollouts.init -> void
+AiDotNet.Models.Options.WorldModelsOptions<T>.ControllerInitialStepSize.get -> double
+AiDotNet.Models.Options.WorldModelsOptions<T>.ControllerInitialStepSize.init -> void
+AiDotNet.Models.Options.WorldModelsOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.WorldModelsOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.WorldModelsOptions<T>.RNNSequenceLength.get -> int
+AiDotNet.Models.Options.WorldModelsOptions<T>.RNNSequenceLength.init -> void
+AiDotNet.NeuralNetworks.Layers.DuelingCombinationLayer<T>.DuelingCombinationLayer(int featureDim, int actionSize, int numAtoms = 1, int[]? valueHiddenWidths = null, int[]? advantageHiddenWidths = null, int? seed = null) -> void
+AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.AttentionDropoutRate.get -> double
+AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.ConfigureAttentionDropout(double dropoutRate) -> AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>!
+AiDotNet.Optimizers.CMAESGeneration<T>
+AiDotNet.Optimizers.CMAESGeneration<T>.Points.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>!
+AiDotNet.Optimizers.CMAESOptimizer<T, TInput, TOutput>.Ask(AiDotNet.Optimizers.CMAESSearchState! state, System.Random! random) -> AiDotNet.Optimizers.CMAESGeneration<T>!
+AiDotNet.Optimizers.CMAESOptimizer<T, TInput, TOutput>.CreateSearchState(AiDotNet.Tensors.LinearAlgebra.Vector<T>! initialParameters) -> AiDotNet.Optimizers.CMAESSearchState!
+AiDotNet.Optimizers.CMAESOptimizer<T, TInput, TOutput>.Tell(AiDotNet.Optimizers.CMAESSearchState! state, AiDotNet.Optimizers.CMAESGeneration<T>! generation, System.Collections.Generic.IReadOnlyList<T>! fitness) -> void
+AiDotNet.Optimizers.CMAESSearchState
+AiDotNet.Optimizers.CMAESSearchState.CMAESSearchState() -> void
+AiDotNet.Optimizers.CMAESSearchState.Clone() -> AiDotNet.Optimizers.CMAESSearchState!
+AiDotNet.Optimizers.CMAESSearchState.Covariance.get -> double[]![]!
+AiDotNet.Optimizers.CMAESSearchState.Covariance.set -> void
+AiDotNet.Optimizers.CMAESSearchState.Dimension.get -> int
+AiDotNet.Optimizers.CMAESSearchState.Dimension.set -> void
+AiDotNet.Optimizers.CMAESSearchState.Generation.get -> int
+AiDotNet.Optimizers.CMAESSearchState.Generation.set -> void
+AiDotNet.Optimizers.CMAESSearchState.IsDegenerate.get -> bool
+AiDotNet.Optimizers.CMAESSearchState.Mean.get -> double[]!
+AiDotNet.Optimizers.CMAESSearchState.Mean.set -> void
+AiDotNet.Optimizers.CMAESSearchState.PathC.get -> double[]!
+AiDotNet.Optimizers.CMAESSearchState.PathC.set -> void
+AiDotNet.Optimizers.CMAESSearchState.PathSigma.get -> double[]!
+AiDotNet.Optimizers.CMAESSearchState.PathSigma.set -> void
+AiDotNet.Optimizers.CMAESSearchState.PopulationSize.get -> int
+AiDotNet.Optimizers.CMAESSearchState.PopulationSize.set -> void
+AiDotNet.Optimizers.CMAESSearchState.Sigma.get -> double
+AiDotNet.Optimizers.CMAESSearchState.Sigma.set -> void
+AiDotNet.ReinforcementLearning.Agents.A3C.A3CAgent<T>.A3CAgent(AiDotNet.Models.Options.A3COptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Agents.DeepReinforcementLearningAgentBase<T>.NextNetworkInitializationSeed() -> int?
+AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent<T>.DreamerAgent(AiDotNet.Models.Options.DreamerOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Agents.MADDPG.MADDPGAgent<T>.MADDPGAgent(AiDotNet.Models.Options.MADDPGOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Agents.Rainbow.RainbowDQNAgent<T>.RainbowDQNAgent(AiDotNet.Models.Options.RainbowDQNOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.ControllerSearch.get -> AiDotNet.Optimizers.CMAESSearchState?
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.ControllerSearch.set -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.EpochCursor.get -> int
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.EpochCursor.set -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.EpochOrder.get -> System.Collections.Generic.List<int>!
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.EpochOrder.set -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.EpochsCompleted.get -> int
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.EpochsCompleted.set -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.Stage.get -> AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.Stage.set -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.StagePrepared.get -> bool
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.StagePrepared.set -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingCycle.WorldModelsTrainingCycle() -> void
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage.Controller = 2 -> AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage.Memory = 1 -> AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
+AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage.Vision = 0 -> AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
+override AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.OnRandomSeedAssigned() -> void
+override AiDotNet.ReinforcementLearning.Agents.A3C.A3CAgent<T>.Dispose() -> void
+static AiDotNet.ReinforcementLearning.Agents.DeepReinforcementLearningAgentBase<T>.CreateNetworkOptimizer(T learningRate, double? maxGradientNorm = null) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null) -> void
+AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.Epsilon.get -> double
+AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.StoreMultiAgentExperience(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentStates, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentActions, T teamReward, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! nextAgentStates, AiDotNet.Tensors.LinearAlgebra.Vector<T>! globalState, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextGlobalState, bool done, bool truncated = false) -> void
+AiDotNet.Models.Options.QMIXOptions<T>.RnnHiddenDim.get -> int
+AiDotNet.Models.Options.QMIXOptions<T>.RnnHiddenDim.init -> void
+AiDotNet.Models.Options.QMIXOptions<T>.MixingEmbedDim.get -> int
+AiDotNet.Models.Options.QMIXOptions<T>.MixingEmbedDim.init -> void
+AiDotNet.Models.Options.QMIXOptions<T>.HypernetLayers.get -> int
+AiDotNet.Models.Options.QMIXOptions<T>.HypernetLayers.init -> void
+AiDotNet.Models.Options.QMIXOptions<T>.HypernetEmbed.get -> int
+AiDotNet.Models.Options.QMIXOptions<T>.HypernetEmbed.init -> void
+AiDotNet.Models.Options.QMIXOptions<T>.IncludeLastAction.get -> bool
+AiDotNet.Models.Options.QMIXOptions<T>.IncludeLastAction.init -> void
+AiDotNet.Models.Options.QMIXOptions<T>.IncludeAgentId.get -> bool
+AiDotNet.Models.Options.QMIXOptions<T>.IncludeAgentId.init -> void
+AiDotNet.Models.Options.QMIXOptions<T>.DoubleQ.get -> bool
+AiDotNet.Models.Options.QMIXOptions<T>.DoubleQ.init -> void
+AiDotNet.Models.Options.QMIXOptions<T>.MeanLoss.get -> bool
+AiDotNet.Models.Options.QMIXOptions<T>.EpsilonAnnealSteps.init -> void
+AiDotNet.Models.Options.QMIXOptions<T>.MeanLoss.init -> void
+AiDotNet.Models.Options.QMIXOptions<T>.EpsilonAnnealSteps.get -> int
+AiDotNet.Models.Options.QMIXOptions<T>.RmsPropAlpha.get -> double
+AiDotNet.Models.Options.QMIXOptions<T>.RmsPropAlpha.init -> void
+AiDotNet.Models.Options.QMIXOptions<T>.RmsPropEpsilon.get -> double
+AiDotNet.Models.Options.QMIXOptions<T>.RmsPropEpsilon.init -> void
+AiDotNet.Models.Options.QMIXOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.IsContinuous.get -> bool
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.IsContinuous.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.MaxEpisodeLength.get -> int
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.MaxEpisodeLength.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.ReturnScale.get -> double
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.ReturnScale.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.LearningRateWarmupSteps.get -> int
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.LearningRateWarmupSteps.init -> void
+*REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.AgentHiddenLayers.get -> System.Collections.Generic.List<int>!
+*REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.AgentHiddenLayers.init -> void
+*REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.MixingHiddenLayers.get -> System.Collections.Generic.List<int>!
+*REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.MixingHiddenLayers.init -> void
+*REMOVED*AiDotNet.Models.Options.QMIXOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.QMIXAgent(AiDotNet.Models.Options.QMIXOptions<T>! options, AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>? optimizer = null) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T>.StoreMultiAgentExperience(System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentStates, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! agentActions, T teamReward, System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Vector<T>!>! nextAgentStates, AiDotNet.Tensors.LinearAlgebra.Vector<T>! globalState, AiDotNet.Tensors.LinearAlgebra.Vector<T>! nextGlobalState, bool done) -> void
+*REMOVED*override AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.WeightDecay.get -> double
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.WeightDecay.init -> void
+AiDotNet.Models.Options.QMIXOptions<T>.OptimizerFactory.get -> System.Func<AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>?
+AiDotNet.Models.Options.QMIXOptions<T>.OptimizerFactory.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.DecisionTransformerOptions() -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.NormalizeStates.get -> bool
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.NormalizeStates.init -> void
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.TargetReturn.get -> double?
+AiDotNet.Models.Options.DecisionTransformerOptions<T>.TargetReturn.init -> void

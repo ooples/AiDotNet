@@ -44,25 +44,6 @@ public partial class MeasurementLayer<T> : LayerBase<T>, IShapeContract
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
     private readonly int _size;
-    /// <summary>
-    /// The input tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the input tensor from the most recent forward pass, which is needed
-    /// during the backward pass for gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// The output tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the output tensor from the most recent forward pass, which is needed
-    /// during the backward pass for gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     private int[]? _originalInputShape;
 
@@ -175,8 +156,6 @@ public partial class MeasurementLayer<T> : LayerBase<T>, IShapeContract
             input2D = Engine.Reshape(input, new[] { batchDim, stateSize });
         }
 
-        _lastInput = input2D;
-
         int batchSize = input2D.Shape[0];
         var probabilities = TensorAllocator.Rent<T>(new[] { batchSize, stateSize });
 
@@ -204,8 +183,6 @@ public partial class MeasurementLayer<T> : LayerBase<T>, IShapeContract
                 probabilities[b, i] = NumOps.Multiply(probabilities[b, i], invSum);
             }
         }
-
-        _lastOutput = probabilities;
 
         if (input.Rank == 1)
         {
@@ -246,8 +223,6 @@ public partial class MeasurementLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
         _originalInputShape = null;
     }
 

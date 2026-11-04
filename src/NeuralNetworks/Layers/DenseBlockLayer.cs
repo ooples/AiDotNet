@@ -74,13 +74,6 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
 
     [Scratch]
     private Tensor<T>? _lastInput;
-    private Tensor<T>? _bn1Out;
-    private Tensor<T>? _relu1Out;
-    private Tensor<T>? _conv1Out;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _bn2Out;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _relu2Out;
 
     public override bool SupportsTraining => true;
 
@@ -205,25 +198,24 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         // In inference the pre-activation BN1 + ReLU runs as one pass, and BN2 + ReLU folds into the 1x1 convolution
         // before it (the engine's FusedConv2DBatchNorm): two batch-norm passes and two ReLU passes fewer per layer, a third
         // of a DenseNet-121 predict. Each stage declines on its own (training, a tape, a capture, an observer) and only a
-        // declined stage runs unfused, so a fused BN1 is kept when the 1x1 fold declines; the unfused stages also keep
-        // the intermediates the backward reads.
+        // declined stage runs unfused, so a fused BN1 is kept when the 1x1 fold declines. The intermediates are locals:
+        // the tape keeps what backward needs, and a field would hold every dense layer's activations after the forward,
+        // in inference too (DenseNet-121 b16).
         bool tryFuse = !ShouldCacheForBackward;
 
         // BN1-ReLU (DenseNet paper: pre-activation bottleneck)
         Tensor<T> preActivated;
         if (tryFuse && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(_bn1, x, FusedActivationType.ReLU, out var fusedPre))
         {
-            _bn1Out = _relu1Out = null;
             preActivated = fusedPre;
         }
         else
         {
-            _bn1Out = _bn1.Forward(x);
+            var bn1Out = _bn1.Forward(x);
             // Scalar activation objects operate eagerly and therefore detach the value from the
             // active GradientTape. Keep the DenseNet pre-activation on the engine graph so gradients
             // reach BN1 and every layer before this block.
-            _relu1Out = Engine.ReLU(_bn1Out);
-            preActivated = _relu1Out;
+            preActivated = Engine.ReLU(bn1Out);
         }
 
         // Conv1x1-BN2-ReLU, then the 3x3 convolution
@@ -231,15 +223,13 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         if (tryFuse
             && ConvolutionBatchNormFolding<T>.TryForward(_conv1x1, _bn2, preActivated, FusedActivationType.ReLU, out var folded))
         {
-            _conv1Out = _bn2Out = _relu2Out = null;
             bottleneck = folded;
         }
         else
         {
-            _conv1Out = _conv1x1.Forward(preActivated);
-            _bn2Out = _bn2.Forward(_conv1Out);
-            _relu2Out = Engine.ReLU(_bn2Out);
-            bottleneck = _relu2Out;
+            var conv1Out = _conv1x1.Forward(preActivated);
+            var bn2Out = _bn2.Forward(conv1Out);
+            bottleneck = Engine.ReLU(bn2Out);
         }
 
         var output = _conv3x3.Forward(bottleneck);
@@ -298,11 +288,6 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
     public override void ResetState()
     {
         _lastInput = null;
-        _bn1Out = null;
-        _relu1Out = null;
-        _conv1Out = null;
-        _bn2Out = null;
-        _relu2Out = null;
 
         _bn1.ResetState();
         _conv1x1.ResetState();

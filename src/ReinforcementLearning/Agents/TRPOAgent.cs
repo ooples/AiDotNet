@@ -112,7 +112,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         Options = _options;
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
-            InitialLearningRate = 0.001,
+            InitialLearningRate = NumOps.ToDouble(LearningRate),
             Beta1 = 0.9,
             Beta2 = 0.999,
             Epsilon = 1e-8
@@ -146,6 +146,8 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
     private INeuralNetwork<T> CreateMlp(List<int> hidden, int outputSize, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
     {
+        if (hidden is null || hidden.Count == 0 || hidden.Any(width => width <= 0))
+            throw new ArgumentException("Hidden layers must contain positive widths.", nameof(hidden));
         var layers = new List<ILayer<T>>();
         foreach (int width in hidden)
             layers.Add(new DenseLayer<T>(width, (IActivationFunction<T>)new TanhActivation<T>()));
@@ -156,7 +158,10 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             complexity: NetworkComplexity.Medium,
             inputSize: _options.StateSize,
             outputSize: outputSize,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
         return new NeuralNetwork<T>(architecture, optimizer, lossFunction: _options.ValueLossFunction);
     }
 
@@ -175,7 +180,8 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
                     continue;
                 }
                 var std = NumOps.Exp(_logStd[i]);
-                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
+                var noise = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(Math.Max(Random.NextDouble(), double.Epsilon)))
+                    * Math.Cos(2.0 * Math.PI * Random.NextDouble()));
                 action[i] = NumOps.Add(output[i], NumOps.Multiply(std, noise));
             }
             return action;
@@ -258,8 +264,8 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         for (int i = n - 1; i >= 0; i--)
         {
             bool done = _trajectoryBuffer[i].done;
-            double value = NumOps.ToDouble(values.Data.Span[i]);
-            double next = done ? 0 : NumOps.ToDouble(nextValues.Data.Span[i]);
+            double value = NumOps.ToDouble(values[i]);
+            double next = done ? 0 : NumOps.ToDouble(nextValues[i]);
             if (done || i == n - 1) running = 0;
             double delta = NumOps.ToDouble(_trajectoryBuffer[i].reward) + gamma * next - value;
             running = delta + gamma * lambda * running;
@@ -290,7 +296,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         for (int i = 0; i < n; i++)
         {
             result[i] = new double[a];
-            for (int k = 0; k < a; k++) result[i][k] = NumOps.ToDouble(output.Data.Span[i * a + k]);
+            for (int k = 0; k < a; k++) result[i][k] = NumOps.ToDouble(output[i * a + k]);
         }
         return result;
     }

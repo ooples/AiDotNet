@@ -147,7 +147,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         if (options.LearningRate is null || NumOps.Equals(options.LearningRate, NumOps.Zero))
             LearningRate = NumOps.FromDouble(5e-4);
 
-        _optimizer = optimizer ?? options.Optimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(null,
+        _optimizer = optimizer ?? options.OptimizerFactory?.Invoke() ?? options.Optimizer ?? new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(null,
             new RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = NumOps.ToDouble(LearningRate),

@@ -176,18 +176,6 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
 
 
     /// <summary>
-    /// Stores the input tensor from the last forward pass for use in the backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stores the output tensor from the last forward pass for use in the backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// Gets a value indicating whether this layer supports training.
     /// </summary>
     /// <value>
@@ -388,12 +376,10 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         var output = _forwardFunction(input);
 
         output = ApplyActivation(output);
 
-        _lastOutput = ShouldCacheForBackward ? output : null; // #1668: skip in inference (arena safety)
         return output;
     }
 
@@ -421,8 +407,6 @@ public partial class LambdaLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward pass
-        _lastInput = null;
-        _lastOutput = null;
     }
 
 }

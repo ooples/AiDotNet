@@ -114,11 +114,12 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         : base(options)
     {
         Guard.NotNull(options);
+        ValidateOptions(options);
         _options = options;
         Options = _options;
         _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
         {
-            InitialLearningRate = 0.001,
+            InitialLearningRate = NumOps.ToDouble(LearningRate),
             Beta1 = 0.9,
             Beta2 = 0.999,
             Epsilon = 1e-8
@@ -127,12 +128,13 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, T, int)>();
         _episode = new List<(Vector<T>, Vector<T>, T)>();
         _currentContext = new SequenceContext<T>();
-        _runningReturn = NumOps.FromDouble(_options.TargetReturn);
+        RecomputeStateStatistics();
+        _runningReturn = InitialReturnToGo();
 
         _transformerNetwork = new DecisionTransformerNetwork<T>(_options.StateSize, _options.ActionSize, _options.EmbeddingDim,
             _options.NumLayers, _options.NumHeads, _options.ContextLength, _options.MaxEpisodeLength, _options.DropoutRate,
-            _options.IsContinuous);
-        _networkOptimizer = PaperOptimizerFactory.CreateFor(_transformerNetwork, warmupStepsOverride: _options.LearningRateWarmupSteps);
+            _options.IsContinuous, NextNetworkInitializationSeed());
+        _networkOptimizer = _options.OptimizerFactory?.Invoke() ?? CreatePaperOptimizer();
 
         Networks.Add(_transformerNetwork);
     }
@@ -144,6 +146,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     public void LoadOfflineData(List<List<(Vector<T> state, Vector<T> action, T reward)>> trajectories)
     {
         foreach (var trajectory in trajectories) AddTrajectory(trajectory);
+        if (_currentContext.Length == 0) ResetEpisode();
     }
 
     private void AddTrajectory(List<(Vector<T> state, Vector<T> action, T reward)> trajectory)
@@ -157,7 +160,12 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         }
         for (int i = 0; i < trajectory.Count; i++)
             _trajectoryBuffer.Add((trajectory[i].state, trajectory[i].action, trajectory[i].reward, returnsToGo[i], i));
-        while (_trajectoryBuffer.Count > _options.BufferSize) _trajectoryBuffer.RemoveAt(0);
+        if (trajectory.Count > 0 && (!_hasEpisodeReturn || NumOps.GreaterThan(returnToGo, _bestEpisodeReturn)))
+        {
+            _bestEpisodeReturn = returnToGo;
+            _hasEpisodeReturn = true;
+        }
+        TrimCompletedTrajectories();
     }
 
     /// <summary>
@@ -199,7 +207,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         _transformerNetwork.SetTrainingMode(false);
         var output = _transformerNetwork.Predict(input);
         var predicted = new Vector<T>(_options.ActionSize);
-        for (int j = 0; j < _options.ActionSize; j++) predicted[j] = output.Data.Span[(k - 1) * _options.ActionSize + j];
+        for (int j = 0; j < _options.ActionSize; j++) predicted[j] = output[(k - 1) * _options.ActionSize + j];
         var chosen = _options.IsContinuous ? predicted : OneHot(ArgMax(predicted));
         _currentContext.Actions.Add(chosen);
         return chosen;
@@ -224,10 +232,11 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     private void Pack(Tensor<T> input, int b, int position, T returnToGo, Vector<T> state, Vector<T>? action, int timestep)
     {
         int w = _transformerNetwork.StepWidth;
-        var span = input.Data.Span;
+        var span = input;
         int offset = (b * input.Shape[1] + position) * w;
         span[offset] = NumOps.FromDouble(NumOps.ToDouble(returnToGo) / _options.ReturnScale);
-        for (int j = 0; j < _options.StateSize; j++) span[offset + 1 + j] = state[j];
+        for (int j = 0; j < _options.StateSize; j++) span[offset + 1 + j] = _options.NormalizeStates
+            ? NumOps.Divide(NumOps.Subtract(state[j], _stateMean[j]), _stateStd[j]) : state[j];
         if (action is not null) for (int j = 0; j < _options.ActionSize; j++) span[offset + 1 + _options.StateSize + j] = action[j];
         span[offset + w - 1] = NumOps.FromDouble(Math.Min(Math.Max(timestep, 0), _options.MaxEpisodeLength - 1));
     }
@@ -261,7 +270,18 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
             return NumOps.Zero;
         }
 
-        int batch = Math.Max(1, _options.BatchSize), k = _options.ContextLength, a = _options.ActionSize;
+        int batch = Math.Max(1, _options.BatchSize), k = 1, a = _options.ActionSize;
+        var starts = new int[batch];
+        var lengths = new int[batch];
+        for (int b = 0; b < batch; b++)
+        {
+            starts[b] = Random.Next(_trajectoryBuffer.Count);
+            int length = 1;
+            while (length < _options.ContextLength && starts[b] + length < _trajectoryBuffer.Count
+                && _trajectoryBuffer[starts[b] + length].timestep != 0) length++;
+            lengths[b] = length;
+            k = Math.Max(k, length);
+        }
         var input = new Tensor<T>(new[] { batch, k, _transformerNetwork.StepWidth });
         var targets = new Tensor<T>(new[] { batch, k, a });
         var mask = new Tensor<T>(new[] { batch, k, a });
@@ -269,8 +289,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         for (int b = 0; b < batch; b++)
         {
             // A uniformly drawn step starts the segment: the authors' trajectory-by-length then uniform-start sampling.
-            int start = Random.Next(_trajectoryBuffer.Count), length = 1;
-            while (length < k && start + length < _trajectoryBuffer.Count && _trajectoryBuffer[start + length].timestep != 0) length++;
+            int start = starts[b], length = lengths[b];
             int pad = k - length;
             for (int i = 0; i < length; i++)
             {
@@ -316,7 +335,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         if (state is null) throw new ArgumentNullException(nameof(state));
         if (target is null) throw new ArgumentNullException(nameof(target));
 
-        var input = SingleStep(state);
+        var input = SingleStep(state, training: true);
         var targetAction = new Tensor<T>(new[] { 1, 1, _options.ActionSize });
         int copyLen = Math.Min(target.Length, _options.ActionSize);
         for (int i = 0; i < copyLen; i++) targetAction[0, 0, i] = target[i];
@@ -332,10 +351,10 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     }
 
     // A one-timestep sequence: return-to-go 0, the state, no action, timestep 0.
-    private Tensor<T> SingleStep(Vector<T> state)
+    private Tensor<T> SingleStep(Vector<T> state, bool training = false)
     {
         var input = new Tensor<T>(new[] { 1, 1, _transformerNetwork.StepWidth });
-        Pack(input, 0, 0, NumOps.Zero, state, null, 0);
+        Pack(input, 0, 0, training ? NumOps.Zero : InitialReturnToGo(), state, null, 0);
         return input;
     }
 
@@ -352,7 +371,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     {
         _currentContext = new SequenceContext<T>();
         _contextTimestep = 0;
-        _runningReturn = NumOps.FromDouble(_options.TargetReturn);
+        _runningReturn = InitialReturnToGo();
     }
 
     public override Vector<T> Predict(Vector<T> input)
@@ -363,8 +382,8 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         _transformerNetwork.SetTrainingMode(false);
         var output = _transformerNetwork.Predict(SingleStep(input));
         var action = new Vector<T>(_options.ActionSize);
-        for (int j = 0; j < _options.ActionSize; j++) action[j] = output.Data.Span[j];
-        return action;
+        for (int j = 0; j < _options.ActionSize; j++) action[j] = output[j];
+        return _options.IsContinuous ? action : OneHot(ArgMax(action));
     }
 
     public Task<Vector<T>> PredictAsync(Vector<T> input)
@@ -407,7 +426,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         if (target is null) throw new ArgumentNullException(nameof(target));
         var targetAction = new Tensor<T>(new[] { 1, 1, _options.ActionSize });
         for (int i = 0; i < Math.Min(target.Length, _options.ActionSize); i++) targetAction[0, 0, i] = target[i];
-        return _transformerNetwork.ComputeGradients(SingleStep(input), targetAction, lossFunction ?? LossFunction);
+        return _transformerNetwork.ComputeGradients(SingleStep(input, training: true), targetAction, lossFunction ?? LossFunction);
     }
 
     public override void SaveModel(string filepath)
@@ -420,5 +439,37 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     {
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
+    }
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+    {
+        double rate = NumOps.ToDouble(LearningRate);
+        if (double.IsNaN(rate) || double.IsInfinity(rate) || rate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(LearningRate), rate, "LearningRate must be positive and finite.");
+
+        double clip = _options.MaxGradientNorm;
+        bool clipping = clip > 0.0 && !double.IsPositiveInfinity(clip);
+        var optimizerOptions = new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = rate,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8,
+            WeightDecay = _options.WeightDecay,
+            UseAMSGrad = false,
+            UseAdaptiveLearningRate = false,
+            EnableGradientClipping = clipping,
+            GradientClippingMethod = GradientClippingMethod.ByNorm,
+        };
+        if (clipping) optimizerOptions.MaxGradientNorm = clip;
+
+        int warmup = _options.WarmupSteps;
+        if (warmup > 1)
+        {
+            optimizerOptions.LearningRateScheduler =
+                new LinearWarmupScheduler(rate, warmup - 1, warmupInitLr: rate / warmup);
+            optimizerOptions.SchedulerStepMode = SchedulerStepMode.StepPerBatch;
+        }
+
+        return new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, optimizerOptions);
     }
 }

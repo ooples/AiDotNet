@@ -38,8 +38,6 @@ public class A2COptions<T> : ModelOptions
     public T DiscountFactor { get; set; }
     /// <summary>Weight of the entropy bonus in the objective, which encourages exploration.</summary>
     public T EntropyCoefficient { get; set; }
-    /// <summary>Weight of the value loss in the combined objective.</summary>
-    public T ValueLossCoefficient { get; set; }
     /// <summary>Number of environment steps collected before each update (the rollout length n of n-step A2C).</summary>
     public int StepsPerUpdate { get; set; } = 5;
     /// <summary>Loss function used to train the value network.</summary>
@@ -57,6 +55,5 @@ public class A2COptions<T> : ModelOptions
         ValueLearningRate = numOps.FromDouble(0.001);
         DiscountFactor = numOps.FromDouble(0.99);
         EntropyCoefficient = numOps.FromDouble(0.01);
-        ValueLossCoefficient = numOps.FromDouble(0.5);
     }
 }

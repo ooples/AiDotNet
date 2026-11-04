@@ -28,6 +28,7 @@ public class QMIXOptions<T> : ReinforcementLearningOptions<T>
     /// <summary>Creates the options with the paper's defaults.</summary>
     public QMIXOptions()
     {
+        LearningRate = MathHelper.GetNumericOperations<T>().FromDouble(5e-4);
         BatchSize = 32;
         ReplayBufferSize = 5000;
         TargetUpdateFrequency = 200;
@@ -95,4 +96,6 @@ public class QMIXOptions<T> : ReinforcementLearningOptions<T>
     /// already clipped to <c>MaxGradientNorm</c>.
     /// </summary>
     public IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; init; }
+    /// <summary>Creates a fresh optimizer for the joint agent/mixer step; null uses paper RMSprop.</summary>
+    public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 }

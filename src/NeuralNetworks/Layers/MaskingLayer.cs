@@ -65,52 +65,6 @@ public partial class MaskingLayer<T> : LayerBase<T>, IShapeContract
     private readonly T _maskValue;
 
     /// <summary>
-    /// The input tensor from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the input tensor from the most recent forward pass. It is kept for potential future use,
-    /// though the current implementation doesn't directly use it after storing it. This field is reset when
-    /// ResetState is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the most recent data that was fed into the layer.
-    /// 
-    /// The layer keeps track of:
-    /// - The input it received in the most recent forward pass
-    /// - This information might be needed for future operations
-    /// - It gets cleared when you reset the layer's state
-    /// 
-    /// Storing the last input is a common pattern in neural network layers,
-    /// even when not immediately needed for calculations.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// The mask tensor from the last forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field stores the binary mask tensor created during the most recent forward pass. It is needed during
-    /// the backward pass to apply the same masking pattern to the output gradients. This field is reset when
-    /// ResetState is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This stores the pattern of 0s and 1s created in the last forward pass.
-    ///
-    /// The layer remembers:
-    /// - Which positions were masked (set to 0) in the forward pass
-    /// - This same pattern must be applied during the backward pass
-    /// - This ensures consistency between forward and backward operations
-    ///
-    /// By keeping the mask, the layer doesn't need to recalculate it during
-    /// the backward pass, which saves computation time.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastMask;
-
-    /// <summary>
     /// The GPU mask tensor from the last GPU forward pass (for backward pass caching).
     /// </summary>
     [Scratch]
@@ -204,9 +158,7 @@ public partial class MaskingLayer<T> : LayerBase<T>, IShapeContract
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         var mask = CreateMask(input);
-        _lastMask = ShouldCacheForBackward ? mask : null; // #1668: cache the mask only for backward
         return ApplyMask(input, mask);
     }
 
@@ -289,10 +241,6 @@ public partial class MaskingLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override void ResetState()
     {
-        // Clear cached values from forward pass
-        _lastInput = null;
-        _lastMask = null;
-
         // Clear GPU mask tensor
         if (_lastMaskGpu is IDisposable disposable)
         {

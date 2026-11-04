@@ -85,21 +85,9 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
     private readonly T _curvature;
 
     /// <summary>
-    /// Stored input from forward pass for backpropagation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-
-    /// <summary>
-    /// Stored pre-activation output for gradient computation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Gradient for weights, stored during backward pass.
@@ -258,8 +246,6 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
                 $"Input size {inputLen} does not match expected {InputFeatures}.");
         }
 
-        _lastInput = inputTensor;
-
         // Batched Möbius matrix-vector multiply per Ganea et al. 2018, Section 2.3.
         // M⊗_c x = tanh(||Mx|| * arctanh(√c·||x||) / (√c·||x||)) * Mx / (√c·||Mx||)
         // All operations are tape-tracked tensor ops for automatic differentiation.
@@ -275,7 +261,6 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
                 ? Engine.TensorTranspose(_weights)
                 : (_weightsTCache ??= Engine.TensorTranspose(_weights));
             var linear = Engine.FusedLinear(inputTensor, euclideanW, _biases, FusedActivationType.None);
-            _lastOutput = linear;
             var euclideanOut = ApplyActivation(linear);
             if (_originalInputShape == null || _originalInputShape.Length == 2) return euclideanOut;
             if (_originalInputShape.Length == 1) return Engine.Reshape(euclideanOut, [OutputFeatures]);
@@ -375,8 +360,6 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
         var projScale = Engine.TensorDivide(maxNormTensor, Engine.TensorAddScalar(norm, NumOps.FromDouble(1e-8)));
         projScale = Engine.TensorClamp(projScale, NumOps.Zero, NumOps.One); // clamp to [0, 1]
         output = Engine.TensorMultiply(projScale, output); // [batch, outputFeatures]
-
-        _lastOutput = output;
 
         // Apply activation function
         var activated = ApplyActivation(output);
@@ -630,8 +613,6 @@ public partial class HyperbolicLinearLayer<T> : LayerBase<T>, IShapeContract
 
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
         _weightsGradient = null;
         _biasesGradient = null;
     }
