@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Attributes;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Serialization;
@@ -7,12 +8,12 @@ using Xunit;
 
 namespace AiDotNetTests.UnitTests.Serialization;
 
-public class ExternalLayerReflectionReviewTests
+public partial class ExternalLayerReflectionReviewTests
 {
     [ElementWiseShape]
-    public sealed class ShapeOnlyLayer : LayerBase<double>
+    public sealed partial class ShapeOnlyLayer : LayerBase<double>
     {
-        public ShapeOnlyLayer(int[] inputShape) : base(inputShape, inputShape) { }
+        public ShapeOnlyLayer(IReadOnlyList<int> inputShape) : base(inputShape.ToArray(), inputShape.ToArray()) { }
         public override bool SupportsTraining => false;
         public override void ResetState() { }
         protected override void WriteConstructionState(Dictionary<string, string> metadata)
