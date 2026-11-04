@@ -20786,3 +20786,41 @@ static AiDotNet.Video.Options.EMAVFIOptions.Small() -> AiDotNet.Video.Options.EM
 *REMOVED*AiDotNet.Video.Options.EMAVFIOptions.NumSwinBlocks.set -> void
 *REMOVED*AiDotNet.Video.Options.EMAVFIOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
 *REMOVED*AiDotNet.Video.Options.EMAVFIOptions.Variant.set -> void
+AiDotNet.Video.Options.IFRNetOptions.EncoderChannels.get -> int[]!
+AiDotNet.Video.Options.IFRNetOptions.EncoderChannels.set -> void
+AiDotNet.Video.Options.IFRNetOptions.FirstKernelSize.get -> int
+AiDotNet.Video.Options.IFRNetOptions.FirstKernelSize.set -> void
+AiDotNet.Video.Options.IFRNetOptions.GeometryWeight.get -> double
+AiDotNet.Video.Options.IFRNetOptions.GeometryWeight.set -> void
+AiDotNet.Video.Options.IFRNetOptions.MinLearningRate.get -> double
+AiDotNet.Video.Options.IFRNetOptions.MinLearningRate.set -> void
+AiDotNet.Video.Options.IFRNetOptions.SideChannels.get -> int
+AiDotNet.Video.Options.IFRNetOptions.SideChannels.set -> void
+AiDotNet.Video.Options.IFRNetOptions.TotalIterations.get -> int
+AiDotNet.Video.Options.IFRNetOptions.TotalIterations.set -> void
+AiDotNet.Video.Options.IFRNetOptions.WeightDecay.get -> double
+AiDotNet.Video.Options.IFRNetOptions.WeightDecay.set -> void
+override AiDotNet.Video.FrameInterpolation.IFRNet<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.FrameInterpolation.IFRNet<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.IFRNet<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.IFRNet<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.IFRNet<T>.GetNamedLayerActivations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> System.Collections.Generic.Dictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.FrameInterpolation.IFRNet<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.FrameInterpolation.IFRNet<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.IFRNet<T>.RegisterComponents() -> void
+override AiDotNet.Video.FrameInterpolation.IFRNet<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.FrameInterpolation.IFRNet<T>.SupportsFusedCompiledTraining.get -> bool
+static AiDotNet.Video.Options.IFRNetOptions.Large() -> AiDotNet.Video.Options.IFRNetOptions!
+static AiDotNet.Video.Options.IFRNetOptions.Small() -> AiDotNet.Video.Options.IFRNetOptions!
+*REMOVED*AiDotNet.Video.Options.IFRNetOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.IFRNetOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.IFRNetOptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.IFRNetOptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.IFRNetOptions.NumPyramidLevels.get -> int
+*REMOVED*AiDotNet.Video.Options.IFRNetOptions.NumPyramidLevels.set -> void
+*REMOVED*AiDotNet.Video.Options.IFRNetOptions.NumRefineBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.IFRNetOptions.NumRefineBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.IFRNetOptions.UseTaskOrientedFlow.get -> bool
+*REMOVED*AiDotNet.Video.Options.IFRNetOptions.UseTaskOrientedFlow.set -> void
+*REMOVED*AiDotNet.Video.Options.IFRNetOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.IFRNetOptions.Variant.set -> void
