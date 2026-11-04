@@ -13835,6 +13835,20 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "CorrelationRadius = 1, FeatureEncoderWidths = new[] { 4, 4, 4 }, FeatureDim = 4, UpdateHiddenDim = 4, " +
                     "UpdateFlowDim = 4, UpdateCorrelationDim = 4, UpdateFusionDim = 4 })";
             }
+            else if (model.ClassName == "M2M" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
+            {
+                // The release's M2M-PWC at CI width with two branches and PWC-Net at half size; the cost volume, the
+                // attention cube, the many-to-many splatting, the losses and the cosine are unchanged. No warmup (its first
+                // step runs at a rate of zero), and 1e-3: Adam moves a weight by at most the rate per step, and 100 steps at
+                // 1e-4 cannot fit the memorization target with a frame that is a blend of the input pixels.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 3), " +
+                    "options: new AiDotNet.Video.Options.M2MOptions { BaseChannels = 2, NumBranches = 2, CubeRank = 2, Ratio = 2, " +
+                    "FlowChannels = 4, FlowDecoderChannels = new[] { 4, 4, 4, 4, 4 }, WarmupSteps = 0, LearningRate = 1e-3 })";
+            }
             else if (model.ClassName == "XVFI" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
             {

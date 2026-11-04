@@ -119,7 +119,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.Video.FrameInterpolation.GIMMVFI<T>",
             "AiDotNet.Video.FrameInterpolation.InterpAnyClearer<T>",
             "AiDotNet.Video.FrameInterpolation.IQVFI<T>",
-            "AiDotNet.Video.FrameInterpolation.M2M<T>",
             "AiDotNet.Video.FrameInterpolation.MoG<T>",
             "AiDotNet.Video.FrameInterpolation.MoMo<T>",
             "AiDotNet.Video.FrameInterpolation.PerVFI<T>",

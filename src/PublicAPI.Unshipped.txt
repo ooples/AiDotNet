@@ -20940,3 +20940,54 @@ static AiDotNet.Video.Options.XVFIOptions.Vimeo() -> AiDotNet.Video.Options.XVFI
 *REMOVED*AiDotNet.Video.Options.XVFIOptions.UseComplementaryFlow.set -> void
 *REMOVED*AiDotNet.Video.Options.XVFIOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
 *REMOVED*AiDotNet.Video.Options.XVFIOptions.Variant.set -> void
+AiDotNet.Video.Options.M2MOptions.BaseChannels.get -> int
+AiDotNet.Video.Options.M2MOptions.BaseChannels.set -> void
+AiDotNet.Video.Options.M2MOptions.CharbonnierWeight.get -> double
+AiDotNet.Video.Options.M2MOptions.CharbonnierWeight.set -> void
+AiDotNet.Video.Options.M2MOptions.CubeRank.get -> int
+AiDotNet.Video.Options.M2MOptions.CubeRank.set -> void
+AiDotNet.Video.Options.M2MOptions.FlowChannels.get -> int
+AiDotNet.Video.Options.M2MOptions.FlowChannels.set -> void
+AiDotNet.Video.Options.M2MOptions.FlowDecoderChannels.get -> int[]!
+AiDotNet.Video.Options.M2MOptions.FlowDecoderChannels.set -> void
+AiDotNet.Video.Options.M2MOptions.FlowLearningRateMultiplier.get -> double
+AiDotNet.Video.Options.M2MOptions.FlowLearningRateMultiplier.set -> void
+AiDotNet.Video.Options.M2MOptions.MaxGradientNorm.get -> double
+AiDotNet.Video.Options.M2MOptions.MaxGradientNorm.set -> void
+AiDotNet.Video.Options.M2MOptions.NumBranches.get -> int
+AiDotNet.Video.Options.M2MOptions.NumBranches.set -> void
+AiDotNet.Video.Options.M2MOptions.Ratio.get -> int
+AiDotNet.Video.Options.M2MOptions.Ratio.set -> void
+AiDotNet.Video.Options.M2MOptions.TernaryWeight.get -> double
+AiDotNet.Video.Options.M2MOptions.TernaryWeight.set -> void
+AiDotNet.Video.Options.M2MOptions.TotalSteps.get -> int
+AiDotNet.Video.Options.M2MOptions.TotalSteps.set -> void
+AiDotNet.Video.Options.M2MOptions.WarmupSteps.get -> int
+AiDotNet.Video.Options.M2MOptions.WarmupSteps.set -> void
+AiDotNet.Video.Options.M2MOptions.WeightDecay.get -> double
+AiDotNet.Video.Options.M2MOptions.WeightDecay.set -> void
+override AiDotNet.Video.FrameInterpolation.M2M<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.FrameInterpolation.M2M<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.M2M<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.M2M<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.M2M<T>.GetNamedLayerActivations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> System.Collections.Generic.Dictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.FrameInterpolation.M2M<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.FrameInterpolation.M2M<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.M2M<T>.RegisterComponents() -> void
+override AiDotNet.Video.FrameInterpolation.M2M<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.FrameInterpolation.M2M<T>.SupportsFusedCompiledTraining.get -> bool
+override AiDotNet.Video.FrameInterpolation.M2M<T>.SupportsParameterMutation.get -> bool
+*REMOVED*AiDotNet.Video.Options.M2MOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.M2MOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.M2MOptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.M2MOptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.M2MOptions.NumFlowHypotheses.get -> int
+*REMOVED*AiDotNet.Video.Options.M2MOptions.NumFlowHypotheses.set -> void
+*REMOVED*AiDotNet.Video.Options.M2MOptions.NumPyramidLevels.get -> int
+*REMOVED*AiDotNet.Video.Options.M2MOptions.NumPyramidLevels.set -> void
+*REMOVED*AiDotNet.Video.Options.M2MOptions.NumRefineBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.M2MOptions.NumRefineBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.M2MOptions.SplattingRadius.get -> int
+*REMOVED*AiDotNet.Video.Options.M2MOptions.SplattingRadius.set -> void
+*REMOVED*AiDotNet.Video.Options.M2MOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.M2MOptions.Variant.set -> void
