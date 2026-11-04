@@ -114,7 +114,6 @@ internal static class ModelDefectBaselines
     internal static readonly System.Collections.Generic.HashSet<string> UndeclaredSharedFactoryModels =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
-            "AiDotNet.Video.FrameInterpolation.AMT<T>",
             "AiDotNet.Video.FrameInterpolation.BiMVFI<T>",
             "AiDotNet.Video.FrameInterpolation.DynamiCrafter<T>",
             "AiDotNet.Video.FrameInterpolation.EMAVFI<T>",

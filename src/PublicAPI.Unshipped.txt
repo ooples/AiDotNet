@@ -20646,4 +20646,52 @@ override AiDotNet.Video.FrameInterpolation.ABME<T>.SupportsFusedCompiledTraining
 override AiDotNet.Video.FrameInterpolation.ABME<T>.GetNamedLayerActivations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> System.Collections.Generic.Dictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 *REMOVED*AiDotNet.Models.Options.TRPOOptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
 *REMOVED*AiDotNet.Models.Options.TRPOOptions<T>.Optimizer.init -> void
-
+AiDotNet.Video.Options.AMTOptions.Channels.get -> int[]!
+AiDotNet.Video.Options.AMTOptions.Channels.set -> void
+AiDotNet.Video.Options.AMTOptions.CombineKernelSize.get -> int
+AiDotNet.Video.Options.AMTOptions.CombineKernelSize.set -> void
+AiDotNet.Video.Options.AMTOptions.FeatureDim.get -> int
+AiDotNet.Video.Options.AMTOptions.FeatureDim.set -> void
+AiDotNet.Video.Options.AMTOptions.FeatureEncoderWidths.get -> int[]!
+AiDotNet.Video.Options.AMTOptions.FeatureEncoderWidths.set -> void
+AiDotNet.Video.Options.AMTOptions.LargeEncoders.get -> bool
+AiDotNet.Video.Options.AMTOptions.LargeEncoders.set -> void
+AiDotNet.Video.Options.AMTOptions.MinLearningRate.get -> double
+AiDotNet.Video.Options.AMTOptions.MinLearningRate.set -> void
+AiDotNet.Video.Options.AMTOptions.SkipChannels.get -> int
+AiDotNet.Video.Options.AMTOptions.SkipChannels.set -> void
+AiDotNet.Video.Options.AMTOptions.TernaryWeight.get -> double
+AiDotNet.Video.Options.AMTOptions.TernaryWeight.set -> void
+AiDotNet.Video.Options.AMTOptions.TotalIterations.get -> int
+AiDotNet.Video.Options.AMTOptions.TotalIterations.set -> void
+AiDotNet.Video.Options.AMTOptions.UpdateCorrelationDim.get -> int
+AiDotNet.Video.Options.AMTOptions.UpdateCorrelationDim.set -> void
+AiDotNet.Video.Options.AMTOptions.UpdateFlowDim.get -> int
+AiDotNet.Video.Options.AMTOptions.UpdateFlowDim.set -> void
+AiDotNet.Video.Options.AMTOptions.UpdateFusionDim.get -> int
+AiDotNet.Video.Options.AMTOptions.UpdateFusionDim.set -> void
+AiDotNet.Video.Options.AMTOptions.UpdateHiddenDim.get -> int
+AiDotNet.Video.Options.AMTOptions.UpdateHiddenDim.set -> void
+AiDotNet.Video.Options.AMTOptions.UpdateSecondCorrelationDim.get -> int
+AiDotNet.Video.Options.AMTOptions.UpdateSecondCorrelationDim.set -> void
+AiDotNet.Video.Options.AMTOptions.WeightDecay.get -> double
+AiDotNet.Video.Options.AMTOptions.WeightDecay.set -> void
+override AiDotNet.Video.FrameInterpolation.AMT<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.FrameInterpolation.AMT<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.AMT<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.AMT<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.AMT<T>.GetNamedLayerActivations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> System.Collections.Generic.Dictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.FrameInterpolation.AMT<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.FrameInterpolation.AMT<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.AMT<T>.RegisterComponents() -> void
+override AiDotNet.Video.FrameInterpolation.AMT<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.FrameInterpolation.AMT<T>.SupportsFusedCompiledTraining.get -> bool
+static AiDotNet.Video.Options.AMTOptions.AmtL() -> AiDotNet.Video.Options.AMTOptions!
+*REMOVED*AiDotNet.Video.Options.AMTOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.AMTOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.AMTOptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.AMTOptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.AMTOptions.NumRefinementIters.get -> int
+*REMOVED*AiDotNet.Video.Options.AMTOptions.NumRefinementIters.set -> void
+*REMOVED*AiDotNet.Video.Options.AMTOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.AMTOptions.Variant.set -> void
