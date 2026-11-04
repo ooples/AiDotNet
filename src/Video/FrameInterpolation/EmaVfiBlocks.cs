@@ -164,19 +164,20 @@ internal sealed class EmaDepthwiseConv<T> : LazyWeightModule<T>
     public Tensor<T> Forward(Tensor<T> tokens, int h, int w)
     {
         int b = tokens.Shape[0], c = tokens.Shape[2];
-        var x = Engine.TensorPermute(Engine.Reshape(tokens, new[] { b, h, w, c }), new[] { 0, 3, 1, 2 });
-        var padded = Engine.PadNd(x, new[] { 1, 1, 1, 1 }, PadMode.Constant, MathHelper.GetNumericOperations<T>().Zero);
-        var shape = new[] { b, c, h, w };
+        // Channels-last throughout: the per-channel taps broadcast over [B, H, W, C].
+        var padded = EmaOps.PadSpatial(Engine, Engine.Reshape(tokens, new[] { b, h, w, c }), 1, 1, 1, 1);
+        var shape = new[] { b, h, w, c };
         Tensor<T>? sum = null;
         for (int ky = 0; ky < 3; ky++)
             for (int kx = 0; kx < 3; kx++)
             {
-                var tap = Engine.Reshape(Engine.TensorNarrow(Engine.TensorNarrow(_weight.Value, 2, ky, 1), 3, kx, 1), new[] { 1, c, 1, 1 });
-                var term = Engine.TensorMultiply(Engine.TensorSlice(padded, new[] { 0, 0, ky, kx }, shape), Engine.TensorBroadcastTo(tap, shape));
+                var tap = Engine.Reshape(Engine.TensorNarrow(Engine.TensorNarrow(_weight.Value, 2, ky, 1), 3, kx, 1), new[] { 1, 1, 1, c });
+                var term = Engine.TensorMultiply(Engine.TensorSlice(padded, new[] { 0, ky, kx, 0 }, shape), Engine.TensorBroadcastTo(tap, shape));
                 sum = sum is null ? term : Engine.TensorAdd(sum, term);
             }
-        var y = MgldOps.ChannelBias(Engine, sum ?? throw new InvalidOperationException("The 3x3 kernel is never empty."), _bias.Value);
-        return Engine.Reshape(Engine.TensorPermute(y, new[] { 0, 2, 3, 1 }), new[] { b, h * w, c });
+        var y = Engine.TensorAdd(sum ?? throw new InvalidOperationException("The 3x3 kernel is never empty."),
+            Engine.TensorBroadcastTo(Engine.Reshape(_bias.Value, new[] { 1, 1, 1, c }), shape));
+        return Engine.Reshape(y, new[] { b, h * w, c });
     }
 
     protected override IEnumerable<LazyWeight<T>> OwnWeights()
@@ -194,6 +195,30 @@ internal static class EmaOps
 
     /// <summary>F.interpolate(mode='bilinear', align_corners=False) to an explicit size.</summary>
     internal static Tensor<T> Resize<T>(IEngine engine, Tensor<T> x, int height, int width) => AmtOps.Resize(engine, x, height, width);
+
+    /// <summary>Zero padding of a channels-last map [B, H, W, C] on its spatial axes.</summary>
+    internal static Tensor<T> PadSpatial<T>(IEngine engine, Tensor<T> x, int top, int bottom, int left, int right)
+    {
+        int b = x.Shape[0], h = x.Shape[1], c = x.Shape[3];
+        if (top + bottom > 0)
+        {
+            var parts = new List<Tensor<T>>();
+            if (top > 0) parts.Add(new Tensor<T>(new[] { b, top, x.Shape[2], c }));
+            parts.Add(x);
+            if (bottom > 0) parts.Add(new Tensor<T>(new[] { b, bottom, x.Shape[2], c }));
+            x = engine.TensorConcatenate(parts.ToArray(), 1);
+            h = x.Shape[1];
+        }
+        if (left + right > 0)
+        {
+            var parts = new List<Tensor<T>>();
+            if (left > 0) parts.Add(new Tensor<T>(new[] { b, h, left, c }));
+            parts.Add(x);
+            if (right > 0) parts.Add(new Tensor<T>(new[] { b, h, right, c }));
+            x = engine.TensorConcatenate(parts.ToArray(), 2);
+        }
+        return x;
+    }
 
     /// <summary>window_partition: [B, H, W, C] to windows [B·nW, w·w, C], windows row-major within each image.</summary>
     internal static Tensor<T> Partition<T>(IEngine engine, Tensor<T> x, int window)

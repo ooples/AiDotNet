@@ -111,23 +111,20 @@ internal sealed class EmaMotionFormerBlock<T> : LazyWeightModule<T>
     private Tensor<T> ToWindows(Tensor<T> x, int h, int w)
     {
         var (left, right, top, bottom) = EmaOps.WindowPadding(h, w, _window);
-        var nchw = Engine.TensorPermute(x, new[] { 0, 3, 1, 2 });
-        if (left + right + top + bottom > 0)
-            nchw = Engine.PadNd(nchw, new[] { left, right, top, bottom }, PadMode.Constant, MathHelper.GetNumericOperations<T>().Zero);
-        if (_shift > 0) nchw = Engine.TensorRoll(nchw, new[] { -_shift, -_shift }, new[] { 2, 3 });
-        return EmaOps.Partition(Engine, Engine.TensorPermute(nchw, new[] { 0, 2, 3, 1 }), _window);
+        x = EmaOps.PadSpatial(Engine, x, top, bottom, left, right);
+        if (_shift > 0) x = Engine.TensorRoll(x, new[] { -_shift, -_shift }, new[] { 1, 2 });
+        return EmaOps.Partition(Engine, x, _window);
     }
 
     // Windows back to tokens [B, H·W, C]: reversed, rolled back, centre padding removed.
     private Tensor<T> FromWindows(Tensor<T> windows, int h, int w)
     {
         var (left, right, top, bottom) = EmaOps.WindowPadding(h, w, _window);
-        int hp = h + top + bottom, wp = w + left + right;
-        var nchw = Engine.TensorPermute(EmaOps.Reverse(Engine, windows, _window, hp, wp), new[] { 0, 3, 1, 2 });
-        if (_shift > 0) nchw = Engine.TensorRoll(nchw, new[] { _shift, _shift }, new[] { 2, 3 });
+        var x = EmaOps.Reverse(Engine, windows, _window, h + top + bottom, w + left + right);
+        if (_shift > 0) x = Engine.TensorRoll(x, new[] { _shift, _shift }, new[] { 1, 2 });
         if (left + right + top + bottom > 0)
-            nchw = Engine.TensorSlice(nchw, new[] { 0, 0, top, left }, new[] { nchw.Shape[0], nchw.Shape[1], h, w });
-        return Engine.Reshape(Engine.TensorPermute(nchw, new[] { 0, 2, 3, 1 }), new[] { nchw.Shape[0], h * w, nchw.Shape[1] });
+            x = Engine.TensorSlice(x, new[] { 0, top, left, 0 }, new[] { x.Shape[0], h, w, x.Shape[3] });
+        return Engine.Reshape(x, new[] { x.Shape[0], h * w, x.Shape[3] });
     }
 
     /// <summary>Tokens [2B, H·W, C] of both frames (frame 0 first) and the coordinate grid [2B, H, W, 2] to the updated
@@ -225,8 +222,9 @@ internal sealed class EmaMotionFormer<T> : LazyWeightModule<T>
         return Engine.Reshape(Engine.TensorPermute(x, new[] { 0, 2, 3, 1 }), new[] { b, h * w, c });
     }
 
+    // Tokens to [B, C, H, W], materialized as the release's .permute(0, 3, 1, 2).contiguous(): the warps sample it.
     private Tensor<T> Map(Tensor<T> tokens, int h, int w)
-        => Engine.TensorPermute(Engine.Reshape(tokens, new[] { tokens.Shape[0], h, w, tokens.Shape[2] }), new[] { 0, 3, 1, 2 });
+        => Engine.TensorPermute(Engine.Reshape(tokens, new[] { tokens.Shape[0], h, w, tokens.Shape[2] }), new[] { 0, 3, 1, 2 }).Contiguous();
 
     /// <summary>Both frames' appearance features (five maps) and the two attention stages' motion features, frame 0's
     /// samples first in each batch.</summary>
