@@ -10234,10 +10234,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // The exact generated fixture exhausted a 16 GB runner while allocating the first
                 // transformer weights and activations. Keep the native codec-token architecture,
                 // but exercise it at bounded width/depth/vocabulary through public options in CI.
+                // Make the intended fixture seed explicit: the model-test base's process-wide
+                // fallback otherwise overrides AmbientFallbackSeed and can collapse sampled codes.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
-                    "inputSize: 4, outputSize: 16), " +
+                    "inputSize: 4, outputSize: 16) { RandomSeed = 1337 }, " +
                     "new AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions { TextEncoderDim = 32, LLMDim = 32, VocabSize = 256, " +
                     "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 1, " +
                     "CodebookSize = 16, MaxTextLength = 128, MaxCodecFrames = 16, DropoutRate = 0.0 })";
