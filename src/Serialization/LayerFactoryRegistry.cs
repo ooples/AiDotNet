@@ -223,6 +223,28 @@ public static class LayerFactoryRegistry<T>
             if (type == typeof(string[])) { value = state.StringArray(key); return true; }
             if (type == typeof(int[][])) { value = state.Int32Jagged(key); return true; }
             if (type.IsEnum) { value = Enum.Parse(type, state.String(key), ignoreCase: true); return true; }
+            if (state.TryGetRaw(key, out var raw))
+            {
+                if (target.IsInstanceOfType(raw) || type.IsInstanceOfType(raw))
+                {
+                    // Constructor-owned objects must be independent, just as in generated factories.
+                    value = state.CloneObject<object>(key);
+                    return true;
+                }
+                if (raw is string json && !type.IsValueType && type != typeof(string))
+                {
+                    var trimmed = json.Trim();
+                    if (trimmed.StartsWith("{", StringComparison.Ordinal) || trimmed.StartsWith("[", StringComparison.Ordinal))
+                    {
+                        var deserialized = Newtonsoft.Json.JsonConvert.DeserializeObject(trimmed, type);
+                        if (deserialized is not null)
+                        {
+                            value = deserialized;
+                            return true;
+                        }
+                    }
+                }
+            }
         }
         catch (Exception)
         {
