@@ -2,7 +2,7 @@
   "baseline": "0.234.0",
   "reviewed_commit": "59aac68791577c267f4cce6ae8e8e25b778ec8c7",
   "scope": "Earlier explicit breaking public-API migrations in PR #2294. These exceptions are not a claim of backwards compatibility or paper fidelity. No requested model is removed by this change.",
-  "ledger_sha256": "bb21698363fc31787c22b47fd26ad2a6814f7c7490a2045fd8d8dfa7290ba5b5",
+  "ledger_sha256": "1c10629b025316a81837bc9208678b1cff0adaf71b07c24e2980570953f91097",
   "existing_suppressions_preserved": 283,
   "new_exact_baseline_suppressions": 4875,
   "unique_reviewed_changes": 1625,

@@ -14536,7 +14536,6 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*AiDotNet.ComputerVision.Segmentation.Referring.GLaMMOptions.GLaMMOptions(AiDotNet.ComputerVision.Segmentation.Referring.GLaMMOptions! other) -> void
 *REMOVED*AiDotNet.ComputerVision.Segmentation.Referring.GLaMMOptions.Validate() -> void
 *REMOVED*AiDotNet.ComputerVision.Segmentation.Video.EfficientTAM<T>.EfficientTAM(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! onnxModelPath, AiDotNet.ComputerVision.Segmentation.Video.EfficientTAMOptions? options = null) -> void
-AiDotNet.ComputerVision.VisionTaskModelBase<T>.PaperAdam(double learningRate) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 *REMOVED*AiDotNet.Configuration.YamlModelConfig.TextToSpeech.get -> AiDotNet.Configuration.YamlTypeSection?
 *REMOVED*AiDotNet.Configuration.YamlModelConfig.TextToSpeech.set -> void
 *REMOVED*AiDotNet.ContinualLearning.ElasticWeightConsolidation<T>
