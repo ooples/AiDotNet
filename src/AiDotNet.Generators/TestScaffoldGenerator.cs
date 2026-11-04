@@ -12072,8 +12072,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 // bandit's 800 steps the rate never passes 0.8% of 1e-4 and the toy task's outcome was set by
                 // platform rounding: Learned on Linux, a 0.09 rise of the 0.50 required on Windows, every run.
                 // As the other RL fixtures do, the fixture drops the warmup; paper defaults are untouched.
+                // A one-state bandit needs a small transformer, not the paper's 3x128 Gym network.
+                // Bound the fixture's compute while retaining all 800 updates and the learning assertion.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.DecisionTransformerOptions<double> {{ " +
-                    "WarmupSteps = 0 })";
+                    "WarmupSteps = 0, EmbeddingDim = 16, NumLayers = 1, ContextLength = 2, BatchSize = 4, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "WorldModelsAgent" && model.TypeParameterCount == 1)
             {

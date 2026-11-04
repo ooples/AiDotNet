@@ -1213,7 +1213,7 @@ public abstract class ReinforcementLearningTestBase<T>
             + "bandit loop cannot run against it.");
 
         await Task.Yield();
-        using var _arena = TensorArena.Create();
+        // Training spans hundreds of updates; let each update's temporary buffers be reclaimed.
         var state = CreateRandomState(ModelTestHelpers.CreateSeededRandom());
 
         using (var probe = CreateModel())
