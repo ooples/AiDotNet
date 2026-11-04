@@ -2473,8 +2473,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // Trim ONLY the repeated iterations: paper architectures, production defaults,
         // numerical tolerances and decrease thresholds are unchanged, and every training
         // assertion still executes against the real forward/backward path.
-        // (ABME's 18 s and AMT's 27 s were shared-factory placeholders; their paper ports run the full probes.)
-        "AVID", "BiMVFI",
+        // (ABME's 18 s, AMT's 27 s and BiMVFI's 18 s were shared-factory placeholders; their paper ports run the
+        // full probes.)
+        "AVID",
         // Second A-C wave, measured on the LOCAL 16 GB/4 CPU run rather than the CI log. The
         // cancelled CI job only reached 58% of the shard, so its slowest-class ranking was
         // badly skewed: these classes were either never reached or under-counted, yet they
@@ -13833,6 +13834,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "Channels = new[] { 4, 4, 4, 4 }, SkipChannels = 2, NumFlowFields = 2, NumCorrelationLevels = 3, " +
                     "CorrelationRadius = 1, FeatureEncoderWidths = new[] { 4, 4, 4 }, FeatureDim = 4, UpdateHiddenDim = 4, " +
                     "UpdateFlowDim = 4, UpdateCorrelationDim = 4, UpdateFusionDim = 4 })";
+            }
+            else if (model.ClassName == "BiMVFI" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
+            {
+                // The release's network at CI width with its three training levels (64x64 is a multiple of 16). The
+                // one-cycle schedule is shortened to 100 steps so its 1% warm-up ends after the first step; at the
+                // release's length the probes would run entirely at the warm-up's starting rate, max / 25.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 3), " +
+                    "options: new AiDotNet.Video.Options.BiMVFIOptions { FeatureChannels = 4, TotalIterations = 100 })";
             }
             else if (model.ClassName == "ABME" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))

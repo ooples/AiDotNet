@@ -20695,3 +20695,51 @@ static AiDotNet.Video.Options.AMTOptions.AmtL() -> AiDotNet.Video.Options.AMTOpt
 *REMOVED*AiDotNet.Video.Options.AMTOptions.NumRefinementIters.set -> void
 *REMOVED*AiDotNet.Video.Options.AMTOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
 *REMOVED*AiDotNet.Video.Options.AMTOptions.Variant.set -> void
+AiDotNet.Video.Options.BiMVFIOptions.DistillationWeight.get -> double
+AiDotNet.Video.Options.BiMVFIOptions.DistillationWeight.set -> void
+AiDotNet.Video.Options.BiMVFIOptions.FeatureChannels.get -> int
+AiDotNet.Video.Options.BiMVFIOptions.FeatureChannels.set -> void
+AiDotNet.Video.Options.BiMVFIOptions.FlowLevelDecay.get -> double
+AiDotNet.Video.Options.BiMVFIOptions.FlowLevelDecay.set -> void
+AiDotNet.Video.Options.BiMVFIOptions.LevelDecay.get -> double
+AiDotNet.Video.Options.BiMVFIOptions.LevelDecay.set -> void
+AiDotNet.Video.Options.BiMVFIOptions.MaxGradientNorm.get -> double
+AiDotNet.Video.Options.BiMVFIOptions.MaxGradientNorm.set -> void
+AiDotNet.Video.Options.BiMVFIOptions.PyramidLevels.get -> int
+AiDotNet.Video.Options.BiMVFIOptions.PyramidLevels.set -> void
+AiDotNet.Video.Options.BiMVFIOptions.RegularizationWeight.get -> double
+AiDotNet.Video.Options.BiMVFIOptions.RegularizationWeight.set -> void
+AiDotNet.Video.Options.BiMVFIOptions.SmoothnessEdgeConstant.get -> double
+AiDotNet.Video.Options.BiMVFIOptions.SmoothnessEdgeConstant.set -> void
+AiDotNet.Video.Options.BiMVFIOptions.SmoothnessWeight.get -> double
+AiDotNet.Video.Options.BiMVFIOptions.SmoothnessWeight.set -> void
+AiDotNet.Video.Options.BiMVFIOptions.TotalIterations.get -> int
+AiDotNet.Video.Options.BiMVFIOptions.TotalIterations.set -> void
+AiDotNet.Video.Options.BiMVFIOptions.WarmupFraction.get -> double
+AiDotNet.Video.Options.BiMVFIOptions.WarmupFraction.set -> void
+AiDotNet.Video.Options.BiMVFIOptions.WeightDecay.get -> double
+AiDotNet.Video.Options.BiMVFIOptions.WeightDecay.set -> void
+override AiDotNet.Video.FrameInterpolation.BiMVFI<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.FrameInterpolation.BiMVFI<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.BiMVFI<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.BiMVFI<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.BiMVFI<T>.GetNamedLayerActivations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> System.Collections.Generic.Dictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.FrameInterpolation.BiMVFI<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.FrameInterpolation.BiMVFI<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.BiMVFI<T>.RegisterComponents() -> void
+override AiDotNet.Video.FrameInterpolation.BiMVFI<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.FrameInterpolation.BiMVFI<T>.SupportsFusedCompiledTraining.get -> bool
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.ConfidenceThreshold.get -> double
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.ConfidenceThreshold.set -> void
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.NumResBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.NumResBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.NumScales.get -> int
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.NumScales.set -> void
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.OcclusionAwareBlending.get -> bool
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.OcclusionAwareBlending.set -> void
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.BiMVFIOptions.Variant.set -> void
