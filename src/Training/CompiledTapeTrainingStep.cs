@@ -1728,7 +1728,15 @@ public static class CompiledTapeTrainingStep<T>
             // moments), so the next Step continues the checkpointed trajectory exactly. NOT marked installed here: the
             // caller marks it once the whole fused step has succeeded, so a failure in the import, the step or the
             // gradient publication leaves it pending and the eager fallback still refuses to run.
-            plan.ImportOptimizerState(restored);
+            if (plan is AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanStreamedState streamedImport)
+            {
+                using var restoredStream = restored.OpenRead();
+                streamedImport.ImportOptimizerState(restoredStream);
+            }
+            else
+            {
+                plan.ImportOptimizerState(restored.ToArray());
+            }
             imported = optimizer;
             // The import carried the checkpoint's step; the plan reports it (AiDotNet.Tensors plan introspection), so a
             // schedule evaluated after a resume uses the resumed step rather than an unknown one.
@@ -1753,7 +1761,7 @@ public static class CompiledTapeTrainingStep<T>
 
         var state = CurrentState;
         optimizer.AttachFusedOptimizerState(new AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>.FusedOptimizerStateLink(
-            export: () => ReferenceEquals(state.configuredPlan, plan) ? plan.ExportOptimizerState() : null,
+            export: () => ReferenceEquals(state.configuredPlan, plan) ? ExportFusedState(plan) : null,
             release: () =>
             {
                 var previous = _currentState;
@@ -1766,6 +1774,29 @@ public static class CompiledTapeTrainingStep<T>
                 finally { _currentState = previous; }
             }));
         return imported;
+    }
+
+    /// <summary>
+    /// The plan's optimizer state, streamed into blocks when the plan supports it (so it is not capped at an array's
+    /// 2 GB), or <c>null</c> when no optimizer is configured on it.
+    /// </summary>
+    private static AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>.FusedPlanStatePayload? ExportFusedState(
+        ICompiledTrainingPlan<T> plan)
+    {
+        if (plan is AiDotNet.Tensors.Engines.Compilation.ICompiledTrainingPlanStreamedState streamed)
+        {
+            var blocks = new AiDotNet.Helpers.ChunkedMemoryStream();
+            if (!streamed.ExportOptimizerState(blocks))
+            {
+                blocks.Dispose();
+                return null;
+            }
+            return new AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>.FusedPlanStatePayload(blocks);
+        }
+
+        return plan.ExportOptimizerState() is { } bytes
+            ? new AiDotNet.Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>>.FusedPlanStatePayload(bytes)
+            : null;
     }
 
     private static void RefreshCompiledStochasticState(IReadOnlyList<ITrainableLayer<T>> layers)

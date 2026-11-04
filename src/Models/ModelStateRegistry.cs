@@ -65,6 +65,77 @@ public static class ModelStateEnvelope
         return result;
     }
 
+    /// <summary>
+    /// Writes the declared-state block and trailer to <paramref name="destination"/>, directly after a payload already
+    /// written there; the bytes are exactly those <see cref="Append{T}"/> adds, without copying the payload.
+    /// </summary>
+    internal static void AppendTo<T>(ModelStateRegistry<T> state, Stream destination)
+    {
+        if (destination is null) throw new ArgumentNullException(nameof(destination));
+        if (state is null || state.Count == 0) return;
+
+        using var buffer = new MemoryStream();
+        using (var writer = new BinaryWriter(buffer, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            state.WriteAll(writer);
+            writer.Flush();
+        }
+
+        buffer.Position = 0;
+        buffer.CopyTo(destination);
+        var trailer = new byte[TrailerLength];
+        Buffer.BlockCopy(BitConverter.GetBytes((int)buffer.Length), 0, trailer, 0, sizeof(int));
+        Buffer.BlockCopy(BitConverter.GetBytes(Magic), 0, trailer, sizeof(int), sizeof(int));
+        destination.Write(trailer, 0, trailer.Length);
+    }
+
+    /// <summary>
+    /// The stream form of <see cref="Stage{T}"/>: splits the declared-state block off the end of <paramref name="payload"/>
+    /// (a seekable stream whose whole length is the payload) and stages it. <paramref name="innerLength"/> is the length of
+    /// the payload in front of the block. The stream is left at position 0.
+    /// </summary>
+    internal static Action StageFrom<T>(
+        ModelStateRegistry<T> state, Stream payload, out long innerLength, out bool hasFallibleCommit)
+    {
+        if (payload is null) throw new ArgumentNullException(nameof(payload));
+        if (!payload.CanSeek || !payload.CanRead)
+            throw new ArgumentException("The payload stream must be readable and seekable.", nameof(payload));
+        hasFallibleCommit = false;
+        long length = payload.Length;
+        innerLength = length;
+        if (length < TrailerLength) return () => { };
+
+        var trailer = new byte[TrailerLength];
+        payload.Position = length - TrailerLength;
+        int got = 0;
+        while (got < TrailerLength)
+        {
+            int n = payload.Read(trailer, got, TrailerLength - got);
+            if (n <= 0) throw new EndOfStreamException("The payload ended inside its state trailer.");
+            got += n;
+        }
+        payload.Position = 0;
+
+        int magic = BitConverter.ToInt32(trailer, sizeof(int));
+        if (magic != Magic) return () => { };
+
+        int blockLength = BitConverter.ToInt32(trailer, 0);
+        long inner = length - TrailerLength - blockLength;
+        if (blockLength < 0 || inner < 0) return () => { };
+
+        Action commit = () => { };
+        if (state is not null && state.Count > 0)
+        {
+            using var block = new AiDotNet.Helpers.ReadOnlyWindowStream(payload, inner, blockLength);
+            using var reader = new BinaryReader(block, System.Text.Encoding.UTF8, leaveOpen: true);
+            commit = state.StageAll(reader, restoreAfterParameters: null, out hasFallibleCommit);
+        }
+
+        payload.Position = 0;
+        innerLength = inner;
+        return commit;
+    }
+
     /// <summary>Applies and strips a state trailer, returning the payload the base should read.</summary>
     /// <typeparam name="T">The model's numeric type.</typeparam>
     /// <param name="state">The model's declared state.</param>

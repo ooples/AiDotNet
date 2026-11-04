@@ -110,6 +110,9 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     private const string TapeStateExtensionMarker = "AiDotNet.GradientTapeOptimizerState.v1";
     private const string SchedulerStateExtensionMarker = "AiDotNet.LearningRateSchedulerState.v1";
     private const string FusedPlanStateExtensionMarker = "AiDotNet.FusedPlanOptimizerState.v1";
+    // v2 differs only in a 64-bit length, for fused state over 2 GB. Smaller state is still written as v1, so a
+    // checkpoint that fits the old format stays readable by readers that predate v2.
+    private const string FusedPlanStateExtensionMarkerV2 = "AiDotNet.FusedPlanOptimizerState.v2";
 
     /// <summary>
     /// The compiled training plan currently running this optimizer's update, when training takes the fused path.
@@ -123,7 +126,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// freshly configured plan. While it is pending, an eager step would silently restart the optimizer, so the
     /// eager path refuses to run instead.
     /// </summary>
-    private byte[]? _pendingFusedPlanState;
+    private FusedPlanStatePayload? _pendingFusedPlanState;
 
     /// <summary>
     /// Set when a checkpoint restored optimizer moments for the EAGER path (a tape step counter or tape tensor
@@ -132,17 +135,72 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </summary>
     private bool _restoredEagerStateAwaitingEagerPath;
 
+    /// <summary>
+    /// A compiled plan's exported optimizer state: one array when it fits, otherwise blocks, so state of any size
+    /// (the moments of a few hundred million parameters exceed an array's 2 GB) can be carried and re-imported.
+    /// </summary>
+    internal sealed class FusedPlanStatePayload
+    {
+        private readonly byte[]? _array;
+        private readonly AiDotNet.Helpers.ChunkedMemoryStream? _blocks;
+
+        internal FusedPlanStatePayload(byte[] array) => _array = array ?? throw new ArgumentNullException(nameof(array));
+
+        internal FusedPlanStatePayload(AiDotNet.Helpers.ChunkedMemoryStream blocks)
+            => _blocks = blocks ?? throw new ArgumentNullException(nameof(blocks));
+
+        /// <summary>The payload length in bytes.</summary>
+        internal long Length => _array?.LongLength ?? _blocks!.Length;
+
+        /// <summary>A read-only stream over the payload, positioned at its start.</summary>
+        internal Stream OpenRead() => _array is not null
+            ? new MemoryStream(_array, writable: false)
+            : new AiDotNet.Helpers.ReadOnlyWindowStream(_blocks!, 0, _blocks!.Length);
+
+        /// <summary>The payload as one array; throws when it is larger than an array can be.</summary>
+        internal byte[] ToArray()
+        {
+            if (_array is not null) return _array;
+            if (_blocks!.Length > OptimizerBase<T, TInput, TOutput>.MaxArrayBytes)
+                throw new InvalidOperationException(
+                    $"The fused optimizer state is {_blocks.Length:N0} bytes, more than an array can hold; import it " +
+                    "through a plan that implements ICompiledTrainingPlanStreamedState.");
+            var bytes = new byte[_blocks.Length];
+            using var s = OpenRead();
+            int got = 0;
+            while (got < bytes.Length)
+            {
+                int n = s.Read(bytes, got, bytes.Length - got);
+                if (n <= 0) throw new EndOfStreamException("The fused optimizer state is truncated.");
+                got += n;
+            }
+            return bytes;
+        }
+
+        /// <summary>Copies the payload to <paramref name="destination"/>.</summary>
+        internal void WriteTo(Stream destination)
+        {
+            if (_array is not null)
+            {
+                destination.Write(_array, 0, _array.Length);
+                return;
+            }
+            using var s = OpenRead();
+            s.CopyTo(destination, 1 << 20);
+        }
+    }
+
     /// <summary>How the compiled plan running this optimizer exports its state and is released.</summary>
     internal sealed class FusedOptimizerStateLink
     {
-        internal FusedOptimizerStateLink(Func<byte[]?> export, Action release)
+        internal FusedOptimizerStateLink(Func<FusedPlanStatePayload?> export, Action release)
         {
             Export = export ?? throw new ArgumentNullException(nameof(export));
             Release = release ?? throw new ArgumentNullException(nameof(release));
         }
 
         /// <summary>The plan's optimizer state, or <c>null</c> when that plan is no longer the live one.</summary>
-        internal Func<byte[]?> Export { get; }
+        internal Func<FusedPlanStatePayload?> Export { get; }
 
         /// <summary>Drops the plan so the next fused step configures (and imports into) a fresh one.</summary>
         internal Action Release { get; }
@@ -153,7 +211,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         => _fusedStateLink = link ?? throw new ArgumentNullException(nameof(link));
 
     /// <summary>The fused-plan state restored from a checkpoint and not yet installed, if any.</summary>
-    internal byte[]? PeekPendingFusedOptimizerState() => _pendingFusedPlanState;
+    internal FusedPlanStatePayload? PeekPendingFusedOptimizerState() => _pendingFusedPlanState;
 
     /// <summary>
     /// Records that the pending fused-plan state is now installed in a plan. Called only after the import
@@ -3228,7 +3286,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         // The fused plan's own state (moments, step counter, schedule position). A checkpoint restored but not yet
         // installed is carried forward unchanged, so saving again before the first resumed step loses nothing.
-        byte[]? liveFusedState = _fusedStateLink?.Export();
+        FusedPlanStatePayload? liveFusedState = _fusedStateLink?.Export();
         if (_fusedStateLink is not null && liveFusedState is null)
         {
             // The linked plan is no longer live (invalidated, or dropped after a fused-path failure, from which the
@@ -3236,13 +3294,16 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             _fusedStateLink = null;
         }
 
-        byte[]? fusedState = liveFusedState ?? _pendingFusedPlanState;
-        writer.Write(FusedPlanStateExtensionMarker);
+        FusedPlanStatePayload? fusedState = liveFusedState ?? _pendingFusedPlanState;
+        bool wide = fusedState is not null && fusedState.Length > int.MaxValue;
+        writer.Write(wide ? FusedPlanStateExtensionMarkerV2 : FusedPlanStateExtensionMarker);
         writer.Write(fusedState is not null);
         if (fusedState is not null)
         {
-            writer.Write(fusedState.Length);
-            writer.Write(fusedState);
+            if (wide) writer.Write(fusedState.Length);
+            else writer.Write((int)fusedState.Length);
+            writer.Flush();
+            fusedState.WriteTo(writer.BaseStream);
         }
     }
 
@@ -3290,7 +3351,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         public bool HasSchedulerSection;
         public PreparedScheduler? Scheduler;
         public SchedulerStepMode? StepMode;
-        public byte[]? FusedPlanState;
+        public FusedPlanStatePayload? FusedPlanState;
         public bool RestoredEagerMoments;
     }
 
@@ -3371,14 +3432,15 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         if (reader.BaseStream.Position < reader.BaseStream.Length)
         {
             string fusedMarker = reader.ReadString();
-            if (!string.Equals(fusedMarker, FusedPlanStateExtensionMarker, StringComparison.Ordinal))
+            bool wide = string.Equals(fusedMarker, FusedPlanStateExtensionMarkerV2, StringComparison.Ordinal);
+            if (!wide && !string.Equals(fusedMarker, FusedPlanStateExtensionMarker, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException($"Unknown optimizer extension payload '{fusedMarker}'.");
             }
 
             if (reader.ReadBoolean())
             {
-                int length = reader.ReadInt32();
+                long length = wide ? reader.ReadInt64() : reader.ReadInt32();
                 long remaining = reader.BaseStream.Length - reader.BaseStream.Position;
                 if (length <= 0 || length > remaining)
                 {
@@ -3386,7 +3448,24 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                         $"Optimizer checkpoint declares a fused-plan state of {length} bytes but only {remaining} remain.");
                 }
 
-                parsed.FusedPlanState = reader.ReadBytes(length);
+                if (length <= OptimizerBase<T, TInput, TOutput>.MaxArrayBytes)
+                {
+                    parsed.FusedPlanState = new FusedPlanStatePayload(reader.ReadBytes((int)length));
+                }
+                else
+                {
+                    var blocks = new AiDotNet.Helpers.ChunkedMemoryStream();
+                    var buffer = new byte[1 << 20];
+                    long left = length;
+                    while (left > 0)
+                    {
+                        int n = reader.BaseStream.Read(buffer, 0, (int)Math.Min(buffer.Length, left));
+                        if (n <= 0) throw new EndOfStreamException("The fused-plan optimizer state is truncated.");
+                        blocks.Write(buffer, 0, n);
+                        left -= n;
+                    }
+                    parsed.FusedPlanState = new FusedPlanStatePayload(blocks);
+                }
             }
         }
 

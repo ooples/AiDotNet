@@ -84,6 +84,13 @@ public class Checkpoint<T, TInput, TOutput>
     public bool ShouldSerializeOptimizerData() => !OptimizerDataInSidecar;
 
     /// <summary>
+    /// The sidecar holding the optimizer state when it was too large to load into <see cref="OptimizerData"/> (over an
+    /// array's 2 GB); <see cref="TryRestoreOptimizer"/> then streams it from here. Set by the checkpoint manager on
+    /// load, never persisted.
+    /// </summary>
+    internal string? OptimizerDataPath { get; set; }
+
+    /// <summary>
     /// Gets or sets the optimizer type name for reconstruction.
     /// </summary>
     public string? OptimizerTypeName { get; set; }
@@ -179,11 +186,28 @@ public class Checkpoint<T, TInput, TOutput>
         int step,
         Dictionary<string, T> metrics,
         Dictionary<string, object>? metadata = null)
+        : this(model, optimizer, epoch, step, metrics, metadata, serializeOptimizer: true)
+    {
+    }
+
+    /// <summary>
+    /// As the public constructor; with <paramref name="serializeOptimizer"/> false the optimizer's state is NOT
+    /// captured into <see cref="OptimizerData"/>, because the caller streams it to a sidecar itself (state over 2 GB
+    /// cannot be held in one array).
+    /// </summary>
+    internal Checkpoint(
+        object model,
+        IOptimizer<T, TInput, TOutput> optimizer,
+        int epoch,
+        int step,
+        Dictionary<string, T> metrics,
+        Dictionary<string, object>? metadata,
+        bool serializeOptimizer)
         : this()
     {
         Model = model;
         OptimizerState = ExtractOptimizerState(optimizer);
-        OptimizerData = optimizer?.Serialize() ?? Array.Empty<byte>();
+        OptimizerData = serializeOptimizer ? optimizer?.Serialize() ?? Array.Empty<byte>() : Array.Empty<byte>();
         OptimizerState["SerializedStateLengthBytes"] = OptimizerData.Length;
         OptimizerTypeName = optimizer?.GetType().AssemblyQualifiedName;
         Epoch = epoch;
@@ -215,7 +239,8 @@ public class Checkpoint<T, TInput, TOutput>
         if (optimizer == null)
             throw new ArgumentNullException(nameof(optimizer));
 
-        if (OptimizerData == null || OptimizerData.Length == 0)
+        bool streamed = (OptimizerData == null || OptimizerData.Length == 0) && OptimizerDataPath is not null;
+        if (!streamed && (OptimizerData == null || OptimizerData.Length == 0))
             return false;
 
         // Guard against feeding a checkpoint's bytes to a different optimizer type, which would
@@ -258,7 +283,18 @@ public class Checkpoint<T, TInput, TOutput>
             }
         }
 
-        optimizer.Deserialize(OptimizerData);
+        if (streamed)
+        {
+            if (optimizer is not AiDotNet.Optimizers.OptimizerBase<T, TInput, TOutput> streamable)
+                throw new InvalidOperationException(
+                    $"Checkpoint '{CheckpointId}' holds {new FileInfo(OptimizerDataPath!).Length:N0} bytes of optimizer " +
+                    $"state, more than an array can hold, and '{optimizer.GetType().Name}' can only restore from an array.");
+            using var file = new FileStream(OptimizerDataPath!, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 20);
+            streamable.DeserializeFrom(file);
+            return true;
+        }
+
+        optimizer.Deserialize(OptimizerData!);
         return true;
     }
 

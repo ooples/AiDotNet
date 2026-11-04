@@ -74,12 +74,30 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
 
         lock (SyncLock)
         {
-            var checkpoint = new Checkpoint<T, TInput, TOutput>(model, optimizer, epoch, step, metrics, metadata);
+            // An optimizer built on OptimizerBase streams its state straight into the sidecar, so state over 2 GB (the
+            // moments of a few hundred million parameters) never has to fit one array; the file holds exactly the bytes
+            // Serialize() would return. Any other optimizer is serialized to an array, as before.
+            var streamable = optimizer as AiDotNet.Optimizers.OptimizerBase<T, TInput, TOutput>;
+            var checkpoint = new Checkpoint<T, TInput, TOutput>(
+                model, optimizer, epoch, step, metrics, metadata, serializeOptimizer: streamable is null);
             var checkpointPath = GetCheckpointFilePath(checkpoint.CheckpointId);
 
             // The optimizer payload (every moment tensor) goes to its own binary file, written before the JSON that
             // indexes it; the JSON is then streamed to disk instead of being built as one string.
-            if (checkpoint.OptimizerData.Length > 0)
+            if (streamable is not null)
+            {
+                long written;
+                using (var file = new FileStream(checkpointPath + OptimizerSuffix, FileMode.Create, FileAccess.Write,
+                           FileShare.None, 1 << 20))
+                {
+                    streamable.WriteState(file);
+                    written = file.Length;
+                }
+                checkpoint.OptimizerState["SerializedStateLengthBytes"] = written;
+                checkpoint.OptimizerDataInSidecar = written > 0;
+                if (written == 0) File.Delete(checkpointPath + OptimizerSuffix);
+            }
+            else if (checkpoint.OptimizerData.Length > 0)
             {
                 File.WriteAllBytes(checkpointPath + OptimizerSuffix, checkpoint.OptimizerData);
                 checkpoint.OptimizerDataInSidecar = true;
@@ -152,7 +170,12 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
                     throw new FileNotFoundException(
                         $"Checkpoint '{checkpointId}' keeps its optimizer state in '{optimizerPath}', which is missing.",
                         optimizerPath);
-                checkpoint.OptimizerData = File.ReadAllBytes(optimizerPath);
+                // Loaded into OptimizerData when it fits an array, as callers have always read it; larger state is
+                // streamed from the sidecar by RestoreOptimizer instead.
+                if (new FileInfo(optimizerPath).Length <= AiDotNet.Optimizers.OptimizerBase<T, TInput, TOutput>.MaxArrayBytes)
+                    checkpoint.OptimizerData = File.ReadAllBytes(optimizerPath);
+                else
+                    checkpoint.OptimizerDataPath = optimizerPath;
             }
 
             return checkpoint;

@@ -867,6 +867,102 @@ public class StreamingStepTrainingTests : IDisposable
         Assert.False(File.Exists(jsonPath + ".optim"), "deleting the checkpoint left its optimizer sidecar");
     }
 
+    /// <summary>
+    /// The sidecar is streamed from the optimizer, not built as one array, so state over 2 GB can be checkpointed. It
+    /// must still be exactly the bytes Serialize() returns, and restoring from a stream (the path a sidecar too large to
+    /// load into OptimizerData takes) must leave the optimizer exactly as restoring from the array does.
+    /// </summary>
+    [Fact(Timeout = 180000)]
+    public async Task StreamedOptimizerSidecar_IsTheSerializeBytes_AndStreamedRestoreMatchesTheArrayRestore()
+    {
+        await Task.Yield();
+        var dir = Path.Combine(_root, "optim-stream");
+        var init = InitialWeights();
+        var (model, trained) = await Train(maxSteps: 6, resume: false, checkpoints: null, init);
+        byte[] expected = trained.Serialize();
+
+        var manager = new CheckpointManager<float, Tensor<float>, Tensor<float>>(dir);
+        var id = manager.SaveCheckpoint(model, trained, 0, 6, new Dictionary<string, float> { ["loss"] = 1f });
+        var sidecarPath = Directory.GetFiles(dir, "checkpoint_*.json").Single() + ".optim";
+        Assert.Equal(expected, File.ReadAllBytes(sidecarPath));
+
+        using (var buffer = new MemoryStream())
+        {
+            trained.WriteState(buffer);
+            Assert.Equal(expected, buffer.ToArray());
+        }
+
+        var fromArray = Optimizer(epochs: 100);
+        fromArray.Deserialize(expected);
+
+        // The streamed path, as LoadCheckpoint takes it for a sidecar over an array's limit: OptimizerData stays empty
+        // and RestoreOptimizer reads the file. The payload sits after a prefix to prove nothing assumes offset 0.
+        var loaded = new CheckpointManager<float, Tensor<float>, Tensor<float>>(dir).LoadCheckpoint(id);
+        loaded.OptimizerData = Array.Empty<byte>();
+        loaded.OptimizerDataPath = sidecarPath;
+        var fromStream = Optimizer(epochs: 100);
+        Assert.True(loaded.TryRestoreOptimizer(fromStream));
+        Assert.Equal(fromArray.Serialize(), fromStream.Serialize());
+        Assert.Equal(expected, fromStream.Serialize());
+
+        using (var file = new MemoryStream())
+        {
+            file.Write(new byte[] { 1, 2, 3 }, 0, 3);
+            file.Write(expected, 0, expected.Length);
+            var fromWindow = Optimizer(epochs: 100);
+            fromWindow.DeserializeFrom(new AiDotNet.Helpers.ReadOnlyWindowStream(file, 3, expected.Length));
+            Assert.Equal(expected, fromWindow.Serialize());
+        }
+    }
+
+    /// <summary>A truncated streamed payload is rejected and leaves the optimizer exactly as it was.</summary>
+    [Fact(Timeout = 180000)]
+    public async Task TruncatedStreamedOptimizerPayload_IsRejected_AndChangesNothing()
+    {
+        await Task.Yield();
+        var (_, trained) = await Train(maxSteps: 4, resume: false, checkpoints: null, InitialWeights());
+        byte[] payload = trained.Serialize();
+
+        var target = Optimizer(epochs: 100);
+        byte[] before = target.Serialize();
+        using var truncated = new MemoryStream(payload, 0, payload.Length / 2, writable: false);
+        Assert.ThrowsAny<Exception>(() => target.DeserializeFrom(truncated));
+        Assert.Equal(before, target.Serialize());
+
+        // The stream path must reject exactly what the array path rejects.
+        var arrayTarget = Optimizer(epochs: 100);
+        Assert.ThrowsAny<Exception>(() => arrayTarget.Deserialize(payload.Take(payload.Length / 2).ToArray()));
+        Assert.Equal(before, arrayTarget.Serialize());
+    }
+
+    /// <summary>
+    /// Fused-plan state larger than an array is held in blocks; the block form reads, copies and converts back to the
+    /// identical bytes the array form holds.
+    /// </summary>
+    [Fact(Timeout = 60000)]
+    public async Task FusedPlanStatePayload_InBlocks_RoundTripsTheSameBytesAsTheArrayForm()
+    {
+        await Task.Yield();
+        var rng = new Random(11);
+        var bytes = new byte[3 * 1024 * 1024 + 17];
+        rng.NextBytes(bytes);
+        var blocks = new AiDotNet.Helpers.ChunkedMemoryStream();
+        blocks.Write(bytes, 0, bytes.Length);
+        var inBlocks = new AiDotNet.Optimizers.GradientBasedOptimizerBase<float, Tensor<float>, Tensor<float>>.FusedPlanStatePayload(blocks);
+        var asArray = new AiDotNet.Optimizers.GradientBasedOptimizerBase<float, Tensor<float>, Tensor<float>>.FusedPlanStatePayload(bytes);
+
+        Assert.Equal(bytes.LongLength, inBlocks.Length);
+        Assert.Equal(bytes, inBlocks.ToArray());
+        using var copy = new MemoryStream();
+        inBlocks.WriteTo(copy);
+        Assert.Equal(bytes, copy.ToArray());
+        using var read = inBlocks.OpenRead();
+        using var readBack = new MemoryStream();
+        read.CopyTo(readBack);
+        Assert.Equal(bytes, readBack.ToArray());
+        Assert.Equal(asArray.ToArray(), inBlocks.ToArray());
+    }
+
     /// <summary>A checkpoint whose optimizer sidecar is gone fails to load instead of resuming with fresh moments.</summary>
     [Fact(Timeout = 120000)]
     public async Task CheckpointWithAMissingOptimizerSidecar_FailsToLoad()

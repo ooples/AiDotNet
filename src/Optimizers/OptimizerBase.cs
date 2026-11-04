@@ -2030,22 +2030,91 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </remarks>
     public virtual byte[] Serialize()
     {
-        ModelPersistenceGuard.EnforceBeforeSerialize();
         using var memoryStream = new MemoryStream();
-        using var writer = new BinaryWriter(memoryStream);
+        WriteBaseState(memoryStream);
+        return memoryStream.ToArray();
+    }
 
-        // Write the type name
-        writer.Write(GetType().AssemblyQualifiedName ?? string.Empty);
+    /// <summary>
+    /// Writes exactly the bytes <see cref="Serialize"/> returns to <paramref name="destination"/>, without building them
+    /// in one array, so an optimizer whose state exceeds 2 GB (an array's limit) can still be checkpointed.
+    /// </summary>
+    /// <remarks>An optimizer that overrides <see cref="Serialize"/> keeps its own format: its bytes are written as they
+    /// are, and so are bounded by that override's array.</remarks>
+    internal void WriteState(Stream destination)
+    {
+        if (destination is null) throw new ArgumentNullException(nameof(destination));
+        if (OverridesArrayFormat())
+        {
+            byte[] bytes = Serialize();
+            destination.Write(bytes, 0, bytes.Length);
+            return;
+        }
 
-        // Serialize options
-        var optionsJson = JsonConvert.SerializeObject(Options);
-        writer.Write(optionsJson);
+        WriteBaseState(destination);
+    }
 
-        // Allow derived classes to serialize additional data
-        SerializeAdditionalData(writer);
-        SerializeExtensionData(writer);
+    private void WriteBaseState(Stream destination)
+    {
+        ModelPersistenceGuard.EnforceBeforeSerialize();
+        using (var writer = new BinaryWriter(destination, System.Text.Encoding.UTF8, leaveOpen: true))
+        {
+            // Write the type name
+            writer.Write(GetType().AssemblyQualifiedName ?? string.Empty);
 
-        return AiDotNet.Models.ModelStateEnvelope.Append(DeclaredState, memoryStream.ToArray());
+            // Serialize options
+            var optionsJson = JsonConvert.SerializeObject(Options);
+            writer.Write(optionsJson);
+
+            // Allow derived classes to serialize additional data
+            SerializeAdditionalData(writer);
+            SerializeExtensionData(writer);
+            writer.Flush();
+        }
+
+        AiDotNet.Models.ModelStateEnvelope.AppendTo(DeclaredState, destination);
+    }
+
+    /// <summary>
+    /// Restores from a seekable stream holding exactly what <see cref="WriteState"/> (or <see cref="Serialize"/>) wrote,
+    /// with the same validation and atomicity as <see cref="Deserialize"/>, without loading it into one array.
+    /// </summary>
+    internal void DeserializeFrom(Stream source)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
+        if (OverridesArrayFormat())
+        {
+            if (source.Length > MaxArrayBytes)
+                throw new InvalidOperationException(
+                    $"{GetType().Name} uses its own array-based format, which cannot hold the {source.Length:N0}-byte payload.");
+            var bytes = new byte[source.Length];
+            source.Position = 0;
+            int got = 0;
+            while (got < bytes.Length)
+            {
+                int n = source.Read(bytes, got, bytes.Length - got);
+                if (n <= 0) throw new EndOfStreamException("The optimizer payload is truncated.");
+                got += n;
+            }
+            Deserialize(bytes);
+            return;
+        }
+
+        RunAtomicRestore(source, StageDeserialize);
+    }
+
+    /// <summary>The largest byte array the runtime allows (Array.MaxLength, which .NET Framework does not expose).</summary>
+    internal const long MaxArrayBytes = 0x7FFFFFC7;
+
+    private bool OverridesArrayFormat()
+    {
+        var type = GetType();
+        var serialize = type.GetMethod(nameof(Serialize), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public,
+            binder: null, types: Type.EmptyTypes, modifiers: null);
+        var deserialize = type.GetMethod(nameof(Deserialize), System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public,
+            binder: null, types: new[] { typeof(byte[]) }, modifiers: null);
+        var self = typeof(OptimizerBase<T, TInput, TOutput>);
+        return serialize?.DeclaringType != self || deserialize?.DeclaringType != self;
     }
 
     /// <summary>
@@ -2075,7 +2144,7 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     public virtual void Deserialize(byte[] data)
     {
         if (data is null) throw new ArgumentNullException(nameof(data));
-        RunAtomicRestore(data, StageDeserialize);
+        RunAtomicRestore(new MemoryStream(data, writable: false), StageDeserialize);
     }
 
     /// <summary>
@@ -2115,6 +2184,57 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// <para>If the snapshot itself cannot be taken (an optimizer whose configuration cannot be serialized), the restore
     /// still runs; the staged part stays atomic and only the fallible commits are unprotected.</para>
     /// </remarks>
+    private protected void RunAtomicRestore(Stream data, Func<Stream, StagedRestore> stage)
+    {
+        var staged = stage(data);
+
+        // The rollback snapshot is held in blocks, not one array, so it works at any state size.
+        AiDotNet.Helpers.ChunkedMemoryStream? snapshot = null;
+        if (staged.HasFallibleCommit)
+        {
+            try
+            {
+                snapshot = new AiDotNet.Helpers.ChunkedMemoryStream();
+                WriteState(snapshot);
+                snapshot.Position = 0;
+            }
+            catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException)
+            {
+                snapshot?.Dispose();
+                snapshot = null;
+                System.Diagnostics.Trace.TraceWarning(
+                    $"{GetType().Name}: restoring without a rollback snapshot because the current state cannot be " +
+                    $"serialized ({ex.GetType().Name}); a failure in a fallible commit would leave partial state.");
+            }
+        }
+
+        try
+        {
+            staged.Commit();
+        }
+        catch (Exception failure) when (snapshot is not null)
+        {
+            try
+            {
+                stage(snapshot).Commit();
+            }
+            catch (Exception rollbackFailure)
+            {
+                throw new InvalidOperationException(
+                    $"{GetType().Name}: restoring a checkpoint failed and restoring the previous state also failed; " +
+                    "the optimizer state is undefined. Construct a fresh optimizer before continuing.",
+                    new AggregateException(failure, rollbackFailure));
+            }
+
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+            throw;
+        }
+        finally
+        {
+            snapshot?.Dispose();
+        }
+    }
+
     private protected void RunAtomicRestore(byte[] data, Func<byte[], StagedRestore> stage)
     {
         var staged = stage(data);
@@ -2161,12 +2281,22 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
     /// </summary>
     private protected StagedRestore StageDeserialize(byte[] data)
     {
-        ModelPersistenceGuard.EnforceBeforeDeserialize();
-        var commitDeclared = AiDotNet.Models.ModelStateEnvelope.Stage(
-            DeclaredState, data, out var inner, out bool declaredFallible);
+        if (data is null) throw new ArgumentNullException(nameof(data));
+        return StageDeserialize(new MemoryStream(data, writable: false));
+    }
 
-        using MemoryStream ms = new(inner);
-        using BinaryReader reader = new(ms);
+    /// <summary>
+    /// The stream form of <see cref="StageDeserialize(byte[])"/>: <paramref name="data"/> is a seekable stream whose whole
+    /// length is the payload. It must stay open until the returned commit has run, which may read it again.
+    /// </summary>
+    private protected StagedRestore StageDeserialize(Stream data)
+    {
+        ModelPersistenceGuard.EnforceBeforeDeserialize();
+        var commitDeclared = AiDotNet.Models.ModelStateEnvelope.StageFrom(
+            DeclaredState, data, out long innerLength, out bool declaredFallible);
+
+        var ms = new AiDotNet.Helpers.ReadOnlyWindowStream(data, 0, innerLength);
+        using BinaryReader reader = new(ms, System.Text.Encoding.UTF8, leaveOpen: true);
 
         // Read and verify the type
         string typeName = reader.ReadString();
@@ -2202,15 +2332,13 @@ public abstract class OptimizerBase<T, TInput, TOutput> : IOptimizer<T, TInput, 
         // options. Its restore keeps that sequential order and is always protected by the rollback snapshot.
         if (OverridesDeserializeAdditionalData())
         {
-            byte[] body = inner;
             long bodyStart = ms.Position;
             return new StagedRestore(options, () =>
             {
                 commitDeclared();
                 AdoptRestoredOptions(options);
-                using var replay = new MemoryStream(body);
-                replay.Position = bodyStart;
-                using var replayReader = new BinaryReader(replay);
+                ms.Position = bodyStart;
+                using var replayReader = new BinaryReader(ms, System.Text.Encoding.UTF8, leaveOpen: true);
                 DeserializeAdditionalData(replayReader);
                 StageExtensionData(replayReader, out _)();
             }, hasFallibleCommit: true);
