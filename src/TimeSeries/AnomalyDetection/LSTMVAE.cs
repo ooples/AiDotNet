@@ -800,14 +800,9 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
     [Scratch]
     private Tensor<T> _outputBiasGrad;
 
-    [Scratch]
-    private Tensor<T>? _lastLatent;
-    [Scratch]
-    private Tensor<T>? _lastHidden;
-
     public override bool SupportsTraining => true;
 
-    public override void ResetState() { ResetGradients(); _lastLatent = null; _lastHidden = null; }
+    public override void ResetState() { ResetGradients(); }
 
     public override void UpdateParameters(T learningRate)
     {
@@ -816,9 +811,7 @@ internal partial class LSTMDecoderTensor<T> : NeuralNetworks.Layers.LayerBase<T>
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        _lastLatent = input;
-        var (output, hidden) = DecodeWithCache(input);
-        _lastHidden = hidden;
+        var (output, _) = DecodeWithCache(input);
         return output;
     }
 

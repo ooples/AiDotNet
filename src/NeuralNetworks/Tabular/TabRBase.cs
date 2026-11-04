@@ -82,13 +82,7 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
 
     // Cache for backward pass
     [Scratch]
-    private Tensor<T>? _queryEmbeddingCache;
-    [Scratch]
-    private Tensor<T>? _neighborEmbeddingsCache;
-    [Scratch]
     private Tensor<T>? _attentionWeightsCache;
-    [Scratch]
-    private Tensor<T>? _contextCache;
     [Scratch]
     private Matrix<int>? _neighborIndicesCache;
 
@@ -504,12 +498,10 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     {
         // Encode query features
         var queryEmbedding = EncodeFeatures(features);
-        _queryEmbeddingCache = queryEmbedding;
 
         // Retrieve similar neighbors
         var (neighborIndices, neighborEmbeddings, _) = RetrieveNeighbors(queryEmbedding, excludeIndices);
         _neighborIndicesCache = neighborIndices;
-        _neighborEmbeddingsCache = neighborEmbeddings;
 
         // Aggregate neighbor information
         var neighborContext = AggregateNeighbors(queryEmbedding, neighborEmbeddings);
@@ -540,7 +532,6 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
             context = _contextNorm.Forward(context);
         }
 
-        _contextCache = context;
         return context;
     }
 
@@ -588,10 +579,7 @@ public abstract partial class TabRBase<T> : IParameterSource<T>
     /// </summary>
     public virtual void ResetState()
     {
-        _queryEmbeddingCache = null;
-        _neighborEmbeddingsCache = null;
         _attentionWeightsCache = null;
-        _contextCache = null;
         _neighborIndicesCache = null;
 
         foreach (var layer in _encoderLayers)

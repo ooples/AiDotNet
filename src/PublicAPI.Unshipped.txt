@@ -421,3 +421,4 @@ AiDotNet.Safety.Watermarking.SamplingWatermarker<T>.SamplingWatermarker(double w
 AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarker(double watermarkStrength) -> void
 AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength) -> void
 AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength) -> void
+AiDotNet.NeuralNetworks.Tabular.AutoIntBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T

@@ -75,11 +75,7 @@ public abstract class GANDALFBase<T> : IParameterSource<T>
 
     // Cache for backward pass
     [Scratch]
-    private Tensor<T>? _inputCache;
-    [Scratch]
     private Tensor<T>? _gatingWeightsCache;
-    [Scratch]
-    private List<Tensor<T>>? _routingProbsCache;  // Per tree routing probabilities
 
     /// <summary>
     /// Gets the number of trees.
@@ -397,7 +393,6 @@ public abstract class GANDALFBase<T> : IParameterSource<T>
     /// <returns>Aggregated tree outputs [batch_size, leaf_dim].</returns>
     protected Tensor<T> ForwardBackbone(Tensor<T> features)
     {
-        _inputCache = features;
         int batchSize = features.Shape[0];
         int leafDim = Options.LeafDimension;
 
@@ -411,12 +406,9 @@ public abstract class GANDALFBase<T> : IParameterSource<T>
         var aggregatedOutput = new Tensor<T>([batchSize, leafDim]);
         aggregatedOutput.Fill(NumOps.Zero);
 
-        _routingProbsCache = new List<Tensor<T>>();
-
         for (int t = 0; t < Options.NumTrees; t++)
         {
             var leafProbs = ComputeTreeRouting(gatedFeatures, t);
-            _routingProbsCache.Add(leafProbs);
 
             var treeOutput = ComputeTreeOutput(leafProbs, t);
 
@@ -467,9 +459,7 @@ public abstract class GANDALFBase<T> : IParameterSource<T>
     /// </summary>
     public virtual void ResetState()
     {
-        _inputCache = null;
         _gatingWeightsCache = null;
-        _routingProbsCache = null;
 
         foreach (var layer in _gatingLayers)
             layer.ResetState();

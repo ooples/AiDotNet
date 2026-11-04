@@ -157,12 +157,6 @@ public partial class UNetDiscriminator<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private Tensor<T>[]? _skipConnections;
 
-    /// <summary>
-    /// Cached input for backpropagation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
     #endregion
 
     #region Properties
@@ -353,8 +347,6 @@ public partial class UNetDiscriminator<T> : LayerBase<T>, IShapeContract
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         // Initial conv + activation
         var x = _convFirst.Forward(input);
         x = ApplyLeakyReLU(x);
@@ -450,7 +442,6 @@ public partial class UNetDiscriminator<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
         _skipConnections = null;
 
         _convFirst.ResetState();
@@ -524,15 +515,6 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
     private readonly LeakyReLUActivation<T> _leakyReLU;
     private readonly bool _downsample;
 
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _lastInput;
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _conv1Output;      // After LeakyReLU (input to conv2)
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _conv1RawOutput;   // Before LeakyReLU (for backward)
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _conv2RawOutput;   // Before LeakyReLU (for backward)
-
     private readonly int _outChannels;
 
     public UNetConvBlock(int outChannels, bool downsample)
@@ -600,19 +582,12 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        // #1668: chained per-stage outputs → locals; cache to fields only for backward.
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input : null;
-
         // Conv1 + LeakyReLU
         var conv1Raw = _conv1.Forward(input);
-        _conv1RawOutput = cacheBwd ? conv1Raw : null;
         var conv1Out = ApplyLeakyReLU(conv1Raw);
-        _conv1Output = cacheBwd ? conv1Out : null;
 
         // Conv2 + LeakyReLU
         var conv2Raw = _conv2.Forward(conv1Out);
-        _conv2RawOutput = cacheBwd ? conv2Raw : null;
         var output = ApplyLeakyReLU(conv2Raw);
 
         return output;
@@ -646,10 +621,6 @@ public partial class UNetConvBlock<T> : LayerBase<T>, IShapeContract
 
     public override void ResetState()
     {
-        _lastInput = null;
-        _conv1Output = null;
-        _conv1RawOutput = null;
-        _conv2RawOutput = null;
         _conv1.ResetState();
         _conv2.ResetState();
     }
@@ -792,22 +763,23 @@ public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        // #1668: gate backward caches; _upsampledInput/_concatenated are read below
-        // (chained), so forward uses locals and the fields cache only for backward.
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input : null;
-        _lastSkip = cacheBwd ? skip : null;
+        // #1668: forward uses locals; the fields hold only what the backward reads.
+        SaveForBackward(ref _lastInput, input);
+        if (skip is not null)
+            SaveForBackward(ref _lastSkip, skip);
+        else
+            _lastSkip = null;
 
         // Upsample
         var upsampledInput = _upsample.Forward(input);
-        _upsampledInput = cacheBwd ? upsampledInput : null;
+        SaveForBackward(ref _upsampledInput, upsampledInput);
 
         // Concatenate with skip connection
         Tensor<T> x;
         if (skip != null)
         {
             var concatenated = ConcatenateChannels(upsampledInput, skip);
-            _concatenated = cacheBwd ? concatenated : null;
+            SaveForBackward(ref _concatenated, concatenated);
             x = concatenated;
         }
         else
@@ -819,7 +791,7 @@ public partial class UNetUpBlock<T> : LayerBase<T>, IShapeContract
         // Conv1 + LeakyReLU
         x = _conv1.Forward(x);
         x = ApplyLeakyReLU(x);
-        _conv1Output = cacheBwd ? x : null;
+        SaveForBackward(ref _conv1Output, x);
 
         // Conv2 + LeakyReLU
         x = _conv2.Forward(x);

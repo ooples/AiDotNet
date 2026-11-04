@@ -150,24 +150,6 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private Tensor<T> _localizationBias2;
 
     /// <summary>
-    /// Stores the input tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field caches the input to the layer during the forward pass, which is needed during the backward pass
-    /// to compute gradients. It is cleared when ResetState() is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the layer's short-term memory of what input it received.
-    /// 
-    /// During training, the layer needs to remember what input it processed so that it can
-    /// properly calculate how to improve. This temporary storage is cleared between batches
-    /// or when you explicitly reset the layer.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
@@ -177,23 +159,6 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </summary>
     private bool _inputHadChannel;
     private bool _inputChannelFirst;
-
-    /// <summary>
-    /// Stores the output tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field caches the output from the layer during the forward pass, which is needed during the backward pass
-    /// to compute gradients. It is cleared when ResetState() is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the layer's memory of what output it produced.
-    /// 
-    /// The layer needs to remember what output it generated so that during training it can
-    /// understand how changes to the output affect the overall network performance.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Stores the transformation matrix from the most recent forward pass.
@@ -289,10 +254,6 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     [Scratch]
     private Tensor<T>? _localizationBias2Gradient;
-    [Scratch]
-    private Tensor<T>? _lastFlattenedInput;
-    [Scratch]
-    private Tensor<T>? _lastLocalization1;
 
     /// <summary>
     /// The height of the input feature map.
@@ -727,32 +688,30 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             inputNCHW = Engine.Reshape(input, [flatBatch, 1, _inputHeight, _inputWidth]);
         }
 
-        _lastInput = inputNCHW;
-
         var channelSum = Engine.ReduceSum(inputNCHW, new[] { 1 }, keepDims: false);
         var channelMean = Engine.TensorDivideScalar(channelSum, NumOps.FromDouble(channelCount));
         var flattenedInput = Engine.Reshape(channelMean, [flatBatch, _inputHeight * _inputWidth]);
-        _lastFlattenedInput = flattenedInput;
 
         // First layer: localization1 = flattenedInput @ _localizationWeights1 + _localizationBias1
         var localization1 = Engine.TensorMatMul(flattenedInput, _localizationWeights1);
         var bias1Expanded = Engine.Reshape(_localizationBias1, [1, _localizationBias1.Shape[0]]);
         localization1 = Engine.TensorAdd(localization1, bias1Expanded);
         localization1 = ApplyActivation(localization1);
-        _lastLocalization1 = localization1;
 
         // Second layer: transformationParams = localization1 @ _localizationWeights2 + _localizationBias2
         var transformationParams = Engine.TensorMatMul(localization1, _localizationWeights2);
         var bias2Expanded = Engine.Reshape(_localizationBias2, [1, _localizationBias2.Shape[0]]);
         transformationParams = Engine.TensorAdd(transformationParams, bias2Expanded);
 
-        _lastTransformationMatrix = ConvertToTransformationMatrix(transformationParams);
+        var theta = ConvertToTransformationMatrix(transformationParams);
 
-        var theta = _lastTransformationMatrix;
+        // Read only by ComputeAuxiliaryLoss, so keep it only when that regulariser is on and a
+        // training pass can consume it.
+        _lastTransformationMatrix = UseAuxiliaryLoss && IsTrainingMode && !InferenceMode.IsActive
+            ? theta
+            : null;
         var grid = Engine.AffineGrid(theta, _outputHeight, _outputWidth);
         var output = Engine.GridSample(inputNCHW, grid);   // [B, C, outH, outW] (NCHW)
-
-        _lastOutput = output;
 
         if (_inputHadChannel)
         {
@@ -967,8 +926,6 @@ public partial class SpatialTransformerLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
         _lastTransformationMatrix = null;
         _localizationWeights1Gradient = null;
         _localizationBias1Gradient = null;

@@ -64,14 +64,6 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
     private readonly LayerNormalizationLayer<T> _finalNorm;
     private readonly bool _useFinalNorm;
 
-    // Cached values
-    [Scratch]
-    private Tensor<T>? _embeddingsCache;
-    [Scratch]
-    private Tensor<T>? _transformerOutputCache;
-    [Scratch]
-    private Tensor<T>? _mlpOutputCache;
-
     /// <summary>
     /// Gets the number of numerical features.
     /// </summary>
@@ -259,7 +251,6 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
 
         // Project numerical features
         var embeddings = _featureProjection.Forward(numericalFeatures);
-        _embeddingsCache = embeddings;
 
         // Add categorical embeddings if present
         if (categoricalIndices != null && _categoricalEmbeddings.Length > 0)
@@ -286,7 +277,6 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         {
             transformerOutput = block.Forward(transformerOutput);
         }
-        _transformerOutputCache = transformerOutput;
 
         // Apply feature-wise attention if enabled
         if (_featureAttention != null)
@@ -303,7 +293,6 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
 
         // Final normalization
         if (_useFinalNorm) mlpOutput = _finalNorm.Forward(mlpOutput);
-        _mlpOutputCache = mlpOutput;
 
         return mlpOutput;
     }
@@ -360,10 +349,6 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
     /// </summary>
     public virtual void ResetState()
     {
-        _embeddingsCache = null;
-        _transformerOutputCache = null;
-        _mlpOutputCache = null;
-
         _featureProjection.ResetState();
 
         foreach (var emb in _categoricalEmbeddings)
@@ -428,18 +413,6 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         private readonly LayerNormalizationLayer<TBlock> _norm2;
 
         // Cached values
-        [Scratch]
-        private Tensor<TBlock>? _inputCache;
-        [Scratch]
-        private Tensor<TBlock>? _normInput1Cache;
-        [Scratch]
-        private Tensor<TBlock>? _attentionOutputCache;
-        [Scratch]
-        private Tensor<TBlock>? _queryCache;
-        [Scratch]
-        private Tensor<TBlock>? _keyCache;
-        [Scratch]
-        private Tensor<TBlock>? _valueCache;
         [Scratch]
         private Tensor<TBlock>? _attentionScoresCache;
 
@@ -585,14 +558,12 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
 
         public Tensor<TBlock> Forward(Tensor<TBlock> input)
         {
-            _inputCache = input;
             int batchSize = input.Shape[0];
 
             Tensor<TBlock> x;
             if (_usePreNorm)
             {
                 x = _norm1.Forward(input);
-                _normInput1Cache = x;
             }
             else
             {
@@ -604,13 +575,8 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
             var key = MatMul(x, _keyWeights);
             var value = MatMul(x, _valueWeights);
 
-            _queryCache = query;
-            _keyCache = key;
-            _valueCache = value;
-
             var attentionOutput = ComputeAttention(query, key, value, batchSize);
             attentionOutput = MatMul(attentionOutput, _outputWeights);
-            _attentionOutputCache = attentionOutput;
 
             // Residual connection
             var eng = AiDotNetEngine.Current;
@@ -738,12 +704,6 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
 
         public void ResetState()
         {
-            _inputCache = null;
-            _normInput1Cache = null;
-            _attentionOutputCache = null;
-            _queryCache = null;
-            _keyCache = null;
-            _valueCache = null;
             _attentionScoresCache = null;
 
             // Zero gradients
@@ -775,9 +735,6 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
         private Tensor<TBlock> _featureKey;
         private Tensor<TBlock> _featureValue;
         private Tensor<TBlock> _featureOutput;
-
-        [AiDotNet.Attributes.Scratch]
-        private Tensor<TBlock>? _inputCache;
 
         /// <summary>The four projections, in serialization order.</summary>
         private IEnumerable<Tensor<TBlock>> Tensors()
@@ -857,7 +814,6 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
 
         public Tensor<TBlock> Forward(Tensor<TBlock> input)
         {
-            _inputCache = input;
             // For feature attention, we transpose and apply attention across features
             // This is a simplified implementation
             return input;
@@ -875,7 +831,6 @@ public abstract class TabDPTBase<T> : IParameterSource<T>
 
         public void ResetState()
         {
-            _inputCache = null;
         }
     }
 }

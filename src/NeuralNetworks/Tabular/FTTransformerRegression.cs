@@ -51,12 +51,6 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
     private readonly int _outputDimension;
     private readonly FullyConnectedLayer<T> _regressionHead;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _clsOutputCache;
-    [Scratch]
-    private Tensor<T>? _predictionsCache;
-
     /// <summary>
     /// Gets the output dimension (number of target values to predict).
     /// </summary>
@@ -109,11 +103,9 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
     {
         // Get [CLS] representation from backbone
         var clsOutput = ForwardBackbone(numericalFeatures, categoricalIndices);
-        _clsOutputCache = clsOutput;
 
         // Apply regression head: Linear(ReLU(LayerNorm(CLS)))
         var predictions = _regressionHead.Forward(ActivateForHead(clsOutput));
-        _predictionsCache = predictions;
 
         return predictions;
     }
@@ -385,8 +377,6 @@ public class FTTransformerRegression<T> : FTTransformerBase<T>
     public override void ResetState()
     {
         base.ResetState();
-        _clsOutputCache = null;
-        _predictionsCache = null;
         _regressionHead.ResetState();
     }
 }

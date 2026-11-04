@@ -87,18 +87,6 @@ public abstract partial class TabTransformerBase<T> : IParameterSource<T>
     // MLP layers for combined features
     private readonly List<FullyConnectedLayer<T>> _mlpLayers;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _numericalFeaturesCache;
-    [Scratch]
-    private Matrix<int>? _categoricalIndicesCache;
-    [Scratch]
-    private Tensor<T>? _embeddedCategoricalsCache;
-    [Scratch]
-    private Tensor<T>? _transformedCategoricalsCache;
-    [Scratch]
-    private Tensor<T>? _concatenatedCache;
-
     /// <summary>
     /// Gets the embedding dimension.
     /// </summary>
@@ -316,8 +304,6 @@ public abstract partial class TabTransformerBase<T> : IParameterSource<T>
     protected Tensor<T> ForwardBackbone(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices)
     {
         int batchSize = numericalFeatures.Shape[0];
-        _numericalFeaturesCache = numericalFeatures;
-        _categoricalIndicesCache = categoricalIndices;
 
         Tensor<T> combinedFeatures;
 
@@ -325,7 +311,6 @@ public abstract partial class TabTransformerBase<T> : IParameterSource<T>
         {
             // Step 1: Embed categorical features
             var embeddedCat = EmbedCategoricals(categoricalIndices);
-            _embeddedCategoricalsCache = embeddedCat;
 
             // Step 2: Pass through transformer layers
             var transformedCat = embeddedCat;
@@ -339,8 +324,6 @@ public abstract partial class TabTransformerBase<T> : IParameterSource<T>
             {
                 transformedCat = _finalLayerNorm.Forward(transformedCat);
             }
-
-            _transformedCategoricalsCache = transformedCat;
 
             // Step 4: Flatten transformed categoricals
             int flatCatDim = NumCategoricalFeatures * Options.EmbeddingDimension;
@@ -368,8 +351,6 @@ public abstract partial class TabTransformerBase<T> : IParameterSource<T>
             // No categorical features, just use numerical
             combinedFeatures = numericalFeatures;
         }
-
-        _concatenatedCache = combinedFeatures;
 
         // Step 6: Pass through MLP layers
         var mlpOutput = combinedFeatures;
@@ -424,12 +405,6 @@ public abstract partial class TabTransformerBase<T> : IParameterSource<T>
     /// </summary>
     public virtual void ResetState()
     {
-        _numericalFeaturesCache = null;
-        _categoricalIndicesCache = null;
-        _embeddedCategoricalsCache = null;
-        _transformedCategoricalsCache = null;
-        _concatenatedCache = null;
-
         for (int c = 0; c < _categoricalEmbeddingsGrad.Count; c++)
         {
             _categoricalEmbeddingsGrad[c] = null;

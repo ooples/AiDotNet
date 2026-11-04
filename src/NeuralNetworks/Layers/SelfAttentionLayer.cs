@@ -178,17 +178,6 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     private bool _isInitialized = true;
 
     /// <summary>
-    /// Stores the input tensor from the most recent forward pass for use in backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// This cached input is needed during the backward pass to compute gradients. It holds the
-    /// sequence of input embeddings that were processed in the most recent forward pass.
-    /// The tensor is null before the first forward pass or after a reset.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
@@ -248,17 +237,6 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     private Tensor<T>? _fusedQkvSrcK;
     [AiDotNet.Attributes.Scratch]
     private Tensor<T>? _fusedQkvSrcV;
-
-    /// <summary>
-    /// Stores the output tensor from the most recent forward pass for use in backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// This cached output is needed during the backward pass to compute certain derivatives.
-    /// It holds the sequence of output embeddings that were produced in the most recent forward pass.
-    /// The tensor is null before the first forward pass or after a reset.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Stores the attention score tensor from the most recent forward pass for use in backpropagation.
@@ -676,8 +654,6 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
             throw new ArgumentException($"SelfAttentionLayer requires at least 2D input, got {rank}D");
         }
 
-        _lastInput = input3D;
-
         // 1. Project Input to Q, K, V
         // Reshape input to 2D [Batch*Seq, EmbedDim] for efficient MatrixMultiply
         var input2D = Engine.Reshape(input3D, new[] { batchSize * sequenceLength, _embeddingDimension });
@@ -780,8 +756,13 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
                 scale: 1.0 / Math.Sqrt(_headDimension),
                 out var attentionWeights4D);
 
-            // Cache attention weights for backward pass
-            _lastAttentionScores = attentionWeights4D;
+            // The [B, H, S, S] weights are read only by ComputeAuxiliaryLoss (this layer's backward
+            // runs on the tape), so keep them only when that loss is on and a training pass can consume
+            // it. ShouldCacheForBackward is not the guard here: it is false under a recording tape,
+            // which is exactly when the auxiliary loss is computed.
+            _lastAttentionScores = UseAuxiliaryLoss && IsTrainingMode && !InferenceMode.IsActive
+                ? attentionWeights4D
+                : null;
         }
 
         // 3. Reshape and Project Output
@@ -811,12 +792,6 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
         {
             // 2D input -> 2D output (remove batch dim)
             output = Engine.Reshape(output, new[] { sequenceLength, embeddingDimension });
-        }
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = output;
         }
 
         return output;
@@ -923,8 +898,6 @@ public partial class SelfAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
         _lastAttentionScores = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;
