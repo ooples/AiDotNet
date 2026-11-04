@@ -399,7 +399,8 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
          sequence), FusedConv2DBatchNorm and TensorScope. 0.144.1 depends on AiDotNet.Evolution 0.7.0. -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.144.2" />
     <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.139.2" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.144.2" />
+    <!-- 0.146.0 supplies device gradient norms and compressed AdamW moment APIs used by #2436. -->
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.146.0" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.7.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.144.2" />
     <!-- Microsoft / .NET -->
