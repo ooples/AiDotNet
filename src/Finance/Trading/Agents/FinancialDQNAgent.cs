@@ -219,7 +219,7 @@ public partial class FinancialDQNAgent<T> : TradingAgentBase<T>, IGradientComput
                 layers.Add(new DenseLayer<T>(width, (IActivationFunction<T>)new ReLUActivation<T>()));
             }
 
-            layers.Add(new DuelingCombinationLayer<T>(trunkWidth, options.ActionSize, architecture.RandomSeed));
+            layers.Add(new DuelingCombinationLayer<T>(trunkWidth, options.ActionSize, seed: architecture.RandomSeed));
             return layers;
         });
 

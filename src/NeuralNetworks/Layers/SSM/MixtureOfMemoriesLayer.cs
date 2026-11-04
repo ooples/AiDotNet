@@ -146,30 +146,6 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastQuery;
-    [Scratch]
-    private Tensor<T>? _lastKey;
-    [Scratch]
-    private Tensor<T>? _lastValue;
-    [Scratch]
-    private Tensor<T>? _lastGate;
-    [Scratch]
-    private Tensor<T>? _lastGateRaw;
-    [Scratch]
-    private Tensor<T>? _lastMoMOutput;
-    [Scratch]
-    private Tensor<T>? _lastWriteWeights; // [batch, seqLen, numMemories]
-    [Scratch]
-    private Tensor<T>? _lastReadWeights;  // [batch, seqLen, numMemories]
-    [Scratch]
-    private Tensor<T>? _lastForgetGates;  // [batch, seqLen, numMemories]
-    [Scratch]
-    private Tensor<T>? _lastForgetGatesRaw;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -352,8 +328,6 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Q, K, V projections
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
@@ -368,10 +342,6 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
         var v = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _valueWeights),
             Engine.Reshape(_valueBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
-
-        _lastQuery = q;
-        _lastKey = k;
-        _lastValue = v;
 
         // Step 2: Router computations
         var writeLogits = Engine.Reshape(Engine.TensorAdd(
@@ -389,22 +359,14 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
             Engine.Reshape(_gateRouterBias, new[] { 1, _numMemories })), new[] { batchSize, seqLen, _numMemories });
         var forgetGates = Engine.Sigmoid(forgetGatesRaw);
 
-        _lastWriteWeights = writeWeights;
-        _lastReadWeights = readWeights;
-        _lastForgetGates = forgetGates;
-        _lastForgetGatesRaw = forgetGatesRaw;
-
         // Step 3: Output gate
         var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
-        _lastGate = gate;
-        _lastGateRaw = gateRaw;
 
         // Step 4: MoM recurrence
         var momOutput = MoMForward(q, k, v, writeWeights, readWeights, forgetGates, batchSize, seqLen);
-        _lastMoMOutput = momOutput;
 
         // Step 5: Gated output
         var gatedOutput = Engine.TensorMultiply(momOutput, gate);
@@ -417,7 +379,6 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -634,18 +595,6 @@ public partial class MixtureOfMemoriesLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastGate = null;
-        _lastGateRaw = null;
-        _lastMoMOutput = null;
-        _lastWriteWeights = null;
-        _lastReadWeights = null;
-        _lastForgetGates = null;
-        _lastForgetGatesRaw = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _queryBiasGradient = null;

@@ -130,9 +130,12 @@ public partial class REINFORCEAgent<T> : DeepReinforcementLearningAgentBase<T>, 
             complexity: NetworkComplexity.Medium,
             inputSize: _reinforceOptions.StateSize,
             outputSize: outputSize,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
-        return new NeuralNetwork<T>(architecture);
+        return new NeuralNetwork<T>(architecture, optimizer: CreateNetworkOptimizer(LearningRate));
     }
 
     /// <inheritdoc/>

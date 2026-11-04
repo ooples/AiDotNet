@@ -182,9 +182,14 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             inputSize: _options.StateSize,
             outputSize: _options.ActionSize,
             layers: layers
-        );
+        )
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
-        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_options.ActorLearningRate),
+            lossFunction: new MeanSquaredErrorLoss<T>());
     }
 
     private NeuralNetwork<T> CreateCriticNetwork()
@@ -209,9 +214,14 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             inputSize: inputSize,
             outputSize: 1,
             layers: layers
-        );
+        )
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
-        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_options.CriticLearningRate),
+            lossFunction: _options.CriticLossFunction);
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

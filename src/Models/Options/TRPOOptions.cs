@@ -80,11 +80,6 @@ public class TRPOOptions<T> : ReinforcementLearningOptions<T>
     /// baseline.</summary>
     public List<int> ValueHiddenLayers { get; init; } = new List<int> { 64, 64 };
 
-    /// <summary>
-    /// The optimizer used for updating network parameters. If null, Adam optimizer will be used by default.
-    /// </summary>
-    public IOptimizer<T, Vector<T>, Vector<T>>? Optimizer { get; init; }
-
     /// <summary>Creates options with the default values.</summary>
     public TRPOOptions()
     {

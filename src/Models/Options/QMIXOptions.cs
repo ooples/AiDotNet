@@ -95,4 +95,10 @@ public class QMIXOptions<T> : ReinforcementLearningOptions<T>
     /// already clipped to <c>MaxGradientNorm</c>.
     /// </summary>
     public IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; init; }
+
+    /// <summary>
+    /// Creates the optimizer for the joint agent-and-mixer update. Each agent invokes this once
+    /// on its first update. An explicitly supplied optimizer takes precedence.
+    /// </summary>
+    public Func<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>? OptimizerFactory { get; init; }
 }

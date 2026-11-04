@@ -101,16 +101,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T>? _convBiasGradient;
 
     /// <summary>
-    /// The input tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the input tensor from the most recent forward pass, which is needed
-    /// during the backward pass for gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
@@ -119,18 +109,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// Stores whether the original input was provided in NCHW layout.
     /// </summary>
     private bool _inputWasNCHW;
-
-    /// <summary>
-    /// The output tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the output tensor from the most recent forward pass, which is needed
-    /// during the backward pass for gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastPreSquash;
 
     /// <summary>
     /// The number of input channels.
@@ -635,7 +613,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
         }
 
         _inputWasNCHW = inputIsNCHW;
-        _lastInput = processInput;
 
         // Get spatial dimensions based on format
         int inputHeight, inputWidth;
@@ -679,9 +656,8 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
         // SquashActivation expects 2D input [numCapsules, capsuleDim], so reshape and apply
         int totalCapsules = batchSize * outputHeight * outputWidth * _capsuleChannels;
         var flatOutput = Engine.Reshape(output, [totalCapsules, _capsuleDimension]);
-        _lastPreSquash = flatOutput;
         var activatedFlat = ApplyActivation(flatOutput);
-        _lastOutput = Engine.Reshape(activatedFlat, [batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+        var squashed = Engine.Reshape(activatedFlat, [batchSize, outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
 
         // Restore output shape to match original input rank
         // Output is 5D [B, OH, OW, capsuleChannels, capsuleDim]
@@ -691,7 +667,7 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
             {
                 // Lower-rank: remove batch dimension
                 // 3D input -> 4D output [OH, OW, capsuleChannels, capsuleDim]
-                return Engine.Reshape(_lastOutput, [outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
+                return Engine.Reshape(squashed, [outputHeight, outputWidth, _capsuleChannels, _capsuleDimension]);
             }
             else
             {
@@ -704,11 +680,11 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
                 outShape[_originalInputShape.Length - 2] = outputWidth;
                 outShape[_originalInputShape.Length - 1] = _capsuleChannels;
                 outShape[_originalInputShape.Length] = _capsuleDimension;
-                return Engine.Reshape(_lastOutput, outShape);
+                return Engine.Reshape(squashed, outShape);
             }
         }
 
-        return _lastOutput;
+        return squashed;
     }
 
 
@@ -844,8 +820,6 @@ public partial class PrimaryCapsuleLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
         _convWeightsGradient = null;
         _convBiasGradient = null;
         _originalInputShape = null;

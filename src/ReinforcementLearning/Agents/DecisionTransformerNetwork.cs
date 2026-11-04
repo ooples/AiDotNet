@@ -44,13 +44,13 @@ internal sealed partial class DecisionTransformerNetwork<T> : NeuralNetworkBase<
     private readonly List<TransformerEncoderBlock<T>> _blocks = new();
 
     public DecisionTransformerNetwork(int stateSize, int actionSize, int embeddingDim, int numLayers, int numHeads,
-        int contextLength, int maxEpisodeLength, double dropoutRate, bool continuous)
+        int contextLength, int maxEpisodeLength, double dropoutRate, bool continuous, int? randomSeed = null)
         : base(new NeuralNetworkArchitecture<T>(
                 inputType: InputType.TwoDimensional,
                 taskType: NeuralNetworkTaskType.Regression,
                 inputHeight: contextLength,
                 inputWidth: 1 + stateSize + actionSize + 1,
-                outputSize: actionSize),
+                outputSize: actionSize) { RandomSeed = randomSeed },
             new MeanSquaredErrorLoss<T>())
     {
         if (embeddingDim % numHeads != 0)
@@ -95,7 +95,11 @@ internal sealed partial class DecisionTransformerNetwork<T> : NeuralNetworkBase<
         {
             var block = new TransformerEncoderBlock<T>(h, _numHeads, 4 * h, _dropoutRate, new ReLUActivation<T>());
             // GPT: every token attends only to itself and earlier tokens.
-            if (block.AttentionLayer is MultiHeadAttentionLayer<T> attention) attention.UseCausalMask = true;
+            if (block.AttentionLayer is MultiHeadAttentionLayer<T> attention)
+            {
+                attention.UseCausalMask = true;
+                attention.ConfigureAttentionDropout(_dropoutRate);
+            }
             _blocks.Add(block);
             Layers.Add(block);
         }

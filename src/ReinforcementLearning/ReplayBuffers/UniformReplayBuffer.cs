@@ -169,6 +169,32 @@ public class UniformReplayBuffer<T, TState, TAction> : IReplayBuffer<T, TState, 
         // (_position + l) % Capacity; otherwise _position == 0 and logical == physical.
         int windowStarts = Math.Max(1, count - length + 1);
         int logicalStart = _random.Next(windowStarts);
+        return SequenceFromLogical(logicalStart, length);
+    }
+
+    /// <summary>The physical slot the next <see cref="Add"/> writes, so a caller can keep per-slot data.</summary>
+    internal int NextWriteSlot => _buffer.Count < Capacity ? _buffer.Count : _position;
+
+    /// <summary>
+    /// The window of up to <paramref name="length"/> experiences starting at physical slot
+    /// <paramref name="physicalStart"/>, in temporal order, cut at an episode end or at the newest experience.
+    /// </summary>
+    internal List<Experience<T, TState, TAction>> SequenceFromSlot(int physicalStart, int length)
+    {
+        if (length < 1)
+            throw new ArgumentOutOfRangeException(nameof(length), "Sequence length must be positive.");
+        if ((uint)physicalStart >= (uint)_buffer.Count)
+            throw new ArgumentOutOfRangeException(nameof(physicalStart), "The slot holds no experience.");
+
+        bool wrapped = _buffer.Count >= Capacity;
+        int logicalStart = wrapped ? ((physicalStart - _position + Capacity) % Capacity) : physicalStart;
+        return SequenceFromLogical(logicalStart, length);
+    }
+
+    private List<Experience<T, TState, TAction>> SequenceFromLogical(int logicalStart, int length)
+    {
+        int count = _buffer.Count;
+        var seq = new List<Experience<T, TState, TAction>>();
         bool wrapped = count >= Capacity;
         for (int l = 0; l < length && logicalStart + l < count; l++)
         {

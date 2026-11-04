@@ -196,7 +196,6 @@ public class DeepAgentsIntegrationTests
             ValueLearningRate = 0.01,
             DiscountFactor = DiscountFactor,
             EntropyCoefficient = 0.01,
-            ValueLossCoefficient = 0.5,
             PolicyHiddenLayers = new List<int> { 4 },
             ValueHiddenLayers = new List<int> { 4 },
             Seed = 31
@@ -213,7 +212,6 @@ public class DeepAgentsIntegrationTests
             PolicyLearningRate = 0.01,
             ValueLearningRate = 0.01,
             EntropyCoefficient = 0.01,
-            ValueLossCoefficient = 0.5,
             LearningRate = LearningRate,
             DiscountFactor = DiscountFactor,
             LossFunction = CreateLoss(),
@@ -253,7 +251,6 @@ public class DeepAgentsIntegrationTests
             GaeLambda = 0.95,
             ClipEpsilon = 0.2,
             EntropyCoefficient = 0.01,
-            ValueLossCoefficient = 0.5,
             PolicyHiddenLayers = new List<int> { 4 },
             ValueHiddenLayers = new List<int> { 4 },
             Seed = 41
@@ -464,7 +461,8 @@ public class DeepAgentsIntegrationTests
         {
             ObservationSize = ContinuousStateSize,
             ActionSize = ContinuousActionSize,
-            LatentSize = 4,
+            DeterministicSize = 4,
+            StochasticSize = 2,
             HiddenSize = 4,
             BatchSize = 1,
             ReplayBufferSize = 4,

@@ -116,18 +116,6 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
     /// </summary>
     private readonly int _growthChannels;
 
-    /// <summary>
-    /// Cached input for backpropagation.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Cached output from RDB3 for backpropagation.
-    /// </summary>
-    [AiDotNet.Attributes.Scratch]
-    private Tensor<T>? _rdb3Output;
-
     #endregion
 
     #region Properties
@@ -269,14 +257,11 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
     {
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-
         // Pass through 3 Residual Dense Blocks sequentially
         var x = _rdbBlocks[0].Forward(input);
         x = _rdbBlocks[1].Forward(x);
         x = _rdbBlocks[2].Forward(x);
 
-        _rdb3Output = ShouldCacheForBackward ? x : null; // #1668: skip in inference (arena safety)
 
         // Global residual: output = RDB3_output * residualScale + input
         return AddResidual(x, input, _residualScale);
@@ -342,8 +327,6 @@ public partial class RRDBLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _rdb3Output = null;
         foreach (var rdb in _rdbBlocks)
         {
             rdb.ResetState();

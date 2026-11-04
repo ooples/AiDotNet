@@ -4,12 +4,10 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
-using AiDotNet.LossFunctions;
 using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Optimizers;
 using AiDotNet.Validation;
 
 namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
@@ -24,12 +22,35 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
 /// to predict actions conditioned on desired returns-to-go.
 /// </para>
 /// <para>
-/// The network (section 3) embeds the last K timesteps as 3K tokens, (return-to-go, state, action) per timestep, with a
-/// linear layer per modality plus a learned per-timestep embedding, normalizes them, and runs a causally masked GPT
-/// (3 layers, 1 head, 128 dimensions, dropout 0.1 by default, the Gym model of appendix A.2); the hidden state of each
-/// state token predicts that timestep's action. Training regresses the dataset's actions (mean-squared error, or
-/// cross-entropy for discrete actions) on K-step segments; acting conditions on a target return that each reward
-/// decrements.
+/// The model follows Chen et al. 2021, Sec. 3. A trajectory is the token sequence
+/// (R̂_1, s_1, a_1, R̂_2, s_2, a_2, ...), where R̂_t = Σ_{t'≥t} r_{t'} is the return-to-go. The last K timesteps
+/// (3K tokens) are embedded by a separate linear map per modality, a learned embedding of the episode timestep is
+/// added to each token, and the result is layer-normalised and passed through a GPT-2 style causal transformer
+/// (pre-LayerNorm blocks of causal multi-head self-attention and a ReLU feed-forward network, with dropout). The
+/// action a_t is predicted by a linear head (tanh for continuous actions) from the output at the state token s_t,
+/// which by causality has seen R̂_t, s_t and the earlier timesteps but not a_t itself. Training is supervised:
+/// segments of up to K timesteps are sampled from an offline trajectory buffer and the predicted actions are
+/// regressed onto the dataset actions (mean-squared error, or cross-entropy for discrete actions). At evaluation the
+/// first return-to-go is the target return and each later one is the previous one minus the reward received
+/// (Algorithm 1).
+/// </para>
+/// <para>
+/// Implementation notes. The three modality embeddings and the timestep embedding are realised as one bias-free
+/// linear layer over a block-structured token feature vector: a one-hot modality indicator (whose weights are the
+/// per-modality biases), the return-to-go, the state, the action, and a one-hot timestep (whose weights are the
+/// timestep embedding table). Each token fills only its own modality's block, so the layer computes exactly
+/// W_m x + b_m + E[t] for the token's modality m. Segments shorter than K are padded on the RIGHT rather than on the
+/// left as the reference implementation does; under the causal mask no real token can attend to a later padding
+/// token, so this is equivalent to the reference's attention-masked left padding, and padded positions are excluded
+/// from the loss. Dropout is applied as in GPT-2: to the embedding, to the attention probabilities, and to every
+/// sublayer output before its residual addition.
+/// </para>
+/// <para>
+/// Training follows Appendix A.2.1, Table 9: AdamW (PyTorch defaults) at learning rate 1e-4 with weight decay 1e-4,
+/// gradients clipped to a global norm of 0.25, a linear learning-rate warmup over the first 10^5 updates, batches
+/// of 64 segments of K = 20 timesteps. As in the reference implementation, states are standardised by the stored
+/// dataset's per-dimension mean and standard deviation (plus 1e-6) before they are embedded, in training and when
+/// acting.
 /// </para>
 /// <para><b>For Beginners:</b>
 /// Instead of learning "what's the best action", Decision Transformer learns
@@ -76,110 +97,298 @@ namespace AiDotNet.ReinforcementLearning.Agents.DecisionTransformer;
                 Source = "Chen et al. 2021, Appendix A: AdamW following PyTorch defaults, trained for "
                         + "10^5 gradient steps with a learning rate of 1e-4, a weight decay of 1e-4, a "
                         + "batch size of 64 and linear warmup over the first 10^5 training steps. The "
-                        + "exponents render as a bare 105 in extraction. Table 9: grad norm clip 0.25.",
-                MaxGradientNorm = 0.25)]
+                        + "exponents render as a bare 105 in extraction.")]
 public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradientComputable<T, Vector<T>, Vector<T>>
 {
+
     /// <inheritdoc />
+    /// <remarks>The same components, in the same order, that the hand-written
+    /// GetParameters concatenated -- that order is the serialization order.</remarks>
     protected override void RegisterComponents()
     {
         RegisterParameterComponent(_transformerNetwork);
     }
-    private DecisionTransformerOptions<T> _options;
 
-    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
-    // AdamW with the paper's recipe (appendix A), on the transformer's tensors.
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _networkOptimizer;
+    /// <summary>Tokens per timestep: return-to-go, state, action (Chen et al. 2021, Sec. 3).</summary>
+    private const int TokensPerStep = 3;
 
-    private DecisionTransformerNetwork<T> _transformerNetwork;
-    // The offline dataset, trajectory after trajectory: each step's state, action, reward, return-to-go and timestep
-    // (0 starts a trajectory).
-    private List<(Vector<T> state, Vector<T> action, T reward, T returnToGo, int timestep)> _trajectoryBuffer;
-    // The episode StoreExperience is collecting; it joins the dataset when it ends.
-    private List<(Vector<T> state, Vector<T> action, T reward)> _episode;
+    /// <summary>Position of the return-to-go token within a timestep.</summary>
+    private const int ReturnToken = 0;
+
+    /// <summary>Position of the state token within a timestep; the action is read from its output.</summary>
+    private const int StateToken = 1;
+
+    /// <summary>Position of the action token within a timestep.</summary>
+    private const int ActionToken = 2;
+
+    private readonly DecisionTransformerOptions<T> _options;
+
+    private INeuralNetwork<T> _transformerNetwork;
+
+    /// <summary>The optimizer the transformer network was built with; rebuilt with the network, never persisted.</summary>
+    [Scratch]
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _transformerOptimizer;
+
+    /// <summary>The offline dataset: whole trajectories, oldest first, holding at most BufferSize transitions.</summary>
+    private readonly List<StoredTrajectory> _trajectories = new();
+
+    /// <summary>Transitions held in <see cref="_trajectories"/>; recomputed from it, never persisted on its own.</summary>
+    [Scratch]
+    private int _storedTransitions;
+
+    /// <summary>Transitions of the episode currently arriving through StoreExperience, committed when it ends.</summary>
+    private readonly List<(Vector<T> State, Vector<T> Action, T Reward)> _pendingEpisode = new();
+
+    /// <summary>The highest episode return committed to the buffer, the default conditioning target.</summary>
+    private T _bestEpisodeReturn;
+
+    /// <summary>Whether any episode has been committed, i.e. whether <see cref="_bestEpisodeReturn"/> is meaningful.</summary>
+    private bool _hasEpisodeReturn;
+
     private int _updateCount;
 
-    // Evaluation (Algorithm 1): the last K returns-to-go, states and actions, the episode's timestep, and the
-    // return-to-go still to collect.
-    private SequenceContext<T> _currentContext;
-    private int _contextTimestep;
-    private T _runningReturn;
+    /// <summary>Per-dimension mean of the stored states (the reference implementation's <c>state_mean</c>).</summary>
+    /// <remarks>Persisted with the model so a clone or a reloaded model normalises states as the original did.</remarks>
+    private Vector<T> _stateMean;
 
-    /// <summary>The transformer.</summary>
-    internal DecisionTransformerNetwork<T> Network => _transformerNetwork;
+    /// <summary>Per-dimension population standard deviation of the stored states plus 1e-6 (<c>state_std</c>).</summary>
+    private Vector<T> _stateStd;
+
+    /// <summary>The evaluation context: the last K states, actions and returns-to-go of the current episode.</summary>
+    [Scratch]
+    private SequenceContext<T> _currentContext;
+
+    /// <summary>The running return-to-go R̂ of the current episode (Algorithm 1: R̂ ← R̂ − r after each step).</summary>
+    [Scratch]
+    private T _currentReturnToGo;
+
+    /// <summary>Whether <see cref="_currentReturnToGo"/> has been initialised for the current episode.</summary>
+    [Scratch]
+    private bool _episodeConditioned;
+
+    /// <summary>The absolute timestep of the next step of the current episode.</summary>
+    [Scratch]
+    private int _episodeStep;
 
     public DecisionTransformerAgent() : this(new DecisionTransformerOptions<T>()) { }
 
-    public DecisionTransformerAgent(DecisionTransformerOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+    /// <summary>
+    /// Initializes a Decision Transformer agent from <paramref name="options"/>.
+    /// </summary>
+    /// <param name="options">The agent's configuration.</param>
+    /// <exception cref="ArgumentOutOfRangeException">An option is outside its valid range.</exception>
+    public DecisionTransformerAgent(DecisionTransformerOptions<T> options)
         : base(options)
     {
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-        {
-            InitialLearningRate = 0.001,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
+        ValidateOptions(options);
+
         _updateCount = 0;
-        _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, T, int)>();
-        _episode = new List<(Vector<T>, Vector<T>, T)>();
+        _bestEpisodeReturn = NumOps.Zero;
+        _hasEpisodeReturn = false;
         _currentContext = new SequenceContext<T>();
-        _runningReturn = NumOps.FromDouble(_options.TargetReturn);
+        _currentReturnToGo = NumOps.Zero;
+        _episodeConditioned = false;
+        _episodeStep = 0;
+        _stateMean = new Vector<T>(options.StateSize);
+        _stateStd = new Vector<T>(options.StateSize);
+        for (int i = 0; i < options.StateSize; i++) _stateStd[i] = NumOps.One;
 
-        _transformerNetwork = new DecisionTransformerNetwork<T>(_options.StateSize, _options.ActionSize, _options.EmbeddingDim,
-            _options.NumLayers, _options.NumHeads, _options.ContextLength, _options.MaxEpisodeLength, _options.DropoutRate,
-            _options.IsContinuous);
-        _networkOptimizer = PaperOptimizerFactory.CreateFor(_transformerNetwork, warmupStepsOverride: _options.LearningRateWarmupSteps);
+        _transformerNetwork = CreateTransformerNetwork();
 
+        // Register network with base class
         Networks.Add(_transformerNetwork);
     }
 
+    private static void ValidateOptions(DecisionTransformerOptions<T> options)
+    {
+        if (options.StateSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.StateSize, "StateSize must be positive.");
+        if (options.ActionSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.ActionSize, "ActionSize must be positive.");
+        if (options.EmbeddingDim <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.EmbeddingDim, "EmbeddingDim must be positive.");
+        if (options.NumLayers <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.NumLayers, "NumLayers must be positive.");
+        if (options.NumHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.NumHeads, "NumHeads must be positive.");
+        if (options.EmbeddingDim % options.NumHeads != 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.NumHeads,
+                $"NumHeads ({options.NumHeads}) must divide EmbeddingDim ({options.EmbeddingDim}).");
+        if (options.ContextLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.ContextLength, "ContextLength must be positive.");
+        if (double.IsNaN(options.DropoutRate) || options.DropoutRate < 0.0 || options.DropoutRate >= 1.0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.DropoutRate, "DropoutRate must be in [0, 1).");
+        if (options.MaxEpisodeLength <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.MaxEpisodeLength, "MaxEpisodeLength must be positive.");
+        if (options.BufferSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.BufferSize, "BufferSize must be positive.");
+        if (options.BatchSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.BatchSize, "BatchSize must be positive.");
+        if (double.IsNaN(options.ReturnScale) || double.IsInfinity(options.ReturnScale) || options.ReturnScale <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.ReturnScale, "ReturnScale must be positive and finite.");
+        if (options.TargetReturn is double target && (double.IsNaN(target) || double.IsInfinity(target)))
+            throw new ArgumentOutOfRangeException(nameof(options), target, "TargetReturn must be finite when set.");
+        if (double.IsNaN(options.MaxGradientNorm) || options.MaxGradientNorm < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.MaxGradientNorm,
+                "MaxGradientNorm must be non-negative (0 or infinity disables clipping).");
+        if (double.IsNaN(options.WeightDecay) || double.IsInfinity(options.WeightDecay) || options.WeightDecay < 0.0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.WeightDecay,
+                "WeightDecay must be non-negative and finite.");
+        if (options.WarmupSteps < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), options.WarmupSteps, "WarmupSteps must be non-negative.");
+    }
+
+    // Token feature layout (Chen et al. 2021, Sec. 3: one linear embedding per modality plus a learned timestep
+    // embedding). Every token is [modality one-hot | R̂ | s | a | timestep one-hot]; a token fills only its own block.
+    private int ReturnFeature => TokensPerStep;
+    private int StateFeatureOffset => ReturnFeature + 1;
+    private int ActionFeatureOffset => StateFeatureOffset + _options.StateSize;
+    private int TimestepFeatureOffset => ActionFeatureOffset + _options.ActionSize;
+    private int TokenFeatureCount => TimestepFeatureOffset + _options.MaxEpisodeLength;
+    private int SequenceTokenCount => TokensPerStep * _options.ContextLength;
+
+    /// <summary>The transformer network, exposed to the test assembly for structural checks.</summary>
+    internal INeuralNetwork<T> TransformerNetwork => _transformerNetwork;
+    internal DecisionTransformerNetwork<T> Network => (DecisionTransformerNetwork<T>)_transformerNetwork;
+
+
+    /// <summary>The optimizer the transformer trains with, exposed to the test assembly.</summary>
+    internal IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TransformerOptimizer => _transformerOptimizer;
+
+    /// <summary>Number of trajectories currently held in the offline buffer.</summary>
+    internal int StoredTrajectoryCount => _trajectories.Count;
+
+    /// <summary>Number of transitions currently held in the offline buffer.</summary>
+    internal int StoredTransitionCount => _storedTransitions;
+
+    /// <summary>The returns-to-go of one stored trajectory, as they are embedded during training (unscaled).</summary>
+    internal IReadOnlyList<T> GetStoredReturnsToGo(int trajectoryIndex) => _trajectories[trajectoryIndex].ReturnsToGo;
+
+    /// <summary>The returns-to-go of the current evaluation context, oldest first (unscaled).</summary>
+    internal IReadOnlyList<T> CurrentContextReturnsToGo => _currentContext.ReturnsToGo;
+
+    /// <summary>A copy of the per-dimension state mean the embedding subtracts.</summary>
+    internal T[] GetStateMean() => _stateMean.ToArray();
+
+    /// <summary>A copy of the per-dimension state standard deviation (plus 1e-6) the embedding divides by.</summary>
+    internal T[] GetStateStd() => _stateStd.ToArray();
+
+    private INeuralNetwork<T> CreateTransformerNetwork()
+    {
+        _transformerOptimizer = _options.OptimizerFactory?.Invoke() ?? CreatePaperOptimizer();
+        return new DecisionTransformerNetwork<T>(_options.StateSize, _options.ActionSize,
+            _options.EmbeddingDim, _options.NumLayers, _options.NumHeads, _options.ContextLength,
+            _options.MaxEpisodeLength, _options.DropoutRate, _options.IsContinuous,
+            NextNetworkInitializationSeed());
+    }
+
     /// <summary>
-    /// Loads offline trajectories into the dataset, computing each step's return-to-go (the sum of the rewards from
-    /// that step to the end) and timestep.
+    /// The paper's optimizer (Chen et al. 2021, Appendix A.2.1, Table 9): AdamW with PyTorch's defaults, decoupled
+    /// weight decay, global gradient-norm clipping and a linear learning-rate warmup.
     /// </summary>
+    /// <remarks>
+    /// The warmup reproduces the reference implementation's <c>LambdaLR(lambda s: min((s + 1) / W, 1))</c> stepped
+    /// once per update: the first update uses <c>lr / W</c>, update s uses <c>lr * (s + 1) / W</c>, and from update
+    /// W - 1 on the full rate. A <see cref="LinearWarmupScheduler"/> that starts at <c>lr / W</c> and reaches
+    /// <c>lr</c> after W - 1 steps is exactly that sequence.
+    /// </remarks>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
+    {
+        double rate = NumOps.ToDouble(LearningRate);
+        if (double.IsNaN(rate) || double.IsInfinity(rate) || rate <= 0.0)
+            throw new ArgumentOutOfRangeException(nameof(LearningRate), rate, "LearningRate must be positive and finite.");
+
+        double clip = _options.MaxGradientNorm;
+        bool clipping = clip > 0.0 && !double.IsPositiveInfinity(clip);
+        var optimizerOptions = new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = rate,
+            Beta1 = 0.9,
+            Beta2 = 0.999,
+            Epsilon = 1e-8,
+            WeightDecay = _options.WeightDecay,
+            UseAMSGrad = false,
+            UseAdaptiveLearningRate = false,
+            EnableGradientClipping = clipping,
+            GradientClippingMethod = GradientClippingMethod.ByNorm,
+        };
+        if (clipping) optimizerOptions.MaxGradientNorm = clip;
+
+        int warmup = _options.WarmupSteps;
+        if (warmup > 1)
+        {
+            optimizerOptions.LearningRateScheduler =
+                new LinearWarmupScheduler(rate, warmup - 1, warmupInitLr: rate / warmup);
+            optimizerOptions.SchedulerStepMode = SchedulerStepMode.StepPerBatch;
+        }
+
+        return new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null, optimizerOptions);
+    }
+
+    /// <summary>
+    /// Load offline dataset into the trajectory buffer.
+    /// </summary>
+    /// <param name="trajectories">Complete trajectories of (state, action, reward) steps; returns-to-go are computed here.</param>
+    /// <remarks>
+    /// Each trajectory's return-to-go is R̂_t = Σ_{t'=t}^{T} r_{t'} (Chen et al. 2021, Sec. 3) and its timesteps
+    /// count from zero. Trajectories beyond <see cref="DecisionTransformerOptions{T}.BufferSize"/> evict the oldest.
+    /// </remarks>
     public void LoadOfflineData(List<List<(Vector<T> state, Vector<T> action, T reward)>> trajectories)
     {
-        foreach (var trajectory in trajectories) AddTrajectory(trajectory);
-    }
+        if (trajectories is null) throw new ArgumentNullException(nameof(trajectories));
 
-    private void AddTrajectory(List<(Vector<T> state, Vector<T> action, T reward)> trajectory)
-    {
-        var returnsToGo = new T[trajectory.Count];
-        T returnToGo = NumOps.Zero;
-        for (int i = trajectory.Count - 1; i >= 0; i--)
+        foreach (var trajectory in trajectories)
         {
-            returnToGo = NumOps.Add(trajectory[i].reward, returnToGo);
-            returnsToGo[i] = returnToGo;
+            if (trajectory is null) throw new ArgumentException("A trajectory is null.", nameof(trajectories));
+
+            var steps = new List<(Vector<T> State, Vector<T> Action, T Reward)>(trajectory.Count);
+            foreach (var (state, action, reward) in trajectory)
+            {
+                ValidateState(state);
+                ValidateAction(action);
+                steps.Add((CopyVector(state), CopyVector(action), reward));
+            }
+
+            CommitTrajectory(steps);
         }
-        for (int i = 0; i < trajectory.Count; i++)
-            _trajectoryBuffer.Add((trajectory[i].state, trajectory[i].action, trajectory[i].reward, returnsToGo[i], i));
-        while (_trajectoryBuffer.Count > _options.BufferSize) _trajectoryBuffer.RemoveAt(0);
+
+        RecomputeStateStatistics();
     }
 
-    /// <summary>
-    /// Selects an action for the episode's next state, conditioned on the return-to-go still to collect: the
-    /// configured <see cref="DecisionTransformerOptions{T}.TargetReturn"/> at the start of an episode, decremented by
-    /// each reward passed to <see cref="StoreExperience"/>.
-    /// </summary>
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
-        return SelectActionWithReturn(state, _runningReturn, training);
+        return SelectActionWithReturn(state, CurrentReturnToGo(), training);
     }
 
     /// <summary>
-    /// Select action conditioned on desired return-to-go (Algorithm 1's evaluation loop): appends (R, s, t) to the
-    /// context, keeps its last K timesteps, and returns the action predicted at the newest state token.
+    /// Select action conditioned on desired return-to-go.
     /// </summary>
+    /// <param name="state">The current observation s_t.</param>
+    /// <param name="targetReturn">The return-to-go R̂_t to condition this step on (unscaled).</param>
+    /// <param name="training">For discrete actions, true samples the softmax and false takes the arg-max; the
+    /// continuous policy is deterministic either way.</param>
+    /// <returns>The action a_t.</returns>
+    /// <remarks>
+    /// Appends (R̂_t, s_t) to the episode context, runs the transformer over the last K timesteps, and reads a_t from
+    /// the output at s_t (Algorithm 1). The return-to-go given here becomes the episode's running return-to-go, from
+    /// which <see cref="StoreExperience"/> subtracts each reward.
+    /// </remarks>
     public Vector<T> SelectActionWithReturn(Vector<T> state, T targetReturn, bool training = true)
     {
-        _currentContext.States.Add(state);
+        ValidateState(state);
+
+        _currentReturnToGo = targetReturn;
+        _episodeConditioned = true;
+        int timestep = _episodeStep;
+        _episodeStep++;
+
+        _currentContext.States.Add(CopyVector(state));
         _currentContext.ReturnsToGo.Add(targetReturn);
-        _runningReturn = targetReturn;
-        _contextTimestep++;
+
+        // Keep the last K timesteps; the action list trails the states by the current, still-unknown action.
         while (_currentContext.Length > _options.ContextLength)
         {
             _currentContext.States.RemoveAt(0);
@@ -187,156 +396,495 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
             if (_currentContext.Actions.Count > 0) _currentContext.Actions.RemoveAt(0);
         }
 
-        // The newest action is not known yet: its slot is zero, and causal masking keeps it from the state token's
-        // prediction anyway.
-        int k = _currentContext.Length, firstTimestep = _contextTimestep - k;
-        var input = new Tensor<T>(new[] { 1, k, _transformerNetwork.StepWidth });
-        for (int i = 0; i < k; i++)
+        int length = _currentContext.Length;
+        var tokens = new T[SequenceTokenCount * TokenFeatureCount];
+        int firstTimestep = timestep - (length - 1);
+        for (int i = 0; i < length; i++)
         {
-            var action = i < _currentContext.Actions.Count ? _currentContext.Actions[i] : null;
-            Pack(input, 0, i, _currentContext.ReturnsToGo[i], _currentContext.States[i], action, firstTimestep + i);
+            Vector<T>? action = i < _currentContext.Actions.Count ? _currentContext.Actions[i] : null;
+            WriteTimestepTokens(tokens, i, _currentContext.ReturnsToGo[i], _currentContext.States[i], action,
+                firstTimestep + i);
         }
-        _transformerNetwork.SetTrainingMode(false);
-        var output = _transformerNetwork.Predict(input);
-        var predicted = new Vector<T>(_options.ActionSize);
-        for (int j = 0; j < _options.ActionSize; j++) predicted[j] = output.Data.Span[(k - 1) * _options.ActionSize + j];
-        var chosen = _options.IsContinuous ? predicted : OneHot(ArgMax(predicted));
-        _currentContext.Actions.Add(chosen);
+
+        var output = PredictStateTokenOutput(tokens, length - 1);
+        var chosen = ToAction(output, sample: training && !_options.IsContinuous);
+
+        _currentContext.Actions.Add(CopyVector(chosen));
         return chosen;
     }
 
-    private Vector<T> OneHot(int index)
-    {
-        var v = new Vector<T>(_options.ActionSize);
-        v[index] = NumOps.One;
-        return v;
-    }
-
-    private static int ArgMax(Vector<T> v)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        int best = 0;
-        for (int i = 1; i < v.Length; i++) if (ops.GreaterThan(v[i], v[best])) best = i;
-        return best;
-    }
-
-    // One packed timestep [R / scale, s, a, t]; a null action is zero.
-    private void Pack(Tensor<T> input, int b, int position, T returnToGo, Vector<T> state, Vector<T>? action, int timestep)
-    {
-        int w = _transformerNetwork.StepWidth;
-        var span = input.Data.Span;
-        int offset = (b * input.Shape[1] + position) * w;
-        span[offset] = NumOps.FromDouble(NumOps.ToDouble(returnToGo) / _options.ReturnScale);
-        for (int j = 0; j < _options.StateSize; j++) span[offset + 1 + j] = state[j];
-        if (action is not null) for (int j = 0; j < _options.ActionSize; j++) span[offset + 1 + _options.StateSize + j] = action[j];
-        span[offset + w - 1] = NumOps.FromDouble(Math.Min(Math.Max(timestep, 0), _options.MaxEpisodeLength - 1));
-    }
-
-    /// <summary>
-    /// Collects the episode; when it ends it joins the offline dataset (with its returns-to-go). The reward also
-    /// decrements the return-to-go the next <see cref="SelectAction"/> conditions on (Algorithm 1).
-    /// </summary>
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
-        _episode.Add((state, action, reward));
-        _runningReturn = NumOps.Subtract(_runningReturn, reward);
+        ValidateState(state);
+        ValidateAction(action);
+
+        _pendingEpisode.Add((CopyVector(state), CopyVector(action), reward));
+
+        // If this transition is the step the context just acted on, record the action actually taken.
+        int last = _currentContext.Length - 1;
+        if (last >= 0 && _currentContext.Actions.Count == _currentContext.Length
+            && VectorsEqual(_currentContext.States[last], state))
+        {
+            _currentContext.Actions[last] = CopyVector(action);
+        }
+
+        // Algorithm 1: the next return-to-go is the current one minus the reward just received.
+        _currentReturnToGo = NumOps.Subtract(CurrentReturnToGo(), reward);
+        _episodeConditioned = true;
+
         if (done)
         {
-            AddTrajectory(_episode);
-            _episode = new List<(Vector<T>, Vector<T>, T)>();
+            CommitTrajectory(_pendingEpisode);
+            _pendingEpisode.Clear();
+            RecomputeStateStatistics();
             ResetEpisode();
         }
     }
 
     /// <summary>
-    /// One gradient step (section 3, "Training"): a minibatch of K-step segments, each predicting its actions from
-    /// the state tokens, with the mean-squared error (continuous) or cross-entropy (discrete) averaged over the
-    /// timesteps. Segments shorter than K (at a trajectory's end) are padded on the left and the padding is left out of
-    /// the loss.
+    /// One supervised update on a batch of trajectory segments (Chen et al. 2021, Sec. 3 and Algorithm 1).
     /// </summary>
+    /// <returns>The batch loss, or zero while the buffer holds fewer transitions than the batch size.</returns>
     public override T Train()
     {
-        if (_trajectoryBuffer.Count == 0)
+        int batchSize = _options.BatchSize;
+        if (_storedTransitions == 0 || _storedTransitions < batchSize)
         {
             return NumOps.Zero;
         }
 
-        int batch = Math.Max(1, _options.BatchSize), k = _options.ContextLength, a = _options.ActionSize;
-        var input = new Tensor<T>(new[] { batch, k, _transformerNetwork.StepWidth });
-        var targets = new Tensor<T>(new[] { batch, k, a });
-        var mask = new Tensor<T>(new[] { batch, k, a });
-        int counted = 0;
-        for (int b = 0; b < batch; b++)
+        int contextLength = _options.ContextLength;
+        int sequenceTokens = SequenceTokenCount;
+        int featureCount = TokenFeatureCount;
+        int actionSize = _options.ActionSize;
+
+        var tokens = new T[batchSize * sequenceTokens * featureCount];
+        var targets = new T[batchSize * sequenceTokens * actionSize];
+        var labelledRows = new List<int>(batchSize * contextLength);
+
+        for (int b = 0; b < batchSize; b++)
         {
-            // A uniformly drawn step starts the segment: the authors' trajectory-by-length then uniform-start sampling.
-            int start = Random.Next(_trajectoryBuffer.Count), length = 1;
-            while (length < k && start + length < _trajectoryBuffer.Count && _trajectoryBuffer[start + length].timestep != 0) length++;
-            int pad = k - length;
+            // A segment starts at a uniformly drawn stored transition, which picks a trajectory with probability
+            // proportional to its length and a start uniformly within it -- the reference implementation's sampler.
+            var (trajectory, start) = LocateTransition(Random.Next(_storedTransitions));
+            int length = Math.Min(contextLength, trajectory.Length - start);
+            int sampleTokenBase = b * sequenceTokens;
+
             for (int i = 0; i < length; i++)
             {
-                var step = _trajectoryBuffer[start + i];
-                Pack(input, b, pad + i, step.returnToGo, step.state, step.action, step.timestep);
-                for (int j = 0; j < a; j++)
-                {
-                    targets[b, pad + i, j] = step.action[j];
-                    mask[b, pad + i, j] = NumOps.One;
-                }
-                counted++;
+                int step = start + i;
+                WriteTimestepTokens(tokens, sampleTokenBase / TokensPerStep + i,
+                    trajectory.ReturnsToGo[step], trajectory.States[step], trajectory.Actions[step],
+                    trajectory.Timesteps[step]);
+
+                int row = sampleTokenBase + TokensPerStep * i + StateToken;
+                labelledRows.Add(row);
+                WriteActionLabel(targets, row, trajectory.Actions[step]);
             }
         }
 
-        var scale = NumOps.FromDouble(1.0 / (counted * (_options.IsContinuous ? a : 1)));
-        _transformerNetwork.SetTrainingMode(true);
-        T loss = _transformerNetwork.TrainWithCustomLoss(input, output =>
-        {
-            var allAxes = new[] { 0, 1, 2 };
-            if (_options.IsContinuous)
-            {
-                var diff = Engine.TensorMultiply(Engine.TensorSubtract(output, targets), mask);
-                return Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(diff, diff), allAxes, keepDims: false), scale);
-            }
-            var logProbabilities = Engine.TensorLogSoftmax(output, 2);
-            var picked = Engine.TensorMultiply(Engine.TensorMultiply(logProbabilities, targets), mask);
-            return Engine.TensorNegate(Engine.TensorMultiplyScalar(Engine.ReduceSum(picked, allAxes, keepDims: false), scale));
-        }, _networkOptimizer);
-        _transformerNetwork.SetTrainingMode(false);
+        var tokenTensor = new Tensor<T>(tokens, new[] { batchSize, sequenceTokens, featureCount });
+        var targetTensor = new Tensor<T>(targets, new[] { batchSize, sequenceTokens, actionSize });
+        T loss = TrainOnSequence(tokenTensor, targetTensor, labelledRows.ToArray());
 
         _updateCount++;
+        TrainingSteps++;
+        LossHistory.Add(loss);
         return loss;
     }
 
     /// <summary>
-    /// Supervised (online) training entry from <see cref="IFullModel{T,TInput,TOutput}"/>: one step predicting
-    /// <paramref name="target"/> (the action) from a one-timestep sequence of <paramref name="state"/> at return-to-go 0
-    /// and timestep 0. Decision Transformer is return-conditioned behavior cloning, so this is its objective on a
-    /// single pair.
+    /// Supervised (online) training entry from <see cref="IFullModel{T,TInput,TOutput}"/>: trains
+    /// the transformer to predict <paramref name="target"/> (the desired action) from
+    /// <paramref name="state"/>. Decision Transformer is return-conditioned behavior cloning, so a
+    /// single supervised step on (return-to-go, state) → action IS the training objective. The base
+    /// <see cref="ReinforcementLearningAgentBase{T}.Train(Vector{T},Vector{T})"/> stores a Q-learning
+    /// transition then calls the parameterless <see cref="Train()"/>, which for this agent would
+    /// only buffer a one-step episode. Route the supervised pair straight into a transformer step
+    /// instead, conditioned exactly as <see cref="Predict"/> conditions a query: a one-timestep
+    /// context at timestep zero whose return-to-go is the episode's starting target.
     /// </summary>
     public override void Train(Vector<T> state, Vector<T> target)
     {
         if (state is null) throw new ArgumentNullException(nameof(state));
         if (target is null) throw new ArgumentNullException(nameof(target));
+        ValidateState(state);
+        if (target.Length == 0) throw new ArgumentException("target must contain at least one element.", nameof(target));
 
-        var input = SingleStep(state);
-        var targetAction = new Tensor<T>(new[] { 1, 1, _options.ActionSize });
-        int copyLen = Math.Min(target.Length, _options.ActionSize);
-        for (int i = 0; i < copyLen; i++) targetAction[0, 0, i] = target[i];
-
-        _transformerNetwork.SetTrainingMode(true);
-        _transformerNetwork.TrainWithCustomLoss(input, output =>
-        {
-            var diff = Engine.TensorSubtract(output, targetAction);
-            return Engine.ReduceMean(Engine.TensorMultiply(diff, diff), new[] { 0, 1, 2 }, keepDims: false);
-        }, _networkOptimizer);
-        _transformerNetwork.SetTrainingMode(false);
+        var (tokens, targets, rows) = BuildSingleStepExample(state, target);
+        TrainOnSequence(tokens, targets, rows);
         _updateCount++;
     }
 
-    // A one-timestep sequence: return-to-go 0, the state, no action, timestep 0.
-    private Tensor<T> SingleStep(Vector<T> state)
+    private T TrainOnSequence(Tensor<T> tokens, Tensor<T> targets, int[] labelledRows)
     {
-        var input = new Tensor<T>(new[] { 1, 1, _transformerNetwork.StepWidth });
-        Pack(input, 0, 0, NumOps.Zero, state, null, 0);
-        return input;
+        var objective = new DecisionTransformerActionLoss<T>(
+            labelledRows.Select(row => row / TokensPerStep).ToArray(),
+            _options.ActionSize, _options.IsContinuous, LossFunction);
+        var network = (NeuralNetworkBase<T>)_transformerNetwork;
+        var packedTargets = PackNativeTargets(targets);
+        return network.TrainWithCustomLoss(PackNativeTimesteps(tokens),
+            output => objective.ComputeTapeLoss(output, packedTargets), _transformerOptimizer);
+    }
+    // The orchestration stores explicit R/s/a token rows. The native graph embeds each modality
+    // independently and owns a learned timestep table, so convert those data rows to its packed
+    // timestep input without replacing any neural stage or changing the parameter layout.
+    private Tensor<T> PackNativeTimesteps(Tensor<T> tokens)
+    {
+        int batch = tokens.Shape[0], steps = tokens.Shape[1] / TokensPerStep;
+        int width = Network.StepWidth, features = tokens.Shape[2];
+        var packed = new Tensor<T>(new[] { batch, steps, width });
+        for (int b = 0; b < batch; b++)
+        for (int t = 0; t < steps; t++)
+        {
+            int first = (b * tokens.Shape[1] + TokensPerStep * t) * features;
+            int dst = (b * steps + t) * width;
+            packed.Data.Span[dst] = tokens.Data.Span[first + ReturnFeature];
+            for (int j = 0; j < _options.StateSize; j++)
+                packed.Data.Span[dst + 1 + j] = tokens.Data.Span[first + features + StateFeatureOffset + j];
+            for (int j = 0; j < _options.ActionSize; j++)
+                packed.Data.Span[dst + 1 + _options.StateSize + j] =
+                    tokens.Data.Span[first + 2 * features + ActionFeatureOffset + j];
+            for (int i = 0; i < _options.MaxEpisodeLength; i++)
+                if (NumOps.GreaterThan(tokens.Data.Span[first + TimestepFeatureOffset + i], NumOps.Zero))
+                {
+                    packed.Data.Span[dst + width - 1] = NumOps.FromDouble(i);
+                    break;
+                }
+        }
+        return packed;
+    }
+
+    private Tensor<T> PackNativeTargets(Tensor<T> targets)
+    {
+        int batch = targets.Shape[0], steps = targets.Shape[1] / TokensPerStep;
+        var packed = new Tensor<T>(new[] { batch, steps, _options.ActionSize });
+        for (int b = 0; b < batch; b++)
+        for (int t = 0; t < steps; t++)
+        for (int a = 0; a < _options.ActionSize; a++)
+            packed[b, t, a] = targets[b, TokensPerStep * t + StateToken, a];
+        return packed;
+    }
+
+
+    /// <summary>The token sequence, label tensor and labelled row for one state at the start of an episode.</summary>
+    private (Tensor<T> Tokens, Tensor<T> Targets, int[] Rows) BuildSingleStepExample(Vector<T> state, Vector<T> target)
+    {
+        int sequenceTokens = SequenceTokenCount;
+        int actionSize = _options.ActionSize;
+
+        var tokens = new T[sequenceTokens * TokenFeatureCount];
+        WriteTimestepTokens(tokens, 0, InitialReturnToGo(), state, null, 0);
+
+        var label = new Vector<T>(actionSize);
+        if (_options.IsContinuous)
+        {
+            int copy = Math.Min(target.Length, actionSize);
+            for (int i = 0; i < copy; i++) label[i] = target[i];
+        }
+        else
+        {
+            label[Math.Min(ArgMax(target), actionSize - 1)] = NumOps.One;
+        }
+
+        var targets = new T[sequenceTokens * actionSize];
+        WriteActionLabel(targets, StateToken, label);
+
+        return (
+            new Tensor<T>(tokens, new[] { 1, sequenceTokens, TokenFeatureCount }),
+            new Tensor<T>(targets, new[] { 1, sequenceTokens, actionSize }),
+            new[] { StateToken });
+    }
+
+    /// <summary>
+    /// Writes the three tokens of one timestep into a flattened <c>[tokens, features]</c> buffer.
+    /// </summary>
+    /// <param name="tokens">The token buffer; rows are tokens and must be zero where nothing is written.</param>
+    /// <param name="stepSlot">The timestep slot in the flattened buffer (token row = 3 * slot).</param>
+    /// <param name="returnToGo">R̂_t, unscaled.</param>
+    /// <param name="state">s_t.</param>
+    /// <param name="action">a_t, or null when it is not yet known (the step being predicted).</param>
+    /// <param name="timestep">The absolute episode timestep, clipped to the embedding table.</param>
+    private void WriteTimestepTokens(T[] tokens, int stepSlot, T returnToGo, Vector<T> state, Vector<T>? action, int timestep)
+    {
+        int featureCount = TokenFeatureCount;
+        int clippedTimestep = Math.Min(Math.Max(timestep, 0), _options.MaxEpisodeLength - 1);
+        int firstRow = stepSlot * TokensPerStep;
+
+        for (int token = 0; token < TokensPerStep; token++)
+        {
+            int rowBase = (firstRow + token) * featureCount;
+            tokens[rowBase + token] = NumOps.One;
+            tokens[rowBase + TimestepFeatureOffset + clippedTimestep] = NumOps.One;
+        }
+
+        tokens[(firstRow + ReturnToken) * featureCount + ReturnFeature] =
+            NumOps.Divide(returnToGo, NumOps.FromDouble(_options.ReturnScale));
+
+        int stateBase = (firstRow + StateToken) * featureCount + StateFeatureOffset;
+        if (_options.NormalizeStates)
+        {
+            // The reference implementation's (s - state_mean) / state_std, at training and at acting time alike.
+            for (int i = 0; i < _options.StateSize; i++)
+                tokens[stateBase + i] = NumOps.Divide(NumOps.Subtract(state[i], _stateMean[i]), _stateStd[i]);
+        }
+        else
+        {
+            for (int i = 0; i < _options.StateSize; i++) tokens[stateBase + i] = state[i];
+        }
+
+        if (action is not null)
+        {
+            int actionBase = (firstRow + ActionToken) * featureCount + ActionFeatureOffset;
+            for (int i = 0; i < _options.ActionSize; i++) tokens[actionBase + i] = action[i];
+        }
+    }
+
+    /// <summary>Writes the action label for one state-token row: the action itself, or its one-hot when discrete.</summary>
+    private void WriteActionLabel(T[] targets, int row, Vector<T> action)
+    {
+        int actionSize = _options.ActionSize;
+        int rowBase = row * actionSize;
+        if (_options.IsContinuous)
+        {
+            for (int i = 0; i < actionSize; i++) targets[rowBase + i] = action[i];
+        }
+        else
+        {
+            targets[rowBase + ArgMax(action)] = NumOps.One;
+        }
+    }
+
+    /// <summary>Runs one token sequence and returns the head output at the state token of timestep slot <paramref name="stepSlot"/>.</summary>
+    private Vector<T> PredictStateTokenOutput(T[] tokens, int stepSlot)
+    {
+        var input = new Tensor<T>(tokens, new[] { 1, SequenceTokenCount, TokenFeatureCount });
+        var output = _transformerNetwork.Predict(PackNativeTimesteps(input)).ToVector();
+
+        int actionSize = _options.ActionSize;
+        int row = stepSlot;
+        var result = new Vector<T>(actionSize);
+        for (int i = 0; i < actionSize; i++) result[i] = output[row * actionSize + i];
+        return result;
+    }
+
+    /// <summary>
+    /// Runs the transformer over an explicit context and returns the head output at every state token, in order.
+    /// </summary>
+    /// <remarks>
+    /// Exposed to the test assembly so the causal structure can be checked directly: the output at s_t must not
+    /// change when anything at a later position (a_t, or any later timestep) changes.
+    /// </remarks>
+    internal Vector<T>[] PredictContext(
+        IReadOnlyList<T> returnsToGo,
+        IReadOnlyList<Vector<T>> states,
+        IReadOnlyList<Vector<T>?> actions,
+        int firstTimestep)
+    {
+        int length = states.Count;
+        if (length == 0 || length > _options.ContextLength || returnsToGo.Count != length || actions.Count != length)
+            throw new ArgumentException("The context must hold 1..ContextLength timesteps with matching lists.");
+
+        var tokens = new T[SequenceTokenCount * TokenFeatureCount];
+        for (int i = 0; i < length; i++)
+            WriteTimestepTokens(tokens, i, returnsToGo[i], states[i], actions[i], firstTimestep + i);
+
+        var input = new Tensor<T>(tokens, new[] { 1, SequenceTokenCount, TokenFeatureCount });
+        var output = _transformerNetwork.Predict(PackNativeTimesteps(input)).ToVector();
+
+        int actionSize = _options.ActionSize;
+        var results = new Vector<T>[length];
+        for (int t = 0; t < length; t++)
+        {
+            int row = t;
+            results[t] = new Vector<T>(actionSize);
+            for (int i = 0; i < actionSize; i++) results[t][i] = output[row * actionSize + i];
+        }
+
+        return results;
+    }
+
+    /// <summary>Turns the head output into an action: the tanh output itself, or a one-hot of the arg-max or a softmax draw.</summary>
+    private Vector<T> ToAction(Vector<T> headOutput, bool sample)
+    {
+        if (_options.IsContinuous) return headOutput;
+
+        int chosen = sample ? SampleSoftmax(headOutput) : ArgMax(headOutput);
+        var oneHot = new Vector<T>(_options.ActionSize);
+        oneHot[chosen] = NumOps.One;
+        return oneHot;
+    }
+
+    private int SampleSoftmax(Vector<T> logits)
+    {
+        double max = double.NegativeInfinity;
+        for (int i = 0; i < logits.Length; i++) max = Math.Max(max, NumOps.ToDouble(logits[i]));
+
+        var weights = new double[logits.Length];
+        double sum = 0.0;
+        for (int i = 0; i < logits.Length; i++)
+        {
+            weights[i] = Math.Exp(NumOps.ToDouble(logits[i]) - max);
+            sum += weights[i];
+        }
+
+        double draw = Random.NextDouble() * sum;
+        for (int i = 0; i < weights.Length; i++)
+        {
+            draw -= weights[i];
+            if (draw <= 0.0) return i;
+        }
+
+        return weights.Length - 1;
+    }
+
+    private int ArgMax(Vector<T> values)
+    {
+        int best = 0;
+        for (int i = 1; i < values.Length; i++)
+            if (NumOps.GreaterThan(values[i], values[best])) best = i;
+        return best;
+    }
+
+    /// <summary>The episode's starting return-to-go: the configured target, else the best stored episode return.</summary>
+    private T InitialReturnToGo()
+    {
+        if (_options.TargetReturn is double target) return NumOps.FromDouble(target);
+        return _hasEpisodeReturn ? _bestEpisodeReturn : NumOps.Zero;
+    }
+
+    /// <summary>The running return-to-go, initialised to <see cref="InitialReturnToGo"/> at the start of an episode.</summary>
+    private T CurrentReturnToGo() => _episodeConditioned ? _currentReturnToGo : InitialReturnToGo();
+
+    /// <summary>
+    /// Adds a finished trajectory to the buffer with its returns-to-go and timesteps, evicting the oldest
+    /// trajectories beyond <see cref="DecisionTransformerOptions{T}.BufferSize"/> transitions.
+    /// </summary>
+    private void CommitTrajectory(List<(Vector<T> State, Vector<T> Action, T Reward)> steps)
+    {
+        int count = steps.Count;
+        if (count == 0) return;
+
+        // R̂_t = r_t + R̂_{t+1}, undiscounted (Sec. 3).
+        var returnsToGo = new T[count];
+        T running = NumOps.Zero;
+        for (int t = count - 1; t >= 0; t--)
+        {
+            running = NumOps.Add(steps[t].Reward, running);
+            returnsToGo[t] = running;
+        }
+
+        if (!_hasEpisodeReturn || NumOps.GreaterThan(returnsToGo[0], _bestEpisodeReturn))
+        {
+            _bestEpisodeReturn = returnsToGo[0];
+            _hasEpisodeReturn = true;
+        }
+
+        // A trajectory longer than the whole buffer keeps its most recent transitions.
+        int keep = Math.Min(count, _options.BufferSize);
+        int first = count - keep;
+        var states = new Vector<T>[keep];
+        var actions = new Vector<T>[keep];
+        var kept = new T[keep];
+        var timesteps = new int[keep];
+        for (int i = 0; i < keep; i++)
+        {
+            states[i] = steps[first + i].State;
+            actions[i] = steps[first + i].Action;
+            kept[i] = returnsToGo[first + i];
+            timesteps[i] = first + i;
+        }
+
+        _trajectories.Add(new StoredTrajectory(states, actions, kept, timesteps));
+        _storedTransitions += keep;
+
+        while (_storedTransitions > _options.BufferSize && _trajectories.Count > 1)
+        {
+            _storedTransitions -= _trajectories[0].Length;
+            _trajectories.RemoveAt(0);
+        }
+    }
+
+    /// <summary>
+    /// Recomputes the per-dimension state mean and standard deviation over every state in the buffer.
+    /// </summary>
+    /// <remarks>
+    /// The reference implementation concatenates the dataset's states and takes <c>np.mean(axis=0)</c> and
+    /// <c>np.std(axis=0) + 1e-6</c> (population deviation). Two passes, mean first, keep the deviation exact
+    /// rather than cancelling in E[s^2] - E[s]^2. With an empty buffer the statistics are left as they are: the
+    /// identity transform before any data, or the persisted statistics of a reloaded model.
+    /// </remarks>
+    private void RecomputeStateStatistics()
+    {
+        if (_storedTransitions == 0) return;
+
+        int size = _options.StateSize;
+        T count = NumOps.FromDouble(_storedTransitions);
+        var mean = new Vector<T>(size);
+        foreach (var trajectory in _trajectories)
+            foreach (var state in trajectory.States)
+                for (int i = 0; i < size; i++) mean[i] = NumOps.Add(mean[i], state[i]);
+        for (int i = 0; i < size; i++) mean[i] = NumOps.Divide(mean[i], count);
+
+        var variance = new Vector<T>(size);
+        foreach (var trajectory in _trajectories)
+            foreach (var state in trajectory.States)
+                for (int i = 0; i < size; i++)
+                {
+                    T deviation = NumOps.Subtract(state[i], mean[i]);
+                    variance[i] = NumOps.Add(variance[i], NumOps.Multiply(deviation, deviation));
+                }
+
+        var std = new Vector<T>(size);
+        T epsilon = NumOps.FromDouble(1e-6);
+        for (int i = 0; i < size; i++)
+            std[i] = NumOps.Add(NumOps.Sqrt(NumOps.Divide(variance[i], count)), epsilon);
+
+        _stateMean = mean;
+        _stateStd = std;
+    }
+
+    /// <summary>Maps a flat transition index over the buffer to its trajectory and step.</summary>
+    private (StoredTrajectory Trajectory, int Step) LocateTransition(int index)
+    {
+        foreach (var trajectory in _trajectories)
+        {
+            if (index < trajectory.Length) return (trajectory, index);
+            index -= trajectory.Length;
+        }
+
+        throw new InvalidOperationException("Transition index is outside the stored trajectories.");
+    }
+
+    private void ValidateState(Vector<T> state)
+    {
+        if (state is null) throw new ArgumentNullException(nameof(state));
+        if (state.Length != _options.StateSize)
+            throw new ArgumentException(
+                $"State length must be {_options.StateSize}, got {state.Length}.", nameof(state));
+    }
+
+    private void ValidateAction(Vector<T> action)
+    {
+        if (action is null) throw new ArgumentNullException(nameof(action));
+        if (action.Length != _options.ActionSize)
+            throw new ArgumentException(
+                $"Action length must be {_options.ActionSize}, got {action.Length}.", nameof(action));
+    }
+
+    private static Vector<T> CopyVector(Vector<T> source)
+    {
+        var copy = new Vector<T>(source.Length);
+        for (int i = 0; i < source.Length; i++) copy[i] = source[i];
+        return copy;
+    }
+
+    private bool VectorsEqual(Vector<T> left, Vector<T> right)
+    {
+        if (left.Length != right.Length) return false;
+        for (int i = 0; i < left.Length; i++)
+            if (!NumOps.Equals(left[i], right[i])) return false;
+        return true;
     }
 
     public override Dictionary<string, T> GetMetrics()
@@ -344,27 +892,45 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
         return new Dictionary<string, T>
         {
             ["updates"] = NumOps.FromDouble(_updateCount),
-            ["buffer_size"] = NumOps.FromDouble(_trajectoryBuffer.Count)
+            ["buffer_size"] = NumOps.FromDouble(_storedTransitions),
+            ["trajectories"] = NumOps.FromDouble(_trajectories.Count)
         };
     }
 
+    /// <inheritdoc/>
+    /// <remarks>
+    /// Ends the current episode: transitions stored since the last terminal step are committed to the buffer as a
+    /// (truncated) trajectory, and the evaluation context and running return-to-go start afresh.
+    /// </remarks>
     public override void ResetEpisode()
     {
+        if (_pendingEpisode.Count > 0)
+        {
+            CommitTrajectory(_pendingEpisode);
+            _pendingEpisode.Clear();
+            RecomputeStateStatistics();
+        }
+
         _currentContext = new SequenceContext<T>();
-        _contextTimestep = 0;
-        _runningReturn = NumOps.FromDouble(_options.TargetReturn);
+        _currentReturnToGo = NumOps.Zero;
+        _episodeConditioned = false;
+        _episodeStep = 0;
     }
 
     public override Vector<T> Predict(Vector<T> input)
     {
-        // Pure, stateless single-step inference (the IFullModel.Predict contract): two Predict(state) calls must
-        // return the same action, so this runs a one-timestep sequence without touching the episode's context.
+        // Pure, stateless single-step inference (the IFullModel.Predict contract): two Predict(state)
+        // calls must return the same action. SelectAction is the EPISODIC entry — it appends to the
+        // rolling _currentContext, so calling it from Predict would make repeated Predict(state) calls
+        // diverge and break determinism and clone parity. Predict instead answers for a fresh episode:
+        // a one-timestep context at timestep zero, conditioned on the episode's starting return-to-go,
+        // run without touching _currentContext. Discrete actions return the arg-max one-hot.
         if (input is null) throw new ArgumentNullException(nameof(input));
-        _transformerNetwork.SetTrainingMode(false);
-        var output = _transformerNetwork.Predict(SingleStep(input));
-        var action = new Vector<T>(_options.ActionSize);
-        for (int j = 0; j < _options.ActionSize; j++) action[j] = output.Data.Span[j];
-        return action;
+        ValidateState(input);
+
+        var tokens = new T[SequenceTokenCount * TokenFeatureCount];
+        WriteTimestepTokens(tokens, 0, InitialReturnToGo(), input, null, 0);
+        return ToAction(PredictStateTokenOutput(tokens, 0), sample: false);
     }
 
     public Task<Vector<T>> PredictAsync(Vector<T> input)
@@ -382,6 +948,8 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     {
         return new ModelMetadata<T>
         {
+            FeatureCount = _options.StateSize,
+            Complexity = ParameterCount,
         };
     }
 
@@ -395,8 +963,11 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     /// <param name="lossFunction">The loss to differentiate, or null to use the agent's own.</param>
     /// <returns>A gradient vector the same length as <c>GetParameters()</c>.</returns>
     /// <remarks>
-    /// The state runs as a one-timestep sequence (as in <see cref="Predict"/>) and the gradient comes from the network's
-    /// own tape pass.
+    /// Returns PARAMETER-space gradients, as <c>IGradientComputable</c> documents and as
+    /// <c>ApplyGradients</c> requires. The objective is the one <see cref="Train(Vector{T}, Vector{T})"/> steps on:
+    /// the action predicted at the state token of a one-timestep context, against <paramref name="target"/>
+    /// (regressed with <paramref name="lossFunction"/> for continuous actions, cross-entropy for discrete ones).
+    /// The gradient comes from the network's own tape pass, so no derivative is written by hand here.
     /// </remarks>
     public Vector<T> ComputeGradients(
         Vector<T> input,
@@ -405,9 +976,21 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     {
         if (input is null) throw new ArgumentNullException(nameof(input));
         if (target is null) throw new ArgumentNullException(nameof(target));
-        var targetAction = new Tensor<T>(new[] { 1, 1, _options.ActionSize });
-        for (int i = 0; i < Math.Min(target.Length, _options.ActionSize); i++) targetAction[0, 0, i] = target[i];
-        return _transformerNetwork.ComputeGradients(SingleStep(input), targetAction, lossFunction ?? LossFunction);
+        ValidateState(input);
+
+        if (_transformerNetwork is not IGradientComputable<T, Tensor<T>, Tensor<T>> computable)
+        {
+            throw new NotSupportedException(
+                $"{GetType().Name} cannot compute parameter gradients because its network "
+                + $"({_transformerNetwork.GetType().Name}) does not implement "
+                + "IGradientComputable<T, Tensor<T>, Tensor<T>>.");
+        }
+
+        var (tokens, targets, rows) = BuildSingleStepExample(input, target);
+        var objective = new DecisionTransformerActionLoss<T>(
+            rows.Select(row => row / TokensPerStep).ToArray(),
+            _options.ActionSize, _options.IsContinuous, lossFunction ?? LossFunction);
+        return computable.ComputeGradients(PackNativeTimesteps(tokens), PackNativeTargets(targets), objective);
     }
 
     public override void SaveModel(string filepath)
@@ -420,5 +1003,27 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
     {
         var data = System.IO.File.ReadAllBytes(filepath);
         Deserialize(data);
+    }
+
+    /// <summary>One stored trajectory: states, actions, returns-to-go and absolute timesteps, step-aligned.</summary>
+    private sealed class StoredTrajectory
+    {
+        public StoredTrajectory(Vector<T>[] states, Vector<T>[] actions, T[] returnsToGo, int[] timesteps)
+        {
+            States = states;
+            Actions = actions;
+            ReturnsToGo = returnsToGo;
+            Timesteps = timesteps;
+        }
+
+        public Vector<T>[] States { get; }
+
+        public Vector<T>[] Actions { get; }
+
+        public T[] ReturnsToGo { get; }
+
+        public int[] Timesteps { get; }
+
+        public int Length => States.Length;
     }
 }

@@ -85,7 +85,6 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     }
     private TRPOOptions<T> _options;
 
-    private IOptimizer<T, Vector<T>, Vector<T>> _optimizer;
 
     private INeuralNetwork<T> _policyNetwork;
     private INeuralNetwork<T> _valueNetwork;
@@ -104,19 +103,12 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     {
     }
 
-    public TRPOAgent(TRPOOptions<T> options, IOptimizer<T, Vector<T>, Vector<T>>? optimizer = null)
+    public TRPOAgent(TRPOOptions<T> options)
         : base(options)
     {
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _optimizer = optimizer ?? options.Optimizer ?? new AdamOptimizer<T, Vector<T>, Vector<T>>(this, new AdamOptimizerOptions<T, Vector<T>, Vector<T>>
-        {
-            InitialLearningRate = 0.001,
-            Beta1 = 0.9,
-            Beta2 = 0.999,
-            Epsilon = 1e-8
-        });
         _updateCount = 0;
         _trajectoryBuffer = new List<(Vector<T>, Vector<T>, T, Vector<T>, bool)>();
 
@@ -436,6 +428,8 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
     private double PolicyStep(Tensor<T> states, List<Vector<T>> actions, double[] advantages)
     {
+        LastStepFraction = 0.0;
+        _lastKl = 0.0;
         int n = advantages.Length, a = _options.ActionSize;
         var theta = PolicyParameters();
         int count = theta.Length - _logStd.Length;
@@ -508,6 +502,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             if (kl <= delta && improvement > 0 && improvement >= _options.LineSearchAcceptRatio * fraction * expected)
             {
                 _lastKl = kl;
+                LastStepFraction = fraction;
                 return improvement;
             }
         }
@@ -515,6 +510,28 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         _lastKl = 0;
         return 0;
     }
+
+    /// <summary>The measured mean KL of the last accepted policy step.</summary>
+    internal double LastPolicyKL => _lastKl;
+
+    /// <summary>The fraction of the full natural-gradient step accepted by line search.</summary>
+    internal double LastStepFraction { get; private set; }
+
+    /// <summary>The policy probabilities, or Gaussian means followed by log standard deviations.</summary>
+    internal Vector<T> PolicyDistribution(Vector<T> state)
+    {
+        var output = _policyNetwork.Predict(Tensor<T>.FromVector(state)).ToVector();
+        if (!_options.IsContinuous)
+            return new Vector<T>(Softmax(Enumerable.Range(0, output.Length)
+                .Select(i => NumOps.ToDouble(output[i])).ToArray()).Select(NumOps.FromDouble).ToArray());
+        var result = new Vector<T>(output.Length + _logStd.Length);
+        for (int i = 0; i < output.Length; i++) result[i] = output[i];
+        for (int i = 0; i < _logStd.Length; i++) result[output.Length + i] = _logStd[i];
+        return result;
+    }
+
+    /// <summary>The value network parameters, materialized by the constructor.</summary>
+    internal Vector<T> GetValueNetworkParameters() => _valueNetwork.GetParameters();
 
     /// <summary>The policy's log standard deviations (empty for discrete actions).</summary>
     internal Vector<T> LogStandardDeviations => _logStd;

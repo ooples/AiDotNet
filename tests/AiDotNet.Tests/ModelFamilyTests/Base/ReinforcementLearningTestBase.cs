@@ -96,8 +96,10 @@ public abstract class ReinforcementLearningTestBase<T>
     /// separate flag from <see cref="IsStateConditional"/>, whose membership is different: on-policy
     /// methods need whole trajectories (A2C/PPO/TRPO), REINFORCE needs complete episodes, SARSA(lambda)
     /// evaluates the action actually taken, CQL/IQL are offline by construction and resist moving
-    /// toward actions their fixed dataset does not support, and Dreamer optimises against an imagined
-    /// value whose world model needs far more than a unit-test budget to fit. Emitted by the generator.
+    /// toward actions their fixed dataset does not support, Dreamer optimises against an imagined
+    /// value whose world model needs far more than a unit-test budget to fit, and World Models evolves
+    /// its controller only in its world model's dream, which this probe's two fixed actions never let it
+    /// correct where the controller exploits it. Emitted by the generator.
     /// </remarks>
     protected virtual bool FollowsOnlineReward => true;
 
@@ -522,8 +524,9 @@ public abstract class ReinforcementLearningTestBase<T>
             "This agent runs the loop but cannot be expected to move its greedy action toward the "
             + "rewarded one within a unit-test budget: on-policy methods need whole trajectories, "
             + "REINFORCE needs complete episodes, SARSA(lambda) evaluates the action it actually took, "
-            + "CQL/IQL are offline and resist actions their fixed dataset does not support, and "
-            + "Dreamer optimises against an imagined value whose world model is nowhere near fitted.");
+            + "CQL/IQL are offline and resist actions their fixed dataset does not support, "
+            + "Dreamer optimises against an imagined value whose world model is nowhere near fitted, "
+            + "and World Models evolves its controller only in a dream this probe's data cannot correct.");
 
         // OUTCOME invariant, deliberately mechanism-independent.
         //
