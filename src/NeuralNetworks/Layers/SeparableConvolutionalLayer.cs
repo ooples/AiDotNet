@@ -137,37 +137,6 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     private Tensor<T> _biases;
 
     /// <summary>
-    /// Stores the input tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field caches the input to the layer during the forward pass, which is needed during the backward pass
-    /// to compute gradients. It is cleared when ResetState() is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is like the layer's short-term memory of what input it received.
-    /// It needs to remember this input during training so it can calculate how to improve.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stores the output tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This field caches the output from the layer during the forward pass, which is needed during the backward pass
-    /// to compute activation function derivatives. It is cleared when ResetState() is called.
-    /// </para>
-    /// <para><b>For Beginners:</b> This is the layer's memory of what output it produced.
-    /// The layer needs this during training to understand how changes to the output
-    /// affect the overall network performance.
-    /// </para>
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// Gradient of the loss with respect to the depthwise kernels.
     /// </summary>
     /// <remarks>
@@ -664,7 +633,6 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureInitializedFromInput(input);
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
 
         // Convert input from NHWC [batch, H, W, channels] to NCHW [batch, channels, H, W]
         var inputNCHW = Engine.TensorPermute(input, [0, 3, 1, 2]);
@@ -700,7 +668,6 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
         // Only store for backward pass during training - skip during inference
         if (IsTrainingMode)
         {
-            _lastOutput = result;
         }
 
         return result;
@@ -847,8 +814,6 @@ public partial class SeparableConvolutionalLayer<T> : LayerBase<T>, IShapeContra
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
         _depthwiseKernelsGradient = null;
         _pointwiseKernelsGradient = null;
         _biasesGradient = null;

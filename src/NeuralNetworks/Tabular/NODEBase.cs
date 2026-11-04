@@ -51,16 +51,6 @@ public abstract class NODEBase<T> : IParameterSource<T>
     private readonly Tensor<T>[] _splitThresholds;          // [depth] per tree
     private readonly Tensor<T>[] _leafValues;               // [2^depth, output_dim] per tree
 
-    // Caches for backward pass
-    [Scratch]
-    private Tensor<T>? _preprocessedFeaturesCache;
-    [Scratch]
-    private List<Tensor<T>>? _splitProbabilitiesCache;
-    [Scratch]
-    private List<Tensor<T>>? _leafWeightsCache;
-    [Scratch]
-    private Tensor<T>? _treeOutputsCache;
-
     /// <summary>
     /// Gets the tree output dimension.
     /// </summary>
@@ -209,8 +199,6 @@ public abstract class NODEBase<T> : IParameterSource<T>
     protected Tensor<T> ForwardBackbone(Tensor<T> features)
     {
         int batchSize = features.Shape[0];
-        _splitProbabilitiesCache = [];
-        _leafWeightsCache = [];
 
         // Optional feature preprocessing
         var processed = features;
@@ -218,7 +206,6 @@ public abstract class NODEBase<T> : IParameterSource<T>
         {
             processed = _featurePreprocessing.Forward(features);
         }
-        _preprocessedFeaturesCache = processed;
 
         // Aggregate outputs from all trees
         var output = new Tensor<T>(new[] { batchSize, Options.TreeOutputDimension });
@@ -239,14 +226,11 @@ public abstract class NODEBase<T> : IParameterSource<T>
         // Average over trees
         output = Engine.TensorMultiplyScalar(output, NumOps.FromDouble(1.0 / Options.NumTrees));
 
-        _treeOutputsCache = output;
         return output;
     }
 
     private Tensor<T> ForwardTree(int treeIdx, Tensor<T> features, int batchSize)
     {
-        var splitProbabilitiesCache = _splitProbabilitiesCache ?? throw new InvalidOperationException("_splitProbabilitiesCache has not been initialized.");
-
         // Compute leaf weights for each sample
         var leafWeights = new Tensor<T>(new[] { batchSize, Options.NumLeaves });
 
@@ -280,8 +264,6 @@ public abstract class NODEBase<T> : IParameterSource<T>
                 splitProbs[d] = Sigmoid(scaledDiff);
             }
 
-            splitProbabilitiesCache.Add(splitProbs);
-
             // Compute leaf weights using the product of split probabilities
             // Each leaf corresponds to a binary path through the tree
             for (int leaf = 0; leaf < Options.NumLeaves; leaf++)
@@ -307,8 +289,6 @@ public abstract class NODEBase<T> : IParameterSource<T>
                 leafWeights[b * Options.NumLeaves + leaf] = weight;
             }
         }
-
-        (_leafWeightsCache ?? throw new InvalidOperationException("_leafWeightsCache has not been initialized.")).Add(leafWeights);
 
         // Compute tree output as weighted sum of leaf values
         var output = new Tensor<T>(new[] { batchSize, Options.TreeOutputDimension });
@@ -416,11 +396,6 @@ public abstract class NODEBase<T> : IParameterSource<T>
     /// </summary>
     public virtual void ResetState()
     {
-        _preprocessedFeaturesCache = null;
-        _splitProbabilitiesCache = null;
-        _leafWeightsCache = null;
-        _treeOutputsCache = null;
-
         _featurePreprocessing?.ResetState();
     }
 }

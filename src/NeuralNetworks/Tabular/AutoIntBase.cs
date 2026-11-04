@@ -9,6 +9,7 @@ using AiDotNet.Extensions;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Training;
 
 namespace AiDotNet.NeuralNetworks.Tabular;
 
@@ -55,17 +56,15 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
     private readonly List<FullyConnectedLayer<T>> _mlpLayers;
     protected int MLPOutputDimension { get; }
 
-    // Caches
+    // Caches for the embedding-gradient backward
     [Scratch]
     private Tensor<T>? _numericalFeaturesCache;
     [Scratch]
     private Matrix<int>? _categoricalIndicesCache;
-    [Scratch]
-    private Tensor<T>? _embeddedFeaturesCache;
-    [Scratch]
-    private List<Tensor<T>>? _interactingOutputsCache;
-    [Scratch]
-    private Tensor<T>? _mlpOutputCache;
+
+    // Batch size of the last forward, which scales the learning rate in UpdateParameters. Kept apart
+    // from the caches above so that skipping them when no backward runs cannot change the update.
+    private int _forwardBatchSize;
 
     // Embedding gradients
     private readonly Tensor<T> _numericalEmbeddingsGrad;
@@ -229,61 +228,74 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
         }
     }
 
+    /// <summary>Computes the scalar objective's gradients and applies one SGD step to the whole model.</summary>
+    /// <param name="objective">Computes the batch-averaged scalar loss through differentiable engine operations.</param>
+    /// <param name="learningRate">Step size applied to the computed gradients.</param>
+    /// <returns>The loss before updating the model.</returns>
+    protected T TrainWithTape(Func<Tensor<T>> objective, T learningRate)
+    {
+        var parameters = new List<Tensor<T>> { _numericalEmbeddings };
+        if (_categoricalEmbeddings != null) parameters.AddRange(_categoricalEmbeddings);
+        foreach (var layer in _interactingLayers) parameters.AddRange(layer.GetTrainableParameters());
+        foreach (var layer in _mlpLayers) parameters.AddRange(layer.GetTrainableParameters());
+        foreach (var layer in GetExtraTrainableLayers().OfType<ITrainableLayer<T>>())
+            parameters.AddRange(layer.GetTrainableParameters());
+        try
+        {
+            // The objective already averages over the batch; do not divide its gradients again.
+            return TapeTrainingStepper<T>.EagerSgdObjectiveStep(() => parameters, objective, learningRate);
+        }
+        finally
+        {
+            foreach (var parameter in parameters.Distinct())
+                Engine.InvalidatePersistentTensor(parameter);
+            ResetState();
+        }
+    }
+
     /// <summary>
     /// Embeds input features.
     /// </summary>
     protected Tensor<T> EmbedFeatures(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
     {
         int batchSize = numericalFeatures.Shape[0];
-        var embedded = new Tensor<T>(new[] { batchSize, TotalFeatures, Options.EmbeddingDimension });
-
-        // Embed numerical features (multiply feature value by embedding vector)
-        for (int b = 0; b < batchSize; b++)
+        if (numericalFeatures.Rank != 2 || numericalFeatures.Shape[1] != NumNumericalFeatures || batchSize == 0)
+            throw new ArgumentException("Expected a nonempty [batch, numerical features] tensor.", nameof(numericalFeatures));
+        var parts = new List<Tensor<T>>();
+        if (NumNumericalFeatures > 0)
         {
-            for (int f = 0; f < NumNumericalFeatures; f++)
-            {
-                var featureValue = numericalFeatures[b * NumNumericalFeatures + f];
-
-                for (int d = 0; d < Options.EmbeddingDimension; d++)
-                {
-                    int embIdx = f * Options.EmbeddingDimension + d;
-                    int outIdx = (b * TotalFeatures + f) * Options.EmbeddingDimension + d;
-                    embedded[outIdx] = NumOps.Multiply(featureValue, _numericalEmbeddings[embIdx]);
-                }
-            }
+            var numerical = Engine.Reshape(numericalFeatures, new[] { batchSize, NumNumericalFeatures, 1 });
+            var table = Engine.Reshape(_numericalEmbeddings, new[] { 1, NumNumericalFeatures, Options.EmbeddingDimension });
+            parts.Add(Engine.TensorMultiply(numerical, table));
         }
 
-        // Embed categorical features (lookup embedding)
         if (categoricalIndices != null && _categoricalEmbeddings != null)
         {
+            if (categoricalIndices.Rows != batchSize || categoricalIndices.Columns != NumCategoricalFeatures)
+                throw new ArgumentException("Categorical indices must match the batch and categorical feature counts.", nameof(categoricalIndices));
             var cardinalities = Options.CategoricalCardinalities
                 ?? throw new InvalidOperationException("AutoIntBase: CategoricalCardinalities not configured.");
-
-            for (int b = 0; b < batchSize; b++)
+            for (int f = 0; f < NumCategoricalFeatures; f++)
             {
-                for (int f = 0; f < NumCategoricalFeatures; f++)
+                int cardinality = cardinalities[f];
+                var indices = new Tensor<int>(new[] { batchSize });
+                for (int b = 0; b < batchSize; b++)
                 {
                     int catIdx = categoricalIndices[b, f];
-                    int cardinality = cardinalities[f];
                     if ((uint)catIdx >= (uint)cardinality)
-                    {
-                        throw new ArgumentOutOfRangeException(
-                            nameof(categoricalIndices),
+                        throw new ArgumentOutOfRangeException(nameof(categoricalIndices),
                             $"Categorical index {catIdx} for feature {f} (batch {b}) is out of range [0, {cardinality}).");
-                    }
-                    int featureIdx = NumNumericalFeatures + f;
-
-                    for (int d = 0; d < Options.EmbeddingDimension; d++)
-                    {
-                        int embIdx = catIdx * Options.EmbeddingDimension + d;
-                        int outIdx = (b * TotalFeatures + featureIdx) * Options.EmbeddingDimension + d;
-                        embedded[outIdx] = _categoricalEmbeddings[f][embIdx];
-                    }
+                    indices[b] = catIdx;
                 }
+                var selected = Engine.TensorEmbeddingLookup<T, int>(_categoricalEmbeddings[f], indices);
+                parts.Add(Engine.Reshape(selected, new[] { batchSize, 1, Options.EmbeddingDimension }));
             }
         }
-
-        return embedded;
+        else if (NumCategoricalFeatures > 0)
+        {
+            parts.Add(new Tensor<T>(new[] { batchSize, NumCategoricalFeatures, Options.EmbeddingDimension }));
+        }
+        return parts.Count == 1 ? parts[0] : Engine.TensorConcatenate(parts.ToArray(), axis: 1);
     }
 
     /// <summary>
@@ -292,33 +304,24 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
     protected Tensor<T> ForwardBackbone(Tensor<T> numericalFeatures, Matrix<int>? categoricalIndices = null)
     {
         int batchSize = numericalFeatures.Shape[0];
-        _interactingOutputsCache = [];
-        _numericalFeaturesCache = numericalFeatures;
-        _categoricalIndicesCache = categoricalIndices;
+        _forwardBatchSize = batchSize;
+        ManualBackwardCache<T>.SaveForBackward(ref _numericalFeaturesCache, numericalFeatures);
+        if (categoricalIndices is not null)
+            ManualBackwardCache<T>.SaveForBackward(ref _categoricalIndicesCache, categoricalIndices);
+        else
+            _categoricalIndicesCache = null;
 
         // Embed features
         var embedded = EmbedFeatures(numericalFeatures, categoricalIndices);
-        _embeddedFeaturesCache = embedded;
 
         // Apply interacting layers
         var current = embedded;
         foreach (var layer in _interactingLayers)
         {
             current = layer.Forward(current);
-            _interactingOutputsCache.Add(current);
         }
-
-        // Flatten
-        var flattened = new Tensor<T>(new[] { batchSize, TotalFeatures * Options.EmbeddingDimension });
-        for (int b = 0; b < batchSize; b++)
-        {
-            for (int i = 0; i < TotalFeatures * Options.EmbeddingDimension; i++)
-            {
-                flattened[b * TotalFeatures * Options.EmbeddingDimension + i] =
-                    current[b * TotalFeatures * Options.EmbeddingDimension + i];
-            }
-        }
-
+        // Reshape through the engine so the tape can carry gradients back to the embeddings.
+        var flattened = Engine.Reshape(current, new[] { batchSize, TotalFeatures * Options.EmbeddingDimension });
         // MLP
         var mlpOutput = flattened;
         foreach (var mlpLayer in _mlpLayers)
@@ -326,7 +329,6 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
             mlpOutput = mlpLayer.Forward(mlpOutput);
         }
 
-        _mlpOutputCache = mlpOutput;
         return mlpOutput;
     }
 
@@ -408,7 +410,7 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
     public virtual void UpdateParameters(T learningRate)
     {
         // Scale learning rate by batch size to normalize gradients that were accumulated across samples
-        int batchSize = _numericalFeaturesCache?.Shape[0] ?? 1;
+        int batchSize = _forwardBatchSize > 0 ? _forwardBatchSize : 1;
         var scaledLr = batchSize > 1
             ? NumOps.Divide(learningRate, NumOps.FromDouble(batchSize))
             : learningRate;
@@ -451,9 +453,7 @@ public abstract partial class AutoIntBase<T> : IParameterSource<T>
     {
         _numericalFeaturesCache = null;
         _categoricalIndicesCache = null;
-        _embeddedFeaturesCache = null;
-        _interactingOutputsCache = null;
-        _mlpOutputCache = null;
+        _forwardBatchSize = 0;
 
         foreach (var layer in _interactingLayers)
         {
