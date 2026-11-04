@@ -2592,9 +2592,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // VideoCLIP runs its spatial encoder per frame at 768 hidden channels and had no bound, so
         // Training_ShouldReduceLoss hit the 120s timeout even at the fixture's small 4x3x32x32 clip.
         "VideoCLIP",
-        // Upscale4KAgent had no bound either and ran its MoreData probe past 120s and its
-        // memorization probe past 180s.
-        "Upscale4KAgent",
         // VideoLISA had no bound and ran its training probes out of memory outright.
         "VideoLISA",
         // UNITER only started training its encoder once its mean-pool stopped detaching the tape, and
@@ -13292,6 +13289,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "ConditioningChannels = new[] { 8, 8, 8 }, VaeChannels = 8, EncoderBlocks = new[] { 1, 1, 1 }, " +
                     "DecoderBlocks = new[] { 1, 1, 1 }, FlowIterations = 1, WarmupSteps = 0 })";
             }
+            else if (model.ClassName == "Upscale4KAgent" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.Enhancement.", System.StringComparison.Ordinal))
+            {
+                // 4KAgent (Zuo et al. 2025) keeps the agent loop in production (plan, every expert per step, NIQE
+                // reflection, rollback, color fix) over the Gen4K-P toolbox. The ExpSR-s4 profile here plans one 4x step
+                // so two 8x8 frames come back 32x32; the perception experts (RealBasicVSR, RealViformer) run at the smoke
+                // widths of their own fixtures.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.FourDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputFrames: 2, inputDepth: 3, inputHeight: 8, inputWidth: 8, outputSize: 3 * 32 * 32), " +
+                    "new AiDotNet.Video.Options.Upscale4KAgentOptions { Seed = 1, Upscale4K = false, ScaleFactor = 4, " +
+                    "RealBasicVsr = new AiDotNet.Video.Options.RealBasicVSROptions { MidChannels = 8, NumPropagationBlocks = 1, " +
+                    "NumCleaningBlocks = 1 }, " +
+                    "RealViformer = new AiDotNet.Video.Options.RealViformerOptions { NumFeatures = 8, " +
+                    "NumBlocks = new[] { 1, 1, 1, 1 }, Heads = new[] { 1, 1, 1 }, MergeHeads = 1, SqueezeFactor = 2 } })";
+            }
             else if (model.ClassName == "FloRNN" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.Denoising.", System.StringComparison.Ordinal))
             {
@@ -14693,6 +14707,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         else if (model.ClassName == "SeedVR")
         {
             // Two RGB 8x8 frames upscaled 4x; see the constructor pin above.
+            sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
+            sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 32, 32 };");
+        }
+        else if (model.ClassName == "Upscale4KAgent")
+        {
+            // Two RGB 8x8 frames upscaled 4x by the ExpSR-s4 profile; see the constructor pin above.
             sb.AppendLine("    protected override int[] InputShape => new[] { 2, 3, 8, 8 };");
             sb.AppendLine("    protected override int[] OutputShape => new[] { 2, 3, 32, 32 };");
         }
@@ -18564,42 +18584,6 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
         }
 
-      // Upscale4KAgent is already FP32 in the U-Z resource shard, but its repeated
-        // super-resolution training probes still exceeded their watchdogs. Keep the agent/model
-        // fixture intact and cap only optimizer-step counts before considering any fixture shrink.
-        if (model.ClassName == "Upscale4KAgent")
-        {
-            // MoreData_ShouldNotDegrade now compares the trained model against its own UNTRAINED
-            // baseline rather than one trained point against another, so it no longer needs a
-            // budget long enough to sit past a transient — any point below the baseline proves the
-            // same thing. That matters here because this model costs ~2.8 s per update: the old
-            // 5/15 window was 20 updates, and together with the surrounding Predict calls and the
-            // Clone it overran the 120 s timeout outright (which then abandoned the thread and took
-            // the test host down).
-            //
-            // Measured on this fixture (4x3x32x32, float, seed 42) from an untrained 0.4730:
-            //   0.3393, 0.3265, 0.3150, 0.2858, 0.2316, 0.3278
-            // Every point is already below the baseline, so 2/6 — 8 updates, ~22 s — proves the
-            // invariant with a 0.145 margin instead of relying on the curve having settled.
-            sb.AppendLine("    protected override int MoreDataShortIterations => 2;");
-            sb.AppendLine("    protected override int MoreDataLongIterations => 6;");
-            // Fifteen real updates retain the strict memorization-loss decrease invariant while
-            // avoiding the default 100-step timeout; the super-resolution architecture is unchanged.
-            sb.AppendLine("    protected override int MemorizationTaskIterations => 15;");
-            // Training_ShouldReduceLoss runs TrainingIterations * 3 updates, so the default 10 means
-            // 30 of them. At the ~2.8 s per update measured above that is ~84 s of optimizer work
-            // before the surrounding Predict calls, which pushed the whole test past the 120 s xUnit
-            // timeout. xUnit does not merely fail a timed-out test: it abandons the thread, and the
-            // abandoned super-resolution step took the test HOST down with it, aborting every
-            // remaining test in the shard. That is why the U shard reported a failure with no [FAIL]
-            // marker anywhere in its log. Five (15 updates, ~42 s) keeps the invariant — the loss
-            // falls 0.4730 -> 0.1494 over that window — with room under the budget.
-            //
-            // Set here rather than by adding the class to HeavyTrainingTimeoutClassNames: that
-            // branch re-emits MoreData members this block already emits, which collides as CS0102.
-            sb.AppendLine("    protected override int TrainingIterations => 5;");
-        }
-
         // Heavy paper-scale models (see HeavyTrainingTimeoutClassNames): trim ONLY the many-iteration
         // convergence invariants to the same smoke level the paper-scale VL branch uses, so the deep
         // model's train path is still exercised (loss → backward → update; direction / no-degrade /
@@ -18694,7 +18678,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // training probe in the suite: three conditions (target A, an A repeat as the noise
             // control, target B), each averaged over TargetDependenceRepeatCount runs of
             // TargetDependenceStepCount steps, on top of its own single-step preamble. At the ~2.8 s
-            // per update measured on Upscale4KAgent above, the default 3 repeats are 3*3*3 = 27 updates
+            // per update once measured on the earlier Upscale4KAgent fixture, the default 3 repeats are 3*3*3 = 27 updates
             // plus the preamble -- around 110 s inside a 120 s bound, which is why that fixture passed
             // one local run and timed out on the next two. Capping the probe's own per-call wall-clock
             // budget cannot fix it: that budget is per call and the test makes four of them, so its
