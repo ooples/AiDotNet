@@ -123,7 +123,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.Video.FrameInterpolation.MoG<T>",
             "AiDotNet.Video.FrameInterpolation.MoMo<T>",
             "AiDotNet.Video.FrameInterpolation.PerVFI<T>",
-            "AiDotNet.Video.FrameInterpolation.SoftSplat<T>",
             "AiDotNet.Video.FrameInterpolation.STMFNet<T>",
             "AiDotNet.Video.FrameInterpolation.SwinVFI<T>",
             "AiDotNet.Video.FrameInterpolation.TLBVFI<T>",

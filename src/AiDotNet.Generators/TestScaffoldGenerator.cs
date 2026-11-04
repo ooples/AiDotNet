@@ -13835,6 +13835,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "CorrelationRadius = 1, FeatureEncoderWidths = new[] { 4, 4, 4 }, FeatureDim = 4, UpdateHiddenDim = 4, " +
                     "UpdateFlowDim = 4, UpdateCorrelationDim = 4, UpdateFusionDim = 4 })";
             }
+            else if (model.ClassName == "SoftSplat" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
+            {
+                // The release's PWC-Net, importance-metric U-Net and GridNet at CI width; the topology, the softmax
+                // splatting, the Laplacian loss and AdaMax are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 3), " +
+                    "options: new AiDotNet.Video.Options.SoftSplatOptions { FlowChannels = new[] { 2, 2, 2, 2, 2, 2 }, " +
+                    "FlowDecoderChannels = new[] { 2, 2, 2, 2, 2 }, MetricChannels = new[] { 6, 2, 2, 2 }, SynthesisChannels = new[] { 2, 2, 2 } })";
+            }
             else if (model.ClassName == "FLAVR" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
             {

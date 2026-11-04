@@ -337,6 +337,10 @@ internal static class EmaOps
 
     // laplacian_pyramid on [M, 1, H, W]: each level's detail current − upsample(downsample(gauss(current))).
     internal static List<Tensor<T>> LaplacianPyramid<T>(IEngine engine, Tensor<T> image, int levels)
+        => LaplacianPyramid(engine, image, levels, out _);
+
+    /// <summary>The detail levels, and in <paramref name="residual"/> the low-pass image left after the last.</summary>
+    internal static List<Tensor<T>> LaplacianPyramid<T>(IEngine engine, Tensor<T> image, int levels, out Tensor<T> residual)
     {
         var ops = MathHelper.GetNumericOperations<T>();
         var pick = new Tensor<T>(new[] { 1, 1, 1, 1 });
@@ -349,6 +353,7 @@ internal static class EmaOps
             pyramid.Add(engine.TensorSubtract(current, Upsample(engine, down)));
             current = down;
         }
+        residual = current;
         return pyramid;
     }
 

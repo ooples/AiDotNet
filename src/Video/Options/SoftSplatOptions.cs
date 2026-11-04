@@ -1,32 +1,22 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for SoftSplat softmax splatting for video frame interpolation.
+/// Configuration options for <see cref="AiDotNet.Video.FrameInterpolation.SoftSplat{T}"/>, softmax splatting for video
+/// frame interpolation (Niklaus and Liu, CVPR 2020).
 /// </summary>
 /// <remarks>
 /// <para>
-/// SoftSplat (Niklaus &amp; Liu, CVPR 2020) uses softmax splatting for forward warping:
-/// - Forward warping with softmax: instead of backward warping (which creates holes at
-///   disocclusions), SoftSplat uses forward warping where source pixels are "splatted" to
-///   target positions, with conflicts resolved via softmax weighting
-/// - Importance metric Z: each source pixel carries a learned importance metric Z that controls
-///   its softmax weight during splatting, allowing the model to automatically learn that
-///   foreground (closer) objects should occlude background (farther) objects
-/// - Feature-space splatting: splatting is performed not on raw pixels but on deep feature maps,
-///   allowing the synthesis network to work with rich feature representations and produce
-///   higher-quality output
-/// - Synthesis network: a GridNet-style synthesis network takes the splatted feature maps and
-///   produces the final interpolated frame, handling residual refinement and artifact removal
+/// The widths are the release's (sniklaus/softmax-splatting, run.py): the PWC-Net flow estimator, the three-level
+/// importance-metric U-Net and the three-stream GridNet synthesis. Training follows the paper, which adopts the
+/// training of context-aware synthesis (Niklaus and Liu, CVPR 2018): AdaMax at 1e-3 on the five-level Laplacian loss.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> When you push pixels from a source frame to a new position (forward
-/// warping), multiple pixels might land in the same spot. SoftSplat uses a smart voting system
-/// (softmax) where each pixel gets a learned "importance score" to decide which pixel wins
-/// when there's a conflict, naturally handling which objects appear in front of others.
+/// <b>For Beginners:</b> SoftSplat estimates motion both ways between the two frames, pushes each frame's feature
+/// pyramid forward along its motion to the in-between time (blending pixels that land on the same spot by a learned
+/// importance), and then lets a grid of convolutions paint the in-between frame from the pushed features.
 /// </para>
 /// </remarks>
 public class SoftSplatOptions : NeuralNetworkOptions
@@ -48,38 +38,48 @@ public class SoftSplatOptions : NeuralNetworkOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Variant = other.Variant;
-        NumFeatures = other.NumFeatures;
-        NumGridNetLevels = other.NumGridNetLevels;
-        NumResBlocksPerRow = other.NumResBlocksPerRow;
-        NumFeatureBlocks = other.NumFeatureBlocks;
-        UseImportanceMetric = other.UseImportanceMetric;
+        Seed = other.Seed;
+        FlowChannels = (int[])other.FlowChannels.Clone();
+        FlowDecoderChannels = (int[])other.FlowDecoderChannels.Clone();
+        MetricChannels = (int[])other.MetricChannels.Clone();
+        SynthesisChannels = (int[])other.SynthesisChannels.Clone();
+        LearningRate = other.LearningRate;
+        Beta1 = other.Beta1;
+        Beta2 = other.Beta2;
+        LaplacianLevels = other.LaplacianLevels;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
-        LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
     }
 
     #region Architecture
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
+    /// <summary>Gets or sets the flow estimator's six pyramid widths, 1/2 to 1/64 size (16, 32, 64, 96, 128, 192).</summary>
+    public int[] FlowChannels { get; set; } = { 16, 32, 64, 96, 128, 192 };
 
-    /// <summary>Gets or sets the number of feature channels.</summary>
-    public int NumFeatures { get; set; } = 64;
+    /// <summary>Gets or sets the widths of each flow decoder's five hidden convolutions (128, 128, 96, 64, 32).</summary>
+    public int[] FlowDecoderChannels { get; set; } = { 128, 128, 96, 64, 32 };
 
-    /// <summary>Gets or sets the number of GridNet synthesis levels.</summary>
-    public int NumGridNetLevels { get; set; } = 3;
+    /// <summary>Gets or sets the importance-metric U-Net's four row widths (16, 32, 64, 96); the first exceeds 4.</summary>
+    public int[] MetricChannels { get; set; } = { 16, 32, 64, 96 };
 
-    /// <summary>Gets or sets the number of residual blocks per GridNet row.</summary>
-    public int NumResBlocksPerRow { get; set; } = 3;
+    /// <summary>Gets or sets the feature pyramid's and the GridNet's three stream widths (32, 64, 96).</summary>
+    public int[] SynthesisChannels { get; set; } = { 32, 64, 96 };
 
-    /// <summary>Gets or sets the feature extraction depth (number of VGG-like blocks).</summary>
-    public int NumFeatureBlocks { get; set; } = 5;
+    #endregion
 
-    /// <summary>Gets or sets whether to use the learned importance metric Z.</summary>
-    /// <remarks>When false, falls back to average splatting (no occlusion reasoning).</remarks>
-    public bool UseImportanceMetric { get; set; } = true;
+    #region Training
+
+    /// <summary>Gets or sets AdaMax's learning rate (1e-3).</summary>
+    public double LearningRate { get; set; } = 1e-3;
+
+    /// <summary>Gets or sets AdaMax's first-moment decay (0.9).</summary>
+    public double Beta1 { get; set; } = 0.9;
+
+    /// <summary>Gets or sets AdaMax's infinity-norm decay (0.999).</summary>
+    public double Beta2 { get; set; } = 0.999;
+
+    /// <summary>Gets or sets the Laplacian loss's pyramid levels, the last being the low-pass residual (5).</summary>
+    public int LaplacianLevels { get; set; } = 5;
 
     #endregion
 
@@ -90,16 +90,6 @@ public class SoftSplatOptions : NeuralNetworkOptions
 
     /// <summary>Gets or sets the ONNX runtime options.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-
-    #endregion
-
-    #region Training
-
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 2e-4;
-
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
 
     #endregion
 }
