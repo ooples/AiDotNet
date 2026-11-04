@@ -55,14 +55,6 @@ public class TabRClassifier<T> : TabRBase<T>
     private readonly int _numClasses;
     private readonly FullyConnectedLayer<T> _classificationHead;
 
-    // Cache for backward pass
-    [Scratch]
-    private Tensor<T>? _backboneOutputCache;
-    [Scratch]
-    private Tensor<T>? _logitsCache;
-    [Scratch]
-    private Tensor<T>? _probabilitiesCache;
-
     /// <summary>
     /// Gets the number of output classes.
     /// </summary>
@@ -111,10 +103,8 @@ public class TabRClassifier<T> : TabRBase<T>
     public Tensor<T> Forward(Tensor<T> features, Vector<int>? excludeIndices = null)
     {
         var backboneOutput = ForwardBackbone(features, excludeIndices);
-        _backboneOutputCache = backboneOutput;
 
         var logits = _classificationHead.Forward(backboneOutput);
-        _logitsCache = logits;
 
         return logits;
     }
@@ -128,7 +118,6 @@ public class TabRClassifier<T> : TabRBase<T>
     {
         var logits = Forward(features);
         var probabilities = ApplySoftmax(logits);
-        _probabilitiesCache = probabilities;
         return probabilities;
     }
 
@@ -198,7 +187,6 @@ public class TabRClassifier<T> : TabRBase<T>
         // Forward with leave-one-out (exclude each sample from its own retrieval)
         var logits = Forward(features, sampleIndices);
         var probabilities = ApplySoftmax(logits);
-        _probabilitiesCache = probabilities;
 
         var loss = ComputeCrossEntropyLoss(probabilities, targets);
         UpdateParameters(learningRate);
@@ -290,9 +278,6 @@ public class TabRClassifier<T> : TabRBase<T>
     public override void ResetState()
     {
         base.ResetState();
-        _backboneOutputCache = null;
-        _logitsCache = null;
-        _probabilitiesCache = null;
         _classificationHead.ResetState();
     }
 }

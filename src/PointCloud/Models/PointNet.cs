@@ -289,9 +289,7 @@ public partial class PointNet<T> : NeuralNetworkBase<T>, IPointCloudModel<T>, IP
         // Process through all layers
         for (int i = 0; i < Layers.Count; i++)
         {
-            _layerInputs[i] = x;
             x = Layers[i].Forward(x);
-            _layerOutputs[i] = x;
 
             // Capture global features after max pooling
             if (Layers[i] is AiDotNet.PointCloud.Layers.MaxPoolingLayer<T>)
