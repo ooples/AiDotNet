@@ -2379,7 +2379,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // The exact serialized 4-core/16-GB D-F trace showed these otherwise-correct FP32 fixtures
         // spending several minutes in repeated training probes. They have already exhausted the
         // precision rung; bound only generated-test repetition while retaining their public-option topology.
-        "FLAVR", "FTTransformerNetwork", "EdgeSAM", "Emu3", "DocOwl",
+        "FTTransformerNetwork", "EdgeSAM", "Emu3", "DocOwl",
         "DenseNetNetwork", "Donut", "Emu", "ExtremeLearningMachine", "FastText",
         "MCDropoutNeuralNetwork", "GPT4Point", "InternImage", "Janus",
         // InvestLM's 12-block decoder is floated for memory, but its generic
@@ -13835,6 +13835,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "CorrelationRadius = 1, FeatureEncoderWidths = new[] { 4, 4, 4 }, FeatureDim = 4, UpdateHiddenDim = 4, " +
                     "UpdateFlowDim = 4, UpdateCorrelationDim = 4, UpdateFusionDim = 4 })";
             }
+            else if (model.ClassName == "FLAVR" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
+            {
+                // The release's unet_18 encoder and 3D U-Net decoder at CI width with one block per stage; the
+                // topology, the L1 loss and the schedule are unchanged.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 3), " +
+                    "options: new AiDotNet.Video.Options.FLAVROptions { BaseChannels = 4, LayerBlocks = new[] { 1, 1, 1, 1 } })";
+            }
             else if (model.ClassName == "IFRNet" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
             {
@@ -13897,17 +13908,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 64, inputDepth: 6, outputSize: 3), " +
                     "options: new AiDotNet.Video.Options.FILMOptions { NumScales = 2, NumFeatures = 8 }" + ")";
             }
-            else if ((model.ClassName is "DynamiCrafter" or "FLAVR")
+            else if (model.ClassName == "DynamiCrafter"
                      && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
             {
-                // Keep each paper topology while bounding its public channel/block options
+                // Keep the paper topology while bounding its public channel/block options
                 // for the repeated generated training invariants.
-                string optionsExpr = model.ClassName switch
-                {
-                    "DynamiCrafter" => "new AiDotNet.Video.Options.DynamiCrafterOptions { NumFeatures = 16, NumDiffusionSteps = 2, NumResBlocks = 1, NumHeads = 2, DropoutRate = 0.0 }",
-                    _ => "new AiDotNet.Video.Options.FLAVROptions { NumFeatures = 8, NumResBlocks = 1, NumLevels = 2, NumInputFrames = 4, DropoutRate = 0.0 }"
-                };
+                string optionsExpr = "new AiDotNet.Video.Options.DynamiCrafterOptions { NumFeatures = 16, NumDiffusionSteps = 2, NumResBlocks = 1, NumHeads = 2, DropoutRate = 0.0 }";
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +

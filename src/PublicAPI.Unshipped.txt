@@ -20824,3 +20824,40 @@ static AiDotNet.Video.Options.IFRNetOptions.Small() -> AiDotNet.Video.Options.IF
 *REMOVED*AiDotNet.Video.Options.IFRNetOptions.UseTaskOrientedFlow.set -> void
 *REMOVED*AiDotNet.Video.Options.IFRNetOptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
 *REMOVED*AiDotNet.Video.Options.IFRNetOptions.Variant.set -> void
+AiDotNet.Video.Options.FLAVROptions.BaseChannels.get -> int
+AiDotNet.Video.Options.FLAVROptions.BaseChannels.set -> void
+AiDotNet.Video.Options.FLAVROptions.Beta1.get -> double
+AiDotNet.Video.Options.FLAVROptions.Beta1.set -> void
+AiDotNet.Video.Options.FLAVROptions.Beta2.get -> double
+AiDotNet.Video.Options.FLAVROptions.Beta2.set -> void
+AiDotNet.Video.Options.FLAVROptions.LayerBlocks.get -> int[]!
+AiDotNet.Video.Options.FLAVROptions.LayerBlocks.set -> void
+AiDotNet.Video.Options.FLAVROptions.NumOutputFrames.get -> int
+AiDotNet.Video.Options.FLAVROptions.NumOutputFrames.set -> void
+AiDotNet.Video.Options.FLAVROptions.PlateauFactor.get -> double
+AiDotNet.Video.Options.FLAVROptions.PlateauFactor.set -> void
+AiDotNet.Video.Options.FLAVROptions.PlateauPatience.get -> int
+AiDotNet.Video.Options.FLAVROptions.PlateauPatience.set -> void
+override AiDotNet.Video.FrameInterpolation.FLAVR<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Video.FrameInterpolation.FLAVR<T>.Forward(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.FLAVR<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Video.FrameInterpolation.FLAVR<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.FLAVR<T>.GetOrCreateBaseOptimizer() -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.Video.FrameInterpolation.FLAVR<T>.GetOutputDomain(int[]? outputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+override AiDotNet.Video.FrameInterpolation.FLAVR<T>.RegisterComponents() -> void
+override AiDotNet.Video.FrameInterpolation.FLAVR<T>.ResolveLazyLayerShapes() -> void
+override AiDotNet.Video.FrameInterpolation.FLAVR<T>.SupportsFusedCompiledTraining.get -> bool
+static AiDotNet.Video.Options.FLAVROptions.Deep() -> AiDotNet.Video.Options.FLAVROptions!
+*REMOVED*AiDotNet.Video.Options.FLAVROptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.Video.Options.FLAVROptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.Video.Options.FLAVROptions.NumFeatures.get -> int
+*REMOVED*AiDotNet.Video.Options.FLAVROptions.NumFeatures.set -> void
+*REMOVED*AiDotNet.Video.Options.FLAVROptions.NumLevels.get -> int
+*REMOVED*AiDotNet.Video.Options.FLAVROptions.NumLevels.set -> void
+*REMOVED*AiDotNet.Video.Options.FLAVROptions.NumResBlocks.get -> int
+*REMOVED*AiDotNet.Video.Options.FLAVROptions.NumResBlocks.set -> void
+*REMOVED*AiDotNet.Video.Options.FLAVROptions.TemporalKernelSize.get -> int
+*REMOVED*AiDotNet.Video.Options.FLAVROptions.TemporalKernelSize.set -> void
+*REMOVED*AiDotNet.Video.Options.FLAVROptions.Variant.get -> AiDotNet.Enums.VideoModelVariant
+*REMOVED*AiDotNet.Video.Options.FLAVROptions.Variant.set -> void
+override AiDotNet.Video.FrameInterpolation.FLAVR<T>.GetNamedLayerActivations(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> System.Collections.Generic.Dictionary<string!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
