@@ -131,35 +131,9 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached forward pass values
     [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastLinearQuery;
-    [Scratch]
-    private Tensor<T>? _lastLinearKey;
-    [Scratch]
-    private Tensor<T>? _lastLinearValue;
-    [Scratch]
-    private Tensor<T>? _lastWindowQuery;
-    [Scratch]
-    private Tensor<T>? _lastWindowKey;
-    [Scratch]
-    private Tensor<T>? _lastWindowValue;
-    [Scratch]
     private Tensor<T>? _lastLinearFeatureQ;
     [Scratch]
     private Tensor<T>? _lastLinearFeatureK;
-    [Scratch]
-    private Tensor<T>? _lastLinearOutput;
-    [Scratch]
-    private Tensor<T>? _lastWindowOutput;
-    [Scratch]
-    private Tensor<T>? _lastMixingAlpha;
-    [Scratch]
-    private Tensor<T>? _lastMixingAlphaRaw;
-    [Scratch]
-    private Tensor<T>? _lastCombinedOutput;
     [Scratch]
     private Tensor<T>? _lastWindowScores;
     private int[]? _originalInputShape;
@@ -355,8 +329,6 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Compute projections for both attention mechanisms
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
@@ -364,25 +336,17 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
         var linQ = Engine.Reshape(Engine.TensorMatMul(inputFlat, _linearQueryWeights), new[] { batchSize, seqLen, _modelDimension });
         var linK = Engine.Reshape(Engine.TensorMatMul(inputFlat, _linearKeyWeights), new[] { batchSize, seqLen, _modelDimension });
         var linV = Engine.Reshape(Engine.TensorMatMul(inputFlat, _linearValueWeights), new[] { batchSize, seqLen, _modelDimension });
-        _lastLinearQuery = linQ;
-        _lastLinearKey = linK;
-        _lastLinearValue = linV;
 
         // Window attention Q, K, V
         var winQ = Engine.Reshape(Engine.TensorMatMul(inputFlat, _windowQueryWeights), new[] { batchSize, seqLen, _modelDimension });
         var winK = Engine.Reshape(Engine.TensorMatMul(inputFlat, _windowKeyWeights), new[] { batchSize, seqLen, _modelDimension });
         var winV = Engine.Reshape(Engine.TensorMatMul(inputFlat, _windowValueWeights), new[] { batchSize, seqLen, _modelDimension });
-        _lastWindowQuery = winQ;
-        _lastWindowKey = winK;
-        _lastWindowValue = winV;
 
         // Step 2: Compute mixing gate alpha
         var alphaRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _mixingGateWeights),
             Engine.Reshape(_mixingGateBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var alpha = Engine.Sigmoid(alphaRaw);
-        _lastMixingAlphaRaw = alphaRaw;
-        _lastMixingAlpha = alpha;
 
         // Step 3: Linear attention with a vectorized Taylor feature map.
         var qHeads = Engine.Reshape(
@@ -408,12 +372,10 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
             CausalLinearAttention.NormalizedHeads(
                 Engine, phiQ, phiK, vHeads, NumOps.FromDouble(1e-6)),
             new[] { batchSize, seqLen, _modelDimension });
-        _lastLinearOutput = linearOutput;
 
         // Step 4: Sliding window causal attention
         var windowOutput = CausalLinearAttention.ScaledDotProduct(
             Engine, winQ, winK, winV, _numHeads, causal: true, windowSize: _windowSize);
-        _lastWindowOutput = windowOutput;
 
         // Step 5: Combine linear and window attention using learned alpha
         var alphaHeads = Engine.TensorBroadcastTo(
@@ -429,7 +391,6 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
             Engine.TensorMultiply(
                 Engine.TensorSubtract(ones, alphaModel),
                 windowOutput));
-        _lastCombinedOutput = combined;
 
         // Step 6: Output projection
         var combinedFlat = Engine.Reshape(combined, new[] { batchSize * seqLen, _modelDimension });
@@ -439,7 +400,6 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -802,21 +762,8 @@ public partial class BASEDLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastLinearQuery = null;
-        _lastLinearKey = null;
-        _lastLinearValue = null;
-        _lastWindowQuery = null;
-        _lastWindowKey = null;
-        _lastWindowValue = null;
         _lastLinearFeatureQ = null;
         _lastLinearFeatureK = null;
-        _lastLinearOutput = null;
-        _lastWindowOutput = null;
-        _lastMixingAlpha = null;
-        _lastMixingAlphaRaw = null;
-        _lastCombinedOutput = null;
         _lastWindowScores = null;
         _originalInputShape = null;
         _linearQueryWeightsGradient = null;

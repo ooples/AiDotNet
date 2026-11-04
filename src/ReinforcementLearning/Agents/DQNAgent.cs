@@ -178,10 +178,14 @@ public partial class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActio
             inputSize: _dqnOptions.StateSize,
             outputSize: _dqnOptions.ActionSize,
             layers: layers
-        );
+        )
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
         return new NeuralNetwork<T>(architecture,
-            optimizer: _dqnOptions.Optimizer,
+            // A user's factory builds each network's optimizer; otherwise Adam at the configured learning rate.
+            optimizer: _dqnOptions.OptimizerFactory?.Invoke() ?? CreateNetworkOptimizer(LearningRate),
             lossFunction: _dqnOptions.LossFunction);
     }
 

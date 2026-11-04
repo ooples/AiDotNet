@@ -155,9 +155,14 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             complexity: NetworkComplexity.Medium,
             inputSize: _options.StateSize,
             outputSize: _options.ActionSize * 2,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
-        return new NeuralNetwork<T>(architecture, lossFunction: new MeanSquaredErrorLoss<T>());
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_options.PolicyLearningRate),
+            lossFunction: new MeanSquaredErrorLoss<T>());
     }
 
     private NeuralNetwork<T> CreateValueNetwork()
@@ -179,9 +184,12 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             complexity: NetworkComplexity.Medium,
             inputSize: _options.StateSize,
             outputSize: 1,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
-        return new NeuralNetwork<T>(architecture);
+        return new NeuralNetwork<T>(architecture, optimizer: CreateNetworkOptimizer(_options.ValueLearningRate));
     }
 
     private NeuralNetwork<T> CreateQNetwork()
@@ -204,9 +212,14 @@ public partial class IQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             complexity: NetworkComplexity.Medium,
             inputSize: inputSize,
             outputSize: 1,
-            layers: layers);
+            layers: layers)
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
-        return new NeuralNetwork<T>(architecture);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(_options.QLearningRate),
+            lossFunction: _options.QLossFunction);
     }
 
     private void InitializeBuffer()

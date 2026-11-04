@@ -594,7 +594,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, [1, _visibleUnits])
             : Engine.Reshape(input, [flatBatch, _visibleUnits]);
 
-        _lastVisibleInput = visible2D;
+        SaveForBackward(ref _lastVisibleInput, visible2D);
 
         // Recompute the transpose every forward — caching it across forwards is
         // unsafe in a tape-trained network because the tape-based optimizer's
@@ -612,7 +612,7 @@ public partial class RBMLayer<T> : LayerBase<T>, IShapeContract
         // negligible relative to the FusedLinear that follows it.
         Tensor<T> weightsT = Engine.TensorTranspose(_weights);
         Tensor<T> hiddenProbs = Engine.FusedLinear(visible2D, weightsT, _hiddenBiases, FusedActivationType.Sigmoid);
-        _lastHiddenOutput = hiddenProbs;
+        SaveForBackward(ref _lastHiddenOutput, hiddenProbs);
 
         if (rank == 1)
             return Engine.Reshape(hiddenProbs, [_hiddenUnits]);

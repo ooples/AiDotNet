@@ -193,16 +193,6 @@ public partial class PoolingLayer<T> : LayerBase<T>, IShapeContract
     public override bool SupportsTraining => true;
 
     /// <summary>
-    /// The input tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the input tensor from the most recent forward pass, which is needed
-    /// during the backward pass for gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// The execution engine for GPU-accelerated pooling operations.
     /// </summary>
     /// <remarks>
@@ -376,7 +366,6 @@ public partial class PoolingLayer<T> : LayerBase<T>, IShapeContract
         // chain-walkers and tests see the resolved input/output shapes.
         if (!IsShapeResolved) OnFirstForward(input);
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
         _originalInputShape = input._shape;
 
         // Support any rank >= 3: last 3 dims are [C, H, W], earlier dims are batch-like
@@ -469,7 +458,6 @@ public partial class PoolingLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward pass
-        _lastInput = null;
         _maxIndices = null;
     }
 

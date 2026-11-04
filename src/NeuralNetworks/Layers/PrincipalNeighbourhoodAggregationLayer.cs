@@ -100,17 +100,11 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
     /// </summary>
     private int[]? _originalInputShape;
     [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastTransformed;
-    [Scratch]
     private Tensor<T>? _lastAggregated;
     [Scratch]
     private Tensor<T>? _lastMlpHiddenPreRelu;
     [Scratch]
     private Tensor<T>? _lastMlpHidden;
-    [Scratch]
-    private Tensor<T>? _lastMlpOutput;
     [Scratch]
     private Tensor<T>? _lastDegrees;
 
@@ -326,30 +320,31 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
             processInput = Engine.Reshape(input, [flatBatch, numNodes, features]);
         }
 
-        _lastInput = processInput;
+        SaveForBackward(ref _lastInput, processInput);
         int processNumNodes = processInput.Shape[1];
 
         // Step 1: Pre-transform input features: transformed = input @ preTransformWeights + preTransformBias
         // Uses Engine.TensorMatMul for batched matrix multiplication
         var transformed = Engine.TensorMatMul(processInput, _preTransformWeights);
         var preBiasBroadcast = BroadcastBias(_preTransformBias, batchSize, processNumNodes);
-        _lastTransformed = Engine.TensorAdd(transformed, preBiasBroadcast);
+        var preTransformed = Engine.TensorAdd(transformed, preBiasBroadcast);
 
         // Step 2: Compute degrees for each node using adjacency matrix row sums
         // degrees[b,i] = sum_j(A[b,i,j])
-        _lastDegrees = Engine.ReduceSum(_adjacencyMatrix, [2], keepDims: false); // [batch, nodes]
+        var degrees = Engine.ReduceSum(_adjacencyMatrix, [2], keepDims: false); // [batch, nodes]
+        SaveForBackward(ref _lastDegrees, degrees);
 
         // Avoid division by zero - clamp degrees to minimum of 1
-        var oneTensor = new Tensor<T>(_lastDegrees._shape);
+        var oneTensor = new Tensor<T>(degrees._shape);
         oneTensor.Fill(NumOps.One);
-        var safeDegrees = Engine.TensorMax(_lastDegrees, oneTensor);
+        var safeDegrees = Engine.TensorMax(degrees, oneTensor);
 
         // Step 3: Apply multiple aggregators and scalers using vectorized operations
         var aggregatedParts = new List<Tensor<T>>();
 
         foreach (var aggregator in _aggregators)
         {
-            var aggregated = ComputeVectorizedAggregation(_lastTransformed, aggregator, safeDegrees, processNumNodes);
+            var aggregated = ComputeVectorizedAggregation(preTransformed, aggregator, safeDegrees, processNumNodes);
 
             foreach (var scaler in _scalers)
             {
@@ -359,37 +354,34 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
         }
 
         // Concatenate all aggregated features along the last axis
-        _lastAggregated = Engine.TensorConcatenate(aggregatedParts.ToArray(), axis: 2); // [batch, nodes, combinedFeatures]
+        var allAggregated = Engine.TensorConcatenate(aggregatedParts.ToArray(), axis: 2); // [batch, nodes, combinedFeatures]
+        SaveForBackward(ref _lastAggregated, allAggregated);
 
         // Step 4: Post-aggregation MLP - Layer 1 with ReLU
-        var hidden = Engine.TensorMatMul(_lastAggregated, _postAggregationWeights1);
+        var hidden = Engine.TensorMatMul(allAggregated, _postAggregationWeights1);
         var bias1Broadcast = BroadcastBias(_postAggregationBias1, batchSize, processNumNodes);
-        _lastMlpHiddenPreRelu = Engine.TensorAdd(hidden, bias1Broadcast);
+        var mlpHiddenPreRelu = Engine.TensorAdd(hidden, bias1Broadcast);
+        SaveForBackward(ref _lastMlpHiddenPreRelu, mlpHiddenPreRelu);
 
         // ReLU activation using Engine operations
-        var zeroTensor = new Tensor<T>(_lastMlpHiddenPreRelu._shape);
+        var zeroTensor = new Tensor<T>(mlpHiddenPreRelu._shape);
         zeroTensor.Fill(NumOps.Zero);
-        _lastMlpHidden = Engine.TensorMax(_lastMlpHiddenPreRelu, zeroTensor);
+        var mlpHidden = Engine.TensorMax(mlpHiddenPreRelu, zeroTensor);
+        SaveForBackward(ref _lastMlpHidden, mlpHidden);
 
         // Step 5: Post-aggregation MLP - Layer 2
-        var mlpOutput = Engine.TensorMatMul(_lastMlpHidden, _postAggregationWeights2);
+        var mlpOutput = Engine.TensorMatMul(mlpHidden, _postAggregationWeights2);
         var bias2Broadcast = BroadcastBias(_postAggregationBias2, batchSize, processNumNodes);
-        _lastMlpOutput = Engine.TensorAdd(mlpOutput, bias2Broadcast);
+        var mlpProjected = Engine.TensorAdd(mlpOutput, bias2Broadcast);
 
         // Step 6: Self-loop transformation and final bias
         var selfContribution = Engine.TensorMatMul(processInput, _selfWeights);
         var biasBroadcast = BroadcastBias(_bias, batchSize, processNumNodes);
 
-        var preActivation = Engine.TensorAdd(_lastMlpOutput, selfContribution);
+        var preActivation = Engine.TensorAdd(mlpProjected, selfContribution);
         preActivation = Engine.TensorAdd(preActivation, biasBroadcast);
 
         var result = ApplyActivation(preActivation);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = result;
-        }
 
         // Restore output shape to match original input rank
         if (_originalInputShape != null && _originalInputShape.Length != 3)
@@ -829,12 +821,9 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
     public override void ResetState()
     {
         _lastInput = null;
-        _lastOutput = null;
-        _lastTransformed = null;
         _lastAggregated = null;
         _lastMlpHidden = null;
         _lastMlpHiddenPreRelu = null;
-        _lastMlpOutput = null;
         _lastDegrees = null;
         _preTransformWeightsGradient = null;
         _preTransformBiasGradient = null;

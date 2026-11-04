@@ -124,7 +124,8 @@ public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             _options.SharedLayers.ToArray(),
             _options.ValueStreamLayers.ToArray(),
             _options.AdvantageStreamLayers.ToArray(),
-            NumOps
+            NumOps,
+            NextNetworkInitializationSeed()
         );
 
         _targetNetwork = new DuelingNetwork<T>(
@@ -133,7 +134,8 @@ public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             _options.SharedLayers.ToArray(),
             _options.ValueStreamLayers.ToArray(),
             _options.AdvantageStreamLayers.ToArray(),
-            NumOps
+            NumOps,
+            NextNetworkInitializationSeed()
         );
 
         CopyNetworkWeights(_qNetwork, _targetNetwork);
@@ -371,7 +373,8 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
         int[] sharedLayerSizes,
         int[] valueLayerSizes,
         int[] advantageLayerSizes,
-        INumericOperations<T> numOps)
+        INumericOperations<T> numOps,
+        int? seed = null)
     {
         _numOps = numOps;
         _stateSize = stateSize;
@@ -407,6 +410,14 @@ internal class DuelingNetwork<T> : IParameterSource<T>, IDisposable
             prevSize = size;
         }
         _advantageLayers.Add(new DenseLayer<T>(actionSize, (IActivationFunction<T>)new IdentityActivation<T>())); // Output per-action advantages
+
+        // A seeded network gives each dense layer its own seed, so its lazy weights are the same on every build.
+        if (seed is int baseSeed)
+        {
+            int index = 0;
+            foreach (var layer in _sharedLayers.Concat(_valueLayers).Concat(_advantageLayers))
+                layer.RandomSeed = unchecked(baseSeed + index++);
+        }
     }
 
     /// <summary>

@@ -147,36 +147,6 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     private Tensor<T> _outputBias;
 
     /// <summary>
-    /// The input tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the input tensor from the most recent forward pass, which is needed
-    /// during the backward pass for gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// The memory tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the memory tensor from the most recent forward pass, which is needed
-    /// during the backward pass for gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastMemory;
-
-    /// <summary>
-    /// The output tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the output tensor from the most recent forward pass, which is needed
-    /// during the backward pass for gradient calculation.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// The attention scores tensor from the most recent forward pass.
     /// </summary>
     /// <remarks>
@@ -185,25 +155,6 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     /// </remarks>
     [Scratch]
     private Tensor<T>? _lastAttentionScores;
-
-    /// <summary>
-    /// The write values tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the write values tensor computed from attention weights, which can be used
-    /// when updating memory or computing auxiliary objectives.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastWriteValues;
-
-    /// <summary>
-    /// The transformed values tensor from the most recent forward pass.
-    /// </summary>
-    /// <remarks>
-    /// This field stores the input values after value projection, which are used for output gradients.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastValues;
 
     /// <summary>
     /// The gradient of the loss with respect to the query weights.
@@ -488,9 +439,6 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
         // but only when the layer has run at least once. Force init here.
         EnsureInitializedFromInput(input);
 
-        _lastInput = ShouldCacheForBackward ? input : null; // #1668: skip in inference (arena safety)
-        _lastMemory = memory;
-
         // Dynamic input dimension adaptation
         int actualInputDim = input.Shape[^1];
         int expectedInputDim = _queryWeights.Shape[0];
@@ -523,7 +471,6 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
         var queries = Engine.TensorMatMul(input, _queryWeights);
         var keys = Engine.TensorMatMul(input, _keyWeights);
         var values = Engine.TensorMatMul(input, _valueWeights);
-        _lastValues = values;
 
         // Compute attention scores: queries × memory^T
         var memoryTransposed = Engine.TensorTranspose(memory);
@@ -536,15 +483,8 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
         // Apply softmax to get attention weights
         var softmaxActivation = new SoftmaxActivation<T>();
         var attentionWeights = softmaxActivation.Activate(attentionScores);
-        _lastAttentionScores = attentionWeights;
-
-        // Compute write values: attention-weighted combination of values
-        // attentionWeights: [batch, numSlots], values: [batch, memoryDim]
-        // We want: [numSlots, memoryDim] to update memory
-        // Use: attentionWeights^T @ values = [numSlots, batch] @ [batch, memoryDim] = [numSlots, memoryDim]
-        var attentionT = Engine.TensorTranspose(attentionWeights);
-        var writeValues = Engine.TensorMatMul(attentionT, values);
-        _lastWriteValues = writeValues; // Cache for gradient computation / memory update
+        // Read only by ComputeAuxiliaryLoss, so it is kept only while that loss can be asked for.
+        _lastAttentionScores = IsTrainingMode && UseAuxiliaryLoss ? attentionWeights : null;
 
         // For the output, we transform the values (what we're writing) through output weights
         // This maintains [batch, memoryDim] shape for downstream layers
@@ -556,15 +496,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
         var biasBroadcast = BroadcastBiases(_outputBias, batchSize);
         var output = Engine.TensorAdd(projected, biasBroadcast);
 
-        var result = ApplyActivation(output);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = result;
-        }
-
-        return result;
+        return ApplyActivation(output);
     }
 
     /// <summary>
@@ -731,12 +663,7 @@ public partial class MemoryWriteLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>,
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastMemory = null;
-        _lastOutput = null;
         _lastAttentionScores = null;
-        _lastWriteValues = null;
-        _lastValues = null;
 
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

@@ -36,6 +36,7 @@ namespace AiDotNet.Diffusion.VAE;
 /// <example>
 /// <code>
 /// var vae = new TemporalInterpolationVAE&lt;float&gt;();
+/// var clip = Tensor&lt;float&gt;.CreateRandom(new[] { 1, 3, 14, 576, 1024 });
 /// var latent = vae.Encode(clip, sampleMode: false); // [1, 4, 14, 72, 128] for a [1, 3, 14, 576, 1024] clip
 /// var decoded = vae.Decode(latent);
 /// </code>

@@ -212,51 +212,9 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     private bool _useSparseAggregation = false;
 
     /// <summary>
-    /// Cached input from forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-
-    /// <summary>
-    /// Cached output from forward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
-    /// Cached messages for backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastMessages;
-
-    /// <summary>
-    /// Cached aggregated messages.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastAggregated;
-
-    /// <summary>
-    /// Cached hidden activations from message MLP layer 1.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastMessageHidden;
-
-    /// <summary>
-    /// Cached reset gates.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastResetGate;
-
-    /// <summary>
-    /// Cached update gates.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastUpdateGate;
 
     /// <summary>
     /// Gradients for parameters.
@@ -635,8 +593,6 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
             }
         }
 
-        _lastInput = processInput;
-
         // Steps 1+2 (message MLP + masked aggregation), bulk-vectorized.
         // ----------------------------------------------------------------
         // Original implementation walked every (b, i, j) edge in scalar:
@@ -691,7 +647,6 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         var hidden = Engine.TensorMatMul(inputFlat, _messageWeights1);
         hidden = Engine.TensorAdd(hidden, bias1Broadcast);
         hidden = Engine.ReLU(hidden);
-        _lastMessageHidden = Engine.Reshape(hidden, [batchSize, numNodes, numNodes, _messageFeatures]);
 
         // Layer 2: hidden @ W2 + b2.
         var bias2Broadcast = Engine.Reshape(_messageBias2, [1, _messageFeatures]);
@@ -706,10 +661,10 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
             ? new[] { 1, numNodes, numNodes, 1 }
             : new[] { batchSize, numNodes, numNodes, 1 };
         var adjBroadcastable = Engine.Reshape(_adjacencyMatrix, adjShape);
-        _lastMessages = Engine.TensorMultiply(messages4D, adjBroadcastable);
+        var maskedMessages = Engine.TensorMultiply(messages4D, adjBroadcastable);
 
         // Step 2: aggregate by summing over the j axis (axis=2 of [B, N(i), N(j), M]).
-        _lastAggregated = Engine.ReduceSum(_lastMessages, new[] { 2 }, keepDims: false);
+        var aggregated = Engine.ReduceSum(maskedMessages, new[] { 2 }, keepDims: false);
 
         // Step 3: Update node features (GRU-style update), bulk-vectorized.
         // ----------------------------------------------------------------
@@ -728,7 +683,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         // operands and the broadcast-add on biases stays simple.
         int bn = batchSize * numNodes;
         var inputFlatBN = Engine.Reshape(processInput, [bn, _inputFeatures]);
-        var aggFlatBN = Engine.Reshape(_lastAggregated, [bn, _messageFeatures]);
+        var aggFlatBN = Engine.Reshape(aggregated, [bn, _messageFeatures]);
 
         // Reset gate: Ïƒ(input @ W_r + agg @ W_mr + b_r)
         var resetBiasBcast = Engine.Reshape(_resetBias, [1, _outputFeatures]);
@@ -736,7 +691,6 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         resetLogitsFlat = Engine.TensorAdd(resetLogitsFlat, Engine.TensorMatMul(aggFlatBN, _resetMessageWeights));
         resetLogitsFlat = Engine.TensorAdd(resetLogitsFlat, resetBiasBcast);
         var resetFlat = Engine.Sigmoid(resetLogitsFlat);
-        _lastResetGate = Engine.Reshape(resetFlat, [batchSize, numNodes, _outputFeatures]);
 
         // Update gate: Ïƒ(input @ W_u + agg @ W_mu + b_u)
         var updateBiasBcast = Engine.Reshape(_updateBias, [1, _outputFeatures]);
@@ -744,7 +698,6 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         updateLogitsFlat = Engine.TensorAdd(updateLogitsFlat, Engine.TensorMatMul(aggFlatBN, _updateMessageWeights));
         updateLogitsFlat = Engine.TensorAdd(updateLogitsFlat, updateBiasBcast);
         var updateFlat = Engine.Sigmoid(updateLogitsFlat);
-        _lastUpdateGate = Engine.Reshape(updateFlat, [batchSize, numNodes, _outputFeatures]);
 
         // Output combiner: (1 - update) * input_padded + update * agg_padded.
         // The original conditional `f < inputFeatures ? processInput : 0` zeros
@@ -761,15 +714,7 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
         var outputFlat = Engine.TensorAdd(oldContribution, newContribution);
         var output = Engine.Reshape(outputFlat, [batchSize, numNodes, _outputFeatures]);
 
-        var result = ApplyActivation(output);
-
-        // Only store for backward pass during training - skip during inference
-        if (IsTrainingMode)
-        {
-            _lastOutput = result;
-        }
-
-        return result;
+        return ApplyActivation(output);
     }
 
     /// <inheritdoc/>
@@ -893,13 +838,6 @@ public partial class MessagePassingLayer<T> : LayerBase<T>, IGraphConvolutionLay
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastMessages = null;
-        _lastAggregated = null;
-        _lastMessageHidden = null;
-        _lastResetGate = null;
-        _lastUpdateGate = null;
         _messageWeights1Gradient = null;
         _messageWeights2Gradient = null;
         _messageBias1Gradient = null;
