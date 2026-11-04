@@ -301,15 +301,23 @@ public partial class AdamWOptimizer<T, TInput, TOutput>
 
     // bfloat16 is the top 16 bits of a float, so the widened value is exact and narrowing it back is lossless.
     private static float Bf16ToFloat(byte[] bytes, int i)
-        => BitConverter.Int32BitsToSingle((bytes[2 * i] | (bytes[2 * i + 1] << 8)) << 16);
+        => new FloatIntBits { Int32 = (bytes[2 * i] | (bytes[2 * i + 1] << 8)) << 16 }.Single;
 
     private static void FloatToBf16(float value, byte[] bytes, int i)
     {
-        int bits = BitConverter.SingleToInt32Bits(value);
+        int bits = new FloatIntBits { Single = value }.Int32;
         if ((bits & 0xFFFF) != 0)
             throw new InvalidOperationException($"Corrupt AdamW bf16 moment state: {value} is not a bfloat16 value.");
         bytes[2 * i] = (byte)(bits >> 16);
         bytes[2 * i + 1] = (byte)(bits >> 24);
+    }
+
+    // Explicit layout preserves the float bit pattern on every supported framework.
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Explicit)]
+    private struct FloatIntBits
+    {
+        [System.Runtime.InteropServices.FieldOffset(0)] public float Single;
+        [System.Runtime.InteropServices.FieldOffset(0)] public int Int32;
     }
 
     private void ResetCompressedMoments()
