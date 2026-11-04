@@ -12699,8 +12699,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             // Publish after loss-scale removal and global clipping so the surface is the exact
             // derivative field handed to the optimizer, not a scaled or unclipped intermediate.
-            foreach (var pair in grads)
-                allGrads[pair.Key] = pair.Value;
+            foreach (var published in grads)
+                allGrads[published.Key] = published.Value;
             PublishParameterGradients(allGrads);
 
             var context = new TapeStepContext<T>(
