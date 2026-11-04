@@ -230,13 +230,11 @@ public partial class Squeezeformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     {
         var vocabulary = _options.Vocabulary;
         var sb = new System.Text.StringBuilder();
-        foreach (var t in tokens)
+        foreach (var piece in tokens.Where(t => t > 0 && t < vocabulary.Length)
+            .Select(t => vocabulary[t])
+            .Where(piece => !(piece.Length > 1 && piece[0] == '<' && piece[piece.Length - 1] == '>')))
         {
-            if (t <= 0 || t >= vocabulary.Length) continue;
-
-            string piece = vocabulary[t];
             if (piece == "|") { sb.Append(' '); continue; }
-            if (piece.Length > 1 && piece[0] == '<' && piece[piece.Length - 1] == '>') continue;
 
             sb.Append(piece);
         }

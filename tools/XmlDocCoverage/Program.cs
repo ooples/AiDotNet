@@ -56,7 +56,9 @@ if (!File.Exists(xmlPath))
 string probeDirectory = Path.GetDirectoryName(assembly.Location) ?? AppContext.BaseDirectory;
 AppDomain.CurrentDomain.AssemblyResolve += (_, request) =>
 {
-    string candidate = Path.Combine(probeDirectory, new AssemblyName(request.Name).Name + ".dll");
+    string? simpleName = new AssemblyName(request.Name).Name;
+    if (string.IsNullOrEmpty(simpleName) || simpleName != Path.GetFileName(simpleName)) return null;
+    string candidate = Path.Combine(probeDirectory, Path.GetFileName(simpleName + ".dll"));
     return File.Exists(candidate) ? Assembly.LoadFrom(candidate) : null;
 };
 

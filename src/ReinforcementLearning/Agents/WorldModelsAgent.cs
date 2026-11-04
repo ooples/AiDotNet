@@ -169,7 +169,7 @@ public partial class WorldModelsAgent<T> : DeepReinforcementLearningAgentBase<T>
 
     // Where the V -> M -> C cycle stands, including the Controller stage's CMA-ES search; carried through Clone and
     // serialization so a copy resumes the cycle (and the search) exactly where the original was.
-    private WorldModelsTrainingCycle _cycle;
+    private readonly WorldModelsTrainingCycle _cycle;
     private T _lastDreamReturn;
 
     // Deterministic base seeds for each sub-network's lazy weight init, so a
