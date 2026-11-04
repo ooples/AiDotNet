@@ -26,6 +26,14 @@ public class AdamWCompressedMomentsTests
     private const int BlockSize = 256;
 
     [Fact]
+    public void CompressedMomentLayout_DoesNotPreventLoadingOptimizerTypes()
+    {
+        var optimizerType = typeof(AdamWOptimizer<,,>);
+        Assert.Contains(optimizerType, optimizerType.Assembly.GetTypes());
+    }
+
+
+    [Fact]
     public void OptionsCopy_PreservesEveryMomentSetting()
     {
         var original = new AdamWOptimizerOptions<float, Matrix<float>, Vector<float>>
