@@ -13835,6 +13835,18 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "CorrelationRadius = 1, FeatureEncoderWidths = new[] { 4, 4, 4 }, FeatureDim = 4, UpdateHiddenDim = 4, " +
                     "UpdateFlowDim = 4, UpdateCorrelationDim = 4, UpdateFusionDim = 4 })";
             }
+            else if (model.ClassName == "InterpAnyClearer" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
+            {
+                // The release's DR-RIFE at CI width; the index map, the teacher, the distillation, the two reference
+                // iterations, the losses and the cosine are unchanged. No warmup: its first step runs at a rate of zero.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
+                    "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
+                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 3), " +
+                    "options: new AiDotNet.Video.Options.InterpAnyClearerOptions { BlockWidths = new[] { 4, 4, 4 }, TeacherWidth = 4, " +
+                    "ContextChannels = 2, WarmupSteps = 0 })";
+            }
             else if (model.ClassName == "M2M" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
             {

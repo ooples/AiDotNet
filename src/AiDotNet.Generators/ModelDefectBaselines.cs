@@ -117,7 +117,6 @@ internal static class ModelDefectBaselines
             "AiDotNet.Video.FrameInterpolation.DynamiCrafter<T>",
             "AiDotNet.Video.FrameInterpolation.Figan<T>",
             "AiDotNet.Video.FrameInterpolation.GIMMVFI<T>",
-            "AiDotNet.Video.FrameInterpolation.InterpAnyClearer<T>",
             "AiDotNet.Video.FrameInterpolation.IQVFI<T>",
             "AiDotNet.Video.FrameInterpolation.MoG<T>",
             "AiDotNet.Video.FrameInterpolation.MoMo<T>",
