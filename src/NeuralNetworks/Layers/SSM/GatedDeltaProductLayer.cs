@@ -134,28 +134,6 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
 
     // Cached forward pass values
     [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastQuery;
-    [Scratch]
-    private Tensor<T>? _lastKey;
-    [Scratch]
-    private Tensor<T>? _lastValue;
-    [Scratch]
-    private Tensor<T>? _lastBeta;
-    [Scratch]
-    private Tensor<T>? _lastAlpha;
-    [Scratch]
-    private Tensor<T>? _lastHouseholderVecs;
-    [Scratch]
-    private Tensor<T>? _lastRecurrenceOutput;
-    [Scratch]
-    private Tensor<T>? _lastOutputGate;
-    [Scratch]
-    private Tensor<T>? _lastOutputGateRaw;
-    [Scratch]
     private readonly List<Tensor<T>> _recurrenceInitialStates = [];
     private int[]? _originalInputShape;
 
@@ -323,16 +301,12 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
         // Step 1: Q, K, V projections
         var q = Engine.Reshape(Engine.TensorMatMul(inputFlat, _queryWeights), new[] { batchSize, seqLen, _modelDimension });
         var k = Engine.Reshape(Engine.TensorMatMul(inputFlat, _keyWeights), new[] { batchSize, seqLen, _modelDimension });
         var v = Engine.Reshape(Engine.TensorMatMul(inputFlat, _valueWeights), new[] { batchSize, seqLen, _modelDimension });
-        _lastQuery = q;
-        _lastKey = k;
-        _lastValue = v;
 
         // Step 2: Gates
         var betaProjection = Engine.TensorMatMul(inputFlat, _betaWeights);
@@ -342,7 +316,6 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
         var betaRaw = Engine.Reshape(
             Engine.TensorAdd(betaProjection, betaBias), new[] { batchSize, seqLen, _numHeads });
         var beta = Engine.Sigmoid(betaRaw);
-        _lastBeta = beta;
 
         var alphaProjection = Engine.TensorMatMul(inputFlat, _alphaWeights);
         var alphaBias = Engine.TensorBroadcastTo(
@@ -351,7 +324,6 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
         var alphaRaw = Engine.Reshape(
             Engine.TensorAdd(alphaProjection, alphaBias), new[] { batchSize, seqLen, _numHeads });
         var alpha = Engine.Sigmoid(alphaRaw);
-        _lastAlpha = alpha;
 
         var gateProjection = Engine.TensorMatMul(inputFlat, _outputGateWeights);
         var gateBias = Engine.TensorBroadcastTo(
@@ -360,16 +332,12 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
         var gateRaw = Engine.Reshape(
             Engine.TensorAdd(gateProjection, gateBias), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
-        _lastOutputGate = gate;
-        _lastOutputGateRaw = gateRaw;
 
         // Step 3: Compute Householder vectors
         var hVecs = ComputeHouseholderVectors(inputFlat, batchSize, seqLen);
-        _lastHouseholderVecs = hVecs;
 
         // Step 4: Gated DeltaProduct recurrence
         var recOutput = GatedDeltaProductRecurrence(q, k, v, alpha, beta, hVecs, batchSize, seqLen);
-        _lastRecurrenceOutput = recOutput;
 
         // Step 5: Gated output
         var gatedOutput = Engine.TensorMultiply(recOutput, gate);
@@ -384,7 +352,6 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -654,17 +621,6 @@ public partial class GatedDeltaProductLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         DisposeRecurrenceInitialStates();
-        _lastInput = null;
-        _lastOutput = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastBeta = null;
-        _lastAlpha = null;
-        _lastHouseholderVecs = null;
-        _lastRecurrenceOutput = null;
-        _lastOutputGate = null;
-        _lastOutputGateRaw = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

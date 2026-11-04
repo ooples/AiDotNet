@@ -47,6 +47,7 @@ namespace AiDotNet.VisionLanguage.Encoders;
 ///
 /// // Native DaViT + BART model; read the text on a page
 /// var trainModel = new Florence2&lt;double&gt;(architecture, new Florence2Options());
+/// var pageImage = Tensor&lt;double&gt;.CreateRandom(new[] { 1, 3, 768, 768 });
 /// var answer = trainModel.RunTask(pageImage, Florence2Task.Ocr);
 /// </code>
 /// </example>

@@ -133,28 +133,6 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     private IRadialBasisFunction<T> _rbf;
 
     /// <summary>
-    /// Stores the input tensor from the most recent forward pass for use in backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// This cached input is needed during the backward pass to compute gradients. It holds the
-    /// batch of input vectors that were processed in the most recent forward pass. The tensor
-    /// is null before the first forward pass or after a reset.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
-    /// Stores the output tensor from the most recent forward pass for use in backpropagation.
-    /// </summary>
-    /// <remarks>
-    /// This cached output is needed during the backward pass to compute certain derivatives.
-    /// It holds the batch of output vectors that were produced in the most recent forward pass.
-    /// The tensor is null before the first forward pass or after a reset.
-    /// </remarks>
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-
-    /// <summary>
     /// Stores the gradients of the loss with respect to the center parameters.
     /// </summary>
     /// <remarks>
@@ -368,17 +346,11 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
 
         PlaceCentersFromFirstBatch(processedInput);
 
-        // Store 2D input for backward pass (RBFKernelBackward requires 2D)
-        _lastInput = ShouldCacheForBackward ? processedInput : null; // #1668: skip in inference (arena safety)
-
         // Use Engine.RBFKernel for GPU/CPU acceleration
         // This computes exp(-epsilon * ||x - center||²) for Gaussian RBF
         // Convert widths to epsilons: epsilon = 1 / (2 * width²)
         var epsilons = ComputeEpsilonsFromWidths();
         var output = Engine.RBFKernel(processedInput, _centers, epsilons);
-
-        // Store 2D output for backward pass
-        _lastOutput = ShouldCacheForBackward ? output : null; // #1668: skip in inference (arena safety)
 
         // Remove batch dimension if input was unbatched
         return wasUnbatched ? Engine.Reshape(output, [output.Shape[1]]) : output;
@@ -502,8 +474,6 @@ public partial class RBFLayer<T> : LayerBase<T>, IShapeContract
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes
-        _lastInput = null;
-        _lastOutput = null;
         _centersGradient = null;
         _widthsGradient = null;
     }

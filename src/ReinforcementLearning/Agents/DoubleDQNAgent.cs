@@ -164,9 +164,14 @@ public partial class DoubleDQNAgent<T> : DeepReinforcementLearningAgentBase<T>, 
             inputSize: _options.StateSize,
             outputSize: _options.ActionSize,
             layers: layers
-        );
+        )
+        {
+            RandomSeed = NextNetworkInitializationSeed(),
+        };
 
-        return new NeuralNetwork<T>(architecture, lossFunction: _options.LossFunction);
+        return new NeuralNetwork<T>(architecture,
+            optimizer: CreateNetworkOptimizer(LearningRate),
+            lossFunction: _options.LossFunction);
     }
 
     /// <inheritdoc/>

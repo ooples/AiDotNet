@@ -12016,14 +12016,23 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // with a flattened observation whose size equals StateDim and an
                 // ActionSize equal to StateDim so the transition is accepted. The
                 // dense VAE (flattened observation -> DenseLayer stack) imposes no
-                // spatial minimum, so a 4x1x1 observation is legal. BatchSize=1 lets
-                // the single stored transition trigger a real VAE+RNN update, so
-                // Training_ShouldChangeParameters observes moved weights.
+                // spatial minimum, so a 4x1x1 observation is legal. BatchSize=8 lets
+                // the eighth stored transition trigger a real VAE update, so
+                // Training_ShouldChangeParameters observes moved weights. Train()
+                // walks the paper's V -> M -> C cycle (VAEEpochs passes of V,
+                // RNNEpochs passes of M, then one complete CMA-ES run in M's dream);
+                // the cycle is shrunk here (one epoch each, short sequences, a
+                // 2-generation CMA-ES of 4 candidates over 2 dreams of 8 steps) so
+                // the real-loop invariants reach M and C within their step budget
+                // instead of running the paper's 1800 generations x 64 x 16 x 1000.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.WorldModelsOptions<double> {{ " +
                     "ObservationWidth = 4, ObservationHeight = 1, ObservationChannels = 1, " +
-                    "ActionSize = 4, LatentSize = 4, RNNHiddenSize = 8, BatchSize = 1, " +
+                    "ActionSize = 4, LatentSize = 4, RNNHiddenSize = 8, BatchSize = 8, " +
                     "VAEEncoderChannels = new System.Collections.Generic.List<int> { 8 }, " +
-                    "ControllerLayers = new System.Collections.Generic.List<int> { 8 } })";
+                    "ControllerLayers = new System.Collections.Generic.List<int> { 8 }, " +
+                    "VAEEpochs = 1, RNNEpochs = 1, RNNSequenceLength = 16, " +
+                    "ControllerGenerations = 2, ControllerPopulationSize = 4, " +
+                    "ControllerEvaluationRollouts = 2, RolloutLength = 8 })";
             }
             else if ((model.ClassName is "PaLIX" or "PaLI" or "PaLI3" or "CoCa" or "GIT")
                      && model.TypeParameterCount == 1
@@ -16988,6 +16997,22 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // - Dreamer (Hafner et al. 2020): model-based; the policy is improved against an IMAGINED
             //   value, so it follows the learned world model's reward head rather than the reward
             //   stream directly, and the world model needs far more than a unit-test budget to fit.
+            // - Decision Transformer (Chen et al. 2021): OFFLINE return-conditioned behaviour cloning.
+            //   It does no policy improvement at all; it imitates whichever dataset action accompanies
+            //   the return-to-go it is conditioned on, so it moves toward a paid action only when the
+            //   requested return happens to coincide with that action's return-to-go. Its own return-
+            //   conditioning is tested directly in DecisionTransformerPaperTests.
+            // - World Models (Ha & Schmidhuber 2018): C is evolved only inside M's dream, so it follows
+            //   M's reward head, and the paper corrects M where C exploits it by collecting fresh rollouts
+            //   with C (section 5, "Iterative Training Procedure"; section 4.5, "Cheating the World
+            //   Model"). This probe feeds only its two fixed actions, so M never sees the actions C
+            //   searches and C settles wherever M extrapolates well. Measured on the fixture: across 800
+            //   steps (7 full V -> M -> C cycles) both arms end on bit-identical controllers; with M's
+            //   epochs raised twentyfold, five times the CMA-ES generations and actions 1.0 apart, the arms
+            //   separate by under 0.02 of the 0.25 required while M's dream returns reach 3 per rollout,
+            //   whether the paid action alternates or is drawn at random. Both links are tested directly in
+            //   WorldModelsPaperTests: Memory_LearnsTheRewardOfTheActionTaken (M learns the paid action)
+            //   and Controller_LearnsInTheDream_ToTakeTheRewardedAction (C maximises M's reward).
             if (model.ClassName == "A2CAgent"
                 || model.ClassName == "PPOAgent"
                 || model.ClassName == "TRPOAgent"
@@ -16995,7 +17020,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 || model.ClassName == "SARSALambdaAgent"
                 || model.ClassName == "CQLAgent"
                 || model.ClassName == "IQLAgent"
-                || model.ClassName == "DreamerAgent")
+                || model.ClassName == "DreamerAgent"
+                || model.ClassName == "WorldModelsAgent"
+                || model.ClassName == "DecisionTransformerAgent")
             {
                 sb.AppendLine("    protected override bool FollowsOnlineReward => false;");
             }

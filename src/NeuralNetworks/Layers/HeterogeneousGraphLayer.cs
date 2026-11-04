@@ -228,17 +228,9 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     private Dictionary<int, string>? _nodeTypeMap;
 
     /// <summary>
-    /// Cached values for backward pass.
-    /// </summary>
-    [Scratch]
-    private Tensor<T>? _lastInput;
-
-    /// <summary>
     /// Stores the original input shape for any-rank tensor support.
     /// </summary>
     private int[]? _originalInputShape;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
 
     /// <summary>
     /// Gradients for weights, self-loop weights, and biases.
@@ -487,7 +479,6 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
             processInput = Engine.Reshape(input, [flatBatch, numNodes, features]);
         }
 
-        _lastInput = processInput;
         int processNumNodes = processInput.Shape[1];
 
         var output = TensorAllocator.Rent<T>([batchSize, processNumNodes, _outputFeatures]);
@@ -589,12 +580,6 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
                 outShape[_originalInputShape.Length - 1] = _outputFeatures;
                 result = Engine.Reshape(result, outShape);
             }
-        }
-
-        // Store output AFTER shape restoration so Backward gets matching rank
-        if (IsTrainingMode)
-        {
-            _lastOutput = result;
         }
 
         return result;
@@ -1024,8 +1009,6 @@ public partial class HeterogeneousGraphLayer<T> : LayerBase<T>, IGraphConvolutio
     /// <inheritdoc/>
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
         _edgeTypeWeightsGradients = null;
         _selfLoopWeightsGradients = null;
         _biasesGradients = null;

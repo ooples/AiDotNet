@@ -88,7 +88,8 @@ public class ModelBasedAndMultiAgentTrainingTests
         {
             ObservationSize = obs,
             ActionSize = actionDim,
-            LatentSize = 16,
+            DeterministicSize = 16,
+            StochasticSize = 4,
             ImaginationHorizon = 3,
             BatchSize = batch,
         });

@@ -107,20 +107,6 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastProjectedInput;
-    [Scratch]
-    private Tensor<T>? _lastForgetGate;
-    [Scratch]
-    private Tensor<T>? _lastInputGate;
-    [Scratch]
-    private Tensor<T>? _lastHiddenStates;
-    [Scratch]
-    private Tensor<T>? _lastRecurrenceOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -265,15 +251,12 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Input projection
         var input2D = Engine.Reshape(input3D, new[] { batchSize * seqLen, modelDim });
         var projected = Engine.TensorMatMul(input2D, _inputProjectionWeights);
         var projBias = Engine.Reshape(_inputProjectionBias, new[] { 1, _modelDimension });
         projected = Engine.TensorAdd(projected, projBias);
         var projected3D = Engine.Reshape(projected, new[] { batchSize, seqLen, _modelDimension });
-        _lastProjectedInput = projected3D;
 
         // Step 2: Compute forget and input gates from projected input
         var fBias = Engine.Reshape(_forgetGateBias, new[] { 1, _modelDimension });
@@ -287,14 +270,10 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
                 Engine.TensorMatMul(projected, _inputGateWeights), iBias)),
             new[] { batchSize, seqLen, _modelDimension });
 
-        _lastForgetGate = forgetGate3D;
-        _lastInputGate = inputGate3D;
-
         // Step 3: Element-wise gated recurrence
         // h_t = f_t * h_{t-1} + i_t * x_t (where x_t is the projected input)
         var recurrenceOutput = GatedRecurrenceForward(
             projected3D, forgetGate3D, inputGate3D, batchSize, seqLen);
-        _lastRecurrenceOutput = recurrenceOutput;
 
         // Step 4: Output projection
         var outFlat = Engine.Reshape(recurrenceOutput, new[] { batchSize * seqLen, _modelDimension });
@@ -304,7 +283,6 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -354,10 +332,6 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
         var output = hiddenSteps.Count == 1
             ? hiddenSteps[0]
             : Engine.TensorConcatenate(hiddenSteps.ToArray(), axis: 1);
-        var initialState = Tensor<T>.CreateDefault([batchSize, 1, _modelDimension], NumOps.Zero);
-        _lastHiddenStates = Engine.TensorConcatenate(
-            [initialState, output],
-            axis: 1);
         return output;
     }
 
@@ -426,13 +400,6 @@ public partial class HGRNLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastProjectedInput = null;
-        _lastForgetGate = null;
-        _lastInputGate = null;
-        _lastHiddenStates = null;
-        _lastRecurrenceOutput = null;
         _originalInputShape = null;
         _inputProjectionWeightsGradient = null;
         _inputProjectionBiasGradient = null;

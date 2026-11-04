@@ -121,21 +121,6 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached forward pass values
-    private Tensor<T>? _lastInput;
-    private Tensor<T>? _lastOutput;
-    private Tensor<T>? _lastQuery;
-    private Tensor<T>? _lastKey;
-    private Tensor<T>? _lastValue;
-    private Tensor<T>? _lastPhiQ;
-    private Tensor<T>? _lastPhiK;
-    private Tensor<T>? _lastPhiQHidden;
-    private Tensor<T>? _lastPhiKHidden;
-    private Tensor<T>? _lastPhiQPreActivation;
-    private Tensor<T>? _lastPhiKPreActivation;
-    private Tensor<T>? _lastAttnOutput;
-    private Tensor<T>? _lastAttnDenominators;
-    private Tensor<T>? _lastGateRaw;
-    private Tensor<T>? _lastGate;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -333,41 +318,26 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Q, K, V projections
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var q = Engine.Reshape(Engine.TensorMatMul(inputFlat, _queryWeights), new[] { batchSize, seqLen, _modelDimension });
         var k = Engine.Reshape(Engine.TensorMatMul(inputFlat, _keyWeights), new[] { batchSize, seqLen, _modelDimension });
         var v = Engine.Reshape(Engine.TensorMatMul(inputFlat, _valueWeights), new[] { batchSize, seqLen, _modelDimension });
-        _lastQuery = q;
-        _lastKey = k;
-        _lastValue = v;
 
         // Step 2: Apply the learned per-head feature MLP with batched matrix multiplies. The
         // previous scalar extraction/fill path detached Q/K and all four feature-map parameters.
         var (phiQ, phiQPreAct, phiQHidden) = ApplyFeatureMap(q, batchSize, seqLen);
         var (phiK, phiKPreAct, phiKHidden) = ApplyFeatureMap(k, batchSize, seqLen);
 
-        _lastPhiQ = phiQ;
-        _lastPhiK = phiK;
-        _lastPhiQHidden = phiQHidden;
-        _lastPhiKHidden = phiKHidden;
-        _lastPhiQPreActivation = phiQPreAct;
-        _lastPhiKPreActivation = phiKPreAct;
-
         // Step 3: Compute output gate
         var gateRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _outputGateWeights),
             Engine.Reshape(_outputGateBias, new[] { 1, _modelDimension })), new[] { batchSize, seqLen, _modelDimension });
         var gate = Engine.Swish(gateRaw);
-        _lastGateRaw = gateRaw;
-        _lastGate = gate;
 
         // Step 4: Causal linear attention with learned features
         var attnOutput = CausalLinearAttention.Normalized(
             Engine, phiQ, phiK, v, _numHeads, NumOps.FromDouble(1e-6));
-        _lastAttnOutput = attnOutput;
 
         // Step 5: Gated output
         var gatedOutput = Engine.TensorMultiply(gate, attnOutput);
@@ -380,7 +350,6 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -515,7 +484,6 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
             }
         }
 
-        _lastAttnDenominators = denominators;
         return output;
     }
 
@@ -588,21 +556,6 @@ public partial class HedgehogLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastPhiQ = null;
-        _lastPhiK = null;
-        _lastPhiQHidden = null;
-        _lastPhiKHidden = null;
-        _lastPhiQPreActivation = null;
-        _lastPhiKPreActivation = null;
-        _lastAttnOutput = null;
-        _lastAttnDenominators = null;
-        _lastGateRaw = null;
-        _lastGate = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _keyWeightsGradient = null;

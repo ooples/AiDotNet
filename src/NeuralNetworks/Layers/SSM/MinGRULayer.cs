@@ -121,22 +121,6 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastProjectedInput;
-    [Scratch]
-    private Tensor<T>? _lastGatePreAct;
-    [Scratch]
-    private Tensor<T>? _lastGate;
-    [Scratch]
-    private Tensor<T>? _lastCandidate;
-    [Scratch]
-    private Tensor<T>? _lastHiddenStates;
-    [Scratch]
-    private Tensor<T>? _lastRecurrenceOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -285,15 +269,12 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Input projection from modelDim to expandedDim
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
         var projected = Engine.TensorMatMul(inputFlat, _inputProjectionWeights);
         var projBias = Engine.Reshape(_inputProjectionBias, new[] { 1, _expandedDimension });
         projected = Engine.TensorAdd(projected, projBias);
         var projected3D = Engine.Reshape(projected, new[] { batchSize, seqLen, _expandedDimension });
-        _lastProjectedInput = projected3D;
 
         // Step 2: Gate computation: z_t = sigma(W_z * projected_t + b_z)
         var gatePreAct = Engine.TensorMatMul(Engine.Reshape(projected, new[] { batchSize * seqLen, _expandedDimension }), _gateWeights);
@@ -301,19 +282,15 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
         gatePreAct = Engine.TensorAdd(gatePreAct, gateBias2D);
         var gatePreAct3D = Engine.Reshape(gatePreAct, new[] { batchSize, seqLen, _expandedDimension });
         var gate = Engine.Sigmoid(gatePreAct3D);
-        _lastGatePreAct = gatePreAct3D;
-        _lastGate = gate;
 
         // Step 3: Candidate computation: h_tilde_t = W_h * projected_t + b_h
         var candidate = Engine.TensorMatMul(Engine.Reshape(projected, new[] { batchSize * seqLen, _expandedDimension }), _candidateWeights);
         var candBias2D = Engine.Reshape(_candidateBias, new[] { 1, _expandedDimension });
         candidate = Engine.TensorAdd(candidate, candBias2D);
         var candidate3D = Engine.Reshape(candidate, new[] { batchSize, seqLen, _expandedDimension });
-        _lastCandidate = candidate3D;
 
         // Step 4: Sequential recurrence: h_t = (1 - z_t) * h_{t-1} + z_t * h_tilde_t
         var recurrenceOutput = MinGRURecurrenceForward(gate, candidate3D, batchSize, seqLen);
-        _lastRecurrenceOutput = recurrenceOutput;
 
         // Step 5: Output projection from expandedDim back to modelDim
         var recFlat = Engine.Reshape(recurrenceOutput, new[] { batchSize * seqLen, _expandedDimension });
@@ -323,7 +300,6 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -366,8 +342,6 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
         var output = hiddenSteps.Count == 1
             ? hiddenSteps[0]
             : Engine.TensorConcatenate(hiddenSteps.ToArray(), axis: 1);
-        var initialState = Tensor<T>.CreateDefault([batchSize, 1, _expandedDimension], NumOps.Zero);
-        _lastHiddenStates = Engine.TensorConcatenate([initialState, output], axis: 1);
         return output;
     }
 
@@ -436,14 +410,6 @@ public partial class MinGRULayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastProjectedInput = null;
-        _lastGatePreAct = null;
-        _lastGate = null;
-        _lastCandidate = null;
-        _lastHiddenStates = null;
-        _lastRecurrenceOutput = null;
         _originalInputShape = null;
         _inputProjectionWeightsGradient = null;
         _inputProjectionBiasGradient = null;

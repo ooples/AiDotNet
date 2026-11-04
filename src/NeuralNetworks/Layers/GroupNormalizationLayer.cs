@@ -56,12 +56,6 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
     private Tensor<T> _gamma;
     private Tensor<T> _beta;
     [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastMean;
-    [Scratch]
-    private Tensor<T>? _lastVariance;
-    [Scratch]
     private Tensor<T>? _gammaGradient;
     [Scratch]
     private Tensor<T>? _betaGradient;
@@ -169,11 +163,6 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
 
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
-        // Retain backward-activation caches (_lastInput / _lastMean / _lastVariance)
-        // only when an eager manual Backward will read them; skip in inference/under
-        // tape so the denoise-loop arena can recycle scratch without aliasing (#1668).
-        bool cacheBwd = ShouldCacheForBackward;
-        _lastInput = cacheBwd ? input : null;
         _originalInputShape = input._shape;
 
         var shape = input._shape;
@@ -234,11 +223,8 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
             _gamma,
             _beta,
             NumOps.ToDouble(_epsilon),
-            out var mean,
-            out var variance);
-
-        _lastMean = cacheBwd ? mean : null;
-        _lastVariance = cacheBwd ? variance : null;
+            out _,
+            out _);
 
         // Restore original tensor rank — via Engine so tape records the restore.
         if (_originalInputShape.Length > 4)
@@ -276,9 +262,6 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
 
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastMean = null;
-        _lastVariance = null;
         _gammaGradient = null;
         _betaGradient = null;
         _addedBatchDimension = false;

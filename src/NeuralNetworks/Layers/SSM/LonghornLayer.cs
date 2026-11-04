@@ -123,24 +123,6 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
     private Tensor<T> _outputProjectionBias;
 
     // Cached values for backward pass
-    [Scratch]
-    private Tensor<T>? _lastInput;
-    [Scratch]
-    private Tensor<T>? _lastOutput;
-    [Scratch]
-    private Tensor<T>? _lastQuery;
-    [Scratch]
-    private Tensor<T>? _lastKey;
-    [Scratch]
-    private Tensor<T>? _lastValue;
-    [Scratch]
-    private Tensor<T>? _lastAlpha;
-    [Scratch]
-    private Tensor<T>? _lastStates;
-    [Scratch]
-    private Tensor<T>? _lastRecurrenceOutput;
-    [Scratch]
-    private Tensor<T>? _lastNormedOutput;
     private int[]? _originalInputShape;
 
     // Gradients
@@ -305,8 +287,6 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
             ? Engine.Reshape(input, new[] { 1, seqLen, modelDim })
             : Engine.Reshape(input, new[] { batchSize, seqLen, modelDim });
 
-        _lastInput = input3D;
-
         // Step 1: Q, K, V projections
         var inputFlat = Engine.Reshape(input3D, new[] { batchSize * seqLen, _modelDimension });
 
@@ -325,24 +305,17 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
             Engine.Reshape(_valueBias, new[] { 1, _modelDimension }));
         var v = Engine.Reshape(vFlat, new[] { batchSize, seqLen, _modelDimension });
 
-        _lastQuery = q;
-        _lastKey = k;
-        _lastValue = v;
-
         // Step 2: Alpha (learning rate / update gate) via sigmoid
         var alphaRaw = Engine.Reshape(Engine.TensorAdd(
             Engine.TensorMatMul(inputFlat, _alphaWeights),
             Engine.Reshape(_alphaBias, new[] { 1, _numHeads })), new[] { batchSize, seqLen, _numHeads });
         var alpha = Engine.Sigmoid(alphaRaw);
-        _lastAlpha = alpha;
 
         // Step 3: Online learning recurrence per head
         var recurrenceOutput = OnlineLearnerForward(q, k, v, alpha, batchSize, seqLen);
-        _lastRecurrenceOutput = recurrenceOutput;
 
         // Step 4: Group normalization per head
         var normedOutput = ApplyGroupNorm(recurrenceOutput, batchSize, seqLen);
-        _lastNormedOutput = normedOutput;
 
         // Step 5: Output projection
         var normedFlat = Engine.Reshape(normedOutput, new[] { batchSize * seqLen, _modelDimension });
@@ -352,7 +325,6 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
         var output3D = Engine.Reshape(outputFlat, new[] { batchSize, seqLen, _modelDimension });
 
         var result = ApplyActivation(output3D);
-        _lastOutput = result;
 
         if (rank == 2)
             return Engine.Reshape(result, new[] { seqLen, _modelDimension });
@@ -404,11 +376,6 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
         var state = Tensor<T>.CreateDefault(
             new[] { headBatch, _headDimension, _headDimension }, NumOps.Zero);
         var outputs = new List<Tensor<T>>(seqLen);
-        var states = new List<Tensor<T>>(seqLen + 1)
-        {
-            Engine.Reshape(state,
-                new[] { batchSize, 1, _numHeads, _headDimension, _headDimension })
-        };
 
         for (int t = 0; t < seqLen; t++)
         {
@@ -430,11 +397,8 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
 
             outputs.Add(Engine.Reshape(Engine.BatchMatMul(state, qCol),
                 new[] { headBatch, 1, _headDimension }));
-            states.Add(Engine.Reshape(state,
-                new[] { batchSize, 1, _numHeads, _headDimension, _headDimension }));
         }
 
-        _lastStates = Engine.TensorConcatenate(states.ToArray(), axis: 1);
         return FromHeadMajor(Engine.TensorConcatenate(outputs.ToArray(), axis: 1), batchSize, seqLen);
     }
 
@@ -637,15 +601,6 @@ public partial class LonghornLayer<T> : LayerBase<T>, IShapeContract
     /// <inheritdoc />
     public override void ResetState()
     {
-        _lastInput = null;
-        _lastOutput = null;
-        _lastQuery = null;
-        _lastKey = null;
-        _lastValue = null;
-        _lastAlpha = null;
-        _lastStates = null;
-        _lastRecurrenceOutput = null;
-        _lastNormedOutput = null;
         _originalInputShape = null;
         _queryWeightsGradient = null;
         _queryBiasGradient = null;

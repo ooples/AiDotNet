@@ -46,6 +46,7 @@ namespace AiDotNet.VisionLanguage.Document;
 ///
 /// // Native SAM ViTDet + Qwen model; read a page
 /// var trainModel = new GOTOCR2&lt;double&gt;(architecture, new GOTOCR2Options());
+/// var pageImage = Tensor&lt;double&gt;.CreateRandom(new[] { 1, 3, 1024, 1024 });
 /// string text = trainModel.ReadText(pageImage);
 /// </code>
 /// </example>
