@@ -58,7 +58,8 @@ AppDomain.CurrentDomain.AssemblyResolve += (_, request) =>
 {
     string? simpleName = new AssemblyName(request.Name).Name;
     if (string.IsNullOrEmpty(simpleName) || simpleName != Path.GetFileName(simpleName)) return null;
-    string candidate = Path.Combine(probeDirectory, Path.GetFileName(simpleName + ".dll"));
+    // Join, unlike Combine, never discards the probe directory when the second segment looks rooted.
+    string candidate = Path.Join(probeDirectory, Path.GetFileName(simpleName + ".dll"));
     return File.Exists(candidate) ? Assembly.LoadFrom(candidate) : null;
 };
 
