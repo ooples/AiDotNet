@@ -10,7 +10,7 @@ public class E3TTSOptionsTests
     {
         var original = new E3TTSOptions
         {
-            DiffusionDim = 48, NumDiffusionSteps = 37, NumFlowSteps = 7,
+            ConditionDim = 48, TimeEmbeddingDim = 32, NumDiffusionSteps = 37, NumFlowSteps = 7,
             InterChannels = 40, FilterChannels = 160, EncoderDim = 80, DecoderDim = 96,
             SampleRate = 24000, HiddenDim = 64, NumEncoderLayers = 3, NumDecoderLayers = 4,
             NumHeads = 2, VocabSize = 1234, MaxTextLength = 127, MaxMelLength = 513,
@@ -26,7 +26,7 @@ public class E3TTSOptionsTests
 
     private static object?[] Settings(E3TTSOptions options) =>
     [
-        options.DiffusionDim, options.NumDiffusionSteps, options.NumFlowSteps,
+        options.ConditionDim, options.TimeEmbeddingDim, options.NumDiffusionSteps, options.NumFlowSteps,
         options.InterChannels, options.FilterChannels, options.EncoderDim, options.DecoderDim,
         options.SampleRate, options.HiddenDim, options.NumEncoderLayers, options.NumDecoderLayers,
         options.NumHeads, options.VocabSize, options.MaxTextLength, options.MaxMelLength,

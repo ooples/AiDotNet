@@ -4,14 +4,18 @@ on:
     paths:
       - '.github/workflows/tts-paper-contracts.yml'
       - 'src/TextToSpeech/**'
+      - 'src/Audio/**'
+      - 'src/NeuralNetworks/Layers/**'
+      - 'src/Tokenization/**'
       - 'tests/AiDotNet.Tests/TextToSpeech/**'
       - 'tests/AiDotNet.TtsPaperContracts/**'
+      - 'tools/TtsCheckpointAudit/review-filter.txt'
   workflow_dispatch:
     inputs:
       family:
         description: Native paper/reference contracts to run
         type: choice
-        options: [CosyVoice, VALLE, SPEARTTS, All]
+        options: [CosyVoice, VALLE, SPEARTTS, AdversarialReview, All]
         default: All
 permissions:
   contents: read
@@ -44,8 +48,11 @@ jobs:
       - name: Run the native paper and reference checks
         shell: pwsh
         run: |
+          $reviewFilter = (Get-Content tools/TtsCheckpointAudit/review-filter.txt -Raw).Trim()
           $filter = if ($env:TTS_FAMILY -eq 'All') {
-            'FullyQualifiedName~AiDotNet.Tests.TextToSpeech'
+            "$reviewFilter|FullyQualifiedName~AiDotNet.Tests.TextToSpeech"
+          } elseif ($env:TTS_FAMILY -eq 'AdversarialReview') {
+            $reviewFilter
           } else {
             "FullyQualifiedName~$env:TTS_FAMILY"
           }

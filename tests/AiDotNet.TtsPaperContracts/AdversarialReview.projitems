@@ -1,0 +1,117 @@
+<Project>
+  <ItemGroup>
+    <Compile Include="../AiDotNet.Tests/Helpers/TtsPaperNumerics.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/ClassicTextFrontendTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/XttsTextReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/FastSpeechPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/FastSpeech2PaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/FastSpeech2AcousticReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/AdaSpeechPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/AlignTTSPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/AlignTtsAcousticReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/E3TTSPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/E3UnetReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/NormedConvParameterOwnershipTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/TortoiseTTSPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/SparkTTSPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/SeedTTSPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/SeedDiffusionReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/ReleasedTtsModuleReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/VoiceCraftPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/UniAudioPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/XTTSv2PaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/XTTSv2Fixture.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/DiTToTTSPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/DiTToDiffusionReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/ChatterboxPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/ChatterboxFixture.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/VoiceboxPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/VoiceboxNetworkReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceDeepFilterReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceOutputPolicyTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceSincFastTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/OpenVoiceTrainingReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/OpenVoiceIpaPriorTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/EmotiVoiceFrontEndTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MeloRomanceFrontEndTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/NatSpeechFrontEndReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/DiTToCodecTrainingTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/SeanetCheckpointReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/DiffusionTextTokenContractTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/ChatterboxT3ReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/ChatterboxVoiceReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/Audio/Pitch/PitchWaveletTransformTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/AlignTtsDensityReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/ClassicFftReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/Audio/Codecs/DACPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/XttsMelReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/Tokenization/HuggingFaceWhitespaceBpeTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/QwenTokenizerReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/Audio/Codecs/EnCodecPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/UniAudioReleasedReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/ComputerVision/WeightLoaderLegacyTorchTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/UniAudioCodecTrainingTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/UniAudioCodecTrainingReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/VALLEXCommunityReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/TortoiseSamplingReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/TortoiseCandidateReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/VoiceCraftGenerationReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/ChatterboxSamplingReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/SparkSamplingReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/UniAudioGenerationReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/XttsSamplingReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/VALLEXGenerationReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/DiTToLengthReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/DiTToLengthBoundaryReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/DiTToSamplingReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/DiTToPromptConditioningTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/DiTToPublicPromptRoutingTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/OpenVoiceReferenceEncoderTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/OpenVoiceConverterTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/OpenVoicePublicPipelineTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/KokoroHarmonicSourceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/StyleTTS2PaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/StyleTTS2TrainingPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceGptReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceMultibandUnetTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceMultibandScheduleTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceBandFilterTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceBandProcessorTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceTokenizerTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceSpeakerReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceGenerationReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceDropoutReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoicePublicPipelineTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/OpenVoiceObjectiveReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/OpenVoiceTrainingIntegrationTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/TorchLstmCellReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TestInfrastructure/IsolateTrialStateAttribute.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/AlbertGradientReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/VoiceboxPhoneFrontEndTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/KokoroSignalBuffersReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceNativeFixture.cs" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/*.json" Link="TextToSpeech/ReferenceData/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/*.safetensors" Link="TextToSpeech/ReferenceData/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/Audio/Pitch/ReferenceData/*.json" Link="Audio/Pitch/ReferenceData/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/Audio/Codecs/ReferenceData/*.json" Link="Audio/Codecs/ReferenceData/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/xtts_wrapped_gpt_reference.pth" Link="TextToSpeech/ReferenceData/xtts_wrapped_gpt_reference.pth" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/Tokenization/ReferenceData/whitespace_bpe_reference.json" Link="Tokenization/ReferenceData/whitespace_bpe_reference.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/xtts_wrapped_decoder_reference.pth" Link="TextToSpeech/ReferenceData/xtts_wrapped_decoder_reference.pth" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/uniaudio_wrapped_lm_reference.pth" Link="TextToSpeech/ReferenceData/uniaudio_wrapped_lm_reference.pth" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/ComputerVision/ReferenceData/legacy_torch.*" Link="ComputerVision/ReferenceData/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/cosyvoice_legacy_weightnorm_reference.pth" Link="TextToSpeech/ReferenceData/cosyvoice_legacy_weightnorm_reference.pth" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/cosyvoice_legacy_weightnorm_reference.safetensors" Link="TextToSpeech/ReferenceData/cosyvoice_legacy_weightnorm_reference.safetensors" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/tortoise_sampling_reference.json" Link="TextToSpeech/ReferenceData/tortoise_sampling_reference.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/tortoise_candidate_reference.json" Link="TextToSpeech/ReferenceData/tortoise_candidate_reference.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/voicecraft_generation_reference.json" Link="TextToSpeech/ReferenceData/voicecraft_generation_reference.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/cosyvoice_sampling_reference.json" Link="TextToSpeech/ReferenceData/cosyvoice_sampling_reference.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/chatterbox_sampling_reference.json" Link="TextToSpeech/ReferenceData/chatterbox_sampling_reference.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/spark_sampling_reference.json" Link="TextToSpeech/ReferenceData/spark_sampling_reference.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/uniaudio_generation_reference.json" Link="TextToSpeech/ReferenceData/uniaudio_generation_reference.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/xtts_sampling_reference.json" Link="TextToSpeech/ReferenceData/xtts_sampling_reference.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/vallex_generation_reference.json" Link="TextToSpeech/ReferenceData/vallex_generation_reference.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/valle_reference.json" Link="TextToSpeech/ReferenceData/valle_reference.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/ditto_length_reference.json" Link="TextToSpeech/ReferenceData/ditto_length_reference.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../AiDotNet.Tests/TextToSpeech/ReferenceData/metavoice_*.pt" Link="TextToSpeech/ReferenceData/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
