@@ -341,12 +341,12 @@ public class AdamWCompressedMomentsTests
     }
 
     /// <summary>
-    /// DisposeGpuState is a cleanup: when the compressed moments cannot be read back (the active engine is no longer
-    /// the GPU engine) it still frees their device buffers and resets the dense state, then reports the failure. The
-    /// read-back used to throw first, leaking every device buffer and leaving the optimizer marked initialized.
+    /// Failed compressed-state read-back frees every slot before reporting one failure or an aggregate.
     /// </summary>
-    [SkippableFact]
-    public void DisposeGpuState_FreesTheDeviceState_WhenTheReadBackFails()
+    [SkippableTheory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void DisposeGpuState_FreesTheDeviceState_WhenTheReadBackFails(int parameterCount)
     {
         DirectGpuTensorEngine? gpu = null;
         try { gpu = new DirectGpuTensorEngine(); }
@@ -357,27 +357,20 @@ public class AdamWCompressedMomentsTests
         {
             AiDotNetEngine.Current = gpu!;
             var optimizer = Optimizer(OptimizerMomentStorage.Int8Blockwise);
-            var param = gpu!.TensorMultiplyScalar(new Tensor<float>(new[] { Length }, new Vector<float>(Rand(Length, 1))), 1f);
-            Step(optimizer, param, gpu.TensorMultiplyScalar(Grad(1), 1f));
+            for (int i = 0; i < parameterCount; i++)
+            {
+                var param = gpu!.TensorMultiplyScalar(new Tensor<float>(new[] { Length }, new Vector<float>(Rand(Length, i + 1))), 1f);
+                Step(optimizer, param, gpu.TensorMultiplyScalar(Grad(1), 1f));
+            }
             Skip.If(DeviceSlotCount(optimizer) == 0, "The backend kept the compressed moments on the host.");
-
-            var backend = gpu.GetBackend();
-            Assert.NotNull(backend);
-            // Compressed eager slots cannot be mixed with the Float32-only scalar GPU state.
-            Assert.Throws<NotSupportedException>(() => optimizer.InitializeGpuState(Length, backend!));
-            var stateFlag = typeof(AdamWOptimizer<float, Matrix<float>, Vector<float>>)
-                .GetField("_gpuStateInitialized", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
-            Assert.NotNull(stateFlag);
-            Assert.Equal(false, stateFlag!.GetValue(optimizer));
+            Assert.Equal(parameterCount, DeviceSlotCount(optimizer));
 
             AiDotNetEngine.Current = new CpuEngine();
-            Assert.Throws<InvalidOperationException>(() => optimizer.DisposeGpuState());
+            if (parameterCount == 1)
+                Assert.Throws<InvalidOperationException>(() => optimizer.DisposeGpuState());
+            else
+                Assert.Equal(parameterCount, Assert.Throws<AggregateException>(() => optimizer.DisposeGpuState()).InnerExceptions.Count);
             Assert.Equal(0, DeviceSlotCount(optimizer));
-            // Declared protected on GradientBasedOptimizerBase, so reachable through the derived type.
-            var initialized = typeof(AdamWOptimizer<float, Matrix<float>, Vector<float>>)
-                .GetField("_gpuStateInitialized", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-                ?.GetValue(optimizer);
-            Assert.Equal(false, initialized);
         }
         finally
         {

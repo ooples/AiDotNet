@@ -19,6 +19,8 @@ public class SparseOptimizerReviewRegressionTests : IDisposable
 
     private static IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>> Make(string kind) => kind switch
     {
+        "AdaDelta" => new AdaDeltaOptimizer<double, Tensor<double>, Tensor<double>>(null,
+            new AdaDeltaOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 0.01, EnableGradientClipping = false }),
         "AMSGrad" => new AMSGradOptimizer<double, Tensor<double>, Tensor<double>>(null,
             new AMSGradOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 0.01, EnableGradientClipping = false }),
         "AdaMax" => new AdaMaxOptimizer<double, Tensor<double>, Tensor<double>>(null,
@@ -33,6 +35,7 @@ public class SparseOptimizerReviewRegressionTests : IDisposable
     };
 
     [Theory]
+    [InlineData("AdaDelta")]
     [InlineData("AMSGrad")]
     [InlineData("AdaMax")]
     [InlineData("Nadam")]
@@ -45,9 +48,9 @@ public class SparseOptimizerReviewRegressionTests : IDisposable
         var dense = new Tensor<double>(new[] { 0.1, 0.2, 0.3 }, new[] { 3, 1 });
         var sparseOptimizer = Make(kind); var denseOptimizer = Make(kind);
         double firstAfterStepOne = 0;
-        for (int step = 0; step < 2; step++)
+        for (int step = 0; step < 3; step++)
         {
-            var ids = new Tensor<int>(new[] { step }, new[] { 1 });
+            var ids = new Tensor<int>(new[] { step % 2 }, new[] { 1 });
             bool ran = false;
             using (var tape = new GradientTape<double>())
             {
@@ -63,7 +66,7 @@ public class SparseOptimizerReviewRegressionTests : IDisposable
             }
             Assert.True(ran);
             var gradient = new Tensor<double>(new[] { 3, 1 });
-            gradient[step] = 0.5 + step * 0.25;
+            gradient[step % 2] = 0.5 + step * 0.25;
             denseOptimizer.Step(new TapeStepContext<double>(new[] { dense },
                 new Dictionary<Tensor<double>, Tensor<double>> { [dense] = gradient }, 0.0));
             for (int i = 0; i < 3; i++) Assert.Equal(dense[i], sparse[i], 10);

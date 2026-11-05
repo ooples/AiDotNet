@@ -163,7 +163,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput>
         var p = (Tensor<float>)(object)param;
         var g = (Tensor<float>)(object)grad;
 
-        if (gpu && slot.TryMoveToDevice())
+        if (gpu && p.HasPendingGpuData && g.HasPendingGpuData && slot.TryMoveToDevice())
         {
             bool done = slot.Int8
                 ? GpuOptimizer.TryAdam8BitStep(p, g, slot.DeviceM, slot.DeviceV, slot.DeviceMScales, slot.DeviceVScales,

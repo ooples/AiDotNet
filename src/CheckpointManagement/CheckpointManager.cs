@@ -40,10 +40,9 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
     private const string StateSuffix = ".state";
     private const string OptimizerSuffix = ".optim";
 
-    private static void WriteJsonFile(object value, string path)
+    private static void WriteJsonFile(object value, Stream file)
     {
-        using var file = File.Create(path);
-        using var text = new StreamWriter(file, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+        using var text = new StreamWriter(file, new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false), 1024, leaveOpen: true);
         using var json = new JsonTextWriter(text);
         JsonSerializer.Create(JsonSettings).Serialize(json, value);
     }
@@ -77,26 +76,56 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
             var checkpoint = new Checkpoint<T, TInput, TOutput>(model, optimizer, epoch, step, metrics, metadata);
             var checkpointPath = GetCheckpointFilePath(checkpoint.CheckpointId);
 
-            // The optimizer payload (every moment tensor) goes to its own binary file, written before the JSON that
-            // indexes it; the JSON is then streamed to disk instead of being built as one string.
-            if (checkpoint.OptimizerData.Length > 0)
+            // Stage all payloads, then publish the JSON last. File.Move never overwrites an
+            // existing checkpoint; rollback owns only files created by this attempt.
+            var stagedPath = checkpointPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            var ownedPaths = new List<string>();
+            try
             {
-                File.WriteAllBytes(checkpointPath + OptimizerSuffix, checkpoint.OptimizerData);
-                checkpoint.OptimizerDataInSidecar = true;
+                void Stage(string suffix, Action<Stream> write)
+                {
+                    var path = stagedPath + suffix;
+                    using var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write);
+                    ownedPaths.Add(path);
+                    write(stream);
+                }
+
+                void Publish(string suffix)
+                {
+                    var destination = checkpointPath + suffix;
+                    File.Move(stagedPath + suffix, destination);
+                    ownedPaths.Add(destination);
+                }
+
+                if (checkpoint.OptimizerData.Length > 0)
+                {
+                    Stage(OptimizerSuffix, stream => stream.Write(checkpoint.OptimizerData, 0, checkpoint.OptimizerData.Length));
+                    checkpoint.OptimizerDataInSidecar = true;
+                }
+                if (model is ICheckpointableModel checkpointable)
+                    Stage(StateSuffix, checkpointable.SaveState);
+                Stage(string.Empty, stream => WriteJsonFile(checkpoint, stream));
+
+                if (checkpoint.OptimizerDataInSidecar)
+                    Publish(OptimizerSuffix);
+                if (model is ICheckpointableModel)
+                    Publish(StateSuffix);
+                Publish(string.Empty);
             }
-            WriteJsonFile(checkpoint, checkpointPath);
+            catch
+            {
+                foreach (var path in ownedPaths)
+                {
+                    try { File.Delete(path); }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        System.Diagnostics.Trace.TraceWarning($"[CheckpointManager] Failed to roll back '{path}': {ex}");
+                    }
+                }
+                throw;
+            }
 
             checkpoint.FilePath = checkpointPath;
-
-            // Persist the model's OWN state via the ICheckpointableModel contract to a sidecar file.
-            // LoadCheckpoint's JSON deserializes the model as an un-rehydrated JObject (NN models are
-            // not JSON-round-trippable), so it can't produce a usable model. This sidecar is the
-            // typed restore path consumed by RestoreModelState.
-            if (model is ICheckpointableModel checkpointable)
-            {
-                using var stateStream = File.Create(checkpointPath + StateSuffix);
-                checkpointable.SaveState(stateStream);
-            }
 
             // Store metadata
             var checkpointMetadata = new CheckpointMetadata<T>
@@ -153,6 +182,13 @@ public class CheckpointManager<T, TInput, TOutput> : CheckpointManagerBase<T, TI
                         $"Checkpoint '{checkpointId}' keeps its optimizer state in '{optimizerPath}', which is missing.",
                         optimizerPath);
                 checkpoint.OptimizerData = File.ReadAllBytes(optimizerPath);
+                if (checkpoint.OptimizerState is null
+                    || !checkpoint.OptimizerState.TryGetValue("SerializedStateLengthBytes", out var savedLength)
+                    || savedLength is null
+                    || !long.TryParse(Convert.ToString(savedLength, System.Globalization.CultureInfo.InvariantCulture),
+                        System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var expectedLength)
+                    || expectedLength != checkpoint.OptimizerData.LongLength)
+                    throw new InvalidDataException($"Checkpoint '{checkpointId}' has an invalid optimizer sidecar length.");
             }
 
             return checkpoint;

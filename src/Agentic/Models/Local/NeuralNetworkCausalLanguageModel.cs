@@ -227,8 +227,9 @@ public sealed class NeuralNetworkCausalLanguageModel<T>
                 DisposeOnceGuard.TryDispose(optModel);
             }
         }
-        catch
+        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException)
         {
+            System.Diagnostics.Trace.TraceWarning($"[NeuralNetworkCausalLanguageModel] KV cache optimization unavailable: {ex}");
             _hasActiveKvCache = false;
         }
     }

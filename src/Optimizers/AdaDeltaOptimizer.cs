@@ -472,10 +472,9 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
 
         foreach (var param in context.Parameters)
         {
-            // True sparse scatter AdaDelta: both EMAs (accSqGrad, accSqUpd) + param at
-            // touched indices only. lr=1.0 (AdaDelta's adaptive step makes a base lr
-            // unnecessary; some implementations expose one as a global multiplier).
-            if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
+            // Once state exists, zero-gradient rows must decay both accumulators too.
+            if (!_tapeAccSqGrad.ContainsKey(param) && !_tapeAccSqUpd.ContainsKey(param)
+                && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeAccSqGrad.TryGetValue(param, out var agSp)) { agSp = new Tensor<T>(param._shape); _tapeAccSqGrad[param] = agSp; }
                 if (!_tapeAccSqUpd.TryGetValue(param, out var auSp)) { auSp = new Tensor<T>(param._shape); _tapeAccSqUpd[param] = auSp; }
@@ -494,7 +493,8 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
             if (!_tapeAccSqGrad.TryGetValue(param, out var accSqGrad)) { accSqGrad = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeAccSqGrad[param] = accSqGrad; }
             if (!_tapeAccSqUpd.TryGetValue(param, out var accSqUpd)) { accSqUpd = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeAccSqUpd[param] = accSqUpd; }
 
-            if (gpuAdam && param.Length == grad.Length
+            // The fused kernel applies an unscaled update (learning rate one).
+            if (gpuAdam && NumOps.Equals(CurrentLearningRate, NumOps.One) && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdadeltaStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)accSqGrad, (Tensor<float>)(object)accSqUpd,
                     (float)_options.Rho, (float)_options.Epsilon, 0f))
                 continue;

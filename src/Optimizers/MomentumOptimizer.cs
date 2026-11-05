@@ -423,11 +423,8 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
 
             if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeVelocity[param] = vel; }
 
-            if (gpuAdam && param.Length == grad.Length
-                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TrySgdMomentumStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)vel,
-                    (float)NumOps.ToDouble(CurrentLearningRate), (float)NumOps.ToDouble(CurrentMomentum), 0f))
-                continue;
-
+            // The fused SGD kernel stores unscaled gradients; this optimizer's velocity
+            // includes the learning rate, so retain that representation across all engines.
             // velocity = momentum * velocity + lr * grad
             var velNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(vel, CurrentMomentum), Engine.TensorMultiplyScalar(grad, CurrentLearningRate));
             Engine.TensorCopy(velNew, vel);

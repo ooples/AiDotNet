@@ -290,8 +290,10 @@ public class NOTEARSLinear<T> : ContinuousOptimizationBase<T>
                 }
                 else
                 {
-                    g[i] = w[i] != 0.0
-                        ? g[i] + Lambda1 * Math.Sign(w[i])
+                    // Exact zero selects the L1 subgradient; an epsilon would change the objective.
+                    int sign = Math.Sign(w[i]);
+                    g[i] = sign != 0
+                        ? g[i] + Lambda1 * sign
                         : Math.Sign(g[i]) * Math.Max(0.0, Math.Abs(g[i]) - Lambda1);
                 }
             }

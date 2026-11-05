@@ -255,7 +255,6 @@ internal static class CausalLmBenchmarkSuiteRunner
         long top1Correct = 0;
         long totalUtf8Bytes = 0;
         var windowLatenciesMs = new List<double>(windows.Count);
-        var numOps = MathHelper.GetNumericOperations<T>();
         long suiteStartTicks = Stopwatch.GetTimestamp();
 
         for (int w = 0; w < windows.Count; w++)
@@ -458,10 +457,9 @@ internal static class CausalLmBenchmarkSuiteRunner
         var passages = new List<string>();
         if (lmOptions.LambadaPassages is { Count: > 0 })
         {
-            foreach (var p in lmOptions.LambadaPassages)
+            foreach (var p in lmOptions.LambadaPassages.Where(p => !string.IsNullOrWhiteSpace(p) && p.Trim().IndexOf(' ') > 0))
             {
-                if (!string.IsNullOrWhiteSpace(p) && p.Trim().IndexOf(' ') > 0)
-                    passages.Add(p.Trim());
+                passages.Add(p.Trim());
             }
 
             return passages;
@@ -473,10 +471,8 @@ internal static class CausalLmBenchmarkSuiteRunner
         if (!File.Exists(lmOptions.LambadaDatasetPath))
             throw new FileNotFoundException($"LAMBADA dataset file not found: {lmOptions.LambadaDatasetPath}", lmOptions.LambadaDatasetPath);
 
-        foreach (var rawLine in File.ReadLines(lmOptions.LambadaDatasetPath))
+        foreach (var rawLine in File.ReadLines(lmOptions.LambadaDatasetPath).Where(line => !string.IsNullOrWhiteSpace(line)))
         {
-            if (string.IsNullOrWhiteSpace(rawLine))
-                continue;
 
             string trimmed = rawLine.Trim();
             if (trimmed.StartsWith("{", StringComparison.Ordinal))

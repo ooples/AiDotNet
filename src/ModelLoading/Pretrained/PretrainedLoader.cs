@@ -179,8 +179,10 @@ public static class PretrainedLoader<T>
 
                     return AutoTokenizer.FromPretrained(source.Locator, source.CacheDirectory);
                 }
-                catch
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                    or System.Net.Http.HttpRequestException or Newtonsoft.Json.JsonException or NotSupportedException)
                 {
+                    System.Diagnostics.Trace.TraceWarning($"[PretrainedLoader] Could not load optional tokenizer: {ex}");
                     return null;
                 }
             }

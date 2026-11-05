@@ -442,15 +442,14 @@ namespace AiDotNet.Tokenization.HuggingFace
             decoderAddedTokens = new List<(int Id, string Content, bool Special)>();
             if (root["added_tokens_decoder"] is JObject decoderObj)
             {
-                foreach (var prop in decoderObj.Properties())
+                foreach (var prop in decoderObj.Properties().Where(prop => int.TryParse(prop.Name, out _) && prop.Value is JObject))
                 {
-                    if (int.TryParse(prop.Name, out int id) && prop.Value is JObject entry)
-                    {
-                        var content = entry["content"]?.Value<string>();
-                        bool special = entry["special"]?.Value<bool>() ?? false;
-                        if (!string.IsNullOrEmpty(content))
-                            decoderAddedTokens.Add((id, content!, special));
-                    }
+                    int id = int.Parse(prop.Name);
+                    var entry = (JObject)prop.Value;
+                    var content = entry["content"]?.Value<string>();
+                    bool special = entry["special"]?.Value<bool>() ?? false;
+                    if (!string.IsNullOrEmpty(content))
+                        decoderAddedTokens.Add((id, content, special));
                 }
             }
 
@@ -458,9 +457,8 @@ namespace AiDotNet.Tokenization.HuggingFace
             if (root["additional_special_tokens"] is JArray addArr)
             {
                 additionalSpecial = new List<string>();
-                foreach (var item in addArr)
+                foreach (var s in addArr.Select(ReadTokenString))
                 {
-                    var s = ReadTokenString(item);
                     if (!string.IsNullOrEmpty(s))
                         additionalSpecial.Add(s!);
                 }
@@ -534,10 +532,9 @@ namespace AiDotNet.Tokenization.HuggingFace
 
             if (decoderAddedTokens != null)
             {
-                foreach (var entry in decoderAddedTokens)
+                foreach (var entry in decoderAddedTokens.Where(entry => !string.IsNullOrEmpty(entry.Content) && seen.Add(entry.Content)))
                 {
-                    if (!string.IsNullOrEmpty(entry.Content) && seen.Add(entry.Content))
-                        result.Add(entry);
+                    result.Add(entry);
                 }
             }
 
@@ -639,11 +636,7 @@ namespace AiDotNet.Tokenization.HuggingFace
 
             var decNodes = new List<JObject>();
             CollectStageNodes(root["decoder"], "decoders", decNodes);
-            foreach (var node in decNodes)
-            {
-                if (string.Equals(node["type"]?.Value<string>(), "ByteLevel", StringComparison.OrdinalIgnoreCase))
-                    byteLevel = true;
-            }
+            byteLevel |= decNodes.Any(node => string.Equals(node["type"]?.Value<string>(), "ByteLevel", StringComparison.OrdinalIgnoreCase));
 
             if (individualDigits && !string.IsNullOrEmpty(pattern))
             {
