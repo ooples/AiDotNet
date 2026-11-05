@@ -66,21 +66,24 @@ public class GpuPredictTransferAndLaunchTests
         });
     }
 
+    public enum BatchedModel { Transformer, VisionTransformer }
+
     public static IEnumerable<object[]> BatchedModels()
     {
-        yield return new object[] { "Transformer" };
-        yield return new object[] { "VisionTransformer" };
+        yield return new object[] { BatchedModel.Transformer };
+        yield return new object[] { BatchedModel.VisionTransformer };
     }
 
     [SkippableTheory(Timeout = 600000)]
     [MemberData(nameof(BatchedModels))]
-    public async Task BatchedPredict_LaunchCountDoesNotGrowWithTheBatch(string model)
+    public async Task BatchedPredict_LaunchCountDoesNotGrowWithTheBatch(BatchedModel model)
     {
         await Task.Yield();
         await OnGpu(() =>
         {
-            NeuralNetworkBase<float> network = model == "Transformer" ? BuildTransformer() : BuildVisionTransformer();
-            int[] sample = model == "Transformer" ? new[] { 32, 32 } : new[] { 3, 32, 32 };
+            bool transformer = model == BatchedModel.Transformer;
+            NeuralNetworkBase<float> network = transformer ? BuildTransformer() : BuildVisionTransformer();
+            int[] sample = transformer ? new[] { 32, 32 } : new[] { 3, 32, 32 };
             long Launches(int batch)
             {
                 var input = RandomInput(Prepend(batch, sample), 2384 + batch);
