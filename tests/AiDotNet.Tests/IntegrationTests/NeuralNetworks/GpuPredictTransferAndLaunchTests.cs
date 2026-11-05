@@ -112,13 +112,13 @@ public class GpuPredictTransferAndLaunchTests
         await Task.Yield();
         // A lane that requires the GPU fails here instead of skipping, so a broken runner cannot pass as "no GPU".
         bool requireGpu = Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1";
-        DirectGpuTensorEngine? gpu = null;
-        try { gpu = new DirectGpuTensorEngine(); }
-        catch (Exception ex) when (!requireGpu) { _output.WriteLine($"No GPU engine: {ex.GetType().Name}: {ex.Message}"); }
+        // No catch: with no GPU the constructor falls back and reports IsGpuAvailable == false (DirectGpuEngine's
+        // TryCreateBackend returns null per backend), so a throw here is a broken installation and fails the test.
+        var gpu = new DirectGpuTensorEngine();
         var previous = AiDotNetEngine.Current;
         try
         {
-            bool gpuAvailable = gpu is not null && gpu.SupportsGpu && gpu.IsGpuAvailable;
+            bool gpuAvailable = gpu.SupportsGpu && gpu.IsGpuAvailable;
             if (requireGpu) Assert.True(gpuAvailable, "AIDOTNET_REQUIRE_GPU_TESTS=1 but no GPU backend is available.");
             Skip.IfNot(gpuAvailable, "No GPU backend available.");
             AiDotNetEngine.Current = gpu;
@@ -127,7 +127,7 @@ public class GpuPredictTransferAndLaunchTests
         finally
         {
             AiDotNetEngine.Current = previous;
-            gpu?.Dispose();
+            gpu.Dispose();
         }
     }
 
