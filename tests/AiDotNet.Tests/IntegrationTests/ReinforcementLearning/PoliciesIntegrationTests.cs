@@ -387,18 +387,32 @@ public class PoliciesIntegrationTests
         Assert.True(anyDifferent, "A different Seed produced the same exploration noise, so the seed is not read.");
     }
 
-    // The default exploration noise is created for the final ActionSize, not the size 1 it had before ActionSize was set.
-    [Fact(Timeout = 120000)]
-    public async Task DeterministicPolicyOptions_DefaultExploration_MatchesTheActionSize()
+    // Null requests constructor-owned OU noise, sized to the final action width.
+    [Theory(Timeout = 120000)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task DeterministicPolicyOptions_DefaultExploration_MatchesTheActionSize(int actionSize)
     {
         await Task.Yield();
-        var network = CreateNetwork(StateSize, ContinuousActionSize);
-        var options = new DeterministicPolicyOptions<double> { ActionSize = ContinuousActionSize };
-        Assert.IsType<OrnsteinUhlenbeckNoise<double>>(options.ExplorationStrategy);
+        var network = CreateNetwork(StateSize, actionSize);
+        var options = new DeterministicPolicyOptions<double>
+        {
+            ActionSize = actionSize, Seed = OptionsSeed, UseTanhSquashing = false,
+        };
+        Assert.Null(options.ExplorationStrategy);
 
         using var policy = new DeterministicPolicy<double>(network, options);
-        var action = policy.SelectAction(CreateState(StateSize, 0.25), training: true);
-        Assert.Equal(ContinuousActionSize, action.Length);
+        var state = CreateState(StateSize, 0.25);
+        var reference = new OrnsteinUhlenbeckNoise<double>(actionSize);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(OptionsSeed);
+        for (int step = 0; step < 4; step++)
+        {
+            var expected = reference.GetExplorationAction(state, policy.SelectAction(state, training: false), actionSize, random);
+            var action = policy.SelectAction(state, training: true);
+            Assert.Equal(actionSize, action.Length);
+            Assert.Equal(expected.ToArray(), action.ToArray());
+        }
     }
 
     // Ornstein-Uhlenbeck noise carries state from one action to the next. Two policies built from one options
@@ -412,15 +426,16 @@ public class PoliciesIntegrationTests
         var options = new DeterministicPolicyOptions<double> { ActionSize = ContinuousActionSize, UseTanhSquashing = false };
         AiDotNet.Models.Options.ModelOptions inherited = options;
         inherited.Seed = OptionsSeed;
-        Assert.NotSame(options.ExplorationStrategy, options.ExplorationStrategy);
-
         var state = CreateState(StateSize, 0.25);
         using var first = new DeterministicPolicy<double>(network, options);
         using var second = new DeterministicPolicy<double>(network, options);
-        var firstAction = first.SelectAction(state, training: true);
-        for (int step = 0; step < 4; step++) first.SelectAction(state, training: true);
-        var secondAction = second.SelectAction(state, training: true);
-        for (int i = 0; i < firstAction.Length; i++) Assert.Equal(firstAction[i], secondAction[i]);
+        var firstActions = new List<double[]>();
+        for (int step = 0; step < 5; step++)
+            firstActions.Add(first.SelectAction(state, training: true).ToArray());
+
+        Assert.False(firstActions[0].SequenceEqual(firstActions[1]), "The control policy never advanced its exploration noise.");
+        foreach (var expected in firstActions)
+            Assert.Equal(expected, second.SelectAction(state, training: true).ToArray());
     }
 
     [Theory(Timeout = 120000)]
