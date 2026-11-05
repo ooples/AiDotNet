@@ -511,15 +511,17 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// var labels = Tensor&lt;float&gt;.CreateRandom(32, 4);
     ///
     /// // Enable with default settings (recommended)
-    /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
     ///     .ConfigureModel(network)
     ///     .ConfigureOptimizer(optimizer)
-    ///     .ConfigureMixedPrecision();  // Enable mixed-precision
+    ///     .ConfigureMixedPrecision()  // Enable mixed-precision
+    ///     .Build(features, labels);
     ///
-    /// // Or with custom configuration
-    /// builder.ConfigureMixedPrecision(AiDotNet.MixedPrecision.MixedPrecisionConfig.Conservative());
-    ///
-    /// var result = builder.Build(features, labels);
+    /// // Or a custom configuration, set on its own builder before its Build
+    /// var conservativeBuilder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureModel(network)
+    ///     .ConfigureOptimizer(optimizer)
+    ///     .ConfigureMixedPrecision(AiDotNet.MixedPrecision.MixedPrecisionConfig.Conservative());
     /// </code>
     /// </example>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null)
@@ -1018,30 +1020,34 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// var labels = Tensor&lt;float&gt;.CreateRandom(32, 4);
     ///
     /// // Enable with default settings (recommended for most cases)
-    /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
     ///     .ConfigureModel(network)
     ///     .ConfigureOptimizer(optimizer)
-    ///     .ConfigureGpuAcceleration();  // Enable GPU acceleration with sensible defaults
-    /// var result = builder.Build(features, labels);
+    ///     .ConfigureGpuAcceleration()  // Enable GPU acceleration with sensible defaults
+    ///     .Build(features, labels);
     ///
-    /// // Or with custom configuration for high-end GPUs
-    /// builder.ConfigureGpuAcceleration(new GpuAccelerationConfig
-    /// {
-    ///     UsageLevel = GpuUsageLevel.Aggressive,
-    ///     DeviceType = GpuDeviceType.CUDA
-    /// });
+    /// // Each alternative goes on its own builder, configured before that builder's Build:
+    /// // a custom configuration for high-end GPUs
+    /// var aggressiveBuilder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureModel(network)
+    ///     .ConfigureOptimizer(optimizer)
+    ///     .ConfigureGpuAcceleration(new GpuAccelerationConfig
+    ///     {
+    ///         UsageLevel = GpuUsageLevel.Aggressive,
+    ///         DeviceType = GpuDeviceType.CUDA
+    ///     });
     ///
-    /// // Or conservative settings for older/slower GPUs
-    /// builder.ConfigureGpuAcceleration(new GpuAccelerationConfig
-    /// {
-    ///     UsageLevel = GpuUsageLevel.Conservative
-    /// });
+    /// // conservative settings for older/slower GPUs
+    /// var conservativeBuilder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureModel(network)
+    ///     .ConfigureOptimizer(optimizer)
+    ///     .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.Conservative });
     ///
-    /// // Or force CPU-only (for debugging or deployment to CPU servers)
-    /// builder.ConfigureGpuAcceleration(new GpuAccelerationConfig
-    /// {
-    ///     UsageLevel = GpuUsageLevel.AlwaysCpu
-    /// });
+    /// // CPU only (for debugging or deployment to CPU servers)
+    /// var cpuBuilder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureModel(network)
+    ///     .ConfigureOptimizer(optimizer)
+    ///     .ConfigureGpuAcceleration(new GpuAccelerationConfig { UsageLevel = GpuUsageLevel.AlwaysCpu });
     /// </code>
     /// </example>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureGpuAcceleration(GpuAccelerationConfig? config = null)
