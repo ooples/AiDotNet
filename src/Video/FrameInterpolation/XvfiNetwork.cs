@@ -105,7 +105,7 @@ internal sealed class XvfiConv<T> : LazyWeightModule<T>
         var shape = volumetric ? new[] { outChannels, inChannels, 1, kernel, kernel } : new[] { outChannels, inChannels, kernel, kernel };
         _stride = volumetric ? new[] { 1, stride, stride } : new[] { stride, stride };
         _padding = volumetric ? new[] { 0, padding, padding } : new[] { padding, padding };
-        _weight = EmaInit.Normal<T>(shape, Math.Sqrt(2.0 / ((inChannels + outChannels) * kernel * kernel)));
+        _weight = EmaInit.Normal<T>(shape, Math.Sqrt(2.0 / ((inChannels + (double)outChannels) * kernel * kernel)));
         _bias = LazyWeight<T>.Constant(new[] { outChannels }, 0.0);
     }
 

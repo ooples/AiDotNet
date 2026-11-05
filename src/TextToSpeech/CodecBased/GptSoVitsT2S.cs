@@ -58,7 +58,7 @@ internal sealed class GptSoVitsT2S<T>
         {
             // MultiheadAttention: xavier_uniform in_proj and zero biases; the feed-forward nn.Linear defaults.
             var inProjection = IndexTtsOps.Linear(engine, layers, random, d, 3 * d);
-            double bound = Math.Sqrt(6.0 / (d + 3 * d));
+            double bound = Math.Sqrt(6.0 / (d + 3.0 * d));
             TorchParameters.Linear(engine, inProjection, d, 3 * d,
                 Enumerable.Range(0, 3 * d * d).Select(_ => bound * (2 * random.NextDouble() - 1)).ToArray(), new double[3 * d]);
             var outProjection = IndexTtsOps.Linear(engine, layers, random, d, d);

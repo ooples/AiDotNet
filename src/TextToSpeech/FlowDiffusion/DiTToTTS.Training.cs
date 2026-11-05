@@ -93,7 +93,7 @@ public partial class DiTToTTS<T>
         var error = Engine.TensorMultiply(mask, Engine.TensorSubtract(prediction, target));
         int maskedFrames = Math.Max(1, Enumerable.Range(0, example.Mask.Shape[0]).Count(i => Ops.ToDouble(example.Mask[i, 0]) > 0.5));
         return Engine.TensorMultiplyScalar(Engine.ReduceSum(Engine.TensorMultiply(error, error), new[] { 0, 1 }, keepDims: true),
-            Ops.FromDouble(1.0 / (maskedFrames * _options.LatentDim)));
+            Ops.FromDouble(1.0 / (maskedFrames * (double)_options.LatentDim)));
     }
 
     private LengthExample PrepareLength(TtsTrainingSample<T> sample, Random random)

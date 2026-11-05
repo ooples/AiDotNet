@@ -160,7 +160,7 @@ internal sealed class FishFireflyCodec<T>
     internal static double[,] MelBasis(int sampleRate, int fftSize, int mels)
     {
         int bins = fftSize / 2 + 1;
-        double top = sampleRate / 2;
+        double top = sampleRate / 2.0;
         double HzToMel(double hz) => hz >= 1000 ? 15.0 + Math.Log(hz / 1000.0) / (Math.Log(6.4) / 27.0) : hz / (200.0 / 3);
         double MelToHz(double mel) => mel >= 15.0 ? 1000.0 * Math.Exp(Math.Log(6.4) / 27.0 * (mel - 15.0)) : mel * 200.0 / 3;
         var freqs = Enumerable.Range(0, bins).Select(k => top * k / (bins - 1)).ToArray();

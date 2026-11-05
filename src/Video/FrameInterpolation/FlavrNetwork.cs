@@ -31,7 +31,7 @@ internal sealed class FlavrConv3d<T> : LazyWeightModule<T>
         int receptive = kernel[0] * kernel[1] * kernel[2];
         if (init == FlavrInit.FanOutNormal)
         {
-            _weight = EmaInit.Normal<T>(shape, Math.Sqrt(2.0 / (outChannels * receptive)));
+            _weight = EmaInit.Normal<T>(shape, Math.Sqrt(2.0 / (outChannels * (double)receptive)));
             if (bias) _bias = LazyWeight<T>.Constant(new[] { outChannels }, 0.0);
         }
         else

@@ -29,7 +29,7 @@ internal sealed record WhisperSpeechT2SConfiguration
 
     public int Width => Heads * HeadWidth;
     public int BaseWidth => 3 * HeadWidth;
-    public int EncoderDepth => (int)(Depth * 2 * EncoderDepthRatio);
+    public int EncoderDepth => (int)(Depth * 2.0 * EncoderDepthRatio);
     public int DecoderDepth => Depth * 2 - EncoderDepth;
     public double QkScale => QueryMult * 8 / Math.Sqrt(HeadWidth);
 
@@ -137,7 +137,7 @@ internal sealed class WhisperSpeechT2S<T>
                 Linear(attention.Output, w, w, c.InitStd / w);
             }
             Linear(block.Mlp1, w, w * c.FfnMult, c.InitStd / w);
-            Linear(block.Mlp2, w * c.FfnMult, w, c.InitStd / (w * c.FfnMult));
+            Linear(block.Mlp2, w * c.FfnMult, w, c.InitStd / (w * (double)c.FfnMult));
         }
         if (SemanticEmbeddings.EmbedToHidden is not null)
             Linear(SemanticEmbeddings.EmbedToHidden, c.SemanticWidth, w, c.InitStd);

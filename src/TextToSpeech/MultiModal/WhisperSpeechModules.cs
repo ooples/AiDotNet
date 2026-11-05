@@ -89,7 +89,7 @@ internal sealed class WhisperSpeechAttention<T>
         for (int t = 0; t < length; t++)
             for (int i = 0; i < half; i++)
             {
-                double angle = positions[t] * subsampling * (1.0 / Math.Pow(10000, 2.0 * i / dk));
+                double angle = positions[t] * (double)subsampling * (1.0 / Math.Pow(10000, 2.0 * i / dk));
                 cos[0, t, i] = cos[0, t, i + half] = NumOps.FromDouble(Math.Cos(angle));
                 sin[0, t, i] = sin[0, t, i + half] = NumOps.FromDouble(Math.Sin(angle));
             }

@@ -49,13 +49,13 @@ internal sealed class IartImplicitWarp<T> : IPsrtFrameAligner<T>
 
         int features = dim / 2;
         _frequency = new double[features];
-        for (int i = 0; i < features; i++) _frequency[i] = 1.0 / Math.Pow(temperature, 2.0 * (i / 2) / features);
+        for (int i = 0; i < features; i++) _frequency[i] = 1.0 / Math.Pow(temperature, 2.0 * Math.Floor(i / 2.0) / features);
 
         // get_sine_position_encoding over the 2x2 window, normalized so the last row/column sits at 2*pi.
         _windowCode = new double[Neighbours * dim];
         for (int k = 0; k < Neighbours; k++)
         {
-            double y = k / Window / (Window - 1 + 1e-6) * 2 * Math.PI, x = k % Window / (Window - 1 + 1e-6) * 2 * Math.PI;
+            double y = Math.Floor(k / (double)Window) / (Window - 1 + 1e-6) * 2 * Math.PI, x = k % Window / (Window - 1 + 1e-6) * 2 * Math.PI;
             for (int i = 0; i < features; i++)
             {
                 _windowCode[k * dim + i] = Code(y, i);

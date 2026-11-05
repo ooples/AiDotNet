@@ -20,7 +20,8 @@ static IEnumerable<(MethodDeclarationSyntax Method, ParameterSyntax Parameter, i
             if (parameter.Type?.DescendantNodesAndSelf().OfType<GenericNameSyntax>()
                 .Any(t => t.Identifier.ValueText == "NeuralNetworkArchitecture") != true)
                 continue;
-            SyntaxNode? body = method.Body ?? (SyntaxNode?)method.ExpressionBody;
+            SyntaxNode? body = method.Body;
+            if (body is null) body = method.ExpressionBody;
             if (body is null) continue;
             int references = body.DescendantNodes().OfType<IdentifierNameSyntax>()
                 .Count(identifier => identifier.Identifier.ValueText == parameter.Identifier.ValueText);

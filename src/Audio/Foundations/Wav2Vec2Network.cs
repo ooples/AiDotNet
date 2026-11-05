@@ -416,7 +416,7 @@ internal sealed class Wav2Vec2Network<T>
         }
         // Data2VecAudioPositionalConvLayer: Kaiming-normal weight (fan-in (C/G)·K), zero bias.
         foreach (var conv in PositionalConvStack)
-            LoadGroupedConv(conv, Gaussian(c.HiddenSize * perGroup * c.PositionalConvKernel, Math.Sqrt(2.0 / (perGroup * c.PositionalConvKernel))),
+            LoadGroupedConv(conv, Gaussian(c.HiddenSize * perGroup * (double)c.PositionalConvKernel, Math.Sqrt(2.0 / (perGroup * c.PositionalConvKernel))),
                 new double[c.HiddenSize]);
         foreach (var l in EncoderLayers)
         {

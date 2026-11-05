@@ -586,9 +586,9 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
     private double EdenLearningRate(int step)
     {
         double t = step, epoch = step / (double)Math.Max(1, _options.PseudoEpochSteps);
-        double stepFactor = Math.Pow((t * t + _options.EdenStep * _options.EdenStep) /
+        double stepFactor = Math.Pow((t * t + (double)_options.EdenStep * _options.EdenStep) /
             (_options.EdenStep * (double)_options.EdenStep), -0.25);
-        double epochFactor = Math.Pow((epoch * epoch + _options.EdenEpoch * _options.EdenEpoch) /
+        double epochFactor = Math.Pow((epoch * epoch + (double)_options.EdenEpoch * _options.EdenEpoch) /
             (_options.EdenEpoch * (double)_options.EdenEpoch), -0.25);
         double warmup = _options.EdenWarmupSteps <= 0 ? 1 : 0.5 + 0.5 * Math.Min(1, t / _options.EdenWarmupSteps);
         return _options.LearningRate * stepFactor * epochFactor * warmup;

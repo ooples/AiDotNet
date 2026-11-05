@@ -366,7 +366,7 @@ internal sealed class SparkSpeakerTokenizer<T>
             var rounded = new Tensor<T>(bounded.Shape.ToArray());
             for (int i = 0; i < rounded.Length; i++) rounded[i] = NumOps.FromDouble(Math.Round(NumOps.ToDouble(bounded[i]), MidpointRounding.ToEven));
             var detached = new Tensor<T>(bounded.Shape.ToArray(), new Vector<T>(bounded.ToArray()));
-            columns.Add(_engine.TensorMultiplyScalar(_engine.TensorAdd(bounded, _engine.TensorSubtract(rounded, detached)), NumOps.FromDouble(1.0 / (level / 2))));
+            columns.Add(_engine.TensorMultiplyScalar(_engine.TensorAdd(bounded, _engine.TensorSubtract(rounded, detached)), NumOps.FromDouble(1.0 / Math.Floor(level / 2.0))));
         }
         var reconstructed = _projectOut.Forward(_engine.TensorConcatenate(columns.ToArray(), 1));
         Tensor<T> VectorOf(Tensor<T> rows) => _engine.Reshape(_dVector.Forward(_engine.Reshape(
@@ -392,7 +392,7 @@ internal sealed class SparkSpeakerTokenizer<T>
                 int level = _options.FsqLevels[d];
                 int digit = index % level;
                 index /= level;
-                coordinates[t, d] = NumOps.FromDouble((digit - level / 2) / (double)(level / 2));
+                coordinates[t, d] = NumOps.FromDouble((digit - Math.Floor(level / 2.0)) / Math.Floor(level / 2.0));
             }
         }
         var latents = _projectOut.Forward(coordinates);

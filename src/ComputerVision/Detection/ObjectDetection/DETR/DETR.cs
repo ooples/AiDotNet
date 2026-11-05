@@ -347,7 +347,7 @@ public partial class DETR<T> : ObjectDetectorBase<T>, IDetectionTrainingModel<T>
             {
                 for (int i = 0; i < hiddenDim; i++)
                 {
-                    double angle = pos / Math.Pow(10000.0, (2.0 * (i / 2)) / hiddenDim);
+                    double angle = pos / Math.Pow(10000.0, (2.0 * Math.Floor(i / 2.0)) / hiddenDim);
                     double value = (i % 2 == 0) ? Math.Sin(angle) : Math.Cos(angle);
                     encoding[b, pos, i] = NumOps.FromDouble(value);
                 }

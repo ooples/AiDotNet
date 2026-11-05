@@ -37,7 +37,7 @@ internal static class VfiformerOps
             {
                 int row = y < h - window ? 0 : y < h - shift ? 1 : 2;
                 int col = x < w - window ? 0 : x < w - shift ? 1 : 2;
-                ids[y * w + x] = row * 3 + col;
+                ids[y * w + x] = row * 3.0 + col;
             }
         return ids;
     }

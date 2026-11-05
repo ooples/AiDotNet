@@ -254,7 +254,7 @@ internal sealed class SilentCipherNetwork<T>
         double level = Math.Pow(10, sdr / 20), carrierSquares = 0;
         for (int k = 0; k < bins; k++)
             for (int f = 0; f < frames; f++) carrierSquares += magnitude[k, f] * magnitude[k, f];
-        double utterance = Math.Sqrt(carrierSquares / (bins * frames));
+        double utterance = Math.Sqrt(carrierSquares / (bins * (double)frames));
         var reconstructed = new Tensor<T>(new[] { 1, bins, frames });
         var phaseTensor = new Tensor<T>(new[] { 1, bins, frames });
         for (int f = 0; f < frames; f++)
@@ -381,7 +381,7 @@ internal sealed class SilentCipherNetwork<T>
             mode[j] = best;
             agree += counts[best];
         }
-        double confidence = agree / (double)(count * c.MessageLength);
+        double confidence = agree / (count * (double)c.MessageLength);
         int end = Array.IndexOf(mode, 0);
         if (end < 0) return (false, Array.Empty<int>(), 0);
         var ordered = mode.Skip(end + 1).Concat(mode.Take(end)).Select(v => v - 1).ToArray();

@@ -328,7 +328,7 @@ internal sealed class FireRedTtsFlow<T>
         var mask = new Tensor<T>(new[] { frames });
         mask.Fill(NumOps.One);
         var error = _engine.TensorSubtract(Estimator.Estimate(xt, mu, t, mask), target);
-        return _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(error, error), null), NumOps.FromDouble(1.0 / (frames * channels)));
+        return _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(error, error), null), NumOps.FromDouble(1.0 / (frames * (double)channels)));
     }
 
     /// <summary>Loads the release's <c>flow.*</c> names (the codebooks belong to the speech tokenizer).</summary>

@@ -304,7 +304,7 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
             }
         }
 
-        var scale = NumOps.FromDouble(1.0 / (counted * (_options.IsContinuous ? a : 1)));
+        var scale = NumOps.FromDouble(1.0 / ((double)counted * (_options.IsContinuous ? a : 1)));
         _transformerNetwork.SetTrainingMode(true);
         T loss = _transformerNetwork.TrainWithCustomLoss(input, output =>
         {

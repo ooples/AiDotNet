@@ -34,7 +34,7 @@ internal sealed record WhisperSpeechS2AConfiguration
     public int Languages { get; init; } = 99;
     public int Width => Heads * HeadWidth;
     public int BaseWidth => 3 * HeadWidth;
-    public int EncoderDepth => (int)(Depth * 2 * EncoderDepthRatio);
+    public int EncoderDepth => (int)(Depth * 2.0 * EncoderDepthRatio);
     public int DecoderDepth => Depth * 2 - EncoderDepth;
     public double QkScale => QueryMult * 8 / Math.Sqrt(HeadWidth);
 }

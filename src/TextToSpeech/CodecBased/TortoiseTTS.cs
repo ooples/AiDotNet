@@ -186,8 +186,8 @@ public partial class TortoiseTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (samples is null || samples.Count == 0) throw new ArgumentException("A nonempty CLVP batch is required.", nameof(samples));
         if (_optimizer is null) throw new NotSupportedException("Native optimizer is unavailable.");
         var texts = samples.Select(s => (IReadOnlyList<int>)TextIds(s.Tokens)).ToArray();
-        var speech = samples.Select(s => (IReadOnlyList<int>)TortoiseOps<T>.IdsOf(s.CodecTokens
-            ?? EncodeToTokens(s.Audio ?? throw new ArgumentException("Every CLVP example requires CodecTokens or Audio.")))).ToArray();
+        var speech = samples.Select(s => (IReadOnlyList<int>)TortoiseOps<T>.IdsOf(s.CodecTokens is { } storedCodecTokens ? storedCodecTokens
+            : EncodeToTokens(s.Audio ?? throw new ArgumentException("Every CLVP example requires CodecTokens or Audio.")))).ToArray();
         return TrainWithCustomObjective(samples[0].Tokens, samples[0].Tokens,
             (_, _) => _clvp!.ContrastiveBatchLoss(texts, speech, new Random(_options.SamplingSeed + 17)), _optimizer);
     }

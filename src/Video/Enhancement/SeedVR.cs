@@ -207,7 +207,7 @@ public partial class SeedVR<T> : VideoSuperResolutionBase<T>, ITrainingObjective
     /// <param name="latentWidth">The latent width.</param>
     internal static double ShiftTimestep(double timestep, int latentFrames, int latentHeight, int latentWidth)
     {
-        double frames = (latentFrames - 1) * 4 + 1, pixels = latentHeight * 8.0 * latentWidth * 8.0;
+        double frames = (latentFrames - 1.0) * 4 + 1, pixels = latentHeight * 8.0 * latentWidth * 8.0;
         static double Line(double x, double x1, double y1, double x2, double y2) => y1 + (y2 - y1) / (x2 - x1) * (x - x1);
         double shift = frames > 1
             ? Line(pixels * frames, 256.0 * 256 * 37, 1.0, 1280.0 * 720 * 145, 5.0)

@@ -105,7 +105,7 @@ internal sealed class NaturalSpeechCore<T>
             for (int p = 0; p < c.MaxPositions; p++)
                 for (int i = 0; i < h; i++)
                 {
-                    double angle = p / Math.Pow(10000, 2.0 * (i / 2) / h);
+                    double angle = p / Math.Pow(10000, 2.0 * Math.Floor(i / 2.0) / h);
                     _positions[p * h + i] = i % 2 == 0 ? Math.Sin(angle) : Math.Cos(angle);
                 }
         }

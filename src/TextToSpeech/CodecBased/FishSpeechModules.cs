@@ -82,7 +82,7 @@ internal sealed class FishDualAr<T>
         var sin = new double[positions, half];
         for (int i = 0; i < half; i++)
         {
-            float exponent = (float)(2 * i) / headDim;
+            float exponent = (2.0f * i) / headDim;
             float frequency = (float)(1.0 / (float)Math.Pow(ropeBase, exponent));
             for (int p = 0; p < positions; p++)
             {

@@ -21,7 +21,7 @@ internal sealed class AmtConv2d<T> : LazyWeightModule<T>
         if (kaimingFanOut)
         {
             var ops = MathHelper.GetNumericOperations<T>();
-            double std = Math.Sqrt(2.0 / (outChannels * kernel * kernel));
+            double std = Math.Sqrt(2.0 / (outChannels * (double)kernel * kernel));
             _weight = new LazyWeight<T>(shape, (tensor, random) =>
             {
                 for (int i = 0; i < tensor.Length; i++)

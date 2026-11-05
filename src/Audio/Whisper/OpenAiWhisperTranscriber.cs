@@ -743,17 +743,17 @@ internal sealed class OpenAiWhisperTranscriber<T>
             language = ArgmaxLanguage(DetectLanguage(_model.Encode(Window(mel, 0, ChunkFrames))));
         }
         int inputStride = ChunkFrames / d.AudioContext;
-        double timePrecision = inputStride * HopLength / (double)SampleRate;
+        double timePrecision = inputStride * (double)HopLength / SampleRate;
         var allTokens = new List<int>();
         var allSegments = new List<WhisperTranscriptSegment>();
         int promptResetSince = 0, seek = 0;
         double lastSpeech = 0.0;
         while (seek < contentFrames)
         {
-            double timeOffset = seek * HopLength / (double)SampleRate;
+            double timeOffset = seek * (double)HopLength / SampleRate;
             int segmentSize = Math.Min(ChunkFrames, contentFrames - seek);
             var window = Window(mel, seek, segmentSize);
-            double segmentDuration = segmentSize * HopLength / (double)SampleRate;
+            double segmentDuration = segmentSize * (double)HopLength / SampleRate;
             var prompt = allTokens.Skip(promptResetSince).ToList();
             WhisperDecodingResult result = null!;
             foreach (double t in temperatures)

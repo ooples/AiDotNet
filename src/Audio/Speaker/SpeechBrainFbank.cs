@@ -22,7 +22,7 @@ internal static class SpeechBrainFbank
             double central = hz[m + 1], band = hz[m + 1] - hz[m];
             for (int b = 0; b < bins; b++)
             {
-                double frequency = (double)(sampleRate / 2) * b / (bins - 1);
+                double frequency = (sampleRate / 2.0) * b / (bins - 1);
                 double slope = (frequency - central) / band;
                 filters[b, m] = Math.Max(0, Math.Min(slope + 1, -slope + 1));
             }

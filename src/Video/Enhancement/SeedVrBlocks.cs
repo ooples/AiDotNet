@@ -44,7 +44,7 @@ internal sealed class SeedVrWindows
     internal static SeedVrWindows Build(int t, int h, int w, (int T, int H, int W) counts, bool shifted)
     {
         // The 720p latent grid is 45 x 80 tokens; Python's round() rounds halves to even, as Math.Round does.
-        double scale = Math.Sqrt(45.0 * 80.0 / (h * w));
+        double scale = Math.Sqrt(45.0 * 80.0 / (h * (double)w));
         int resizedH = (int)Math.Round(h * scale), resizedW = (int)Math.Round(w * scale);
         int wh = (resizedH + counts.H - 1) / counts.H, ww = (resizedW + counts.W - 1) / counts.W;
         int wt = (Math.Min(t, 30) + counts.T - 1) / counts.T;

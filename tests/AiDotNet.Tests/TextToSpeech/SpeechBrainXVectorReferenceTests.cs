@@ -17,6 +17,14 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class SpeechBrainXVectorReferenceTests
 {
+    [Fact]
+    public void Fbank_OddSampleRate_UsesFractionalNyquist()
+    {
+        // HTK triangle at bin 198, mel 23, evaluated with 60-digit decimal arithmetic.
+        var filters = SpeechBrainFbank.Filters(24, 16001);
+        Assert.InRange(Math.Abs(filters[198, 23] - 0.000010472486255596686), 0, 1e-12);
+    }
+
     private static JObject Fixture()
     {
         const string fileName = "speechbrain_xvector_reference.json";

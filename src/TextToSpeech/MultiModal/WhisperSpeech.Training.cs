@@ -61,7 +61,7 @@ public partial class WhisperSpeech<T>
                 }
                 foreach (var norm in new[] { b.AttentionNorm, b.CrossNorm, b.MlpNorm }.Where(n => n is not null)) groups.Add((norm!, 1, false));
                 groups.Add((b.Mlp1, baseWidth / width, true));
-                groups.Add((b.Mlp2, baseWidth / (width * ffn), true));
+                groups.Add((b.Mlp2, baseWidth / (width * (double)ffn), true));
             }
         }
         void Embeddings(WhisperSpeechEmbeddings<T> e, double rate, double projector, bool frozenMain)
@@ -116,7 +116,7 @@ public partial class WhisperSpeech<T>
                 double b = c.BaseWidth;
                 groups.Add((m.MlpNorm, 1, false));
                 groups.Add((m.Mlp1, b / c.Width, true));
-                groups.Add((m.Mlp2, b / (c.Width * c.FfnMult), true));
+                groups.Add((m.Mlp2, b / (c.Width * (double)c.FfnMult), true));
                 foreach (var l in m.ProjectIn) groups.Add((l, b / c.Width, true));
                 foreach (var l in m.ProjectOut) groups.Add((l, b / c.CodebookWidth, true));
                 groups.Add((m.Positions, 1, false));

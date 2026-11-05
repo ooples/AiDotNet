@@ -374,7 +374,7 @@ internal sealed class IndexTtsPerceiver<T>
         _contextDim = contextDim;
         _latents = latents;
         _heads = heads;
-        _feedForward = (int)(dim * feedForwardMultiple * 2 / 3.0);
+        _feedForward = (int)(dim * (double)feedForwardMultiple * 2 / 3.0);
         int inner = HeadDim * heads;
         ProjectContext = contextDim != dim ? IndexTtsOps.Linear(engine, layers, random, contextDim, dim) : null;
         Latents = IndexTtsOps.Values(layers, IndexTtsOps.Normal(random, latents * dim, 0.02));

@@ -286,6 +286,6 @@ internal sealed class BestRqNetwork<T>
             total = total is null ? term : _engine.TensorAdd(total, term);
         }
         var sum = total ?? throw new InvalidOperationException("No codebooks.");
-        return count == 0 ? sum : _engine.TensorMultiplyScalar(sum, NumOps.FromDouble(1.0 / (count * _o.NumCodebooks)));
+        return count == 0 ? sum : _engine.TensorMultiplyScalar(sum, NumOps.FromDouble(1.0 / (count * (double)_o.NumCodebooks)));
     }
 }

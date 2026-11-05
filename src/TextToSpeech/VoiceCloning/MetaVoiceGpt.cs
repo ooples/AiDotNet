@@ -59,7 +59,7 @@ internal sealed class MetaVoiceGpt<T>
         _engine = engine; _config = config; _random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         _restoredLayers = restoredLayers;
         _feedForward = config.SwiGlu
-            ? (((int)(2.0 * (4 * config.Dimension) / 3) + config.SwiGluMultiple - 1) / config.SwiGluMultiple) * config.SwiGluMultiple
+            ? (((int)(2.0 * (4.0 * config.Dimension) / 3) + config.SwiGluMultiple - 1) / config.SwiGluMultiple) * config.SwiGluMultiple
             : 4 * config.Dimension;
         foreach (int size in config.InputVocabularies) _embeddings.Add(Embedding(size));
         _positions = Embedding(config.Context);

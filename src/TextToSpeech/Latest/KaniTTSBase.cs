@@ -391,7 +391,7 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
         int text = 0, audio = 0;
         for (int i = 0; i < ids.Count; i++)
         {
-            positions[i] = text + audio / _options.Codebooks * _options.AudioStep;
+            positions[i] = text + Math.Floor(audio / (double)_options.Codebooks) * _options.AudioStep;
             if (ids[i] >= Layout.AudioTokensStart) audio++;
             else text++;
         }

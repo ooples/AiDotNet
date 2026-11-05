@@ -265,14 +265,14 @@ internal sealed class SoxrResampler
                     }
                     else
                     {
-                        arbM = i * (int)arbM + attempt;
+                        arbM = i * Math.Truncate(arbM) + attempt;
                         arbL = i;
                     }
                 }
             }
             int L = preL * arbL, M = (int)(arbM * postM), x = (L | M) & 1;
             if (x == 0) { L >>= 1; M >>= 1; }
-            if (iOpt && postL == 1 && (d = preL * arbL / arbM) > 4 && d != 5)
+            if (iOpt && postL == 1 && (d = preL * (double)arbL / arbM) > 4 && d != 5)
             {
                 for (postL = 4, i = (int)(d / 16); (i >>= 1) != 0 && postL < 256; postL <<= 1) { }
                 arbM = arbM * postL / arbL / preL;
@@ -481,7 +481,7 @@ internal sealed class SoxrResampler
         p.AtInteger = f.PostPeak % L;
         p.L = L;
         p.StepInteger = fDomainM ? -M / 2 : M;
-        p.Phase0 = p.AtInteger / p.L;
+        p.Phase0 = p.AtInteger / (double)p.L;
         p.InputSize = (f.DftLength - p.AtInteger + p.L - 1) / p.L;
     }
 

@@ -21,6 +21,12 @@ namespace AiDotNet.Tests.Video;
 /// </summary>
 public class SeedVRPaperTests
 {
+    [Fact]
+    public void TimestepShift_LargeFrameCount_DoesNotOverflowIntoImageBranch()
+    {
+        Assert.InRange(SeedVR<double>.ShiftTimestep(500, int.MaxValue, 32, 32), 999.99, 1000);
+    }
+
     private const int Low = 8;
 
     private static SeedVR<double> Small() =>

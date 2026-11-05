@@ -29,13 +29,13 @@ internal sealed class UniAudioCriticSpectrogram<T>
                 _sin[n, k] = N(-window * Math.Sin(angle));
             }
         }
-        double maximumMel = 2595 * Math.Log10(1 + (sampleRate / 2) / 700.0);
+        double maximumMel = 2595 * Math.Log10(1 + (sampleRate / 2.0) / 700.0);
         var points = Enumerable.Range(0, _bins + 2)
             .Select(i => 700 * (Math.Pow(10, maximumMel * i / (_bins + 1) / 2595) - 1)).ToArray();
         for (int k = 0; k < _bins; k++)
             for (int m = 0; m < _bins; m++)
             {
-                double frequency = (sampleRate / 2) * k / (double)(_bins - 1);
+                double frequency = (sampleRate / 2.0) * k / (double)(_bins - 1);
                 double down = (frequency - points[m]) / (points[m + 1] - points[m]);
                 double up = (points[m + 2] - frequency) / (points[m + 2] - points[m + 1]);
                 // The author's create_fb_matrix deliberately clamps every coefficient, including its floor.

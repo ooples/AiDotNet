@@ -166,7 +166,7 @@ internal static class Mars5Ops
     public static List<Mars5SwiGluLayer<T>> Stack<T>(IEngine engine, List<LayerBase<T>> layers, Random random, int dim, int heads, int count, bool decoder,
         out LayerNormalizationLayer<T> norm)
     {
-        int ff = (int)(dim * 4 * (3.0 / 4));
+        int ff = (int)(dim * 4.0 * (3.0 / 4));
         var stack = new List<Mars5SwiGluLayer<T>>();
         for (int i = 0; i < count; i++) stack.Add(new Mars5SwiGluLayer<T>(engine, layers, random, dim, heads, ff, decoder));
         norm = IndexTtsOps.LayerNorm(layers, dim, LayerNormEpsilon);

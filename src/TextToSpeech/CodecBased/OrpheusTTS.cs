@@ -127,7 +127,7 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
     public int CodebookSize => OrpheusTokens.CodebookSize;
 
     /// <summary>Frames per second (one coarse code and six finer ones each: about 12 at 24 kHz).</summary>
-    public int CodecFrameRate => (int)Math.Round(_options.SampleRate / (double)(HopSize * 4));
+    public int CodecFrameRate => (int)Math.Round(_options.SampleRate / (HopSize * 4.0));
 
     /// <inheritdoc />
     /// <remarks>Orpheus trains on recordings: the recording (24 kHz) or its frames' codes

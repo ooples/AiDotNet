@@ -175,7 +175,7 @@ internal sealed class StreamingParaformerEncoder<T>
     {
         var c = Encoder.Configuration;
         int m = c.LfrM, step = c.LfrN, total = inputs.Count;
-        int count = (int)Math.Ceiling((total - (m - 1) / 2) / (double)step);
+        int count = (int)Math.Ceiling((total - Math.Floor((m - 1) / 2.0)) / (double)step);
         int spliceIndex = count;
         var rows = new List<double[]>();
         for (int i = 0; i < count; i++)

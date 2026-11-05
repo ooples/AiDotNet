@@ -46,7 +46,7 @@ internal sealed class EmaConv2d<T> : LazyWeightModule<T>
         int fanIn = inChannels * kernel * kernel;
         if (init == EmaConvInit.FanOutNormal)
         {
-            _weight = EmaInit.Normal<T>(shape, Math.Sqrt(2.0 / (kernel * kernel * outChannels)));
+            _weight = EmaInit.Normal<T>(shape, Math.Sqrt(2.0 / (kernel * (double)kernel * outChannels)));
             _bias = LazyWeight<T>.Constant(new[] { outChannels }, 0.0);
         }
         else

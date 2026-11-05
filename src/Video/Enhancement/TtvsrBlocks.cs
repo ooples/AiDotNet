@@ -117,7 +117,7 @@ internal sealed class TtvsrBackbone<T>
         var fy = new double[hs * ws];
         var data = flow.Data.Span;
         int plane = h * w, baseIndex = item * 2 * plane;
-        double norm = 1.0 / (_stride * _stride * _stride);
+        double norm = 1.0 / (_stride * (double)_stride * _stride);
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
             {

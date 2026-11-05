@@ -417,7 +417,7 @@ public partial class NaturalSpeech3<T>
     // MaskGCT's codebook draw: weights Q − i over the codebooks.
     private static int Layer(int codebooks, Random random)
     {
-        double total = codebooks * (codebooks + 1) / 2.0, draw = random.NextDouble() * total, cumulative = 0;
+        double total = codebooks * (codebooks + 1.0) / 2.0, draw = random.NextDouble() * total, cumulative = 0;
         for (int i = 0; i < codebooks; i++)
         {
             cumulative += codebooks - i;

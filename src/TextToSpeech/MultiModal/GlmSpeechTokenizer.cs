@@ -426,7 +426,7 @@ internal sealed class GlmSpeechTokenizer<T>
         int count = valid.Count(v => v);
         for (int r = 0; r < rows; r++)
             if (valid[r])
-                for (int i = 0; i < d; i++) weights[r, i] = NumOps.FromDouble(1.0 / (d * count));
+                for (int i = 0; i < d; i++) weights[r, i] = NumOps.FromDouble(1.0 / (d * (double)count));
         var diff = _engine.TensorSubtract(input, target);
         return _engine.ReduceSum(_engine.TensorMultiply(_engine.TensorMultiply(diff, diff), weights), null, false);
     }

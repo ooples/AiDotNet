@@ -40,7 +40,7 @@ public partial class SpiritLM<T>
             if (input.IsSpeech)
             {
                 if (previous != 's') sb.Append(SpiritLmTokens.SpeechPrefix);
-                sb.Append(input.SpeechTokens ?? SpeechString(input.Audio!));
+                sb.Append(input.SpeechTokens is { } storedSpeechTokens ? storedSpeechTokens : SpeechString(input.Audio!));
                 previous = 's';
             }
             else

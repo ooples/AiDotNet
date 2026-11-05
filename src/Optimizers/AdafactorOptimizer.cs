@@ -86,7 +86,7 @@ public class AdafactorOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBase
         double rate = _options.UseRelativeStepSize
             ? Math.Min(1e-2, 1.0 / Math.Sqrt(step))
             : _options.InitialLearningRate > 0 ? _options.InitialLearningRate : NumOps.ToDouble(CurrentLearningRate);
-        bool scaleByParameters = _options.MultiplyByParameterScale ?? _options.UseRelativeStepSize;
+        bool scaleByParameters = _options.MultiplyByParameterScale is bool explicitScale ? explicitScale : _options.UseRelativeStepSize;
         return scaleByParameters ? rate * Math.Max(_options.ParameterScaleFloor, parameterRms) : rate;
     }
 

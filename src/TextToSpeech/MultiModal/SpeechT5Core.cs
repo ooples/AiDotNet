@@ -133,7 +133,7 @@ internal sealed class SpeechT5Core<T>
         var c = Configuration;
         int frames = mel.Shape[0], olen = frames - frames % c.ReductionFactor;
         var target = _engine.TensorNarrow(mel, 0, 0, olen);
-        double scale = 1.0 / (olen * c.MelChannels);
+        double scale = 1.0 / (olen * (double)c.MelChannels);
         var l1 = _engine.TensorMultiplyScalar(_engine.TensorAdd(
             _engine.ReduceSum(_engine.TensorAbs(_engine.TensorSubtract(outputs.After, target)), null, false),
             _engine.ReduceSum(_engine.TensorAbs(_engine.TensorSubtract(outputs.Before, target)), null, false)), NumOps.FromDouble(scale));

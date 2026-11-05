@@ -89,7 +89,7 @@ internal sealed record Lfm2Configuration
         get
         {
             if (!AutoAdjustFeedForward) return Intermediate;
-            int width = (int)(2 * Intermediate / 3.0);
+            int width = (int)(2.0 * Intermediate / 3.0);
             if (FeedForwardMultiplier == 0) return width;
             width = (int)(FeedForwardMultiplier * width);
             return FeedForwardMultipleOf * ((width + FeedForwardMultipleOf - 1) / FeedForwardMultipleOf);

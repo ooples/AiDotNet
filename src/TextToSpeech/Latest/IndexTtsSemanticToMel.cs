@@ -210,7 +210,7 @@ internal sealed class IndexTtsDiT<T>
         var c = configuration;
         int d = c.Hidden;
         if (d % c.Heads != 0 || (d / c.Heads) % 2 != 0) throw new ArgumentException("The width must divide into heads of even width.", nameof(configuration));
-        Intermediate = FindMultiple((int)(2 * (4 * d) / 3.0), 256);
+        Intermediate = FindMultiple((int)(2.0 * (4.0 * d) / 3.0), 256);
         Time = new IndexTtsTimestepEmbedder<T>(engine, layers, random, d);
         ContentProjection = IndexTtsOps.Linear(engine, layers, random, c.RegulatorChannels, d);
         Merge = IndexTtsOps.Linear(engine, layers, random, d + 2 * c.MelChannels + c.StyleDim, d);
@@ -500,7 +500,7 @@ internal sealed class IndexTtsSemanticToMel<T>
         bool drop = random.NextDouble() < c.ClassDropout;
         var v = Estimator.Forward(y, promptX, t, style, condition, drop, training: true, random: random);
         var error = _engine.TensorMultiply(_engine.TensorAbs(_engine.TensorSubtract(v, u)), target);
-        return _engine.TensorMultiplyScalar(_engine.ReduceSum(error, null, false), NumOps.FromDouble(1.0 / ((total - prompt) * mels)));
+        return _engine.TensorMultiplyScalar(_engine.ReduceSum(error, null, false), NumOps.FromDouble(1.0 / ((total - prompt) * (double)mels)));
     }
 
     /// <summary>Loads the release's <c>s2mel.pth</c> modules (<c>cfm</c>, <c>length_regulator</c>, <c>gpt_layer</c>).</summary>

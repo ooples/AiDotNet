@@ -126,7 +126,7 @@ internal sealed class WhisperSpeechVq<T>
         int w = c.Width, hidden = w * c.FfnMult;
         Linear(Mlp1, w, hidden);
         Linear(Mlp2, hidden, w);
-        double bound = Math.Sqrt(6.0 / (c.CodebookSize * c.CodebookWidth));
+        double bound = Math.Sqrt(6.0 / (c.CodebookSize * (double)c.CodebookWidth));
         for (int q = 0; q < c.QuantizerDepth; q++)
         {
             Linear(ProjectIn[q], w, c.CodebookWidth);

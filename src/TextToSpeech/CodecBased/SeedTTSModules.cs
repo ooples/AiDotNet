@@ -339,8 +339,8 @@ internal sealed class SeedTTSTokenDiffusion<T>
         int total = _alphaBar.Length - 1;
         for (int step = _options.DiffusionSteps; step >= 1; step--)
         {
-            int timestep = (int)Math.Round(step * total / (double)_options.DiffusionSteps);
-            int nextTimestep = (int)Math.Round((step - 1) * total / (double)_options.DiffusionSteps);
+            int timestep = (int)Math.Round(step * (double)total / (double)_options.DiffusionSteps);
+            int nextTimestep = (int)Math.Round((step - 1.0) * total / (double)_options.DiffusionSteps);
             var clean = Predict(state, tokens, timbre, timestep / (double)total);
             state = DdimStep(state, clean, timestep, nextTimestep);
         }

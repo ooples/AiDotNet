@@ -495,7 +495,7 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
     {
         VocabSize = o.EmotionVocabulary, Hidden = o.EmotionHidden, Layers = o.EmotionLayers, Heads = o.EmotionHeads,
         KeyValueHeads = o.EmotionKeyValueHeads, HeadDim = o.EmotionHeadDim, Intermediate = o.EmotionIntermediate, RmsEpsilon = 1e-6,
-        RopeTheta = 1e6, QueryKeyNorm = true, TieWordEmbeddings = true, LoraRank = o.EmotionLoraRank, LoraAlpha = 2 * o.EmotionLoraRank, LoraDropout = 0,
+        RopeTheta = 1e6, QueryKeyNorm = true, TieWordEmbeddings = true, LoraRank = o.EmotionLoraRank, LoraAlpha = 2.0 * o.EmotionLoraRank, LoraDropout = 0,
     };
 
     // ---------------------------------------------------------------- synthesis

@@ -29,7 +29,7 @@ internal sealed class SpeechT5SpeechEncoderPrenet<T>
             var conv = new NormedConv1DLayer<T>(inputs, channels, kernel, stride, 1, 1, 0, false, ConvolutionNormalization.None, false);
             layers.Add(conv);
             // kaiming_normal_ (fan_in, gain √2).
-            conv.LoadTorchWeights(IndexTtsOps.Normal(random, channels * inputs * kernel, Math.Sqrt(2.0 / (inputs * kernel))), null, new double[channels]);
+            conv.LoadTorchWeights(IndexTtsOps.Normal(random, channels * inputs * kernel, Math.Sqrt(2.0 / (inputs * (double)kernel))), null, new double[channels]);
             Convolutions.Add(conv);
             inputs = channels;
         }
@@ -40,7 +40,7 @@ internal sealed class SpeechT5SpeechEncoderPrenet<T>
         Projection = _features != c.Hidden ? IndexTtsOps.Linear(engine, layers, random, _features, c.Hidden) : null;
         MaskEmbedding = IndexTtsOps.Values(layers, Enumerable.Range(0, c.Hidden).Select(_ => random.NextDouble()).ToArray());
         int per = c.Hidden / c.ConvPositionGroups, k = c.ConvPositionKernel;
-        double std = Math.Sqrt(4.0 / (k * c.Hidden));
+        double std = Math.Sqrt(4.0 / (k * (double)c.Hidden));
         var v = IndexTtsOps.Normal(random, c.Hidden * per * k, std);
         PositionDirection = IndexTtsOps.Values(layers, v);
         // weight_norm(dim=2) starts with g = ‖v‖ over the output and input dimensions, per kernel tap.
@@ -311,7 +311,7 @@ internal sealed class SpeechT5Quantizer<T>
     /// <summary>The diversity term <c>(GV − perplexity) / GV</c>.</summary>
     public Tensor<T> Diversity(Tensor<T> perplexity)
     {
-        double gv = _groups * _vars;
+        double gv = _groups * (double)_vars;
         return _engine.TensorMultiplyScalar(_engine.TensorAddScalar(_engine.TensorNegate(perplexity), NumOps.FromDouble(gv)), NumOps.FromDouble(1.0 / gv));
     }
 
