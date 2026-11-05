@@ -504,15 +504,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+    /// var network = new NeuralNetwork&lt;float&gt;(architecture);
+    /// var optimizer = new AdamOptimizer&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;(network);
+    /// var features = Tensor&lt;float&gt;.CreateRandom(32, 8);
+    /// var labels = Tensor&lt;float&gt;.CreateRandom(32, 4);
+    ///
     /// // Enable with default settings (recommended)
-    /// var result = await new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
     ///     .ConfigureModel(network)
     ///     .ConfigureOptimizer(optimizer)
-    ///     .ConfigureMixedPrecision()  // Enable mixed-precision
-    ///     .BuildAsync();
+    ///     .ConfigureMixedPrecision();  // Enable mixed-precision
     ///
     /// // Or with custom configuration
-    /// builder.ConfigureMixedPrecision(MixedPrecisionConfig.Conservative());
+    /// builder.ConfigureMixedPrecision(AiDotNet.MixedPrecision.MixedPrecisionConfig.Conservative());
+    ///
+    /// var result = builder.Build(features, labels);
     /// </code>
     /// </example>
     public IAiModelBuilder<T, TInput, TOutput> ConfigureMixedPrecision(MixedPrecisionConfig? config = null)
@@ -1004,12 +1011,18 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </remarks>
     /// <example>
     /// <code>
+    /// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4);
+    /// var network = new NeuralNetwork&lt;float&gt;(architecture);
+    /// var optimizer = new AdamOptimizer&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;(network);
+    /// var features = Tensor&lt;float&gt;.CreateRandom(32, 8);
+    /// var labels = Tensor&lt;float&gt;.CreateRandom(32, 4);
+    ///
     /// // Enable with default settings (recommended for most cases)
-    /// var result = await new AiModelBuilder&lt;float, Matrix&lt;float&gt;, Vector&lt;float&gt;&gt;()
+    /// var builder = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
     ///     .ConfigureModel(network)
     ///     .ConfigureOptimizer(optimizer)
-    ///     .ConfigureGpuAcceleration()  // Enable GPU acceleration with sensible defaults
-    ///     .BuildAsync();
+    ///     .ConfigureGpuAcceleration();  // Enable GPU acceleration with sensible defaults
+    /// var result = builder.Build(features, labels);
     ///
     /// // Or with custom configuration for high-end GPUs
     /// builder.ConfigureGpuAcceleration(new GpuAccelerationConfig

@@ -35,7 +35,12 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// 
 /// For example:
 /// ```csharp
-/// var metric = new NoiseRobustnessMetric&lt;double>(NumOps.FromDouble(0.3));
+/// var retrievedDocs = new List&lt;Document&lt;double>>
+/// {
+///     new Document&lt;double>("doc1", "Artificial intelligence is the simulation of human intelligence by machines."),
+///     new Document&lt;double>("doc2", "The 2024 football season opened in September.")
+/// };
+/// var metric = new NoiseRobustnessMetric&lt;double>(0.3);
 /// var answer = new GroundedAnswer&lt;double>(
 ///     query: "What is AI?",
 ///     answer: "AI is artificial intelligence...",

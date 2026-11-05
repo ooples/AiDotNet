@@ -31,6 +31,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// - It understands you're looking for connections, not just mentions
 /// 
 /// ```csharp
+/// var myDocStore = new InMemoryDocumentStore&lt;double>(vectorDimension: 768);
+/// var mySentenceTransformer = new StubEmbeddingModel&lt;double>(embeddingDimension: 768);
+///
 /// var graphRetriever = new GraphRetriever&lt;double>(
 ///     documentStore: myDocStore,
 ///     embeddingModel: mySentenceTransformer,

@@ -9202,19 +9202,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     /// <example>
     /// <code>
-    /// // Enable with default settings (recommended for most cases)
-    /// network.EnableMixedPrecision();
+    /// // This method is internal: callers turn mixed precision on through the builder, which calls it.
+    /// var network = new NeuralNetwork&lt;float&gt;(new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4));
+    /// var features = Tensor&lt;float&gt;.CreateRandom(32, 8);
+    /// var labels = Tensor&lt;float&gt;.CreateRandom(32, 4);
     ///
-    /// // Enable with custom configuration
-    /// var config = new MixedPrecisionConfig
-    /// {
-    ///     InitialLossScale = 4096.0,
-    ///     ScaleGrowthInterval = 2000
-    /// };
-    /// network.EnableMixedPrecision(config);
-    ///
-    /// // Enable with conservative settings for sensitive models
-    /// network.EnableMixedPrecision(MixedPrecisionConfig.Conservative());
+    /// // Conservative loss scaling for sensitive models; omit the argument for the defaults
+    /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureModel(network)
+    ///     .ConfigureMixedPrecision(AiDotNet.MixedPrecision.MixedPrecisionConfig.Conservative())
+    ///     .Build(features, labels);
     /// </code>
     /// </example>
     /// <exception cref="NotSupportedException">Thrown when T is not float.</exception>

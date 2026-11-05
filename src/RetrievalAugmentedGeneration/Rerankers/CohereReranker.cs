@@ -57,6 +57,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies;
 ///     model: "rerank-english-v3.0"
 /// );
 /// 
+/// var documentStore = new InMemoryDocumentStore&lt;double>(vectorDimension: 768);
+/// var retriever = new DenseRetriever&lt;double>(documentStore, new StubEmbeddingModel&lt;double>());
+/// var query = "How do vaccines train the immune system?";
+///
 /// var initialResults = retriever.Retrieve(query, topK: 20);  // Get 20 candidates
 /// var reranked = reranker.Rerank(query, initialResults);      // Rerank to improve order
 /// var final = reranked.Take(5);                               // Return best 5
