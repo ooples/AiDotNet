@@ -723,3 +723,6 @@ AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.Exploratio
 AiDotNet.ReinforcementLearning.Policies.DiscretePolicy<T>.DiscretePolicy(AiDotNet.ReinforcementLearning.Policies.DiscretePolicyOptions<T>! options) -> void
 AiDotNet.ReinforcementLearning.Policies.MixedPolicy<T>.MixedPolicy(AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>! options) -> void
 AiDotNet.ReinforcementLearning.Policies.MultiModalPolicy<T>.MultiModalPolicy(AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>! options) -> void
+override AiDotNet.Audio.Fingerprinting.CLAPModel<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.NeuralNetworks.WGANGP<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.VisionLanguage.Document.GOTOCR2<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
