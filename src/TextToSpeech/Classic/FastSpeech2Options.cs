@@ -26,6 +26,7 @@ public class FastSpeech2Options : AcousticModelOptions
         UseEnergyPredictor = other.UseEnergyPredictor;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public FastSpeech2Options()
     {
         VocabSize = 76;

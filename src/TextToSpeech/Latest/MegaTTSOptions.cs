@@ -31,6 +31,7 @@ public enum MegaTtsStage
 /// </remarks>
 public class MegaTTSOptions : TtsModelOptions
 {
+    /// <summary>Creates an instance with the default settings.</summary>
     public MegaTTSOptions()
     {
         SampleRate = 22050;

@@ -58,6 +58,7 @@ public class BridgeTowerOptions : FoundationalVLMOptions
     /// <summary>Gets or sets the square visual patch size used by the ViT stem.</summary>
     public int PatchSize { get; set; } = 16;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public BridgeTowerOptions()
     {
         FusionType = FusionType.BridgeLayers;

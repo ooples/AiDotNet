@@ -88,7 +88,6 @@ internal static class ModelDefectBaselines
             "CreateDefaultStableAudioLayers",
             "CreateDefaultStyleTTSLayers",
             "CreateDefaultTokenReductionVLMLayers",
-            "CreateDefaultTtsLayers",
             "CreateDefaultUnifiedBidirectionalLayers",
             "CreateDefaultUnifiedGenerationLayers",
             "CreateDefaultUnifiedMultimodalLayers",

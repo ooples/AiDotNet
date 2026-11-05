@@ -47,9 +47,13 @@ public enum FireRedTtsVocoder
 /// <summary>An emotion of FireRedTTS's instruction tuning (§4.2).</summary>
 public enum FireRedTtsEmotion
 {
+    /// <summary>Neutral emotional expression.</summary>
     Neutral,
+    /// <summary>Happy emotional expression.</summary>
     Happy,
+    /// <summary>Sad emotional expression.</summary>
     Sad,
+    /// <summary>Angry emotional expression.</summary>
     Angry,
 }
 
@@ -61,6 +65,7 @@ public enum FireRedTtsEmotion
 /// </remarks>
 public class FireRedTTSOptions : TtsModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public FireRedTTSOptions()
     {
         SampleRate = 24000;
@@ -101,10 +106,15 @@ public class FireRedTTSOptions : TtsModelOptions
 
     /// <summary>The ECAPA-TDNN's channels per stage (the last aggregates).</summary>
     public int[] SpeakerChannels { get; set; } = { 512, 512, 512, 512, 1536 };
+    /// <summary>Gets or sets the convolution kernel sizes for the speaker.</summary>
     public int[] SpeakerKernels { get; set; } = { 5, 3, 3, 3, 1 };
+    /// <summary>Gets or sets the convolution dilations for the speaker.</summary>
     public int[] SpeakerDilations { get; set; } = { 1, 2, 3, 4, 1 };
+    /// <summary>Gets or sets the speaker attention channels. Defaults to <c>128</c>.</summary>
     public int SpeakerAttentionChannels { get; set; } = 128;
+    /// <summary>Gets or sets the speaker squeeze-and-excitation channels. Defaults to <c>128</c>.</summary>
     public int SpeakerSeChannels { get; set; } = 128;
+    /// <summary>Gets or sets the speaker res 2 net scale. Defaults to <c>4</c>.</summary>
     public int SpeakerRes2NetScale { get; set; } = 4;
 
     /// <summary>The speaker embedding's width (also the tokenizer's model width, whose decoder adds it).</summary>
@@ -114,25 +124,42 @@ public class FireRedTTSOptions : TtsModelOptions
 
     /// <summary>The speech tokenizer's codewords per sub-codebook (two sub-codebooks make 16,384 tokens).</summary>
     public int CodebookSize { get; set; } = 128;
+    /// <summary>Gets or sets the feature width of the codebook. Defaults to <c>128</c>.</summary>
     public int CodebookDim { get; set; } = 128;
+    /// <summary>Gets or sets the feature width of the flow. Defaults to <c>512</c>.</summary>
     public int FlowDim { get; set; } = 512;
+    /// <summary>Gets or sets the number of attention heads in the flow. Defaults to <c>8</c>.</summary>
     public int FlowHeads { get; set; } = 8;
+    /// <summary>Gets or sets the flow linear units. Defaults to <c>2048</c>.</summary>
     public int FlowLinearUnits { get; set; } = 2048;
+    /// <summary>Gets or sets the flow blocks. Defaults to <c>6</c>.</summary>
     public int FlowBlocks { get; set; } = 6;
 
     /// <summary>The encoder layers with cross-attention to the prompt (<c>srcattention_end_index</c> + 1).</summary>
     public int FlowCrossAttentionBlocks { get; set; } = 3;
+    /// <summary>Gets or sets the dropout probability for the flow. Defaults to <c>0.01</c>.</summary>
     public double FlowDropout { get; set; } = 0.01;
+    /// <summary>Gets or sets the flow regulator blocks. Defaults to <c>4</c>.</summary>
     public int FlowRegulatorBlocks { get; set; } = 4;
+    /// <summary>Gets or sets the prompt encoder hidden. Defaults to <c>384</c>.</summary>
     public int PromptEncoderHidden { get; set; } = 384;
+    /// <summary>Gets or sets the prompt encoder reduction. Defaults to <c>4</c>.</summary>
     public int PromptEncoderReduction { get; set; } = 4;
+    /// <summary>Gets or sets the number of layers in the prompt encoder. Defaults to <c>2</c>.</summary>
     public int PromptEncoderLayers { get; set; } = 2;
+    /// <summary>Gets or sets the prompt encoder blocks. Defaults to <c>5</c>.</summary>
     public int PromptEncoderBlocks { get; set; } = 5;
+    /// <summary>Gets or sets the prompt encoder kernel. Defaults to <c>3</c>.</summary>
     public int PromptEncoderKernel { get; set; } = 3;
+    /// <summary>Gets or sets the flow decoder channels.</summary>
     public int[] FlowDecoderChannels { get; set; } = { 256, 256 };
+    /// <summary>Gets or sets the number of attention heads in the flow decoder. Defaults to <c>8</c>.</summary>
     public int FlowDecoderHeads { get; set; } = 8;
+    /// <summary>Gets or sets the feature width of the flow decoder head. Defaults to <c>64</c>.</summary>
     public int FlowDecoderHeadDim { get; set; } = 64;
+    /// <summary>Gets or sets the flow decoder blocks per level. Defaults to <c>4</c>.</summary>
     public int FlowDecoderBlocksPerLevel { get; set; } = 4;
+    /// <summary>Gets or sets the flow decoder mid blocks. Defaults to <c>12</c>.</summary>
     public int FlowDecoderMidBlocks { get; set; } = 12;
 
     /// <summary>Classifier-free guidance at inference (eq. 7: α = 0.7).</summary>
@@ -173,32 +200,45 @@ public class FireRedTTSOptions : TtsModelOptions
 
     private FireRedTtsVocoder _vocoder = FireRedTtsVocoder.Release24k;
 
+    /// <summary>Gets or sets the vocoder initial channels. Defaults to <c>1536</c>.</summary>
     public int VocoderInitialChannels { get; set; } = 1536;
+    /// <summary>Gets or sets the vocoder upsample rates.</summary>
     public int[] VocoderUpsampleRates { get; set; } = { 5, 3, 2, 2, 2, 2 };
+    /// <summary>Gets or sets the convolution kernel sizes for the vocoder upsample.</summary>
     public int[] VocoderUpsampleKernels { get; set; } = { 11, 7, 4, 4, 4, 4 };
+    /// <summary>Gets or sets the convolution kernel sizes for the vocoder res block.</summary>
     public int[] VocoderResBlockKernels { get; set; } = { 3, 7, 11 };
+    /// <summary>Gets or sets the convolution dilations for the vocoder res block.</summary>
     public int[][] VocoderResBlockDilations { get; set; } = { new[] { 1, 3, 5 }, new[] { 1, 3, 5 }, new[] { 1, 3, 5 } };
 
     // ---------------------------------------------------------------- the speech tokenizer
 
-    /// <summary>The HuBERT features' width (chinese-hubert-large: 1024).</summary>
+    /// <summary>The HuBERT features' width (chinese-HuBERT-large: 1024).</summary>
     public int SslDim { get; set; } = 1024;
 
     /// <summary>The tokenizer encoder's width (<c>n_model_size</c>).</summary>
     public int TokenizerDim { get; set; } = 512;
+    /// <summary>Gets or sets the convolution strides for the tokenizer downsample.</summary>
     public int[] TokenizerDownsampleStrides { get; set; } = { 1, 1, 1, 2 };
 
     /// <summary>The SSL decoder's and the mel decoder's upsampling strides (the release config's <c>upsample_scales</c>).</summary>
     public int[][] TokenizerUpsampleStrides { get; set; } = { new[] { 2, 1 }, new[] { 2, 1, 1, 1 } };
+    /// <summary>Gets or sets the number of layers in the HuBERT. Defaults to <c>24</c>.</summary>
     public int HubertLayers { get; set; } = 24;
+    /// <summary>Gets or sets the feature width of the HuBERT. Defaults to <c>1024</c>.</summary>
     public int HubertDim { get; set; } = 1024;
+    /// <summary>Gets or sets the number of attention heads in the HuBERT. Defaults to <c>16</c>.</summary>
     public int HubertHeads { get; set; } = 16;
+    /// <summary>Gets or sets the HuBERT intermediate. Defaults to <c>4096</c>.</summary>
     public int HubertIntermediate { get; set; } = 4096;
+    /// <summary>Gets or sets the HuBERT conv dims.</summary>
     public int[] HubertConvDims { get; set; } = { 512, 512, 512, 512, 512, 512, 512 };
+    /// <summary>Gets or sets the HuBERT positional kernel. Defaults to <c>128</c>.</summary>
     public int HubertPositionalKernel { get; set; } = 128;
+    /// <summary>Gets or sets the HuBERT positional groups. Defaults to <c>16</c>.</summary>
     public int HubertPositionalGroups { get; set; } = 16;
 
-    /// <summary>Whether HuBERT's input is layer-normalized (the checkpoint's <c>task.normalize</c>; chinese-hubert-large: true).</summary>
+    /// <summary>Whether HuBERT's input is layer-normalized (the checkpoint's <c>task.normalize</c>; chinese-HuBERT-large: true).</summary>
     public bool HubertNormalizeWave { get; set; } = true;
 
     /// <summary>The codebooks' EMA decay (DPQ-VAE §4.1.2: 0.9 for PQ-VAE).</summary>
@@ -209,14 +249,18 @@ public class FireRedTTSOptions : TtsModelOptions
 
     /// <summary>Eq. 1's weights: λ_vq, λ_s, λ_a.</summary>
     public double VqLossWeight { get; set; } = 1.0;
+    /// <summary>Gets or sets the weight of the self-supervised loss. Defaults to <c>1000.0</c>.</summary>
     public double SslLossWeight { get; set; } = 1000.0;
+    /// <summary>Gets or sets the weight of the mel loss. Defaults to <c>1.0</c>.</summary>
     public double MelLossWeight { get; set; } = 1.0;
 
     /// <summary>Dual decoding's weight γ on the pre-quantized reconstruction (DPQ-VAE eq. 4): 1, falling linearly to
     /// <see cref="DualDecodingFinalWeight"/> between <see cref="DualDecodingDecayStart"/> and
     /// <see cref="DualDecodingDecayEnd"/>.</summary>
     public double DualDecodingFinalWeight { get; set; } = 0.1;
+    /// <summary>Gets or sets the dual decoding decay start. Defaults to <c>20000</c>.</summary>
     public int DualDecodingDecayStart { get; set; } = 20000;
+    /// <summary>Gets or sets the dual decoding decay end. Defaults to <c>80000</c>.</summary>
     public int DualDecodingDecayEnd { get; set; } = 80000;
 
     // ---------------------------------------------------------------- the streamable decoder (§3.3.2)
@@ -233,6 +277,7 @@ public class FireRedTTSOptions : TtsModelOptions
 
     /// <summary>The streams (§3.3.2: four of 16,384 codewords, each two codebooks of <see cref="CodebookSize"/>).</summary>
     public int CodecStreams { get; set; } = 4;
+    /// <summary>Gets or sets the feature width of the codec codebook. Defaults to <c>128</c>.</summary>
     public int CodecCodebookDim { get; set; } = 128;
 
     /// <summary>The residual units' convolution groups (SoCodec: 32).</summary>
@@ -240,21 +285,28 @@ public class FireRedTTSOptions : TtsModelOptions
 
     /// <summary>The codec's EMA decay and commitment weight (SoCodec's config: 0.99, 1.0).</summary>
     public double CodecEmaDecay { get; set; } = 0.99;
+    /// <summary>Gets or sets the weight of the codec commitment objective. Defaults to <c>1.0</c>.</summary>
     public double CodecCommitmentWeight { get; set; } = 1.0;
 
     /// <summary>The codec's losses: L1 mel reconstruction and the LSGAN generator loss (no paper or code gives them).</summary>
     public double CodecReconstructionWeight { get; set; } = 1.0;
+    /// <summary>Gets or sets the weight of the codec adversarial objective. Defaults to <c>1.0</c>.</summary>
     public double CodecAdversarialWeight { get; set; } = 1.0;
 
     /// <summary>The mel discriminator's window lengths (frames) and width (MegaTTS's).</summary>
     public int[] DiscriminatorWindows { get; set; } = { 32, 64, 128 };
+    /// <summary>Gets or sets the discriminator hidden. Defaults to <c>192</c>.</summary>
     public int DiscriminatorHidden { get; set; } = 192;
 
     /// <summary>The acoustic LM's sizes (MusicGen-small: 24 layers, 1024 wide, 16 heads, a 4096 feed-forward).</summary>
     public int AcousticLmDim { get; set; } = 1024;
+    /// <summary>Gets or sets the number of attention heads in the acoustic language-model. Defaults to <c>16</c>.</summary>
     public int AcousticLmHeads { get; set; } = 16;
+    /// <summary>Gets or sets the number of layers in the acoustic language-model. Defaults to <c>24</c>.</summary>
     public int AcousticLmLayers { get; set; } = 24;
+    /// <summary>Gets or sets the acoustic language-model feed forward. Defaults to <c>4096</c>.</summary>
     public int AcousticLmFeedForward { get; set; } = 4096;
+    /// <summary>Gets or sets the dropout probability for the acoustic language-model.</summary>
     public double AcousticLmDropout { get; set; }
 
     /// <summary>d in sᵢ₋d + aᵢ (unstated in the paper; 3 spans MusicGen's delay pattern over four streams).</summary>
@@ -262,6 +314,7 @@ public class FireRedTTSOptions : TtsModelOptions
 
     /// <summary>The acoustic LM's sampling (MusicGen's defaults: top-k 250, temperature 1).</summary>
     public int AcousticTopK { get; set; } = 250;
+    /// <summary>Gets or sets the logit temperature used for acoustic-token sampling. Defaults to <c>1.0</c>.</summary>
     public double AcousticTemperature { get; set; } = 1.0;
 
 
@@ -269,9 +322,13 @@ public class FireRedTTSOptions : TtsModelOptions
 
     /// <summary>Sample the semantic tokens (the release: true); false takes the most likely token.</summary>
     public bool Sample { get; set; } = true;
+    /// <summary>Gets or sets the maximum number of highest-probability tokens retained during sampling. Defaults to <c>30</c>.</summary>
     public int TopK { get; set; } = 30;
+    /// <summary>Gets or sets the cumulative probability threshold for nucleus sampling. Defaults to <c>0.85</c>.</summary>
     public double TopP { get; set; } = 0.85;
+    /// <summary>Gets or sets the logit temperature used during sampling. Defaults to <c>0.75</c>.</summary>
     public double Temperature { get; set; } = 0.75;
+    /// <summary>Gets or sets the penalty applied to repeated tokens during generation. Defaults to <c>2.0</c>.</summary>
     public double RepetitionPenalty { get; set; } = 2.0;
 
     /// <summary>Sequences sampled per segment (<c>num_return_sequences</c>: 7).</summary>
@@ -303,24 +360,30 @@ public class FireRedTTSOptions : TtsModelOptions
 
     /// <summary>The network a training step updates.</summary>
     public FireRedTtsStage Stage { get; set; } = FireRedTtsStage.TextToSpeech;
+    /// <summary>Gets or sets the random seed used during training. Defaults to <c>7</c>.</summary>
     public int TrainingSeed { get; set; } = 7;
 
     /// <summary>The flow's and the acoustic LM's warm-up steps (their recipes: CosyVoice's 2,500 and MusicGen's 4,000; the other
     /// recipe values are the stages' declared optimizers).</summary>
     public int FlowWarmupSteps { get; set; } = 2500;
+    /// <summary>Gets or sets the acoustic language-model warmup steps. Defaults to <c>4000</c>.</summary>
     public int AcousticLmWarmupSteps { get; set; } = 4000;
 
     /// <summary>XTTS's loss weights: text 0.01, audio 1.</summary>
     public double TextLossWeight { get; set; } = 0.01;
+    /// <summary>Gets or sets the weight of the audio loss. Defaults to <c>1.0</c>.</summary>
     public double AudioLossWeight { get; set; } = 1.0;
 
     /// <summary>The GPT's AdamW (XTTS: 0.9, 0.96, 1e-8; rate <see cref="TtsModelOptions.LearningRate"/>, decay on weights).</summary>
     public double Beta1 { get; set; } = 0.9;
+    /// <summary>Gets or sets the second-moment decay for the training optimizer. Defaults to <c>0.96</c>.</summary>
     public double Beta2 { get; set; } = 0.96;
+    /// <summary>Gets or sets the numerical stability constant of the optimizer. Defaults to <c>1e-8</c>.</summary>
     public double Epsilon { get; set; } = 1e-8;
 
     /// <summary>XTTS's MultiStepLR milestones (×0.5 each).</summary>
     public int[] LearningRateMilestones { get; set; } = { 900000, 2700000, 5400000 };
+    /// <summary>Gets or sets the learning rate decay. Defaults to <c>0.5</c>.</summary>
     public double LearningRateDecay { get; set; } = 0.5;
 
 

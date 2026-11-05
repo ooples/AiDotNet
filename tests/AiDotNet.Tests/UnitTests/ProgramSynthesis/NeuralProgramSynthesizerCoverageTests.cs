@@ -103,6 +103,51 @@ public sealed class NeuralProgramSynthesizerCoverageTests
         Assert.Null(feedback);
     }
 
+    [Fact]
+    public void ValidateProgram_FallsBackToGenericChecks_OnlyWhenTheGrammarCannotLoad()
+    {
+        // A grammar library that cannot load, even wrapped by a type initializer, falls back to the generic checks.
+        var wrapped = new TypeInitializationException("Grammar", new DllNotFoundException("tree-sitter-csharp"));
+        var program = new Program<double>("public class C { }", ProgramLanguage.CSharp, isValid: false, fitnessScore: 0.0, complexity: 1);
+        Assert.True(CreateSynthesizer(new ThrowingSyntaxProvider(wrapped)).ValidateProgram(program));
+
+        // The provider's own failure is a defect, not a missing grammar, so it surfaces instead of passing generically.
+        Assert.Throws<InvalidOperationException>(() =>
+            CreateSynthesizer(new ThrowingSyntaxProvider(new InvalidOperationException("parser bug"))).ValidateProgram(program));
+    }
+
+    private sealed class ThrowingSyntaxProvider : AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider
+    {
+        private readonly Exception _failure;
+        public ThrowingSyntaxProvider(Exception failure) => _failure = failure;
+        public bool? TryValidate(ProgramLanguage language, string sourceCode) => throw _failure;
+        public bool TryExtractAst(string code, ProgramLanguage language,
+            AiDotNet.ProgramSynthesis.Tokenization.CodeTokenizationPipelineOptions options,
+            out System.Collections.Generic.List<CodeAstNode> nodes,
+            out System.Collections.Generic.List<CodeAstEdge> edges) => throw _failure;
+    }
+
+    private static NeuralProgramSynthesizer<double> CreateSynthesizer(AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider provider)
+    {
+        var architecture = new CodeSynthesisArchitecture<double>(
+            synthesisType: SynthesisType.Neural,
+            targetLanguage: ProgramLanguage.Generic,
+            codeTaskType: CodeTask.Generation,
+            numEncoderLayers: 0,
+            numDecoderLayers: 0,
+            numHeads: 1,
+            modelDimension: 16,
+            feedForwardDimension: 32,
+            maxSequenceLength: 64,
+            vocabularySize: 256,
+            maxProgramLength: 64,
+            dropoutRate: 0.0,
+            usePositionalEncoding: false);
+
+        return new NeuralProgramSynthesizer<double>(architecture, FakeCodeModel.CreateDefault(ProgramLanguage.Generic),
+            codeSyntaxProvider: provider);
+    }
+
     private static NeuralProgramSynthesizer<double> CreateSynthesizer(IProgramExecutionEngine? executionEngine, int maxProgramLength)
     {
         var architecture = new CodeSynthesisArchitecture<double>(

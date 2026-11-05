@@ -666,7 +666,7 @@ public sealed class SqlSandboxExecutor : ISqlSandboxExecutor
 
         var returnsRows = ReturnsRows(safeQuery);
         var queryToRun = returnsRows && IsSelectLike(safeQuery)
-            ? ApplyLimit(dialect, safeQuery, _options.MaxResultRows)
+            ? ApplyLimit(dialect, safeQuery, EffectiveMaxResultRows)
             : safeQuery;
 
         await using var cmd = createCommand(queryToRun);
@@ -691,7 +691,7 @@ public sealed class SqlSandboxExecutor : ISqlSandboxExecutor
         }
 
         var rows = new List<Dictionary<string, SqlValue>>();
-        var maxRows = _options.MaxResultRows;
+        var maxRows = EffectiveMaxResultRows;
         while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
         {
             var row = new Dictionary<string, SqlValue>(StringComparer.Ordinal);
@@ -703,7 +703,7 @@ public sealed class SqlSandboxExecutor : ISqlSandboxExecutor
 
             rows.Add(row);
 
-            if (maxRows > 0 && rows.Count >= maxRows)
+            if (rows.Count >= maxRows)
             {
                 break;
             }
@@ -804,9 +804,16 @@ public sealed class SqlSandboxExecutor : ISqlSandboxExecutor
                start.StartsWith("explain", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string ApplyLimit(SqlDialect dialect, string sql, int limit)
+    /// <summary>
+    /// The row cap every row-returning statement shares: <see cref="ServingSqlSandboxOptions.MaxResultRows"/>, or 1,000
+    /// when that is not positive, so a SELECT and any other row-returning statement are capped alike.
+    /// </summary>
+    private int EffectiveMaxResultRows => _options.MaxResultRows > 0 ? _options.MaxResultRows : DefaultMaxResultRows;
+
+    private const int DefaultMaxResultRows = 1000;
+
+    private static string ApplyLimit(SqlDialect dialect, string sql, int capped)
     {
-        var capped = limit > 0 ? limit : 1000;
         return dialect switch
         {
             SqlDialect.MySql => $"SELECT * FROM ({sql}) AS aidotnet_q LIMIT {capped}",

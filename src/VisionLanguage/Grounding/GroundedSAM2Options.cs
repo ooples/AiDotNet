@@ -37,6 +37,7 @@ public class GroundedSAM2Options : ModelOptions
         MaskThreshold = other.MaskThreshold;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GroundedSAM2Options()
     {
     }

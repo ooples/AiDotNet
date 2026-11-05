@@ -15,8 +15,11 @@ namespace AiDotNet.Data.Audio.Benchmarks;
 /// </remarks>
 public sealed class GtzanDataLoaderOptions
 {
+    /// <summary>Gets or sets which split of the dataset is loaded.</summary>
     public DatasetSplit Split { get; set; } = DatasetSplit.Train;
+    /// <summary>Gets or sets the dataset root directory; null uses the default data directory for this dataset.</summary>
     public string? DataPath { get; set; }
+    /// <summary>Gets or sets whether the dataset is downloaded into the data directory when it is not there.</summary>
     public bool AutoDownload { get; set; } = true;
     /// <summary>Sample rate for resampling. Default 22050 (matches the source).</summary>
     public int SampleRate { get; set; } = 22050;
@@ -24,6 +27,7 @@ public sealed class GtzanDataLoaderOptions
     public int Samples { get; set; } = 30 * 22050;
     /// <summary>Train/test split fraction (per-class deterministic). Default 0.8 → 80 train / 20 test per class.</summary>
     public double TrainFraction { get; set; } = 0.8;
+    /// <summary>Gets or sets the most samples loaded; null loads the whole split.</summary>
     public int? MaxSamples { get; set; }
 
     /// <summary>Validates that all option values are within acceptable ranges.</summary>

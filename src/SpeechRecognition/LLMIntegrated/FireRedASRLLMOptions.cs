@@ -56,6 +56,7 @@ public class FireRedASRLLMOptions : ModelOptions
         Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
     /// <summary>The longest recording transcribed (30 seconds).</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
@@ -85,14 +86,18 @@ public class FireRedASRLLMOptions : ModelOptions
     public int NumLlmAttentionHeads { get; set; } = 28;
     /// <summary>Qwen2-7B's key-value heads (4).</summary>
     public int NumLlmKvHeads { get; set; } = 4;
+    /// <summary>Gets or sets the rotary positional-embedding frequency base for the language-model. Defaults to <c>1_000_000.0</c>.</summary>
     public double LlmRopeTheta { get; set; } = 1_000_000.0;
+    /// <summary>Gets or sets the RMS-normalization stability constant for the language-model. Defaults to <c>1e-6</c>.</summary>
     public double LlmRmsEpsilon { get; set; } = 1e-6;
     /// <summary>Qwen2-7B's vocabulary rows (152,064). A vocabulary smaller than the tokenizer's has no ChatML prompt: the
     /// decoder reads the speech alone and its last token ends the answer.</summary>
     public int VocabSize { get; set; } = 152064;
     /// <summary>The LoRA rank on every attention and feed-forward projection (64, the release's <c>LoraConfig</c>).</summary>
     public int LoraRank { get; set; } = 64;
+    /// <summary>Gets or sets the LoRA adapter scaling factor. Defaults to <c>16</c>.</summary>
     public double LoraAlpha { get; set; } = 16;
+    /// <summary>Gets or sets the dropout probability of the LoRA adapter. Defaults to <c>0.05</c>.</summary>
     public double LoraDropout { get; set; } = 0.05;
     /// <summary>The parameters training updates: every one by default; the paper's recipe trains the encoder, the adapter
     /// and the LoRA adapters only.</summary>
@@ -101,8 +106,11 @@ public class FireRedASRLLMOptions : ModelOptions
     public string Instruction { get; set; } = "请转写音频为文字";
     /// <summary>The longest transcript generated, in tokens; the release also stops at the adapter's output length.</summary>
     public int MaxTextLength { get; set; } = 512;
+    /// <summary>Gets or sets the path to the model weights.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"zh"</c>.</summary>
     public string Language { get; set; } = "zh";
     /// <summary>Optional vocabulary mapping token ids to text when the vocabulary is not Qwen's.</summary>
     public string[]? Vocabulary { get; set; }

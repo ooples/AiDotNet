@@ -9,6 +9,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </remarks>
 public class E3TTSOptions : EndToEndTtsOptions
 {
+    /// <summary>Creates an instance with the default settings.</summary>
     public E3TTSOptions()
     {
         SampleRate = 24_000;
@@ -54,12 +55,19 @@ public class E3TTSOptions : EndToEndTtsOptions
         SamplingSeed = other.SamplingSeed;
     }
 
+    /// <summary>Gets or sets the BERT vocabulary size. Defaults to <c>30_522</c>.</summary>
     public int BertVocabularySize { get; set; } = 30_522;
+    /// <summary>Gets or sets the feature width of the BERT hidden. Defaults to <c>768</c>.</summary>
     public int BertHiddenDim { get; set; } = 768;
+    /// <summary>Gets or sets the number of layers in the BERT. Defaults to <c>12</c>.</summary>
     public int BertLayers { get; set; } = 12;
+    /// <summary>Gets or sets the number of attention heads in the BERT. Defaults to <c>12</c>.</summary>
     public int BertHeads { get; set; } = 12;
+    /// <summary>Gets or sets the feature width of the BERT intermediate. Defaults to <c>3_072</c>.</summary>
     public int BertIntermediateDim { get; set; } = 3_072;
+    /// <summary>Gets or sets the BERT max positions. Defaults to <c>512</c>.</summary>
     public int BertMaxPositions { get; set; } = 512;
+    /// <summary>Gets or sets the dropout probability for the BERT. Defaults to <c>0.1</c>.</summary>
     public double BertDropout { get; set; } = 0.1;
 
     /// <summary>The paper does not say that the English BERT checkpoint is fine-tuned; by default it is a frozen feature extractor.</summary>
@@ -83,11 +91,17 @@ public class E3TTSOptions : EndToEndTtsOptions
     /// <summary>Self/cross-attention heads per block; zero means no attention.</summary>
     public int[] AttentionHeads { get; set; } = [0, 0, 0, 0, 0, 8, 8, 8, 8, 8];
 
+    /// <summary>Gets or sets the group norm groups. Defaults to <c>32</c>.</summary>
     public int GroupNormGroups { get; set; } = 32;
+    /// <summary>Gets or sets the numerical stability constant for group norm. Defaults to <c>1e-5</c>.</summary>
     public double GroupNormEpsilon { get; set; } = 1e-5;
+    /// <summary>Gets or sets the feature width of the time embedding. Defaults to <c>256</c>.</summary>
     public int TimeEmbeddingDim { get; set; } = 256;
+    /// <summary>Gets or sets the feature width of the condition. Defaults to <c>1_024</c>.</summary>
     public int ConditionDim { get; set; } = 1_024;
+    /// <summary>Gets or sets the speaker count. Defaults to <c>1</c>.</summary>
     public int SpeakerCount { get; set; } = 1;
+    /// <summary>Gets or sets the token ID for default speaker.</summary>
     public int DefaultSpeakerId { get; set; }
 
     /// <summary>10.92 seconds at 24 kHz, as used during training.</summary>
@@ -108,8 +122,11 @@ public class E3TTSOptions : EndToEndTtsOptions
 
     /// <summary>Paper section 3.3 weights padded samples one tenth as much as real samples.</summary>
     public double PaddingLossWeight { get; set; } = 0.1;
+    /// <summary>Gets or sets the silence block size. Defaults to <c>1_024</c>.</summary>
     public int SilenceBlockSize { get; set; } = 1_024;
+    /// <summary>Gets or sets the silence magnitude threshold. Defaults to <c>0.02</c>.</summary>
     public double SilenceMagnitudeThreshold { get; set; } = 0.02;
+    /// <summary>Gets or sets the random seed used during sampling. Defaults to <c>17</c>.</summary>
     public int SamplingSeed { get; set; } = 17;
 
     internal void Validate()

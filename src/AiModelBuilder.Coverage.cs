@@ -17,9 +17,6 @@ namespace AiDotNet;
 /// curriculum scheduling, exploration strategies, self-supervised learning, stopping criteria,
 /// time series decomposition, distillation strategies, model compression, and tools.
 /// </summary>
-/// <typeparam name="T">The numeric type used for calculations.</typeparam>
-/// <typeparam name="TInput">The input type.</typeparam>
-/// <typeparam name="TOutput">The output type.</typeparam>
 public partial class AiModelBuilder<T, TInput, TOutput>
 {
     private IDataSplitter<T>? _configuredDataSplitter;

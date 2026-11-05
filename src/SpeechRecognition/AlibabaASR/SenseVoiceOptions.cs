@@ -51,18 +51,29 @@ public class SenseVoiceOptions : ModelOptions
         WeightDecay = other.WeightDecay;
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
+    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
+    /// <summary>Gets or sets the hidden width of the encoder.</summary>
     public int EncoderDim { get; set; } = 512;
+    /// <summary>Gets or sets the number of encoder layers.</summary>
     public int NumEncoderLayers { get; set; } = 50;
+    /// <summary>Gets or sets the number of heads in each attention layer.</summary>
     public int NumAttentionHeads { get; set; } = 4;
+    /// <summary>Gets or sets the number of mel filterbank channels in the input features.</summary>
     public int NumMels { get; set; } = 80;
+    /// <summary>Gets or sets the number of output tokens the model predicts over.</summary>
     public int VocabSize { get; set; } = 25055;
+    /// <summary>Gets or sets the most tokens decoded for one utterance.</summary>
     public int MaxTextLength { get; set; } = 512;
+    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     /// <summary>The language query: auto (the release's default), zh, en, yue, ja, ko or nospeech.</summary>
     public string Language { get; set; } = "auto";
+    /// <summary>Gets or sets the hidden width of the feed-forward network. Defaults to <c>2048</c>.</summary>
     public int FeedForwardDim { get; set; } = 2048;
     /// <summary>SAN-M blocks after the first norm (<c>tp_blocks</c>, 20).</summary>
     public int NumTpEncoderLayers { get; set; } = 20;
@@ -80,6 +91,8 @@ public class SenseVoiceOptions : ModelOptions
     public bool TargetsIncludeRichTokens { get; set; } = false;
     /// <summary>Token strings by id; ids past it decode as Unicode code points.</summary>
     public string[] Vocabulary { get; set; } = Array.Empty<string>();
+    /// <summary>Gets or sets the optimizer learning rate. Defaults to <c>2e-5</c>.</summary>
     public double LearningRate { get; set; } = 2e-5;
+    /// <summary>Gets or sets the weight decay of the default optimizer.</summary>
     public double WeightDecay { get; set; } = 0.01;
 }

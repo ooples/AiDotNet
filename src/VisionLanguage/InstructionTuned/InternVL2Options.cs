@@ -40,6 +40,7 @@ public class InternVL2Options : InstructionTunedVLMOptions
         EnableDynamicResolution = other.EnableDynamicResolution;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public InternVL2Options()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

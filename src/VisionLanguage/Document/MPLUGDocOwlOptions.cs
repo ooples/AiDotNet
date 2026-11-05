@@ -41,6 +41,7 @@ public class MPLUGDocOwlOptions : DocumentVLMOptions
         NumAbstractorLayers = other.NumAbstractorLayers;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MPLUGDocOwlOptions()
     {
         VisionDim = 1024;

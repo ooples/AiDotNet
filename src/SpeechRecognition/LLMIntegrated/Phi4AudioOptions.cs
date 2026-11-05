@@ -59,6 +59,7 @@ public class Phi4AudioOptions : ModelOptions
         Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
     /// <summary>The longest recording transcribed (30 seconds, the post-training limit for ASR).</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
@@ -88,19 +89,23 @@ public class Phi4AudioOptions : ModelOptions
     public int NumLlmAttentionHeads { get; set; } = 24;
     /// <summary>Phi-4-Mini's key-value heads (8).</summary>
     public int NumLlmKvHeads { get; set; } = 8;
+    /// <summary>Gets or sets the rotary positional-embedding frequency base for the language-model. Defaults to <c>10000.0</c>.</summary>
     public double LlmRopeTheta { get; set; } = 10000.0;
     /// <summary>The share of each head the rotary embedding turns (0.75).</summary>
     public double PartialRotaryFactor { get; set; } = 0.75;
     /// <summary>Whether the rotary embedding uses the release's LongRoPE factors (its 128K context extension); they
     /// apply to a head width of 128 with the default rotary share.</summary>
     public bool UseLongRope { get; set; } = true;
+    /// <summary>Gets or sets the RMS-normalization stability constant for the language-model. Defaults to <c>1e-5</c>.</summary>
     public double LlmRmsEpsilon { get; set; } = 1e-5;
     /// <summary>The vocabulary rows (200,064). A vocabulary smaller than the tokenizer's has no chat prompt: the decoder
     /// reads the speech alone and its last token ends the answer.</summary>
     public int VocabSize { get; set; } = 200064;
     /// <summary>The speech LoRA's rank on every attention and feed-forward projection (320).</summary>
     public int LoraRank { get; set; } = 320;
+    /// <summary>Gets or sets the LoRA adapter scaling factor. Defaults to <c>640</c>.</summary>
     public double LoraAlpha { get; set; } = 640;
+    /// <summary>Gets or sets the dropout probability of the LoRA adapter. Defaults to <c>0.01</c>.</summary>
     public double LoraDropout { get; set; } = 0.01;
     /// <summary>What training updates: every parameter by default; the paper's stages are encoder alignment, then the
     /// projector and the speech LoRA.</summary>
@@ -109,8 +114,11 @@ public class Phi4AudioOptions : ModelOptions
     public string Instruction { get; set; } = "Transcribe the audio clip into text.";
     /// <summary>The longest transcript generated, in tokens.</summary>
     public int MaxTextLength { get; set; } = 512;
+    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"en"</c>.</summary>
     public string Language { get; set; } = "en";
     /// <summary>Optional vocabulary mapping token ids to text when the vocabulary is not Phi's.</summary>
     public string[]? Vocabulary { get; set; }

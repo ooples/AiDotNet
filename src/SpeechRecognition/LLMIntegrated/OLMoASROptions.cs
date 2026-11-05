@@ -39,6 +39,7 @@ public class OLMoASROptions : ModelOptions
         Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
     /// <summary>Log-mel bands (80, as every English-only Whisper geometry).</summary>
     public int NumMels { get; set; } = 80;
@@ -56,8 +57,11 @@ public class OLMoASROptions : ModelOptions
     /// <summary>The longest transcript generated, in tokens (224, half the decoder's 448-token context, as Whisper's
     /// <c>sample_len</c>).</summary>
     public int MaxTextLength { get; set; } = 224;
+    /// <summary>Gets or sets the path to the model weights.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"en"</c>.</summary>
     public string Language { get; set; } = "en";
     /// <summary>Optional vocabulary mapping token ids to text when the vocabulary is not Whisper's English one.</summary>
     public string[]? Vocabulary { get; set; }

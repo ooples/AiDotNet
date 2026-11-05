@@ -67,45 +67,76 @@ public class VoiceCraftOptions : CodecTtsOptions
         Codec = (EnCodecOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(other.Codec);
     }
 
+    /// <summary>Gets or sets the hidden width of the feed-forward network.</summary>
     public int FeedForwardDim { get; set; }
+    /// <summary>Gets or sets the text vocabulary size. Defaults to <c>100</c>.</summary>
     public int TextVocabularySize { get; set; } = 100;
+    /// <summary>Gets or sets the max mask spans. Defaults to <c>3</c>.</summary>
     public int MaxMaskSpans { get; set; } = 3;
+    /// <summary>Gets or sets the minimum mask frames. Defaults to <c>1</c>.</summary>
     public int MinimumMaskFrames { get; set; } = 1;
+    /// <summary>Gets or sets the maximum mask frames. Defaults to <c>600</c>.</summary>
     public int MaximumMaskFrames { get; set; } = 600;
+    /// <summary>Gets or sets the minimum gap frames. Defaults to <c>5</c>.</summary>
     public int MinimumGapFrames { get; set; } = 5;
+    /// <summary>Gets or sets the codebook loss weights.</summary>
     public double[] CodebookLossWeights { get; set; } = [5, 1, 0.5, 0.1];
 
+    /// <summary>Gets or sets the dropout probability for the text embedding. Defaults to <c>0.1</c>.</summary>
     public double TextEmbeddingDropout { get; set; } = 0.1;
+    /// <summary>Gets or sets the dropout probability for the audio embedding.</summary>
     public double AudioEmbeddingDropout { get; set; }
+    /// <summary>Gets or sets the dropout probability for the text position. Defaults to <c>0.1</c>.</summary>
     public double TextPositionDropout { get; set; } = 0.1;
+    /// <summary>Gets or sets the dropout probability for the audio position. Defaults to <c>0.1</c>.</summary>
     public double AudioPositionDropout { get; set; } = 0.1;
+    /// <summary>Gets or sets the dropout probability for the transformer. Defaults to <c>0.1</c>.</summary>
     public double TransformerDropout { get; set; } = 0.1;
 
     /// <summary>Top-k sampling. Zero selects the paper's nucleus-only rule; the current release recommends 40.</summary>
     public int TopK { get; set; }
+    /// <summary>Gets or sets the cumulative probability threshold for nucleus sampling. Defaults to <c>0.8</c>.</summary>
     public double TopP { get; set; } = 0.8;
+    /// <summary>Gets or sets the logit temperature used during sampling. Defaults to <c>1</c>.</summary>
     public double Temperature { get; set; } = 1;
+    /// <summary>Gets or sets the sample batch size. Defaults to <c>3</c>.</summary>
     public int SampleBatchSize { get; set; } = 3;
+    /// <summary>Gets or sets the minimum generated frames. Defaults to <c>10</c>.</summary>
     public int MinimumGeneratedFrames { get; set; } = 10;
+    /// <summary>Gets or sets the maximum frames per phone. Defaults to <c>10</c>.</summary>
     public int MaximumFramesPerPhone { get; set; } = 10;
+    /// <summary>Gets or sets the stop silence repetition. Defaults to <c>3</c>.</summary>
     public int StopSilenceRepetition { get; set; } = 3;
+    /// <summary>Gets or sets the silence tokens.</summary>
     public int[] SilenceTokens { get; set; } = [1388, 1898, 131];
+    /// <summary>Gets or sets the random seed used during sampling. Defaults to <c>1</c>.</summary>
     public int SamplingSeed { get; set; } = 1;
 
+    /// <summary>Gets or sets the total training steps. Defaults to <c>50000</c>.</summary>
     public int TotalTrainingSteps { get; set; } = 50000;
+    /// <summary>Gets or sets the eden warmup steps. Defaults to <c>500</c>.</summary>
     public int EdenWarmupSteps { get; set; } = 500;
+    /// <summary>Gets or sets the eden step. Defaults to <c>3000</c>.</summary>
     public int EdenStep { get; set; } = 3000;
+    /// <summary>Gets or sets the eden epoch. Defaults to <c>4</c>.</summary>
     public int EdenEpoch { get; set; } = 4;
+    /// <summary>Gets or sets the pseudo epoch steps. Defaults to <c>3000</c>.</summary>
     public int PseudoEpochSteps { get; set; } = 3000;
+    /// <summary>Gets or sets whether training uses the ScaledAdam optimizer. Defaults to <c>true</c>.</summary>
     public bool UseScaledAdam { get; set; } = true;
 
     /// <summary>The frozen 16 kHz, 50 Hz, four-by-2048 EnCodec trained by the authors on GigaSpeech.</summary>
     public EnCodecOptions Codec { get; set; }
 
+    /// <summary>Gets or sets the token ID for empty.</summary>
     public int EmptyToken => CodebookSize;
+    /// <summary>Gets or sets the token ID for end of generation.</summary>
     public int EndOfGenerationToken => CodebookSize + 1;
+    /// <summary>Gets or sets the token ID for audio padding.</summary>
     public int AudioPaddingToken => CodebookSize + 2;
+    /// <summary>Gets or sets the token ID for end of utterance.</summary>
     public int EndOfUtteranceToken => CodebookSize + 3;
+    /// <summary>Gets or sets the audio vocabulary size.</summary>
     public int AudioVocabularySize => CodebookSize + 4;
 
     /// <summary>Released 830M layout, including the release's 16 heads and current top-40 sampling.</summary>

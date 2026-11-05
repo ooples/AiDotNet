@@ -60,7 +60,9 @@ public class SALMOptions : ModelOptions
         Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
+    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
     /// <summary>Log-mel bands (80).</summary>
     public int NumMels { get; set; } = 80;
@@ -90,6 +92,7 @@ public class SALMOptions : ModelOptions
     public int NumLlmLayers { get; set; } = 24;
     /// <summary>Megatron GPT's attention heads (16).</summary>
     public int NumLlmAttentionHeads { get; set; } = 16;
+    /// <summary>Gets or sets the rotary positional-embedding frequency base for the language-model. Defaults to <c>10000.0</c>.</summary>
     public double LlmRopeTheta { get; set; } = 10000.0;
     /// <summary>The share of each head the rotary embedding turns (<c>rotary_percentage</c> 0.5).</summary>
     public double PartialRotaryFactor { get; set; } = 0.5;
@@ -102,6 +105,7 @@ public class SALMOptions : ModelOptions
     public int LoraRank { get; set; } = 128;
     /// <summary>LoRA alpha; NeMo scales the update by alpha / rank with alpha equal to the rank.</summary>
     public double LoraAlpha { get; set; } = 128;
+    /// <summary>Gets or sets the dropout probability of the LoRA adapter.</summary>
     public double LoraDropout { get; set; }
     /// <summary>What training updates: every parameter by default; the paper freezes the LLM and trains the encoder, the
     /// adapter and LoRA (<see cref="SpeechLlmTrainingScope.EncoderAdapterAndLora"/>).</summary>
@@ -113,8 +117,11 @@ public class SALMOptions : ModelOptions
     public string Instruction { get; set; } = "Transcribe the audio into English text.";
     /// <summary>The longest transcript generated, in tokens (the release's <c>tokens_to_generate</c>, 128).</summary>
     public int MaxTextLength { get; set; } = 128;
+    /// <summary>Gets or sets the path to the model weights.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"en"</c>.</summary>
     public string Language { get; set; } = "en";
     /// <summary>Optional vocabulary mapping token ids to text when the vocabulary is not Megatron's.</summary>
     public string[]? Vocabulary { get; set; }

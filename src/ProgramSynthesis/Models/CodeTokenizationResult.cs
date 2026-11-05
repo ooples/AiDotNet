@@ -39,4 +39,10 @@ public sealed class CodeTokenizationResult
     /// Optional relationships between AST nodes (when enabled).
     /// </summary>
     public List<CodeAstEdge> AstEdges { get; set; } = new();
+
+    /// <summary>
+    /// Why the result has no syntax tree although one was requested (for example, the provider's native grammar could
+    /// not load), or null.
+    /// </summary>
+    public string? AstUnavailableReason { get; set; }
 }

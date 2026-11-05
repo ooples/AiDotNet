@@ -41,6 +41,7 @@ public class DragonflyMedOptions : MedicalVLMOptions
         MaxOutputTokens = other.MaxOutputTokens;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public DragonflyMedOptions()
     {
         VisionDim = 1024;

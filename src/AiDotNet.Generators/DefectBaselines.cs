@@ -23,8 +23,5 @@ internal static class DefectBaselines
     internal static readonly System.Collections.Generic.HashSet<string> UntestedModels =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
-            "global::AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>",
-            "global::AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>",
-            "global::AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>",
         };
 }

@@ -38,6 +38,7 @@ public class Phi3VisionOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public Phi3VisionOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

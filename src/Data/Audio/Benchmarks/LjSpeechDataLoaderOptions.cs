@@ -17,7 +17,9 @@ public sealed class LjSpeechDataLoaderOptions
 {
     /// <summary>Dataset split. LJSpeech has no canonical splits; this loader uses a deterministic 90/5/5 by row index.</summary>
     public DatasetSplit Split { get; set; } = DatasetSplit.Train;
+    /// <summary>Gets or sets the dataset root directory; null uses the default data directory for this dataset.</summary>
     public string? DataPath { get; set; }
+    /// <summary>Gets or sets whether the dataset is downloaded into the data directory when it is not there.</summary>
     public bool AutoDownload { get; set; } = true;
     /// <summary>Maximum waveform length in samples (zero-padded). Default 22050 * 10 = 10s.</summary>
     public int MaxAudioSamples { get; set; } = 22_050 * 10;
@@ -27,6 +29,7 @@ public sealed class LjSpeechDataLoaderOptions
     public int VocabularySize { get; set; } = 256;
     /// <summary>Use the normalized text (numbers/dates expanded). Default true (recommended for TTS).</summary>
     public bool UseNormalizedText { get; set; } = true;
+    /// <summary>Gets or sets the most samples loaded; null loads the whole split.</summary>
     public int? MaxSamples { get; set; }
 
     /// <summary>Validates that all option values are within acceptable ranges.</summary>

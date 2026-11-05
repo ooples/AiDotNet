@@ -35,10 +35,12 @@ namespace AiDotNet.Audio.Classification;
 /// </remarks>
 public class ASTOptions : ModelOptions
 {
+    /// <summary>Creates an instance with the default settings.</summary>
     public ASTOptions()
     {
     }
 
+    /// <summary>Copies the settings from another options instance.</summary>
     public ASTOptions(ASTOptions other)
     {
         if (other is null) throw new ArgumentNullException(nameof(other));

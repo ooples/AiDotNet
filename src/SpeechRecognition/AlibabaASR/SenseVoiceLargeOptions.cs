@@ -43,6 +43,7 @@ public class SenseVoiceLargeOptions : ModelOptions
         Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
     /// <summary>Log-mel bands (128).</summary>
     public int NumMels { get; set; } = 128;
@@ -52,14 +53,18 @@ public class SenseVoiceLargeOptions : ModelOptions
     public int NumEncoderLayers { get; set; } = 32;
     /// <summary>Decoder layers (32).</summary>
     public int NumDecoderLayers { get; set; } = 32;
+    /// <summary>Gets or sets the number of attention heads. Defaults to <c>20</c>.</summary>
     public int NumAttentionHeads { get; set; } = 20;
     /// <summary>The vocabulary (51,866). Its last five tokens are the special ones: end of text, start of transcript, and
     /// the LID, SER and AED task tokens; the others are text, language, emotion and event tokens.</summary>
     public int VocabSize { get; set; } = 51866;
     /// <summary>The longest decoded sequence, task outputs included (at most the decoder's 448 positions).</summary>
     public int MaxTextLength { get; set; } = 224;
+    /// <summary>Gets or sets the path to the model weights.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"auto"</c>.</summary>
     public string Language { get; set; } = "auto";
     /// <summary>Whether the prompt carries the LID task token, so the decoder first predicts the language.</summary>
     public bool PredictLanguage { get; set; } = true;

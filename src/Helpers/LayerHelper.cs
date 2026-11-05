@@ -6629,124 +6629,6 @@ public static partial class LayerHelper<T>
     }
 
     /// <summary>
-    /// Creates default TTS (Text-to-Speech) layers for speech synthesis.
-    /// </summary>
-    /// <param name="textHiddenDim">Text encoder hidden dimension (default: 256).</param>
-    /// <param name="audioHiddenDim">Audio decoder hidden dimension (default: 512).</param>
-    /// <param name="numEncoderLayers">Number of encoder transformer layers (default: 6).</param>
-    /// <param name="numDecoderLayers">Number of decoder transformer layers (default: 6).</param>
-    /// <param name="numHeads">Number of attention heads (default: 8).</param>
-    /// <param name="numMels">Number of mel spectrogram bins (default: 80).</param>
-    /// <param name="maxTextLength">Maximum input text length (default: 512).</param>
-    /// <param name="maxMelFrames">Maximum mel spectrogram frames (default: 1000).</param>
-    /// <param name="vocabSize">Phoneme/character vocabulary size (default: 148).</param>
-    /// <param name="dropoutRate">Dropout rate (default: 0.1).</param>
-    /// <returns>A collection of layers forming a TTS encoder-decoder architecture.</returns>
-    /// <remarks>
-    /// <para>
-    /// TTS architecture with:
-    /// </para>
-    /// <list type="bullet">
-    /// <item><description>Character/phoneme embedding with positional encoding</description></item>
-    /// <item><description>Transformer encoder for text representation</description></item>
-    /// <item><description>Transformer decoder with cross-attention for mel generation</description></item>
-    /// <item><description>Post-net convolutional refinement (simulated with dense layers)</description></item>
-    /// </list>
-    /// <para>
-    /// Reference: "Natural TTS Synthesis by Conditioning WaveNet on Mel Spectrogram Predictions" (Tacotron 2)
-    /// </para>
-    /// </remarks>
-    public static IEnumerable<ILayer<T>> CreateDefaultTtsLayers(
-        int textHiddenDim = 256,
-        int audioHiddenDim = 512,
-        int numEncoderLayers = 6,
-        int numDecoderLayers = 6,
-        int numHeads = 8,
-        int numMels = 80,
-        int maxTextLength = 512,
-        int maxMelFrames = 1000,
-        int vocabSize = 148,
-        double dropoutRate = 0.1)
-    {
-        IActivationFunction<T> reluActivation = new ReLUActivation<T>();
-        IActivationFunction<T> tanhActivation = new TanhActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
-
-        // === TEXT ENCODER ===
-
-        // Character/phoneme embedding
-        yield return new EmbeddingLayer<T>(vocabSize, textHiddenDim);
-
-        // Positional encoding for text
-        yield return new PositionalEncodingLayer<T>(maxTextLength, textHiddenDim);
-
-        if (dropoutRate > 0)
-        {
-            yield return new DropoutLayer<T>(dropoutRate);
-        }
-
-        // Text encoder transformer layers
-        for (int i = 0; i < numEncoderLayers; i++)
-        {
-            yield return new MultiHeadAttentionLayer<T>(numHeads, (textHiddenDim) / (numHeads));
-
-            yield return new LayerNormalizationLayer<T>();
-
-            yield return new DenseLayer<T>(textHiddenDim * 4, reluActivation);
-            yield return new DenseLayer<T>(textHiddenDim, identityActivation);
-
-            yield return new LayerNormalizationLayer<T>();
-
-            if (dropoutRate > 0)
-            {
-                yield return new DropoutLayer<T>(dropoutRate);
-            }
-        }
-
-        // Project to decoder dimension
-        yield return new DenseLayer<T>(audioHiddenDim, identityActivation);
-
-        // === MEL DECODER ===
-
-        // Pre-net for mel input (autoregressive conditioning)
-        yield return new DenseLayer<T>(audioHiddenDim, reluActivation);
-        yield return new DenseLayer<T>(audioHiddenDim, reluActivation);
-
-        if (dropoutRate > 0)
-        {
-            yield return new DropoutLayer<T>(dropoutRate);
-        }
-
-        // Decoder transformer layers
-        for (int i = 0; i < numDecoderLayers; i++)
-        {
-            yield return new TransformerDecoderLayer<T>(
-                numHeads: numHeads,
-                feedForwardDim: audioHiddenDim * 4,
-                sequenceLength: maxMelFrames,
-                ffnActivation: reluActivation);
-
-            if (dropoutRate > 0 && i < numDecoderLayers - 1)
-            {
-                yield return new DropoutLayer<T>(dropoutRate);
-            }
-        }
-
-        // Mel projection
-        yield return new DenseLayer<T>(numMels, identityActivation);
-
-        // === POST-NET (5 convolutional layers simulated with dense) ===
-        yield return new DenseLayer<T>(512, tanhActivation);
-        yield return new DenseLayer<T>(512, tanhActivation);
-        yield return new DenseLayer<T>(512, tanhActivation);
-        yield return new DenseLayer<T>(512, tanhActivation);
-        yield return new DenseLayer<T>(numMels, identityActivation);
-
-        // Stop token prediction
-        yield return new DenseLayer<T>(1, (IActivationFunction<T>)new SigmoidActivation<T>());
-    }
-
-    /// <summary>
     /// Creates default speaker embedding layers for speaker verification and identification.
     /// </summary>
     /// <param name="numMels">Number of mel spectrogram bins (default: 80).</param>
@@ -32956,9 +32838,10 @@ public static partial class LayerHelper<T>
         int numDecoderLayers = 4,
         int numHeads = 2,
         double dropoutRate = 0.1,
-        int vocabSize = 256)
-        => CreateDefaultAcousticEncoderLayers(encoderDim, hiddenDim, numEncoderLayers, numHeads, dropoutRate, vocabSize)
-            .Concat(CreateDefaultAcousticDecoderLayers(decoderDim, hiddenDim, numDecoderLayers, numHeads, dropoutRate));
+        int vocabSize = 256,
+        int maxSequenceLength = 1000)
+        => CreateDefaultAcousticEncoderLayers(encoderDim, hiddenDim, numEncoderLayers, numHeads, dropoutRate, vocabSize, maxSequenceLength)
+            .Concat(CreateDefaultAcousticDecoderLayers(decoderDim, hiddenDim, numDecoderLayers, numHeads, dropoutRate, maxSequenceLength));
 
     /// <summary>
     /// Creates the text-encoder half of an acoustic TTS model: phoneme embedding, FFT blocks, and the projection to
@@ -32970,7 +32853,8 @@ public static partial class LayerHelper<T>
         int numEncoderLayers = 4,
         int numHeads = 2,
         double dropoutRate = 0.1,
-        int vocabSize = 256)
+        int vocabSize = 256,
+        int maxSequenceLength = 1000)
     {
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int encoderFfnDim = encoderDim * 4;
@@ -32981,6 +32865,12 @@ public static partial class LayerHelper<T>
         // tokens — without this layer, the test's raw mel-spec / token-ID
         // input fails the first MHA's hidden-dim contract.
         yield return new EmbeddingLayer<T>(vocabSize, encoderDim);
+
+        // Self-attention is order-blind, so FastSpeech adds sinusoidal positional encodings to the phoneme embeddings
+        // before the encoder (Ren et al. 2019, Fig. 1; Vaswani et al. 2017, Sec. 3.5). Without them the encoder sees a
+        // bag of phonemes and the spectrogram cannot follow the text order. maxSequenceLength is the longest input
+        // (1000 in the FastSpeech 2 reference configuration's max_seq_len).
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, encoderDim);
 
         // === Text Encoder (FFT blocks; Li et al. 2019 §3, FastSpeech Ren et al.
         // 2019 §3.1) ===
@@ -33011,12 +32901,15 @@ public static partial class LayerHelper<T>
         int hiddenDim = 256,
         int numDecoderLayers = 4,
         int numHeads = 2,
-        double dropoutRate = 0.1)
+        double dropoutRate = 0.1,
+        int maxSequenceLength = 1000)
     {
         IActivationFunction<T> identityActivation = new IdentityActivation<T>();
         int decoderFfnDim = hiddenDim * 4;
 
         // === Mel Decoder (FFT blocks; residual Pre-LN, as in the encoder) ===
+        // The decoder receives its own positional encoding, as in the combined acoustic factory.
+        yield return new PositionalEncodingLayer<T>(maxSequenceLength, hiddenDim);
         for (int i = 0; i < numDecoderLayers; i++)
         {
             yield return new TransformerEncoderBlock<T>(

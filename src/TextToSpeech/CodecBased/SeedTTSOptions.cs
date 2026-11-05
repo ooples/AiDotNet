@@ -83,12 +83,19 @@ public class SeedTTSOptions : CodecTtsOptions
 
     /// <summary>Configurable DAC-family tokenizer encoder width; Seed-TTS does not disclose its tokenizer widths.</summary>
     public int TokenizerChannels { get; set; } = 32;
+    /// <summary>Gets or sets the feature width of the tokenizer code. Defaults to <c>8</c>.</summary>
     public int TokenizerCodeDimension { get; set; } = 8;
+    /// <summary>Gets or sets the codec rates.</summary>
     public int[] CodecRates { get; set; } = [2, 4, 5, 12];
+    /// <summary>Gets or sets the training mel windows.</summary>
     public int[] TrainingMelWindows { get; set; } = [32, 64, 128, 256, 512, 1024, 2048];
+    /// <summary>Gets or sets the training mel bins.</summary>
     public int[] TrainingMelBins { get; set; } = [5, 10, 20, 40, 80, 160, 320];
+    /// <summary>Gets or sets the discriminator windows.</summary>
     public int[] DiscriminatorWindows { get; set; } = [2048, 1024, 512];
+    /// <summary>Gets or sets the discriminator channels. Defaults to <c>32</c>.</summary>
     public int DiscriminatorChannels { get; set; } = 32;
+    /// <summary>Gets or sets the discriminator width divisor. Defaults to <c>1</c>.</summary>
     public int DiscriminatorWidthDivisor { get; set; } = 1;
 
     /// <summary>Number of bidirectional transformer blocks in the token diffusion model.</summary>

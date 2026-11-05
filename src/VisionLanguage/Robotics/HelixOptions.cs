@@ -50,6 +50,7 @@ public class HelixOptions : VisionLanguageActionOptions
         WeightOffloadOptions = other.WeightOffloadOptions;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public HelixOptions()
     {
         VisionDim = 1024;

@@ -45,6 +45,7 @@ public class SkyworkR1V2Options : ReasoningVLMOptions
         EnableHybridRL = other.EnableHybridRL;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SkyworkR1V2Options()
     {
         VisionDim = 1152;

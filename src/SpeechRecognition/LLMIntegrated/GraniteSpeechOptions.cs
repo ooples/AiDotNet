@@ -73,6 +73,7 @@ public class GraniteSpeechOptions : ModelOptions
         Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
     /// <summary>The longest recording transcribed (30 seconds).</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
@@ -120,7 +121,9 @@ public class GraniteSpeechOptions : ModelOptions
     public int NumLlmAttentionHeads { get; set; } = 32;
     /// <summary>granite-3.3-8b's key-value heads (8).</summary>
     public int NumLlmKvHeads { get; set; } = 8;
+    /// <summary>Gets or sets the rotary positional-embedding frequency base for the language-model. Defaults to <c>10_000_000.0</c>.</summary>
     public double LlmRopeTheta { get; set; } = 10_000_000.0;
+    /// <summary>Gets or sets the RMS-normalization stability constant for the language-model. Defaults to <c>1e-5</c>.</summary>
     public double LlmRmsEpsilon { get; set; } = 1e-5;
     /// <summary>Granite's scale on the input embeddings (12).</summary>
     public double EmbeddingMultiplier { get; set; } = 12.0;
@@ -135,7 +138,9 @@ public class GraniteSpeechOptions : ModelOptions
     public int VocabSize { get; set; } = 49160;
     /// <summary>The LoRA rank on the query and value projections (64, the release's adapter).</summary>
     public int LoraRank { get; set; } = 64;
+    /// <summary>Gets or sets the LoRA adapter scaling factor. Defaults to <c>32</c>.</summary>
     public double LoraAlpha { get; set; } = 32;
+    /// <summary>Gets or sets the dropout probability of the LoRA adapter. Defaults to <c>0.0</c>.</summary>
     public double LoraDropout { get; set; } = 0.0;
     /// <summary>What training optimizes: every parameter on the transcript by default; the paper's stages are the
     /// encoder's CTC and then the projector and LoRA adapters.</summary>
@@ -149,8 +154,11 @@ public class GraniteSpeechOptions : ModelOptions
     public string Instruction { get; set; } = "can you transcribe the speech into a written format?";
     /// <summary>The longest transcript generated, in tokens.</summary>
     public int MaxTextLength { get; set; } = 200;
+    /// <summary>Gets or sets the path to the model weights.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"en"</c>.</summary>
     public string Language { get; set; } = "en";
     /// <summary>Optional vocabulary mapping token ids to text when the vocabulary is not Granite's.</summary>
     public string[]? Vocabulary { get; set; }

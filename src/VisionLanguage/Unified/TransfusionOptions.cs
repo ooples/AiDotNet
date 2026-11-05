@@ -46,6 +46,7 @@ public class TransfusionOptions : UnifiedVisionOptions
         EndOfImageTokenId = other.EndOfImageTokenId;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public TransfusionOptions()
     {
         VisionDim = 4096;

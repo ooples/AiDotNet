@@ -21,6 +21,7 @@ public class KokoroOptions : EndToEndTtsOptions
         UseNativeEnglishFallback = other.UseNativeEnglishFallback;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public KokoroOptions()
     {
         SampleRate = 24000;
@@ -33,6 +34,7 @@ public class KokoroOptions : EndToEndTtsOptions
         DropoutRate = .2;
     }
 
+    /// <summary>Gets or sets the width of the style vector that conditions synthesis.</summary>
     public int StyleDim { get; set; } = 128;
 
     /// <summary>Duration scaling used by the released model: sum(sigmoid(duration logits)) / speed.</summary>

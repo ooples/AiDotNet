@@ -4,6 +4,8 @@ namespace AiDotNet.Interfaces;
 /// Defines an interface for detecting how well a machine learning model fits the data.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
+/// <typeparam name="TInput">The type of the input data (for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
+/// <typeparam name="TOutput">The type of the output data (for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
 /// <remarks>
 /// <b>For Beginners:</b> This interface helps determine if your model is learning properly or has problems.
 /// 

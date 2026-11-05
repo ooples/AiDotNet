@@ -58,6 +58,7 @@ public class CanaryQwenOptions : ModelOptions
         Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
     /// <summary>The longest recording transcribed (40 seconds, the longest in training).</summary>
     public int MaxAudioLengthSeconds { get; set; } = 40;
@@ -87,14 +88,18 @@ public class CanaryQwenOptions : ModelOptions
     public int NumDecoderKvHeads { get; set; } = 8;
     /// <summary>Qwen3-1.7B's head width (128).</summary>
     public int DecoderHeadDim { get; set; } = 128;
+    /// <summary>Gets or sets the rotary positional-embedding frequency base for the decoder. Defaults to <c>1000000.0</c>.</summary>
     public double DecoderRopeTheta { get; set; } = 1000000.0;
+    /// <summary>Gets or sets the RMS-normalization stability constant for the decoder. Defaults to <c>1e-6</c>.</summary>
     public double DecoderRmsEpsilon { get; set; } = 1e-6;
     /// <summary>The vocabulary rows (151,936). A vocabulary smaller than the tokenizer's has no chat prompt: the decoder
     /// reads the speech alone and its last token ends the answer.</summary>
     public int VocabSize { get; set; } = 151936;
     /// <summary>The LoRA rank on the query and value projections (128).</summary>
     public int LoraRank { get; set; } = 128;
+    /// <summary>Gets or sets the LoRA adapter scaling factor. Defaults to <c>256</c>.</summary>
     public double LoraAlpha { get; set; } = 256;
+    /// <summary>Gets or sets the dropout probability of the LoRA adapter. Defaults to <c>0.01</c>.</summary>
     public double LoraDropout { get; set; } = 0.01;
     /// <summary>What training updates: every parameter by default; the release freezes the LLM and trains the encoder,
     /// the projection and LoRA (<see cref="SpeechLlmTrainingScope.EncoderAdapterAndLora"/>).</summary>
@@ -105,8 +110,11 @@ public class CanaryQwenOptions : ModelOptions
     public string Instruction { get; set; } = "Transcribe the following:";
     /// <summary>The longest transcript generated, in tokens.</summary>
     public int MaxTextLength { get; set; } = 512;
+    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"en"</c>.</summary>
     public string Language { get; set; } = "en";
     /// <summary>Optional vocabulary mapping token ids to text when the vocabulary is not Qwen's.</summary>
     public string[]? Vocabulary { get; set; }

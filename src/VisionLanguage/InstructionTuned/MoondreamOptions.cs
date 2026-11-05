@@ -38,6 +38,7 @@ public class MoondreamOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MoondreamOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

@@ -12,8 +12,10 @@ public enum UniAudioTrainingComponent
 /// <summary>The released universal codec's adversarial-pretraining configuration.</summary>
 public sealed class UniAudioCodecTrainingOptions
 {
+    /// <summary>Creates an instance with the default settings.</summary>
     public UniAudioCodecTrainingOptions() { }
 
+    /// <summary>Copies the settings from another options instance.</summary>
     public UniAudioCodecTrainingOptions(UniAudioCodecTrainingOptions other)
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
@@ -46,22 +48,33 @@ public sealed class UniAudioCodecTrainingOptions
     public int[] DiscriminatorHops { get; set; } = [32, 64, 128, 256, 512, 1024];
     /// <summary>Each critic's final hidden width (paper Appendix E).</summary>
     public int[] DiscriminatorChannels { get; set; } = [64, 128, 256, 512, 512, 512];
+    /// <summary>Gets or sets the full FFT sizes.</summary>
     public int[] FullFftSizes { get; set; } = [512, 1024, 2048];
+    /// <summary>Gets or sets the full window sizes.</summary>
     public int[] FullWindowSizes { get; set; } = [480, 960, 1200];
+    /// <summary>Gets or sets the full hop sizes.</summary>
     public int[] FullHopSizes { get; set; } = [120, 240, 300];
+    /// <summary>Gets or sets the sub FFT sizes.</summary>
     public int[] SubFftSizes { get; set; } = [128, 256, 256];
+    /// <summary>Gets or sets the sub window sizes.</summary>
     public int[] SubWindowSizes { get; set; } = [80, 120, 200];
+    /// <summary>Gets or sets the sub hop sizes.</summary>
     public int[] SubHopSizes { get; set; } = [20, 40, 50];
     /// <summary>PQMF subbands for the sub-band spectral objective (six).</summary>
     public int Subbands { get; set; } = 6;
     /// <summary>Samples in the released training segment (32,000).</summary>
     public int SegmentSize { get; set; } = 32000;
+    /// <summary>Gets or sets the weight of the feature matching objective. Defaults to <c>20</c>.</summary>
     public double FeatureMatchingWeight { get; set; } = 20;
+    /// <summary>Gets or sets the weight of the full STFT objective. Defaults to <c>1</c>.</summary>
     public double FullStftWeight { get; set; } = 1;
+    /// <summary>Gets or sets the weight of the sub STFT objective. Defaults to <c>1</c>.</summary>
     public double SubStftWeight { get; set; } = 1;
+    /// <summary>Gets or sets the weight of the commitment objective. Defaults to <c>1</c>.</summary>
     public double CommitmentWeight { get; set; } = 1;
     /// <summary>AdamW rate for both codec and critic; betas are (0.8, 0.99), epsilon 1e-6.</summary>
     public double LearningRate { get; set; } = 2e-4;
+    /// <summary>Gets or sets the optimizer weight decay. Defaults to <c>0.01</c>.</summary>
     public double WeightDecay { get; set; } = 0.01;
     /// <summary>The released exponential learning-rate multiplier per completed codec epoch.</summary>
     public double EpochDecay { get; set; } = 0.999;

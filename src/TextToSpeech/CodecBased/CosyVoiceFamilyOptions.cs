@@ -7,6 +7,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </summary>
 public abstract class CosyVoiceFamilyOptions : CodecTtsOptions
 {
+    /// <summary>Creates an instance with the default settings.</summary>
     protected CosyVoiceFamilyOptions() { }
 
     /// <summary>Copies every shared setting.</summary>

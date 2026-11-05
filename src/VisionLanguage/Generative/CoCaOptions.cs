@@ -35,6 +35,7 @@ public class CoCaOptions : GenerativeVLMOptions
         CaptionWeight = other.CaptionWeight;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public CoCaOptions()
     {
         ArchitectureType = GenerativeArchitectureType.EncoderDecoder;

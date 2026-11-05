@@ -23,6 +23,7 @@ public class AlignTTSOptions : AcousticModelOptions
         MixDensityHiddenLayers = other.MixDensityHiddenLayers;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public AlignTTSOptions()
     {
         EncoderDim = 768;

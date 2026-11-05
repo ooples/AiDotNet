@@ -50,7 +50,9 @@ public class ParaformerOptions : ModelOptions
         Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
+    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
     /// <summary>The encoder's width (256), which the predictor and the decoder share.</summary>
     public int EncoderDim { get; set; } = 256;
@@ -58,18 +60,24 @@ public class ParaformerOptions : ModelOptions
     public int NumEncoderLayers { get; set; } = 12;
     /// <summary>Parallel SAN decoder blocks (6).</summary>
     public int NumDecoderLayers { get; set; } = 6;
+    /// <summary>Gets or sets the number of attention heads. Defaults to <c>4</c>.</summary>
     public int NumAttentionHeads { get; set; } = 4;
     /// <summary>The encoder's and decoder's feed-forward width (2048), a multiple of <see cref="EncoderDim"/>.</summary>
     public int FeedForwardDim { get; set; } = 2048;
     /// <summary>The Conformer convolution module's kernel (15).</summary>
     public int ConvKernel { get; set; } = 15;
+    /// <summary>Gets or sets the number of mel-frequency bands. Defaults to <c>80</c>.</summary>
     public int NumMels { get; set; } = 80;
     /// <summary>Output vocabulary, blank (0), start (1) and end (2) included. The recipe builds its character list from
     /// the training data; the default is the released Mandarin Paraformer's 8,404 tokens.</summary>
     public int VocabSize { get; set; } = 8404;
+    /// <summary>Gets or sets the most tokens decoded for one utterance.</summary>
     public int MaxTextLength { get; set; } = 512;
+    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"zh"</c>.</summary>
     public string Language { get; set; } = "zh";
     /// <summary>The encoder CTC loss's weight (0.3).</summary>
     public double CtcWeight { get; set; } = 0.3;

@@ -70,6 +70,7 @@ public class FunASRNanoOptions : ModelOptions
         Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
     /// <summary>The longest recording transcribed (30 seconds).</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
@@ -111,14 +112,18 @@ public class FunASRNanoOptions : ModelOptions
     public int LlmHeadDim { get; set; } = 128;
     /// <summary>Qwen3-0.6B's SwiGLU width (3,072).</summary>
     public int LlmIntermediateDim { get; set; } = 3072;
+    /// <summary>Gets or sets the RMS-normalization stability constant for the language-model. Defaults to <c>1e-6</c>.</summary>
     public double LlmRmsEpsilon { get; set; } = 1e-6;
+    /// <summary>Gets or sets the rotary positional-embedding frequency base for the language-model. Defaults to <c>1_000_000</c>.</summary>
     public double LlmRopeTheta { get; set; } = 1_000_000;
     /// <summary>The LLM's vocabulary (151,936, Qwen3's). A vocabulary smaller than the Qwen tokenizer's has no ChatML
     /// prompt: the LLM reads the speech alone and its last token ends the answer.</summary>
     public int VocabSize { get; set; } = 151936;
     /// <summary>The LoRA rank on the LLM's query and value projections (16, the release's <c>lora_conf</c>).</summary>
     public int LoraRank { get; set; } = 16;
+    /// <summary>Gets or sets the LoRA adapter scaling factor. Defaults to <c>32</c>.</summary>
     public double LoraAlpha { get; set; } = 32;
+    /// <summary>Gets or sets the dropout probability of the LoRA adapter. Defaults to <c>0.05</c>.</summary>
     public double LoraDropout { get; set; } = 0.05;
     /// <summary>The CTC decoder's width (512).</summary>
     public int CtcDecoderDim { get; set; } = 512;
@@ -141,7 +146,9 @@ public class FunASRNanoOptions : ModelOptions
     public FunASRNanoTrainingStage TrainingStage { get; set; } = FunASRNanoTrainingStage.Joint;
     /// <summary>Linear warmup steps before the inverse-square-root decay of the release's AdamW recipe (2,500).</summary>
     public int WarmupSteps { get; set; } = 2500;
+    /// <summary>Gets or sets the path to the model weights.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     /// <summary>The transcript's language named in the prompt; empty or "auto" leaves it unnamed.</summary>
     public string Language { get; set; } = "auto";

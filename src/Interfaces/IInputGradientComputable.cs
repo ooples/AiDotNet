@@ -34,30 +34,6 @@ namespace AiDotNet.Interfaces;
 [AiDotNet.Configuration.YamlConfigurable("InputGradientComputable")]
 public interface IInputGradientComputable<T>
 {
-    /// <summary>
-    /// Computes the gradient of the model output with respect to the input.
-    /// </summary>
-    /// <param name="input">The input for which to compute gradients.</param>
-    /// <param name="outputGradient">The gradient with respect to the output (typically from a loss function).</param>
-    /// <returns>The gradient with respect to the input.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method performs backpropagation through the model to compute input gradients.
-    /// The <paramref name="outputGradient"/> represents how much we "care" about each output dimension,
-    /// typically derived from a loss function.
-    /// </para>
-    /// <para><b>For Adversarial Attacks:</b>
-    /// Set <paramref name="outputGradient"/> to emphasize the target class (for targeted attacks)
-    /// or the true class (for untargeted attacks), then use the returned input gradient
-    /// to perturb the input in a direction that maximizes misclassification.
-    /// </para>
-    /// </remarks>
     // ComputeInputGradient removed — use tape-based autodiff.
 
-    /// <summary>
-    /// Computes the gradient of the model output with respect to the input using tensor format.
-    /// </summary>
-    /// <param name="input">The input tensor for which to compute gradients.</param>
-    /// <param name="outputGradient">The gradient tensor with respect to the output.</param>
-    /// <returns>The gradient tensor with respect to the input.</returns>
 }

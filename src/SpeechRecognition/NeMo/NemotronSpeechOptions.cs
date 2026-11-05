@@ -57,7 +57,9 @@ public class NemotronSpeechOptions : ModelOptions
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
+    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 60;
     /// <summary>Log-mel bands (128).</summary>
     public int NumMels { get; set; } = 128;
@@ -89,9 +91,13 @@ public class NemotronSpeechOptions : ModelOptions
     public int JointDim { get; set; } = 640;
     /// <summary>FastEmit regularization of the transducer loss (0.005).</summary>
     public double FastEmitLambda { get; set; } = 0.005;
+    /// <summary>Gets or sets the number of SpecAugment frequency masks. Defaults to <c>2</c>.</summary>
     public int FrequencyMasks { get; set; } = 2;
+    /// <summary>Gets or sets the maximum width of a SpecAugment frequency mask, in mel bins. Defaults to <c>27</c>.</summary>
     public int FrequencyMaskWidth { get; set; } = 27;
+    /// <summary>Gets or sets the number of SpecAugment time masks. Defaults to <c>10</c>.</summary>
     public int TimeMasks { get; set; } = 10;
+    /// <summary>Gets or sets the maximum time-mask width as a fraction of the utterance. Defaults to <c>0.05</c>.</summary>
     public double TimeMaskRatio { get; set; } = 0.05;
     /// <summary>Output symbols, the blank (0) first: the 1,024 SentencePiece pieces follow as ids 1 to 1,024 (the
     /// release puts its blank last, at 1,024).</summary>
@@ -105,8 +111,11 @@ public class NemotronSpeechOptions : ModelOptions
     public double NoamFactor { get; set; } = 3.0;
     /// <summary>AdamW's weight decay (1e-3).</summary>
     public double WeightDecay { get; set; } = 1e-3;
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"en"</c>.</summary>
     public string Language { get; set; } = "en";
+    /// <summary>Gets or sets the path to the model weights.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
 
     internal ConformerAsrConfiguration ToConfiguration()

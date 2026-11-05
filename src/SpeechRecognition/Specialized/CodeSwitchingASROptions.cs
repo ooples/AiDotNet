@@ -147,7 +147,9 @@ public class CodeSwitchingASROptions : ModelOptions
     /// <value>Defaults to 3000.</value>
     public int MandarinCharVocabSize { get; set; } = 3000;
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
+    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
 
     /// <summary>Gets or sets the LSTM units per direction of each encoder BLSTM layer.</summary>
@@ -199,9 +201,13 @@ public class CodeSwitchingASROptions : ModelOptions
             ? Math.Max(1, (v - 1) / 2)
             : MandarinCharVocabSize;
 
+    /// <summary>Gets or sets the most tokens decoded for one utterance.</summary>
     public int MaxTextLength { get; set; } = 512;
+    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"en"</c>.</summary>
     public string Language { get; set; } = "en";
 
     /// <summary>Gets or sets the text of each token id (Mandarin characters, then English BPE units); ids past the list

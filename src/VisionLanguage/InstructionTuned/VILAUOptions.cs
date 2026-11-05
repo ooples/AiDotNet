@@ -39,6 +39,7 @@ public class VILAUOptions : InstructionTunedVLMOptions
         EnableGeneration = other.EnableGeneration;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public VILAUOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

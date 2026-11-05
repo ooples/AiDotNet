@@ -40,6 +40,7 @@ public class LLaVANeXTOptions : InstructionTunedVLMOptions
         MaxImageTiles = other.MaxImageTiles;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public LLaVANeXTOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

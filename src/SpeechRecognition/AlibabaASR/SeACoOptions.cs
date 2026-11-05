@@ -63,7 +63,9 @@ public class SeACoOptions : ModelOptions
         AttentionFilterTopK = other.AttentionFilterTopK;
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
+    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
     /// <summary>Kaldi filterbank bands (80).</summary>
     public int NumMels { get; set; } = 80;
@@ -77,6 +79,7 @@ public class SeACoOptions : ModelOptions
     public int NumEncoderLayers { get; set; } = 50;
     /// <summary>SAN-M ASR decoder blocks with cross-attention (16), before the final feed-forward block.</summary>
     public int NumDecoderLayers { get; set; } = 16;
+    /// <summary>Gets or sets the number of attention heads. Defaults to <c>4</c>.</summary>
     public int NumAttentionHeads { get; set; } = 4;
     /// <summary>The encoder's and the ASR decoder's feed-forward width (2,048).</summary>
     public int FeedForwardDim { get; set; } = 2048;
@@ -85,9 +88,13 @@ public class SeACoOptions : ModelOptions
     /// <summary>Output vocabulary, blank (0), start (1) and end (2) included (8,404). The bias output layer adds the
     /// no-bias class.</summary>
     public int VocabSize { get; set; } = 8404;
+    /// <summary>Gets or sets the most tokens decoded for one utterance.</summary>
     public int MaxTextLength { get; set; } = 512;
+    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"zh"</c>.</summary>
     public string Language { get; set; } = "zh";
     /// <summary>The ASR decoder loss's label smoothing (0.1).</summary>
     public double LabelSmoothing { get; set; } = 0.1;

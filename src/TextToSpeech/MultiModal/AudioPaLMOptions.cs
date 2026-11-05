@@ -136,7 +136,7 @@ public class AudioPaLMOptions : TtsModelOptions
     public SoundStormOptions SoundStorm { get; set; } = new() { IncludeTextToSemantic = false };
 
     /// <summary>AudioLM's options (its acoustic stages read AudioPaLM's tokens).</summary>
-    public AudioLMOptions AudioLM { get; set; } = new();
+    public AiDotNet.Audio.Generation.AudioLMOptions AudioLM { get; set; } = new();
 
     /// <summary>Seconds of voice prompt the detokenizer continues (3, repeated when the recording is shorter; §3.3).</summary>
     public double VoicePromptSeconds { get; set; } = 3.0;

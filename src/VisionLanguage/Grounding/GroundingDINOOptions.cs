@@ -8,10 +8,10 @@ namespace AiDotNet.VisionLanguage.Grounding;
 /// <para>The defaults are Grounding DINO-T as released (the official GroundingDINO_SwinT_OGC configuration): a Swin-T image
 /// backbone, a BERT-base-uncased text backbone, a 256-wide feature enhancer and decoder of six layers each with eight
 /// heads, four feature levels, four sampling points, 900 queries and a 256-token text head. The shared vision-language
-/// options map as follows: <see cref="GenerativeVLMOptions.VisionDim"/> is the Swin embedding width,
-/// <see cref="GenerativeVLMOptions.DecoderDim"/> the model width, <see cref="GenerativeVLMOptions.NumVisionLayers"/> the
-/// feature-enhancer layers, <see cref="GenerativeVLMOptions.NumHeads"/> the encoder and decoder heads,
-/// <see cref="GenerativeVLMOptions.MaxSequenceLength"/> the scored text tokens, <see cref="GenerativeVLMOptions.VocabSize"/>
+/// options map as follows: <see cref="AiDotNet.VisionLanguage.Generative.GenerativeVLMOptions.VisionDim"/> is the Swin embedding width,
+/// <see cref="AiDotNet.VisionLanguage.Generative.GenerativeVLMOptions.DecoderDim"/> the model width, <see cref="AiDotNet.VisionLanguage.Generative.GenerativeVLMOptions.NumVisionLayers"/> the
+/// feature-enhancer layers, <see cref="AiDotNet.VisionLanguage.Generative.GenerativeVLMOptions.NumHeads"/> the encoder and decoder heads,
+/// <see cref="AiDotNet.VisionLanguage.Generative.GenerativeVLMOptions.MaxSequenceLength"/> the scored text tokens, <see cref="AiDotNet.VisionLanguage.Generative.GenerativeVLMOptions.VocabSize"/>
 /// the BERT vocabulary and <see cref="GroundingVLMOptions.ConfidenceThreshold"/> the box threshold.</para>
 /// <para><b>For Beginners:</b> These options configure the GroundingDINO model. Default values follow the released
 /// model.</para>
@@ -66,6 +66,7 @@ public class GroundingDINOOptions : GroundingVLMOptions
         FusionDropPathRate = other.FusionDropPathRate;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GroundingDINOOptions()
     {
         VisionDim = 96;

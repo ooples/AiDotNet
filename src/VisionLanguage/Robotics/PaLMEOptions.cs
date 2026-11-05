@@ -45,6 +45,7 @@ public class PaLMEOptions : VisionLanguageActionOptions
         WeightOffloadOptions = other.WeightOffloadOptions;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PaLMEOptions()
     {
         VisionDim = 1408;

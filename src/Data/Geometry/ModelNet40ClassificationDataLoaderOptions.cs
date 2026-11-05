@@ -5,6 +5,7 @@ namespace AiDotNet.Data.Geometry;
 /// </summary>
 public sealed class ModelNet40ClassificationDataLoaderOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public ModelNet40ClassificationDataLoaderOptions()
     {
         Split = DatasetSplit.Train;

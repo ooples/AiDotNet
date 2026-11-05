@@ -39,6 +39,7 @@ public class MonkeyOptions : InstructionTunedVLMOptions
         EnableMultiLevelDescription = other.EnableMultiLevelDescription;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MonkeyOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

@@ -53,6 +53,7 @@ public class Qwen3ASRSmallOptions : ModelOptions
         Vocabulary = other.Vocabulary is null ? null : (string[])other.Vocabulary.Clone();
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
     /// <summary>The longest recording transcribed (20 minutes, the report's single-utterance limit).</summary>
     public int MaxAudioLengthSeconds { get; set; } = 1200;
@@ -84,7 +85,9 @@ public class Qwen3ASRSmallOptions : ModelOptions
     public int LlmHeadDim { get; set; } = 128;
     /// <summary>Qwen3-0.6B's SwiGLU width (3,072).</summary>
     public int LlmIntermediateDim { get; set; } = 3072;
+    /// <summary>Gets or sets the RMS-normalization stability constant for the language-model. Defaults to <c>1e-6</c>.</summary>
     public double LlmRmsEpsilon { get; set; } = 1e-6;
+    /// <summary>Gets or sets the rotary positional-embedding frequency base for the language-model. Defaults to <c>1_000_000</c>.</summary>
     public double LlmRopeTheta { get; set; } = 1_000_000;
     /// <summary>The decoder's vocabulary (151,936). A vocabulary smaller than the Qwen3-ASR tokenizer's has no ChatML
     /// prompt: the decoder reads the audio alone and its last token ends the answer.</summary>
@@ -96,7 +99,9 @@ public class Qwen3ASRSmallOptions : ModelOptions
     /// <summary>Linear warmup steps. The release's SFT script warms up over 2% of the run, whose length is not known when
     /// the model is built; 0 starts at the peak rate.</summary>
     public int WarmupSteps { get; set; }
+    /// <summary>Gets or sets the path to the model weights.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     /// <summary>The language to force ("English", "Chinese", …): the prompt then ends with <c>language {Language}&lt;asr_text&gt;</c>
     /// and the answer is the transcript alone. "auto" lets the model name the language first.</summary>

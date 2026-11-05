@@ -42,6 +42,7 @@ public class SlowFastLLaVAOptions : VideoLanguageOptions
         FastFrames = other.FastFrames;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SlowFastLLaVAOptions()
     {
         VisionDim = 1024;

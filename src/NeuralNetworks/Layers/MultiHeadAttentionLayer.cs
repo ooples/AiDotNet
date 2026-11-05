@@ -621,7 +621,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
     protected override void EnsureInitialized()
     {
-        // Metadata walks initialize child registration while keeping trainable storage lazy.
+        // Metadata walks may bring up child structure, but must not allocate Q/K/V/O values.
         if (!IsResolvingShapesOnly) EnsureWeightsAllocated();
         base.EnsureInitialized();
     }

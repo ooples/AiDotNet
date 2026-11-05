@@ -40,6 +40,7 @@ public class VideoLLaMA3Options : VideoLanguageOptions
         SystemPrompt = other.SystemPrompt;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public VideoLLaMA3Options()
     {
         VisionDim = 1152;

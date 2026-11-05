@@ -5,6 +5,7 @@ namespace AiDotNet.Serving.Configuration;
 /// </summary>
 public sealed class ServingProgramSynthesisOptions
 {
+    /// <summary>Gets or sets the program-synthesis limits applied to requests from the Free tier.</summary>
     public ServingProgramSynthesisLimitOptions Free { get; set; } = new()
     {
         MaxRequestChars = 50_000,
@@ -16,6 +17,7 @@ public sealed class ServingProgramSynthesisOptions
         MaxTaskTimeSeconds = 2
     };
 
+    /// <summary>Gets or sets the program-synthesis limits applied to requests from the Premium tier.</summary>
     public ServingProgramSynthesisLimitOptions Premium { get; set; } = new()
     {
         MaxRequestChars = 200_000,
@@ -27,6 +29,7 @@ public sealed class ServingProgramSynthesisOptions
         MaxTaskTimeSeconds = 5
     };
 
+    /// <summary>Gets or sets the program-synthesis limits applied to requests from the Enterprise tier.</summary>
     public ServingProgramSynthesisLimitOptions Enterprise { get; set; } = new()
     {
         MaxRequestChars = 1_000_000,

@@ -54,6 +54,7 @@ public class MetaVoice1BOptions : VoiceCloningOptions
         SynthesisSeed = other.SynthesisSeed;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MetaVoice1BOptions()
     {
         MinReferenceDurationSec = 30.0;

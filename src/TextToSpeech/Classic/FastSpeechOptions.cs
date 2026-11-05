@@ -23,6 +23,7 @@ public class FastSpeechOptions : AcousticModelOptions
         FftKernelSizes = (int[])other.FftKernelSizes.Clone();
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public FastSpeechOptions()
     {
         VocabSize = 51;

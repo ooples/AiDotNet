@@ -231,7 +231,7 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         // conv over time, normalization, Swish, and a pointwise conv back to dim.
         _convNorm = new LayerNormalizationLayer<T>(modelDim);
         _convPointwiseExpand = new Conv1DLayer<T>(inputChannels: modelDim, outputChannels: modelDim * 2, kernelSize: 1, dilation: 1, stride: 1, padding: 0, activation: identity);
-        _convDepthwise = new DepthwiseConv1DLayer<T>(modelDim, convKernelSize, multiplier: 1, stride: 1, padding: causal || causalConvolution ? 0 : convKernelSize / 2, activation: identity);
+        _convDepthwise = new DepthwiseConv1DLayer<T>(modelDim, convKernelSize, multiplier: 1, stride: 1, padding: causal || causalConvolution || convKernelSize % 2 == 0 ? 0 : convKernelSize / 2, activation: identity);
         // BatchNorm, exactly as the paper specifies (§2.2). This is NOT interchangeable with LayerNorm
         // here: LayerNorm normalizes per time position, and its 1/std backward blows up when the
         // convolution output at a position is near-degenerate — substituting it made the first Adam
@@ -338,7 +338,13 @@ public partial class ConformerBlockLayer<T> : LayerBase<T>, IShapeContract
         var gated = Engine.TensorMultiply(gateA, Engine.Sigmoid(gateB));   // GLU: a ⊙ σ(b)
 
         // Depthwise conv over time, then normalization + Swish (paper order), then pointwise back.
-        var depthwise = _convDepthwise.Forward(_causal || _causalConvolution ? Engine.TensorConstantPad(gated, new[] { _convKernelSize - 1, 0 }, NumOps.Zero) : gated);   // [B, D, T]
+        // Even kernels need asymmetric padding totaling K-1; symmetric K/2 adds a time step.
+        var convolutionInput = _causal || _causalConvolution
+            ? Engine.TensorConstantPad(gated, new[] { _convKernelSize - 1, 0 }, NumOps.Zero)
+            : _convKernelSize % 2 == 0
+                ? Engine.TensorConstantPad(gated, new[] { (_convKernelSize - 1) / 2, _convKernelSize / 2 }, NumOps.Zero)
+                : gated;
+        var depthwise = _convDepthwise.Forward(convolutionInput);   // [B, D, T]
 
         // Normalize per time position: transpose to [B, T, D] so LayerNorm acts on the feature axis.
         var normedTd = _convInnerNorm.Forward(Engine.TensorPermute(depthwise, new[] { 0, 2, 1 }));

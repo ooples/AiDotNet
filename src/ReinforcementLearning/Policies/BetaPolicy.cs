@@ -65,6 +65,20 @@ namespace AiDotNet.ReinforcementLearning.Policies
         {
         }
 
+        /// <summary>
+        /// Builds the policy from <paramref name="options"/>: a dense ReLU network of the options' hidden widths from
+        /// StateSize inputs to α and β for each action dimension (2 × ActionSize outputs).
+        /// </summary>
+        /// <param name="options">The policy's configuration.</param>
+        public BetaPolicy(BetaPolicyOptions<T> options)
+            : this(
+                PolicyNetworks.Build((options ?? throw new ArgumentNullException(nameof(options))).StateSize,
+                    options.HiddenLayers, 2 * options.ActionSize, options.LossFunction, nameof(BetaPolicyOptions<T>)),
+                options.ActionSize, options.ExplorationStrategy, options.ActionMin, options.ActionMax,
+                PolicyNetworks.RandomFor(options.Seed))
+        {
+        }
+
         /// <param name="actionSize">The size of the action space.</param>
         /// <param name="explorationStrategy">The exploration strategy.</param>
         /// <param name="actionMin">Minimum action value (default: 0.0).</param>

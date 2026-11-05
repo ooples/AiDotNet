@@ -5,8 +5,8 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// <para>The defaults are the paper's multispeaker model as the released LibriTTS configuration builds it
 /// (yl4579/StyleTTS2 <c>Configs/config_libritts.yml</c>): HiFi-GAN decoder, 128-dimensional acoustic and prosodic styles,
 /// a 3-layer style-diffusion transformer conditioned on PL-BERT, 50 duration bins. The LJSpeech configuration is
-/// <see cref="Multispeaker"/> false with the iSTFTNet decoder (<see cref="DecoderType"/>, <see cref="UpsampleRates"/>
-/// {10, 6}, <see cref="UpsampleKernels"/> {20, 12}).</para>
+/// <see cref="Multispeaker"/> false with the iSTFTNet decoder (<see cref="StyleTtsWaveformOptions.DecoderType"/>, <see cref="StyleTtsWaveformOptions.UpsampleRates"/>
+/// {10, 6}, <see cref="StyleTtsWaveformOptions.UpsampleKernels"/> {20, 12}).</para>
 /// <para><b>For Beginners:</b> These settings size the networks and control how speech is generated; the defaults
 /// reproduce the published multispeaker model.</para>
 /// </remarks>

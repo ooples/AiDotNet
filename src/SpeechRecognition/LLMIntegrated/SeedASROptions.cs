@@ -55,7 +55,9 @@ public class SeedASROptions : ModelOptions
         WeightDecay = other.WeightDecay;
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
+    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
     /// <summary>Mel filterbank bands (80).</summary>
     public int NumMels { get; set; } = 80;
@@ -81,7 +83,9 @@ public class SeedASROptions : ModelOptions
     public int NumLlmAttentionHeads { get; set; } = 32;
     /// <summary>The LLM's key-value heads (unpublished; 8).</summary>
     public int NumLlmKvHeads { get; set; } = 8;
+    /// <summary>Gets or sets the rotary positional-embedding frequency base for the language-model. Defaults to <c>500000.0</c>.</summary>
     public double LlmRopeTheta { get; set; } = 500000.0;
+    /// <summary>Gets or sets the RMS-normalization stability constant for the language-model. Defaults to <c>1e-5</c>.</summary>
     public double LlmRmsEpsilon { get; set; } = 1e-5;
     /// <summary>The LLM's vocabulary (unpublished; 32,000). Its last token ends the answer.</summary>
     public int VocabSize { get; set; } = 32000;
@@ -92,8 +96,11 @@ public class SeedASROptions : ModelOptions
     public int[]? Context { get; set; }
     /// <summary>The longest transcript generated, in tokens.</summary>
     public int MaxTextLength { get; set; } = 512;
+    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"en"</c>.</summary>
     public string Language { get; set; } = "en";
     /// <summary>Optional vocabulary mapping token ids to text; without one a token is its code point.</summary>
     public string[]? Vocabulary { get; set; }

@@ -54,7 +54,9 @@ public class VoxtLMOptions : ModelOptions
         Language = other.Language;
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
+    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
     /// <summary>The speech tokenizer's k-means clusters (50, VoxtLM-k50; the paper also trains 200 and 1,000).</summary>
     public int NumSpeechUnits { get; set; } = 50;
@@ -76,7 +78,7 @@ public class VoxtLMOptions : ModelOptions
     public double LabelSmoothing { get; set; } = 0.1;
     /// <summary>HuBERT Base's width (768).</summary>
     public int HubertWidth { get; set; } = 768;
-    /// <summary>The HuBERT layer clustered (6, the recipe's <c>kmeans_feature: hubert_base/6</c>).</summary>
+    /// <summary>The HuBERT layer clustered (6, the recipe's <c>kmeans_feature: HuBERT_base/6</c>).</summary>
     public int HubertLayer { get; set; } = 6;
     /// <summary>HuBERT Base's attention heads (12).</summary>
     public int HubertHeads { get; set; } = 12;
@@ -100,7 +102,10 @@ public class VoxtLMOptions : ModelOptions
     public int MaxTextLength { get; set; } = 150;
     /// <summary>Optional text for each text-token index; without it, index <c>t</c> decodes as code point <c>t</c>.</summary>
     public string[]? Vocabulary { get; set; }
+    /// <summary>Gets or sets the path to the model weights.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"en"</c>.</summary>
     public string Language { get; set; } = "en";
 }

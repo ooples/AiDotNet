@@ -71,6 +71,7 @@ public class GLaMMOptions : ModelOptions
         DiceLossWeight = other.DiceLossWeight;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GLaMMOptions()
     {
     }

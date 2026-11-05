@@ -86,7 +86,7 @@ public class SpeakerEmbeddingOptions : SpeakerRecognitionOptions
     public double MinimumDurationSeconds { get; set; }
 
     /// <summary>
-    /// Gets or sets the ONNX runtime options used when <see cref="ModelPath"/> is supplied.
+    /// Gets or sets the ONNX runtime options used when loading the model from an ONNX file.
     /// </summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
 

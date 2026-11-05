@@ -4,6 +4,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <remarks>The defaults reproduce the released Qwen2 LM, causal DiT flow and 24 kHz CausalHiFT.</remarks>
 public class CosyVoice3Options : CosyVoice2Options
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public CosyVoice3Options()
     {
         DiTInputDim = 80;
@@ -42,16 +43,27 @@ public class CosyVoice3Options : CosyVoice2Options
         SpeakerEncoderOnnxPath = other.SpeakerEncoderOnnxPath;
     }
 
+    /// <summary>Gets or sets the feature width of the diffusion transformer input.</summary>
     public int DiTInputDim { get; set; }
+    /// <summary>Gets or sets the pre lookahead channels.</summary>
     public int PreLookaheadChannels { get; set; }
+    /// <summary>Gets or sets the feature width of the diffusion transformer.</summary>
     public int DiTDim { get; set; }
+    /// <summary>Gets or sets the diffusion transformer depth.</summary>
     public int DiTDepth { get; set; }
+    /// <summary>Gets or sets the number of attention heads in the diffusion transformer.</summary>
     public int DiTHeads { get; set; }
+    /// <summary>Gets or sets the feature width of the diffusion transformer head.</summary>
     public int DiTHeadDim { get; set; }
+    /// <summary>Gets or sets the diffusion transformer feed forward multiplier.</summary>
     public int DiTFeedForwardMultiplier { get; set; }
+    /// <summary>Gets or sets the diffusion transformer timesteps.</summary>
     public int DiTTimesteps { get; set; }
+    /// <summary>Gets or sets the diffusion transformer sigma min.</summary>
     public double DiTSigmaMin { get; set; }
+    /// <summary>Gets or sets the diffusion transformer training classifier-free guidance rate.</summary>
     public double DiTTrainingCfgRate { get; set; }
+    /// <summary>Gets or sets the diffusion transformer inference classifier-free guidance rate.</summary>
     public double DiTInferenceCfgRate { get; set; }
 
     /// <summary>Reserved speech ids after the S3 vocabulary; every one is a stop id during generation.</summary>

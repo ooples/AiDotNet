@@ -43,6 +43,7 @@ public class LEOVLOptions : ThreeDVLMOptions
         NumViews = other.NumViews;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public LEOVLOptions()
     {
         VisionDim = 1024;

@@ -20,6 +20,7 @@ public class OWLViTOptions : GroundingVLMOptions
         NumClassEmbeddings = other.NumClassEmbeddings;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public OWLViTOptions()
     {
         VisionDim = 768;

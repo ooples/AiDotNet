@@ -42,6 +42,7 @@ public class Qwen25VLOptions : InstructionTunedVLMOptions
         EnableMRoPE = other.EnableMRoPE;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public Qwen25VLOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.CrossAttentionResampler;

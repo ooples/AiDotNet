@@ -22,6 +22,7 @@ public class OpenVoiceOptions : EndToEndTtsOptions
         Training = new OpenVoiceTrainingOptions(other.Training);
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public OpenVoiceOptions()
     {
         NumEncoderLayers = 6;
@@ -30,7 +31,9 @@ public class OpenVoiceOptions : EndToEndTtsOptions
         DropoutRate = 0.1;
     }
 
+    /// <summary>Gets or sets the width of the speaker embedding.</summary>
     public int SpeakerEmbeddingDim { get; set; } = 256;
+    /// <summary>Gets or sets the number of layers in the tone-color converter.</summary>
     public int NumToneColorLayers { get; set; } = 3;
     /// <summary>Auxiliary IPA prior, waveform reconstruction and adversarial training configuration.</summary>
     public OpenVoiceTrainingOptions Training { get; set; } = new();

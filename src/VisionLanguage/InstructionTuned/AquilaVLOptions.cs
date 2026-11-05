@@ -38,6 +38,7 @@ public class AquilaVLOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public AquilaVLOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;
