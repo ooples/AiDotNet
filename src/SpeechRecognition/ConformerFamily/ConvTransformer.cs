@@ -152,10 +152,11 @@ public partial class ConvTransformer<T> : AudioNeuralNetworkBase<T>, ISpeechReco
     {
         var vocabulary = _options.Vocabulary;
         var sb = new System.Text.StringBuilder();
-        foreach (var piece in tokens.Where(t => t > 0 && t < vocabulary.Length).Select(t => vocabulary[t]))
+        foreach (var piece in tokens.Where(t => t > 0 && t < vocabulary.Length)
+            .Select(t => vocabulary[t])
+            .Where(piece => !(piece.Length > 1 && piece[0] == '<' && piece[piece.Length - 1] == '>')))
         {
             if (piece == "|") { sb.Append(' '); continue; }
-            if (piece.Length > 1 && piece[0] == '<' && piece[piece.Length - 1] == '>') continue;
 
             sb.Append(piece);
         }

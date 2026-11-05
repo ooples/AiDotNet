@@ -219,6 +219,30 @@ public class CrossEntropyWithLogitsLossTapeTargetTests
         Assert.False(double.IsInfinity(result.Data.Span[0]));
     }
 
+    [Fact]
+    public void ComputeTapeLoss_RankMatchedClassIndexTarget_MatchesRankReducedClassIndexTarget()
+    {
+        var loss = new CrossEntropyWithLogitsLoss<double>();
+        var predicted = new Tensor<double>(new[] { 4, 3 });
+        predicted[0, 0] = 0.1; predicted[0, 1] = 0.2; predicted[0, 2] = 0.7;
+        predicted[1, 0] = 0.9; predicted[1, 1] = 0.05; predicted[1, 2] = 0.05;
+        predicted[2, 0] = 0.3; predicted[2, 1] = 0.5; predicted[2, 2] = 0.2;
+        predicted[3, 0] = 0.2; predicted[3, 1] = 0.3; predicted[3, 2] = 0.5;
+
+        var classIdx1D = new Tensor<double>(new[] { 4 });
+        classIdx1D[0] = 2.0; classIdx1D[1] = 0.0; classIdx1D[2] = 1.0; classIdx1D[3] = 2.0;
+
+        var classIdx2DBatch = new Tensor<double>(new[] { 1, 4 });
+        classIdx2DBatch[0, 0] = 2.0; classIdx2DBatch[0, 1] = 0.0; classIdx2DBatch[0, 2] = 1.0; classIdx2DBatch[0, 3] = 2.0;
+
+        var loss1D = loss.ComputeTapeLoss(predicted, classIdx1D);
+        var loss2DBatch = loss.ComputeTapeLoss(predicted, classIdx2DBatch);
+
+        Assert.True(
+            System.Math.Abs(loss1D.Data.Span[0] - loss2DBatch.Data.Span[0]) < 1e-10,
+            "Rank-matched [1, S] class-index target loss must match [S] target loss.");
+    }
+
     private static void SetPixel(Tensor<double> tensor, int row, int col, double c0, double c1, double c2)
     {
         tensor[0, 0, row, col] = c0;

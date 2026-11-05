@@ -44,6 +44,10 @@ on:
         description: 'Internal: exact Test impact map run whose artifact should be audited against this forced run.'
         required: false
         default: ''
+      sonar_only:
+        description: 'Run only the SonarCloud analysis (for changes to that job). Skips the build, test shards, CodeQL and size check; the CI Gate fails closed, so this run never certifies a PR.'
+        type: boolean
+        default: false
   schedule:
     # NIGHTLY FULL MATRIX on master, the net under test-level selection: pull requests and merges
     # run only the tests their change can statically reach, so anything reached only by reflection
@@ -131,7 +135,8 @@ jobs:
       reused_requires_validation: ${{ steps.resolve.outputs.reused_requires_validation || steps.defaults.outputs.reused_requires_validation }}
       # Independent JSON booleans. A validation-only certificate suppresses the large build/test
       # graph while still rerunning CodeQL and Sonar; only a complete certificate suppresses both.
-      execute_validation: ${{ steps.resolve.outputs.execute_validation || steps.defaults.outputs.execute_validation }}
+      # A sonar_only dispatch turns the whole build/test graph off; quality (Sonar) stays on.
+      execute_validation: ${{ inputs.sonar_only && 'false' || steps.resolve.outputs.execute_validation || steps.defaults.outputs.execute_validation }}
       execute_quality: ${{ steps.resolve.outputs.execute_quality || steps.defaults.outputs.execute_quality }}
       # Delta reuse. Reuse: nothing re-runs (reuse=true above). Partial: re-run partial_shards only
       # and import import_shards' artifacts from run import_run_id (tested commit import_sha).
@@ -271,7 +276,7 @@ jobs:
     timeout-minutes: 85
     # CodeQL remains mandatory even for non-runtime changes because the active Main ruleset
     # requires a CodeQL result for the candidate commit. This is one job, not a model/test matrix.
-    if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_quality) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && !cancelled() && !inputs.sonar_only && fromJSON(needs.validation-source.outputs.execute_quality) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read
       security-events: write
@@ -348,7 +353,7 @@ jobs:
     # Recent traced runs took 66-71 minutes (about 26 traced build + 31 analysis) and trace Serving and
     # the playground functions as well; 85 keeps the margin.
     timeout-minutes: 85
-    if: "${{ always() && !cancelled() && github.event_name != 'pull_request' && fromJSON(needs.validation-source.outputs.execute_quality) && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && !cancelled() && !inputs.sonar_only && github.event_name != 'pull_request' && fromJSON(needs.validation-source.outputs.execute_quality) && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     permissions:
       contents: read
       security-events: write
@@ -2411,7 +2416,7 @@ jobs:
     #
     # The required check remains a lightweight successful job for non-runtime changes. Runtime
     # analysis still requires the build; every expensive step below consumes the same typed flag.
-    if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_quality) && (!fromJSON((needs.validation-source.outputs.reuse == 'true' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || 'true') || needs.validation-source.outputs.reuse == 'true' || needs.build.result == 'success') && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
+    if: "${{ always() && !cancelled() && fromJSON(needs.validation-source.outputs.execute_quality) && (!fromJSON((needs.validation-source.outputs.reuse == 'true' && needs.validation-source.outputs.reused_requires_validation) || needs.select-shards.outputs.requires_validation || 'true') || needs.validation-source.outputs.reuse == 'true' || needs.build.result == 'success' || inputs.sonar_only) && (github.event.pull_request.draft != true) && !startsWith(github.head_ref, 'release-please--') && !(github.event_name == 'push' && startsWith(github.event.head_commit.message, 'chore(master): release')) }}"
     needs:
       - build
       - test-net10-sharded
@@ -2435,15 +2440,25 @@ jobs:
             echo 'Non-runtime-only change; the SonarCloud check succeeds without analysis.'
           fi
 
-      - name: Free runner disk space
+      - name: Free runner disk space and add swap
         # The analysed run checks out full history, restores the ~1.3 GB NuGet cache and runs the
         # instrumented Release build. Run 41511223687 (PR #2412) ran out of space on ubuntu-latest while the
         # cache was still extracting ("No space left on device"), so this job frees the same unused
         # preinstalled toolchains as the build and traced CodeQL jobs. Java is installed after this step,
         # so the hosted Java cache is left alone.
+        #
+        # Swap: the analysed runs of master 40996396452 (10-30), 41163384956 (10-31) and 41570960245
+        # (11-03) and of the PR dispatches 41517541064 and 41519686106 all lost their runner inside
+        # "Build (Release)", 18-28 minutes in, while the main library compiled under Sonar's analyzers
+        # ("The runner has received a shutdown signal", no compiler error). The image has 16 GB of RAM
+        # and 3 GB of swap. With a 20 GB swap file the analysis completed (run 41834443097), but swap
+        # peaked at 17.7 GB with the compiler server at 15.2 GB resident, so the file is 32 GB for
+        # headroom; the runner had 88 GB of disk free after it. The build step logs memory, swap and
+        # the largest process every minute.
         if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         run: |
           df -h /
+          free -m
           sudo rm -rf /usr/local/lib/android || true
           sudo rm -rf /opt/ghc || true
           sudo rm -rf /opt/hostedtoolcache/CodeQL || true
@@ -2455,6 +2470,16 @@ jobs:
           sudo rm -rf /usr/local/share/boost || true
           sudo apt-get clean || true
           df -h /
+          swapdir=/mnt
+          if [ ! -d "$swapdir" ] || [ "$(df --output=avail -BG "$swapdir" | tail -1 | tr -dc 0-9)" -lt 45 ]; then swapdir=/; fi
+          sudo swapoff -a || true
+          sudo rm -f /mnt/swapfile /swapfile || true
+          sudo fallocate -l 32G "$swapdir/sonar.swap"
+          sudo chmod 600 "$swapdir/sonar.swap"
+          sudo mkswap "$swapdir/sonar.swap"
+          sudo swapon "$swapdir/sonar.swap"
+          free -m
+          df -h / "$swapdir"
 
       - name: Set up JDK 17
         if: ${{ fromJSON(env.SONAR_ANALYZE) }}
@@ -2509,7 +2534,7 @@ jobs:
           dotnet tool update dotnet-sonarscanner --tool-path ${{ runner.temp }}/scanner
 
       - name: Download current-run coverage artifacts
-        if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.reuse != 'true' }}
+        if: ${{ fromJSON(env.SONAR_ANALYZE) && needs.validation-source.outputs.reuse != 'true' && !inputs.sonar_only }}
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v4
         with:
           pattern: coverage-${{ github.sha }}-*
@@ -2611,35 +2636,62 @@ jobs:
         # already built above. A project that stops targeting net10.0 fails this step on purpose,
         # so it cannot silently drop out of analysis.
         #
+        # ONE BUILD. Building the projects one `dotnet build` at a time recompiled the main library
+        # under Sonar for every project that references it (nearly all of them): run 41643755098
+        # spent 20-23 minutes per project on it and was cancelled at the 90-minute limit before
+        # reaching the test project. The net10.0 projects are therefore built together through a
+        # generated solution filter, so MSBuild compiles each project, the main library included,
+        # once. The per-project check that every project targets net10.0 is kept.
+        #
         # -m:2 matches the memory-safe project concurrency of the artifact build: Sonar's compiler
         # instrumentation only increases the need to avoid large csc processes competing inside
-        # the 16-GB runner.
+        # the 16-GB runner (that run's compiler server peaked at 15 GB with 10 GB in swap).
         if: ${{ fromJSON(env.SONAR_ANALYZE) }}
         shell: pwsh
         run: |
-          $projects = @(dotnet sln AiDotNet.sln list | Select-Object -Skip 2 |
-            ForEach-Object { $_.Trim().Replace('\', '/') } | Where-Object { $_ })
-          if ($projects.Count -eq 0) { throw 'AiDotNet.sln lists no projects' }
-          foreach ($project in $projects) {
-            $evaluated = dotnet msbuild $project -getProperty:TargetFrameworks -getProperty:TargetFramework | Out-String
-            if ($LASTEXITCODE -ne 0) { throw "could not evaluate the target frameworks of $project" }
-            $properties = ($evaluated | ConvertFrom-Json).Properties
-            $frameworks = @(("$($properties.TargetFrameworks);$($properties.TargetFramework)").Split(';') |
-              Where-Object { $_ })
-            if ($frameworks -contains 'net10.0') {
-              Write-Host "::group::$project (net10.0 of $($frameworks -join ', '))"
-              dotnet build $project -c Release --no-restore -m:2 -f net10.0
+          # One line a minute: RAM and swap in use, the largest process, free disk (see the swap step).
+          $monitorScript = Join-Path $env:RUNNER_TEMP 'runner-monitor.sh'
+          Set-Content -Path $monitorScript -Value @(
+            'while sleep 60; do'
+            '  mem=$(free -m | awk ''/^Mem/{printf "mem used %s/%s MB avail %s", $3, $2, $7} /^Swap/{printf ", swap %s/%s MB", $3, $2}'')'
+            '  top=$(ps -eo rss=,comm= --sort=-rss | head -1 | awk ''{printf "%s %d MB", $2, $1/1024}'')'
+            '  echo "[runner] $(date -u +%H:%M:%S) $mem, largest $top, disk free $(df --output=avail -h / | tail -1)"'
+            'done')
+          $filter = 'sonar-net10.slnf'
+          $monitor = $null
+          try {
+            $monitor = Start-Process bash -NoNewWindow -PassThru -ArgumentList $monitorScript
+            $projects = @(dotnet sln AiDotNet.sln list | Select-Object -Skip 2 |
+              ForEach-Object { $_.Trim().Replace('\', '/') } | Where-Object { $_ })
+            if ($projects.Count -eq 0) { throw 'AiDotNet.sln lists no projects' }
+            $net10 = @()
+            foreach ($project in $projects) {
+              $evaluated = dotnet msbuild $project -getProperty:TargetFrameworks -getProperty:TargetFramework | Out-String
+              if ($LASTEXITCODE -ne 0) { throw "could not evaluate the target frameworks of $project" }
+              $properties = ($evaluated | ConvertFrom-Json).Properties
+              $frameworks = @(("$($properties.TargetFrameworks);$($properties.TargetFramework)").Split(';') |
+                Where-Object { $_ })
+              if ($frameworks -contains 'net10.0') {
+                Write-Host "$project (net10.0 of $($frameworks -join ', '))"
+                $net10 += $project
+              }
+              elseif ($project -eq 'src/AiDotNet.Generators/AiDotNet.Generators.csproj') {
+                Write-Host "$project (analyzer, $($frameworks -join ', '); built in the previous step)"
+              }
+              else {
+                throw "$project targets $($frameworks -join ', ') and not net10.0; decide how Sonar should analyse it"
+              }
             }
-            elseif ($project -eq 'src/AiDotNet.Generators/AiDotNet.Generators.csproj') {
-              Write-Host "::group::$project (analyzer, $($frameworks -join ', '))"
-              dotnet build $project -c Release --no-restore -m:2
-            }
-            else {
-              throw "$project targets $($frameworks -join ', ') and not net10.0; decide how Sonar should analyse it"
-            }
+            @{ solution = @{ path = 'AiDotNet.sln'; projects = $net10 } } | ConvertTo-Json -Depth 4 |
+              Set-Content -Path $filter
+            dotnet build $filter -c Release --no-restore -m:2 -f net10.0
             $exit = $LASTEXITCODE
-            Write-Host '::endgroup::'
-            if ($exit -ne 0) { throw "Sonar-instrumented build of $project failed with exit code $exit" }
+            if ($exit -ne 0) { throw "Sonar-instrumented build of the net10.0 projects failed with exit code $exit" }
+          } finally {
+            if ($null -ne $monitor) {
+              try { $monitor.Kill($true) } catch { }
+            }
+            Remove-Item -LiteralPath $filter -ErrorAction SilentlyContinue
           }
 
       - name: End SonarCloud analysis

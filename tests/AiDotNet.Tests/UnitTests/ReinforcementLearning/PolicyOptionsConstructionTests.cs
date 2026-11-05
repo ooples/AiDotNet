@@ -63,8 +63,7 @@ public class PolicyOptionsConstructionTests
     public void Deterministic_DefaultExploration_IsSizedToTheActionSize()
     {
         var options = new DeterministicPolicyOptions<double> { StateSize = State, ActionSize = 3, HiddenLayers = new[] { 8 }, Seed = 2 };
-        Assert.IsType<AiDotNet.ReinforcementLearning.Policies.Exploration.OrnsteinUhlenbeckNoise<double>>(options.ExplorationStrategy);
-        Assert.NotSame(options.ExplorationStrategy, options.ExplorationStrategy);
+        Assert.Null(options.ExplorationStrategy);
         var policy = new DeterministicPolicy<double>(options);
         var action = policy.SelectAction(StateVector(), training: true);
         Assert.Equal(3, action.Length);

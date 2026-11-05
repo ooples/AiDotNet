@@ -1,4 +1,4 @@
-﻿global using System.Reflection;
+global using System.Reflection;
 using AiDotNet.NeuralNetworks.Layers.SSM;
 
 namespace AiDotNet.Helpers;
@@ -314,6 +314,7 @@ public static class DeserializationHelper
                     out var registeredLayer)
                 && registeredLayer is ILayer<T> registeredAsLayer)
             {
+                RestorePostConstructionConfiguration(registeredAsLayer, additionalParams);
                 PreResolveLazyShape(registeredAsLayer, inputShape);
                 return registeredAsLayer;
             }
@@ -4513,15 +4514,28 @@ public static class DeserializationHelper
             return;
         }
 
-        // Generated factories return before the constructor-specific fallback below. Restore the
-        // hosted attentions here as well, otherwise their post-construction settings are lost.
-        if (layer is TransformerEncoderBlock<T> encoder && encoder.AttentionLayer is MultiHeadAttentionLayer<T> encoderAttention)
-            RestoreNestedMultiHeadAttentionConfiguration(encoderAttention, additionalParams, TransformerEncoderBlock<T>.AttentionMetadataPrefix);
-        if (layer is TransformerDecoderBlock<T> decoder)
+        if (layer is NeuralNetworks.Layers.TransformerEncoderBlock<T> encoderBlock
+            && encoderBlock.AttentionLayer is MultiHeadAttentionLayer<T> encoderAttention)
         {
-            if (decoder.SelfAttentionLayer is MultiHeadAttentionLayer<T> selfAttention)
-                RestoreNestedMultiHeadAttentionConfiguration(selfAttention, additionalParams, TransformerDecoderBlock<T>.SelfAttentionMetadataPrefix);
-            RestoreNestedMultiHeadAttentionConfiguration(decoder.CrossAttentionLayer, additionalParams, TransformerDecoderBlock<T>.CrossAttentionMetadataPrefix);
+            RestoreNestedMultiHeadAttentionConfiguration(
+                encoderAttention,
+                additionalParams,
+                NeuralNetworks.Layers.TransformerEncoderBlock<T>.AttentionMetadataPrefix);
+        }
+        else if (layer is NeuralNetworks.Layers.TransformerDecoderBlock<T> decoderBlock)
+        {
+            if (decoderBlock.SelfAttentionLayer is MultiHeadAttentionLayer<T> selfAttention)
+            {
+                RestoreNestedMultiHeadAttentionConfiguration(
+                    selfAttention,
+                    additionalParams,
+                    NeuralNetworks.Layers.TransformerDecoderBlock<T>.SelfAttentionMetadataPrefix);
+            }
+
+            RestoreNestedMultiHeadAttentionConfiguration(
+                decoderBlock.CrossAttentionLayer,
+                additionalParams,
+                NeuralNetworks.Layers.TransformerDecoderBlock<T>.CrossAttentionMetadataPrefix);
         }
 
         string? positionalEncoding = TryGetString(additionalParams, "PositionalEncoding");

@@ -621,7 +621,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
     protected override void EnsureInitialized()
     {
-        // Shape metadata must register children without materializing trainable weights.
+        // Metadata walks may bring up child structure, but must not allocate Q/K/V/O values.
         if (!IsResolvingShapesOnly) EnsureWeightsAllocated();
         base.EnsureInitialized();
     }

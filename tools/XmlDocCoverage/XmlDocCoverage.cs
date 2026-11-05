@@ -33,12 +33,9 @@ internal static class XmlDocCoverage
         var missing = new List<(Type DeclaringType, string Id)>();
         foreach (Type type in LoadableTypes(assembly).Where(IsVisible).Where(type => !IsCompilerGenerated(type)))
         {
-            foreach (string id in VisibleMemberIds(type))
+            foreach (string id in VisibleMemberIds(type).Where(id => !documented.Contains(id)))
             {
-                if (!documented.Contains(id))
-                {
-                    missing.Add((type, id));
-                }
+                missing.Add((type, id));
             }
         }
 

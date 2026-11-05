@@ -38,17 +38,11 @@ namespace AiDotNet.ReinforcementLearning.Policies
 
         /// <summary>Gets or sets the exploration noise added to actions during training.</summary>
         /// <value>
-        /// With no explicit strategy, each read creates fresh Ornstein-Uhlenbeck noise with θ = 0.15 and σ = 0.2, DDPG's choice, sized to
+        /// Null (the default) uses Ornstein-Uhlenbeck noise with θ = 0.15 and σ = 0.2, DDPG's choice, sized to
         /// <see cref="ActionSize"/>. The default used to be that noise built for one action, which threw on the first
         /// exploratory step of any policy with more than one action dimension.
         /// </value>
-        public IExplorationStrategy<T>? ExplorationStrategy
-        {
-            get => _explorationStrategy ?? new OrnsteinUhlenbeckNoise<T>(Math.Max(1, ActionSize));
-            set => _explorationStrategy = value;
-        }
-
-        private IExplorationStrategy<T>? _explorationStrategy;
+        public IExplorationStrategy<T>? ExplorationStrategy { get; set; } = null;
 
         /// <summary>Gets or sets whether actions pass through tanh, bounding them to [-1, 1].</summary>
         /// <value>Defaults to true, as DDPG's and TD3's actors do.</value>
