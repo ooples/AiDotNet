@@ -18,6 +18,12 @@ namespace AiDotNet.PromptEngineering.Templates;
 /// // Create base template
 /// var baseTemplate = "Classify the sentiment of the following text.\n\n{examples}\n\nText: {text}\nSentiment:";
 ///
+/// // Labelled examples the template can draw from
+/// var exampleSelector = new FixedExampleSelector&lt;double&gt;();
+/// exampleSelector.AddExample(new FewShotExample { Input = "I loved this product!", Output = "Positive" });
+/// exampleSelector.AddExample(new FewShotExample { Input = "Terrible experience.", Output = "Negative" });
+/// exampleSelector.AddExample(new FewShotExample { Input = "It's okay, nothing special.", Output = "Neutral" });
+///
 /// // Create few-shot template with example selector
 /// var template = new FewShotPromptTemplate&lt;double&gt;(
 ///     baseTemplate,

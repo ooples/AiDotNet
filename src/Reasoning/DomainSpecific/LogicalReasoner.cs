@@ -118,9 +118,9 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 ///
 /// // Logic puzzle
 /// result = await reasoner.SolvePuzzleAsync(
-///     "In a room are 3 switches and 3 light bulbs in another room.
-///      You can flip switches but only enter the bulb room once.
-///      How do you determine which switch controls which bulb?"
+///     "In a room are 3 switches and 3 light bulbs in another room. " +
+///     "You can flip switches but only enter the bulb room once. " +
+///     "How do you determine which switch controls which bulb?"
 /// );
 /// ```
 ///
