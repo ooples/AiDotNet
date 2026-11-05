@@ -39239,504 +39239,504 @@
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_Variant</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_Variant</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_Variant(AiDotNet.Enums.VideoModelVariant)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_Variant(AiDotNet.Enums.VideoModelVariant)</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_NumFeatures</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_NumFeatures</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_NumFeatures(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_NumFeatures(System.Int32)</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_NumEncoderLayers</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_NumEncoderLayers</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_NumEncoderLayers(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_NumEncoderLayers(System.Int32)</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_NumDecoderLayers</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_NumDecoderLayers</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_NumDecoderLayers(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_NumDecoderLayers(System.Int32)</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_NumDeformablePoints</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_NumDeformablePoints</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_NumDeformablePoints(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_NumDeformablePoints(System.Int32)</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_DropoutRate</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_DropoutRate</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_DropoutRate(System.Double)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_DropoutRate(System.Double)</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_Variant</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_Variant</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_Variant(AiDotNet.Enums.VideoModelVariant)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_Variant(AiDotNet.Enums.VideoModelVariant)</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_NumFeatures</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_NumFeatures</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_NumFeatures(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_NumFeatures(System.Int32)</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_NumEncoderLayers</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_NumEncoderLayers</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_NumEncoderLayers(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_NumEncoderLayers(System.Int32)</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_NumDecoderLayers</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_NumDecoderLayers</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_NumDecoderLayers(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_NumDecoderLayers(System.Int32)</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_NumDeformablePoints</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_NumDeformablePoints</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_NumDeformablePoints(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_NumDeformablePoints(System.Int32)</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_DropoutRate</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_DropoutRate</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_DropoutRate(System.Double)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_DropoutRate(System.Double)</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_Variant</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_Variant</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_Variant(AiDotNet.Enums.VideoModelVariant)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_Variant(AiDotNet.Enums.VideoModelVariant)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_NumFeatures</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_NumFeatures</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_NumFeatures(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_NumFeatures(System.Int32)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_NumEncoderLayers</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_NumEncoderLayers</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_NumEncoderLayers(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_NumEncoderLayers(System.Int32)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_NumDecoderLayers</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_NumDecoderLayers</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_NumDecoderLayers(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_NumDecoderLayers(System.Int32)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_NumDeformablePoints</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_NumDeformablePoints</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_NumDeformablePoints(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_NumDeformablePoints(System.Int32)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.get_DropoutRate</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.get_DropoutRate</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFIformerOptions.set_DropoutRate(System.Double)</Target>
+    <Target>M:AiDotNet.Video.Options.VFIformerOptions.set_DropoutRate(System.Double)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_Variant</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_Variant</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_Variant(AiDotNet.Enums.VideoModelVariant)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_Variant(AiDotNet.Enums.VideoModelVariant)</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_NumFeatures</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_NumFeatures</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_NumFeatures(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_NumFeatures(System.Int32)</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_NumTemporalLayers</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_NumTemporalLayers</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_NumTemporalLayers(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_NumTemporalLayers(System.Int32)</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_NumSpatialLayers</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_NumSpatialLayers</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_NumSpatialLayers(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_NumSpatialLayers(System.Int32)</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_NumHeads</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_NumHeads</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_NumHeads(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_NumHeads(System.Int32)</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_DropoutRate</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_DropoutRate</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_DropoutRate(System.Double)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_DropoutRate(System.Double)</Target>
     <Left>lib/net10.0/AiDotNet.dll</Left>
     <Right>lib/net10.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_Variant</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_Variant</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_Variant(AiDotNet.Enums.VideoModelVariant)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_Variant(AiDotNet.Enums.VideoModelVariant)</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_NumFeatures</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_NumFeatures</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_NumFeatures(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_NumFeatures(System.Int32)</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_NumTemporalLayers</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_NumTemporalLayers</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_NumTemporalLayers(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_NumTemporalLayers(System.Int32)</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_NumSpatialLayers</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_NumSpatialLayers</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_NumSpatialLayers(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_NumSpatialLayers(System.Int32)</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_NumHeads</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_NumHeads</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_NumHeads(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_NumHeads(System.Int32)</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_DropoutRate</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_DropoutRate</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_DropoutRate(System.Double)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_DropoutRate(System.Double)</Target>
     <Left>lib/net471/AiDotNet.dll</Left>
     <Right>lib/net471/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_Variant</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_Variant</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_Variant(AiDotNet.Enums.VideoModelVariant)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_Variant(AiDotNet.Enums.VideoModelVariant)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_NumFeatures</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_NumFeatures</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_NumFeatures(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_NumFeatures(System.Int32)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_NumTemporalLayers</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_NumTemporalLayers</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_NumTemporalLayers(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_NumTemporalLayers(System.Int32)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_NumSpatialLayers</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_NumSpatialLayers</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_NumSpatialLayers(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_NumSpatialLayers(System.Int32)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_NumHeads</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_NumHeads</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_NumHeads(System.Int32)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_NumHeads(System.Int32)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.get_DropoutRate</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.get_DropoutRate</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
   <Suppression>
     <DiagnosticId>CP0002</DiagnosticId>
-    <Target>M:VFITOptions.set_DropoutRate(System.Double)</Target>
+    <Target>M:AiDotNet.Video.Options.VFITOptions.set_DropoutRate(System.Double)</Target>
     <Left>lib/net8.0/AiDotNet.dll</Left>
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
