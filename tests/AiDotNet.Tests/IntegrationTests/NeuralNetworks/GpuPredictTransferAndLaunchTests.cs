@@ -53,16 +53,18 @@ public class GpuPredictTransferAndLaunchTests
             watch.Restart();
             for (int i = 0; i < 200; i++) network.Predict(input).ToArray();
             _output.WriteLine($"warm b1 Predict: {unreadMs:F3} ms unread, {watch.Elapsed.TotalMilliseconds / 200:F3} ms read");
-            _output.WriteLine($"per call: {launches} launches, {readbacks} readbacks ({readbackBytes} B), " +
-                $"{uploads} uploads ({uploadBytes} B)");
+            _output.WriteLine($"over {MeasuredCalls} calls: {launches} launches, {readbacks} readbacks " +
+                $"({readbackBytes} B), {uploads} uploads ({uploadBytes} B)");
+            // Otherwise a Predict that fell back to the CPU would pass both transfer checks with nothing moved.
+            Assert.True(launches > 0, "a warm MLP Predict launched no GPU kernel, so it did not run on the GPU");
             Assert.True(readbackBytes == 0,
-                $"a warm Predict whose result was not read downloaded {readbackBytes} B per call in {readbacks} readbacks: " +
-                string.Join("; ", GpuLaunchProbe.ReadbackSites));
-            // The input is a host tensor, so its bytes go up once; the weights are already on the device.
+                $"warm Predicts whose results were not read downloaded {readbackBytes} B in {readbacks} readbacks " +
+                $"over {MeasuredCalls} calls: " + string.Join("; ", GpuLaunchProbe.ReadbackSites));
+            // The input is a host tensor, so its bytes go up once per call; the weights are already on the device.
             long inputBytes = input.Length * sizeof(float);
-            Assert.True(uploadBytes <= inputBytes,
-                $"a warm Predict uploaded {uploadBytes} B per call, more than its {inputBytes} B input: " +
-                string.Join("; ", GpuLaunchProbe.UploadSites));
+            Assert.True(uploadBytes <= inputBytes * MeasuredCalls,
+                $"warm Predicts uploaded {uploadBytes} B over {MeasuredCalls} calls, more than their " +
+                $"{inputBytes * MeasuredCalls} B of input: " + string.Join("; ", GpuLaunchProbe.UploadSites));
         });
     }
 
@@ -92,8 +94,9 @@ public class GpuPredictTransferAndLaunchTests
             }
 
             long single = Launches(1), batched = Launches(128);
-            _output.WriteLine($"{model}: {single} launches per b1 Predict, {batched} per b128 Predict");
+            _output.WriteLine($"{model}: {single} launches over {MeasuredCalls} b1 Predicts, {batched} over {MeasuredCalls} b128 Predicts");
             Assert.True(single > 0, $"{model}: a b1 Predict launched no GPU kernel, so it did not run on the GPU");
+            Assert.True(batched > 0, $"{model}: a b128 Predict launched no GPU kernel, so it did not run on the GPU");
             // The same layers run whatever the batch, each as one batched kernel. The count still moves a little with
             // the batch (measured on OpenCL: Transformer 29-35 launches from b1 to b128, ViT 81-107) because a bigger
             // GEMM can pick a kernel with another launch shape; a part of the forward looped per sample would add at
@@ -107,13 +110,17 @@ public class GpuPredictTransferAndLaunchTests
     private async Task OnGpu(Action body)
     {
         await Task.Yield();
+        // A lane that requires the GPU fails here instead of skipping, so a broken runner cannot pass as "no GPU".
+        bool requireGpu = Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1";
         DirectGpuTensorEngine? gpu = null;
         try { gpu = new DirectGpuTensorEngine(); }
-        catch (Exception ex) { _output.WriteLine($"No GPU engine: {ex.GetType().Name}: {ex.Message}"); }
+        catch (Exception ex) when (!requireGpu) { _output.WriteLine($"No GPU engine: {ex.GetType().Name}: {ex.Message}"); }
         var previous = AiDotNetEngine.Current;
         try
         {
-            Skip.If(gpu is null || !gpu.SupportsGpu || !gpu.IsGpuAvailable, "No GPU backend available.");
+            bool gpuAvailable = gpu is not null && gpu.SupportsGpu && gpu.IsGpuAvailable;
+            if (requireGpu) Assert.True(gpuAvailable, "AIDOTNET_REQUIRE_GPU_TESTS=1 but no GPU backend is available.");
+            Skip.IfNot(gpuAvailable, "No GPU backend available.");
             AiDotNetEngine.Current = gpu;
             body();
         }
@@ -124,6 +131,8 @@ public class GpuPredictTransferAndLaunchTests
         }
     }
 
+    // Totals over MeasuredCalls calls, not per-call averages: integer division would round a single 4-byte readback in
+    // ten calls down to zero and let the zero-readback check pass.
     private static (long Launches, long Readbacks, long ReadbackBytes, long Uploads, long UploadBytes) Measure(
         Action call)
     {
@@ -134,11 +143,11 @@ public class GpuPredictTransferAndLaunchTests
             GpuLaunchProbe.Reset();
             long before = GpuLaunchProbe.Count;
             for (int i = 0; i < MeasuredCalls; i++) call();
-            return ((GpuLaunchProbe.Count - before) / MeasuredCalls,
-                GpuLaunchProbe.Readbacks / MeasuredCalls,
-                GpuLaunchProbe.ReadbackBytes / MeasuredCalls,
-                GpuLaunchProbe.Uploads / MeasuredCalls,
-                GpuLaunchProbe.UploadBytes / MeasuredCalls);
+            return (GpuLaunchProbe.Count - before,
+                GpuLaunchProbe.Readbacks,
+                GpuLaunchProbe.ReadbackBytes,
+                GpuLaunchProbe.Uploads,
+                GpuLaunchProbe.UploadBytes);
         }
         finally
         {
