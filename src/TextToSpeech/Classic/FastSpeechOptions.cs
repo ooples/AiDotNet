@@ -20,6 +20,7 @@ public class FastSpeechOptions : AcousticModelOptions
         MaxDuration = other.MaxDuration;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public FastSpeechOptions()
     {
         EncoderDim = 256;

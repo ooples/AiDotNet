@@ -49,6 +49,7 @@ public class EmuEditOptions : EditingVLMOptions
         VaeNumResBlocksPerLevel = other.VaeNumResBlocksPerLevel;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public EmuEditOptions()
     {
         VisionDim = 1024;

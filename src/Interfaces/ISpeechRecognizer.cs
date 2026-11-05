@@ -159,6 +159,7 @@ public interface ISpeechRecognizer<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class TranscriptionResult<T>
 {
+    /// <summary>Creates a transcription result with every required member set to its default.</summary>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public TranscriptionResult() { }
 

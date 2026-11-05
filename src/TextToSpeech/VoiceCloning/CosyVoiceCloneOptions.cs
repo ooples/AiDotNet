@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// </remarks>
 public class CosyVoiceCloneOptions : VoiceCloningOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public CosyVoiceCloneOptions()
     {
         MinReferenceDurationSec = 3.0;

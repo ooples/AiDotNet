@@ -40,6 +40,7 @@ public class CogVLMOptions : InstructionTunedVLMOptions
         NumVisualExpertHeads = other.NumVisualExpertHeads;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public CogVLMOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.VisualExpert;

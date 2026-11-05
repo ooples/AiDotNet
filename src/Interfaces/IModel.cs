@@ -3,6 +3,9 @@ namespace AiDotNet.Interfaces;
 /// <summary>
 /// Defines the core functionality for machine learning models that can be trained on data and make predictions.
 /// </summary>
+/// <typeparam name="TInput">The type of the input data (for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
+/// <typeparam name="TMetadata">The type of the metadata the model reports about itself.</typeparam>
+/// <typeparam name="TOutput">The type of the output data (for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>).</typeparam>
 /// <remarks>
 /// This interface represents the fundamental operations that all machine learning models should support:
 /// training on data, making predictions with new data, and providing metadata about the model's performance.
@@ -21,7 +24,6 @@ namespace AiDotNet.Interfaces;
 /// 
 /// This interface provides the essential methods needed for this learning and prediction process.
 /// </remarks>
-/// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
 public interface IModel<TInput, TOutput, TMetadata>
 {
     /// <summary>
@@ -46,8 +48,8 @@ public interface IModel<TInput, TOutput, TMetadata>
     /// - x would contain features like square footage, number of bedrooms, location
     /// - y would contain the actual sale prices of those houses
     /// </remarks>
-    /// <param name="x">A matrix where each row represents a training example and each column represents a feature.</param>
-    /// <param name="y">A vector containing the target values corresponding to each training example.</param>
+    /// <param name="input">The training inputs, for example a matrix with one row per example and one column per feature.</param>
+    /// <param name="expectedOutput">The target values for those inputs, one per training example.</param>
     void Train(TInput input, TOutput expectedOutput);
 
     /// <summary>

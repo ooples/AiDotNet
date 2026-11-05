@@ -43,6 +43,7 @@ public class SceneLLMOptions : ThreeDVLMOptions
         VoxelResolution = other.VoxelResolution;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SceneLLMOptions()
     {
         VisionDim = 768;

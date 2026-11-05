@@ -25,4 +25,7 @@
     <Compile Include="../AiDotNet.Tests/IntegrationTests/NeuralNetworks/BuilderJitValueStabilityTests.cs" Link="BuilderJitValueStabilityTests.cs" />
     <None Include="../AiDotNet.Tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AiDotNet.CodeAnalysis.TreeSitter/AiDotNet.CodeAnalysis.TreeSitter.csproj" />
+  </ItemGroup>
 </Project>

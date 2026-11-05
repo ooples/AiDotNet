@@ -16,12 +16,17 @@ namespace AiDotNet.Data.Vision.Benchmarks;
 /// </remarks>
 public sealed class StanfordCarsDataLoaderOptions
 {
+    /// <summary>Gets or sets which split of the dataset is loaded.</summary>
     public DatasetSplit Split { get; set; } = DatasetSplit.Train;
+    /// <summary>Gets or sets the dataset root directory; null uses the default data directory for this dataset.</summary>
     public string? DataPath { get; set; }
     /// <summary>Auto-download is OFF by default — Stanford URLs are unstable. Place archives manually.</summary>
     public bool AutoDownload { get; set; } = false;
+    /// <summary>Gets or sets the side length, in pixels, images are resized to.</summary>
     public int ImageSize { get; set; } = 224;
+    /// <summary>Gets or sets whether pixel values are scaled to [0, 1].</summary>
     public bool Normalize { get; set; } = true;
+    /// <summary>Gets or sets the most samples loaded; null loads the whole split.</summary>
     public int? MaxSamples { get; set; }
 
     /// <summary>Validates that all option values are within acceptable ranges.</summary>

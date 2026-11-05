@@ -72,7 +72,6 @@ public interface ISpeakerVerifier<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
     /// </summary>
     /// <param name="audio">Audio to verify.</param>
     /// <param name="referenceEmbedding">Pre-computed speaker embedding of the claimed identity.</param>
-    /// <param name="threshold">Decision threshold. Uses default if null.</param>
     /// <returns>Verification result with decision and confidence score.</returns>
     /// <remarks>
     /// <para>
@@ -163,6 +162,7 @@ public interface ISpeakerVerifier<T> : IFullModel<T, Tensor<T>, Tensor<T>>,
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 public class SpeakerVerificationResult<T>
 {
+    /// <summary>Creates an empty verification result.</summary>
     public SpeakerVerificationResult() { }
 
     /// <summary>

@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// </remarks>
 public class SeedTTSCloneOptions : VoiceCloningOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public SeedTTSCloneOptions()
     {
         MinReferenceDurationSec = 5.0;

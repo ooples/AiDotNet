@@ -41,6 +41,7 @@ public class GroundingDINOOptions : GroundingVLMOptions
         NumQueryPositions = other.NumQueryPositions;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GroundingDINOOptions()
     {
         VisionDim = 256;

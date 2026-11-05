@@ -77,6 +77,7 @@ public class Contradiction
     /// </summary>
     public double Severity { get; set; }
 
+    /// <summary>Describes the contradiction: the two step numbers, the explanation and the severity.</summary>
     public override string ToString() =>
         $"Contradiction between steps {Step1Number} and {Step2Number}: {Explanation} (Severity: {Severity:F2})";
 }

@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -300,9 +300,7 @@ public partial class TransitionLayer<T> : LayerBase<T>, ILayerSerializationExtra
         }
 
         // BN → ReLU → Conv1x1 → AvgPool. In inference BN + ReLU is one pass (when the block's ReLU is exactly a ReLU);
-        // otherwise, and whenever the backward will read the intermediates, the stages run separately. Locals, not
-        // fields: nothing reads them after the forward, and a field would keep this layer's activations alive between
-        // forwards.
+        // otherwise the stages run separately. Keep intermediates local so inference doesn't retain activations.
         Tensor<T> reluOut;
         if (!ShouldCacheForBackward && _relu.GetType() == typeof(ReLUActivation<T>)
             && ConvolutionBatchNormFolding<T>.TryBatchNormActivation(_bn, processInput, FusedActivationType.ReLU, out var preActivated))

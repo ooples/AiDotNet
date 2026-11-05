@@ -21,6 +21,7 @@ public class GoogleCloudTTSOptions : EndToEndTtsOptions
         VoiceId = other.VoiceId;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GoogleCloudTTSOptions()
     {
         NumFlowSteps = 0;

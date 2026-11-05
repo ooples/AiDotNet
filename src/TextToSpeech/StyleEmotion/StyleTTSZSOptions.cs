@@ -20,6 +20,7 @@ public class StyleTTSZSOptions : EndToEndTtsOptions
         NumStyleLayers = other.NumStyleLayers;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public StyleTTSZSOptions()
     {
         NumEncoderLayers = 6;
@@ -28,6 +29,8 @@ public class StyleTTSZSOptions : EndToEndTtsOptions
         DropoutRate = 0.1;
     }
 
+    /// <summary>Gets or sets the width of the style vector that conditions synthesis.</summary>
     public int StyleDim { get; set; } = 256;
+    /// <summary>Gets or sets the number of layers in the style encoder.</summary>
     public int NumStyleLayers { get; set; } = 4;
 }

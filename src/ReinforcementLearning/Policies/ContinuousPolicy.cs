@@ -59,6 +59,20 @@ namespace AiDotNet.ReinforcementLearning.Policies
         {
         }
 
+        /// <summary>
+        /// Builds the policy from <paramref name="options"/>: a dense ReLU network of the options' hidden widths from
+        /// StateSize inputs to a mean and a log standard deviation for each action dimension (2 × ActionSize outputs).
+        /// </summary>
+        /// <param name="options">The policy's configuration.</param>
+        public ContinuousPolicy(ContinuousPolicyOptions<T> options)
+            : this(
+                PolicyNetworks.Build((options ?? throw new ArgumentNullException(nameof(options))).StateSize,
+                    options.HiddenLayers, 2 * options.ActionSize, options.LossFunction, nameof(ContinuousPolicyOptions<T>)),
+                options.ActionSize, options.ExplorationStrategy, options.UseTanhSquashing,
+                PolicyNetworks.RandomFor(options.Seed))
+        {
+        }
+
         public ContinuousPolicy(
             INeuralNetwork<T> policyNetwork,
             int actionSize,

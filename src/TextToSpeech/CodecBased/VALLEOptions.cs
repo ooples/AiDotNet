@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class VALLEOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public VALLEOptions()
     {
         SampleRate = 24000;

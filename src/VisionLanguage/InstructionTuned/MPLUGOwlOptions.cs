@@ -41,6 +41,7 @@ public class MPLUGOwlOptions : InstructionTunedVLMOptions
         NumAbstractorHeads = other.NumAbstractorHeads;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MPLUGOwlOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.VisualAbstractor;

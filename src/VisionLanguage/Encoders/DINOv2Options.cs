@@ -58,6 +58,7 @@ public class DINOv2Options : VisionEncoderOptions
     /// </summary>
     public double IBOTMaskRatio { get; set; } = 0.3;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public DINOv2Options()
     {
         ImageSize = 518;

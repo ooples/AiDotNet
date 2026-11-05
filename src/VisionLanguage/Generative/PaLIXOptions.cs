@@ -33,6 +33,7 @@ public class PaLIXOptions : GenerativeVLMOptions
         WeightDecay = other.WeightDecay;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PaLIXOptions()
     {
         ArchitectureType = GenerativeArchitectureType.EncoderDecoder;

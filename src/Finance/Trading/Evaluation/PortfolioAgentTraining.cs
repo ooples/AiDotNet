@@ -14,11 +14,28 @@ namespace AiDotNet.Finance.Trading.Evaluation;
 /// IFullModel surface) so the trainer depends on nothing more than the RL loop, and a test double is trivial.
 /// Wrap any real AiDotNet agent with <see cref="PortfolioAgent.From{T}"/>.
 /// </summary>
+/// <typeparam name="T">The numeric type of states, actions and rewards.</typeparam>
 public interface IPortfolioAgent<T>
 {
+    /// <summary>Chooses the portfolio action for <paramref name="state"/>.</summary>
+    /// <param name="state">The market state the trading environment observed.</param>
+    /// <param name="explore">True while training, so the agent may explore; false to act greedily.</param>
+    /// <returns>The action, in the environment's action layout.</returns>
     Vector<T> SelectAction(Vector<T> state, bool explore);
+
+    /// <summary>Records one transition for the agent to learn from.</summary>
+    /// <param name="state">The state the action was chosen in.</param>
+    /// <param name="action">The action taken.</param>
+    /// <param name="reward">The reward the environment returned for it.</param>
+    /// <param name="nextState">The state the environment moved to.</param>
+    /// <param name="done">True when the transition ended the episode.</param>
     void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done);
+
+    /// <summary>Runs one learning update from the stored experience.</summary>
+    /// <returns>The training loss of the update, for monitoring.</returns>
     T Train();
+
+    /// <summary>Clears the agent's per-episode state before the next episode starts.</summary>
     void ResetEpisode();
 }
 

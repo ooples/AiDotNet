@@ -41,6 +41,7 @@ public class SEEDXOptions : UnifiedVisionOptions
         EnableMultiGranularity = other.EnableMultiGranularity;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SEEDXOptions()
     {
         VisionDim = 1024;

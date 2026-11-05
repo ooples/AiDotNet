@@ -5,6 +5,7 @@ namespace AiDotNet.Data.Geometry;
 /// </summary>
 public sealed class ShapeNetCorePartSegmentationDataLoaderOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public ShapeNetCorePartSegmentationDataLoaderOptions()
     {
         Split = DatasetSplit.Train;

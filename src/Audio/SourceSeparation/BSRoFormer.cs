@@ -92,7 +92,7 @@ public partial class BSRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourceSepa
         // nothing reads — the defect that diverged MusicFlamingo's training.
         _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            { InitialLearningRate = _options.LearningRate });
+            { InitialLearningRate = _options.LearningRate, WeightDecay = _options.WeightDecay });
         base.SampleRate = _options.SampleRate;
         int nFft = NextPowerOfTwo(_options.FftSize);
         _stft = new ShortTimeFourierTransform<T>(nFft: nFft, hopLength: _options.HopLength,

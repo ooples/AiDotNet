@@ -39,6 +39,7 @@ public class MayaOptions : InstructionTunedVLMOptions
         NumLanguages = other.NumLanguages;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MayaOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

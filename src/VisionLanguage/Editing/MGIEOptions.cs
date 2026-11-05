@@ -51,6 +51,7 @@ public class MGIEOptions : EditingVLMOptions
         TrainableLanguageModelScope = other.TrainableLanguageModelScope;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MGIEOptions()
     {
         VisionDim = 1024;

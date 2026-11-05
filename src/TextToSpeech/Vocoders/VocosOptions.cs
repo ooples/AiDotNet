@@ -20,6 +20,7 @@ public class VocosOptions : VocoderOptions
         IntermediateDim = other.IntermediateDim;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public VocosOptions()
     {
         SampleRate = 24000;
@@ -29,6 +30,7 @@ public class VocosOptions : VocoderOptions
         LearningRate = 2e-4;
     }
 
+    /// <summary>Gets or sets the hidden width of the ConvNeXt backbone.</summary>
     public int ConvNeXtDim { get; set; } = 512;
 
     /// <summary>Gets or sets the number of isotropic ConvNeXt backbone blocks.</summary>

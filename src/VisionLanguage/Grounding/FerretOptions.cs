@@ -41,6 +41,7 @@ public class FerretOptions : GroundingVLMOptions
         EnableFreeFormRegions = other.EnableFreeFormRegions;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public FerretOptions()
     {
         VisionDim = 1024;

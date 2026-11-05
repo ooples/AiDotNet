@@ -38,6 +38,7 @@ public class PixtralLargeOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PixtralLargeOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

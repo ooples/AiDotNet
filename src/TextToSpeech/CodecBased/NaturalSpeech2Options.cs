@@ -20,6 +20,7 @@ public class NaturalSpeech2Options : EndToEndTtsOptions
         DiffusionDim = other.DiffusionDim;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public NaturalSpeech2Options()
     {
         NumDiffusionSteps = 100;
@@ -28,5 +29,6 @@ public class NaturalSpeech2Options : EndToEndTtsOptions
         DropoutRate = 0.1;
     }
 
+    /// <summary>Gets or sets the hidden width of the diffusion decoder.</summary>
     public int DiffusionDim { get; set; } = 256;
 }

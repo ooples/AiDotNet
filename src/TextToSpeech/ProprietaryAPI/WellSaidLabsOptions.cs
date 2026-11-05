@@ -21,6 +21,7 @@ public class WellSaidLabsOptions : EndToEndTtsOptions
         VoiceId = other.VoiceId;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public WellSaidLabsOptions()
     {
         NumFlowSteps = 0;
@@ -30,7 +31,10 @@ public class WellSaidLabsOptions : EndToEndTtsOptions
         DropoutRate = 0.0;
     }
 
+    /// <summary>Gets or sets a service API key. It is not read: this class runs a local ONNX or native model and calls no service.</summary>
     public string ApiKey { get; set; } = string.Empty;
+    /// <summary>Gets or sets a service endpoint. It is not read: this class runs a local ONNX or native model and calls no service.</summary>
     public string ApiEndpoint { get; set; } = string.Empty;
+    /// <summary>Gets or sets a service voice name. It is not read: this class runs a local ONNX or native model and calls no service.</summary>
     public string VoiceId { get; set; } = "default";
 }

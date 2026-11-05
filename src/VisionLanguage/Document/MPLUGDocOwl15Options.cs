@@ -42,6 +42,7 @@ public class MPLUGDocOwl15Options : DocumentVLMOptions
         EnableUnifiedStructureLearning = other.EnableUnifiedStructureLearning;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MPLUGDocOwl15Options()
     {
         VisionDim = 1024;
@@ -53,8 +54,10 @@ public class MPLUGDocOwl15Options : DocumentVLMOptions
         VocabSize = 32000;
     }
 
+    /// <summary>Gets or sets the hidden width of the paper's visual abstractor. The native layers do not read it.</summary>
     public int AbstractorDim { get; set; } = 1024;
 
+    /// <summary>Gets or sets the number of layers of the paper's visual abstractor. The native layers do not read it.</summary>
     public int NumAbstractorLayers { get; set; } = 6;
 
     /// <summary>Gets or sets whether to use unified structure learning.</summary>

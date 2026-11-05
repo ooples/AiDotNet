@@ -43,6 +43,7 @@ public class ThreeDGraphLLMOptions : ThreeDVLMOptions
         MaxGraphNodes = other.MaxGraphNodes;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ThreeDGraphLLMOptions()
     {
         VisionDim = 768;

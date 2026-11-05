@@ -38,6 +38,7 @@ public class BLIP3Options : GenerativeVLMOptions
         UseInterleavedData = other.UseInterleavedData;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public BLIP3Options()
     {
         ArchitectureType = GenerativeArchitectureType.QFormerBridge;

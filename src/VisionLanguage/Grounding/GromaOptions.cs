@@ -41,6 +41,7 @@ public class GromaOptions : GroundingVLMOptions
         EnableLocalizedTokenization = other.EnableLocalizedTokenization;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GromaOptions()
     {
         VisionDim = 1024;

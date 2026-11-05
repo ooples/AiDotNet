@@ -18,6 +18,7 @@ public class TransformerTTSOptions : AcousticModelOptions
         PositionalEncodingDim = other.PositionalEncodingDim;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public TransformerTTSOptions()
     {
         EncoderDim = 256;

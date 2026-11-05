@@ -53,6 +53,7 @@ public class ViTOptions : VisionEncoderOptions
     public PositionalEmbeddingType PositionalEmbedding { get; set; } =
         PositionalEmbeddingType.Learned;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ViTOptions()
     {
         ImageSize = 224;

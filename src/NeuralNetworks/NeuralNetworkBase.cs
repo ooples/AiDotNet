@@ -5672,6 +5672,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // for exactly the foundation-scale models that need them, #1688). Robust
         // across ALL model families, not just whichever layer breaks first.
         int[] lastGoodShape = currentShape;
+        // A raw architecture input is only a candidate; do not rewrite its feature axis
+        // from rank-1 declarations until a layer has established a sequence shape.
+        bool lastGoodShapeComesFromLayer = false;
 
         for (int i = 0; hasOwnLayers && i < (Layers ?? throw new InvalidOperationException("Layers is null where it is required.")).Count; i++)
         {
@@ -5707,10 +5710,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 // unrelated branch. Retaining that branch's last rank >= 2 shape can
                 // silently size a downstream normalization layer from the wrong modality.
                 lastGoodShape = rootOutput;
+                lastGoodShapeComesFromLayer = true;
                 continue;
             }
 
-            if (!TryAdvanceLayerShape(layer, ref currentShape, ref lastGoodShape))
+            if (!TryAdvanceLayerShapeCore(layer, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer))
             {
                 // This layer resolved from NEITHER the running shape NOR the last
                 // good shape (the backtrack above already tried both). Its true
@@ -5744,7 +5748,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             foreach (var extra in GetExtraTrainableLayers())
             {
                 if (extra is null) continue;
-                TryAdvanceLayerShape(extra, ref currentShape, ref lastGoodShape);
+                TryAdvanceLayerShapeCore(extra, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer);
             }
 
         // After the whole walk, so the tally covers every transition including the extra layers.
@@ -5764,6 +5768,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Returns false only when neither shape resolves the layer.
     /// </summary>
     private bool TryAdvanceLayerShape(ILayer<T> layer, ref int[] currentShape, ref int[] lastGoodShape)
+    {
+        bool lastGoodShapeComesFromLayer = false;
+        return TryAdvanceLayerShapeCore(layer, ref currentShape, ref lastGoodShape, ref lastGoodShapeComesFromLayer);
+    }
+
+    private bool TryAdvanceLayerShapeCore(
+        ILayer<T> layer,
+        ref int[] currentShape,
+        ref int[] lastGoodShape,
+        ref bool lastGoodShapeComesFromLayer)
     {
         var candidates = ReferenceEquals(lastGoodShape, currentShape)
             ? new[] { currentShape }
@@ -5793,9 +5807,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     // rest of the walk. Cloning here made a downstream layer declare [8, 16] where
                     // it should have declared [-1, 16].
                     currentShape = outShape;
-                    if (outShape.Length >= 2) lastGoodShape = outShape;
-                    else if (TryApplyFeatureAxisWidth(layer, lastGoodShape, outShape) is { } carried)
+                    if (outShape.Length >= 2)
+                    {
+                        lastGoodShape = outShape;
+                        lastGoodShapeComesFromLayer = true;
+                    }
+                    // FullyConnected resolves from the last axis even when it is the first
+                    // layer. Its successful resolution establishes the sequence provenance.
+                    else if ((lastGoodShapeComesFromLayer || layer is FullyConnectedLayer<T>)
+                        && TryApplyFeatureAxisWidth(layer, lastGoodShape, outShape) is { } carried)
+                    {
                         lastGoodShape = carried;
+                        lastGoodShapeComesFromLayer = true;
+                    }
                 }
 
                 // ...but the layer must not keep CLAIMING the spatial dims this walk inferred. They

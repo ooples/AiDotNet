@@ -7,7 +7,7 @@ namespace AiDotNet.Interfaces;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// This interface bridges layers with <see cref="AiDotNet.Autodiff.GradientTape{T}"/>
+/// This interface bridges layers with <see cref="AiDotNet.Tensors.Engines.Autodiff.GradientTape{T}"/>
 /// by exposing the exact <see cref="Tensor{T}"/> instances that the layer uses during
 /// its forward pass. The gradient tape tracks operations by tensor reference identity,
 /// so the tensors returned here must be the same objects passed to engine operations

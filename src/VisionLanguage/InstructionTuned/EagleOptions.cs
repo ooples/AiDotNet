@@ -38,6 +38,7 @@ public class EagleOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public EagleOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

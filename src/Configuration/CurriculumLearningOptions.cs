@@ -200,7 +200,7 @@ public class CurriculumLearningOptions<T, TInput, TOutput>
 
     /// <summary>
     /// Gets or sets a pre-built difficulty estimator. If null, BuildAsync constructs
-    /// a <see cref="DifficultyEstimators.LossBasedDifficultyEstimator{T,TInput,TOutput}"/>
+    /// a <see cref="AiDotNet.CurriculumLearning.DifficultyEstimators.LossBasedDifficultyEstimator{T,TInput,TOutput}"/>
     /// using the trained model's internal loss function.
     /// </summary>
     public IDifficultyEstimator<T, TInput, TOutput>? CustomDifficultyEstimator { get; set; }

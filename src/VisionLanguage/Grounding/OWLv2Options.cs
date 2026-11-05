@@ -21,6 +21,7 @@ public class OWLv2Options : GroundingVLMOptions
         EnableSelfTraining = other.EnableSelfTraining;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public OWLv2Options()
     {
         VisionDim = 1024;
@@ -32,6 +33,7 @@ public class OWLv2Options : GroundingVLMOptions
         MaxDetections = 100;
     }
 
+    /// <summary>Gets or sets the width of the class-embedding head of the reference configuration. It is only recorded in the model metadata.</summary>
     public int NumClassEmbeddings { get; set; } = 768;
 
     /// <summary>Gets or sets the text-encoder feature width.</summary>

@@ -42,6 +42,7 @@ public class MPLUGOwl3Options : InstructionTunedVLMOptions
         EnableHyperAttention = other.EnableHyperAttention;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MPLUGOwl3Options()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.VisualAbstractor;

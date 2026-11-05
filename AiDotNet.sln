@@ -49,6 +49,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNet.Storage.Redis", "s
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNet.Evolve.Cli", "tools\AiDotNet.Evolve.Cli\AiDotNet.Evolve.Cli.csproj", "{14F06BF0-3608-4AAB-A1E6-DBFBC41A0642}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AiDotNet.CodeAnalysis.TreeSitter", "src\AiDotNet.CodeAnalysis.TreeSitter\AiDotNet.CodeAnalysis.TreeSitter.csproj", "{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -287,6 +289,18 @@ Global
 		{14F06BF0-3608-4AAB-A1E6-DBFBC41A0642}.Release|x64.Build.0 = Release|Any CPU
 		{14F06BF0-3608-4AAB-A1E6-DBFBC41A0642}.Release|x86.ActiveCfg = Release|Any CPU
 		{14F06BF0-3608-4AAB-A1E6-DBFBC41A0642}.Release|x86.Build.0 = Release|Any CPU
+		{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3}.Debug|x64.Build.0 = Debug|Any CPU
+		{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3}.Debug|x86.Build.0 = Debug|Any CPU
+		{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3}.Release|x64.ActiveCfg = Release|Any CPU
+		{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3}.Release|x64.Build.0 = Release|Any CPU
+		{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3}.Release|x86.ActiveCfg = Release|Any CPU
+		{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -305,6 +319,7 @@ Global
 		{ADB1F1A3-6FB2-4AAC-AC27-F18A4738C02A} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{2053080F-FA1A-493E-ACD2-C559EDADDB0C} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{14F06BF0-3608-4AAB-A1E6-DBFBC41A0642} = {07C2787E-EAC7-C090-1BA3-A61EC2A24D84}
+		{FAC60148-1B2D-4EFD-9E3D-B3DE9B45A2B3} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {99F5DE1C-2F44-4B2D-B8B3-DEFFC86D2F16}

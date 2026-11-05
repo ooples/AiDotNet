@@ -43,6 +43,7 @@ public class OctoOptions : VisionLanguageActionOptions
         TotalParameters = other.TotalParameters;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public OctoOptions()
     {
         VisionDim = 384;

@@ -18,6 +18,7 @@ public class TacotronOptions : AcousticModelOptions
         PrenetDim = other.PrenetDim;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public TacotronOptions()
     {
         EncoderDim = 256;

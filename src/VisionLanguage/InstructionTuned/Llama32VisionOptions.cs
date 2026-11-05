@@ -38,6 +38,7 @@ public class Llama32VisionOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public Llama32VisionOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

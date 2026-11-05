@@ -53,6 +53,7 @@ public class SigLIPSOOptions : VisionEncoderOptions
     /// </summary>
     public int TrainingResolution { get; set; } = 384;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SigLIPSOOptions()
     {
         ImageSize = 384;

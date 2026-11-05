@@ -49,6 +49,7 @@ public class SmartEditOptions : EditingVLMOptions
         VaeNumResBlocksPerLevel = other.VaeNumResBlocksPerLevel;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SmartEditOptions()
     {
         VisionDim = 1024;

@@ -40,6 +40,7 @@ public class DocPediaOptions : DocumentVLMOptions
         EnableFrequencyDomain = other.EnableFrequencyDomain;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public DocPediaOptions()
     {
         VisionDim = 1024;

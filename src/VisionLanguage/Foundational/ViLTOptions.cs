@@ -66,6 +66,7 @@ public class ViLTOptions : FoundationalVLMOptions
     /// <summary>Gets or sets the non-zero initial rate used at the start of warmup.</summary>
     public double WarmupInitialLearningRate { get; set; } = 1e-5;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ViLTOptions()
     {
         FusionType = FusionType.SingleStream;

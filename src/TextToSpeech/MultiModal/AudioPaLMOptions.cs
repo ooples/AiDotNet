@@ -8,6 +8,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
 /// </remarks>
 public class AudioPaLMOptions : EndToEndTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public AudioPaLMOptions()
     {
         NumEncoderLayers = 6;
