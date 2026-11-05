@@ -123,13 +123,39 @@ public class MobileNetV2FusedParityTests
     [InlineData(StackVariant.Stride2)]
     [InlineData(StackVariant.NoExpansion)]
     [InlineData(StackVariant.DefaultStack)]
-    public void One_fused_step_matches_the_eager_tape(StackVariant variant)
+    public void One_fused_step_matches_the_eager_tape(StackVariant variant) => FusedMatchesEager(variant, new CpuEngine());
+
+    /// <summary>
+    /// The same comparison on a GPU engine (#2382 asks for the fused step to engage on CPU and GPU). Skips with no
+    /// GPU backend.
+    /// </summary>
+    [SkippableTheory]
+    [InlineData(StackVariant.Residual)]
+    [InlineData(StackVariant.Stride2)]
+    [InlineData(StackVariant.DefaultStack)]
+    public void One_fused_step_matches_the_eager_tape_on_the_gpu(StackVariant variant)
+    {
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine? gpu = null;
+        try { gpu = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine(); }
+        catch (Exception ex) { _output.WriteLine($"No GPU engine: {ex.GetType().Name}: {ex.Message}"); }
+        try
+        {
+            Skip.If(gpu is null || !gpu.SupportsGpu || !gpu.IsGpuAvailable, "No GPU backend available.");
+            FusedMatchesEager(variant, gpu);
+        }
+        finally
+        {
+            gpu?.Dispose();
+        }
+    }
+
+    private void FusedMatchesEager(StackVariant variant, IEngine engine)
     {
         var prior = AiDotNetEngine.Current;
         var priorOptions = TensorCodecOptions.Current;
         try
         {
-            AiDotNetEngine.Current = new CpuEngine();
+            AiDotNetEngine.Current = engine;
             int size = InputSize(variant);
             var x = Seeded(11, Batch, 3, size, size);
             var y = new Tensor<float>(new[] { Batch, Classes });
