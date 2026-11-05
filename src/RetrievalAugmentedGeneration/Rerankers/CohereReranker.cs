@@ -58,7 +58,17 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies;
 /// );
 /// 
 /// var documentStore = new InMemoryDocumentStore&lt;double>(vectorDimension: 768);
-/// var retriever = new DenseRetriever&lt;double>(documentStore, new StubEmbeddingModel&lt;double>());
+/// var embeddingModel = new StubEmbeddingModel&lt;double>(embeddingDimension: 768);
+/// string[] passages =
+/// {
+///     "Vaccines expose the immune system to a harmless antigen so it builds memory cells.",
+///     "Neural networks architecture guide",
+///     "Booster doses refresh the antibody response a vaccine first trained."
+/// };
+/// for (int i = 0; i &lt; passages.Length; i++)
+///     documentStore.Add(new VectorDocument&lt;double>(
+///         new Document&lt;double>($"passage-{i}", passages[i]), embeddingModel.Embed(passages[i])));
+/// var retriever = new DenseRetriever&lt;double>(documentStore, embeddingModel);
 /// var query = "How do vaccines train the immune system?";
 ///
 /// var initialResults = retriever.Retrieve(query, topK: 20);  // Get 20 candidates
