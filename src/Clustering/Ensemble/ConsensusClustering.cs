@@ -50,8 +50,8 @@ namespace AiDotNet.Clustering.Ensemble;
 ///     .ConfigureModel(new ConsensusClustering&lt;double&gt;(new ConsensusClusteringOptions&lt;double&gt;()))
 ///     .Build(dataMatrix);
 ///
-/// // one cluster label per row
-/// var labels = result.Predict(dataMatrix);
+/// // the cluster each training row was assigned to (Predict places rows the model has not seen)
+/// var labels = result.GetClusterLabels();
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

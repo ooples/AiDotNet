@@ -52,8 +52,8 @@ namespace AiDotNet.Clustering.Streaming;
 ///     .ConfigureModel(new MiniBatchKMeans&lt;double&gt;(new MiniBatchKMeansOptions&lt;double&gt;()))
 ///     .Build(dataMatrix);
 ///
-/// // one cluster label per row
-/// var labels = result.Predict(dataMatrix);
+/// // the cluster each training row was assigned to (Predict places rows the model has not seen)
+/// var labels = result.GetClusterLabels();
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]
