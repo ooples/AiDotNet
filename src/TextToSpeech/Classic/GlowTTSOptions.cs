@@ -19,6 +19,7 @@ public class GlowTTSOptions : AcousticModelOptions
         Temperature = other.Temperature;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GlowTTSOptions()
     {
         EncoderDim = 192;

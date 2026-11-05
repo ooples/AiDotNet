@@ -17,6 +17,7 @@ public class AlignTTSOptions : AcousticModelOptions
         NumMixtures = other.NumMixtures;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public AlignTTSOptions()
     {
         EncoderDim = 256;

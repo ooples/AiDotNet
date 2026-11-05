@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class VoiceCraftOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public VoiceCraftOptions()
     {
         TextEncoderDim = 256;

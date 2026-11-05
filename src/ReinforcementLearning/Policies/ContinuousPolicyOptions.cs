@@ -7,6 +7,8 @@ namespace AiDotNet.ReinforcementLearning.Policies
     /// <summary>
     /// Configuration options for continuous action space policies in reinforcement learning.
     /// Continuous policies output actions as real-valued vectors using Gaussian (normal) distributions.
+    /// <see cref="ContinuousPolicy{T}"/>'s <see cref="ContinuousPolicy{T}(ContinuousPolicyOptions{T})"/> constructor
+    /// builds its network from them.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -99,10 +101,23 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// </remarks>
         public int ActionSize { get; set; } = 0;
 
+        /// <summary>Gets or sets the width of each hidden layer of the policy network, in order.</summary>
+        /// <value>Defaults to [256, 256], SAC's actor; each layer is dense with ReLU.</value>
         public int[] HiddenLayers { get; set; } = new int[] { 256, 256 };
+
+        /// <summary>Gets or sets the loss the policy network is trained with when it is fitted directly.</summary>
+        /// <value>Defaults to mean squared error.</value>
         public ILossFunction<T> LossFunction { get; set; } = new MeanSquaredErrorLoss<T>();
+
+        /// <summary>Gets or sets the exploration applied to sampled actions during training.</summary>
+        /// <value>Defaults to Gaussian noise.</value>
         public IExplorationStrategy<T> ExplorationStrategy { get; set; } = new GaussianNoiseExploration<T>();
+
+        /// <summary>Gets or sets whether sampled actions pass through tanh, bounding them to [-1, 1] as SAC does.</summary>
+        /// <value>Defaults to false: actions are the raw Gaussian samples.</value>
         public bool UseTanhSquashing { get; set; } = false;
+
+        /// <summary>Gets or sets the seed of the policy's action sampling; null samples from a secure random source.</summary>
         public new int? Seed { get; set; } = null;
     }
 }

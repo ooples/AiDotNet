@@ -19,6 +19,7 @@ public class FreGradOptions : VocoderOptions
         NumWaveletLevels = other.NumWaveletLevels;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public FreGradOptions()
     {
         SampleRate = 22050;
@@ -27,6 +28,8 @@ public class FreGradOptions : VocoderOptions
         NumDiffusionSteps = 4;
     }
 
+    /// <summary>Gets or sets the number of residual blocks.</summary>
     public int NumResBlocks { get; set; } = 15;
+    /// <summary>Gets or sets the number of wavelet decomposition levels the waveform is split into.</summary>
     public int NumWaveletLevels { get; set; } = 3;
 }

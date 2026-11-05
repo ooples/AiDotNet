@@ -41,6 +41,7 @@ public class ShikraOptions : GroundingVLMOptions
         EnableCoordinateOutput = other.EnableCoordinateOutput;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ShikraOptions()
     {
         VisionDim = 1024;

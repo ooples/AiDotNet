@@ -35,4 +35,7 @@
     <Compile Include="../AiDotNet.Tests/UnitTests/Finance/FinancialA2CActionProvenanceTests.cs" Link="FinancialA2CActionProvenanceTests.cs" />
     <None Include="../AiDotNet.Tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AiDotNet.CodeAnalysis.TreeSitter/AiDotNet.CodeAnalysis.TreeSitter.csproj" />
+  </ItemGroup>
 </Project>

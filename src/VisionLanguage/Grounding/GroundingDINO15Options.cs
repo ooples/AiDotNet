@@ -42,6 +42,7 @@ public class GroundingDINO15Options : GroundingVLMOptions
         BackboneType = other.BackboneType;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GroundingDINO15Options()
     {
         VisionDim = 256;
@@ -53,6 +54,7 @@ public class GroundingDINO15Options : GroundingVLMOptions
         MaxDetections = 300;
     }
 
+    /// <summary>Gets or sets the number of object queries the detector decodes.</summary>
     public int NumQueryPositions { get; set; } = 900;
 
     /// <summary>Gets or sets the visual backbone type.</summary>

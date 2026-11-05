@@ -197,7 +197,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
             // Factorised Gaussian noise (Fortunato et al. 2018, §3.2): sigma_0 = NoisyNetSigma, initial
             // sigma = sigma_0 / sqrt(p) for p inputs. The noisy layer sits between the trunk and both streams.
             layerList.Add(new NoisyDenseLayer<T>(trunkHidden, trunkHidden,
-                new ReLUActivation<T>(),
+                new ReLUActivation<T>() as IActivationFunction<T>,
                 sigmaInit: _options.NoisyNetSigma / Math.Sqrt(trunkHidden),
                 // The noisy layer draws its mu initialisation in its constructor, before any architecture seed
                 // reaches it, so it takes this network's seed directly.

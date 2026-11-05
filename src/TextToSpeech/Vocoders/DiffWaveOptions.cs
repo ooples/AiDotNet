@@ -24,6 +24,7 @@ public class DiffWaveOptions : VocoderOptions
         MaxGradientNorm = other.MaxGradientNorm;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public DiffWaveOptions()
     {
         SampleRate = 22050;
@@ -35,7 +36,9 @@ public class DiffWaveOptions : VocoderOptions
         WeightDecay = 0.0;
     }
 
+    /// <summary>Gets or sets the number of residual layers.</summary>
     public int NumResLayers { get; set; } = 30;
+    /// <summary>Gets or sets the channel width of the residual layers.</summary>
     public int ResChannels { get; set; } = 64;
 
     /// <summary>Gets or sets the Adam mini-batch size. The paper default is 16.</summary>

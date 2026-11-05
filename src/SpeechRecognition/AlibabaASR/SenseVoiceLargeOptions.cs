@@ -49,20 +49,35 @@ public class SenseVoiceLargeOptions : ModelOptions
         WeightDecay = other.WeightDecay;
     }
 
+    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
     public int SampleRate { get; set; } = 16000;
+    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
+    /// <summary>Gets or sets the hidden width of the encoder.</summary>
     public int EncoderDim { get; set; } = 1024;
+    /// <summary>Gets or sets the number of encoder layers.</summary>
     public int NumEncoderLayers { get; set; } = 50;
+    /// <summary>Gets or sets the number of heads in each attention layer.</summary>
     public int NumAttentionHeads { get; set; } = 16;
+    /// <summary>Gets or sets the number of mel filterbank channels in the input features.</summary>
     public int NumMels { get; set; } = 128;
+    /// <summary>Gets or sets the number of output tokens the model predicts over.</summary>
     public int VocabSize { get; set; } = 25000;
+    /// <summary>Gets or sets the most tokens decoded for one utterance.</summary>
     public int MaxTextLength { get; set; } = 512;
+    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
     public string? ModelPath { get; set; }
+    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Gets or sets the dropout probability of the native layers during training.</summary>
     public double DropoutRate { get; set; } = 0.1;
+    /// <summary>Gets or sets the language code (for example "en") reported for a transcript when none is passed or detected.</summary>
     public string Language { get; set; } = "en";
+    /// <summary>Gets or sets the hidden width of the decoder.</summary>
     public int DecoderDim { get; set; } = 512;
+    /// <summary>Gets or sets the number of decoder layers.</summary>
     public int NumDecoderLayers { get; set; } = 6;
+    /// <summary>Gets or sets the inner width of each feed-forward block.</summary>
     public int FeedForwardDim { get; set; } = 2048;
     /// <summary>
     /// Whether to insert a CIF (continuous integrate-and-fire) monotonic-alignment stage between
@@ -84,6 +99,8 @@ public class SenseVoiceLargeOptions : ModelOptions
     /// Paraformer-style non-autoregressive variant can still opt in.</para>
     /// </remarks>
     public bool UseCifAlignment { get; set; } = false;
+    /// <summary>Gets or sets the learning rate of the default optimizer.</summary>
     public double LearningRate { get; set; } = 1e-4;
+    /// <summary>Gets or sets the weight decay of the default optimizer.</summary>
     public double WeightDecay { get; set; } = 0.01;
 }

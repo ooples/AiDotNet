@@ -39,6 +39,7 @@ public class MolmoOptions : InstructionTunedVLMOptions
         EnablePointing = other.EnablePointing;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MolmoOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

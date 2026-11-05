@@ -46,6 +46,7 @@ public class GLaMMOptions : GroundingVLMOptions
         NumDetectionLayers = other.NumDetectionLayers;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GLaMMOptions()
     {
         VisionDim = 1024;

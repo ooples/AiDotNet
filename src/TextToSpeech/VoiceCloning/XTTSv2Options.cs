@@ -17,6 +17,7 @@ public class XTTSv2Options : CodecTtsOptions
         AdamEpsilon = other.AdamEpsilon;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public XTTSv2Options()
     {
         SampleRate = 24000;

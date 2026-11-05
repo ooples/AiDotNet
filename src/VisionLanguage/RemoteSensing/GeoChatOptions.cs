@@ -41,6 +41,7 @@ public class GeoChatOptions : RemoteSensingVLMOptions
         GroundSampleDistance = other.GroundSampleDistance;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GeoChatOptions()
     {
         VisionDim = 1024;

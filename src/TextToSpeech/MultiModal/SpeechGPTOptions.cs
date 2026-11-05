@@ -14,6 +14,7 @@ public class SpeechGPTOptions : CodecTtsOptions
     {
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SpeechGPTOptions()
     {
         TextEncoderDim = 256;

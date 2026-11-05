@@ -40,6 +40,7 @@ public class UReaderOptions : DocumentVLMOptions
         EnableShapeAdaptiveCropping = other.EnableShapeAdaptiveCropping;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public UReaderOptions()
     {
         VisionDim = 1024;

@@ -39,6 +39,7 @@ public class DragonflyOptions : InstructionTunedVLMOptions
         EnableMultiResolution = other.EnableMultiResolution;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public DragonflyOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class ZonosOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public ZonosOptions()
     {
         SampleRate = 44100;

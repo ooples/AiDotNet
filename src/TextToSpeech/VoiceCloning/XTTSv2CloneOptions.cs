@@ -15,6 +15,7 @@ public class XTTSv2CloneOptions : VoiceCloningOptions
         AdamEpsilon = other.AdamEpsilon;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public XTTSv2CloneOptions()
     {
         SampleRate = 24000;

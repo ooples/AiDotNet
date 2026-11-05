@@ -40,6 +40,7 @@ public class ShowO2Options : UnifiedVisionOptions
         NumVisualTokens = other.NumVisualTokens;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ShowO2Options()
     {
         VisionDim = 1024;

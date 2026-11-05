@@ -39,6 +39,7 @@ public class SmolVLMOptions : InstructionTunedVLMOptions
         ModelVariant = other.ModelVariant;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SmolVLMOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

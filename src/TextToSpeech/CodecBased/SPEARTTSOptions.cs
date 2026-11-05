@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class SPEARTTSOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public SPEARTTSOptions()
     {
         TextEncoderDim = 256;

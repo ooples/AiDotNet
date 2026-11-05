@@ -20,6 +20,7 @@ public class PiperOptions : EndToEndTtsOptions
         OptimizerEpsilon = other.OptimizerEpsilon;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PiperOptions()
     {
         SampleRate = 22050;
@@ -32,8 +33,11 @@ public class PiperOptions : EndToEndTtsOptions
         WeightDecay = 0.01;
     }
 
+    /// <summary>Gets or sets the multiplier on predicted phoneme durations; values above 1 speak more slowly.</summary>
     public double LengthScale { get; set; } = 1.0;
+    /// <summary>Gets or sets the prior noise scale of the reference VITS voices. The native synthesis path does not read it.</summary>
     public double NoiseScale { get; set; } = 0.667;
+    /// <summary>Gets or sets the duration-predictor noise scale of the reference VITS voices. The native synthesis path does not read it.</summary>
     public double NoiseScaleW { get; set; } = 0.8;
 
     /// <summary>Gets or sets AdamW's first-moment decay from the VITS training recipe.</summary>

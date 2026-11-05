@@ -58,6 +58,7 @@ public class InternViTOptions : VisionEncoderOptions
     /// </summary>
     public bool Use3DRoPE { get; set; } = false;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public InternViTOptions()
     {
         ImageSize = 448;

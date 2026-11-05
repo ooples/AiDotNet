@@ -39,6 +39,7 @@ public class Phi4MultimodalOptions : InstructionTunedVLMOptions
         EnableAudio = other.EnableAudio;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public Phi4MultimodalOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

@@ -8,6 +8,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </remarks>
 public class F5TTSOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public F5TTSOptions()
     {
         SampleRate = 24000;

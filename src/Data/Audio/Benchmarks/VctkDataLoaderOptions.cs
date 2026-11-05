@@ -13,14 +13,21 @@ namespace AiDotNet.Data.Audio.Benchmarks;
 /// </remarks>
 public sealed class VctkDataLoaderOptions
 {
+    /// <summary>Gets or sets which split of the dataset is loaded.</summary>
     public DatasetSplit Split { get; set; } = DatasetSplit.Train;
+    /// <summary>Gets or sets the dataset root directory; null uses the default data directory for this dataset.</summary>
     public string? DataPath { get; set; }
+    /// <summary>Gets or sets whether the dataset is downloaded into the data directory when it is not there.</summary>
     public bool AutoDownload { get; set; } = true;
     /// <summary>Comma-separated speaker-ID filter (e.g. "p225,p226"). Null = all speakers.</summary>
     public string? SpeakerFilter { get; set; }
+    /// <summary>Gets or sets the waveform length, in samples, each clip is zero-padded or truncated to.</summary>
     public int MaxAudioSamples { get; set; } = 48_000 * 8;   // 8 sec at 48 kHz
+    /// <summary>Gets or sets the token length each transcript is padded or truncated to.</summary>
     public int MaxTextLength { get; set; } = 256;
+    /// <summary>Gets or sets the most distinct tokens in the vocabulary built from the loaded text.</summary>
     public int VocabularySize { get; set; } = 256;
+    /// <summary>Gets or sets the most samples loaded; null loads the whole split.</summary>
     public int? MaxSamples { get; set; }
 
     /// <summary>Validates that all option values are within acceptable ranges.</summary>

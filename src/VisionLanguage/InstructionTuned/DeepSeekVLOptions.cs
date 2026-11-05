@@ -39,6 +39,7 @@ public class DeepSeekVLOptions : InstructionTunedVLMOptions
         UseHybridEncoder = other.UseHybridEncoder;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public DeepSeekVLOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

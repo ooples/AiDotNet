@@ -43,6 +43,7 @@ public class GPT4PointOptions : ThreeDVLMOptions
         SupportsPointGeneration = other.SupportsPointGeneration;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GPT4PointOptions()
     {
         VisionDim = 512;

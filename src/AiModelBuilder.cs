@@ -52,6 +52,8 @@ namespace AiDotNet;
 /// A builder class that helps create and configure machine learning prediction models.
 /// </summary>
 /// <typeparam name="T">The numeric data type used for calculations (e.g., float, double).</typeparam>
+/// <typeparam name="TInput">The type of input data the model consumes, for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>.</typeparam>
+/// <typeparam name="TOutput">The type of output the model produces, for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>.</typeparam>
 /// <remarks>
 /// <para>
 /// This class uses the builder pattern to configure various components of a machine learning model
@@ -184,7 +186,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// Optional cap on the number of training rows fed into the
     /// post-train pipeline-fit Predict call (review #1368 C7HAu). Default
     /// is null = no cap = full <c>XTrain</c> tensor. Set via
-    /// <see cref="ConfigurePostprocessingFitMaxRows"/> when the user's
+    /// <see cref="SetPostprocessingFitMaxRows(int?)"/> when the user's
     /// pipeline transformers stabilise on a subsample and the doubled
     /// build-time inference cost matters.
     /// </summary>
@@ -271,7 +273,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     private AiDotNet.Diagnostics.TensorsOperationProfile? _tensorsOperationProfile;
 
     /// <summary>
-    /// When <c>true</c>, <see cref="BuildAsync"/> does NOT force deterministic
+    /// When <c>true</c>, <see cref="BuildAsync()"/> does NOT force deterministic
     /// math on the engine.
     /// </summary>
     private bool _allowNondeterminism;
@@ -344,6 +346,7 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
 
     // Program synthesis Serving configuration
     private ProgramSynthesisServingClientOptions? _programSynthesisServingClientOptions;
+    private AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider? _codeSyntaxProvider;
     private IProgramSynthesisServingClient? _programSynthesisServingClient;
     private IFullModel<T, Tensor<T>, Tensor<T>>? _programSynthesisModel;
 
@@ -478,17 +481,17 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// </summary>
     /// <remarks>
     /// <para><b>Layout assumption</b> (review #1368): for Tensor&lt;T&gt;,
-    /// the slice loop assumes <see cref="Tensor{T}.GetFlat"/> /
-    /// <see cref="Tensor{T}.SetFlat"/> address a contiguous batch-first
+    /// the slice copies the first <c>perSample</c> elements of
+    /// <c>tensor.Data.Span</c>, which assumes a contiguous batch-first
     /// row-major buffer (i.e. the first <c>perSample</c> flat positions
     /// are the first sample's elements in row-major order). All
     /// AiDotNet.Tensors tensor allocations satisfy this — the storage
     /// is a contiguous <c>T[]</c> with row-major strides — but if a
     /// future tensor backend exposes non-contiguous views (e.g. stride
-    /// tricks for slicing without copy), this loop would silently copy
-    /// the wrong elements. <see cref="Tensor{T}.GetFlat"/>'s contract
-    /// is "flat index across the contiguous storage in row-major
-    /// order" which holds today; revisit if that contract relaxes.</para>
+    /// tricks for slicing without copy), this copy would silently take
+    /// the wrong elements. A <c>Debug.Assert</c> checks that the backing
+    /// span is at least as long as the logical shape, which holds today;
+    /// revisit if the contiguous row-major storage contract relaxes.</para>
     /// <para><b>Future direction</b>: the proper fix is to eliminate
     /// the warmup forward entirely via a layer-side
     /// <c>TryDeclareShape()</c> oracle that lets lazy-init layers
@@ -606,6 +609,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     ///     .BuildAsync();
     /// </code>
     /// </remarks>
+    /// <param name="licenseKey">Optional license key used when saving or loading encrypted (AIMF) model files.
+    /// When <c>null</c> (the default), the key is resolved from the <c>AIDOTNET_LICENSE_KEY</c> environment
+    /// variable or the <c>~/.aidotnet/license.key</c> file, falling back to trial mode. It can also be set later
+    /// with <see cref="ConfigureLicenseKey(AiDotNetLicenseKey)"/>.</param>
     /// <exception cref="ArgumentException">Thrown when <paramref name="configFilePath"/> is null or empty.</exception>
     /// <exception cref="FileNotFoundException">Thrown when the YAML file does not exist.</exception>
     public AiModelBuilder(string configFilePath, AiDotNetLicenseKey? licenseKey = null)
@@ -637,6 +644,10 @@ public partial class AiModelBuilder<T, TInput, TOutput> : IAiModelBuilder<T, TIn
     /// <c>.Configure*()</c> methods in C# code.
     /// </para>
     /// </remarks>
+    /// <param name="licenseKey">Optional license key used when saving or loading encrypted (AIMF) model files.
+    /// When <c>null</c> (the default), the key is resolved from the <c>AIDOTNET_LICENSE_KEY</c> environment
+    /// variable or the <c>~/.aidotnet/license.key</c> file, falling back to trial mode. It can also be set later
+    /// with <see cref="ConfigureLicenseKey(AiDotNetLicenseKey)"/>.</param>
     public AiModelBuilder(AiDotNetLicenseKey? licenseKey = null)
     {
         _licensing = new AiDotNet.Configuration.AiModelLicensing(licenseKey);

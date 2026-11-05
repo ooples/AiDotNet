@@ -54,6 +54,7 @@ public class VideoLLaMA2Options : VideoLanguageOptions
         STCMlpDepth = other.STCMlpDepth;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public VideoLLaMA2Options()
     {
         VisionDim = 1024;

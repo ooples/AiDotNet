@@ -20,4 +20,7 @@
     <Compile Include="../AiDotNet.Tests/IntegrationTests/NeuralNetworks/CopyOnWriteCloneDefectRegressionTests.cs" Link="CopyOnWriteCloneDefectRegressionTests.cs" />
     <None Include="../AiDotNet.Tests/xunit.runner.json" Link="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AiDotNet.CodeAnalysis.TreeSitter/AiDotNet.CodeAnalysis.TreeSitter.csproj" />
+  </ItemGroup>
 </Project>

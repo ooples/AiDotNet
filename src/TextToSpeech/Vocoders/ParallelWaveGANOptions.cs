@@ -18,6 +18,7 @@ public class ParallelWaveGANOptions : VocoderOptions
         ResChannels = other.ResChannels;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ParallelWaveGANOptions()
     {
         SampleRate = 24000;
@@ -25,6 +26,8 @@ public class ParallelWaveGANOptions : VocoderOptions
         HopSize = 300;
     }
 
+    /// <summary>Gets or sets the number of residual blocks.</summary>
     public int NumResBlocks { get; set; } = 30;
+    /// <summary>Gets or sets the channel width of the residual layers.</summary>
     public int ResChannels { get; set; } = 64;
 }

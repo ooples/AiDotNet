@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class UniAudioOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public UniAudioOptions()
     {
         // Yang et al. 2024, Appendix model configuration: the multi-scale

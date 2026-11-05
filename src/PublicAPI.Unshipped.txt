@@ -422,6 +422,19 @@ AiDotNet.Safety.Watermarking.SpectralAudioWatermarker<T>.SpectralAudioWatermarke
 AiDotNet.Safety.Watermarking.SyntacticWatermarker<T>.SyntacticWatermarker(double watermarkStrength) -> void
 AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.TextWatermarkerBase(double watermarkStrength) -> void
 AiDotNet.NeuralNetworks.Tabular.AutoIntBase<T>.TrainWithTape(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! objective, T learningRate) -> T
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.WatermarkGeneratedImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer<T>.NeuralProgramSynthesizer(AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture<T>! architecture, AiDotNet.ProgramSynthesis.Interfaces.ICodeModel<T>! codeModel, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.ProgramSynthesis.Interfaces.IProgramExecutionEngine? executionEngine = null, AiDotNet.ProgramSynthesis.Options.NeuralProgramSynthesizerOptions? options = null, AiDotNet.ProgramSynthesis.Interfaces.ISqlSyntaxValidator? sqlSyntaxValidator = null, AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider? codeSyntaxProvider = null) -> void
+AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider
+AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider.TryExtractAst(string! code, AiDotNet.ProgramSynthesis.Enums.ProgramLanguage language, AiDotNet.ProgramSynthesis.Tokenization.CodeTokenizationPipelineOptions! options, out System.Collections.Generic.List<AiDotNet.ProgramSynthesis.Models.CodeAstNode!>! nodes, out System.Collections.Generic.List<AiDotNet.ProgramSynthesis.Models.CodeAstEdge!>! edges) -> bool
+AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider.TryValidate(AiDotNet.ProgramSynthesis.Enums.ProgramLanguage language, string! sourceCode) -> bool?
+AiDotNet.ProgramSynthesis.Models.CodeTokenizationResult.AstUnavailableReason.get -> string?
+AiDotNet.ProgramSynthesis.Models.CodeTokenizationResult.AstUnavailableReason.set -> void
+AiDotNet.ProgramSynthesis.Options.ProgramSynthesisOptions.SyntaxProvider.get -> AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider?
+AiDotNet.ProgramSynthesis.Options.ProgramSynthesisOptions.SyntaxProvider.set -> void
+AiDotNet.ProgramSynthesis.Tokenization.CodeTokenizationPipeline.CodeTokenizationPipeline(AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider? syntaxProvider) -> void
+AiDotNet.Safety.SafetyPipeline<T>.EmbedImageWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Safety.WatermarkConfig.ImageWatermarkKey.get -> string?
+AiDotNet.Safety.WatermarkConfig.ImageWatermarkKey.set -> void
 *REMOVED*AiDotNet.Models.Options.A2COptions<T>.ValueLossCoefficient.get -> T
 *REMOVED*AiDotNet.Models.Options.A2COptions<T>.ValueLossCoefficient.set -> void
 *REMOVED*AiDotNet.Models.Options.A3COptions<T>.Optimizer.get -> AiDotNet.Interfaces.IOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Vector<T>!, AiDotNet.Tensors.LinearAlgebra.Vector<T>!>?
@@ -566,7 +579,73 @@ AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
 AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage.Controller = 2 -> AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
 AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage.Memory = 1 -> AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
 AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage.Vision = 0 -> AiDotNet.ReinforcementLearning.Agents.WorldModels.WorldModelsTrainingStage
+AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.FrequencyImageWatermarker(double watermarkStrength = 0.5, string? key = null) -> void
+AiDotNet.Safety.Watermarking.IImageWatermarker<T>.EmbedWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Safety.Watermarking.ImageWatermarker<T>.ImageWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.5, string? key = null) -> void
+AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
+AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.EmbedWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.ImageWatermarkerBase(double watermarkStrength, string? key) -> void
+AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.UsesPublicKey.get -> bool
+AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.InvisibleImageWatermarker(double watermarkStrength = 0.3, string? key = null) -> void
+abstract AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.CoefficientCount(int height, int width) -> int
+abstract AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.PatternSalt.get -> int
+abstract AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.TileCoefficients(double[,]! tile) -> double[]!
+abstract AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.TileDelta(int height, int width, double[]! coefficientChanges) -> double[,]!
+abstract AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.WatermarkDescription.get -> string!
+const AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.MaxTileSize = 64 -> int
+const AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.MinimumCoefficients = 64 -> int
+const AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.PublicKey = "aidotnet-public-image-watermark-key" -> string!
 override AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.OnRandomSeedAssigned() -> void
 override AiDotNet.ReinforcementLearning.Agents.A3C.A3CAgent<T>.Dispose() -> void
 override AiDotNet.ReinforcementLearning.Agents.DecisionTransformer.DecisionTransformerAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+override AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.CoefficientCount(int height, int width) -> int
+override AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.PatternSalt.get -> int
+override AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.TileCoefficients(double[,]! tile) -> double[]!
+override AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.TileDelta(int height, int width, double[]! coefficientChanges) -> double[,]!
+override AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.WatermarkDescription.get -> string!
+override AiDotNet.Safety.Watermarking.ImageWatermarker<T>.ReportThreshold.get -> double
+override AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.CoefficientCount(int height, int width) -> int
+override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.PatternSalt.get -> int
+override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.TileCoefficients(double[,]! tile) -> double[]!
+override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.TileDelta(int height, int width, double[]! coefficientChanges) -> double[,]!
+override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.WatermarkDescription.get -> string!
 static AiDotNet.ReinforcementLearning.Agents.DeepReinforcementLearningAgentBase<T>.CreateNetworkOptimizer(T learningRate, double? maxGradientNorm = null) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+static AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.SeparableProduct(double[,]! left, double[,]! x, double[,]! right) -> double[,]!
+static AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.Transpose(double[,]! matrix) -> double[,]!
+virtual AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.MaxPixels.get -> long
+virtual AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.ReportThreshold.get -> double
+*REMOVED*AiDotNet.ProgramSynthesis.Engines.NeuralProgramSynthesizer<T>.NeuralProgramSynthesizer(AiDotNet.ProgramSynthesis.Models.CodeSynthesisArchitecture<T>! architecture, AiDotNet.ProgramSynthesis.Interfaces.ICodeModel<T>! codeModel, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.ProgramSynthesis.Interfaces.IProgramExecutionEngine? executionEngine = null, AiDotNet.ProgramSynthesis.Options.NeuralProgramSynthesizerOptions? options = null, AiDotNet.ProgramSynthesis.Interfaces.ISqlSyntaxValidator? sqlSyntaxValidator = null) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.ExplorationStrategy.get -> AiDotNet.ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T>!
+*REMOVED*AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.FrequencyImageWatermarker(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.ImageWatermarker<T>.ImageWatermarker(double detectionThreshold = 0.5, double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.ImageWatermarkerBase(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.InvisibleImageWatermarker(double watermarkStrength = 0.3) -> void
+*REMOVED*AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>
+*REMOVED*AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>.NeuralImageWatermarker(double watermarkStrength = 0.5) -> void
+*REMOVED*AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer
+*REMOVED*AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.Dispose() -> void
+*REMOVED*AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.TreeSitterTokenizer(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, AiDotNet.Tokenization.CodeTokenization.TreeSitterLanguage language = AiDotNet.Tokenization.CodeTokenization.TreeSitterLanguage.Python, bool includeNodeTypes = true, bool flattenTree = true) -> void
+*REMOVED*abstract AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.FrequencyImageWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.ImageWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.ImageWatermarker<T>.IsReady.get -> bool
+*REMOVED*override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
+*REMOVED*override AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+*REMOVED*override AiDotNet.Safety.Watermarking.NeuralImageWatermarker<T>.ModuleName.get -> string!
+*REMOVED*override AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.Tokenize(string! text) -> System.Collections.Generic.List<string!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultTtsLayers(int textHiddenDim = 256, int audioHiddenDim = 512, int numEncoderLayers = 6, int numDecoderLayers = 6, int numHeads = 8, int numMels = 80, int maxTextLength = 512, int maxMelFrames = 1000, int vocabSize = 148, double dropoutRate = 0.1) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.CreateCSharp(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, bool includeNodeTypes = true) -> AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer!
+*REMOVED*static AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.CreateJava(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, bool includeNodeTypes = true) -> AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer!
+*REMOVED*static AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.CreateJavaScript(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, bool includeNodeTypes = true) -> AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer!
+*REMOVED*static AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer.CreatePython(AiDotNet.Tokenization.Interfaces.ITokenizer! baseTokenizer, bool includeNodeTypes = true) -> AiDotNet.Tokenization.CodeTokenization.TreeSitterTokenizer!
+AiDotNet.ReinforcementLearning.Policies.BetaPolicy<T>.BetaPolicy(AiDotNet.ReinforcementLearning.Policies.BetaPolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.ContinuousPolicy<T>.ContinuousPolicy(AiDotNet.ReinforcementLearning.Policies.ContinuousPolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.DeterministicPolicy<T>.DeterministicPolicy(AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.ExplorationStrategy.get -> AiDotNet.ReinforcementLearning.Policies.Exploration.IExplorationStrategy<T>?
+AiDotNet.ReinforcementLearning.Policies.DiscretePolicy<T>.DiscretePolicy(AiDotNet.ReinforcementLearning.Policies.DiscretePolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.MixedPolicy<T>.MixedPolicy(AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.MultiModalPolicy<T>.MultiModalPolicy(AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>! options) -> void

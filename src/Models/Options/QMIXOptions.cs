@@ -49,6 +49,7 @@ public class QMIXOptions<T> : ReinforcementLearningOptions<T>
         LearningRate = MathHelper.GetNumericOperations<T>().FromDouble(5e-4);
     }
 
+    /// <summary>Number of cooperating agents whose action-values the mixing network combines.</summary>
     public int NumAgents { get; init; }
     /// <summary>Number of features in one observation of the environment state.</summary>
     public int StateSize { get; init; }  // Per-agent observation size

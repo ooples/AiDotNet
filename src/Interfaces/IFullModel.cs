@@ -6,6 +6,8 @@ namespace AiDotNet.Interfaces;
 /// Represents a complete machine learning model that combines prediction capabilities with serialization and checkpointing support.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., double, float).</typeparam>
+/// <typeparam name="TInput">The type of input data the model consumes, for example <c>Matrix&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>.</typeparam>
+/// <typeparam name="TOutput">The type of output the model produces, for example <c>Vector&lt;T&gt;</c> or <c>Tensor&lt;T&gt;</c>.</typeparam>
 /// <remarks>
 /// <b>For Beginners:</b> This interface combines all the important capabilities that a complete AI model needs.
 ///

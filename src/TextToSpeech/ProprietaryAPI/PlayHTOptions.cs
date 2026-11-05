@@ -21,6 +21,7 @@ public class PlayHTOptions : EndToEndTtsOptions
         VoiceId = other.VoiceId;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PlayHTOptions()
     {
         NumFlowSteps = 0;

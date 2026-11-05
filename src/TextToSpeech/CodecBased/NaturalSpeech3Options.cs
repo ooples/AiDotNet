@@ -21,6 +21,7 @@ public class NaturalSpeech3Options : EndToEndTtsOptions
         WarmupSteps = other.WarmupSteps;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public NaturalSpeech3Options()
     {
         NumDiffusionSteps = 100;
@@ -29,6 +30,7 @@ public class NaturalSpeech3Options : EndToEndTtsOptions
         DropoutRate = 0.1;
     }
 
+    /// <summary>Gets or sets the hidden width of the diffusion decoder.</summary>
     public int DiffusionDim { get; set; } = 256;
 
     /// <summary>

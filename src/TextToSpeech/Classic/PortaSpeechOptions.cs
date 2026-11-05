@@ -21,6 +21,7 @@ public class PortaSpeechOptions : AcousticModelOptions
         MaxDuration = other.MaxDuration;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PortaSpeechOptions()
     {
         EncoderDim = 256;

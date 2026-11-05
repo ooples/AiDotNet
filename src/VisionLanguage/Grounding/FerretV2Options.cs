@@ -42,6 +42,7 @@ public class FerretV2Options : GroundingVLMOptions
         EnableHighResolution = other.EnableHighResolution;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public FerretV2Options()
     {
         VisionDim = 1024;
@@ -54,6 +55,7 @@ public class FerretV2Options : GroundingVLMOptions
         VocabSize = 32000;
     }
 
+    /// <summary>Gets or sets whether free-form regions are enabled as in Ferret-v2. It is only recorded in the model metadata.</summary>
     public bool EnableFreeFormRegions { get; set; } = true;
 
     /// <summary>Gets or sets whether to use high-resolution input processing.</summary>

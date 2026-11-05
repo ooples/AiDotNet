@@ -41,6 +41,7 @@ public class DeepSeekVL2Options : InstructionTunedVLMOptions
         NumActiveExperts = other.NumActiveExperts;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public DeepSeekVL2Options()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

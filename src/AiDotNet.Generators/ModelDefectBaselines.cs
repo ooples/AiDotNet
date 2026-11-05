@@ -149,7 +149,6 @@ internal static class ModelDefectBaselines
             "CreateDefaultStyleTTS2Layers",
             "CreateDefaultStyleTTSLayers",
             "CreateDefaultTokenReductionVLMLayers",
-            "CreateDefaultTtsLayers",
             "CreateDefaultUnifiedBidirectionalLayers",
             "CreateDefaultUnifiedGenerationLayers",
             "CreateDefaultUnifiedMultimodalLayers",

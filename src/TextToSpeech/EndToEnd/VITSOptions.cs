@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// </remarks>
 public class VITSOptions : EndToEndTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public VITSOptions()
     {
         SampleRate = 22050;

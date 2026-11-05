@@ -64,6 +64,7 @@ public class DINOv3Options : VisionEncoderOptions
     /// </summary>
     public bool UseSwiGLU { get; set; } = true;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public DINOv3Options()
     {
         ImageSize = 518;

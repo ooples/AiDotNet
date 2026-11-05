@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// </remarks>
 public class VALLEXCloneOptions : VoiceCloningOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public VALLEXCloneOptions()
     {
         MinReferenceDurationSec = 3.0;

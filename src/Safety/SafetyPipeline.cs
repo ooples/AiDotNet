@@ -277,6 +277,34 @@ public class SafetyPipeline<T>
     }
 
     /// <summary>
+    /// Returns <paramref name="image"/> marked by the pipeline's keyed image watermarker.
+    /// </summary>
+    /// <param name="image">The generated image to mark (CHW or HWC format).</param>
+    /// <returns>The watermarked image.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// No image watermarker is registered, or every registered one uses the published public key.
+    /// </exception>
+    /// <remarks>
+    /// <para>
+    /// <see cref="EvaluateImage"/> only looks for marks; this is the call that embeds one. The first registered
+    /// <see cref="IImageWatermarker{T}"/> holding a secret key embeds the mark. <see cref="SafetyPipelineFactory{T}"/>
+    /// registers one with <see cref="WatermarkConfig.ImageWatermarkKey"/> when
+    /// <see cref="WatermarkConfig.ImageWatermarking"/> is on. Watermarkers on the public key may stay registered for
+    /// detection; they are never used to embed, because anyone can forge their marks.
+    /// </para>
+    /// </remarks>
+    public Tensor<T> EmbedImageWatermark(Tensor<T> image)
+    {
+        if (image == null)
+        {
+            throw new ArgumentNullException(nameof(image));
+        }
+
+        return RequireKeyedEmbedder<IImageWatermarker<T>>(
+            "image watermarker (IImageWatermarker; set Watermarking.ImageWatermarkKey)").EmbedWatermark(image);
+    }
+
+    /// <summary>
     /// Returns <paramref name="audioSamples"/> marked by the pipeline's keyed audio watermarker.
     /// </summary>
     /// <param name="audioSamples">The audio to mark.</param>

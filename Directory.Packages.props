@@ -395,12 +395,11 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
          (AiDotNet.Tensors #679), which the new AiDotNet targets need. 0.138.1 depends on AiDotNet.Evolution
          0.3.0, so Evolution moves with it.
 
-         Bumped 0.143.0 to 0.144.2 for AiDotNet.Tensors #1578 (v1 T-1): AVX2-off kernel parity, the #1570 fixes and
-         the CPU parity flakes; #2388's seven MoreData tests failed only on the non-AVX2 path. Evolution moves to
-         0.7.0 with it. AiDotNet.Native.OpenBLAS stays at 0.139.2 and leaves the lockstep set: it is not published
-         after 0.139.2, and the native OpenBLAS dependency is being dropped (v1 A-4). -->
+         Bumped 0.143.0 to 0.144.2 for AiDotNet.Tensors #1577 and #1578 (v1 T-1): fused GRU sequence, convolution
+         batch-normalization folding, TensorScope, AVX2-off kernel parity and CPU parity fixes. Evolution moves to
+         0.7.0 with it. AiDotNet.Native.OpenBLAS is no longer referenced: Tensors stopped publishing it after 0.139.2
+         and the native OpenBLAS dependency is dropped (v1 A-4). -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.144.2" />
-    <PackageVersion Include="AiDotNet.Native.OpenBLAS" Version="0.139.2" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.144.2" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.7.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.144.2" />
@@ -411,6 +410,7 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.ML" Version="3.0.1" />
     <PackageVersion Include="Microsoft.ML.OnnxRuntime" Version="1.31.1" />
+    <PackageVersion Include="Microsoft.ML.OnnxRuntime.Managed" Version="1.31.1" />
     <PackageVersion Include="Microsoft.Research.SEALNet" Version="4.1.1" />
     <PackageVersion Include="Microsoft.Bcl.Numerics" Version="10.0.7" />
     <PackageVersion Include="System.Net.Http" Version="4.3.4" />
@@ -435,7 +435,6 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
     <PackageVersion Include="Pomelo.EntityFrameworkCore.MySql" Version="9.0.0" />
     <PackageVersion Include="MySqlConnector" Version="2.6.2" />
     <!-- Azure -->
-    <PackageVersion Include="Azure.Search.Documents" Version="11.7.0" />
     <PackageVersion Include="Microsoft.ApplicationInsights.WorkerService" Version="2.23.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker" Version="2.51.0" />
     <PackageVersion Include="Microsoft.Azure.Functions.Worker.ApplicationInsights" Version="2.50.0" />

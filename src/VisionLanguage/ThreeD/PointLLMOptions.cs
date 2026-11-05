@@ -42,6 +42,7 @@ public class PointLLMOptions : ThreeDVLMOptions
         PointEncoderDim = other.PointEncoderDim;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PointLLMOptions()
     {
         VisionDim = 512;

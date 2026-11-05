@@ -18,6 +18,7 @@ public class AdaSpeech2Options : AcousticModelOptions
         Mel2PhDim = other.Mel2PhDim;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public AdaSpeech2Options()
     {
         EncoderDim = 256;

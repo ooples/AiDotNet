@@ -1,4 +1,4 @@
-﻿using AiDotNet.ActivationFunctions;
+using AiDotNet.ActivationFunctions;
 using AiDotNet.Attributes;
 using AiDotNet.Autodiff;
 using AiDotNet.Interfaces;
@@ -196,11 +196,8 @@ public partial class DenseBlockLayer<T> : LayerBase<T>, ILayerSerializationExtra
         var x = input.Shape.Length == 3 ? Engine.Reshape(input, [1, input.Shape[0], input.Shape[1], input.Shape[2]]) : input;
 
         // In inference the pre-activation BN1 + ReLU runs as one pass, and BN2 + ReLU folds into the 1x1 convolution
-        // before it (the engine's FusedConv2DBatchNorm): two batch-norm passes and two ReLU passes fewer per layer, a third
-        // of a DenseNet-121 predict. Each stage declines on its own (training, a tape, a capture, an observer) and only a
-        // declined stage runs unfused, so a fused BN1 is kept when the 1x1 fold declines. The intermediates are locals:
-        // the tape keeps what backward needs, and a field would hold every dense layer's activations after the forward,
-        // in inference too (DenseNet-121 b16).
+        // before it (the engine's FusedConv2DBatchNorm). Each stage declines on its own, so a fused BN1 is kept when
+        // the 1x1 fold declines; training and backward retain the ordinary engine graph without storing intermediates.
         bool tryFuse = !ShouldCacheForBackward;
 
         // BN1-ReLU (DenseNet paper: pre-activation bottleneck)

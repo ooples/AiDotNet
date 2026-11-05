@@ -130,6 +130,7 @@ public class UNITEROptions : FoundationalVLMOptions
     private static bool IsFinite(double value)
         => !double.IsNaN(value) && !double.IsInfinity(value);
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public UNITEROptions()
     {
         FusionType = FusionType.SingleStream;

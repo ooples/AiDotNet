@@ -14,6 +14,7 @@ public class ParlerTTSOptions : CodecTtsOptions
     {
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ParlerTTSOptions()
     {
         SampleRate = 44100;

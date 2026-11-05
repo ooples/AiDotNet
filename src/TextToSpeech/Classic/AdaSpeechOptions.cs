@@ -18,6 +18,7 @@ public class AdaSpeechOptions : AcousticModelOptions
         NumConditionLayers = other.NumConditionLayers;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public AdaSpeechOptions()
     {
         EncoderDim = 256;

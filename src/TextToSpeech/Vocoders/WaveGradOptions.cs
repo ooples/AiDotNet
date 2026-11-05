@@ -17,6 +17,7 @@ public class WaveGradOptions : VocoderOptions
         NumDownsampleBlocks = other.NumDownsampleBlocks;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public WaveGradOptions()
     {
         SampleRate = 24000;
@@ -29,5 +30,6 @@ public class WaveGradOptions : VocoderOptions
         LearningRate = 2e-4;
     }
 
+    /// <summary>Gets or sets the number of downsampling blocks in the conditioning branch.</summary>
     public int NumDownsampleBlocks { get; set; } = 4;
 }
