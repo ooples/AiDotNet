@@ -202,7 +202,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         if (!training)
         {
-            // Inference path: return a one-hot argmax(π) action. The
+            // Inference path: return the most visited action as one-hot. The
             // IRLAgent<T> public contract on discrete envs is "give me
             // the action to take" — callers feed the result directly into
             // env.Step(action). Returning a raw policy distribution would
@@ -212,11 +212,11 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
             // observable to callers that need it for diagnostics — they
             // can invoke _predictionNetwork.Predict directly or wire a
             // separate GetPolicy(...) method if needed.
-            var policyValueTensor = Tensor<T>.FromVector(hiddenState);
-            var policyValueTensorOutput = _predictionNetwork.Predict(policyValueTensor);
-            var policyValue = policyValueTensorOutput.ToVector();
-            var policy = ExtractPolicy(policyValue);
-            int bestIdx = ArgMax(policy);
+            // Evaluation still plans with the learned reward and dynamics. The policy
+            // head supplies priors; it is not an action-value estimate (in particular,
+            // balanced demonstration targets need not favor the rewarding action).
+            var evaluationVisits = RunMCTS(hiddenState, addRootNoise: false);
+            int bestIdx = Array.IndexOf(evaluationVisits, evaluationVisits.Max());
             var oneHot = new Vector<T>(_options.ActionSize);
             oneHot[bestIdx] = NumOps.One;
             return oneHot;
@@ -234,7 +234,7 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
     }
 
     /// <summary>Runs the search from a root and returns the root's visit count per action.</summary>
-    private int[] RunMCTS(Vector<T> rootHiddenState)
+    private int[] RunMCTS(Vector<T> rootHiddenState, bool addRootNoise = true)
     {
         var root = new MCTSNode<T> { HiddenState = rootHiddenState, Value = NumOps.Zero };
 
@@ -246,8 +246,10 @@ public partial class MuZeroAgent<T> : DeepReinforcementLearningAgentBase<T>
 
         // Root exploration noise (Schrittwieser et al. 2020, Appendix C, after AlphaZero): while acting, the
         // root's priors are P(s,a) = (1 - RootExplorationFraction) p_a + RootExplorationFraction eta_a with
-        // eta ~ Dir(RootDirichletAlpha). RunMCTS is only reached from training-mode action selection.
-        root.Priors = MixRootNoise(ExtractPolicy(rootPrediction));
+            // eta ~ Dir(RootDirichletAlpha). Evaluation uses the network priors without exploration noise.
+        root.Priors = addRootNoise
+            ? MixRootNoise(ExtractPolicy(rootPrediction))
+            : PolicyPriors(ExtractPolicy(rootPrediction));
 
         // Run simulations
         for (int sim = 0; sim < _options.NumSimulations; sim++)
