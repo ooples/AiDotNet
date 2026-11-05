@@ -3,6 +3,10 @@ namespace AiDotNet.Serving.Configuration;
 /// <summary>
 /// Configuration for protecting admin endpoints.
 /// </summary>
+/// <remarks>
+/// The admin endpoints accept an API key with the <c>Admin</c> scope, or any authenticated caller (typically a
+/// JWT) carrying the claim <see cref="ClaimType"/> with the value <see cref="ClaimValue"/>.
+/// </remarks>
 public sealed class AdminAuthorizationOptions
 {
     /// <summary>
@@ -21,6 +25,10 @@ public sealed class AdminAuthorizationOptions
     /// </remarks>
     public string ClaimValue { get; set; } = "admin";
 
+    /// <summary>
+    /// Validates these settings and throws <see cref="InvalidOperationException"/> naming the first invalid one.
+    /// </summary>
+    /// <param name="configurationPath">The configuration path used in error messages.</param>
     public void Validate(string configurationPath)
     {
         if (string.IsNullOrWhiteSpace(configurationPath))

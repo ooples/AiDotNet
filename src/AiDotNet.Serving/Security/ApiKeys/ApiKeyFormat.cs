@@ -23,6 +23,12 @@ internal static class ApiKeyFormat
         return $"{Prefix}{Separator}{keyId}{Separator}{secret}";
     }
 
+    /// <summary>
+    /// Whether <paramref name="value"/> starts like an AiDotNet API key (<c>aidn.</c>), as opposed to a JWT.
+    /// </summary>
+    public static bool HasApiKeyPrefix(string value) =>
+        value.StartsWith($"{Prefix}{Separator}", StringComparison.Ordinal);
+
     public static bool TryParse(string apiKey, out string keyId, out string secret)
     {
         keyId = string.Empty;
