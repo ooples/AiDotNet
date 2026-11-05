@@ -12093,7 +12093,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // majority of models that already fit, this is a no-op and the classic
         // path below runs unchanged (zero overhead, bit-identical results).
         // StreamingTraining = ForceOn/ForceOff overrides the autotuner.
-        if (ShouldUseStreamingTraining())
+        // A non-backprop credit rule needs the eager step below: the streaming and fused paths compute ordinary
+        // back-propagation gradients and would silently ignore the rule.
+        bool creditRuleActive = _creditRule is { IsExactBackprop: false };
+        if (!creditRuleActive && ShouldUseStreamingTraining())
         {
             TrainWithTapeStreaming(input, expected, resolvedOptimizer, useStreamingDefaults);
             return;
@@ -12124,7 +12127,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // forward-weight round-tripping. When MP is enabled we MUST take the
         // eager tape path so the MP wiring below (cast weights to low precision,
         // scale loss, unscale gradients, overflow detection) actually runs.
-        if (_mixedPrecisionContext is null
+        if (!creditRuleActive && _mixedPrecisionContext is null
             && TryTrainWithFusedOptimizer(input, expected, resolvedOptimizer, useStreamingDefaults))
         {
             return;
@@ -12140,6 +12143,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // opt-out (TensorCodecOptions.EnableCompilation = false), not an unexpected
         // fallback, so the "training is slower" warning would be noisy and misleading.
         if (!_loggedFusedFallback
+            && !creditRuleActive
             && _mixedPrecisionContext is null
             && AiDotNet.Tensors.Engines.Optimization.TensorCodecOptions.Current.EnableCompilation)
         {
@@ -12515,8 +12519,43 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // tape-walk path uses. Pattern mismatch (different shapes /
             // different loss) gracefully falls back to the tape-walk path,
             // so the change is safe across the model zoo.
-            using var tape = new GradientTape<T>();
-            var output = ForwardForTraining(input);
+            // Pluggable credit rule (ConfigureCreditRule): a non-backprop rule replaces this step's gradient
+            // computation; the optimizer, clipping, regularization and step bookkeeping below are unchanged. Before
+            // this branch existed, Train()/TrainWithTape ignored the configured rule and silently ran back-propagation
+            // (only ComputeGradients honoured it), so a model trained through AiModelBuilder never used the rule it
+            // was configured with.
+            GradientTape<T>? stepTape = null;
+            Tensor<T> output;
+            Tensor<T> lossTensor;
+            Dictionary<Tensor<T>, Tensor<T>>? creditGrads = null;
+            if (_creditRule is { IsExactBackprop: false } activeCreditRule)
+            {
+                if (mpCtx is not null)
+                    throw new NotSupportedException(
+                        $"Credit rule '{activeCreditRule.Name}' cannot be combined with mixed-precision training yet.");
+                if (activeCreditRule is ILocalObjectiveCreditRule<T> localRule)
+                {
+                    var local = CreditAssignment.LocalObjectiveGradientComputer<T>.Compute(
+                        this, input, expected, localRule, loss, AlignTargetToOutputShape);
+                    creditGrads = local.Gradients;
+                    output = local.Prediction;
+                    lossTensor = local.OutputLoss;
+                    expected = AlignTargetToOutputShape(output, expected);
+                }
+                else
+                {
+                    var flat = CreditAssignment.CreditAssignmentGradientComputer<T>.ComputeGradients(
+                        this, input, expected, activeCreditRule, _creditRuleRandom, loss);
+                    creditGrads = UnflattenParameterChunkGradients(flat);
+                    output = ForwardForTraining(input);
+                    expected = AlignTargetToOutputShape(output, expected);
+                    lossTensor = loss.ComputeTapeLoss(output, expected);
+                }
+            }
+            else
+            {
+            stepTape = new GradientTape<T>();
+            output = ForwardForTraining(input);
 
             // Align output shape to target: when ranks mismatch, ALWAYS reshape the
             // target (a leaf tensor not on the tape) rather than the network output
@@ -12532,7 +12571,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
             // Same declared objective as every other tape-loss path. Wiring only some of them left the
             // composite inert for whichever path a model happened to take - ABCNet took this one.
-            var lossTensor = ApplyCompositeObjective(loss.ComputeTapeLoss(output, expected), input);
+            lossTensor = ApplyCompositeObjective(loss.ComputeTapeLoss(output, expected), input);
+            }
+            using var tape = stepTape;
 
             // ---------------- Mixed-precision (#1354) — scale loss before backward ----------------
             // Multiply the tape-tracked loss by LossScaler.Scale so the backward
@@ -12559,7 +12600,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Compute all gradients then filter to trainable params.
             // Passing sources directly can miss parameters when the tape backward
             // can't match view tensor references through the GradFn chain.
-            var allGrads = tape.ComputeGradients(lossForBackward, sources: null);
+            var allGrads = creditGrads ?? tape!.ComputeGradients(lossForBackward, sources: null);
             var grads = new Dictionary<Tensor<T>, Tensor<T>>(
                 Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
             foreach (var param in trainableParams)
@@ -19653,6 +19694,47 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <b>For Beginners:</b> Gradients are the "direction to change weights" so the model makes fewer mistakes.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Splits a flat gradient vector laid out in <see cref="GetParameterChunks"/> order (the layout
+    /// <see cref="ComputeGradients"/> returns) back into per-parameter-tensor gradients, so a credit rule's
+    /// gradients can drive the same optimizer step as the tape path.
+    /// </summary>
+    /// <summary>Lays per-parameter gradients out in <see cref="GetParameterChunks"/> order (missing = zero).</summary>
+    private Vector<T> FlattenParameterChunkGradients(Dictionary<Tensor<T>, Tensor<T>> grads)
+    {
+        var flat = new List<T>();
+        foreach (var chunk in GetParameterChunks())
+        {
+            if (chunk is null || chunk.Length == 0) continue;
+            if (grads.TryGetValue(chunk, out var g) && g.Length == chunk.Length)
+                for (int i = 0; i < g.Length; i++) flat.Add(g[i]);
+            else
+                for (int i = 0; i < chunk.Length; i++) flat.Add(NumOps.Zero);
+        }
+        return new Vector<T>(flat.ToArray());
+    }
+
+    private Dictionary<Tensor<T>, Tensor<T>> UnflattenParameterChunkGradients(Vector<T> flat)
+    {
+        var result = new Dictionary<Tensor<T>, Tensor<T>>(Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        int offset = 0;
+        foreach (var chunk in GetParameterChunks())
+        {
+            if (chunk is null || chunk.Length == 0) continue;
+            if (offset + chunk.Length > flat.Length)
+                throw new InvalidOperationException(
+                    $"Credit-rule gradient has {flat.Length} entries but the parameter chunks need more than {offset + chunk.Length}.");
+            var g = new Vector<T>(chunk.Length);
+            for (int i = 0; i < chunk.Length; i++) g[i] = flat[offset + i];
+            result[chunk] = new Tensor<T>(chunk.Shape.ToArray(), g);
+            offset += chunk.Length;
+        }
+        if (offset != flat.Length)
+            throw new InvalidOperationException(
+                $"Credit-rule gradient has {flat.Length} entries but the parameter chunks hold {offset}.");
+        return result;
+    }
+
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Pluggable credit-assignment rule (Feedback Alignment, Direct Feedback Alignment, Sign-Symmetric,
@@ -19660,6 +19742,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // is replaced (via local tape VJPs) while the forward pass, optimizer, batching and scheduler are
         // unchanged. Null OR an exact-backprop rule leaves the reverse-mode tape path below byte-for-byte
         // identical to the default.
+        if (_creditRule is ILocalObjectiveCreditRule<T> localObjectiveRule)
+        {
+            var lossFn = (lossFunction ?? LossFunction) as LossFunctions.LossFunctionBase<T>
+                ?? throw new NotSupportedException(
+                    $"Credit rule '{localObjectiveRule.Name}' needs a tape-capable loss (a LossFunctionBase<T>).");
+            var local = CreditAssignment.LocalObjectiveGradientComputer<T>.Compute(
+                this, input, target, localObjectiveRule, lossFn, AlignTargetToOutputShape);
+            return FlattenParameterChunkGradients(local.Gradients);
+        }
+
         if (_creditRule is not null && !_creditRule.IsExactBackprop)
         {
             return CreditAssignment.CreditAssignmentGradientComputer<T>.ComputeGradients(

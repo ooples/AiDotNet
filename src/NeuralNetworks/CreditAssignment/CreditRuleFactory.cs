@@ -28,6 +28,7 @@ public static class CreditRuleFactory<T>
         CreditRule.LocalErrorSignal => new LocalErrorSignalCreditRule<T>(seed),
         CreditRule.DifferenceTargetPropagation => new DifferenceTargetPropagationCreditRule<T>(seed),
         CreditRule.DirectDifferenceTargetPropagation => new DirectDifferenceTargetPropagationCreditRule<T>(seed),
+        CreditRule.TiedReadoutLocalError => new TiedReadoutLocalErrorCreditRule<T>(),
         _ => throw new ArgumentOutOfRangeException(nameof(rule), rule, "Unknown credit rule."),
     };
 }

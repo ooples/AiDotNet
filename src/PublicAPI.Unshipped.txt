@@ -723,3 +723,45 @@ AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.Exploratio
 AiDotNet.ReinforcementLearning.Policies.DiscretePolicy<T>.DiscretePolicy(AiDotNet.ReinforcementLearning.Policies.DiscretePolicyOptions<T>! options) -> void
 AiDotNet.ReinforcementLearning.Policies.MixedPolicy<T>.MixedPolicy(AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>! options) -> void
 AiDotNet.ReinforcementLearning.Policies.MultiModalPolicy<T>.MultiModalPolicy(AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>! options) -> void
+AiDotNet.Enums.CreditRule.TiedReadoutLocalError = 11 -> AiDotNet.Enums.CreditRule
+AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>
+AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>.ApplyAuxiliaryGradients(System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients) -> void
+AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>.AuxiliaryParameters.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>.BuildLocalObjective(AiDotNet.Interfaces.LocalObjectiveContext<T>! context) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>.BuildOutputObjective(AiDotNet.Interfaces.LocalObjectiveStep<T>! step, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! defaultLoss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>.ReadoutLayerCount.get -> int
+AiDotNet.Interfaces.LocalObjectiveContext<T>
+AiDotNet.Interfaces.LocalObjectiveContext<T>.HiddenIndex.get -> int
+AiDotNet.Interfaces.LocalObjectiveContext<T>.Layer.get -> AiDotNet.Interfaces.ILayer<T>!
+AiDotNet.Interfaces.LocalObjectiveContext<T>.NetworkLayerIndex.get -> int
+AiDotNet.Interfaces.LocalObjectiveContext<T>.Output.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Interfaces.LocalObjectiveContext<T>.Step.get -> AiDotNet.Interfaces.LocalObjectiveStep<T>!
+AiDotNet.Interfaces.LocalObjectiveStep<T>
+AiDotNet.Interfaces.LocalObjectiveStep<T>.Engine.get -> AiDotNet.Tensors.Engines.IEngine!
+AiDotNet.Interfaces.LocalObjectiveStep<T>.HiddenLayerCount.get -> int
+AiDotNet.Interfaces.LocalObjectiveStep<T>.Input.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Interfaces.LocalObjectiveStep<T>.Loss.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Interfaces.LocalObjectiveStep<T>.Readout.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Interfaces.LocalObjectiveStep<T>.Target.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.ApplyAuxiliaryGradients(System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.AuxiliaryParameters.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.BuildLocalObjective(AiDotNet.Interfaces.LocalObjectiveContext<T>! context) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.BuildOutputObjective(AiDotNet.Interfaces.LocalObjectiveStep<T>! step, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! defaultLoss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.ComputeTeachingSignals(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.Initialize(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.IsExactBackprop.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.LayerwiseDistillationCreditRule(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>! teacherHidden, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? teacherLogits = null, int readoutLayerCount = 2, double hiddenWeight = 1, double kdAlpha = 0.5, double temperature = 2, double projectionLearningRate = 0.001, int? seed = null) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.Name.get -> string!
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.ReadoutLayerCount.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.ApplyAuxiliaryGradients(System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.AuxiliaryParameters.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.BuildLocalObjective(AiDotNet.Interfaces.LocalObjectiveContext<T>! context) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.BuildOutputObjective(AiDotNet.Interfaces.LocalObjectiveStep<T>! step, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! defaultLoss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.ComputeTeachingSignals(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Initialize(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.IsExactBackprop.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Name.get -> string!
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1) -> void
