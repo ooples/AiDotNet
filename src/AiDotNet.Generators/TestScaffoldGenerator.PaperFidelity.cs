@@ -122,25 +122,23 @@ public partial class TestScaffoldGenerator
         if (!declaration.Identifier.ValueText.EndsWith("PaperTests", System.StringComparison.Ordinal)) return false;
         foreach (var method in declaration.Members.OfType<MethodDeclarationSyntax>())
         {
-            foreach (var attribute in method.AttributeLists.SelectMany(list => list.Attributes))
-            {
-                string name = attribute.Name.ToString();
-                int dot = name.LastIndexOf('.');
-                if (dot >= 0) name = name.Substring(dot + 1);
-                if (name.EndsWith("Attribute", System.StringComparison.Ordinal))
-                    name = name.Substring(0, name.Length - "Attribute".Length);
-                if (name is "Fact" or "Theory" or "SkippableFact" or "SkippableTheory") return true;
-            }
+            if (method.AttributeLists.SelectMany(list => list.Attributes)
+                .Select(attribute => attribute.Name.ToString()).Any(IsPaperTestAttributeName)) return true;
         }
 
         return false;
     }
 
-    /// <summary>
-    /// The paper test class a model must have: <c>&lt;SimpleName&gt;PaperTests</c>, qualified by the
-    /// model's namespace leaf exactly where its generated fixture is (a namesake that does not own its
-    /// simple name, or a simple name several models share without an owner).
-    /// </summary>
+    private static bool IsPaperTestAttributeName(string name)
+    {
+        int dot = name.LastIndexOf('.');
+        if (dot >= 0) name = name.Substring(dot + 1);
+        if (name.EndsWith("Attribute", System.StringComparison.Ordinal))
+            name = name.Substring(0, name.Length - "Attribute".Length);
+        return name is "Fact" or "Theory" or "SkippableFact" or "SkippableTheory";
+    }
+
+    /// <summary>The expected paper-test class name, qualified to disambiguate model namesakes.</summary>
     private static string ExpectedPaperTestClassName(ModelTestInfo model, IReadOnlyDictionary<string, int> simpleNameCounts)
     {
         string simple = StripBacktick(model.ClassName);
@@ -209,14 +207,12 @@ public partial class TestScaffoldGenerator
         var seen = new HashSet<string>(System.StringComparer.Ordinal);
         for (INamedTypeSymbol? walk = options.OriginalDefinition; walk is not null; walk = walk.BaseType?.OriginalDefinition)
         {
-            foreach (var property in walk.GetMembers().OfType<IPropertySymbol>().OrderBy(p => p.Name, System.StringComparer.Ordinal))
+            foreach (var property in walk.GetMembers().OfType<IPropertySymbol>().OrderBy(p => p.Name, System.StringComparer.Ordinal)
+                .Where(property => !property.IsStatic && !property.IsIndexer && !property.IsOverride
+                    && property.DeclaredAccessibility == Accessibility.Public
+                    && property.SetMethod is { DeclaredAccessibility: Accessibility.Public }
+                    && seen.Add(property.Name) && HasGenericPerturbation(property.Type)))
             {
-                if (property.IsStatic || property.IsIndexer || property.IsOverride) continue;
-                if (property.DeclaredAccessibility != Accessibility.Public) continue;
-                if (property.SetMethod is not { DeclaredAccessibility: Accessibility.Public }) continue;
-                if (!seen.Add(property.Name)) continue;
-                if (!HasGenericPerturbation(property.Type)) continue;
-
                 string? skip = null;
                 var exemption = property.GetAttributes().FirstOrDefault(a =>
                     a.AttributeClass?.ToDisplayString() == OptionsFidelityAnalyzer.OptionBehaviourExemptAttributeName);
@@ -305,9 +301,9 @@ public partial class TestScaffoldGenerator
         if (compilation.GetTypeByMetadataName(PaperDefaultsHarnessMetadataName) is null) return;
 
         var declaring = new List<INamedTypeSymbol>();
-        foreach (var reference in compilation.References)
+        foreach (var assembly in compilation.References.Select(compilation.GetAssemblyOrModuleSymbol)
+            .OfType<IAssemblySymbol>().Where(assembly => assembly.Name == "AiDotNet"))
         {
-            if (compilation.GetAssemblyOrModuleSymbol(reference) is not IAssemblySymbol { Name: "AiDotNet" } assembly) continue;
             CollectPaperDefaultOptions(assembly.GlobalNamespace, declaring);
         }
 
@@ -321,11 +317,9 @@ public partial class TestScaffoldGenerator
         sb.AppendLine($"[Xunit.Trait(\"Category\", \"{PaperFidelityCategory}\")]");
         sb.AppendLine("public class GeneratedPaperDefaultsTests");
         sb.AppendLine("{");
-        foreach (var options in declaring.OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal))
+        foreach (var options in declaring.Where(options => !options.IsAbstract).OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal))
         {
-            // An abstract base cannot be constructed, and the concrete classes that inherit its declarations are
-            // enumerated on their own, whose tests check its values; reporting it would be an error no edit can fix.
-            if (options.IsAbstract) continue;
+            // Concrete options test inherited declarations; abstract bases were filtered before emission.
 
             string? problem = null;
             if (!HasPublicParameterlessConstructor(options)) problem = "it has no public parameterless constructor";
