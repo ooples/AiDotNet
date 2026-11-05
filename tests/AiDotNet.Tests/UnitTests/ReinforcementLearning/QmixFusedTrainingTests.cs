@@ -109,6 +109,11 @@ public class QmixFusedTrainingTests
         await Task.Yield();
         var eagerAgent = Make();
         var fusedAgent = Make();
+        // Keep every small ReLU mixing unit active. Random initialization can leave the
+        // entire mixer inactive, making zero agent gradients a valid result for this fixture.
+        var initial = eagerAgent.GetParameters();
+        for (int i = 0; i < initial.Length; i++) initial[i] = 0.1;
+        eagerAgent.SetParameters(initial);
         fusedAgent.SetParameters(eagerAgent.GetParameters());
         var agentsBefore = AgentNetworkParameters(eagerAgent);
 
