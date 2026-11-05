@@ -456,12 +456,8 @@ namespace AiDotNet.Tokenization.HuggingFace
             List<string>? additionalSpecial = null;
             if (root["additional_special_tokens"] is JArray addArr)
             {
-                additionalSpecial = new List<string>();
-                foreach (var s in addArr.Select(ReadTokenString))
-                {
-                    if (!string.IsNullOrEmpty(s))
-                        additionalSpecial.Add(s!);
-                }
+                additionalSpecial = addArr.Select(ReadTokenString)
+                    .OfType<string>().Where(s => s.Length > 0).ToList();
             }
 
             int? maxLen = null;

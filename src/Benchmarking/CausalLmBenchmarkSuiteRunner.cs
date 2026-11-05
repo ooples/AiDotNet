@@ -471,10 +471,9 @@ internal static class CausalLmBenchmarkSuiteRunner
         if (!File.Exists(lmOptions.LambadaDatasetPath))
             throw new FileNotFoundException($"LAMBADA dataset file not found: {lmOptions.LambadaDatasetPath}", lmOptions.LambadaDatasetPath);
 
-        foreach (var rawLine in File.ReadLines(lmOptions.LambadaDatasetPath).Where(line => !string.IsNullOrWhiteSpace(line)))
+        foreach (var trimmed in File.ReadLines(lmOptions.LambadaDatasetPath)
+            .Where(line => !string.IsNullOrWhiteSpace(line)).Select(line => line.Trim()))
         {
-
-            string trimmed = rawLine.Trim();
             if (trimmed.StartsWith("{", StringComparison.Ordinal))
             {
                 var obj = JObject.Parse(trimmed);
