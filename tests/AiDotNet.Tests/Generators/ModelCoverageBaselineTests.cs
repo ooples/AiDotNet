@@ -17,7 +17,7 @@ namespace AiDotNet.Tests.Generators;
 public class ModelCoverageBaselineTests
 {
     /// <summary>
-    /// Models with model-family test coverage: the recorded measurement is 1813 of 1819 (99.7%)
+    /// Models with model-family test coverage: the recorded measurement is 1814 of 1820 (99.7%)
     /// from the AiDotNetTests compilation's TestCoverage (read by reflection from the built
     /// net10.0 assembly of fix/streaming-validation-tensor-loss, 2026-11-05; the 6 untested are
     /// exactly DefectBaselines.UntestedModels, the cloud TTS wrappers). The baseline had stayed at 1485 of 1816 (81.8%, commit
@@ -32,13 +32,13 @@ public class ModelCoverageBaselineTests
     /// means models that were covered no longer are: establish why before editing this constant,
     /// because the point of the gate is that the number cannot quietly fall.
     /// </summary>
-    private const int BaselineTestedCount = 1813;
+    private const int BaselineTestedCount = 1814;
 
     /// <summary>
     /// Total annotated models at the same measurement. Only a floor: the census grows as models are
     /// added, and a growing census must not by itself trip the tested-count gate.
     /// </summary>
-    private const int BaselineTotalModels = 1819;
+    private const int BaselineTotalModels = 1820;
 
     [Fact]
     public void ThisAssemblyPublishesAMeasuredCoverageFigure()

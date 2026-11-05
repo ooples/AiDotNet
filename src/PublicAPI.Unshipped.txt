@@ -976,3 +976,24 @@ AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Tied
 override AiDotNet.Audio.Fingerprinting.CLAPModel<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.NeuralNetworks.WGANGP<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.VisionLanguage.Document.GOTOCR2<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.Channel.get -> int
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.DetectFromNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! noise) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.Generate(int[]! noiseShape, int seed, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, int, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? noisePredictor = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.GenerateWithoutWatermark(int[]! noiseShape, int seed, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, int, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? noisePredictor = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.InferenceSteps.get -> int
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.InvertToNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.Radius.get -> int
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.UsesPublicKey.get -> bool
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.WatermarkedNoise(int[]! noiseShape, int seed) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+override AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.ModuleName.get -> string!
+override AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+override AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+AiDotNet.Safety.Watermarking.TreeRingKeyPattern
+AiDotNet.Safety.Watermarking.TreeRingKeyPattern.Random = 0 -> AiDotNet.Safety.Watermarking.TreeRingKeyPattern
+AiDotNet.Safety.Watermarking.TreeRingKeyPattern.Rings = 1 -> AiDotNet.Safety.Watermarking.TreeRingKeyPattern
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.Pattern.get -> AiDotNet.Safety.Watermarking.TreeRingKeyPattern
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.TreeRingWatermarker(AiDotNet.Interfaces.IDiffusionModel<T>! model, string? key = null, int radius = 10, int channel = 0, int inferenceSteps = 50, AiDotNet.Safety.Watermarking.TreeRingKeyPattern pattern = AiDotNet.Safety.Watermarking.TreeRingKeyPattern.Random, double reportThreshold = 0.3) -> void
