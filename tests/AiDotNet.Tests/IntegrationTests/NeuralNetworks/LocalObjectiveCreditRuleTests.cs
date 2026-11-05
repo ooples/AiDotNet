@@ -165,6 +165,86 @@ public class LocalObjectiveCreditRuleTests
         Assert.True(ruleGap > 1e-9, $"Train() with a local-objective rule produced the back-propagation update (max diff {ruleGap:E2}): the rule was ignored.");
     }
 
+    [Fact]
+    public void DeepCopy_CarriesTheCreditRule()
+    {
+        // The optimizer trains RequireModel().DeepCopy(); a copy without the rule trains by back-propagation.
+        var net = BuildNet(hidden: 3, seed: 11);
+        var rule = new TiedReadoutLocalErrorCreditRule<double>(readoutLayerCount: 1);
+        net.SetCreditRule(rule, seed: 5);
+        var copy = (NeuralNetworkBase<double>)net.DeepCopy();
+        Assert.Same(rule, copy.ActiveCreditRule);
+        Assert.Same(rule, ((NeuralNetworkBase<double>)net.Clone()).ActiveCreditRule);
+    }
+
+    [Fact]
+    public async Task ConfigureCreditRule_ChangesTheFacadeTrainedModel()
+    {
+        // Same init, same data, same optimizer: the facade-trained parameters must depend on the configured rule.
+        var init = BuildNet(hidden: 3, seed: 11).GetParameters();
+        async Task<Vector<double>> Facade(ICreditRule<double>? rule)
+        {
+            var net = BuildNet(hidden: 3, seed: 11);
+            net.SetParameters(init);
+            var (trainX, trainY, _) = MakeBlobs(64, seed: 1);
+            var adam = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null,
+                new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 0.02, MaxIterations = 2, BatchSize = 32 });
+            var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>().ConfigureModel(net).ConfigureOptimizer(adam);
+            if (rule is not null) builder = builder.ConfigureCreditRule(rule, 5);
+            var result = await builder
+                .ConfigureLossFunction(new CategoricalCrossEntropyLoss<double>())
+                .ConfigureDataLoader(new InMemoryDataLoader<double, Tensor<double>, Tensor<double>>(trainX, trainY))
+                .BuildAsync();
+            return ((NeuralNetworkBase<double>)result.Model!).GetParameters();
+        }
+        var bp = await Facade(null);
+        var local = await Facade(new TiedReadoutLocalErrorCreditRule<double>(readoutLayerCount: 1));
+        double gap = 0;
+        for (int i = 0; i < bp.Length; i++) gap = Math.Max(gap, Math.Abs(bp[i] - local[i]));
+        Assert.True(gap > 1e-9, $"facade training with a local-objective rule matched back-propagation (max diff {gap:E2}): the rule never reached the trained model.");
+    }
+
+    [Fact]
+    public async Task ConfigureCreditRule_ChangesTheStreamingFacadeTrainedModel()
+    {
+        // The streaming build path (a StreamingDataLoaderBase loader) never wired the configured rule, so every
+        // streamed run trained by back-propagation whatever ConfigureCreditRule said.
+        var init = BuildNet(hidden: 3, seed: 11).GetParameters();
+        var (trainX, trainY, _) = MakeBlobs(64, seed: 1);
+        async Task<Vector<double>> Streamed(ICreditRule<double>? rule)
+        {
+            var net = BuildNet(hidden: 3, seed: 11);
+            net.SetParameters(init);
+            var loader = new StreamingDataLoader<double, Tensor<double>, Tensor<double>>(64, (i, _) =>
+            {
+                var xi = new Tensor<double>(new[] { Dim });
+                var yi = new Tensor<double>(new[] { Classes });
+                for (int d = 0; d < Dim; d++) xi[d] = trainX[i, d];
+                for (int c = 0; c < Classes; c++) yi[c] = trainY[i, c];
+                return Task.FromResult((xi, yi));
+            }, batchSize: 32, prefetchCount: 1, numWorkers: 1);
+            var adam = new AdamOptimizer<double, Tensor<double>, Tensor<double>>(null,
+                new AdamOptimizerOptions<double, Tensor<double>, Tensor<double>> { InitialLearningRate = 0.02, MaxIterations = 2, BatchSize = 32 });
+            var builder = new AiModelBuilder<double, Tensor<double>, Tensor<double>>().ConfigureModel(net).ConfigureOptimizer(adam);
+            if (rule is not null) builder = builder.ConfigureCreditRule(rule, 5);
+            var result = await builder
+                .ConfigureLossFunction(new CategoricalCrossEntropyLoss<double>())
+                .ConfigureDataLoader(loader)
+                // A seeded shuffle: unseeded, the streaming loader draws its order from a secure RNG and no two
+                // runs see the same batches.
+                .ConfigureStreamingTraining(new StreamingTrainingOptions<double, Tensor<double>, Tensor<double>> { Seed = 7 })
+                .BuildAsync();
+            return ((NeuralNetworkBase<double>)result.Model!).GetParameters();
+        }
+        var bp1 = await Streamed(null);
+        var bp2 = await Streamed(null);
+        var local = await Streamed(new TiedReadoutLocalErrorCreditRule<double>(readoutLayerCount: 1));
+        double drift = 0, gap = 0;
+        for (int i = 0; i < bp1.Length; i++) { drift = Math.Max(drift, Math.Abs(bp1[i] - bp2[i])); gap = Math.Max(gap, Math.Abs(bp1[i] - local[i])); }
+        Assert.Equal(0.0, drift); // a streamed back-propagation run is reproducible, so the gap below is the rule's
+        Assert.True(gap > 1e-9, $"streamed training with a local-objective rule matched back-propagation (max diff {gap:E2}): the rule was never wired.");
+    }
+
     private static async Task<double> TrainAndScore(NeuralNetwork<double> net, ICreditRule<double>? rule, int iterations)
     {
         var (trainX, trainY, _) = MakeBlobs(300, seed: 1);

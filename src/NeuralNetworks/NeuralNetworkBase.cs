@@ -17059,6 +17059,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             network.SetTrainingMode(IsTrainingMode);
         }
 
+        // The credit rule is training configuration, not serialized state, so no restore path carries it. The
+        // optimizer trains a DeepCopy of the configured model: a copy without the rule silently trained by
+        // back-propagation. The copy shares the rule (and its feedback RNG stream), as it shares the optimizer.
+        if (copy is NeuralNetworkBase<T> creditCopy && _creditRule is not null)
+        {
+            creditCopy._creditRule = _creditRule;
+            creditCopy._creditRuleRandom = _creditRuleRandom;
+        }
+
         return copy;
     }
 
