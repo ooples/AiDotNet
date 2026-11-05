@@ -38,6 +38,7 @@ public class LLaVA15Options : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public LLaVA15Options()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

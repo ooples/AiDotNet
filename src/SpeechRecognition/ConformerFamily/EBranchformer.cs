@@ -154,7 +154,27 @@ public partial class EBranchformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
 
 
     private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
+    /// <summary>Renders CTC token ids as text through the configured vocabulary.</summary>
+    /// <remarks>
+    /// Each id indexes <c>EBranchformerOptions.Vocabulary</c>; casting ids to characters instead turned
+    /// token 6 into U+0006 rather than "a". Index 0 is the CTC blank, "|" is the word separator,
+    /// special pieces in angle brackets are dropped, and an id outside the vocabulary is skipped.
+    /// </remarks>
+    private string TokensToText(List<int> tokens)
+    {
+        var vocabulary = _options.Vocabulary;
+        var sb = new System.Text.StringBuilder();
+        foreach (var piece in tokens.Where(t => t > 0 && t < vocabulary.Length)
+            .Select(t => vocabulary[t])
+            .Where(piece => !(piece.Length > 1 && piece[0] == '<' && piece[piece.Length - 1] == '>')))
+        {
+            if (piece == "|") { sb.Append(' '); continue; }
+
+            sb.Append(piece);
+        }
+
+        return sb.ToString().Trim();
+    }
     private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
     private string ClassifyLanguageFromTokens(List<int> _) => _options.Language;
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(EBranchformer<T>)); }

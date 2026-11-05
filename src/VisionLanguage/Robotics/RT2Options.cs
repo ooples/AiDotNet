@@ -42,6 +42,7 @@ public class RT2Options : VisionLanguageActionOptions
         ObservationHistory = other.ObservationHistory;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public RT2Options()
     {
         VisionDim = 1024;

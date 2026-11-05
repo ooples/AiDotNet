@@ -8,6 +8,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 public class MegaTTS3Options : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public MegaTTS3Options()
     {
         SampleRate = 24000;

@@ -42,6 +42,7 @@ public class PathVLMOptions : MedicalVLMOptions
         MagnificationLevel = other.MagnificationLevel;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PathVLMOptions()
     {
         VisionDim = 768;

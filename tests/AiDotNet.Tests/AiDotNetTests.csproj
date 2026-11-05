@@ -61,6 +61,7 @@
            - Storage.Sqlite → Storage/SqliteSqlSyntaxValidatorTests.cs -->
     <ProjectReference Include="..\..\src\AiDotNet.Privacy.HE\AiDotNet.Privacy.HE.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Storage.Sqlite\AiDotNet.Storage.Sqlite.csproj" />
+    <ProjectReference Include="..\..\src\AiDotNet.CodeAnalysis.TreeSitter\AiDotNet.CodeAnalysis.TreeSitter.csproj" />
     <ProjectReference Include="..\..\src\AiDotNet.Dashboard\AiDotNet.Dashboard.csproj" />
   </ItemGroup>
 
@@ -152,5 +153,10 @@
                Condition="$([System.String]::Copy('%(Identity)').Contains('win-arm\native\e_sqlite3.dll'))" />
     </ItemGroup>
   </Target>
+
+  <ItemGroup>
+    <!-- Core references only ONNX Runtime's managed API; running ONNX models needs a native runtime. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
+  </ItemGroup>
 
 </Project>

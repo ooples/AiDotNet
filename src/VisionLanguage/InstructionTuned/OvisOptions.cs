@@ -38,6 +38,7 @@ public class OvisOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public OvisOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

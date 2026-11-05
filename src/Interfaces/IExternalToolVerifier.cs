@@ -63,6 +63,7 @@ internal interface IExternalToolVerifier<T>
 #pragma warning disable CS8618 // Generic T properties use default(T) - always used with value types
 public class VerificationResult<T>
 {
+    /// <summary>Creates a verification result with every required member set to its default.</summary>
     [System.Diagnostics.CodeAnalysis.SetsRequiredMembers]
     public VerificationResult()
     {
@@ -98,6 +99,7 @@ public class VerificationResult<T>
     /// </summary>
     public string ToolUsed { get; set; } = string.Empty;
 
+    /// <summary>Describes the verification: whether it passed, the explanation, and the tool used.</summary>
     public override string ToString() =>
         $"Verification {(Passed ? "PASSED" : "FAILED")}: {Explanation} (Tool: {ToolUsed})";
 }

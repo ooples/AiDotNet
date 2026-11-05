@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class CosyVoice3Options : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public CosyVoice3Options()
     {
         TextEncoderDim = 256;

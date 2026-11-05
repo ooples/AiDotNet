@@ -43,6 +43,7 @@ public class PiZeroOptions : VisionLanguageActionOptions
         NumFlowSteps = other.NumFlowSteps;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PiZeroOptions()
     {
         VisionDim = 1152;

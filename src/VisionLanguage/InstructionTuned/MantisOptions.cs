@@ -39,6 +39,7 @@ public class MantisOptions : InstructionTunedVLMOptions
         MaxImages = other.MaxImages;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MantisOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

@@ -8,9 +8,12 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// </remarks>
 public class MegaTTS2Options : EndToEndTtsOptions
 {
+    /// <summary>Initializes a new instance by copying every setting from another instance.</summary>
+    /// <param name="other">The options to copy.</param>
     public MegaTTS2Options(MegaTTS2Options other)
         : base(other ?? throw new ArgumentNullException(nameof(other))) { }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MegaTTS2Options()
     {
         EncoderDim = 192;

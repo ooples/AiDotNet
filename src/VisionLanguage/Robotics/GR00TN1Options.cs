@@ -49,6 +49,7 @@ public class GR00TN1Options : VisionLanguageActionOptions
         FlowMatchingSteps = other.FlowMatchingSteps;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GR00TN1Options()
     {
         VisionDim = 1024;

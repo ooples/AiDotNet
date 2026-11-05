@@ -43,6 +43,7 @@ public class ThreeDLLMOptions : ThreeDVLMOptions
         NumViews = other.NumViews;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ThreeDLLMOptions()
     {
         VisionDim = 768;

@@ -44,4 +44,7 @@
     <Compile Include="../AiDotNet.Tests/UnitTests/Training/CloneAndQuantizationResidencyTests.cs" Link="CloneAndQuantizationResidencyTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Training/HostStateCheckpointTests.cs" Link="HostStateCheckpointTests.cs" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/AiDotNet.CodeAnalysis.TreeSitter/AiDotNet.CodeAnalysis.TreeSitter.csproj" />
+  </ItemGroup>
 </Project>

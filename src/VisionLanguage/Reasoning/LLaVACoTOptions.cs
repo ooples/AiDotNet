@@ -45,6 +45,7 @@ public class LLaVACoTOptions : ReasoningVLMOptions
         EnableStructuredReasoning = other.EnableStructuredReasoning;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public LLaVACoTOptions()
     {
         VisionDim = 1024;

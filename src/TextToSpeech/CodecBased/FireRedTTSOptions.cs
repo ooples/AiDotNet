@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class FireRedTTSOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public FireRedTTSOptions()
     {
         SampleRate = 24000;

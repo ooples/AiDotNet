@@ -42,6 +42,7 @@ public class DINOXOptions : GroundingVLMOptions
         EnableUniversalPerception = other.EnableUniversalPerception;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public DINOXOptions()
     {
         VisionDim = 256;
@@ -53,6 +54,7 @@ public class DINOXOptions : GroundingVLMOptions
         MaxDetections = 300;
     }
 
+    /// <summary>Gets or sets the number of object queries the detector decodes.</summary>
     public int NumQueryPositions { get; set; } = 900;
 
     /// <summary>Gets or sets whether to enable universal perception mode.</summary>

@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class TortoiseTTSOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public TortoiseTTSOptions()
     {
         TextEncoderDim = 256;

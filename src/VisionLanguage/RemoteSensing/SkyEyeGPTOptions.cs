@@ -42,6 +42,7 @@ public class SkyEyeGPTOptions : RemoteSensingVLMOptions
         InstructionSamples = other.InstructionSamples;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SkyEyeGPTOptions()
     {
         VisionDim = 1024;

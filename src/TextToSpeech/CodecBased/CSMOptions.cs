@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class CSMOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public CSMOptions()
     {
         SampleRate = 24000;

@@ -24,6 +24,9 @@ public partial class AiModelResult<T, TInput, TOutput>
 
     internal ProgramSynthesisServingClientOptions? ProgramSynthesisServingClientOptions { get; private set; }
 
+    /// <summary>The parser configured through <c>ProgramSynthesisOptions.SyntaxProvider</c>, or null for none.</summary>
+    internal AiDotNet.ProgramSynthesis.Interfaces.ICodeSyntaxProvider? CodeSyntaxProvider { get; private set; }
+
     /// <summary>
     /// Executes a structured code task using the configured program synthesis model.
     /// </summary>
@@ -105,16 +108,34 @@ public partial class AiModelResult<T, TInput, TOutput>
         CodeTokenizationPipelineOptions? pipelineOptions = null)
     {
         var tokenizer = ProgramSynthesisTokenizerFactory.CreateDefault(language);
-        var pipeline = new CodeTokenizationPipeline();
+        var pipeline = new CodeTokenizationPipeline(CodeSyntaxProvider);
 
         return pipelineOptions is null
             ? pipeline.Tokenize(code ?? string.Empty, language, tokenizer, options)
             : pipeline.TokenizeWithStructure(code ?? string.Empty, language, tokenizer, pipelineOptions, options);
     }
 
+    /// <summary>
+    /// Summarizes source code using the configured program synthesis model. This is a typed shortcut for
+    /// <see cref="ExecuteCodeTask(CodeTaskRequestBase)"/> with a summarization request; it always runs in-process.
+    /// </summary>
+    /// <param name="request">The code to summarize and the summarization settings.</param>
+    /// <returns>The summarization result.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">No code model is configured for this result, or the model returned
+    /// a result of a different task type.</exception>
     public CodeSummarizationResult SummarizeCode(CodeSummarizationRequest request)
         => ExecuteCodeTaskTyped<CodeSummarizationResult>(request);
 
+    /// <summary>
+    /// Generates source code using the configured program synthesis model. This is a typed shortcut for
+    /// <see cref="ExecuteCodeTask(CodeTaskRequestBase)"/> with a generation request; it always runs in-process.
+    /// </summary>
+    /// <param name="request">The generation prompt and settings.</param>
+    /// <returns>The generation result.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is <c>null</c>.</exception>
+    /// <exception cref="InvalidOperationException">No code model is configured for this result, or the model returned
+    /// a result of a different task type.</exception>
     public CodeGenerationResult GenerateCode(CodeGenerationRequest request)
         => ExecuteCodeTaskTyped<CodeGenerationResult>(request);
 

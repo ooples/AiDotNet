@@ -49,6 +49,7 @@ public class VisualBERTOptions : FoundationalVLMOptions
     /// <summary>Gets or sets whether to use visual segment embeddings.</summary>
     public bool UseVisualSegmentEmbeddings { get; set; } = true;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public VisualBERTOptions()
     {
         FusionType = FusionType.SingleStream;

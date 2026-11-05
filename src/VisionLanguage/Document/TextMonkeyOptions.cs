@@ -40,6 +40,7 @@ public class TextMonkeyOptions : DocumentVLMOptions
         EnableShiftedWindowAttention = other.EnableShiftedWindowAttention;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public TextMonkeyOptions()
     {
         VisionDim = 1024;

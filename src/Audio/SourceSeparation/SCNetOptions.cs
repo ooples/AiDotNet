@@ -22,10 +22,13 @@ namespace AiDotNet.Audio.SourceSeparation;
 /// </remarks>
 public class SCNetOptions : ModelOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public SCNetOptions()
     {
     }
 
+    /// <summary>Initializes a new instance by copying every setting from another instance.</summary>
+    /// <param name="other">The options to copy.</param>
     public SCNetOptions(SCNetOptions other)
     {
         if (other is null) throw new ArgumentNullException(nameof(other));

@@ -58,6 +58,7 @@ public class PerceptionEncoderOptions : VisionEncoderOptions
     /// </summary>
     public int AlignmentProjectionDim { get; set; } = 768;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PerceptionEncoderOptions()
     {
         ImageSize = 384;

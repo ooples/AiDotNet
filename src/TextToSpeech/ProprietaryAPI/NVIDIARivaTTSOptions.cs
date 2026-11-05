@@ -8,6 +8,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// </remarks>
 public class NVIDIARivaTTSOptions : EndToEndTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public NVIDIARivaTTSOptions()
     {
         NumFlowSteps = 0;

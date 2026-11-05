@@ -38,6 +38,7 @@ public class PixtralOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public PixtralOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

@@ -293,18 +293,28 @@ public partial class EfficientConformer<T> : AudioNeuralNetworkBase<T>, ISpeechR
         return (tokens, confidenceCount > 0 ? totalConfidence / confidenceCount : 0.0);
     }
 
-    private static string TokensToText(List<int> tokens)
+    /// <summary>Renders CTC token ids as text through the configured vocabulary.</summary>
+    /// <remarks>
+    /// Each id indexes <c>EfficientConformerOptions.Vocabulary</c>; casting ids to characters instead turned
+    /// token 6 into U+0006 rather than "a". Index 0 is the CTC blank, "|" is the word separator,
+    /// special pieces in angle brackets are dropped, and an id outside the vocabulary is skipped.
+    /// </remarks>
+    private string TokensToText(List<int> tokens)
     {
-        var text = new System.Text.StringBuilder();
-        foreach (int token in tokens)
+        var vocabulary = _options.Vocabulary;
+        var sb = new System.Text.StringBuilder();
+        foreach (var t in tokens)
         {
-            if (token > 0 && token <= char.MaxValue)
-                text.Append((char)token);
-            else if (token > char.MaxValue && token <= 0x10FFFF)
-                text.Append(char.ConvertFromUtf32(token));
+            if (t <= 0 || t >= vocabulary.Length) continue;
+
+            string piece = vocabulary[t];
+            if (piece == "|") { sb.Append(' '); continue; }
+            if (piece.Length > 1 && piece[0] == '<' && piece[piece.Length - 1] == '>') continue;
+
+            sb.Append(piece);
         }
 
-        return text.ToString().Trim();
+        return sb.ToString().Trim();
     }
 
     private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(

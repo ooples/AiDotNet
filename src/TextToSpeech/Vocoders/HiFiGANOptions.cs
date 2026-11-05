@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// </remarks>
 public class HiFiGANOptions : VocoderOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public HiFiGANOptions()
     {
         UpsampleRates = [8, 8, 2, 2];

@@ -42,6 +42,7 @@ public class GroundedSAM2Options : GroundingVLMOptions
         EnableTracking = other.EnableTracking;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GroundedSAM2Options()
     {
         VisionDim = 256;

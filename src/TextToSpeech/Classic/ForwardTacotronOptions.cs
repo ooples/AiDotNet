@@ -20,6 +20,7 @@ public class ForwardTacotronOptions : AcousticModelOptions
         DurationScale = other.DurationScale;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ForwardTacotronOptions()
     {
         EncoderDim = 256;

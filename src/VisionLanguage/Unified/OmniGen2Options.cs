@@ -41,6 +41,7 @@ public class OmniGen2Options : UnifiedVisionOptions
         EnableDualPath = other.EnableDualPath;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public OmniGen2Options()
     {
         VisionDim = 1024;

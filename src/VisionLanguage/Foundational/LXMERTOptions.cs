@@ -53,6 +53,7 @@ public class LXMERTOptions : FoundationalVLMOptions
     /// <summary>Gets or sets the maximum number of visual objects.</summary>
     public int MaxVisualObjects { get; set; } = 36;
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public LXMERTOptions()
     {
         FusionType = FusionType.CrossModal;

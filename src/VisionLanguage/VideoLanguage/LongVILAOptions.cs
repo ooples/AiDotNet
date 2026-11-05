@@ -41,6 +41,7 @@ public class LongVILAOptions : VideoLanguageOptions
         MaxVideoMinutes = other.MaxVideoMinutes;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public LongVILAOptions()
     {
         VisionDim = 1024;

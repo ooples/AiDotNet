@@ -20,6 +20,7 @@ public class VoiceCloningOptions : CodecTtsOptions
         MinReferenceDurationSec = other.MinReferenceDurationSec;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public VoiceCloningOptions()
     {
         SpeakerEmbeddingDim = 256;
@@ -28,5 +29,6 @@ public class VoiceCloningOptions : CodecTtsOptions
         DropoutRate = 0.1;
     }
 
+    /// <summary>Gets or sets the shortest reference clip, in seconds, the cloning recipe recommends. It is informational: shorter references are not rejected.</summary>
     public double MinReferenceDurationSec { get; set; } = 3.0;
 }

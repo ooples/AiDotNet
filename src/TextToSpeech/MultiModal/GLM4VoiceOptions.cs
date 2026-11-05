@@ -20,6 +20,7 @@ public class GLM4VoiceOptions : CodecTtsOptions
         FirstPacketLatencyMs = other.FirstPacketLatencyMs;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GLM4VoiceOptions()
     {
         TextEncoderDim = 256;
@@ -30,5 +31,6 @@ public class GLM4VoiceOptions : CodecTtsOptions
         DropoutRate = 0.1;
     }
 
+    /// <summary>Gets or sets the target delay, in milliseconds, before the first audio packet of a streamed reply. The model reports it and does not schedule by it.</summary>
     public int FirstPacketLatencyMs { get; set; } = 200;
 }

@@ -8,6 +8,7 @@ namespace AiDotNet.TextToSpeech.ProprietaryAPI;
 /// </remarks>
 public class PhemeOptions : EndToEndTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public PhemeOptions()
     {
         NumFlowSteps = 0;

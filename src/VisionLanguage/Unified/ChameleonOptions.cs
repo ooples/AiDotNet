@@ -40,6 +40,7 @@ public class ChameleonOptions : UnifiedVisionOptions
         NumVisualTokens = other.NumVisualTokens;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public ChameleonOptions()
     {
         VisionDim = 4096;

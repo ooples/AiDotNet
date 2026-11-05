@@ -31,14 +31,14 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// - It understands you're looking for connections, not just mentions
 /// 
 /// ```csharp
-/// var myDocStore = new InMemoryDocumentStore&lt;double>(vectorDimension: 768);
-/// var mySentenceTransformer = new StubEmbeddingModel&lt;double>(embeddingDimension: 768);
+/// var myDocStore = new InMemoryDocumentStore&lt;double&gt;(vectorDimension: 768);
+/// var mySentenceTransformer = new StubEmbeddingModel&lt;double&gt;(embeddingDimension: 768);
 /// var content = "Albert Einstein's work on the photoelectric effect helped found quantum physics.";
-/// myDocStore.Add(new VectorDocument&lt;double>(
-///     new Document&lt;double>("einstein-quantum", content),
+/// myDocStore.Add(new VectorDocument&lt;double&gt;(
+///     new Document&lt;double&gt;("einstein-quantum", content),
 ///     mySentenceTransformer.Embed(content)));
 ///
-/// var graphRetriever = new GraphRetriever&lt;double>(
+/// var graphRetriever = new GraphRetriever&lt;double&gt;(
 ///     documentStore: myDocStore,
 ///     embeddingModel: mySentenceTransformer,
 ///     enableAdvancedEntityExtraction: true

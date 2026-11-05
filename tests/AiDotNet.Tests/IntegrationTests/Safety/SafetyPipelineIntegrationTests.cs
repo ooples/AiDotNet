@@ -57,6 +57,7 @@ public class SafetyPipelineIntegrationTests
             Audio = { DeepfakeDetection = true, ToxicSpeechDetection = true },
             Video = { ContentModeration = true, DeepfakeDetection = true },
             Watermarking = { TextWatermarking = true, ImageWatermarking = true, AudioWatermarking = true,
+                             ImageWatermarkKey = "pipeline-test-image-watermark-key",
                              TextTokenizer = new WatermarkFixtures.WordTokenizer() },
             Fairness = { DemographicParity = true, EqualizedOdds = true, StereotypeDetection = true },
             Compliance = { EUAIAct = true, GDPR = true, SOC2 = true }
@@ -407,6 +408,50 @@ public class SafetyPipelineIntegrationTests
         var findings = watermarker.EvaluateImage(tensor);
 
         Assert.NotNull(findings);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Factory_ImageWatermarking_RequiresAKey_AndAPositiveStrength()
+    {
+        await Task.Yield();
+        Assert.Throws<InvalidOperationException>(() => SafetyPipelineFactory<double>.Create(
+            new SafetyConfig { Watermarking = { ImageWatermarking = true } }));
+        Assert.Throws<InvalidOperationException>(() => SafetyPipelineFactory<double>.Create(
+            new SafetyConfig { Watermarking = { ImageWatermarking = true, ImageWatermarkKey = "k-123", WatermarkStrength = 0 } }));
+        // A blank key, or the published public key, is no secret of the application's own.
+        Assert.Throws<InvalidOperationException>(() => SafetyPipelineFactory<double>.Create(
+            new SafetyConfig { Watermarking = { ImageWatermarking = true, ImageWatermarkKey = "   " } }));
+        Assert.Throws<InvalidOperationException>(() => SafetyPipelineFactory<double>.Create(
+            new SafetyConfig { Watermarking = { ImageWatermarking = true, ImageWatermarkKey = ImageWatermarkerBase<double>.PublicKey } }));
+
+        // Detection alone needs no image key: it looks for marks made with the public key. (Detection mode also scores
+        // text, which needs the generator's tokenizer -- Factory_RefusesTextWatermarkingWithoutTheGeneratorsTokenizer.)
+        var tokenizer = new WatermarkFixtures.WordTokenizer();
+        var detectOnly = SafetyPipelineFactory<double>.Create(
+            new SafetyConfig { Watermarking = { DetectionMode = true, TextTokenizer = tokenizer } });
+        Assert.Contains(detectOnly.Modules, m => m is ImageWatermarker<double>);
+        var detectBlank = SafetyPipelineFactory<double>.Create(
+            new SafetyConfig { Watermarking = { DetectionMode = true, TextTokenizer = tokenizer, ImageWatermarkKey = "   " } });
+        Assert.Contains(detectBlank.Modules, m => m is ImageWatermarker<double>);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task Factory_ImageWatermarker_UsesTheConfiguredKey()
+    {
+        await Task.Yield();
+        const string key = "application-secret-image-key";
+        var pipeline = SafetyPipelineFactory<double>.Create(
+            new SafetyConfig { Watermarking = { ImageWatermarking = true, ImageWatermarkKey = key } });
+        var module = Assert.Single(pipeline.Modules.OfType<ImageWatermarker<double>>());
+
+        var data = new double[3 * 32 * 32];
+        var rng = RandomHelper.CreateSeededRandom(42);
+        for (int i = 0; i < data.Length; i++) data[i] = rng.NextDouble();
+        var image = new Tensor<double>(data, new[] { 3, 32, 32 });
+
+        Assert.True(module.DetectWatermark(new ImageWatermarker<double>(key: key).EmbedWatermark(image)) >= 0.9,
+            "the pipeline module does not detect a mark made with the configured key");
+        Assert.Equal(0.0, module.DetectWatermark(new ImageWatermarker<double>().EmbedWatermark(image)));
     }
 
     [Fact(Timeout = 120000)]

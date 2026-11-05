@@ -17,6 +17,7 @@ public class MultiBandMelGANOptions : VocoderOptions
         NumBands = other.NumBands;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MultiBandMelGANOptions()
     {
         SampleRate = 24000;
@@ -24,5 +25,6 @@ public class MultiBandMelGANOptions : VocoderOptions
         HopSize = 300;
     }
 
+    /// <summary>Gets or sets the number of sub-bands. The paper-faithful layers fix them, so a non-default value is reported as not applied.</summary>
     public int NumBands { get; set; } = 4;
 }

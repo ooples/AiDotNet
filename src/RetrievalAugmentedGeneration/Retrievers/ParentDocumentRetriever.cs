@@ -44,18 +44,18 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// Returns: Full page containing introduction + detailed process + diagram
 /// 
 /// ```csharp
-/// var documentStore = new InMemoryDocumentStore&lt;double>(vectorDimension: 768);
-/// var embeddingModel = new StubEmbeddingModel&lt;double>(embeddingDimension: 768);
+/// var documentStore = new InMemoryDocumentStore&lt;double&gt;(vectorDimension: 768);
+/// var embeddingModel = new StubEmbeddingModel&lt;double&gt;(embeddingDimension: 768);
 /// // The full section, and a small chunk of it tagged with its parent's id.
-/// var parent = new Document&lt;double>("entanglement-section",
+/// var parent = new Document&lt;double&gt;("entanglement-section",
 ///     "Quantum entanglement links particles so that measuring one fixes the other's state, however far apart.");
-/// var chunk = new Document&lt;double>("entanglement-section-chunk-0",
+/// var chunk = new Document&lt;double&gt;("entanglement-section-chunk-0",
 ///     "Measuring one entangled particle fixes the other's state.",
-///     new Dictionary&lt;string, object> { ["parent_id"] = "entanglement-section", ["chunk_index"] = 0 });
-/// documentStore.Add(new VectorDocument&lt;double>(parent, embeddingModel.Embed(parent.Content)));
-/// documentStore.Add(new VectorDocument&lt;double>(chunk, embeddingModel.Embed(chunk.Content)));
+///     new Dictionary&lt;string, object&gt; { ["parent_id"] = "entanglement-section", ["chunk_index"] = 0 });
+/// documentStore.Add(new VectorDocument&lt;double&gt;(parent, embeddingModel.Embed(parent.Content)));
+/// documentStore.Add(new VectorDocument&lt;double&gt;(chunk, embeddingModel.Embed(chunk.Content)));
 ///
-/// var retriever = new ParentDocumentRetriever&lt;double>(
+/// var retriever = new ParentDocumentRetriever&lt;double&gt;(
 ///     documentStore,
 ///     embeddingModel,
 ///     chunkSize: 256,                    // Small chunks for precision

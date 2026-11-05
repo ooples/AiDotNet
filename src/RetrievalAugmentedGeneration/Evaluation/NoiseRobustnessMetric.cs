@@ -35,26 +35,26 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Evaluation;
 /// 
 /// For example:
 /// ```csharp
-/// var retrievedDocs = new List&lt;Document&lt;double>>
+/// var retrievedDocs = new List&lt;Document&lt;double&gt;&gt;
 /// {
 ///     // The metric reads each document's retrieval score, so documents without one are not counted.
-///     new Document&lt;double>("doc1", "Artificial intelligence is the simulation of human intelligence by machines.")
+///     new Document&lt;double&gt;("doc1", "Artificial intelligence is the simulation of human intelligence by machines.")
 ///     {
 ///         RelevanceScore = 0.9,
 ///         HasRelevanceScore = true
 ///     },
-///     new Document&lt;double>("doc2", "The 2024 football season opened in September.")
+///     new Document&lt;double&gt;("doc2", "The 2024 football season opened in September.")
 ///     {
 ///         RelevanceScore = 0.1,
 ///         HasRelevanceScore = true
 ///     }
 /// };
-/// var metric = new NoiseRobustnessMetric&lt;double>(0.3);
-/// var answer = new GroundedAnswer&lt;double>(
+/// var metric = new NoiseRobustnessMetric&lt;double&gt;(0.3);
+/// var answer = new GroundedAnswer&lt;double&gt;(
 ///     query: "What is AI?",
 ///     answer: "AI is artificial intelligence...",
 ///     sourceDocuments: retrievedDocs,
-///     citations: new List&lt;string>(),
+///     citations: new List&lt;string&gt;(),
 ///     confidenceScore: 0.8
 /// );
 /// var score = metric.Evaluate(answer);

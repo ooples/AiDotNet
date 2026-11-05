@@ -108,8 +108,8 @@ namespace AiDotNet.Reasoning.DomainSpecific;
 ///
 /// **Usage example:**
 /// ```csharp
-/// var chatModel = new OpenAIChatClient&lt;double&gt;(apiKey: "your-openai-api-key");
-/// var reasoner = new LogicalReasoner&lt;double>(chatModel);
+/// var chatModel = new OllamaChatClient&lt;double&gt;("llama3");
+/// var reasoner = new LogicalReasoner&lt;double&gt;(chatModel);
 ///
 /// // Deductive reasoning
 /// var result = await reasoner.SolveAsync(

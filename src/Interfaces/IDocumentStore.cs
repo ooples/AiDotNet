@@ -60,8 +60,7 @@ public interface IDocumentStore<T>
     /// <summary>
     /// Adds a single vectorized document to the store.
     /// </summary>
-    /// <param name="document">The document to add.</param>
-    /// <param name="embedding">The vector embedding representing the document's semantic meaning.</param>
+    /// <param name="vectorDocument">The document together with its vector embedding, the semantic representation similarity search compares.</param>
     /// <remarks>
     /// <para>
     /// This method indexes a document along with its vector embedding for later retrieval.

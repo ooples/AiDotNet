@@ -19,6 +19,7 @@ public class WaveGlowOptions : VocoderOptions
         EarlyOutputChannels = other.EarlyOutputChannels;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public WaveGlowOptions()
     {
         SampleRate = 22050;
@@ -26,7 +27,10 @@ public class WaveGlowOptions : VocoderOptions
         HopSize = 256;
     }
 
+    /// <summary>Gets or sets the number of affine coupling flow steps.</summary>
     public int NumFlows { get; set; } = 12;
+    /// <summary>Gets or sets the number of WaveNet layers in each coupling network.</summary>
     public int NumWaveNetLayers { get; set; } = 8;
+    /// <summary>Gets or sets the channels emitted early after every few flows in the paper. The native flow does not read it.</summary>
     public int EarlyOutputChannels { get; set; } = 2;
 }

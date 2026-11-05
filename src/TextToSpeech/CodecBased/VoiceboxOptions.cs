@@ -13,6 +13,7 @@ public class VoiceboxOptions : CodecTtsOptions
     {
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public VoiceboxOptions()
     {
         // Le et al. 2023, Appendix D, Table D13: the audio vector-field

@@ -29,6 +29,11 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
+        // The program-synthesis endpoints validate code and build syntax trees with TreeSitter, which left the core
+        // package for the opt-in AiDotNet.CodeAnalysis.TreeSitter package (#2393). Register it as an application would.
+        AiDotNet.ProgramSynthesis.Engines.CodeSyntaxProviders.Provider ??=
+            new AiDotNet.ProgramSynthesis.Tokenization.TreeSitterCodeSyntaxProvider();
+
         // Configure options
         builder.Services.Configure<ServingOptions>(
             builder.Configuration.GetSection("ServingOptions"));

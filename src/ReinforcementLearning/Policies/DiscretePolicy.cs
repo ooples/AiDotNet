@@ -53,6 +53,19 @@ namespace AiDotNet.ReinforcementLearning.Policies
         {
         }
 
+        /// <summary>
+        /// Builds the policy from <paramref name="options"/>: a dense ReLU network of the options' hidden widths from
+        /// StateSize inputs to one logit per action (ActionSize outputs).
+        /// </summary>
+        /// <param name="options">The policy's configuration.</param>
+        public DiscretePolicy(DiscretePolicyOptions<T> options)
+            : this(
+                PolicyNetworks.Build((options ?? throw new ArgumentNullException(nameof(options))).StateSize,
+                    options.HiddenLayers, options.ActionSize, options.LossFunction, nameof(DiscretePolicyOptions<T>)),
+                options.ActionSize, options.ExplorationStrategy, PolicyNetworks.RandomFor(options.Seed))
+        {
+        }
+
         public DiscretePolicy(
             INeuralNetwork<T> policyNetwork,
             int actionSize,

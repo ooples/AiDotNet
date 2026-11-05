@@ -45,6 +45,7 @@ public class SkyworkR1VOptions : ReasoningVLMOptions
         EnableCrossModalTransfer = other.EnableCrossModalTransfer;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public SkyworkR1VOptions()
     {
         VisionDim = 1152;

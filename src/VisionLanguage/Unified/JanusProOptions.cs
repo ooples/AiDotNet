@@ -44,6 +44,7 @@ public class JanusProOptions : UnifiedVisionOptions
         CfgScale = other.CfgScale;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public JanusProOptions()
     {
         VisionDim = 1024;

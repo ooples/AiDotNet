@@ -93,7 +93,7 @@ internal static class TreeSitterAstExtractor
         return nodes.Count > 0;
     }
 
-    private static (string LibraryName, string FunctionName)? GetTreeSitterLanguageSpec(ProgramLanguage language)
+    internal static (string LibraryName, string FunctionName)? GetTreeSitterLanguageSpec(ProgramLanguage language)
     {
         return language switch
         {

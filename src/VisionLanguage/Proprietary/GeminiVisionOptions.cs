@@ -43,6 +43,7 @@ public class GeminiVisionOptions : ProprietaryVLMOptions
         NumExperts = other.NumExperts;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public GeminiVisionOptions()
     {
         VisionDim = 1024;

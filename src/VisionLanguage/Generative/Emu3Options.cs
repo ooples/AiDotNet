@@ -35,6 +35,7 @@ public class Emu3Options : GenerativeVLMOptions
         NumRegressionLayers = other.NumRegressionLayers;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public Emu3Options()
     {
         ArchitectureType = GenerativeArchitectureType.UnifiedGeneration;

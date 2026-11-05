@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class CosyVoiceOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public CosyVoiceOptions()
     {
         SampleRate = 22050;

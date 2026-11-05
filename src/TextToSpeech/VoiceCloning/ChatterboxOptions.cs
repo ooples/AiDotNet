@@ -8,6 +8,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// </remarks>
 public class ChatterboxOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public ChatterboxOptions()
     {
         SampleRate = 24000;

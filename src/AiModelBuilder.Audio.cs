@@ -10,7 +10,7 @@ namespace AiDotNet;
 /// <para>
 /// These methods provide audio-specific operations through the facade pattern.
 /// Configure any model that implements <see cref="IAudioEventDetector{T}"/> via
-/// <see cref="AiModelBuilder{T, TInput, TOutput}.ConfigureModel"/> and then use
+/// <see cref="AiModelBuilder{T, TInput, TOutput}.ConfigureModel(IFullModel{T, TInput, TOutput})"/> and then use
 /// these methods for audio event detection.
 /// </para>
 /// <para>

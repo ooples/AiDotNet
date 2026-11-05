@@ -8,6 +8,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </remarks>
 public class E2TTSOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public E2TTSOptions()
     {
         SampleRate = 24000;

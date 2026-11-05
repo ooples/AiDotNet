@@ -38,6 +38,7 @@ public class MiniCPMVOptions : InstructionTunedVLMOptions
         SystemPrompt = other.SystemPrompt;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public MiniCPMVOptions()
     {
         InstructionArchitectureType = InstructionTunedArchitectureType.MLPProjection;

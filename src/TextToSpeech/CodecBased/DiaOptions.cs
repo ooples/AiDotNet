@@ -6,6 +6,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class DiaOptions : CodecTtsOptions
 {
+    /// <summary>Initializes a new instance with default values.</summary>
     public DiaOptions()
     {
         SampleRate = 44100;

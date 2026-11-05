@@ -37,6 +37,7 @@ public class IDEFICS2Options : GenerativeVLMOptions
         NumPerceiverHeads = other.NumPerceiverHeads;
     }
 
+    /// <summary>Initializes a new instance with default values.</summary>
     public IDEFICS2Options()
     {
         ArchitectureType = GenerativeArchitectureType.PerceiverResampler;
