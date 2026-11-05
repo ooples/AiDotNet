@@ -33,6 +33,10 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// ```csharp
 /// var myDocStore = new InMemoryDocumentStore&lt;double>(vectorDimension: 768);
 /// var mySentenceTransformer = new StubEmbeddingModel&lt;double>(embeddingDimension: 768);
+/// var content = "Albert Einstein's work on the photoelectric effect helped found quantum physics.";
+/// myDocStore.Add(new VectorDocument&lt;double>(
+///     new Document&lt;double>("einstein-quantum", content),
+///     mySentenceTransformer.Embed(content)));
 ///
 /// var graphRetriever = new GraphRetriever&lt;double>(
 ///     documentStore: myDocStore,

@@ -43,10 +43,20 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// 
 /// ```csharp
 /// var documentStore = new InMemoryDocumentStore&lt;double>(vectorDimension: 768);
+/// var embeddingModel = new StubEmbeddingModel&lt;double>(embeddingDimension: 768);
+/// // One stored vector per section, with ids of the form "docId_vector_N" so they group back to their document.
+/// string[] sections = { "Introduction to quantum computing", "Qubits and superposition",
+///     "Quantum gates", "Error correction", "Applications in chemistry and cryptography" };
+/// for (int i = 0; i &lt; sections.Length; i++)
+///     documentStore.Add(new VectorDocument&lt;double>(
+///         new Document&lt;double>($"quantum-book_vector_{i}", sections[i]),
+///         embeddingModel.Embed(sections[i])));
+///
 /// var retriever = new MultiVectorRetriever&lt;double>(
 ///     documentStore,
 ///     vectorsPerDocument: 5,        // 5 vectors per document
-///     aggregationMethod: "max"       // Use best match
+///     aggregationMethod: "max",     // Use best match
+///     queryEmbedder: new EmbeddingModelQueryEmbedder&lt;double>(embeddingModel)  // same space as the documents
 /// );
 /// 
 /// var results = retriever.Retrieve("quantum computing applications", topK: 5);
