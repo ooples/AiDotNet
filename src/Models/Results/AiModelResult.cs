@@ -867,6 +867,9 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
     /// </remarks>
     public BenchmarkReport? BenchmarkReport { get; internal set; }
 
+    [JsonIgnore]
+    internal BenchmarkingOptions? ConfiguredBenchmarkingOptions { get; private set; }
+
     /// <summary>
     /// Gets the profiling report captured during training and/or inference, if profiling was enabled.
     /// </summary>
@@ -1816,6 +1819,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         // Diagnostics / benchmarking
         ProfilingReport = options.ProfilingReport;
         BenchmarkReport = options.BenchmarkReport;
+        ConfiguredBenchmarkingOptions = options.BenchmarkingOptions;
         WeightStreamingReport = options.WeightStreamingReport;
 
         // Training Infrastructure
@@ -1971,7 +1975,7 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
         IChatClient<T>? chatClient,
         CancellationToken cancellationToken = default)
     {
-        var effectiveOptions = options ?? new BenchmarkingOptions();
+        var effectiveOptions = options ?? ConfiguredBenchmarkingOptions ?? new BenchmarkingOptions();
         var report = await BenchmarkRunner.RunAsync(this, effectiveOptions, chatClient, cancellationToken).ConfigureAwait(false);
 
         if (effectiveOptions.AttachReportToResult)
@@ -3379,6 +3383,19 @@ public partial class AiModelResult<T, TInput, TOutput> : IFullModel<T, TInput, T
             lock (_sequenceLock)
             {
                 return _sequenceOptimizer?.GetStatistics() ?? new Dictionary<string, object>();
+            }
+        }
+
+        internal bool IsKvCacheActive
+        {
+            get
+            {
+                ThrowIfDisposed();
+                lock (_sequenceLock)
+                {
+                    return _sequenceOptimizer != null
+                        && (_sequenceOptimizer.KVCache != null || _sequenceOptimizer.PagedKVCache != null);
+                }
             }
         }
 

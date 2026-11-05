@@ -1270,4 +1270,10 @@ public class AiModelResultOptions<T, TInput, TOutput> : ModelOptions
     /// </para>
     /// </remarks>
     public BenchmarkReport? BenchmarkReport { get; set; }
+
+    /// <summary>
+    /// Gets or sets the benchmarking configuration supplied to <c>AiModelBuilder.ConfigureBenchmarking(...)</c>
+    /// so <c>BuildForInference()</c> results can execute <c>EvaluateBenchmarksAsync()</c> without repeating options.
+    /// </summary>
+    public BenchmarkingOptions? BenchmarkingOptions { get; set; }
 }

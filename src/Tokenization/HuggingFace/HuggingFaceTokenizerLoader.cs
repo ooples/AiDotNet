@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using AiDotNet.Tokenization.Algorithms;
 using AiDotNet.Tokenization.Interfaces;
@@ -19,6 +20,12 @@ namespace AiDotNet.Tokenization.HuggingFace
     {
         private static readonly HttpClient _httpClient = new HttpClient();
         private const string HuggingFaceHubUrl = "https://huggingface.co";
+        private const string EndoTextMarker = "<|" + "endoftext|>";
+        private const string EndOfTextMarker = "<|" + "end_of_text|>";
+        private const string BeginOfTextMarker = "<|" + "begin_of_text|>";
+        private const string StartOfTextMarker = "<|" + "startoftext|>";
+        private const string FallbackCausalBpeRegex =
+            @"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+";
 
         /// <summary>
         /// Loads a HuggingFace tokenizer from a directory.
@@ -48,14 +55,33 @@ namespace AiDotNet.Tokenization.HuggingFace
             if (!File.Exists(configPath))
                 throw new FileNotFoundException("tokenizer_config.json not found");
 
-            // Load configuration
+            // Load configuration resiliently (handles AddedToken objects and oversized model_max_length values)
             var configJson = File.ReadAllText(configPath);
-            var config = JsonConvert.DeserializeObject<TokenizerConfig>(configJson);
+            var config = ParseTokenizerConfig(configJson, out var addBosToken, out var decoderAddedTokens);
 
-            if (config == null)
-                throw new InvalidOperationException("Failed to parse tokenizer configuration");
+            // Determine tokenizer type and load
+            var tokenizerClass = config.TokenizerClass?.ToLowerInvariant() ?? "";
+            bool isBpe = tokenizerClass.Contains("gpt")
+                || tokenizerClass.Contains("bpe")
+                || tokenizerClass.Contains("roberta")
+                || tokenizerClass.Contains("bart")
+                || tokenizerClass.Contains("qwen")
+                || tokenizerClass.Contains("llama")
+                || File.Exists(mergesPath);
 
-            // Create special tokens
+            if (isBpe)
+            {
+                var bpeSpecialTokens = CreateBpeSpecialTokens(config, decoderAddedTokens);
+                return LoadBpeTokenizer(
+                    vocabPath,
+                    mergesPath,
+                    bpeSpecialTokens,
+                    tokenizerClass,
+                    addBosToken ?? false,
+                    decoderAddedTokens);
+            }
+
+            // Create special tokens with encoder defaults for WordPiece / SentencePiece
             var specialTokens = new SpecialTokens
             {
                 UnkToken = config.UnkToken ?? "[UNK]",
@@ -68,14 +94,7 @@ namespace AiDotNet.Tokenization.HuggingFace
                 AdditionalSpecialTokens = config.AdditionalSpecialTokens ?? new List<string>()
             };
 
-            // Determine tokenizer type and load
-            var tokenizerClass = config.TokenizerClass?.ToLowerInvariant() ?? "";
-
-            if (tokenizerClass.Contains("gpt") || tokenizerClass.Contains("bpe") || File.Exists(mergesPath))
-            {
-                return LoadBpeTokenizer(vocabPath, mergesPath, specialTokens);
-            }
-            else if (tokenizerClass.Contains("bert") || tokenizerClass.Contains("wordpiece"))
+            if (tokenizerClass.Contains("bert") || tokenizerClass.Contains("wordpiece"))
             {
                 return LoadWordPieceTokenizer(vocabPath, specialTokens);
             }
@@ -93,7 +112,13 @@ namespace AiDotNet.Tokenization.HuggingFace
         /// <summary>
         /// Loads a BPE tokenizer from HuggingFace format.
         /// </summary>
-        private static BpeTokenizer LoadBpeTokenizer(string vocabPath, string mergesPath, SpecialTokens specialTokens)
+        private static BpeTokenizer LoadBpeTokenizer(
+            string vocabPath,
+            string mergesPath,
+            SpecialTokens specialTokens,
+            string tokenizerClass = "",
+            bool addBosToken = false,
+            List<(int Id, string Content, bool Special)>? addedTokens = null)
         {
             if (!File.Exists(vocabPath))
                 throw new FileNotFoundException($"Vocabulary file not found: {vocabPath}");
@@ -107,24 +132,64 @@ namespace AiDotNet.Tokenization.HuggingFace
             if (vocabDict == null)
                 throw new InvalidOperationException("Failed to parse vocabulary");
 
-            var vocabulary = new Vocabulary.Vocabulary(vocabDict, specialTokens.UnkToken);
+            var specialTokenStrings = new HashSet<string>(StringComparer.Ordinal);
+            if (addedTokens != null)
+            {
+                foreach (var (id, content, _) in addedTokens)
+                {
+                    if (!string.IsNullOrEmpty(content))
+                    {
+                        if (!vocabDict.ContainsKey(content))
+                            vocabDict[content] = id;
+                        specialTokenStrings.Add(content);
+                    }
+                }
+            }
+
+            foreach (var st in specialTokens.GetAllSpecialTokens())
+            {
+                if (!string.IsNullOrEmpty(st) && vocabDict.ContainsKey(st))
+                    specialTokenStrings.Add(st);
+            }
+
+            string unkToken = !string.IsNullOrEmpty(specialTokens.UnkToken)
+                ? specialTokens.UnkToken
+                : (!string.IsNullOrEmpty(specialTokens.EosToken) ? specialTokens.EosToken : "[UNK]");
+            var vocabulary = new Vocabulary.Vocabulary(vocabDict, unkToken);
 
             // Load merges
             var merges = new Dictionary<(string, string), int>();
             var mergeLines = File.ReadAllLines(mergesPath);
             int order = 0;
 
-            var validMergeLines = mergeLines
-                .Where(line => !string.IsNullOrWhiteSpace(line) && !line.StartsWith("#"))
-                .Select(line => line.Split(' '))
-                .Where(parts => parts.Length >= 2);
-
-            foreach (var parts in validMergeLines)
+            foreach (var line in mergeLines)
             {
-                merges[(parts[0], parts[1])] = order++;
+                if (string.IsNullOrWhiteSpace(line) || line.StartsWith("#", StringComparison.Ordinal))
+                    continue;
+
+                int spaceIdx = line.IndexOf(' ');
+                if (spaceIdx > 0 && spaceIdx < line.Length - 1)
+                {
+                    merges[(line.Substring(0, spaceIdx), line.Substring(spaceIdx + 1))] = order++;
+                }
             }
 
-            return new BpeTokenizer(vocabulary, merges, specialTokens);
+            bool byteLevel = tokenizerClass.Contains("gpt")
+                || tokenizerClass.Contains("roberta")
+                || tokenizerClass.Contains("bart")
+                || tokenizerClass.Contains("qwen")
+                || tokenizerClass.Contains("llama")
+                || vocabDict.Keys.Any(k => k.IndexOf('\u0120') >= 0);
+
+            return new BpeTokenizer(
+                vocabulary,
+                merges,
+                specialTokens,
+                pattern: null,
+                byteLevel: byteLevel,
+                specialTokenStrings: specialTokenStrings,
+                addBosToken: addBosToken,
+                bosToken: specialTokens.BosToken);
         }
 
         /// <summary>
@@ -321,19 +386,320 @@ namespace AiDotNet.Tokenization.HuggingFace
             if (model == null)
                 throw new InvalidOperationException("Invalid tokenizer.json: missing 'model' section");
 
-            var modelType = model["type"]?.Value<string>()?.ToLowerInvariant() ?? "";
-            var specialTokens = ExtractSpecialTokensFromJson(root);
+            TokenizerConfig? siblingConfig = null;
+            bool? configAddBos = null;
+            List<(int Id, string Content, bool Special)>? decoderAddedTokens = null;
+            var parentDir = Path.GetDirectoryName(Path.GetFullPath(tokenizerJsonPath));
+            if (!string.IsNullOrEmpty(parentDir))
+            {
+                var siblingConfigPath = GetSafePath(parentDir, "tokenizer_config.json");
+                if (File.Exists(siblingConfigPath))
+                {
+                    try
+                    {
+                        siblingConfig = ParseTokenizerConfig(
+                            File.ReadAllText(siblingConfigPath),
+                            out configAddBos,
+                            out decoderAddedTokens);
+                    }
+                    catch (JsonException)
+                    {
+                        // Ignore malformed optional sibling config; tokenizer.json remains authoritative.
+                    }
+                }
+            }
 
-            if (modelType == "bpe")
-                return LoadBpeFromTokenizerJson(model, specialTokens);
-            else if (modelType == "wordpiece")
+            var modelType = model["type"]?.Value<string>()?.ToLowerInvariant() ?? "";
+            bool isBpe = modelType == "bpe" || (modelType != "wordpiece" && modelType != "unigram" && model["merges"] != null);
+
+            if (isBpe)
+            {
+                var allAddedTokens = ExtractAddedTokensList(root, decoderAddedTokens);
+                var bpeSpecialTokens = CreateBpeSpecialTokens(siblingConfig, allAddedTokens);
+                ExtractBpeOptionsFromJson(root, configAddBos, bpeSpecialTokens, out var pattern, out var byteLevel, out var addBosToken);
+                return LoadBpeFromTokenizerJson(model, bpeSpecialTokens, allAddedTokens, pattern, byteLevel, addBosToken);
+            }
+
+            var specialTokens = ExtractSpecialTokensFromJson(root);
+            if (modelType == "wordpiece")
                 return LoadWordPieceFromTokenizerJson(model, specialTokens);
             else if (modelType == "unigram")
                 return LoadUnigramFromTokenizerJson(model, specialTokens);
-            else if (model["merges"] != null)
-                return LoadBpeFromTokenizerJson(model, specialTokens);
             else
                 return LoadWordPieceFromTokenizerJson(model, specialTokens);
+        }
+
+        private static TokenizerConfig ParseTokenizerConfig(
+            string configJson,
+            out bool? addBosToken,
+            out List<(int Id, string Content, bool Special)> decoderAddedTokens)
+        {
+            var root = JObject.Parse(configJson);
+            addBosToken = root["add_bos_token"]?.Type == JTokenType.Boolean
+                ? root["add_bos_token"]!.Value<bool>()
+                : null;
+
+            decoderAddedTokens = new List<(int Id, string Content, bool Special)>();
+            if (root["added_tokens_decoder"] is JObject decoderObj)
+            {
+                foreach (var prop in decoderObj.Properties())
+                {
+                    if (int.TryParse(prop.Name, out int id) && prop.Value is JObject entry)
+                    {
+                        var content = entry["content"]?.Value<string>();
+                        bool special = entry["special"]?.Value<bool>() ?? false;
+                        if (!string.IsNullOrEmpty(content))
+                            decoderAddedTokens.Add((id, content!, special));
+                    }
+                }
+            }
+
+            List<string>? additionalSpecial = null;
+            if (root["additional_special_tokens"] is JArray addArr)
+            {
+                additionalSpecial = new List<string>();
+                foreach (var item in addArr)
+                {
+                    var s = ReadTokenString(item);
+                    if (!string.IsNullOrEmpty(s))
+                        additionalSpecial.Add(s!);
+                }
+            }
+
+            int? maxLen = null;
+            var maxLenToken = root["model_max_length"];
+            if (maxLenToken != null
+                && (maxLenToken.Type == JTokenType.Integer || maxLenToken.Type == JTokenType.Float)
+                && long.TryParse(
+                    maxLenToken.ToString(),
+                    System.Globalization.NumberStyles.Integer,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out long raw)
+                && raw > 0
+                && raw <= int.MaxValue)
+            {
+                maxLen = (int)raw;
+            }
+
+            return new TokenizerConfig
+            {
+                TokenizerClass = root["tokenizer_class"]?.Value<string>(),
+                ModelType = root["model_type"]?.Value<string>(),
+                VocabFile = root["vocab_file"]?.Value<string>(),
+                MergesFile = root["merges_file"]?.Value<string>(),
+                UnkToken = ReadTokenString(root["unk_token"]),
+                PadToken = ReadTokenString(root["pad_token"]),
+                ClsToken = ReadTokenString(root["cls_token"]),
+                SepToken = ReadTokenString(root["sep_token"]),
+                MaskToken = ReadTokenString(root["mask_token"]),
+                BosToken = ReadTokenString(root["bos_token"]),
+                EosToken = ReadTokenString(root["eos_token"]),
+                DoLowerCase = root["do_lower_case"]?.Type == JTokenType.Boolean && root["do_lower_case"]!.Value<bool>(),
+                ModelMaxLength = maxLen,
+                AdditionalSpecialTokens = additionalSpecial
+            };
+        }
+
+        private static string? ReadTokenString(JToken? token)
+        {
+            if (token == null || token.Type == JTokenType.Null)
+                return null;
+            if (token.Type == JTokenType.String)
+                return token.Value<string>();
+            if (token is JObject obj)
+                return obj["content"]?.Value<string>();
+            return null;
+        }
+
+        private static List<(int Id, string Content, bool Special)> ExtractAddedTokensList(
+            JObject root,
+            List<(int Id, string Content, bool Special)>? decoderAddedTokens)
+        {
+            var result = new List<(int Id, string Content, bool Special)>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            if (root["added_tokens"] is JArray addedTokens)
+            {
+                foreach (var token in addedTokens)
+                {
+                    var content = token["content"]?.Value<string>();
+                    int? id = token["id"]?.Type == JTokenType.Integer ? token["id"]!.Value<int>() : null;
+                    bool special = token["special"]?.Value<bool>() ?? false;
+                    if (!string.IsNullOrEmpty(content) && id.HasValue && seen.Add(content!))
+                    {
+                        result.Add((id.Value, content!, special));
+                    }
+                }
+            }
+
+            if (decoderAddedTokens != null)
+            {
+                foreach (var entry in decoderAddedTokens)
+                {
+                    if (!string.IsNullOrEmpty(entry.Content) && seen.Add(entry.Content))
+                        result.Add(entry);
+                }
+            }
+
+            return result;
+        }
+
+        private static SpecialTokens CreateBpeSpecialTokens(
+            TokenizerConfig? config,
+            List<(int Id, string Content, bool Special)>? addedTokens)
+        {
+            // Causal / BPE tokenizers must NOT inherit BERT's [CLS]/[SEP]/[MASK] defaults unless explicitly configured,
+            // otherwise AddSpecialTokensToSequence wraps prompts in out-of-vocabulary [CLS] ... [SEP] markers.
+            var specialTokens = new SpecialTokens
+            {
+                UnkToken = config?.UnkToken ?? string.Empty,
+                PadToken = config?.PadToken ?? string.Empty,
+                ClsToken = config?.ClsToken ?? string.Empty,
+                SepToken = config?.SepToken ?? string.Empty,
+                MaskToken = config?.MaskToken ?? string.Empty,
+                BosToken = config?.BosToken ?? string.Empty,
+                EosToken = config?.EosToken ?? string.Empty,
+                AdditionalSpecialTokens = config?.AdditionalSpecialTokens != null
+                    ? new List<string>(config.AdditionalSpecialTokens)
+                    : new List<string>()
+            };
+
+            if (addedTokens != null)
+            {
+                foreach (var (_, content, special) in addedTokens)
+                {
+                    if (!special || string.IsNullOrEmpty(content))
+                        continue;
+
+                    var lower = content.ToLowerInvariant();
+                    if (string.IsNullOrEmpty(specialTokens.UnkToken) && lower.Contains("unk"))
+                        specialTokens.UnkToken = content;
+                    else if (string.IsNullOrEmpty(specialTokens.PadToken) && lower.Contains("pad"))
+                        specialTokens.PadToken = content;
+                    else if (string.IsNullOrEmpty(specialTokens.ClsToken) && lower.Contains("cls"))
+                        specialTokens.ClsToken = content;
+                    else if (string.IsNullOrEmpty(specialTokens.SepToken) && lower.Contains("sep"))
+                        specialTokens.SepToken = content;
+                    else if (string.IsNullOrEmpty(specialTokens.MaskToken) && lower.Contains("mask"))
+                        specialTokens.MaskToken = content;
+                    else if (string.IsNullOrEmpty(specialTokens.BosToken) &&
+                             (lower.Contains("bos") || lower == "<s>" || lower == BeginOfTextMarker || lower == StartOfTextMarker))
+                        specialTokens.BosToken = content;
+                    else if (string.IsNullOrEmpty(specialTokens.EosToken) &&
+                             (lower.Contains("eos") || lower == "</s>" || lower == EndoTextMarker || lower == EndOfTextMarker))
+                        specialTokens.EosToken = content;
+                    else if (!specialTokens.AdditionalSpecialTokens.Contains(content))
+                        specialTokens.AdditionalSpecialTokens.Add(content);
+                }
+            }
+
+            if (string.IsNullOrEmpty(specialTokens.UnkToken))
+            {
+                specialTokens.UnkToken = !string.IsNullOrEmpty(specialTokens.EosToken)
+                    ? specialTokens.EosToken
+                    : "[UNK]";
+            }
+
+            return specialTokens;
+        }
+
+        private static void ExtractBpeOptionsFromJson(
+            JObject root,
+            bool? configAddBos,
+            SpecialTokens specialTokens,
+            out string? pattern,
+            out bool byteLevel,
+            out bool addBosToken)
+        {
+            pattern = null;
+            byteLevel = false;
+            bool individualDigits = false;
+
+            var preNodes = new List<JObject>();
+            CollectStageNodes(root["pre_tokenizer"], "pretokenizers", preNodes);
+            foreach (var node in preNodes)
+            {
+                var type = node["type"]?.Value<string>();
+                if (string.Equals(type, "ByteLevel", StringComparison.OrdinalIgnoreCase))
+                {
+                    byteLevel = true;
+                }
+                else if (string.Equals(type, "Split", StringComparison.OrdinalIgnoreCase))
+                {
+                    var regexStr = node["pattern"]?["Regex"]?.Value<string>();
+                    if (!string.IsNullOrEmpty(regexStr) && pattern == null)
+                        pattern = regexStr;
+                }
+                else if (string.Equals(type, "Digits", StringComparison.OrdinalIgnoreCase) &&
+                         (node["individual_digits"]?.Value<bool>() ?? false))
+                {
+                    individualDigits = true;
+                }
+            }
+
+            var decNodes = new List<JObject>();
+            CollectStageNodes(root["decoder"], "decoders", decNodes);
+            foreach (var node in decNodes)
+            {
+                if (string.Equals(node["type"]?.Value<string>(), "ByteLevel", StringComparison.OrdinalIgnoreCase))
+                    byteLevel = true;
+            }
+
+            if (individualDigits && !string.IsNullOrEmpty(pattern))
+            {
+                pattern = pattern!.Replace(@"\p{N}+", @"\p{N}");
+            }
+
+            if (!string.IsNullOrEmpty(pattern))
+            {
+                try
+                {
+                    _ = new Regex(pattern!, RegexOptions.None, TimeSpan.FromSeconds(1));
+                }
+                catch (ArgumentException)
+                {
+                    pattern = FallbackCausalBpeRegex;
+                }
+            }
+
+            addBosToken = configAddBos ?? DetectAddBosFromPostProcessor(root["post_processor"], specialTokens.BosToken);
+        }
+
+        private static void CollectStageNodes(JToken? token, string sequenceKey, List<JObject> output)
+        {
+            if (token is not JObject obj)
+                return;
+
+            if (string.Equals(obj["type"]?.Value<string>(), "Sequence", StringComparison.OrdinalIgnoreCase) &&
+                obj[sequenceKey] is JArray children)
+            {
+                foreach (var child in children)
+                    CollectStageNodes(child, sequenceKey, output);
+            }
+            else
+            {
+                output.Add(obj);
+            }
+        }
+
+        private static bool DetectAddBosFromPostProcessor(JToken? postProcessor, string? bosToken)
+        {
+            if (postProcessor is not JObject obj || string.IsNullOrEmpty(bosToken))
+                return false;
+
+            if (string.Equals(obj["type"]?.Value<string>(), "TemplateProcessing", StringComparison.OrdinalIgnoreCase) &&
+                obj["single"] is JArray single &&
+                single.Count >= 2 &&
+                single[0] is JObject first &&
+                first["SpecialToken"] is JObject stObj)
+            {
+                var id = stObj["id"]?.Value<string>();
+                bool hasTrailingSpecial = single[single.Count - 1] is JObject last && last["SpecialToken"] != null;
+                if (!hasTrailingSpecial && string.Equals(id, bosToken, StringComparison.Ordinal))
+                    return true;
+            }
+
+            return false;
         }
 
         private static SpecialTokens ExtractSpecialTokensFromJson(JObject root)
@@ -366,15 +732,37 @@ namespace AiDotNet.Tokenization.HuggingFace
             return specialTokens;
         }
 
-        private static BpeTokenizer LoadBpeFromTokenizerJson(JObject model, SpecialTokens specialTokens)
+        private static BpeTokenizer LoadBpeFromTokenizerJson(
+            JObject model,
+            SpecialTokens specialTokens,
+            List<(int Id, string Content, bool Special)> addedTokens,
+            string? pattern,
+            bool byteLevel,
+            bool addBosToken)
         {
             var vocabObj = model["vocab"] as JObject;
             if (vocabObj == null)
                 throw new InvalidOperationException("Invalid tokenizer.json: missing 'vocab'");
 
-            var vocabDict = new Dictionary<string, int>();
+            var vocabDict = new Dictionary<string, int>(StringComparer.Ordinal);
             foreach (var prop in vocabObj.Properties())
                 vocabDict[prop.Name] = prop.Value.Value<int>();
+
+            var specialTokenStrings = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var (id, content, _) in addedTokens)
+            {
+                if (!string.IsNullOrEmpty(content))
+                {
+                    vocabDict[content] = id;
+                    specialTokenStrings.Add(content);
+                }
+            }
+
+            foreach (var st in specialTokens.GetAllSpecialTokens())
+            {
+                if (!string.IsNullOrEmpty(st) && vocabDict.ContainsKey(st))
+                    specialTokenStrings.Add(st);
+            }
 
             var vocabulary = new Vocabulary.Vocabulary(vocabDict, specialTokens.UnkToken);
 
@@ -383,19 +771,41 @@ namespace AiDotNet.Tokenization.HuggingFace
             if (mergesArray != null)
             {
                 int order = 0;
-                var mergeStrings = mergesArray.Select(m => m.Value<string>());
-                foreach (var mergeStr in mergeStrings)
+                foreach (var entry in mergesArray)
                 {
-                    if (mergeStr != null)
+                    if (entry.Type == JTokenType.String)
                     {
-                        var parts = mergeStr.Split(' ');
-                        if (parts.Length >= 2)
-                            merges[(parts[0], parts[1])] = order++;
+                        var mergeStr = entry.Value<string>();
+                        if (!string.IsNullOrEmpty(mergeStr))
+                        {
+                            int spaceIdx = mergeStr!.IndexOf(' ');
+                            if (spaceIdx > 0 && spaceIdx < mergeStr.Length - 1)
+                            {
+                                merges[(mergeStr.Substring(0, spaceIdx), mergeStr.Substring(spaceIdx + 1))] = order++;
+                            }
+                        }
+                    }
+                    else if (entry is JArray pair && pair.Count >= 2)
+                    {
+                        var first = pair[0]?.Value<string>();
+                        var second = pair[1]?.Value<string>();
+                        if (first != null && second != null)
+                        {
+                            merges[(first, second)] = order++;
+                        }
                     }
                 }
             }
 
-            return new BpeTokenizer(vocabulary, merges, specialTokens);
+            return new BpeTokenizer(
+                vocabulary,
+                merges,
+                specialTokens,
+                pattern: pattern,
+                byteLevel: byteLevel,
+                specialTokenStrings: specialTokenStrings,
+                addBosToken: addBosToken,
+                bosToken: specialTokens.BosToken);
         }
 
         private static WordPieceTokenizer LoadWordPieceFromTokenizerJson(JObject model, SpecialTokens specialTokens)

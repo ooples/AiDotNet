@@ -14,6 +14,19 @@ namespace AiDotNet.Tokenization.Configuration
     public class TokenizationConfig
     {
         /// <summary>
+        /// Gets or sets an optional HuggingFace Hub model repository ID or local directory path
+        /// used to load a pretrained tokenizer when no explicit <c>ITokenizer</c> instance is
+        /// supplied to <c>AiModelBuilder.ConfigureTokenizer(...)</c>.
+        /// </summary>
+        public string? PretrainedModelOrPath { get; set; }
+
+        /// <summary>
+        /// Gets or sets an optional local cache directory used when downloading a pretrained tokenizer
+        /// specified via <see cref="PretrainedModelOrPath"/>.
+        /// </summary>
+        public string? CacheDirectory { get; set; }
+
+        /// <summary>
         /// Gets or sets the default encoding options for tokenization.
         /// </summary>
         public EncodingOptions DefaultEncodingOptions { get; set; } = new EncodingOptions();

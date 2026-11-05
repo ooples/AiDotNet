@@ -11,8 +11,10 @@ using AiDotNet.Preprocessing.DataPreparation;
 using AiDotNet.Preprocessing.Imputers;
 using AiDotNet.Preprocessing.Scalers;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tokenization.Configuration;
+using AiDotNet.Tokenization.HuggingFace;
+using AiDotNet.Tokenization.Interfaces;
 using AiDotNet.Validation;
-
 namespace AiDotNet;
 
 /// <summary>
@@ -176,6 +178,51 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         _postprocessingPipeline = _dataPipeline.PostprocessingPipeline;
         return this;
     }
+
+    /// <summary>
+    /// Configures an explicit <see cref="ITokenizer"/> and optional <see cref="TokenizationConfig"/>
+    /// for text tokenization, detokenization, causal text generation, and language-model benchmarks.
+    /// </summary>
+    /// <param name="tokenizer">The tokenizer instance to attach to the built model result.</param>
+    /// <param name="config">Optional encoding configuration.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizer(
+        ITokenizer tokenizer,
+        TokenizationConfig? config = null)
+    {
+        Guard.NotNull(tokenizer);
+        _tokenizer = tokenizer;
+        _tokenizationConfig = config;
+        return this;
+    }
+
+    /// <summary>
+    /// Configures tokenization options and optionally loads a pretrained Hugging Face or local tokenizer
+    /// via <see cref="TokenizationConfig.PretrainedModelOrPath"/>.
+    /// </summary>
+    /// <param name="config">Tokenization configuration; when null, industry-standard defaults are used.</param>
+    /// <returns>This builder instance for method chaining.</returns>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizer(
+        TokenizationConfig? config)
+    {
+        _tokenizationConfig = config ?? new TokenizationConfig();
+        if (!string.IsNullOrWhiteSpace(_tokenizationConfig.PretrainedModelOrPath))
+        {
+            string locator = _tokenizationConfig.PretrainedModelOrPath!;
+            _tokenizer = File.Exists(locator)
+                ? HuggingFaceTokenizerLoader.LoadFromTokenizerJson(locator)
+                : AutoTokenizer.FromPretrained(locator, _tokenizationConfig.CacheDirectory);
+        }
+
+        return this;
+    }
+
+    /// <summary>
+    /// Configures tokenization with industry-standard default options.
+    /// </summary>
+    /// <returns>This builder instance for method chaining.</returns>
+    public IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizer()
+        => ConfigureTokenizer((TokenizationConfig?)null);
 
     /// <summary>
     /// Caps the number of training rows that the post-train pipeline-fit

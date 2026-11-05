@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Tokenization.HuggingFace;
 using AiDotNet.Tokenization.Interfaces;
 
 namespace AiDotNet.ModelLoading.Pretrained;
@@ -129,5 +130,71 @@ public static class PretrainedLoader<T>
         await loader.DownloadModelAsync(source.Locator, source.Revision, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         return loader.GetCachePath(source.Locator, source.Revision);
+    }
+
+    /// <summary>
+    /// Best-effort discovery and loading of the checkpoint's companion tokenizer so
+    /// <c>ConfigureModel(PretrainedSource)</c> makes <c>GenerateText</c> / <c>PredictNextWord</c> /
+    /// <c>Tokenize</c> work out-of-the-box without requiring manual loader calls.
+    /// </summary>
+    internal static ITokenizer? TryLoadTokenizer(PretrainedSource source)
+    {
+        Guard.NotNull(source);
+
+        if (!string.IsNullOrWhiteSpace(source.TokenizerLocator))
+        {
+            string explicitLocator = source.TokenizerLocator!;
+            if (File.Exists(explicitLocator))
+                return HuggingFaceTokenizerLoader.LoadFromTokenizerJson(explicitLocator);
+            return AutoTokenizer.FromPretrained(explicitLocator, source.CacheDirectory);
+        }
+
+        switch (source.Kind)
+        {
+            case PretrainedModelKind.Safetensors:
+                if (Directory.Exists(source.Locator) && HasLocalTokenizerFiles(source.Locator))
+                    return HuggingFaceTokenizerLoader.LoadFromDirectory(source.Locator);
+                return null;
+
+            case PretrainedModelKind.Onnx:
+            {
+                string? dir = Path.GetDirectoryName(Path.GetFullPath(source.Locator));
+                for (int depth = 0; depth < 3 && !string.IsNullOrEmpty(dir); depth++)
+                {
+                    if (Directory.Exists(dir) && HasLocalTokenizerFiles(dir))
+                        return HuggingFaceTokenizerLoader.LoadFromDirectory(dir);
+                    dir = Path.GetDirectoryName(dir);
+                }
+                return null;
+            }
+
+            case PretrainedModelKind.HuggingFace:
+            {
+                try
+                {
+                    var hubLoader = new HuggingFaceModelLoader<T>(cacheDir: source.CacheDirectory);
+                    string hubCacheDir = hubLoader.GetCachePath(source.Locator, source.Revision);
+                    if (Directory.Exists(hubCacheDir) && HasLocalTokenizerFiles(hubCacheDir))
+                        return HuggingFaceTokenizerLoader.LoadFromDirectory(hubCacheDir);
+
+                    return AutoTokenizer.FromPretrained(source.Locator, source.CacheDirectory);
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            default:
+                return null;
+        }
+    }
+
+    private static bool HasLocalTokenizerFiles(string directory)
+    {
+        return File.Exists(Path.Combine(directory, "tokenizer.json"))
+            || (File.Exists(Path.Combine(directory, "tokenizer_config.json")) &&
+                (File.Exists(Path.Combine(directory, "vocab.json")) ||
+                 File.Exists(Path.Combine(directory, "vocab.txt"))));
     }
 }

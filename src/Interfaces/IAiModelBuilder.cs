@@ -1274,6 +1274,29 @@ public interface IAiModelBuilder<T, TInput, TOutput>
     IAiModelBuilder<T, TInput, TOutput> ConfigureBenchmarking(BenchmarkingOptions? options = null);
 
     /// <summary>
+    /// Configures an explicit <see cref="ITokenizer"/> and optional <see cref="TokenizationConfig"/>
+    /// for text tokenization, detokenization, causal text generation, and language-model benchmarks.
+    /// </summary>
+    /// <param name="tokenizer">The tokenizer instance to attach to the built model result.</param>
+    /// <param name="config">Optional encoding configuration (special tokens, padding, truncation).</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizer(ITokenizer tokenizer, TokenizationConfig? config = null);
+
+    /// <summary>
+    /// Configures tokenization options and optionally loads a pretrained Hugging Face or local tokenizer
+    /// via <see cref="TokenizationConfig.PretrainedModelOrPath"/>.
+    /// </summary>
+    /// <param name="config">Tokenization configuration; when null, industry-standard defaults are used.</param>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizer(TokenizationConfig? config);
+
+    /// <summary>
+    /// Configures tokenization with industry-standard default options.
+    /// </summary>
+    /// <returns>The builder instance for method chaining.</returns>
+    IAiModelBuilder<T, TInput, TOutput> ConfigureTokenizer();
+
+    /// <summary>
     /// Configures export settings for deploying the model to different platforms.
     /// </summary>
     /// <remarks>

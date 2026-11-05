@@ -584,3 +584,63 @@ override AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.OnRandomSeedA
 override AiDotNet.ReinforcementLearning.Agents.A3C.A3CAgent<T>.Dispose() -> void
 override AiDotNet.ReinforcementLearning.Agents.DecisionTransformer.DecisionTransformerAgent<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
 static AiDotNet.ReinforcementLearning.Agents.DeepReinforcementLearningAgentBase<T>.CreateNetworkOptimizer(T learningRate, double? maxGradientNorm = null) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.AppendToken(int tokenId) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.Dispose() -> void
+AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.ForwardLogits(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokenIds) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.ResetCache() -> void
+AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.StartSequence(System.Collections.Generic.IReadOnlyList<int>! promptTokenIds) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.AiModelBuilder<T, TInput, TOutput>.ConfigureTokenizer() -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.AiModelBuilder<T, TInput, TOutput>.ConfigureTokenizer(AiDotNet.Tokenization.Configuration.TokenizationConfig? config) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.AiModelBuilder<T, TInput, TOutput>.ConfigureTokenizer(AiDotNet.Tokenization.Interfaces.ITokenizer! tokenizer, AiDotNet.Tokenization.Configuration.TokenizationConfig? config = null) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Configuration.BenchmarkingOptions.LanguageModel.get -> AiDotNet.Configuration.CausalLmBenchmarkOptions?
+AiDotNet.Configuration.BenchmarkingOptions.LanguageModel.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions
+AiDotNet.Configuration.CausalLmBenchmarkOptions.CalibrationTokenRange.get -> (int Start, int Count)?
+AiDotNet.Configuration.CausalLmBenchmarkOptions.CalibrationTokenRange.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.CausalLmBenchmarkOptions() -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.ContextWindowLength.get -> int
+AiDotNet.Configuration.CausalLmBenchmarkOptions.ContextWindowLength.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.EvaluationTokenCount.get -> int?
+AiDotNet.Configuration.CausalLmBenchmarkOptions.EvaluationTokenCount.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.EvaluationTokenStart.get -> int
+AiDotNet.Configuration.CausalLmBenchmarkOptions.EvaluationTokenStart.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.LambadaDatasetPath.get -> string?
+AiDotNet.Configuration.CausalLmBenchmarkOptions.LambadaDatasetPath.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.LambadaPassages.get -> System.Collections.Generic.IReadOnlyList<string!>?
+AiDotNet.Configuration.CausalLmBenchmarkOptions.LambadaPassages.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.MaxSubwordTokensPerWord.get -> int
+AiDotNet.Configuration.CausalLmBenchmarkOptions.MaxSubwordTokensPerWord.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.PerplexityCorpusPath.get -> string?
+AiDotNet.Configuration.CausalLmBenchmarkOptions.PerplexityCorpusPath.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.PerplexityCorpusText.get -> string?
+AiDotNet.Configuration.CausalLmBenchmarkOptions.PerplexityCorpusText.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.WarmupItems.get -> int
+AiDotNet.Configuration.CausalLmBenchmarkOptions.WarmupItems.set -> void
+AiDotNet.Enums.BenchmarkMetric.BitsPerByte = 10 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkMetric.CrossEntropyLoss = 9 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkMetric.EvaluatedTokens = 14 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkMetric.MedianTimePerItemMilliseconds = 12 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkMetric.P95TimePerItemMilliseconds = 13 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkMetric.Perplexity = 8 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkMetric.SubwordTop1Accuracy = 11 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkSuite.LAMBADA = 23 -> AiDotNet.Enums.BenchmarkSuite
+AiDotNet.Enums.BenchmarkSuite.Perplexity = 24 -> AiDotNet.Enums.BenchmarkSuite
+AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>.ConfigureTokenizer() -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>.ConfigureTokenizer(AiDotNet.Tokenization.Configuration.TokenizationConfig? config) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>.ConfigureTokenizer(AiDotNet.Tokenization.Interfaces.ITokenizer! tokenizer, AiDotNet.Tokenization.Configuration.TokenizationConfig? config = null) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.AppendToken(int tokenId) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.ForwardLogits(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokenIds) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.NextTokenLogits(System.Collections.Generic.IReadOnlyList<int>! tokenIds) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.ResetCache() -> void
+AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.StartSequence(System.Collections.Generic.IReadOnlyList<int>! promptTokenIds) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.VocabularySize.get -> int
+AiDotNet.ModelLoading.Pretrained.PretrainedSource.TokenizerLocator.get -> string?
+AiDotNet.ModelLoading.Pretrained.PretrainedSource.WithTokenizer(string! locator) -> AiDotNet.ModelLoading.Pretrained.PretrainedSource!
+AiDotNet.Models.Options.AiModelResultOptions<T, TInput, TOutput>.BenchmarkingOptions.get -> AiDotNet.Configuration.BenchmarkingOptions?
+AiDotNet.Models.Options.AiModelResultOptions<T, TInput, TOutput>.BenchmarkingOptions.set -> void
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.GenerateText(string! prompt, int maxNewTokens = 64, double temperature = 0, int? seed = null, System.Collections.Generic.IReadOnlyList<string!>? stopSequences = null) -> string!
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.PredictNextWord(string! prompt, int maxSubwordTokens = 8) -> string!
+AiDotNet.Tokenization.Configuration.TokenizationConfig.CacheDirectory.get -> string?
+AiDotNet.Tokenization.Configuration.TokenizationConfig.CacheDirectory.set -> void
+AiDotNet.Tokenization.Configuration.TokenizationConfig.PretrainedModelOrPath.get -> string?
+AiDotNet.Tokenization.Configuration.TokenizationConfig.PretrainedModelOrPath.set -> void
