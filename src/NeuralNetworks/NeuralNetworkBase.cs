@@ -5812,9 +5812,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                         lastGoodShape = outShape;
                         lastGoodShapeComesFromLayer = true;
                     }
-                    else if (lastGoodShapeComesFromLayer
+                    // FullyConnected resolves from the last axis even when it is the first
+                    // layer. Its successful resolution establishes the sequence provenance.
+                    else if ((lastGoodShapeComesFromLayer || layer is FullyConnectedLayer<T>)
                         && TryApplyFeatureAxisWidth(layer, lastGoodShape, outShape) is { } carried)
+                    {
                         lastGoodShape = carried;
+                        lastGoodShapeComesFromLayer = true;
+                    }
                 }
 
                 // ...but the layer must not keep CLAIMING the spatial dims this walk inferred. They
