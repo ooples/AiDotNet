@@ -2105,4 +2105,70 @@
   <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent`1.#ctor(AiDotNet.Models.Options.QMIXOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
   <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.Rainbow.RainbowDQNAgent`1.#ctor(AiDotNet.Models.Options.RainbowDQNOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
   <Suppression><DiagnosticId>CP0002</DiagnosticId><Target>M:AiDotNet.ReinforcementLearning.Agents.TRPO.TRPOAgent`1.#ctor(AiDotNet.Models.Options.TRPOOptions{`0},AiDotNet.Interfaces.IOptimizer{`0,AiDotNet.Tensors.LinearAlgebra.Vector{`0},AiDotNet.Tensors.LinearAlgebra.Vector{`0}})</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
-  <Suppression><DiagnosticId>CP0008</DiagnosticId><Target>T:AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression></Suppressions>
+  <Suppression><DiagnosticId>CP0008</DiagnosticId><Target>T:AiDotNet.ReinforcementLearning.Agents.Dreamer.DreamerAgent`1</Target><Left>lib/net471/AiDotNet.dll</Left><Right>lib/net471/AiDotNet.dll</Right><IsBaselineSuppression>true</IsBaselineSuppression></Suppression>
+  <!-- The v1 facade adds tokenizer configuration overloads. External builder implementations
+       must implement these new members; retain the scoped pre-v1 baseline exceptions. -->
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer(AiDotNet.Tokenization.Interfaces.ITokenizer,AiDotNet.Tokenization.Configuration.TokenizationConfig)</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer(AiDotNet.Tokenization.Configuration.TokenizationConfig)</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer(AiDotNet.Tokenization.Interfaces.ITokenizer,AiDotNet.Tokenization.Configuration.TokenizationConfig)</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer(AiDotNet.Tokenization.Configuration.TokenizationConfig)</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer(AiDotNet.Tokenization.Interfaces.ITokenizer,AiDotNet.Tokenization.Configuration.TokenizationConfig)</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer(AiDotNet.Tokenization.Configuration.TokenizationConfig)</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0006</DiagnosticId>
+    <Target>M:AiDotNet.Interfaces.IAiModelBuilder`3.ConfigureTokenizer</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+</Suppressions>
