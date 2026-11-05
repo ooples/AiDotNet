@@ -628,9 +628,11 @@ public static class LayerCloning
             // were not saved: a layer that reconstructs today takes the identical path it took
             // before, so this can add successes but cannot change an existing one. The shapes are
             // copied so a factory cannot mutate the source layer's own arrays.
-            var withShapes = new Dictionary<string, object>(values, StringComparer.Ordinal);
+            var withShapes = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in values) withShapes[pair.Key] = pair.Value;
             if (!withShapes.ContainsKey("inputShape")) withShapes["inputShape"] = (int[])source.GetInputShape().Clone();
             if (!withShapes.ContainsKey("outputShape")) withShapes["outputShape"] = (int[])source.GetOutputShape().Clone();
+            HarvestConstructorMembers(source, type, withShapes);
 
             if (!LayerFactoryRegistry<T>.TryCreate(
                     type,
@@ -656,5 +658,81 @@ public static class LayerCloning
         }
 
         return layer;
+    }
+
+    /// <summary>
+    /// Populates missing constructor parameter keys from matching fields or properties on <paramref name="source"/>.
+    /// </summary>
+    /// <remarks>
+    /// Layers defined in external consumer assemblies that do not run <c>AiDotNet.Generators</c> (or are not
+    /// marked <c>partial</c>) have no generated <c>WriteConstructionState</c> override. Harvesting matching
+    /// fields (<c>paramName</c>, <c>_paramName</c>, <c>m_paramName</c>) and readable properties as a last resort
+    /// lets <see cref="LayerFactoryRegistry{T}"/> rebuild hand-written external layers without manual factory registration.
+    /// </remarks>
+    private static void HarvestConstructorMembers<T>(
+        LayerBase<T> source,
+        Type layerType,
+        Dictionary<string, object> target)
+    {
+        const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+        foreach (var ctor in layerType.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+        {
+            foreach (var param in ctor.GetParameters().Where(p => !string.IsNullOrEmpty(p.Name) && !target.ContainsKey(p.Name!)))
+            {
+                var name = param.Name!;
+                string[] candidateNames = [name, "_" + name, "m_" + name];
+                object? found = null;
+                bool matched = false;
+
+                for (Type? current = layerType; current is not null && current != typeof(object) && !matched; current = current.BaseType)
+                {
+                    var matchingFields = current.GetFields(Flags).Where(field =>
+                        candidateNames.Any(c => string.Equals(field.Name, c, StringComparison.OrdinalIgnoreCase))
+                        && param.ParameterType.IsAssignableFrom(field.FieldType));
+
+                    foreach (var field in matchingFields)
+                    {
+                        found = field.GetValue(source);
+                        matched = found is not null;
+                        if (matched) break;
+                    }
+
+                    if (matched) break;
+
+                    var matchingProps = current.GetProperties(Flags).Where(prop =>
+                        prop.CanRead
+                        && prop.GetIndexParameters().Length == 0
+                        && string.Equals(prop.Name, name, StringComparison.OrdinalIgnoreCase)
+                        && param.ParameterType.IsAssignableFrom(prop.PropertyType));
+
+                    foreach (var prop in matchingProps)
+                    {
+                        try
+                        {
+                            found = prop.GetValue(source);
+                            matched = found is not null;
+                            if (matched) break;
+                        }
+                        catch (TargetInvocationException)
+                        {
+                            // Ignore properties whose getter throws during reflection inspection.
+                        }
+                        catch (MemberAccessException)
+                        {
+                            // Ignore inaccessible properties during reflection inspection.
+                        }
+                        catch (NotSupportedException)
+                        {
+                            // Ignore unsupported property getters during reflection inspection.
+                        }
+                    }
+                }
+
+                if (matched && found is not null)
+                {
+                    target[name] = found;
+                }
+            }
+        }
     }
 }
