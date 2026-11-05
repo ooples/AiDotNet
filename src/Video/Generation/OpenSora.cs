@@ -434,13 +434,32 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
     }
 
     /// <summary>
-    /// During <see cref="Train"/>, the denoiser's forward at the step's timestep: the time embedding is built here,
-    /// inside the taped forward, so its layer receives gradients too. Outside training it is the ordinary forward.
+    /// The denoiser's noise prediction. During <see cref="Train"/> it runs at the step's timestep, with the time
+    /// embedding built inside the taped forward so its layer receives gradients too. Outside a Train call it runs at
+    /// the mid-schedule timestep that <see cref="PredictCore"/> denoises at.
     /// </summary>
+    /// <remarks>
+    /// The fallback used to be the base implementation, which walks <see cref="Layers"/> in sequence. That list
+    /// holds the patch embedding, every DiT projection and the conditioning layers side by side, not a chain, so any
+    /// public input failed at the second layer ("Expected input depth 48, but got 144").
+    /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
-        => _trainingTime is not null && AuxiliaryInput is { } timeInput
-            ? PredictNoise(input, null, _timeEmbed.Forward(timeInput))
-            : base.ForwardForTraining(input);
+    {
+        if (input is null)
+            throw new ArgumentNullException(nameof(input));
+        EnsureLayerRandomSeedsWired();
+        if (_trainingTime is not null && AuxiliaryInput is { } timeInput)
+            return PredictNoise(input, null, _timeEmbed.Forward(timeInput));
+
+        if (input.Rank == 3)
+        {
+            // Engine reshapes, not AddBatchDimension's span copy, so the batch promotion stays on the tape.
+            var noise = ForwardForTraining(Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] }));
+            return Engine.Reshape(noise, new[] { noise.Shape[1], noise.Shape[2], noise.Shape[3] });
+        }
+
+        return PredictNoise(input, null, CreateTimeEmbedding(0.5));
+    }
 
     /// <inheritdoc/>
     AiDotNet.Enums.TrainingObjectiveKind AiDotNet.Interfaces.ITrainingObjectiveProvider<T>.TrainingObjectiveKind
@@ -991,13 +1010,17 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
         int headDim = _headDim;
 
         // qkv is [B, 3C, H, W] = [B, 3, heads, headDim, seq]; permuted to [3, B*heads, seq, headDim],
-        // each of Q, K and V is one contiguous block.
-        var seqMajor = Engine.TensorPermute(
-            Engine.Reshape(qkv, [batchSize, 3, _numHeads, headDim, seqLen]), [1, 0, 2, 4, 3]).Contiguous();
-        var all = seqMajor.Data.Span;
-        int block = batchHeads * seqLen * headDim;
+        // each of Q, K and V is one block along the leading axis.
+        var rows = Engine.Reshape(
+            Engine.TensorPermute(
+                Engine.Reshape(qkv, [batchSize, 3, _numHeads, headDim, seqLen]), [1, 0, 2, 4, 3]).Contiguous(),
+            [3, batchHeads, seqLen, headDim]);
 
-        var attended = new Tensor<T>([batchHeads, seqLen, headDim]);
+        // Every gather and the final assembly are engine ops, so the tape sees them. The tiles used to be copied in
+        // and out through spans, which the tape cannot see: no gradient reached the QKV projections or flowed back
+        // through attention, so training never updated them, and the finite-difference check disagreed with the
+        // analytic gradient on the patch embedding.
+        var tiles = new List<Tensor<T>>((seqLen + AttentionQueryTile - 1) / AttentionQueryTile);
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
         T excluded = NumOps.FromDouble(-1e30);
 
@@ -1009,12 +1032,12 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
             int keyEnd = Math.Min(seqLen, tileEnd - 1 + halfWindow);
             int keys = keyEnd - keyStart;
 
-            var query = CopySequenceRows(all.Slice(0, block), batchHeads, seqLen, headDim, tileStart, queries);
-            var key = CopySequenceRows(all.Slice(block, block), batchHeads, seqLen, headDim, keyStart, keys);
-            var value = CopySequenceRows(all.Slice(2 * block, block), batchHeads, seqLen, headDim, keyStart, keys);
+            var query = SequenceRows(rows, 0, batchHeads, headDim, tileStart, queries);
+            var key = SequenceRows(rows, 1, batchHeads, headDim, keyStart, keys);
+            var value = SequenceRows(rows, 2, batchHeads, headDim, keyStart, keys);
 
-            var scores = Engine.BatchMatMul(query, Engine.TensorPermute(key, [0, 2, 1]).Contiguous());
-            Engine.TensorMultiplyScalarInPlace(scores, scale);
+            var scores = Engine.TensorMultiplyScalar(
+                Engine.BatchMatMul(query, Engine.TensorPermute(key, [0, 2, 1]).Contiguous()), scale);
 
             // Zero inside each query's band, a large negative value outside it. Finite rather than
             // -infinity: it underflows exp() to exactly zero without producing inf - inf in the
@@ -1031,18 +1054,12 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
                 row.Slice(allowedEnd).Fill(excluded);
             }
 
-            Engine.TensorBroadcastAddInPlace(scores, mask);
-            var output = Engine.BatchMatMul(Engine.Softmax(scores, -1), value);   // [B*heads, queries, headDim]
-
-            var source = output.Data.Span;
-            var destination = attended.Data.Span;
-            for (int bh = 0; bh < batchHeads; bh++)
-            {
-                source.Slice(bh * queries * headDim, queries * headDim)
-                    .CopyTo(destination.Slice((bh * seqLen + tileStart) * headDim, queries * headDim));
-            }
+            // TensorAdd broadcasts the [1, queries, keys] mask over every batch-head.
+            scores = Engine.TensorAdd(scores, mask);
+            tiles.Add(Engine.BatchMatMul(Engine.Softmax(scores, -1), value));   // [B*heads, queries, headDim]
         }
 
+        var attended = tiles.Count == 1 ? tiles[0] : Engine.TensorConcatenate(tiles.ToArray(), axis: 1);
         var headMajor = Engine.TensorPermute(
             Engine.Reshape(attended, [batchSize, _numHeads, seqLen, headDim]), [0, 1, 3, 2]);
         return Engine.Reshape(headMajor.Contiguous(), [batchSize, channels, height, width]);
@@ -1052,22 +1069,13 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
     private const int AttentionQueryTile = 64;
 
     /// <summary>
-    /// Copies sequence rows [start, start + count) of every batch-head of a contiguous
-    /// [batchHeads, seqLen, headDim] block into a new [batchHeads, count, headDim] tensor.
+    /// Sequence rows [start, start + count) of every batch-head of one of the Q, K, V blocks of a
+    /// [3, batchHeads, seqLen, headDim] tensor, as a [batchHeads, count, headDim] tensor on the tape.
     /// </summary>
-    private static Tensor<T> CopySequenceRows(
-        ReadOnlySpan<T> source, int batchHeads, int seqLen, int headDim, int start, int count)
-    {
-        var result = new Tensor<T>([batchHeads, count, headDim]);
-        var destination = result.Data.Span;
-        for (int bh = 0; bh < batchHeads; bh++)
-        {
-            source.Slice((bh * seqLen + start) * headDim, count * headDim)
-                .CopyTo(destination.Slice(bh * count * headDim, count * headDim));
-        }
-
-        return result;
-    }
+    private Tensor<T> SequenceRows(Tensor<T> rows, int block, int batchHeads, int headDim, int start, int count)
+        => Engine.Reshape(
+            Engine.TensorSlice(rows, new[] { block, 0, start, 0 }, new[] { 1, batchHeads, count, headDim }),
+            [batchHeads, count, headDim]);
 
     private Tensor<T> AddBatchDimension(Tensor<T> tensor)
     {
