@@ -51,10 +51,12 @@ public class DenseLayerInitializationRollbackTests
         }
     }
 
-    [Fact]
-    public void FailedInitialization_IsRetriedFromScratch_NotAdoptedAsRestoredWeights()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(17)]
+    public void FailedInitialization_IsRetriedFromScratch_NotAdoptedAsRestoredWeights(int? seed)
     {
-        var layer = new DenseLayer<double>(3, initializationStrategy: new FailsOnceStrategy());
+        var layer = new DenseLayer<double>(3, initializationStrategy: new FailsOnceStrategy()) { RandomSeed = seed };
         var input = new Tensor<double>(new[] { 1, 4 });
         for (int i = 0; i < input.Length; i++) input.SetFlat(i, 1.0);
 
@@ -100,10 +102,12 @@ public class DenseLayerInitializationRollbackTests
     /// A failure in the bias fill, after the weights are filled, rolls back BOTH tensors: the retry neither adopts the
     /// filled weights as restored parameters nor keeps the sentinel biases, and computes 4 x 0.25 + 0 = 1.
     /// </summary>
-    [Fact]
-    public void FailedBiasInitialization_RollsBackBothTensors()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(17)]
+    public void FailedBiasInitialization_RollsBackBothTensors(int? seed)
     {
-        var layer = new DenseLayer<double>(3, initializationStrategy: new BiasFailsOnceStrategy());
+        var layer = new DenseLayer<double>(3, initializationStrategy: new BiasFailsOnceStrategy()) { RandomSeed = seed };
         var input = new Tensor<double>(new[] { 1, 4 });
         for (int i = 0; i < input.Length; i++) input.SetFlat(i, 1.0);
 

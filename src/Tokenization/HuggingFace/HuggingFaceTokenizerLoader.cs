@@ -448,7 +448,7 @@ namespace AiDotNet.Tokenization.HuggingFace
                     var entry = (JObject)prop.Value;
                     var content = entry["content"]?.Value<string>();
                     bool special = entry["special"]?.Value<bool>() ?? false;
-                    if (!string.IsNullOrEmpty(content))
+                    if (content is { Length: > 0 })
                         decoderAddedTokens.Add((id, content, special));
                 }
             }
