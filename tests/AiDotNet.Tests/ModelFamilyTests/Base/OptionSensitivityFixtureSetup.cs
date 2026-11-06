@@ -17,7 +17,16 @@ internal static class OptionSensitivityFixtureSetup
             ? network.GetParameters().Length : 0;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
-        => network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option == "FrameShiftMilliseconds" ? "cam-audio-frontend"
+        => network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> ? option switch
+            {
+                "DefaultSpeakerId" => "e3-speaker-selection",
+                "TrainingBetaEnd" => "e3-training-schedule",
+                "PaddingLossWeight" => "e3-padded-training",
+                "SilenceBlockSize" or "SilenceMagnitudeThreshold" => "e3-silence-trimming",
+                _ => string.Empty,
+            }
+            : network is AiDotNet.PointCloud.Models.DGCNN<T> && option is "DropoutRate" or "UseDropout" ? "dgcnn-dropout"
+            : network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option == "FrameShiftMilliseconds" ? "cam-audio-frontend"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "TokenizerPieces" ? "glamm-unloaded-tokenizer"
             : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option == "LatentFusionProbability" ? "index-latent-fusion"
@@ -60,6 +69,16 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fish && option == "ConstrainToSemanticTokens")
             return ObserveFishFrames(fish, input);
         long fingerprint = observe(network, ObservationInput(network, input, option));
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> e3 && option is "SilenceBlockSize" or "SilenceMagnitudeThreshold")
+        {
+            var waveform = new Tensor<T>(new[] { 16 });
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < 9; i++) waveform[i] = ops.FromDouble(0.075);
+            var trimmed = (Tensor<T>)typeof(AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>).GetMethod("TrimTrailingSilence",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(e3, new object[] { waveform })!;
+            return OptionSensitivityHarness.Combine(fingerprint,
+                OptionSensitivityHarness.Fingerprint(trimmed.Select(value => ops.ToDouble(value))));
+        }
         if (network is not AiDotNet.VisionLanguage.Grounding.GLaMM<T> glamm || option != "RegionGroupNormGroups")
             return fingerprint;
         // Predict encodes the whole image; only a conversation naming a box runs the region encoder.
@@ -177,6 +196,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
         => network is AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> && IsSpiralPretrainingOption(option)
+            || network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> && option == "TrainingBetaEnd"
             ? Math.Max(3, steps) : steps;
 
     internal static void PrepareOptionTraining<T>(INeuralNetworkModel<T> network, string option)
@@ -200,6 +220,15 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> e3 && option == "PaddingLossWeight"
+            && e3.GetOptions() is AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions e3Options)
+        {
+            var recording = new Tensor<T>(new[] { Math.Max(1, e3Options.TrainingWaveformSamples / 2) });
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < recording.Length; i++) recording[i] = ops.FromDouble(0.4 * Math.Sin(i * 0.13));
+            e3.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T> { Tokens = input, Text = "test", Audio = recording });
+            return true;
+        }
         if ((network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames"
                 || network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option == "SegmentSize")
             && network is AiDotNet.TextToSpeech.TtsModelBase<T> vocoder
@@ -234,6 +263,21 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions e3)
+        {
+            if (option == "DefaultSpeakerId") e3.SpeakerCount = 2;
+            if (option == "TrainingBetaEnd") e3.NumDiffusionSteps = 4;
+            if (option is "SilenceBlockSize" or "SilenceMagnitudeThreshold")
+            {
+                e3.SilenceBlockSize = 4;
+                e3.SilenceMagnitudeThreshold = 0.05;
+            }
+        }
+        if (options is AiDotNet.Models.Options.DGCNNOptions dgcnn && option is "DropoutRate" or "UseDropout")
+        {
+            dgcnn.UseDropout = true;
+            dgcnn.DropoutRate = 0.5;
+        }
         if (options is AiDotNet.VisionLanguage.Grounding.GLaMMOptions glamm && option == "TokenizerPieces")
         {
             glamm.TokenizerModel = null;

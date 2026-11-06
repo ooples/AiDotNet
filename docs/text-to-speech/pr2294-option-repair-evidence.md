@@ -213,3 +213,15 @@ pass. The SDK's scoped comparison of this options surface against package
 0.234.0 reports the base-type change CP0007 for net10.0, net471 and net8.0;
 three exact acknowledgments were added. Full hosted compilation and package
 validation are still required.
+
+DGCNN DropoutRate and UseDropout pass with dropout enabled at probability 0.5;
+the deterministic fixture had disabled it. The now-sensitive UseDropout baseline
+entry was removed. E3's default speaker passes with two speaker-table rows, and
+TrainingBetaEnd passes with four diffusion steps and three training updates;
+a one-step schedule only reads the first beta. E3's actual typed training API
+also changes parameters under different padding weights when given a short
+recording and the required text. Its actual silence-trimming routine returns
+8, 10 and 4 samples under the controlled block-size/threshold counterfactuals.
+The updated generated-observation wrapper still needs compilation: the local
+guard is waiting for 6 GB free RAM. These direct API checks do not replace that
+pending source build or the hosted sweep.

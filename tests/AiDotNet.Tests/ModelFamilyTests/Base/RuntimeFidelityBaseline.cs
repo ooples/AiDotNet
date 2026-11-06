@@ -3238,7 +3238,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.PhysicsInformed.ScientificML.UniversalDifferentialEquation`1::EncoderLayerCount", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.PhysicsInformed.ScientificML.UniversalDifferentialEquation`1::MaxGradNorm", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.PointCloud.Models.DGCNN`1::LearningRate", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.PointCloud.Models.DGCNN`1::UseDropout", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.PointCloud.Models.PointNetPlusPlus`1::ClassifierChannels", OptionSensitivityOutcome.OptionsNotHeld },
             { "AiDotNet.PointCloud.Models.PointNetPlusPlus`1::DropoutRate", OptionSensitivityOutcome.OptionsNotHeld },
             { "AiDotNet.PointCloud.Models.PointNetPlusPlus`1::InputFeatureDim", OptionSensitivityOutcome.OptionsNotHeld },
