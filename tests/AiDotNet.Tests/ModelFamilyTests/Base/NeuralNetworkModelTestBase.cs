@@ -7785,7 +7785,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         int steps = OptionSensitivityTrainingSteps;
         var probe = new OptionSensitivityProbe<INeuralNetworkModel<T>>(
             CreateOptionSensitivityNetwork,
-            network => ObserveNetwork(network, OptionSensitivityFixtureSetup.ObservationInput(network, input, option)),
+            network => OptionSensitivityFixtureSetup.Observe(network, input, option, ObserveNetwork),
             network =>
             {
                 if (TrainingInvariantsNotApplicable(network)) return;

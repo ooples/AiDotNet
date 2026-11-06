@@ -80,6 +80,7 @@ public class GLaMMOptions : ModelOptions
     public string? TokenizerPath { get; set; }
 
     /// <summary>Gets or sets the bytes of a SentencePiece BPE model, in place of <see cref="TokenizerPath"/>.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Serialized SentencePiece BPE weights are an opaque model asset, not scalar configuration. Arbitrary byte-array perturbations corrupt protobuf; GlammTokenizerReferenceTests compares valid model bytes, tokenization and decoding to the pinned reference.")]
     public byte[]? TokenizerModel { get; set; }
 
     /// <summary>Gets or sets the pieces of the tokenizer the language model embeds (32000, Vicuna's), used to size the

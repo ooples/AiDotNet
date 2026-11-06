@@ -165,3 +165,14 @@ dropout and WaveNet dropout observable; latent fusion also passes when class
 dropout is zero so it cannot erase the fusion's conditioning. The emotion stage
 with two speaker classes makes the speaker-adversary weight observable; a
 single-class classifier has zero cross-entropy.
+
+GLaMM TokenizerPieces passes in its documented build-before-tokenizer mode;
+with a tokenizer already supplied, the model correctly derives its vocabulary
+from that asset. RegionGroupNormGroups passes when observing the public loss
+on a conversation naming a bounding box, which exercises the region encoder
+that ordinary image prediction bypasses. TokenizerModel carries an explicit
+opaque-asset exemption: arbitrary byte-array mutations corrupt serialized
+SentencePiece protobuf. The existing SentencePiece BPE and pinned GLaMM
+tokenizer reference tests both pass, including the real model bytes and
+tokenization/decoding behavior. The options source compiles without warnings
+or errors; no general exception-swallowing rule was added to the harness.

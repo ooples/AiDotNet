@@ -16,7 +16,9 @@ internal static class OptionSensitivityFixtureSetup
         => UsesFittedAssets(network) ? network.GetParameters().Length : 0;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
-        => network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option == "LatentFusionProbability" ? "index-latent-fusion"
+        => network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
+            : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "TokenizerPieces" ? "glamm-unloaded-tokenizer"
+            : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option == "LatentFusionProbability" ? "index-latent-fusion"
             : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && IsIndexFlowOption(option) ? "index-semantic-to-mel"
             : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option == "SpeakerAdversaryWeight" ? "index-emotion-adversary"
             : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && IsIndexEmotionArchitecture(option) ? "index-text-emotion"
@@ -48,6 +50,20 @@ internal static class OptionSensitivityFixtureSetup
                     "MaxAudioLengthSeconds" => "audio-crop",
                     _ => string.Empty,
                 };
+
+    internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
+        Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
+    {
+        long fingerprint = observe(network, ObservationInput(network, input, option));
+        if (network is not AiDotNet.VisionLanguage.Grounding.GLaMM<T> glamm || option != "RegionGroupNormGroups")
+            return fingerprint;
+        // Predict encodes the whole image; only a conversation naming a box runs the region encoder.
+        var sample = new AiDotNet.VisionLanguage.Grounding.GlammSample<T>(input,
+            new[] { new AiDotNet.VisionLanguage.Grounding.GlammTurn("Describe <bbox>.", "A region.") },
+            new[] { new[] { 0.1, 0.1, 0.8, 0.8 } });
+        double loss = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble(glamm.EvaluateConversationLoss(sample));
+        return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(new[] { loss }));
+    }
 
     internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
@@ -178,6 +194,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.VisionLanguage.Grounding.GLaMMOptions glamm && option == "TokenizerPieces")
+        {
+            glamm.TokenizerModel = null;
+            glamm.TokenizerPath = null; // Vocabulary sizing applies before a tokenizer asset is supplied.
+        }
         if (options is AiDotNet.TextToSpeech.Latest.IndexTTS2Options stagedIndex)
         {
             if (IsIndexFlowOption(option))
