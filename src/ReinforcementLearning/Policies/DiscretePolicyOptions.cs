@@ -199,37 +199,5 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// </para>
         /// </remarks>
         public IExplorationStrategy<T> ExplorationStrategy { get; set; } = new EpsilonGreedyExploration<T>();
-
-        /// <summary>
-        /// Gets or sets the random seed for reproducible training runs.
-        /// </summary>
-        /// <value>Optional random seed. When null, uses a random seed. When set to a value, ensures deterministic behavior.</value>
-        /// <remarks>
-        /// <para>
-        /// Setting a specific seed value ensures that training runs are reproducible, which is essential
-        /// for debugging, comparing algorithms, and scientific research. However, in production or when
-        /// seeking diverse solutions, using null (random seed) allows for variation across runs that
-        /// might discover better policies. Note that reproducibility also requires deterministic environment
-        /// implementations and consistent hardware/software configurations.
-        /// </para>
-        /// <para><b>For Beginners:</b> Random seed controls whether your training is the same every time.
-        ///
-        /// - Set to a number (e.g., 42): Training will be identical each time you run it
-        /// - Set to null (default): Each training run will be different
-        ///
-        /// Use a fixed seed when:
-        /// - Debugging (you want to see the exact same behavior)
-        /// - Comparing algorithms (fair comparison requires same randomness)
-        /// - Publishing research (others should be able to reproduce your results)
-        ///
-        /// Use null (random) when:
-        /// - Training multiple models to pick the best one
-        /// - You want variation in learned behaviors
-        /// - Running in production where diversity is valuable
-        ///
-        /// Common practice: Use seed=42 during development, null in production.
-        /// </para>
-        /// </remarks>
-        public new int? Seed { get; set; } = null;
     }
 }

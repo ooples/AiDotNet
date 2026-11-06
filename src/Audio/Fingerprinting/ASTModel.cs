@@ -81,7 +81,7 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
         ASTModelOptions? options = null)
-        : base(architecture)
+        : base(architecture, maxGradNorm: options?.MaxGradNorm ?? 1.0)
     {
         _options = options ?? new ASTModelOptions();
         Options = _options;
@@ -112,7 +112,7 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
     public ASTModel(
         NeuralNetworkArchitecture<T> architecture,
         ASTModelOptions? options = null)
-        : base(architecture)
+        : base(architecture, maxGradNorm: options?.MaxGradNorm ?? 1.0)
     {
         _options = options ?? new ASTModelOptions();
         Options = _options;

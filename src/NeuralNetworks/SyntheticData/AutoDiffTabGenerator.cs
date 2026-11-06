@@ -184,9 +184,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
             {
                 InitialLearningRate = _options.LearningRate
             });
-        _random = _options.Seed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
-            : RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         InitializeLayers();
     }
@@ -290,7 +288,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
         {
             _dataWidth = input.Length;
             int teDim = _options.TimestepEmbeddingDimension;
-            RebuildDenoiserLayers(_options.MLPDimensions, _dataWidth + teDim, _dataWidth);
+            BuildFromConstructionSequence(() => RebuildDenoiserLayers(_options.MLPDimensions, _dataWidth + teDim, _dataWidth));
         }
     }
 
@@ -455,7 +453,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
 
         int teDim = _options.TimestepEmbeddingDimension;
         int inputDim = _dataWidth + teDim;
-        RebuildDenoiserLayers(bestConfig.MLPDims, inputDim, _dataWidth);
+        BuildFromConstructionSequence(() => RebuildDenoiserLayers(bestConfig.MLPDims, inputDim, _dataWidth));
 
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
         T lr = NumOps.FromDouble(_options.LearningRate / batchSize);
@@ -501,7 +499,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
 
             int teDim = _options.TimestepEmbeddingDimension;
             int inputDim = _dataWidth + teDim;
-            RebuildDenoiserLayers(bestConfig.MLPDims, inputDim, _dataWidth);
+            BuildFromConstructionSequence(() => RebuildDenoiserLayers(bestConfig.MLPDims, inputDim, _dataWidth));
 
             int batchSize = Math.Min(_options.BatchSize, data.Rows);
             T lr = NumOps.FromDouble(_options.LearningRate / batchSize);
@@ -634,7 +632,7 @@ public partial class AutoDiffTabGenerator<T> : NeuralSyntheticTabularGeneratorBa
         ComputeNoiseSchedule(config.Schedule, config.Timesteps);
         _numTimesteps = config.Timesteps;
         int teDim = _options.TimestepEmbeddingDimension;
-        RebuildDenoiserLayers(config.MLPDims, _dataWidth + teDim, _dataWidth);
+        BuildFromConstructionSequence(() => RebuildDenoiserLayers(config.MLPDims, _dataWidth + teDim, _dataWidth));
 
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
         T lr = NumOps.FromDouble(_options.LearningRate / Math.Max(1, batchSize));

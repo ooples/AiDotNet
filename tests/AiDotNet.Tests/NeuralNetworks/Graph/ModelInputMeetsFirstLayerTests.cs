@@ -43,6 +43,24 @@ public class ModelInputMeetsFirstLayerTests
 
     private const int Extent = 8;
 
+    // Blame's inactivity watchdog resets on test completion, not on this sweep's private log.
+    // Separate cases keep progress visible without relaxing the five-minute shard watchdog.
+    private const int SliceCount = 32;
+
+    public static IEnumerable<object[]> Slices =>
+        Enumerable.Range(0, SliceCount).Select(slice => new object[] { slice });
+
+    // The existing 24-model ratchet, apportioned without increasing its total allowance.
+    private static readonly string[] MismatchBaseline =
+    {
+        "ACEStep", "LayoutLM", "AudioSuperResolution", "ContextNet", "MusicSourceSeparator",
+        "NeMoCitrinet", "OpenVoiceV2", "PANNs", "PANNsModel", "RoomImpulseResponse", "SileroVad",
+        "Wav2Vec2Model", "GraFPrint", "SpeechEmotionRecognizer", "LayoutLMv3", "LiLT", "PICK",
+        "UDOP", "GPT4Point", "LEOVL", "PointLLM", "SceneLLM", "ThreeDGraphLLM", "ThreeDLLM"
+    };
+
+    private static int SliceOf(string name) => name.Split('`')[0].Aggregate(0, (hash, c) => (hash * 31 + c) % SliceCount);
+
     /// <summary>
     /// Per-model ceiling on construction, so ONE pathological constructor cannot consume the sweep.
     /// </summary>
@@ -66,8 +84,9 @@ public class ModelInputMeetsFirstLayerTests
     // ("Tests marked with Timeout are only supported for async tests"), which is why the sibling
     // ParameterCountContractTests is shaped the same way. The Yield is what makes the method genuinely
     // async; the sweep itself is synchronous and stays that way.
-    [Fact(Timeout = 1800000)]
-    public async System.Threading.Tasks.Task AModelsDeclaredInputRankIsOneItsFirstLayerAccepts()
+    [Theory(Timeout = 240000)]
+    [MemberData(nameof(Slices))]
+    public async System.Threading.Tasks.Task AModelsDeclaredInputRankIsOneItsFirstLayerAccepts(int slice)
     {
         await System.Threading.Tasks.Task.Yield();
 
@@ -76,7 +95,7 @@ public class ModelInputMeetsFirstLayerTests
         // StackOverflow cannot be caught here - and then xunit's captured output is lost entirely. The
         // last line of this file names the model that was in flight when that happened, which is the
         // only way to find a hanging constructor without guessing.
-        var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "model-input-boundary.txt");
+        var logPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"model-input-boundary-{slice:D2}.txt");
         System.IO.StreamWriter? log = null;
         try
         {
@@ -96,6 +115,7 @@ public class ModelInputMeetsFirstLayerTests
             .Where(t => t.IsClass && !t.IsAbstract && t.IsGenericTypeDefinition
                         && t.GetGenericArguments().Length == 1
                         && DerivesFromNeuralNetworkBase(t))
+            .Where(t => SliceOf(t.Name) == slice)
             .OrderBy(t => t.Name, StringComparer.Ordinal)
             .ToList();
 
@@ -232,30 +252,13 @@ public class ModelInputMeetsFirstLayerTests
         Assert.True(checkedCount > 0,
             "no model was checked, so this proves nothing about the declared-input boundary");
 
-        // A RATCHET, NOT A GATE - YET. Measured 2026-08-10: 764 constructed, 24 mismatched.
-        // Failing on 24 would redden the branch against work that is unfinished rather than wrong,
-        // which is the exact reason ADNSHAPE006 entered as a suppressed warning at 85 of ~270 layers
-        // and was promoted to Error only once it reached zero. Same ladder: the count is printed every
-        // run so the backlog stays readable, and REPLACING THIS WITH Assert.Empty IS THE PROMOTION.
-        //
-        // The 24 fall into three clusters, and each needs a per-model judgement about WHICH SIDE is
-        // wrong - never a bulk sweep:
-        //   * 14 audio models declaring rank 2 against a rank-3 conv (ACEStep, ASTModel,
-        //     AudioSuperResolution, ContextNet, MusicSourceSeparator, NeMoCitrinet, OpenVoiceV2,
-        //     PANNs, PANNsModel, RoomImpulseResponse, SileroVad, Wav2Vec2Model, GraFPrint,
-        //     SpeechEmotionRecognizer). Some are like CLAPModel - a front end converts before the
-        //     stack, so [PreprocessesInput] is the honest answer; others fold input straight in, and
-        //     for those one of the two declarations is simply wrong.
-        //   * 4 document / vision-language models declaring rank 4 against a rank-1/2 EmbeddingLayer
-        //     (LayoutLMv3, LiLT, PICK, plus Florence2 against a rank-3 encoder) - the tokenize-first
-        //     shape, like Chronos.
-        //   * 6 3-D / point-cloud models declaring rank 4 against rank-2/3 attention (GPT4Point, LEOVL,
-        //     PointLLM, SceneLLM, ThreeDGraphLLM, ThreeDLLM).
-        // Distinguishing the two causes requires reading each PredictCore, which is why this is worked
-        // model by model. AST was WRONGLY assumed to belong here and does not: its first layer is a
-        // DenseLayer accepting ranks 1-4, so the inherited rank 2 already overlaps.
-        Assert.True(mismatched.Count <= 24,
-            $"the declared-input mismatch backlog GREW to {mismatched.Count} (was 24). A new model "
+        // Keep the existing total allowance of 24 across all slices. The named inventory was
+        // remeasured against run 42082712460: LayoutLM and UDOP replace the stale ASTModel
+        // and Florence2 entries in the old commentary. No mismatch allowance is added.
+
+        int allowance = MismatchBaseline.Count(name => SliceOf(name) == slice);
+        Assert.True(mismatched.Count <= allowance,
+            $"the declared-input mismatch backlog in slice {slice} GREW to {mismatched.Count} (was {allowance}; 24 across all slices). A new model "
             + "declares an input rank its own first layer rejects, so Predict cannot succeed on the "
             + "input that model advertises."
             + Environment.NewLine + string.Join(Environment.NewLine, mismatched));

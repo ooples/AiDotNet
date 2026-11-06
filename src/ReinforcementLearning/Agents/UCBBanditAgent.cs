@@ -66,7 +66,7 @@ public partial class UCBBanditAgent<T> : ReinforcementLearningAgentBase<T>
         Guard.NotNull(options);
         _options = options;
         Options = _options;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = Random;
         _qValues = new Vector<T>(_options.NumArms);
         _actionCounts = new Vector<int>(_options.NumArms);
         _totalSteps = 0;

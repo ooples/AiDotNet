@@ -339,7 +339,8 @@ public partial class InstantNGP<T> : AiDotNet.NeuralNetworks.VectorModelLayoutBa
     {
         if (!_useOccupancyGrid)
         {
-            _occupancyGrid = null;
+            // Disabled construction-time state is empty, not a missing fitted value.
+            _occupancyGrid = new Tensor<T>([0, 0, 0]);
             _occupancyBitfield = null;
             return;
         }

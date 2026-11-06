@@ -91,12 +91,6 @@ public class DBSCANOptions<T> : ClusteringOptions<T>
     public double P { get; set; } = 2.0;
 
     /// <summary>
-    /// Gets or sets the metric for distance calculations.
-    /// </summary>
-    /// <value>The distance metric to use, or null for default (Euclidean).</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
-
-    /// <summary>
     /// Gets or sets the number of parallel jobs (-1 for all cores).
     /// </summary>
     /// <value>Number of parallel jobs. Default is 1 (no parallelism).</value>

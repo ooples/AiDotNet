@@ -60,7 +60,5 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// </value>
         public bool SharedFeatures { get; set; } = false;
 
-        /// <summary>Gets or sets the seed of the policy's action sampling; null samples from a secure random source.</summary>
-        public new int? Seed { get; set; } = null;
     }
 }

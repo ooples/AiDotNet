@@ -45,7 +45,5 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// <value>Defaults to none: sampling from the mixture already explores.</value>
         public IExplorationStrategy<T> ExplorationStrategy { get; set; } = new NoExploration<T>();
 
-        /// <summary>Gets or sets the seed of the policy's action sampling; null samples from a secure random source.</summary>
-        public new int? Seed { get; set; } = null;
     }
 }

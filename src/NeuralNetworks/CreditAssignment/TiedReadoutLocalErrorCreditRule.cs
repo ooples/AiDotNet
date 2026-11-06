@@ -38,7 +38,7 @@ public sealed class TiedReadoutLocalErrorCreditRule<T> : ILocalObjectiveCreditRu
     public TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1.0)
     {
         if (readoutLayerCount < 1) throw new ArgumentOutOfRangeException(nameof(readoutLayerCount), "Must be at least 1.");
-        if (!(localWeight > 0) || double.IsInfinity(localWeight)) throw new ArgumentOutOfRangeException(nameof(localWeight), "Must be positive and finite.");
+        if (double.IsNaN(localWeight) || double.IsInfinity(localWeight) || localWeight <= 0) throw new ArgumentOutOfRangeException(nameof(localWeight), "Must be positive and finite.");
         ReadoutLayerCount = readoutLayerCount;
         _localWeight = localWeight;
     }
@@ -68,6 +68,7 @@ public sealed class TiedReadoutLocalErrorCreditRule<T> : ILocalObjectiveCreditRu
         if (context.HiddenIndex == context.Step.HiddenLayerCount - 1) return null; // trained exactly by the output loss
         var s = context.Step;
         var local = s.Loss(s.Readout(context.Output), s.Target);
+        // Skip scaling only for the exact identity coefficient.
         return _localWeight == 1.0 ? local : s.Engine.TensorMultiplyScalar(local, Ops.FromDouble(_localWeight));
     }
 

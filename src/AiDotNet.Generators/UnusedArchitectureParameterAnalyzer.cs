@@ -51,7 +51,7 @@ public class UnusedArchitectureParameterAnalyzer : DiagnosticAnalyzer
 {
     /// <summary>A factory that declares an architecture parameter and never reads it.</summary>
     private static readonly DiagnosticDescriptor UnreadArchitectureParameter = new(
-        "AIDN106",
+        "AIDN111",
         "Layer factory ignores the architecture it was handed",
         "'{0}' declares a NeuralNetworkArchitecture parameter '{1}' and never reads it, so the "
             + "layer stack is sized from option defaults and a caller's architecture is silently "

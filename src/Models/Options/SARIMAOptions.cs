@@ -42,6 +42,29 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class SARIMAOptions<T> : TimeSeriesRegressionOptions<T>
 {
+    /// <summary>Initializes a new instance with the SARIMA defaults.</summary>
+    public SARIMAOptions()
+    {
+        // Monthly seasonality.
+        SeasonalPeriod = 12;
+    }
+
+    /// <summary>Initializes a new instance as a copy of <paramref name="other"/>, with every setting copied.</summary>
+    /// <param name="other">The options to copy.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="other"/> is null.</exception>
+    public SARIMAOptions(SARIMAOptions<T> other)
+        : base(other ?? throw new ArgumentNullException(nameof(other)))
+    {
+        P = other.P;
+        D = other.D;
+        Q = other.Q;
+        SeasonalP = other.SeasonalP;
+        SeasonalD = other.SeasonalD;
+        SeasonalQ = other.SeasonalQ;
+        MaxIterations = other.MaxIterations;
+        Tolerance = other.Tolerance;
+    }
+
     /// <summary>
     /// Gets or sets the autoregressive order (p) of the non-seasonal component.
     /// </summary>
@@ -278,43 +301,6 @@ public class SARIMAOptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public int SeasonalQ { get; set; } = 1;
-
-    /// <summary>
-    /// Gets or sets the number of time points in one seasonal cycle.
-    /// </summary>
-    /// <value>A positive integer, defaulting to 12 (monthly seasonality).</value>
-    /// <remarks>
-    /// <para>
-    /// The seasonal period defines the number of time points that make up one complete seasonal cycle in the data. 
-    /// It represents the periodicity of the seasonal pattern. Common values include 12 for monthly data with yearly 
-    /// seasonality, 4 for quarterly data with yearly seasonality, 7 for daily data with weekly seasonality, or 24 
-    /// for hourly data with daily seasonality. The default value of 12 is appropriate for monthly data with yearly 
-    /// seasonality, which is common in many business and economic applications. This property overrides the 
-    /// SeasonalPeriod property inherited from the base class to provide a more appropriate default value for 
-    /// SARIMA models. The correct specification of the seasonal period is crucial for the model to properly 
-    /// capture the seasonal patterns in the data.
-    /// </para>
-    /// <para><b>For Beginners:</b> This setting defines how long one complete seasonal cycle is in your data.
-    /// 
-    /// The SeasonalPeriod tells the model how many time points make up a complete cycle:
-    /// - For monthly data: 12 (default) means a yearly seasonal pattern
-    /// - For quarterly data: 4 would mean a yearly seasonal pattern
-    /// - For daily data: 7 would mean a weekly seasonal pattern
-    /// - For hourly data: 24 would mean a daily seasonal pattern
-    /// 
-    /// This value is critical because it tells the model exactly how far back to look for seasonal patterns:
-    /// - With monthly data and SeasonalPeriod=12, January is compared with previous Januaries
-    /// - With daily data and SeasonalPeriod=7, Mondays are compared with previous Mondays
-    /// 
-    /// When to adjust this value:
-    /// - Change it to match the natural cycle in your data
-    /// - Common values: 12 (monthly), 4 (quarterly), 7 (daily with weekly pattern), 24 (hourly)
-    /// 
-    /// For example, if analyzing weekly sales data over multiple years, you might set this to 52
-    /// to capture yearly seasonality (52 weeks in a year).
-    /// </para>
-    /// </remarks>
-    public new int SeasonalPeriod { get; set; } = 12;  // Default to monthly seasonality
 
     /// <summary>
     /// Gets or sets the maximum number of iterations for the parameter estimation algorithm.

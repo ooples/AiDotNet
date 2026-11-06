@@ -204,7 +204,12 @@ function Merge-ArtifactResponse {
 function Receive-ArtifactArchive {
     param([string] $Url, [string] $Archive, [string] $Expected,
         [string[]] $RequestHeaders, [int] $Attempts, [long] $WorkflowRunId, [int] $MatrixJobIndex,
-        [int] $RequestTimeoutSeconds = 300,
+        # Run 42135003284 sustained ~0.45 MB/s for an 816 MB archive; three five-minute
+        # requests exhausted the retry budget despite making progress. Bound stalls separately
+        # from total transfer time so a healthy slow download can actually finish.
+        [int] $RequestTimeoutSeconds = 1800,
+        [int] $LowSpeedLimitBytesPerSecond = 1024,
+        [int] $LowSpeedTimeSeconds = 60,
         [scriptblock] $Delay = { param($seconds) Start-Sleep -Seconds $seconds })
 
     $curlApplicationPath = Get-CurlApplicationPath
@@ -222,6 +227,7 @@ function Receive-ArtifactArchive {
             $restart = $false
             $arguments = @('--silent', '--show-error', '--location', '--proto-redir', '=https',
                 '--fail-with-body', '--connect-timeout', '30', '--max-time', "$RequestTimeoutSeconds",
+                '--speed-limit', "$LowSpeedLimitBytesPerSecond", '--speed-time', "$LowSpeedTimeSeconds",
                 '--output', $chunk, '--dump-header', $headersPath, '--write-out', '%{http_code}',
                 '--user-agent', 'AiDotNet-CI-artifact-transport')
             foreach ($header in $RequestHeaders) { $arguments += @('--header', $header) }

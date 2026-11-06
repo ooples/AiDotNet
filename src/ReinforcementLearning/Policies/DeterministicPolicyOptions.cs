@@ -48,7 +48,5 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// <value>Defaults to true, as DDPG's and TD3's actors do.</value>
         public bool UseTanhSquashing { get; set; } = true;
 
-        /// <summary>Gets or sets the seed of the policy's exploration noise; null uses a secure random source.</summary>
-        public new int? Seed { get; set; } = null;
     }
 }

@@ -104,10 +104,10 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
         NeuralVaROptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, onnxModelPath, options?.NumFeatures ?? 10,
+        : base(architecture, onnxModelPath, (options ?? DefaultOptionsFor<NeuralVaROptions<T>>(architecture)).NumFeatures,
                options?.ConfidenceLevel ?? 0.95, options?.TimeHorizon ?? 1)
     {
-        options ??= new NeuralVaROptions<T>();
+        options ??= DefaultOptionsFor<NeuralVaROptions<T>>(architecture);
         _options = options;
         Options = _options;
         options.Validate();
@@ -133,11 +133,11 @@ public partial class NeuralVaR<T> : RiskModelBase<T>
         NeuralVaROptions<T>? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null)
-        : base(architecture, options?.NumFeatures ?? 10,
+        : base(architecture, (options ?? DefaultOptionsFor<NeuralVaROptions<T>>(architecture)).NumFeatures,
                options?.ConfidenceLevel ?? 0.95, options?.TimeHorizon ?? 1,
                ResolveTrainingLoss(options, lossFunction))
     {
-        options ??= new NeuralVaROptions<T>();
+        options ??= DefaultOptionsFor<NeuralVaROptions<T>>(architecture);
         _options = options;
         Options = _options;
         options.Validate();

@@ -21,6 +21,12 @@ param(
     [string] $CodeQLResult = 'skipped',
     [string] $SonarResult = 'skipped',
     [string] $ValidationGateResult = 'skipped',
+    # Paper fidelity runs on pull requests only (the nightly sweep covers everything else), so the
+    # caller says whether this run owes it. Its plan decides whether there is anything to run.
+    [string] $RequiresPaperFidelity = 'false',
+    [string] $PaperFidelityPlanResult = 'skipped',
+    [string] $PaperFidelityMode = '',
+    [string] $PaperFidelityResult = 'skipped',
     [string] $SummaryFile = ''
 )
 
@@ -53,6 +59,14 @@ enum CiJobConclusion {
     Abandoned
     # A result this gate does not know. Still not a pass; the raw value is reported, never thrown.
     Unrecognized
+}
+
+# What the paper-fidelity plan decided (tools/PaperFidelity/PaperFidelity.ps1). None means the change
+# reaches no paper-fidelity test: the slices are skipped by design and the requirement is the plan alone.
+enum PaperFidelityPlanMode {
+    None
+    Impact
+    Full
 }
 
 # The raw value behind every Unrecognized conclusion, so the summary can name it.
@@ -102,6 +116,7 @@ $reuse = [CiValidationReuseScope] $ReuseScope
 $requiresRuntimeValidation = ConvertTo-RequiredBoolean $RequiresValidation 'RequiresValidation'
 $requiresTestsNow = ConvertTo-RequiredBoolean $RequiresTests 'RequiresTests'
 $verdictIsEnforced = ConvertTo-RequiredBoolean $VerdictEnforced 'VerdictEnforced'
+$requiresPaperFidelityNow = ConvertTo-RequiredBoolean $RequiresPaperFidelity 'RequiresPaperFidelity'
 
 $source = ConvertTo-CiJobConclusion $SourceResult 'validation-source'
 $select = ConvertTo-CiJobConclusion $SelectResult 'select-shards'
@@ -115,6 +130,8 @@ $promotion = ConvertTo-CiJobConclusion $PromotionResult 'promote-ci-test-analysi
 $codeql = ConvertTo-CiJobConclusion $CodeQLResult 'codeql'
 $sonar = ConvertTo-CiJobConclusion $SonarResult 'sonarcloud'
 $validationGate = ConvertTo-CiJobConclusion $ValidationGateResult 'validation-gate'
+$paperFidelityPlan = ConvertTo-CiJobConclusion $PaperFidelityPlanResult 'paper-fidelity-plan'
+$paperFidelity = ConvertTo-CiJobConclusion $PaperFidelityResult 'paper-fidelity'
 
 $requirements = [System.Collections.Generic.List[object]]::new()
 Add-RequiredSuccess $requirements 'validation-source' $source
@@ -132,6 +149,24 @@ if ($gateStage -eq [CiGateStage]::Validation) {
         Add-RequiredSuccess $requirements 'size-check' $sizeCheck
         if (-not $verdictIsEnforced -and ($requiresTestsNow -or $tests -ne [CiJobConclusion]::Skipped)) {
             Add-RequiredSuccess $requirements 'test-net10-sharded' $tests
+        }
+        if ($requiresPaperFidelityNow) {
+            Add-RequiredSuccess $requirements 'paper-fidelity-plan' $paperFidelityPlan
+            # Only a plan that succeeded has a mode worth reading. A plan with nothing to run skips the
+            # slices on purpose; that skip is the success, so the slices are not required. A mode the
+            # gate does not know is a wiring fault and is required (and reported) rather than waved through.
+            if ($paperFidelityPlan -eq [CiJobConclusion]::Success) {
+                $planMode = [PaperFidelityPlanMode]::None
+                if (-not [Enum]::TryParse([PaperFidelityPlanMode], $PaperFidelityMode, $false, [ref] $planMode) -or
+                    -not [Enum]::IsDefined([PaperFidelityPlanMode], $planMode) -or
+                    $PaperFidelityMode -cnotmatch '^[A-Za-z]+$') {
+                    $script:UnrecognizedConclusions['paper-fidelity-mode'] = $PaperFidelityMode
+                    Add-RequiredSuccess $requirements 'paper-fidelity-mode' ([CiJobConclusion]::Unrecognized)
+                }
+                elseif ($planMode -ne [PaperFidelityPlanMode]::None) {
+                    Add-RequiredSuccess $requirements 'paper-fidelity' $paperFidelity
+                }
+            }
         }
     }
 }

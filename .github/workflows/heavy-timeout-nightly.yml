@@ -192,7 +192,7 @@ jobs:
           # the generator the first time a model is added to it.
           Write-Host '--- discovering HeavyTimeout test classes ---'
           $listed = @(dotnet test $testProject -c Release --framework net10.0 --no-build --no-restore `
-            --filter 'Category=HeavyTimeout' --list-tests 2>&1)
+            --filter 'Category=HeavyTimeout&Category!=PaperFidelity' --list-tests 2>&1)
           $discoveryExit = $LASTEXITCODE
 
           if ($discoveryExit -ne 0) {
@@ -247,7 +247,8 @@ jobs:
           foreach ($chunk in $chunks) {
             $index++
             $label   = 'chunk{0:d3}' -f $index
-            $filter  = 'Category=HeavyTimeout&(' + (($chunk | ForEach-Object { "FullyQualifiedName~$_" }) -join '|') + ')'
+            # A HeavyTimeout class's paper-fidelity cases inherit its category; they run in paper-fidelity-nightly.yml.
+            $filter  = 'Category=HeavyTimeout&Category!=PaperFidelity&(' + (($chunk | ForEach-Object { "FullyQualifiedName~$_" }) -join '|') + ')'
             $names   = ($chunk | ForEach-Object { $_.Substring($_.LastIndexOf('.') + 1) }) -join ', '
             if (((Get-Date) - $laneStarted).TotalMinutes + $chunkCapMinutes -gt $budgetMinutes) {
               $rows += [pscustomobject]@{ Label = $label; Names = $names; Exit = 'not run (budget)'; Outcome = 'Failed'; Reason = 'not run (budget)'; Seconds = 0; MemPre = -1; MemPost = -1 }

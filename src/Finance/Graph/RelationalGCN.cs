@@ -306,7 +306,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         _numSamples = _options.NumSamples;
 
         _relationAdjacencies = relationAdjacencies;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         InitializeBasisDecomposition();
     }
@@ -359,7 +359,7 @@ public partial class RelationalGCN<T> : ForecastingModelBase<T>
         _numSamples = _options.NumSamples;
 
         // Initialize random before CreateDefaultRelationAdjacencies which uses it
-        _random = RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
         _relationAdjacencies = relationAdjacencies ?? CreateDefaultRelationAdjacencies();
 
         InitializeBasisDecomposition();

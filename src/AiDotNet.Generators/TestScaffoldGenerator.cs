@@ -28,7 +28,7 @@ namespace AiDotNet.Generators;
 /// </para>
 /// </remarks>
 [Generator]
-public class TestScaffoldGenerator : IIncrementalGenerator
+public partial class TestScaffoldGenerator : IIncrementalGenerator
 {
     // Interface detection prefixes
     private const string IFullModelName = "AiDotNet.Interfaces.IFullModel";
@@ -123,6 +123,25 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         // zero-argument constructor path and never finished a denoising step either.
         "EmuEdit",
     };
+
+    /// <summary>
+    /// Foundation-scale forecasting models built, like <see cref="FoundationScaleVisionLanguageModels"/>, with
+    /// generated test-scale options.
+    /// </summary>
+    /// <remarks>
+    /// Timer is GPT-2 small at paper scale (768 hidden, 12 layers, 12 heads, 512-step context): 85M parameters and
+    /// 9-12 s per training step on a CPU. Its option-sensitivity check rebuilds and trains it once per candidate, so
+    /// a single option ran past the 300 s budget on CI.
+    /// </remarks>
+    private static readonly System.Collections.Generic.HashSet<string> FoundationScaleForecastingModels =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+    {
+        "Timer",
+    };
+
+    /// <summary>Whether a model's generated fixture is built with generated test-scale options.</summary>
+    private static bool BuildsWithTestScaleOptions(string className)
+        => FoundationScaleVisionLanguageModels.Contains(className) || FoundationScaleForecastingModels.Contains(className);
 
     // Formerly a list of diffusion variants with non-standard UNet input
     // channels — they're now handled paper-faithfully by
@@ -1104,6 +1123,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // training-mode loss read 0.760, 0.792, 0.997, 0.582 ... 1.166 over twelve steps - one draw per fresh mask -
             // while the evaluation loss at the same weights fell 0.3263, 0.3243, 0.3224 ... 0.3194. Same remedy as above.
             { "MarbleNet", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
+
+            // Timer's training forward drops out (0.1) and masks a fresh random 40% of its patches every step, so
+            // GetLastLoss is one draw per mask: at test scale it read 0.374 after step 1 and 0.439 after step 20.
+            // Judge the same trained parameters in evaluation mode; the strict 1% decrease and 20 updates remain.
+            { "Timer", new WarmupIterationOverride(deterministicMemorizationLoss: true) },
 
             // NaturalSpeech: the same shape, over a LONGER warm-up, and on every repeated-training
             // probe rather than just one. Measured evaluation loss on a fixed pair, from untrained:
@@ -2757,17 +2781,24 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 : null)
             .Where(static s => s is not null);
 
+        // Hand-written <Model>PaperTests classes with at least one test method (ADNGEN003).
+        var paperTestClasses = context.SyntaxProvider.CreateSyntaxProvider(
+            predicate: static (node, _) => IsPaperTestCandidate(node),
+            transform: static (ctx, _) => GetRunnablePaperTestClassName(ctx))
+            .Where(static s => s is not null);
+
         var combined = modelClasses.Collect()
             .Combine(testClasses.Collect())
             .Combine(activationClasses.Collect())
             .Combine(lossClasses.Collect())
             .Combine(layerClasses.Collect())
             .Combine(algorithmClasses.Collect())
+            .Combine(paperTestClasses.Collect())
             .Combine(context.CompilationProvider);
 
         context.RegisterSourceOutput(combined, static (spc, source) =>
         {
-            var ((((((models, tests), activations), losses), layers), algorithms), compilation) = source;
+            var (((((((models, tests), activations), losses), layers), algorithms), paperTests), compilation) = source;
 
             // This generator owns AiDotNet's repository test census and emits fixtures that
             // depend on AiDotNetTests-only base classes and xUnit. The generator assembly is also
@@ -2781,7 +2812,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 return;
             }
 
-            Execute(spc, models, tests, compilation);
+            Execute(spc, models, tests, paperTests, compilation);
             ExecuteActivationAndLossGeneration(spc, activations, losses, compilation);
             ExecuteLayerGeneration(spc, layers, compilation);
             ExecuteNonModelAlgorithmGeneration(spc, algorithms, compilation);
@@ -3404,6 +3435,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         SourceProductionContext context,
         ImmutableArray<string?> sourceModels,
         ImmutableArray<string?> testClassNames,
+        ImmutableArray<string?> paperTestClassNames,
         Compilation compilation)
     {
         var domainAttrSymbol = GeneratorHelpers.ResolveSourceType(compilation, ModelDomainAttr);
@@ -3479,6 +3511,10 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
             var autoGenerated = new List<ModelTestInfo>();
             var generatedTestNames = new HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+
+            // The per-option theory calls a family-base helper that exists only in the real test project;
+            // the generator's contract tests compile synthetic "AiDotNetTests" assemblies without it.
+            bool emitOptionSensitivity = compilation.GetTypeByMetadataName(OptionSensitivityHarnessMetadataName) is not null;
 
             // Which model owns each generated fixture name, so the same model seen twice is
             // credited while two different models with the same simple name are disambiguated
@@ -3595,7 +3631,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
                 // Fail closed: a foundation-scale VLM whose options type has no generated test-scale bound
                 // would otherwise get a fixture that builds it at paper scale (~12 GB of fp64 weights).
-                if (FoundationScaleVisionLanguageModels.Contains(model.ClassName)
+                if (BuildsWithTestScaleOptions(model.ClassName)
                     && model.BoundedOptionsTypeName is null)
                 {
                     if (CoveredByScaffold())
@@ -3735,7 +3771,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     continue;
                 }
 
-                EmitGeneratedTestClass(context, model, family.Value, testClassName);
+                EmitGeneratedTestClass(context, model, family.Value, testClassName, emitOptionSensitivity);
                 autoGenerated.Add(model);
                 testNames.Add(testClassName);
             }
@@ -3781,6 +3817,11 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             foreach (var baselined in DefectBaselines.UntestedModels.Where(b => coverageMeasurable && !untestedNames.Contains(b)))
                 context.ReportDiagnostic(Diagnostic.Create(StaleUntestedBaselineEntry, Location.None, baselined));
 
+            // ADNGEN003/ADNGEN004: every model, tested or not, needs a hand-written paper test. Judged only
+            // where coverage is measurable, for the same reason as AIDN040 above.
+            if (coverageMeasurable)
+                ReportMissingPaperTests(context, testedModels.Concat(untestedModels), paperTestClassNames);
+
             // Emit AIDN041 summary
             var totalCount = testedModels.Count + untestedModels.Count;
             if (totalCount > 0)
@@ -3820,6 +3861,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // list of model names.
             EmitGeneratedOptionDimensionScaleTests(context, compilation);
             EmitGeneratedConstructorDimensionRoleTests(context, compilation);
+            EmitPaperDefaultsTests(context, compilation);
         }
 
         // Only the compilation that can SEE test classes may publish a coverage figure. Keyed on
@@ -4520,6 +4562,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             ExtendsLatentDiffusionModelBase = extendsLatentDiffusion,
             ExtendsNonLinearRegressionBase = extendsNonLinearRegression,
             ExtendsProbabilisticClassifierBase = extendsProbabilisticClassifier,
+            OptionSensitivityCases = ComputeOptionSensitivityCases(modelClass),
             Location = modelClass.Locations.Length > 0 ? modelClass.Locations[0] : null
         };
 
@@ -5689,7 +5732,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         SourceProductionContext context,
         ModelTestInfo model,
         TestFamily family,
-        string testClassName)
+        string testClassName,
+        bool emitOptionSensitivity)
     {
         // Caller (the autogen loop above) only invokes this when canConstruct
         // is true — the no-usable-ctor path early-returns before reaching us.
@@ -12022,6 +12066,17 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 1))";
             }
+            else if (model.ClassName == "DecisionTransformerAgent" && model.TypeParameterCount == 1)
+            {
+                // The paper's linear warmup runs over 10^5 updates (Chen et al. 2021, Appendix A), so across the
+                // bandit's 800 steps the rate never passes 0.8% of 1e-4 and the toy task's outcome was set by
+                // platform rounding: Learned on Linux, a 0.09 rise of the 0.50 required on Windows, every run.
+                // As the other RL fixtures do, the fixture drops the warmup; paper defaults are untouched.
+                // A one-state bandit needs a small transformer, not the paper's 3x128 Gym network.
+                // Bound the fixture's compute while retaining all 800 updates and the learning assertion.
+                constructorExpr = $"new {typeName}<double>(new AiDotNet.Models.Options.DecisionTransformerOptions<double> {{ " +
+                    "WarmupSteps = 0, EmbeddingDim = 16, NumLayers = 1, ContextLength = 2, BatchSize = 4, DropoutRate = 0.0 })";
+            }
             else if (model.ClassName == "WorldModelsAgent" && model.TypeParameterCount == 1)
             {
                 // WorldModels (Ha & Schmidhuber 2018) defaults to a 64x64x3 =
@@ -13001,11 +13056,13 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // optimizer moments too, and the performance census peaked at 32.6 GB and killed the 16 GB runner
                 // on every #2136 run. Same architecture as that constructor; the options go through the bounded
                 // scaler, which divides the widths and keeps HiddenDim divisible by NumHeads (DimensionDivisibility).
-                // Paper defaults are untouched - only the fixture is scaled.
+                // Paper defaults are untouched - only the fixture is scaled. The frames are 64x64: at 256x256 the
+                // bounded network still peaked at 18.6 GB across an option check's rebuilds and threw
+                // OutOfMemoryException on the 16 GB runner (GuidanceScale, sweep 41558837370).
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, " +
-                    "inputHeight: 256, inputWidth: 256, inputDepth: 3, outputSize: 256 * 256 * 3), " +
+                    "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 64 * 64 * 3), " +
                     "options: (AiDotNet.Video.Options.OpenSoraOptions)global::AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(" +
                     "typeof(AiDotNet.Video.Options.OpenSoraOptions)))";
             }
@@ -13021,7 +13078,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                 // above, so its bounded options have to be supplied here as a named argument - without
                 // it the fixture silently builds the paper-scale network the list exists to avoid.
                 string boundedArgs =
-                    FoundationScaleVisionLanguageModels.Contains(model.ClassName)
+                    BuildsWithTestScaleOptions(model.ClassName)
                     && model.BoundedOptionsTypeName is { } zeroArgBoundedOptions
                     && model.BoundedOptionsParameterName is { } zeroArgOptionsParameter
                         ? $"{zeroArgOptionsParameter}: ({zeroArgBoundedOptions})"
@@ -13560,8 +13617,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
                         ", new " + optionsNamespace + "RecurrentGemmaOptions { VocabSize = 256, "
                             + "ModelDimension = 32, NumLayers = 1, MaxSequenceLength = 128 }",
                     "GriffinLanguageModel" or "HawkLanguageModel" => ", vocabSize: 4096",
-                    // Foundation-scale VLMs: generated test-scale options (see FoundationScaleVisionLanguageModels).
-                    _ when FoundationScaleVisionLanguageModels.Contains(model.ClassName)
+                    // Foundation-scale models: generated test-scale options (see BuildsWithTestScaleOptions).
+                    _ when BuildsWithTestScaleOptions(model.ClassName)
                            && model.BoundedOptionsTypeName is { } boundedOptions =>
                         $", options: ({boundedOptions})global::AiDotNet.Testing.ModelTestScale.CreateBoundedOptions(typeof({boundedOptions}))",
                     _ => ""
@@ -17858,6 +17915,8 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             sb.AppendLine("        public global::AiDotNet.Tensors.LinearAlgebra.Tensor<double> TokenizeBatch(string[] texts) => new(new[] { texts.Length, 1 });");
             sb.AppendLine("    }");
         }
+        if (emitOptionSensitivity)
+            EmitOptionSensitivityTheory(sb, model, family);
         sb.AppendLine("}");
 
         var hintName = GeneratorHelpers.StripGenericSuffix(model.FullyQualifiedName).Replace(".", "_") + "Tests.g.cs";
@@ -20106,24 +20165,7 @@ public class TestScaffoldGenerator : IIncrementalGenerator
 
     /// <summary>Finds the public ModelOptions-derived parameter that configures a model.</summary>
     private static INamedTypeSymbol? FindDeclaredModelOptionsType(INamedTypeSymbol modelType)
-    {
-        foreach (var constructor in modelType.InstanceConstructors
-                     .Where(c => c.DeclaredAccessibility == Accessibility.Public)
-                     .OrderBy(c => c.Parameters.Length))
-        {
-            foreach (var parameter in constructor.Parameters)
-            {
-                if (parameter.Type is not INamedTypeSymbol candidate) continue;
-                for (var walk = candidate; walk is not null; walk = walk.BaseType)
-                {
-                    if (walk.ToDisplayString() == "AiDotNet.Models.Options.ModelOptions")
-                        return candidate;
-                }
-            }
-        }
-
-        return null;
-    }
+        => OptionsFidelityAnalyzer.FindDeclaredOptionsType(modelType);
 
     /// <summary>Names the public constructor parameter that configures a model, if there is one.</summary>
     /// <remarks>
@@ -20544,6 +20586,12 @@ public class TestScaffoldGenerator : IIncrementalGenerator
         public List<int> Tasks { get; set; } = new List<int>();
         public bool HasTests { get; set; }
         public Location? Location { get; set; }
+
+        /// <summary>
+        /// The generated option-sensitivity cases: one per perturbable public settable/init property of
+        /// the model's options type, with a skip reason for exempt and ADNOPT001-baselined properties.
+        /// </summary>
+        public List<OptionSensitivityCase> OptionSensitivityCases { get; set; } = new List<OptionSensitivityCase>();
 
         /// <summary>
         /// True when the model class is annotated [GenerateFloatTestScaffold] — its generated
@@ -21317,6 +21365,9 @@ public class TestScaffoldGenerator : IIncrementalGenerator
             // (see EmitGeneratedTestClass) to fix ParameterCount lazy-resolution + MoreData stability;
             // keep the InputShape context in lockstep with that reduced ContextLength.
             "Kronos" => 64,
+            // Timer is built with generated test-scale options (FoundationScaleForecastingModels), which bound its
+            // 512-step paper context to 32; the architecture's input size has to state the same length.
+            "Timer" => 32,
             "YingLong" => 1024,
             // TimeGrad is built at CI scale (ContextLength = 24) by its constructor special-case.
             "TimeGrad" => 24,

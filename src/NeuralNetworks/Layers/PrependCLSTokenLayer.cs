@@ -107,8 +107,8 @@ public partial class PrependCLSTokenLayer<T> : LayerBase<T>, IShapeContract
         _initScale = initScale;
         _cls = new Tensor<T>(new[] { 1, embedDim });
 
-        var rng = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
+        var rng = (seed ?? RandomSeed).HasValue
+            ? RandomHelper.CreateSeededRandom((seed ?? RandomSeed).GetValueOrDefault())
             : RandomHelper.CreateSecureRandom();
         for (int i = 0; i < embedDim; i++)
             _cls[0, i] = NumOps.FromDouble(rng.NextGaussian() * initScale);

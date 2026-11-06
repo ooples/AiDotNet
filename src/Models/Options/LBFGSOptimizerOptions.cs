@@ -265,7 +265,7 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// Note: This property uses the "new" keyword because it overrides the base class property with a
     /// different default value that's more appropriate for L-BFGS.</para>
     /// </remarks>
-    public new double MinLearningRate { get; set; } = 1e-6;
+    public override double MinLearningRate { get; set; } = 1e-6;
 
     /// <summary>
     /// Gets or sets the maximum learning rate allowed during optimization, preventing the learning
@@ -299,7 +299,7 @@ public class LBFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// Note: This property uses the "new" keyword because it overrides the base class property with a
     /// different default value that's more appropriate for L-BFGS.</para>
     /// </remarks>
-    public new double MaxLearningRate { get; set; } = 10.0;
+    public override double MaxLearningRate { get; set; } = 10.0;
 
     /// <summary>
     /// Gets or sets the factor by which the learning rate is increased when the algorithm determines

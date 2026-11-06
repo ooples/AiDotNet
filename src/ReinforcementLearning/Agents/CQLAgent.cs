@@ -106,7 +106,7 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     {
         _options = options;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
+        _random = Random;
         _updateCount = 0;
 
         _logAlpha = NumOps.Log(_options.InitialTemperature);
@@ -215,7 +215,7 @@ public partial class CQLAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
     private void InitializeBuffer()
     {
-        _offlineBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.BufferSize);
+        _offlineBuffer = new UniformReplayBuffer<T, Vector<T>, Vector<T>>(_options.BufferSize, Random.Next());
     }
 
     /// <summary>

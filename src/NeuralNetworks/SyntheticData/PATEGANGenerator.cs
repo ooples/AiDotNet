@@ -326,7 +326,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         var transformedData = _transformer.Transform(data);
 
         // Rebuild networks with actual data dimensions
-        RebuildLayersWithActualDimensions();
+        BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions());
 
         // Partition data for teachers
         var partitions = PartitionData(transformedData, _options.NumTeachers);
@@ -382,7 +382,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             var transformedData = _transformer.Transform(data);
 
             // Rebuild networks with actual data dimensions
-            RebuildLayersWithActualDimensions();
+            BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions());
 
             // Partition data for teachers
             var partitions = PartitionData(transformedData, _options.NumTeachers);

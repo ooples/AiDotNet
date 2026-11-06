@@ -206,8 +206,8 @@ public partial class NoisyDenseLayer<T> : LayerBase<T>, IShapeContract
         // when a seed is supplied (Fortunato 2017 §3.3 noise tests rely on
         // deterministic resampling); CreateSecureRandom is the cryptographic
         // default otherwise.
-        _rng = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
+        _rng = (seed ?? RandomSeed).HasValue
+            ? RandomHelper.CreateSeededRandom((seed ?? RandomSeed).GetValueOrDefault())
             : RandomHelper.CreateSecureRandom();
 
         _muWeights = new Tensor<T>([inputSize, outputSize]);

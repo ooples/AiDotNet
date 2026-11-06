@@ -74,7 +74,7 @@ public class ConjugateGradientOptimizerOptions<T, TInput, TOutput> : GradientBas
     /// so small that progress effectively stops. This value overrides the one from the parent class to provide
     /// a more appropriate default for the conjugate gradient method.</para>
     /// </remarks>
-    public new double MinLearningRate { get; set; } = 1e-6;
+    public override double MinLearningRate { get; set; } = 1e-6;
 
     /// <summary>
     /// Gets or sets the maximum learning rate, which prevents the steps from becoming too large.
@@ -90,7 +90,7 @@ public class ConjugateGradientOptimizerOptions<T, TInput, TOutput> : GradientBas
     /// they won't become so large that they cause the training to become unstable or miss the optimal solution.
     /// This value overrides the one from the parent class to provide a more appropriate default for the conjugate gradient method.</para>
     /// </remarks>
-    public new double MaxLearningRate { get; set; } = 1.0;
+    public override double MaxLearningRate { get; set; } = 1.0;
 
     /// <summary>
     /// Gets or sets the factor by which to increase the learning rate when progress is good.

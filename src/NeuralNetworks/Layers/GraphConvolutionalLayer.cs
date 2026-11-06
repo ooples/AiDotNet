@@ -518,9 +518,9 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     {
         if (InitializationStrategy is not null)
         {
-            InitializationStrategy.InitializeWeights(_weights, InputFeatures, OutputFeatures);
+            InitializeLayerWeights(_weights, InputFeatures, OutputFeatures);
             if (_useBias)
-                InitializationStrategy.InitializeBiases(_bias);
+                InitializeLayerBiases(_bias);
             return;
         }
 

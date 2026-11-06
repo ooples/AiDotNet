@@ -50,7 +50,5 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// <value>Defaults to 1; must be above <see cref="ActionMin"/>.</value>
         public double ActionMax { get; set; } = 1.0;
 
-        /// <summary>Gets or sets the seed of the policy's action sampling; null samples from a secure random source.</summary>
-        public new int? Seed { get; set; } = null;
     }
 }

@@ -313,7 +313,7 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         _dataWidth = _transformer.TransformedWidth;
 
         // Rebuild layers with correct transformed data dimensions
-        RebuildLayersForDataWidth();
+        BuildFromConstructionSequence(() => RebuildLayersForDataWidth());
 
         var transformedData = _transformer.Transform(data);
 
@@ -350,7 +350,7 @@ public partial class TabFlowGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             _transformer.Fit(data, _columns);
             _dataWidth = _transformer.TransformedWidth;
 
-            RebuildLayersForDataWidth();
+            BuildFromConstructionSequence(() => RebuildLayersForDataWidth());
 
             var transformedData = _transformer.Transform(data);
 

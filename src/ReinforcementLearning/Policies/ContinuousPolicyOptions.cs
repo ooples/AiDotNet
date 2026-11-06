@@ -117,7 +117,5 @@ namespace AiDotNet.ReinforcementLearning.Policies
         /// <value>Defaults to false: actions are the raw Gaussian samples.</value>
         public bool UseTanhSquashing { get; set; } = false;
 
-        /// <summary>Gets or sets the seed of the policy's action sampling; null samples from a secure random source.</summary>
-        public new int? Seed { get; set; } = null;
     }
 }

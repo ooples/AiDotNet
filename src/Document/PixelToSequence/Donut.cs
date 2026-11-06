@@ -373,7 +373,7 @@ public partial class Donut<T> : DocumentNeuralNetworkBase<T>, IOCRModel<T>, IDoc
             return;
         }
 
-        InitializeLayers();
+        BuildFromConstructionSequence(InitializeLayers);
         _nativeLayersInitialized = true;
         InvalidateParameterCountCache();
     }

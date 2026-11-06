@@ -87,12 +87,6 @@ public class SOMOptions<T> : ClusteringOptions<T>
     /// </summary>
     /// <value>Grid topology. Default is Rectangular.</value>
     public SOMTopology Topology { get; set; } = SOMTopology.Rectangular;
-
-    /// <summary>
-    /// Gets or sets the distance metric for input space.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
 }
 
 /// <summary>

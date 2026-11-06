@@ -88,10 +88,4 @@ public class BIRCHOptions<T> : ClusteringOptions<T>
     /// </summary>
     /// <value>True to copy data. Default is true.</value>
     public bool Copy { get; set; } = true;
-
-    /// <summary>
-    /// Gets or sets the distance metric.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
 }
