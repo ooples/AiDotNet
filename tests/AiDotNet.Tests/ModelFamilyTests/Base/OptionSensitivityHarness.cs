@@ -806,6 +806,10 @@ public static class OptionSensitivityHarness
                 candidates = candidates.Where(value => Convert.ToDouble(value) > 0 && Convert.ToDouble(value) < 2);
             if (option == "NumMels" && current is int)
                 candidates = candidates.Concat(new object[] { 80, 128 }).Where(value => !Equals(value, current)).Distinct();
+            if (option?.EndsWith("HeadDim", StringComparison.Ordinal) == true
+                && current is int headDim && headDim > 0 && headDim <= int.MaxValue / 2)
+                // Rotary embeddings need even head widths: prefer a valid structural change before +/-1.
+                candidates = new object[] { headDim * 2 }.Concat(candidates).Distinct();
             if (option == "SampleRate" && current is int rate && rate > 0)
             {
                 // A one-Hz change can make a polyphase resampler's ratio coprime and allocate gigabytes.

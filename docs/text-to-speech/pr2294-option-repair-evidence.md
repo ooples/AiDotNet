@@ -154,3 +154,14 @@ and memory heads run joint training with an initialized memory bank. All pass.
 The K-means iteration probe passes with 128 posterior frames instead of 32, so
 one Lloyd iteration no longer reaches the same result as the 20-iteration
 control. This clustering probe has a separate cached control group.
+
+IndexTTS2's eight text-to-emotion architecture probes pass after its public
+DetectEmotion entry point builds the lazy Qwen module, narrowed for the probe
+while retaining the real tokenizer vocabulary. Rotary head-width candidates
+prefer an even doubling; the 8-to-16 probe changes parameters before training
+instead of counting a rejected odd width as evidence. All 42 perturbation
+regressions and six span regressions pass. The SemanticToMel stage makes class
+dropout and WaveNet dropout observable; latent fusion also passes when class
+dropout is zero so it cannot erase the fusion's conditioning. The emotion stage
+with two speaker classes makes the speaker-adversary weight observable; a
+single-class classifier has zero cross-entropy.

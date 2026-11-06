@@ -16,7 +16,11 @@ internal static class OptionSensitivityFixtureSetup
         => UsesFittedAssets(network) ? network.GetParameters().Length : 0;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
-        => network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "MemoryKMeansIterations" ? "natural-memory-clustering"
+        => network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option == "LatentFusionProbability" ? "index-latent-fusion"
+            : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && IsIndexFlowOption(option) ? "index-semantic-to-mel"
+            : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option == "SpeakerAdversaryWeight" ? "index-emotion-adversary"
+            : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && IsIndexEmotionArchitecture(option) ? "index-text-emotion"
+            : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "MemoryKMeansIterations" ? "natural-memory-clustering"
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && IsNaturalJointOption(option) ? "natural-joint"
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "MaskRatio" ? "natural-phoneme-pretraining"
             : network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames" ? "diffusion-crop"
@@ -47,6 +51,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> index && IsIndexEmotionArchitecture(option))
+            index.DetectEmotion("I feel happy."); // The text-to-emotion model is built lazily by its public entry point.
         if (IsVocoderFrontendOption(option) && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> native
             && native.GetOptions() is AiDotNet.TextToSpeech.Vocoders.VocoderOptions vocoder
             && network is AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T> or AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>)
@@ -93,6 +99,13 @@ internal static class OptionSensitivityFixtureSetup
 
     private static bool IsNaturalJointOption(string option) => option is
         "MemoryKMeansIterations" or "MemoryHeads" or "DurationLossAfterWarmup" or "ForwardKlWeight";
+
+    private static bool IsIndexEmotionArchitecture(string option) => option is
+        "EmotionHidden" or "EmotionLayers" or "EmotionHeads" or "EmotionKeyValueHeads" or "EmotionHeadDim"
+        or "EmotionIntermediate" or "EmotionVocabulary" or "EmotionLoraRank";
+
+    private static bool IsIndexFlowOption(string option) => option is
+        "LatentFusionProbability" or "ClassDropout" or "WavenetDropout";
 
     private static bool IsVocoderFrontendOption(string option) => option is
         "MelMinFrequency" or "MelMaxFrequency" or "WindowSize" or "MelMean" or "MelScale" or "EnergyMin";
@@ -165,6 +178,30 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Latest.IndexTTS2Options stagedIndex)
+        {
+            if (IsIndexFlowOption(option))
+            {
+                stagedIndex.CurrentStage = AiDotNet.TextToSpeech.Latest.IndexTts2Stage.SemanticToMel;
+                stagedIndex.ClassDropout = option == "LatentFusionProbability" ? 0 : 0.5;
+            }
+            if (option == "SpeakerAdversaryWeight")
+            {
+                stagedIndex.CurrentStage = AiDotNet.TextToSpeech.Latest.IndexTts2Stage.Emotion;
+                stagedIndex.SpeakerCount = 2; // One class has identically zero cross-entropy.
+            }
+        }
+        if (options is AiDotNet.TextToSpeech.Latest.IndexTTS2Options index && IsIndexEmotionArchitecture(option))
+        {
+            index.EmotionHidden = 16;
+            index.EmotionLayers = 1;
+            index.EmotionHeads = 2;
+            index.EmotionKeyValueHeads = 1;
+            index.EmotionHeadDim = 8;
+            index.EmotionIntermediate = 32;
+            index.EmotionLoraRank = 2;
+            index.EmotionMaxTokens = 1;
+        }
         if (options is AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions natural)
         {
             if (IsNaturalJointOption(option)) natural.CurrentStage = AiDotNet.TextToSpeech.CodecBased.NaturalSpeechStage.Joint;

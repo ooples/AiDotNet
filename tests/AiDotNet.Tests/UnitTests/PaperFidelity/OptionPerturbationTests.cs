@@ -8,6 +8,17 @@ namespace AiDotNet.Tests.UnitTests.PaperFidelity;
 public class OptionPerturbationTests
 {
     [Theory]
+    [InlineData(8)]
+    [InlineData(16)]
+    public void RotaryHeadWidthsPreferAnEvenStructuralChange(int current)
+    {
+        var candidates = OptionSensitivityHarness.Perturbations(typeof(int), current, "EmotionHeadDim").Cast<int>().ToArray();
+        Assert.Equal(2 * current, candidates[0]);
+        Assert.Contains(current + 1, candidates);
+        Assert.DoesNotContain(current, candidates);
+    }
+
+    [Theory]
     [InlineData("Beta1", 0.9, false, false)]
     [InlineData("Beta2", 0.999, false, false)]
     [InlineData("TeacherMomentumStart", 0.5, false, true)]
