@@ -21565,3 +21565,23 @@ AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Read
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1) -> void
 AiDotNet.Audio.Classification.ASTOptions.MaxGradNorm.get -> double
 AiDotNet.Audio.Classification.ASTOptions.MaxGradNorm.set -> void
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.FftSize.get -> int
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.FftSize.set -> void
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.HopSize.get -> int
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.HopSize.set -> void
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.LearningRate.get -> double
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.LearningRate.set -> void
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.MaxTextLength.get -> int
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.MaxTextLength.set -> void
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.MelChannels.get -> int
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.MelChannels.set -> void
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.ModelPath.get -> string?
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.ModelPath.set -> void
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.OnnxOptions.get -> AiDotNet.Onnx.OnnxModelOptions!
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.OnnxOptions.set -> void
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.SampleRate.get -> int
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.SampleRate.set -> void
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.VocabSize.get -> int
+AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.VocabSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.CodebookSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.CodebookSize.set -> void

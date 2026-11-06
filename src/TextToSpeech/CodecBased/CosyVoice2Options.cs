@@ -12,6 +12,10 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class CosyVoice2Options : CosyVoiceFamilyOptions
 {
+    /// <summary>The released S3Tokenizer v2 cardinality: eight ternary FSQ dimensions give 3^8 = 6,561 codes.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("S3Tokenizer v2 has exactly 3^8 = 6,561 codes; other cardinalities are rejected by its constructor, rather than changing a valid model. S3TokenizerV2ReferenceTests verifies the released states/tokens and rejects alternative cardinalities.")]
+    public new int CodebookSize { get => base.CodebookSize; set => base.CodebookSize = value; }
+
     /// <summary>Initializes a new instance with default values.</summary>
     public CosyVoice2Options()
     {

@@ -106,8 +106,8 @@ real defect: it used the optimizer's default epoch cadence despite defining its
 boundary in updates. The model now selects StepPerBatch. Two regression cases
 train the changed model source and verify scheduler counts and rates before and
 after the configured boundary. The scoped source build passes with zero warnings
-or errors. No inherited ForwardTacotron option has been removed in this batch;
-its ownership audit remains open, as do the remaining sweep failures.
+or errors. The later ownership audit below records the inherited ForwardTacotron
+settings removed after the runtime checks. The remaining sweep failures stay open.
 
 The subsequent exception-repair batch passes the hosted-binary probes for
 MaskGCT FilterThreshold (0.98 to 0.49), FishSpeech RepetitionPenalty (1.2 to 0.6),
@@ -196,7 +196,11 @@ filterbank inputs cannot exercise frame-shift configuration.
 The native ForwardTacotron options now derive directly from ModelOptions. The
 removed settings are EncoderDim, DecoderDim, HiddenDim, NumEncoderLayers,
 NumDecoderLayers, NumHeads and DropoutRate. The native implementation does not
-build a transformer from them. Its actual settings remain EmbeddingDim,
+build a transformer from them. The static ownership gate also identified seven
+retained legacy no-ops: MaxMelLength, OutputsPerStep, PostnetDim, PostnetLayers,
+TextSymbols, UsePostnet and WeightDecay. Those are removed as well, rather than
+exempted. The native model always uses its own CBHG post-net and Adam setup.
+Its actual settings remain EmbeddingDim,
 SeriesEmbeddingDim, the three predictor convolution/GRU dimensions and dropouts,
 PrenetDim/BankSize/Dropout, RnnDim and PostnetChannels/BankSize/Dropout.
 
@@ -214,6 +218,14 @@ pass. The SDK's scoped comparison of this options surface against package
 three exact acknowledgments were added. Full hosted compilation and package
 validation are still required.
 
+The scoped comparison was repeated after removing the seven legacy no-ops:
+each baseline framework still reports only the same CP0007 plus the two
+previously acknowledged HighwayDim accessor removals. Initial/trained parameter
+and output parity still matches bit for bit. The ONNX loader reads the retained
+ModelPath, and the 18 newly owned accessor declarations are registered in
+PublicAPI.Unshipped.txt. This corrects the RS0016 and ADNOPT001 failures of the
+first pinned build; a new full build remains necessary.
+
 DGCNN DropoutRate and UseDropout pass with dropout enabled at probability 0.5;
 the deterministic fixture had disabled it. The now-sensitive UseDropout baseline
 entry was removed. E3's default speaker passes with two speaker-table rows, and
@@ -222,6 +234,13 @@ a one-step schedule only reads the first beta. E3's actual typed training API
 also changes parameters under different padding weights when given a short
 recording and the required text. Its actual silence-trimming routine returns
 8, 10 and 4 samples under the controlled block-size/threshold counterfactuals.
-The updated generated-observation wrapper still needs compilation: the local
-guard is waiting for 6 GB free RAM. These direct API checks do not replace that
-pending source build or the hosted sweep.
+After releasing the leftover browser processes, the updated observation wrapper
+compiled with zero warnings or errors. All five E3 probes pass through that
+compiled harness. The full hosted sweep remains required.
+
+CosyVoice2 CodebookSize has an explicit constrained-setting exemption, with a
+forwarding accessor that preserves its real value: S3 v2's eight ternary FSQ
+dimensions have exactly 6,561 codes. Constructor tests reject 1, 6,560 and 6,562,
+and the existing released encoder-state/token reference comparison passes.
+Both accessor declarations are registered in the public API manifest. This
+setting is retained because the paper model uses that cardinality.

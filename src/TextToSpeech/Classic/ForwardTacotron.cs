@@ -85,7 +85,7 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        OnnxModel = new OnnxModel<T>(_options.ModelPath!, _options.OnnxOptions);
         InitializeLayers();
     }
 

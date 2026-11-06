@@ -19,6 +19,18 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class S3TokenizerV2ReferenceTests
 {
+    [Theory]
+    [InlineData(1)]
+    [InlineData(6560)]
+    [InlineData(6562)]
+    public void ReleasedFsqCardinality_RejectsOtherCodebookSizes(int codebookSize)
+    {
+        var exception = Assert.Throws<ArgumentException>(() => new S3Tokenizer<double>(AiDotNetEngine.Current,
+            new List<LayerBase<double>>(), new S3TokenizerConfiguration(Mels: 128, State: 64, Heads: 1,
+                Layers: 1, CodebookSize: codebookSize, FirstStride: 2, Version: S3TokenizerVersion.V2), new Random(0)));
+        Assert.Contains("3^8", exception.Message);
+    }
+
     private static readonly Lazy<JObject> Data = new(() =>
     {
         const string fileName = "s3tokenizer_v2_reference.json";

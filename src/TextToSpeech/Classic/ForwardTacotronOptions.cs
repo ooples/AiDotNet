@@ -30,16 +30,9 @@ public class ForwardTacotronOptions : ModelOptions
         FftSize = other.FftSize;
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
-        MaxMelLength = other.MaxMelLength;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         LearningRate = other.LearningRate;
-        WeightDecay = other.WeightDecay;
-        TextSymbols = other.TextSymbols is null ? null : (string[])other.TextSymbols.Clone();
-        OutputsPerStep = other.OutputsPerStep;
-        UsePostnet = other.UsePostnet;
-        PostnetDim = other.PostnetDim;
-        PostnetLayers = other.PostnetLayers;
         EmbeddingDim = other.EmbeddingDim;
         SeriesEmbeddingDim = other.SeriesEmbeddingDim;
         DurationConvDim = other.DurationConvDim;
@@ -85,26 +78,12 @@ public class ForwardTacotronOptions : ModelOptions
     public int VocabSize { get; set; } = 256;
     /// <summary>Gets or sets the input text limit.</summary>
     public int MaxTextLength { get; set; } = 512;
-    /// <summary>Gets or sets the legacy mel length setting.</summary>
-    public int MaxMelLength { get; set; } = 2048;
     /// <summary>Gets or sets the exported ONNX graph's path.</summary>
     public string? ModelPath { get; set; }
     /// <summary>Gets or sets ONNX runtime settings.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
     /// <summary>Gets or sets the first stage's Adam learning rate.</summary>
     public double LearningRate { get; set; } = 5e-5;
-    /// <summary>Gets or sets the legacy weight-decay setting.</summary>
-    public double WeightDecay { get; set; } = 0.01;
-    /// <summary>Gets or sets the legacy text symbol inventory.</summary>
-    public string[]? TextSymbols { get; set; }
-    /// <summary>Gets or sets the legacy reduction-factor setting.</summary>
-    public int OutputsPerStep { get; set; } = 1;
-    /// <summary>Gets or sets the legacy post-net toggle.</summary>
-    public bool UsePostnet { get; set; } = true;
-    /// <summary>Gets or sets the legacy generic post-net width.</summary>
-    public int PostnetDim { get; set; } = 512;
-    /// <summary>Gets or sets the legacy generic post-net depth.</summary>
-    public int PostnetLayers { get; set; } = 5;
 
     /// <summary>Creates the reference single-speaker configuration.</summary>
     public ForwardTacotronOptions()
@@ -114,7 +93,6 @@ public class ForwardTacotronOptions : ModelOptions
         FftSize = 1024;
         MelChannels = 80;
         LearningRate = 5e-5;
-        UsePostnet = true;
     }
 
     /// <summary>Gets or sets the phoneme embedding width (256).</summary>
