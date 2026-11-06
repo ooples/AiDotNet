@@ -982,3 +982,6 @@ AiDotNet.Interfaces.ISupervisedFeatureSelector<T>
 AiDotNet.Interfaces.ISupervisedFeatureSelector<T>.Fit(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! target) -> void
 AiDotNet.Interfaces.ISupervisedFeatureSelector<T>.FitTransform(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! target) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
 AiDotNet.NeuralNetworks.GraphNeuralNetwork<T>.SetAdjacencyMatrix(AiDotNet.Tensors.LinearAlgebra.Tensor<T>? adjacencyMatrix) -> void
+AiDotNet.Models.Options.LogisticRegressionOptions<T>.Solver.get -> AiDotNet.Interfaces.IFunctionOptimizer<T>?
+AiDotNet.Models.Options.LogisticRegressionOptions<T>.Solver.set -> void
+AiDotNet.Regression.LogisticRegression<T>.CreateGradientDescentSolver() -> AiDotNet.Interfaces.IFunctionOptimizer<T>!
