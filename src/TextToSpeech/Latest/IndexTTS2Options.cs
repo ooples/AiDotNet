@@ -200,6 +200,7 @@ public class IndexTTS2Options : TtsModelOptions
     // ---------------------------------------------------------------- semantic-to-mel
 
     /// <summary>The DiT's width (512).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The release final layer consumes the DiT time embedding, so DitHidden must equal WavenetHidden. IndexTts2OptionConstraintTests rejects unpaired changes and runs the actual velocity estimator at paired widths 16 and 32.")]
     public int DitHidden { get; set; } = 512;
 
     /// <summary>The DiT's heads (8).</summary>
@@ -218,6 +219,7 @@ public class IndexTTS2Options : TtsModelOptions
     public int RegulatorStages { get; set; } = 4;
 
     /// <summary>The WaveNet head's width (512).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The release final layer consumes the DiT time embedding, so WavenetHidden must equal DitHidden. IndexTts2OptionConstraintTests rejects unpaired changes and runs the actual velocity estimator at paired widths 16 and 32.")]
     public int WavenetHidden { get; set; } = 512;
 
     /// <summary>The WaveNet head's layers (8).</summary>

@@ -282,3 +282,10 @@ frames through the actual HiFT generator. All seven Cosy constraint tests and
 44 perturbation tests pass together using the matching hosted core/tensors.
 The changed-source stage build and its existing regressions also pass. Two
 forwarding accessor declarations are included in PublicAPI.Unshipped.txt.
+
+IndexTTS2 DitHidden and WavenetHidden are retained with paired-constraint
+explanations. The model rejects both 16/32 and 32/16 before building layers.
+The actual IndexTtsDiT velocity estimator runs at paired widths 16 and 32,
+produces finite [3,5] outputs, and increases parameter count at width 32.
+All three focused constraint tests pass with the matching hosted dependencies.
+No single-property candidate can satisfy this enforced equality.
