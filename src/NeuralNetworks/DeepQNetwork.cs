@@ -556,6 +556,7 @@ public partial class DeepQNetwork<T> : VectorModelLayoutBase<T>
     /// </summary>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _trainOptimizer;
 
+    /// <inheritdoc />
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // If replay buffer is empty, fall back to standard supervised training

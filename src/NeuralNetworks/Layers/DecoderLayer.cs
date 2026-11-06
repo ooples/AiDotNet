@@ -150,6 +150,7 @@ public partial class DecoderLayer<T> : LayerBase<T>, IShapeContract
             $"state-reset entry points.");
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         var ff2 = RequireResolvedFeedForward2(nameof(ClearGradients));

@@ -590,6 +590,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     {
     }
 
+    /// <inheritdoc />
     public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
     {
         get { EnsureComponentsRegistered(); return _parameterRegistry.ParameterLayout; }
@@ -1407,6 +1408,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             ? PredictNoiseBatched(noisySample, timesteps)
             : PredictNoise(noisySample, timesteps[0]);
 
+    /// <inheritdoc />
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         _lastTrainingParameterGradients = null;

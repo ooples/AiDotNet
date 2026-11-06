@@ -74,6 +74,7 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         _model = new Dictionary<string, Dictionary<int, List<(string, T, T)>>>();
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         string stateKey = GetStateKey(state);
@@ -96,6 +97,7 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         // Build model from experience
@@ -120,6 +122,7 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         transitions.Add((nextStateKey, reward, NumOps.One));
     }
 
+    /// <inheritdoc />
     public override T Train()
     {
         if (_model.Count == 0)
@@ -263,6 +266,7 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         return maxIndex;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         return new Dictionary<string, T>
@@ -272,11 +276,13 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         };
     }
 
+    /// <inheritdoc />
     public override void ResetEpisode()
     {
         // No episode-specific state
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input)
     {
         return SelectAction(input, training: false);
@@ -293,6 +299,7 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -310,8 +317,10 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
                 () => _valueTable));
     }
 
+    /// <inheritdoc />
     public override int FeatureCount => _options.StateSize;
 
+    /// <inheritdoc />
     public override void SaveModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))
@@ -323,6 +332,7 @@ public partial class PolicyIterationAgent<T> : ReinforcementLearningAgentBase<T>
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
+    /// <inheritdoc />
     public override void LoadModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))

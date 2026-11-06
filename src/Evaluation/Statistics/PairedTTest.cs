@@ -26,9 +26,12 @@ public class PairedTTest<T> : IPairedTest<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "Paired t-test";
+    /// <inheritdoc />
     public string Description => "Compares means of two related samples (e.g., same dataset, two models).";
 
+    /// <inheritdoc />
     public StatisticalTestResult<T> Test(T[] sample1, T[] sample2, double alpha = 0.05)
     {
         if (sample1.Length != sample2.Length)

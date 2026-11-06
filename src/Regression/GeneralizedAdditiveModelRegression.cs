@@ -181,6 +181,7 @@ public partial class GeneralizedAdditiveModel<T> : RegressionBase<T>
     [Buffer]
     private bool _useOLS;
 
+    /// <inheritdoc />
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidateInputs(x, y);

@@ -296,6 +296,7 @@ public partial class MANNAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     protected override T ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput)
         => ClassifierOutputs<T>.ProbabilityLoss(LossFunction, predictions, expectedOutput);
 
+    /// <inheritdoc />
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         if (task == null)

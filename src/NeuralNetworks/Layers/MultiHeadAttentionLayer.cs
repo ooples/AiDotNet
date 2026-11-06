@@ -619,6 +619,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     protected override bool ParametersAreConstructionSized => true;
 
+    /// <inheritdoc />
     protected override void EnsureInitialized()
     {
         // Metadata walks may bring up child structure, but must not allocate Q/K/V/O values.
@@ -626,6 +627,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         base.EnsureInitialized();
     }
 
+    /// <inheritdoc />
     protected override void OnFirstForward(Tensor<T> input)
     {
         int rank = input.Shape.Length;
@@ -1222,6 +1224,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         return ForwardInternal(input, input, input);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 1) return ForwardInternal(inputs[0], inputs[0], inputs[0]);
@@ -1980,12 +1983,14 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
         _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

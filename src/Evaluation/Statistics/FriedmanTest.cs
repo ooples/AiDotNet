@@ -28,7 +28,9 @@ public class FriedmanTest<T> : IMultipleSampleTest<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "Friedman Test";
+    /// <inheritdoc />
     public string Description => "Non-parametric test for comparing multiple algorithms across datasets.";
 
     /// <summary>

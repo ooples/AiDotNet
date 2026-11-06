@@ -191,10 +191,13 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>, IShapeContract
         _isInitialized = false;
     }
 
+    /// <inheritdoc />
     protected override bool ParametersAreConstructionSized => true;
 
+    /// <inheritdoc />
     protected override bool IsShapePreserving => true;
 
+    /// <inheritdoc />
     protected override void EnsureInitialized()
     {
         if (_isInitialized) return;

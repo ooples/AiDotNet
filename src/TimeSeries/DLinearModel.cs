@@ -113,6 +113,7 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
         return x;
     }
 
+    /// <inheritdoc />
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
@@ -192,6 +193,7 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
 
     }
 
+    /// <inheritdoc />
     public override T PredictSingle(Vector<T> input)
     {
         var window = LastWindow(input, _l);
@@ -204,6 +206,7 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
 
 
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -221,6 +224,7 @@ public partial class DLinearModel<T> : TimeSeriesModelBase<T>
         };
     }
 
+    /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
         => new DLinearModel<T>(new DLinearOptions<T>(_options));
 }

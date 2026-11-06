@@ -21,13 +21,21 @@ public class MAPEMetric<T> : IRegressionMetric<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly double _epsilon;
 
+    /// <inheritdoc />
     public string Name => "MAPE";
+    /// <inheritdoc />
     public string Category => "Regression";
+    /// <inheritdoc />
     public string Description => "Mean Absolute Percentage Error.";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.LowerIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.Zero;
+    /// <inheritdoc />
     public T? MaxValue => default;
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
     public MAPEMetric(double epsilon = 1e-10)
@@ -35,6 +43,7 @@ public class MAPEMetric<T> : IRegressionMetric<T>
         _epsilon = epsilon;
     }
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         if (predictions.Length != actuals.Length)
@@ -57,6 +66,7 @@ public class MAPEMetric<T> : IRegressionMetric<T>
         return validCount > 0 ? NumOps.FromDouble(100.0 * sum / validCount) : NumOps.Zero;
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
         ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

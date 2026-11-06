@@ -117,6 +117,7 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
 
     /// <summary>

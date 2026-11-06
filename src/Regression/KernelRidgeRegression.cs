@@ -381,6 +381,7 @@ public partial class KernelRidgeRegression<T> : NonLinearRegressionBase<T>
         return metadata;
     }
 
+    /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new KernelRidgeRegression<T>((KernelRidgeRegressionOptions)Options, Regularization);

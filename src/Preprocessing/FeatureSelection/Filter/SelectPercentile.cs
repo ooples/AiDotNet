@@ -22,7 +22,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly double _percentile;
     private readonly Func<Matrix<T>, Vector<T>, int, double>? _scoringFunction;
@@ -35,7 +35,9 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public double Percentile => _percentile;
     public double[]? Scores => _scores;
     public double[]? PValues => _pValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public SelectPercentile(
@@ -51,12 +53,14 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _scoringFunction = scoringFunction;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "SelectPercentile requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -174,12 +178,14 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return (fStat2, 1.0 / (1 + fStat2));
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -196,11 +202,13 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("SelectPercentile does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -213,6 +221,7 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return Array.Empty<string>();

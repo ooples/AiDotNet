@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Frequency;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _lowFreqCutoff;
@@ -30,11 +30,14 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double LowFreqCutoff => _lowFreqCutoff;
     public double HighFreqCutoff => _highFreqCutoff;
     public double[]? PSDScores => _psdScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public PowerSpectralDensitySelector(
@@ -52,6 +55,7 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
         _highFreqCutoff = highFreqCutoff;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -117,6 +121,7 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -133,11 +138,13 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("PowerSpectralDensitySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -150,6 +157,7 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

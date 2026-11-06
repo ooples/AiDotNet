@@ -354,6 +354,7 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
     // Clone()'s deserialized copy ends up in eval mode (the deserializer
     // calls SetTrainingMode(false)), so original and clone diverge by the
     // dropout mask.
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();

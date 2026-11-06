@@ -283,6 +283,7 @@ public partial class SDXLVAEModel<T> : VAEModelBase<T>
         layer.SetParameters(np);
     }
 
+    /// <inheritdoc />
     protected override Vector<T> GetParameterGradients()
     {
         var gradients = new List<T>();

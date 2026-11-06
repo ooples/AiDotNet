@@ -176,6 +176,7 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         ClearLayers();
     }
 
+    /// <inheritdoc />
     public override AiDotNet.Tensors.LinearAlgebra.Tensor<T> Predict(AiDotNet.Tensors.LinearAlgebra.Tensor<T> input)
     {
         if (input == null)
@@ -197,6 +198,7 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         return result;
     }
 
+    /// <inheritdoc />
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         throw new NotSupportedException("CLIP neural network in inference mode does not support training.");
@@ -204,6 +206,7 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
 
     // UpdateParameters was an empty override, silently dropping every restore. The base
     // distributes the vector over the declared enumeration.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -266,6 +269,7 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
     }
 
 
+    /// <inheritdoc />
     public Vector<T> EncodeImage(double[] imageData)
     {
         if (imageData == null || imageData.Length == 0)
@@ -279,6 +283,7 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         return embedding.SafeNormalize();
     }
 
+    /// <inheritdoc />
     public Matrix<T> EncodeImageBatch(IEnumerable<double[]> imageDataBatch)
     {
         if (imageDataBatch == null) throw new ArgumentNullException(nameof(imageDataBatch));
@@ -296,6 +301,7 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         return new Matrix<T>(embeddings);
     }
 
+    /// <inheritdoc />
     public T ComputeSimilarity(Vector<T> embedding1, Vector<T> embedding2)
     {
         if (embedding1 == null || embedding2 == null)
@@ -307,6 +313,7 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         return embedding1.DotProduct(embedding2);
     }
 
+    /// <inheritdoc />
     public Dictionary<string, T> ZeroShotClassify(double[] imageData, IEnumerable<string> labels)
     {
         if (imageData == null || imageData.Length == 0)
@@ -382,6 +389,7 @@ public partial class ClipNeuralNetwork<T> : MultimodalModelLayoutBase<T>, IMulti
         return expScores.Select(e => e / sumExp).ToArray();
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (!_disposed)

@@ -282,6 +282,7 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
     /// </remarks>
     public override bool SupportsParameterInitialization => false;
 
+    /// <inheritdoc />
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
         if (_useOLS && _olsCoefficients is not null)
@@ -318,6 +319,7 @@ public partial class MultilayerPerceptronRegression<T> : NonLinearRegressionBase
 
 
 
+    /// <inheritdoc />
     public override void Train(Matrix<T> X, Vector<T> y)
     {
         // This method previously fitted ORDINARY LEAST SQUARES and returned immediately —

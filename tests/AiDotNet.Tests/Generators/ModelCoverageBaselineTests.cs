@@ -17,25 +17,24 @@ namespace AiDotNet.Tests.Generators;
 public class ModelCoverageBaselineTests
 {
     /// <summary>
-    /// Models with model-family test coverage: the recorded measurement is 1485 of 1816 (81.8%)
-    /// from the AiDotNetTests compilation's TestCoverage.g.cs. Provenance: commit
-    /// e9d417a583444fc52c33fcb1c495cf1404d73443, dated 2026-09-09, records the measured change
-    /// from 1482 to 1485 after ResolveTestBaseClass guarded the TimeSeries fixture's I/O contract
-    /// (#2091). The earlier instrument-fix measurement was 1466, followed by 1482 after the
-    /// diffusion routing guard. These are generator-attribution counts, not the separate
+    /// Models with model-family test coverage: the recorded measurement is 1819 of 1819 (100%) from the
+    /// AiDotNetTests compilation's TestCoverage.g.cs, measured 2026-11-06 on fix/v1-epic-2397 after the six
+    /// proprietary-API TTS wrappers gained fixtures (#2394). The earlier recorded measurement was 1485 of 1816
+    /// (commit e9d417a583444fc52c33fcb1c495cf1404d73443, 2026-09-09, #2091), after 1466 at the instrument fix and
+    /// 1482 after the diffusion routing guard. These are generator-attribution counts, not the separate
     /// whole-word reference-count estimate over hand-written and generated tests.
     ///
     /// Record the measured report and its source whenever changing this baseline. LOWERING it
     /// means models that were covered no longer are: establish why before editing this constant,
     /// because the point of the gate is that the number cannot quietly fall.
     /// </summary>
-    private const int BaselineTestedCount = 1485;
+    private const int BaselineTestedCount = 1819;
 
     /// <summary>
     /// Total annotated models at the same measurement. Only a floor: the census grows as models are
     /// added, and a growing census must not by itself trip the tested-count gate.
     /// </summary>
-    private const int BaselineTotalModels = 1816;
+    private const int BaselineTotalModels = 1819;
 
     [Fact]
     public void ThisAssemblyPublishesAMeasuredCoverageFigure()

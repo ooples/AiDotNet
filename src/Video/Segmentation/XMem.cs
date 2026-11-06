@@ -121,6 +121,7 @@ public partial class XMem<T> : NeuralNetworkBase<T>
     #region Properties
 
     internal bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
     internal int InputHeight => _inputHeight;
     internal int InputWidth => _inputWidth;
@@ -356,6 +357,7 @@ public partial class XMem<T> : NeuralNetworkBase<T>
         return new Tensor<T>(outputShape, new Vector<T>(outputData));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => SegmentFrame(input);
 
     /// <summary>
@@ -761,6 +763,7 @@ public partial class XMem<T> : NeuralNetworkBase<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var additionalInfo = new Dictionary<string, object>

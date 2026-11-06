@@ -13,6 +13,7 @@ public class SliceSelection<T> : ImageAugmenterBase<T>
         OutputChannels = outputChannels;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         if (data.Channels <= OutputChannels) return data.Clone();
@@ -28,6 +29,7 @@ public class SliceSelection<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

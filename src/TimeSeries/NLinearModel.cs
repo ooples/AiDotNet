@@ -114,6 +114,7 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
     }
 
 
+    /// <inheritdoc />
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;
@@ -223,6 +224,7 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
         if (_yStd < eps) _yStd = 1.0;
     }
 
+    /// <inheritdoc />
     public override T PredictSingle(Vector<T> input)
     {
         double pred = Forecast(j => Convert.ToDouble(input[j]), input.Length);
@@ -233,6 +235,7 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
 
 
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -249,6 +252,7 @@ public partial class NLinearModel<T> : TimeSeriesModelBase<T>
         };
     }
 
+    /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
         => new NLinearModel<T>(new NLinearOptions<T>(_options));
 }

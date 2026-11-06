@@ -28,15 +28,24 @@ public class BrierScoreMetric<T> : IProbabilisticClassificationMetric<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "BrierScore";
+    /// <inheritdoc />
     public string Category => "Classification";
+    /// <inheritdoc />
     public string Description => "Mean squared error of probability predictions.";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.LowerIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.Zero;
+    /// <inheritdoc />
     public T? MaxValue => NumOps.One;
+    /// <inheritdoc />
     public bool RequiresProbabilities => true;
+    /// <inheritdoc />
     public bool SupportsMultiClass => true;
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> probabilities, ReadOnlySpan<T> actuals, int numClasses = 2)
     {
         if (probabilities.Length == 0) return NumOps.Zero;
@@ -85,6 +94,7 @@ public class BrierScoreMetric<T> : IProbabilisticClassificationMetric<T>
         return NumOps.FromDouble(sum / (n * numClasses));
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> probabilities, ReadOnlySpan<T> actuals,
         int numClasses = 2, ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

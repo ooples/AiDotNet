@@ -565,6 +565,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         base.EnsureParametersMaterialized();
     }
 
+    /// <inheritdoc />
     protected override void OnFirstForward(Tensor<T> input)
     {
         int rank = input.Shape.Length;
@@ -830,6 +831,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_biases);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -837,6 +839,7 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         _biasesGradient = Tensor<T>.Empty();
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

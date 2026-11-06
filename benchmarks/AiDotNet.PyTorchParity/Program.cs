@@ -97,6 +97,17 @@ if (fusedDiag)
     };
 }
 
+// `--classical DIR [--repeats N] [--seed N]`: the classical-ML rows (ClassicalBench.cs), on the CPU engine; then run
+// pytorch/classical.py DIR for the scikit-learn, XGBoost and LightGBM side.
+int classicalAt = Array.IndexOf(args, "--classical");
+if (classicalAt >= 0 && classicalAt + 1 < args.Length)
+{
+    int Flag(string name, int fallback)
+        => Array.IndexOf(args, name) is int at and >= 0 && at + 1 < args.Length
+            && int.TryParse(args[at + 1], out int value) ? value : fallback;
+    return AiDotNet.PyTorchParity.ClassicalBench.Run(args[classicalAt + 1], Flag("--repeats", 9), Flag("--seed", 42));
+}
+
 var benchOptions = BenchmarkOptions.Parse(args);
 if (benchOptions.VerifyStep1Dir is { } referenceDir)
 {
@@ -437,6 +448,12 @@ internal sealed class AiDotNetTensorBackend(int seed)
         "densenet121" => new AiDotNetVisionModel(seed, VisionFamily.DenseNet121),
         // ViT at [3, 32, 32], patch 4, d=192, 6 layers, 3 heads, MLP 768 (a ViT-Tiny width).
         "vit" => new AiDotNetVisionModel(seed, VisionFamily.VisionTransformer),
+        // Graph classification over one fixed 32-node graph (benchmark.py's kipf_graph): 2x GCN(16->64->64, ReLU)
+        // + mean over nodes + Linear(64, 10). Input [B, 32 nodes, 16 features].
+        "gcn" => new AiDotNetGcnModel(seed),
+        // A small causal decoder LM: Embedding(512, 128) + 2x pre-RMSNorm block (causal MHA 4 heads, GELU FFN 512) +
+        // RMSNorm + Linear(128, 512), next-token loss over 64 positions.
+        "decoder-lm" => new AiDotNetDecoderLmModel(seed),
         _ => throw new ArgumentException($"Unknown model '{model}'.")
     };
 }
@@ -731,7 +748,7 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         return total / classes.Length;
     }
 
-    public void LoadSyntheticBatch(int batchSize)
+    public virtual void LoadSyntheticBatch(int batchSize)
     {
         var perSample = InputShapePerSample;
         var sampleSize = perSample.Aggregate(1, (a, b) => a * b);
@@ -995,6 +1012,144 @@ internal sealed class AiDotNetGruModel : AiDotNetBenchmarkModel
             outputSize: 10,
             layers: layers);
         return new GRUNeuralNetwork<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>());
+    }
+}
+
+internal sealed class AiDotNetDecoderLmModel : AiDotNetBenchmarkModel
+{
+    internal const int Vocabulary = 512;
+    internal const int Positions = 64;
+    private const int Width = 128;
+
+    public AiDotNetDecoderLmModel(int seed) : base(seed) { }
+    public override bool HasStep1Twin => false;
+    protected override int[] InputShapePerSample => new[] { Positions };
+    protected override int OutputClasses => Vocabulary;
+    protected override IReadOnlyList<string> PyTorchModulePrefixes => [];
+    protected override NeuralNetworkBase<float> BuildNetwork()
+    {
+        var layers = new List<ILayer<float>> { new EmbeddingLayer<float>(Vocabulary, Width) };
+        for (int block = 0; block < 2; block++)
+            layers.Add(new PreLNTransformerBlock<float>(Width, 4 * Width,
+                new MultiHeadAttentionLayer<float>(4, Width / 4) { UseCausalMask = true }));
+        layers.Add(new RMSNormalizationLayer<float>(Width));
+        layers.Add(new DenseLayer<float>(Vocabulary, activationFunction: NoActivation));
+        var arch = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: Positions,
+            outputSize: Vocabulary,
+            layers: layers);
+        return new NeuralNetwork<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>());
+    }
+
+    /// <summary>
+    /// Token sequences that follow t[i+1] = (7 t[i] + 3) mod V from a random first token, with the next token as the
+    /// one-hot target at every position: learnable, so the loss falls on both sides (benchmark.py's lm_batch).
+    /// </summary>
+    public override void LoadSyntheticBatch(int batchSize)
+    {
+        var tokens = new float[batchSize * Positions];
+        var labels = new float[batchSize * Positions * Vocabulary];
+        for (int b = 0; b < batchSize; b++)
+        {
+            int token = Random.Next(Vocabulary);
+            for (int t = 0; t < Positions; t++)
+            {
+                tokens[b * Positions + t] = token;
+                token = (7 * token + 3) % Vocabulary;
+                labels[(b * Positions + t) * Vocabulary + token] = 1f;
+            }
+        }
+
+        Input = new Tensor<float>(tokens, [batchSize, Positions]);
+        Label = new Tensor<float>(labels, [batchSize, Positions, Vocabulary]);
+    }
+}
+
+internal sealed class AiDotNetGcnModel : AiDotNetBenchmarkModel
+{
+    private const int Nodes = 32;
+    private const int Features = 16;
+
+    public AiDotNetGcnModel(int seed) : base(seed) { }
+    public override bool HasStep1Twin => false;
+    protected override int[] InputShapePerSample => new[] { Nodes, Features };
+    protected override int OutputClasses => 10;
+    protected override IReadOnlyList<string> PyTorchModulePrefixes => ["gc1", "gc2", "head"];
+    protected override NeuralNetworkBase<float> BuildNetwork()
+    {
+        // Kipf & Welling GCN layers, A_hat (X W) + b with A_hat = D^-1/2 (A + I) D^-1/2, then a graph-level readout.
+        var layers = new List<ILayer<float>>
+        {
+            new GraphConvolutionalLayer<float>(Features, 64, new ReLUActivation<float>()),
+            new GraphConvolutionalLayer<float>(64, 64, new ReLUActivation<float>()),
+            new MeanLayer<float>(axis: 1),
+            new DenseLayer<float>(10, activationFunction: NoActivation),
+        };
+        var arch = new NeuralNetworkArchitecture<float>(
+            // Per node, as GraphNeuralNetwork's own default declares it: the node axis comes from the graph.
+            inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification,
+            inputSize: Features,
+            outputSize: 10,
+            layers: layers);
+        var network = new GraphNeuralNetwork<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>(),
+            graphConvolutionalVectorActivation: (IVectorActivationFunction<float>?)null);
+        network.SetAdjacencyMatrix(KipfGraph());
+        return network;
+    }
+
+    /// <summary>
+    /// Standard-normal node features; the class is whichever of the first ten features has the largest mean over the
+    /// nodes, so the label is learnable and the loss falls (benchmark.py's gcn_batch).
+    /// </summary>
+    public override void LoadSyntheticBatch(int batchSize)
+    {
+        base.LoadSyntheticBatch(batchSize);
+        var x = Input.ToArray();
+        var labels = new float[batchSize * 10];
+        for (int b = 0; b < batchSize; b++)
+        {
+            int best = 0;
+            double bestMean = double.NegativeInfinity;
+            for (int f = 0; f < 10; f++)
+            {
+                double sum = 0;
+                for (int n = 0; n < Nodes; n++) sum += x[(b * Nodes + n) * Features + f];
+                if (sum > bestMean) (best, bestMean) = (f, sum);
+            }
+
+            labels[b * 10 + best] = 1f;
+        }
+
+        Label = new Tensor<float>(labels, [batchSize, 10]);
+    }
+
+    /// <summary>
+    /// The graph of benchmark.py's kipf_graph: a ring over the nodes plus a chord i -> i+5 from every third node (so
+    /// degrees differ and the normalization is not a constant), with self-loops, normalized D^-1/2 (A + I) D^-1/2.
+    /// </summary>
+    private static Tensor<float> KipfGraph()
+    {
+        var a = new double[Nodes, Nodes];
+        for (int i = 0; i < Nodes; i++)
+        {
+            a[i, i] = 1;
+            a[i, (i + 1) % Nodes] = a[(i + 1) % Nodes, i] = 1;
+            if (i % 3 == 0) a[i, (i + 5) % Nodes] = a[(i + 5) % Nodes, i] = 1;
+        }
+
+        var degree = new double[Nodes];
+        for (int i = 0; i < Nodes; i++)
+            for (int j = 0; j < Nodes; j++)
+                degree[i] += a[i, j];
+
+        var normalized = new Tensor<float>([Nodes, Nodes]);
+        for (int i = 0; i < Nodes; i++)
+            for (int j = 0; j < Nodes; j++)
+                normalized[i, j] = (float)(a[i, j] / Math.Sqrt(degree[i] * degree[j]));
+        return normalized;
     }
 }
 

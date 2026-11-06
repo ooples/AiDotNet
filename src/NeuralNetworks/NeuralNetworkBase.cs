@@ -1231,6 +1231,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return readiness;
     }
 
+    /// <inheritdoc />
     public virtual Vector<T> GetParameters()
     {
         // Pre-resolve any lazy layer shapes from the architecture before
@@ -1390,6 +1391,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected virtual AiDotNet.Models.Parameters.ParameterSlotRole ResolveExtraTensorParameterRole(
         Tensor<T> tensor, AiDotNet.Models.Parameters.ParameterSlotRole declared) => declared;
 
+    /// <inheritdoc />
     public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
     {
         ResolveLazyLayerShapes();
@@ -5284,6 +5286,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return gradients;
     }
 
+    /// <inheritdoc />
     public virtual Vector<T> GetParameterGradients()
     {
         if (_gradientSurfaceUnavailable)
@@ -6972,6 +6975,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Train(input, expectedOutput);
     }
 
+    /// <inheritdoc />
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
         RequireArchitectureAgreesWithInput();
@@ -10645,6 +10649,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     internal bool HasRecordedLoss => _lastLossRecorded;
 
+    /// <inheritdoc />
     public virtual T GetLastLoss()
     {
         // A missing loss means training has not produced one yet. Preserve NaN/Infinity:
@@ -11010,6 +11015,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
+    /// <inheritdoc />
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         Guard.NotNull(input);
@@ -15919,7 +15925,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // parameters, and Serialize, which builds one byte array, overflowed it for any float model above
     // ~268M parameters (UnifiedMultimodalNetwork's GetModelMetadata did, #2087). A float model now
     // stores 4-byte floats, exactly; every other T keeps 8-byte doubles.
-    private const int SerializationVersion = 8;
+    // v9 writes each layer's input-sized buffers after its extras. They are kept out of the parameter vector by design
+    // (a graph layer's adjacency is sized by the graph, not the layer), and the vector plus extras was all this format
+    // stored, so a saved graph network, and every clone that fell back to this round trip, lost its graph.
+    private const int SerializationVersion = 9;
 
     /// <summary>How the parameter values of a serialized network are stored (format v8 and later).</summary>
     private enum SerializedParameterEncoding : byte
@@ -16120,6 +16129,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 writer.Write(0);
             }
+
+            if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> bufferedLayer)
+                bufferedLayer.WriteInputSizedBuffers(writer);
+            else
+                writer.Write(0);
         }
 
         WriteGeneratedAdditionalLayerState(writer);
@@ -16332,6 +16346,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (extraParametersVector != null && layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> extrasLayer)
             {
                 extrasLayer.SetExtraParameters(extraParametersVector);
+            }
+
+            if (version >= 9)
+            {
+                if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> bufferedLayer)
+                    bufferedLayer.ReadInputSizedBuffers(reader);
+                else if (reader.ReadInt32() != 0)
+                    throw new InvalidDataException(
+                        $"Layer '{layerType}' carries input-sized buffers but was reconstructed outside LayerBase<{typeof(T).Name}>.");
             }
 
             // Prefer restoring into the constructor-created layer at the same canonical slot when
@@ -18489,6 +18512,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
+    /// <inheritdoc />
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         if (featureIndices == null)
@@ -19785,6 +19809,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return result;
     }
 
+    /// <inheritdoc />
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Pluggable credit-assignment rule (Feedback Alignment, Direct Feedback Alignment, Sign-Symmetric,

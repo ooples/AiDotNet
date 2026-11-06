@@ -90,6 +90,7 @@ public sealed class IsotropicPrior<T> : LearnedPrior<T>
         _bMean = numOps.Divide(bSum, count);
     }
 
+    /// <inheritdoc />
     public override Tensor<T> SynthesizeNovelView(
         Vector<T> cameraPosition,
         Matrix<T> cameraRotation,

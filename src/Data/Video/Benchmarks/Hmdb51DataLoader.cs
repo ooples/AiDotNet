@@ -32,6 +32,7 @@ public class Hmdb51DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         _featureSize = _options.FramesPerVideo * _options.FrameHeight * _options.FrameWidth * 3;
     }
 
+    /// <inheritdoc />
     protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
     {
         string dataDir = _dataPath;
@@ -80,11 +81,13 @@ public class Hmdb51DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         await Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     protected override void UnloadDataCore()
     {
         LoadedFeatures = default; LoadedLabels = default; Indices = null; _sampleCount = 0;
     }
 
+    /// <inheritdoc />
     protected override (Tensor<T> Features, Tensor<T> Labels) ExtractBatch(int[] indices)
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
@@ -92,6 +95,7 @@ public class Hmdb51DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         return (VideoLoaderHelper.ExtractTensorBatch(features, indices), VideoLoaderHelper.ExtractTensorBatch(labels, indices));
     }
 
+    /// <inheritdoc />
     public override (IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Train,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Validation,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Test) Split(

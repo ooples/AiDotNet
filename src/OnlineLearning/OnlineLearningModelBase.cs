@@ -197,6 +197,7 @@ public abstract partial class OnlineLearningModelBase<T> : IOnlineLearningModel<
         }
     }
 
+    /// <inheritdoc />
     public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
 
     /// <inheritdoc/>
@@ -648,6 +649,7 @@ public abstract partial class OnlineLearningModelBase<T> : IOnlineLearningModel<
     }
 
 
+    /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
         byte[] serializedData = Serialize();

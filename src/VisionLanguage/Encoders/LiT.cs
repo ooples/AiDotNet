@@ -142,14 +142,20 @@ public partial class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLang
             _options.ImageSize = h;
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.VisionEmbeddingDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxSequenceLength => _options.MaxSequenceLength;
+    /// <inheritdoc />
     public int TextEmbeddingDimension => _options.TextEmbeddingDim;
+    /// <inheritdoc />
     public int ProjectionDimension => _options.ProjectionDim;
+    /// <inheritdoc />
     public T Temperature => NumOps.FromDouble(_options.Temperature);
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -162,6 +168,7 @@ public partial class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLang
         return L2Normalize(c);
     }
 
+    /// <inheritdoc />
     public Tensor<T> EncodeText(string text)
     {
         ThrowIfDisposed();
@@ -186,6 +193,7 @@ public partial class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLang
         return L2Normalize(c);
     }
 
+    /// <inheritdoc />
     public Tensor<T>[] EncodeTexts(string[] texts)
     {
         var e = new Tensor<T>[texts.Length];
@@ -194,9 +202,11 @@ public partial class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLang
         return e;
     }
 
+    /// <inheritdoc />
     public T ComputeSimilarity(Tensor<T> image, string text) =>
         CosineSimilarity(EncodeImage(image), EncodeText(text));
 
+    /// <inheritdoc />
     public Dictionary<string, T> ZeroShotClassify(Tensor<T> image, string[] labels)
     {
         var imageEmb = EncodeImage(image);
@@ -251,6 +261,7 @@ public partial class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLang
         );
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -271,11 +282,14 @@ public partial class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLang
     // This forwarded to a helper the base now calls from its own
     // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var meta = new ModelMetadata<T>
@@ -314,6 +328,7 @@ public partial class LiT<T> : VisionLanguageModelBase<T>, IContrastiveVisionLang
             throw new ObjectDisposedException(GetType().FullName ?? nameof(LiT<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

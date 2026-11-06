@@ -973,3 +973,15 @@ AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.IsEx
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Name.get -> string!
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1) -> void
+AiDotNet.Interfaces.IFeatureSelector<T>
+AiDotNet.Interfaces.IFeatureSelector<T>.GetSupportMask() -> bool[]!
+AiDotNet.Interfaces.IFeatureSelector<T>.SelectedIndices.get -> int[]?
+AiDotNet.Interfaces.IFixedCountFeatureSelector<T>
+AiDotNet.Interfaces.IFixedCountFeatureSelector<T>.NFeaturesToSelect.get -> int
+AiDotNet.Interfaces.ISupervisedFeatureSelector<T>
+AiDotNet.Interfaces.ISupervisedFeatureSelector<T>.Fit(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! target) -> void
+AiDotNet.Interfaces.ISupervisedFeatureSelector<T>.FitTransform(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! target) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.NeuralNetworks.GraphNeuralNetwork<T>.SetAdjacencyMatrix(AiDotNet.Tensors.LinearAlgebra.Tensor<T>? adjacencyMatrix) -> void
+AiDotNet.Models.Options.LogisticRegressionOptions<T>.Solver.get -> AiDotNet.Interfaces.IFunctionOptimizer<T>?
+AiDotNet.Models.Options.LogisticRegressionOptions<T>.Solver.set -> void
+AiDotNet.Regression.LogisticRegression<T>.CreateGradientDescentSolver() -> AiDotNet.Interfaces.IFunctionOptimizer<T>!

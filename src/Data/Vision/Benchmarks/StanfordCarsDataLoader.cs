@@ -31,10 +31,15 @@ public class StanfordCarsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
     private int _sampleCount;
     private int _imageSize;
 
+    /// <inheritdoc />
     public override string Name => "Stanford Cars";
+    /// <inheritdoc />
     public override string Description => "Stanford Cars fine-grained classification (196 classes)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _imageSize * _imageSize * 3;
+    /// <inheritdoc />
     public override int OutputDimension => NumClasses;
 
     public StanfordCarsDataLoader(StanfordCarsDataLoaderOptions? options = null)

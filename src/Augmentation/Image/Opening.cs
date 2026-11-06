@@ -14,6 +14,7 @@ public class Opening<T> : ImageAugmenterBase<T>
         KernelSize = kernelSize;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var erode = new Erode<T>(KernelSize, 1, probability: 1.0);
@@ -23,6 +24,7 @@ public class Opening<T> : ImageAugmenterBase<T>
         return dilate.Apply(eroded, context);
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

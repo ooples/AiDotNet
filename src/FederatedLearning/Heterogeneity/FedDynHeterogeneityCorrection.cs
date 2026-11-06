@@ -29,6 +29,7 @@ public sealed class FedDynHeterogeneityCorrection<T> : FederatedHeterogeneityCor
         _alpha = alpha;
     }
 
+    /// <inheritdoc />
     public override Vector<T> Correct(int clientId, int roundNumber, Vector<T> globalParameters, Vector<T> localParameters, int localEpochs)
     {
         if (globalParameters.Length != localParameters.Length)
@@ -61,6 +62,7 @@ public sealed class FedDynHeterogeneityCorrection<T> : FederatedHeterogeneityCor
         return corrected;
     }
 
+    /// <inheritdoc />
     public override string GetCorrectionName() => "FedDyn";
 }
 

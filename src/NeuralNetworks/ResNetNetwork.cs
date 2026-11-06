@@ -487,6 +487,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     // class defaults IsTrainingMode=true at construction, which would let
     // BatchNorm use batch stats instead of the (zero-init) running stats
     // and produce non-deterministic Predict output across calls.
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();

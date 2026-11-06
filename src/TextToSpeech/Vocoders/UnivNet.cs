@@ -124,6 +124,7 @@ public partial class UnivNet<T> : VocoderBase<T>
         return Predict(melSpectrogram);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
         var t = new Tensor<T>([1]);
@@ -131,6 +132,7 @@ public partial class UnivNet<T> : VocoderBase<T>
         return t;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
@@ -150,6 +152,7 @@ public partial class UnivNet<T> : VocoderBase<T>
         Layers.AddRange(LayerHelper<T>.CreateDefaultHiFiGANLayers(_options.MelChannels, 512, 1));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -178,6 +181,7 @@ public partial class UnivNet<T> : VocoderBase<T>
     }
 
     // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -203,6 +207,7 @@ public partial class UnivNet<T> : VocoderBase<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(UnivNet<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

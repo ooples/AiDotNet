@@ -1233,6 +1233,7 @@ public partial class MMDiTNoisePredictor<T> : NoisePredictorBase<T>
 
     #region Layer-Level Backpropagation
 
+    /// <inheritdoc />
     protected override Vector<T> GetParameterGradients()
     {
         var allGrads = new List<T>();

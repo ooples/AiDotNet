@@ -255,6 +255,7 @@ public partial class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<
             dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -276,6 +277,7 @@ public partial class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<
     /// <summary>Returns output unchanged; no post-processing needed for foundation model embeddings.</summary>
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -299,6 +301,7 @@ public partial class MERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel<
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MERT<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

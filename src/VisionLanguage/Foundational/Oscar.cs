@@ -133,12 +133,16 @@ public partial class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         InitializeLayers();
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.FusionDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int FusionEmbeddingDim => _options.FusionDim;
+    /// <inheritdoc />
     public int MaxSequenceLength => _options.MaxSequenceLength;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -152,6 +156,7 @@ public partial class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         return L2Normalize(c);
     }
 
+    /// <inheritdoc />
     public Tensor<T> FuseImageText(Tensor<T> image, string text)
     {
         ThrowIfDisposed();
@@ -174,6 +179,7 @@ public partial class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         return c;
     }
 
+    /// <inheritdoc />
     public T ComputeMatchingScore(Tensor<T> image, string text)
     {
         var imageEmb = EncodeImage(image);
@@ -272,6 +278,7 @@ public partial class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -289,11 +296,14 @@ public partial class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -319,6 +329,7 @@ public partial class Oscar<T> : VisionLanguageModelBase<T>, IVisionLanguageFusio
             throw new ObjectDisposedException(GetType().FullName ?? nameof(Oscar<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

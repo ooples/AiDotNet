@@ -183,6 +183,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     private readonly int _routingIterations;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -329,6 +330,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
         };
     }
 
+    /// <inheritdoc />
     protected override void OnFirstForward(Tensor<T> input)
     {
         int rank = input.Shape.Length;
@@ -669,6 +671,7 @@ public partial class DigitCapsuleLayer<T> : LayerBase<T>, IShapeContract
         return metadata;
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         _weightsGradient = null;

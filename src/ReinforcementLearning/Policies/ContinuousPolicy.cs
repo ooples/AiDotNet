@@ -105,6 +105,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
         {
         }
 
+        /// <inheritdoc />
         public override Vector<T> SelectAction(Vector<T> state, bool training = true)
         {
             // Get mean and log_std from network
@@ -149,6 +150,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
             return action;
         }
 
+        /// <inheritdoc />
         public override T ComputeLogProb(Vector<T> state, Vector<T> action)
         {
             // Get mean and log_std from network
@@ -183,11 +185,13 @@ namespace AiDotNet.ReinforcementLearning.Policies
             return logProb;
         }
 
+        /// <inheritdoc />
         public override IReadOnlyList<INeuralNetwork<T>> GetNetworks()
         {
             return new List<INeuralNetwork<T>> { _policyNetwork };
         }
 
+        /// <inheritdoc />
         public override void Reset()
         {
             _explorationStrategy.Reset();

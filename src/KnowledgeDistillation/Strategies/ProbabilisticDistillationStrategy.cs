@@ -67,6 +67,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
         _mmdBandwidth = mmdBandwidth;
     }
 
+    /// <inheritdoc />
     public override T ComputeLoss(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);
@@ -119,6 +120,7 @@ public class ProbabilisticDistillationStrategy<T> : DistillationStrategyBase<T>
             distributionLoss);
     }
 
+    /// <inheritdoc />
     public override Matrix<T> ComputeGradient(Matrix<T> studentBatchOutput, Matrix<T> teacherBatchOutput, Matrix<T>? trueLabelsBatch = null)
     {
         ValidateOutputDimensions(studentBatchOutput, teacherBatchOutput);

@@ -221,6 +221,7 @@ public partial class CRAFT<T> : TextDetectorBase<T>
     /// <summary>Reference link threshold on the affinity score.</summary>
     internal const double LinkThreshold = 0.4;
 
+    /// <inheritdoc />
     protected override List<TextRegion<T>> PostProcess(
         List<Tensor<T>> outputs,
         int imageWidth,
