@@ -190,14 +190,27 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
 
         // Create position tensor [maxSequenceLength]
         var positions = new Tensor<T>(new[] { maxSequenceLength });
+        var positionSpan = positions.AsWritableSpan();
         for (int pos = 0; pos < maxSequenceLength; pos++)
         {
-            positions[pos] = NumOps.FromDouble(pos);
+            positionSpan[pos] = NumOps.FromDouble(pos);
         }
 
-        // Compute all angles: angles[pos, i] = pos * divTerms[i]
-        // This is an outer product: [maxSequenceLength] x [halfEmbedding] -> [maxSequenceLength, halfEmbedding]
-        var angles = Engine.TensorOuter(positions, divTerms);
+        // All angles: angles[pos, i] = pos * divTerms[i], the outer product [maxSequenceLength] x [halfEmbedding],
+        // written through spans. The indexer bumps the tensor's version on every write, and with the engine's outer
+        // product it made a 1000 x 256 table cost ~65 ms, which a FastSpeech-style stack paid twice per construction.
+        var angles = new Tensor<T>(new[] { maxSequenceLength, halfEmbedding });
+        var angleSpan = angles.AsWritableSpan();
+        var divSpan = divTerms.AsSpan();
+        for (int pos = 0; pos < maxSequenceLength; pos++)
+        {
+            T position = positionSpan[pos];
+            int row = pos * halfEmbedding;
+            for (int i = 0; i < halfEmbedding; i++)
+            {
+                angleSpan[row + i] = NumOps.Multiply(position, divSpan[i]);
+            }
+        }
 
         // Apply vectorized sin and cos using IEngine
         var sinValues = Engine.TensorSin(angles);
@@ -205,12 +218,17 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
 
         // Interleave sin and cos values into encodings tensor
         // Even indices get sin, odd indices get cos
+        var encodingSpan = encodings.AsWritableSpan();
+        var sinSpan = sinValues.AsSpan();
+        var cosSpan = cosValues.AsSpan();
         for (int pos = 0; pos < maxSequenceLength; pos++)
         {
+            int source = pos * halfEmbedding;
+            int target = pos * embeddingSize;
             for (int i = 0; i < halfEmbedding; i++)
             {
-                encodings[pos, 2 * i] = sinValues[pos, i];         // Even: sin
-                encodings[pos, 2 * i + 1] = cosValues[pos, i];     // Odd: cos
+                encodingSpan[target + 2 * i] = sinSpan[source + i];         // Even: sin
+                encodingSpan[target + 2 * i + 1] = cosSpan[source + i];     // Odd: cos
             }
         }
 
@@ -226,9 +244,11 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
             var lastSinValues = Engine.TensorSin(lastAngles);
 
             // Copy vectorized results to encodings
+            var lastEncodingSpan = encodings.AsWritableSpan();
+            var lastSinSpan = lastSinValues.AsSpan();
             for (int pos = 0; pos < maxSequenceLength; pos++)
             {
-                encodings[pos, lastDimIdx] = lastSinValues[pos];
+                lastEncodingSpan[pos * embeddingSize + lastDimIdx] = lastSinSpan[pos];
             }
         }
     }
