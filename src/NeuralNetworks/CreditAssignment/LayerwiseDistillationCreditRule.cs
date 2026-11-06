@@ -123,6 +123,9 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
     /// <inheritdoc />
     public Tensor<T>? BuildLocalObjective(LocalObjectiveContext<T> context)
     {
+        // Exact configuration sentinel: with no regression and no task term there is no local objective, and the
+        // context is not read.
+        if (_hiddenWeight == 0 && _localTaskWeight == 0) return null;
         var s = context.Step;
         // The last hidden layer feeds the readout undetached, so the output loss already gives it task credit.
         Tensor<T>? task = null;
