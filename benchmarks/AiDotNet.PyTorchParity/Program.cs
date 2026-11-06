@@ -1088,10 +1088,10 @@ internal sealed class AiDotNetGcnModel : AiDotNetBenchmarkModel
             new DenseLayer<float>(10, activationFunction: NoActivation),
         };
         var arch = new NeuralNetworkArchitecture<float>(
-            inputType: InputType.TwoDimensional,
+            // Per node, as GraphNeuralNetwork's own default declares it: the node axis comes from the graph.
+            inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification,
-            inputHeight: Nodes,
-            inputWidth: Features,
+            inputSize: Features,
             outputSize: 10,
             layers: layers);
         var network = new GraphNeuralNetwork<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>(),

@@ -607,7 +607,9 @@ def run(args: argparse.Namespace) -> dict[str, object]:
     for name in [item.strip() for item in args.models.split(",") if item.strip()]:
         model, shape = make_model(name)
         model.to(device)
-        parameters = sum(parameter.numel() for parameter in model.parameters())
+        # Trainable only: the decoder LM's frozen, zeroed in_proj_bias stands in for attention AiDotNet builds without
+        # a Q/K/V bias, and counting it reported 768 parameters the C# row does not have.
+        parameters = sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
         if args.compile:
             # torch.compile (TorchInductor) — the "PyTorch compiled" comparison.
             # Counts params BEFORE compile (the wrapper hides .parameters()).
