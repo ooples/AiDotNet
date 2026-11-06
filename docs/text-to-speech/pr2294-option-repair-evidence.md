@@ -273,3 +273,12 @@ preserving the total waveform ratio even when equal rates cannot be reordered.
 CosyVoice and CosyVoiceClone both pass with [8, 8] -> [4, 16], preserving
 HopSize while changing the actual generator. All 44 perturbation regressions
 pass, including two new waveform-ratio cases; scoped build has zero warnings/errors.
+
+CosyVoice HopSize is retained as an explicitly constrained setting: the HiFT
+iSTFT hop is four, so its sample ratio is 4 * product(HiftUpsampleRates).
+Two mismatched configurations are rejected by the actual model constructor;
+valid rate/hop pairs 2/8 and 4/16 generate 32 and 64 samples from four mel
+frames through the actual HiFT generator. All seven Cosy constraint tests and
+44 perturbation tests pass together using the matching hosted core/tensors.
+The changed-source stage build and its existing regressions also pass. Two
+forwarding accessor declarations are included in PublicAPI.Unshipped.txt.

@@ -1,4 +1,6 @@
 #nullable enable
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.HopSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.HopSize.set -> void
 AiDotNet.TextToSpeech.Classic.FastSpeech2Options.DecoderDim.get -> int
 AiDotNet.TextToSpeech.Classic.FastSpeech2Options.DecoderDim.set -> void
 AiDotNet.TextToSpeech.Vocoders.ISTFTNetOptions.UpsampleKernelSizes.get -> int[]!
