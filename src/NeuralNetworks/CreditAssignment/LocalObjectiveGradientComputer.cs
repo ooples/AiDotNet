@@ -78,7 +78,7 @@ internal static class LocalObjectiveGradientComputer<T>
             using var tape = new GradientTape<T>();
             IEngine engine = AiDotNetEngine.Current;
 
-            var hiddenOut = new Tensor<T>[layers.Count];
+            var hiddenOut = new Tensor<T>?[layers.Count];
             var current = input;
             for (int i = 0; i < readoutStart; i++)
             {
@@ -115,7 +115,8 @@ internal static class LocalObjectiveGradientComputer<T>
             for (int k = 0; k < hiddenIdx.Count; k++)
             {
                 int i = hiddenIdx[k];
-                var local = rule.BuildLocalObjective(new LocalObjectiveContext<T>(step, k, i, layers[i], hiddenOut[i]!));
+                var local = rule.BuildLocalObjective(new LocalObjectiveContext<T>(step, k, i, layers[i],
+                    hiddenOut[i] ?? throw new InvalidOperationException($"Hidden layer {i} produced no output.")));
                 if (local is null) continue;
                 combined = engine.TensorAdd(combined, ReduceToScalar(engine, local));
                 locals++;
