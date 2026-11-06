@@ -143,3 +143,14 @@ waveform-derived mel and fast sampling enabled, respectively. MultiBandMelGAN's
 adversarial weight passes with the discriminator stage active rather than its
 200,000-step generator-only warm-up. Longer recordings through typed sample
 training make FreGrad CropFrames and MultiBandMelGAN SegmentSize observable.
+
+Neural-audio-codec probes now reconstruct without the fixture's optimizer
+override, as TTS probes already do. DAC Beta1 and learning-rate decay pass;
+EnCodec and SoundStream learning rates pass, so their two stale baseline entries
+are removed. NaturalSpeech's nullable UpdatesPerEpoch is set to one just like
+the existing nonnullable form, making epoch decay observable. Its phoneme mask
+probe runs phoneme pretraining; duration loss after warm-up, forward KL weight
+and memory heads run joint training with an initialized memory bank. All pass.
+The K-means iteration probe passes with 128 posterior frames instead of 32, so
+one Lloyd iteration no longer reaches the same result as the 20-iteration
+control. This clustering probe has a separate cached control group.

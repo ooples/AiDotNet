@@ -16,7 +16,10 @@ internal static class OptionSensitivityFixtureSetup
         => UsesFittedAssets(network) ? network.GetParameters().Length : 0;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
-        => network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames" ? "diffusion-crop"
+        => network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "MemoryKMeansIterations" ? "natural-memory-clustering"
+            : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && IsNaturalJointOption(option) ? "natural-joint"
+            : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "MaskRatio" ? "natural-phoneme-pretraining"
+            : network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames" ? "diffusion-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "InferenceNoiseSchedule" ? "diffusion-fast-sampling"
             : network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option == "AdversarialWeight" ? "multi-band-adversarial"
             : network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option == "SegmentSize" ? "multi-band-crop"
@@ -88,6 +91,9 @@ internal static class OptionSensitivityFixtureSetup
     private static bool IsCosyFlowOption(string option) => option is
         "TrainingCfgRate" or "FlowLoss" or "FlowAttentionDropoutRate";
 
+    private static bool IsNaturalJointOption(string option) => option is
+        "MemoryKMeansIterations" or "MemoryHeads" or "DurationLossAfterWarmup" or "ForwardKlWeight";
+
     private static bool IsVocoderFrontendOption(string option) => option is
         "MelMinFrequency" or "MelMaxFrequency" or "WindowSize" or "MelMean" or "MelScale" or "EnergyMin";
 
@@ -108,11 +114,13 @@ internal static class OptionSensitivityFixtureSetup
     {
         if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosy && IsCosyFlowOption(option))
             cosy.CurrentStage = AiDotNet.TextToSpeech.CodecBased.CosyVoiceTrainingStage.Flow;
-        if (option != "CurrentStage" || network is not AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> natural
+        if ((option != "CurrentStage" && !IsNaturalJointOption(option))
+            || network is not AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> natural
             || natural.GetOptions() is not AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions options
             || options.CurrentStage != AiDotNet.TextToSpeech.CodecBased.NaturalSpeechStage.Joint) return;
         // Joint training has a documented warm-up prerequisite: cluster posterior frames into the bank.
-        int samples = checked(Math.Max(options.MemorySize, 32) * options.HopSize);
+        int frames = option == "MemoryKMeansIterations" ? Math.Max(8 * options.MemorySize, 128) : Math.Max(options.MemorySize, 32);
+        int samples = checked(frames * options.HopSize);
         var recording = new Tensor<T>(new[] { samples });
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         for (int i = 0; i < samples; i++)
@@ -157,6 +165,15 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions natural)
+        {
+            if (IsNaturalJointOption(option)) natural.CurrentStage = AiDotNet.TextToSpeech.CodecBased.NaturalSpeechStage.Joint;
+            if (option == "MaskRatio")
+            {
+                natural.CurrentStage = AiDotNet.TextToSpeech.CodecBased.NaturalSpeechStage.PhonemePretraining;
+                natural.MaskRatio = 0.5;
+            }
+        }
         if (options is AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions diffusion)
         {
             if (option == "CropFrames") diffusion.CropFrames = 2;
@@ -248,13 +265,15 @@ internal static class OptionSensitivityFixtureSetup
         if (options is not AiDotNet.TextToSpeech.TtsModelOptions) return;
         // Cross an epoch boundary within the probe's two training steps.
         var perEpoch = options.GetType().GetProperty("UpdatesPerEpoch");
-        if (perEpoch?.PropertyType == typeof(int) && perEpoch.CanWrite)
+        if (perEpoch is not null && perEpoch.CanWrite
+            && (perEpoch.PropertyType == typeof(int) || Nullable.GetUnderlyingType(perEpoch.PropertyType) == typeof(int)))
             perEpoch.SetValue(options, 1);
     }
 
     internal static void UseConfiguredOptimizer<T>(INeuralNetworkModel<T> network)
     {
-        if (network is not AiDotNet.TextToSpeech.TtsModelBase<T>) return;
+        if (network is not AiDotNet.TextToSpeech.TtsModelBase<T>
+            and not AiDotNet.Audio.Codecs.NeuralAudioCodecBase<T>) return;
         // The generated fixtures inject constant-rate optimizers for convergence invariants.
         // Reconstruct option probes without that override so the paper optimizer reads its settings.
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
