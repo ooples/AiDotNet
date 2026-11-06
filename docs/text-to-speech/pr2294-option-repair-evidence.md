@@ -190,3 +190,26 @@ All five probes pass, as do the 42 perturbation and six span regressions.
 CAM++ FrameShiftMilliseconds passes through the same Kaldi preprocessing path
 used by ExtractEmbedding on a one-second waveform (10 to 20 ms); precomputed
 filterbank inputs cannot exercise frame-shift configuration.
+
+## ForwardTacotron option ownership
+
+The native ForwardTacotron options now derive directly from ModelOptions. The
+removed settings are EncoderDim, DecoderDim, HiddenDim, NumEncoderLayers,
+NumDecoderLayers, NumHeads and DropoutRate. The native implementation does not
+build a transformer from them. Its actual settings remain EmbeddingDim,
+SeriesEmbeddingDim, the three predictor convolution/GRU dimensions and dropouts,
+PrenetDim/BankSize/Dropout, RnnDim and PostnetChannels/BankSize/Dropout.
+
+This was checked against the upstream [model constructor](https://github.com/as-ideas/ForwardTacotron/blob/2c3d281c4501040bdb844357203504efa7c6614d/models/forward_tacotron.py#L44)
+and the `forward_tacotron` section of its [single-speaker configuration](https://github.com/as-ideas/ForwardTacotron/blob/2c3d281c4501040bdb844357203504efa7c6614d/configs/singlespeaker.yaml).
+The separate teacher-Tacotron and FastPitch configuration sections are not
+evidence for adding their settings to ForwardTacotron's CBHG/LSTM graph.
+
+Every retained default was compared to the hosted options and matches. In the
+22,307-parameter narrow fixture, initial parameters, initial output, parameters
+after two supervised steps and the resulting output are bit-identical before
+and after the option-base change. The progressive-schedule regressions still
+pass. The SDK's scoped comparison of this options surface against package
+0.234.0 reports the base-type change CP0007 for net10.0, net471 and net8.0;
+three exact acknowledgments were added. Full hosted compilation and package
+validation are still required.

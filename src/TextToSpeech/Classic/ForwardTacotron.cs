@@ -80,7 +80,6 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path required.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -102,7 +101,6 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
         // Adam with PyTorch's defaults; the progressive schedule sets the rate (5e-5 for 150k steps, then 1e-5).
         double first = _options.LearningRate, second = _options.SecondStageLearningRate;
         int switchStep = _options.SecondStageStartStep;
