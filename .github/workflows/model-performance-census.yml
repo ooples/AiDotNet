@@ -318,6 +318,11 @@ jobs:
           dotnet restore tools/ModelPerfProbe/ModelPerfProbe.csproj
           dotnet build tools/ModelPerfProbe/ModelPerfProbe.csproj -c Release --no-restore
 
+      # The verifier's known-answer checks: the baseline comparison, the series step detection and the outlier
+      # cohorts. A gate whose own logic is wrong passes or fails for the wrong reason.
+      - name: Self-test the verifier
+        run: dotnet run --project tools/ModelPerfProbe/ModelPerfProbe.csproj -c Release --no-build -- --self-test
+
       - name: Count expected fixture inventory
         id: inventory
         shell: pwsh
