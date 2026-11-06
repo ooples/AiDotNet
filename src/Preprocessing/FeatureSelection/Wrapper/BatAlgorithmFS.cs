@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Wrapper;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _populationSize;
@@ -39,8 +39,10 @@ public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FeatureImportances => _featureImportances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -81,6 +83,7 @@ public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "BatAlgorithmFS requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -234,6 +237,7 @@ public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return totalCorr / features.Length - 0.01 * features.Length;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -263,6 +267,7 @@ public class BatAlgorithmFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("BatAlgorithmFS does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

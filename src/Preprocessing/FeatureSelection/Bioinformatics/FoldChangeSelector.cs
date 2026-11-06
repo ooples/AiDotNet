@@ -22,7 +22,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Bioinformatics;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class FoldChangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class FoldChangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _minFoldChange;
@@ -33,9 +33,11 @@ public class FoldChangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FoldChanges => _foldChanges;
     public double[]? Log2FoldChanges => _log2FoldChanges;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -64,6 +66,7 @@ public class FoldChangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "FoldChangeSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -153,6 +156,7 @@ public class FoldChangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -182,6 +186,7 @@ public class FoldChangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("FoldChangeSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

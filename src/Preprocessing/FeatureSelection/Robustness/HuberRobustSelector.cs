@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Robustness;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class HuberRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class HuberRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _delta;
@@ -31,9 +31,11 @@ public class HuberRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Delta => _delta;
     public double[]? HuberCoefficients => _huberCoefficients;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -62,6 +64,7 @@ public class HuberRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "HuberRobustSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -158,6 +161,7 @@ public class HuberRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -187,6 +191,7 @@ public class HuberRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("HuberRobustSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

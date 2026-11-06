@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _latentDim;
@@ -30,8 +30,10 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FeatureImportances => _featureImportances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -209,6 +211,7 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
         throw new NotSupportedException("VariationalAutoencoderSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

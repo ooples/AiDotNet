@@ -24,7 +24,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.MultiLabel;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class MultiLabelReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class MultiLabelReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nNeighbors;
@@ -35,10 +35,12 @@ public class MultiLabelReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NNeighbors => _nNeighbors;
     public int NIterations => _nIterations;
     public double[]? FeatureWeights => _featureWeights;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -253,6 +255,7 @@ public class MultiLabelReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("MultiLabelReliefF does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.SemiSupervised;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SemiSupervisedLaplacian<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SemiSupervisedLaplacian<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nNeighbors;
@@ -33,8 +33,10 @@ public class SemiSupervisedLaplacian<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FeatureScores => _featureScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -258,6 +260,7 @@ public class SemiSupervisedLaplacian<T> : TransformerBase<T, Matrix<T>, Matrix<T
         throw new NotSupportedException("SemiSupervisedLaplacian does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

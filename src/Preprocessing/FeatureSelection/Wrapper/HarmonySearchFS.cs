@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Wrapper;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _harmonyMemorySize;
     private readonly int _nIterations;
@@ -38,8 +38,10 @@ public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int _nInputFeatures;
     private double _bestFitness;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FeatureImportances => _featureImportances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     public double BestFitness => _bestFitness;
     /// <inheritdoc />
@@ -77,6 +79,7 @@ public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "HarmonySearchFS requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -233,6 +236,7 @@ public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return totalCorr / nSelected - penalty;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -262,6 +266,7 @@ public class HarmonySearchFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("HarmonySearchFS does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

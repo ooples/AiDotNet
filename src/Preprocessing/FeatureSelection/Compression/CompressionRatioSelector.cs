@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Compression;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class CompressionRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class CompressionRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
@@ -29,9 +29,11 @@ public class CompressionRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
     public double[]? EntropyScores => _entropyScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -140,6 +142,7 @@ public class CompressionRatioSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         throw new NotSupportedException("CompressionRatioSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

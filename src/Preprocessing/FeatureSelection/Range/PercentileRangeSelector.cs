@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Range;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class PercentileRangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class PercentileRangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _lowerPercentile;
@@ -30,10 +30,12 @@ public class PercentileRangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double LowerPercentile => _lowerPercentile;
     public double UpperPercentile => _upperPercentile;
     public double[]? RangeValues => _rangeValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -138,6 +140,7 @@ public class PercentileRangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         throw new NotSupportedException("PercentileRangeSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

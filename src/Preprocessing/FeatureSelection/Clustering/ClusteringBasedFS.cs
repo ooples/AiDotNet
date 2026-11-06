@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Clustering;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFeatureSelector<T>
 {
     private readonly int _nClusters;
     private readonly int _maxIterations;
@@ -36,6 +36,7 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int NClusters => _nClusters;
     public int[]? ClusterAssignments => _clusterAssignments;
     public double[]? FeatureScores => _featureScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -260,6 +261,7 @@ public class ClusteringBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("ClusteringBasedFS does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

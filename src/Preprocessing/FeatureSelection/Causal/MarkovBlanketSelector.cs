@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Causal;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly int _maxFeatures;
     private readonly double _threshold;
@@ -35,6 +35,7 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     public int MaxFeatures => _maxFeatures;
     public double[]? RelevanceScores => _relevanceScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -63,6 +64,7 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "MarkovBlanketSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -262,6 +264,7 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return condCount > 0 ? totalMI / condCount : ComputeMutualInformation(X, y, feature, n);
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -291,6 +294,7 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("MarkovBlanketSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

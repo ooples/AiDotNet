@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _hiddenSize;
@@ -33,11 +33,13 @@ public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int HiddenSize => _hiddenSize;
     public int Epochs => _epochs;
     public double LearningRate => _learningRate;
     public double[]? ReconstructionImportance => _reconstructionImportance;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -237,6 +239,7 @@ public class AutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("AutoencoderSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

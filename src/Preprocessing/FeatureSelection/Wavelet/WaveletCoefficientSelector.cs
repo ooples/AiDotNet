@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Wavelet;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class WaveletCoefficientSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class WaveletCoefficientSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _decompositionLevel;
@@ -29,9 +29,11 @@ public class WaveletCoefficientSelector<T> : TransformerBase<T, Matrix<T>, Matri
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int DecompositionLevel => _decompositionLevel;
     public double[]? WaveletScores => _waveletScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -56,6 +58,7 @@ public class WaveletCoefficientSelector<T> : TransformerBase<T, Matrix<T>, Matri
             "WaveletCoefficientSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -162,6 +165,7 @@ public class WaveletCoefficientSelector<T> : TransformerBase<T, Matrix<T>, Matri
         return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -191,6 +195,7 @@ public class WaveletCoefficientSelector<T> : TransformerBase<T, Matrix<T>, Matri
         throw new NotSupportedException("WaveletCoefficientSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

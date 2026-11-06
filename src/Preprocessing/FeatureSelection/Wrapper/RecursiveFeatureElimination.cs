@@ -24,7 +24,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Wrapper;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class RecursiveFeatureElimination<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class RecursiveFeatureElimination<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _step;
@@ -35,9 +35,11 @@ public class RecursiveFeatureElimination<T> : TransformerBase<T, Matrix<T>, Matr
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int Step => _step;
     public double[]? Ranking => _ranking;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -68,6 +70,7 @@ public class RecursiveFeatureElimination<T> : TransformerBase<T, Matrix<T>, Matr
             "RecursiveFeatureElimination requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -171,6 +174,7 @@ public class RecursiveFeatureElimination<T> : TransformerBase<T, Matrix<T>, Matr
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -200,6 +204,7 @@ public class RecursiveFeatureElimination<T> : TransformerBase<T, Matrix<T>, Matr
         throw new NotSupportedException("RecursiveFeatureElimination does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Streaming;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _windowSize;
@@ -32,9 +32,11 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int WindowSize => _windowSize;
     public double[]? FeatureScores => _featureScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -63,6 +65,7 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "SlidingWindowSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         int n = data.Rows;
@@ -140,6 +143,7 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         Fit(data, target);
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -169,6 +173,7 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("SlidingWindowSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

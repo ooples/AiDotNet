@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Spectral;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _windowSize;
@@ -29,9 +29,11 @@ public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int WindowSize => _windowSize;
     public double[]? SpectralEntropyScores => _spectralEntropyScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -159,6 +161,7 @@ public class SpectralEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         throw new NotSupportedException("SpectralEntropySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

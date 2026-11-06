@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Robustness;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class OutlierRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class OutlierRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _outlierThreshold;
@@ -29,9 +29,11 @@ public class OutlierRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double OutlierThreshold => _outlierThreshold;
     public double[]? RobustnessScores => _robustnessScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -56,6 +58,7 @@ public class OutlierRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "OutlierRobustSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -164,6 +167,7 @@ public class OutlierRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return denominator > 1e-10 ? numerator / denominator : 0;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -193,6 +197,7 @@ public class OutlierRobustSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("OutlierRobustSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

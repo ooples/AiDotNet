@@ -22,7 +22,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _hiddenSize;
@@ -34,8 +34,10 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? SelectionProbabilities => _selectionProbabilities;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -223,6 +225,7 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
         throw new NotSupportedException("ConcreteAutoencoderSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

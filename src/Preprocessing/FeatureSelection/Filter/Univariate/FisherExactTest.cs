@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class FisherExactTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class FisherExactTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
@@ -31,9 +31,11 @@ public class FisherExactTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? PValues => _pValues;
     public double[]? OddsRatios => _oddsRatios;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -57,6 +59,7 @@ public class FisherExactTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "FisherExactTest requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -181,6 +184,7 @@ public class FisherExactTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return result;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -210,6 +214,7 @@ public class FisherExactTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("FisherExactTest does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.MultiObjective;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly int _maxFeatures;
     private readonly int _populationSize;
@@ -38,6 +38,7 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int MaxFeatures => _maxFeatures;
     public int PopulationSize => _populationSize;
     public double[]? FeatureImportances => _featureImportances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -68,6 +69,7 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "NSGAIISelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -400,6 +402,7 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return best;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -429,6 +432,7 @@ public class NSGAIISelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("NSGAIISelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

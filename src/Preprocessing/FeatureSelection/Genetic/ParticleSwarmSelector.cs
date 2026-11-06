@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Genetic;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _swarmSize;
@@ -35,10 +35,12 @@ public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int SwarmSize => _swarmSize;
     public int NIterations => _nIterations;
     public double[]? FeatureImportances => _featureImportances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -73,6 +75,7 @@ public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "ParticleSwarmSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -232,6 +235,7 @@ public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -261,6 +265,7 @@ public class ParticleSwarmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("ParticleSwarmSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

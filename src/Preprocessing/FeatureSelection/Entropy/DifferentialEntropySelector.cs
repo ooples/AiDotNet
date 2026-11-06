@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Entropy;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _kNeighbors;
@@ -30,9 +30,11 @@ public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matr
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int KNeighbors => _kNeighbors;
     public double[]? EntropyValues => _entropyValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -152,6 +154,7 @@ public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matr
         throw new NotSupportedException("DifferentialEntropySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

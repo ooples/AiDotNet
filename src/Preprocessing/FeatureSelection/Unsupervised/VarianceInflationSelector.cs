@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Unsupervised;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class VarianceInflationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class VarianceInflationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFeatureSelector<T>
 {
     private readonly double _vifThreshold;
 
@@ -31,6 +31,7 @@ public class VarianceInflationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
 
     public double VIFThreshold => _vifThreshold;
     public double[]? VIFScores => _vifScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -226,6 +227,7 @@ public class VarianceInflationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         throw new NotSupportedException("VarianceInflationSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

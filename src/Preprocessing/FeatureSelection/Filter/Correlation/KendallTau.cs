@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Correlation;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly bool _useTauB;
@@ -32,9 +32,11 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public bool UseTauB => _useTauB;
     public double[]? TauScores => _tauScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -59,6 +61,7 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "KendallTau requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -151,6 +154,7 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -180,6 +184,7 @@ public class KendallTau<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("KendallTau does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

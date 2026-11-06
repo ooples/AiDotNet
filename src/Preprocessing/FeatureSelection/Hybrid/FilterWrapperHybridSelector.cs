@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Hybrid;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class FilterWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class FilterWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _filterRatio;
@@ -33,8 +33,10 @@ public class FilterWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Matr
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FeatureScores => _featureScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -61,6 +63,7 @@ public class FilterWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Matr
             "FilterWrapperHybridSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -267,6 +270,7 @@ public class FilterWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Matr
         return x;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -296,6 +300,7 @@ public class FilterWrapperHybridSelector<T> : TransformerBase<T, Matrix<T>, Matr
         throw new NotSupportedException("FilterWrapperHybridSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.DomainSpecific;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _imageWidth;
@@ -35,12 +35,14 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int ImageWidth => _imageWidth;
     public int ImageHeight => _imageHeight;
     public int NumChannels => _numChannels;
     public bool UseSpatialCorrelation => _useSpatialCorrelation;
     public double[]? FeatureScores => _featureScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -75,6 +77,7 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "ImageFeatureSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -200,6 +203,7 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return (x, y, channel);
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -229,6 +233,7 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("ImageFeatureSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

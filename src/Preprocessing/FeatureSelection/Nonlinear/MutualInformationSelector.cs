@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Nonlinear;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
@@ -30,9 +30,11 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
     public double[]? MIValues => _miValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -59,6 +61,7 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
             "MutualInformationSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -167,6 +170,7 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return Math.Max(0, mi); // MI is always non-negative
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -196,6 +200,7 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         throw new NotSupportedException("MutualInformationSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

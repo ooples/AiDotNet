@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Quantum;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nSteps;
@@ -32,8 +32,10 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FeatureScores => _featureScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -62,6 +64,7 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             "QuantumAnnealingSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -204,6 +207,7 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return energy;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -233,6 +237,7 @@ public class QuantumAnnealingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         throw new NotSupportedException("QuantumAnnealingSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

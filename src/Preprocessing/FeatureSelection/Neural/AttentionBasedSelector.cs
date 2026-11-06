@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class AttentionBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class AttentionBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _hiddenSize;
@@ -34,8 +34,10 @@ public class AttentionBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? AttentionScores => _attentionScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -64,6 +66,7 @@ public class AttentionBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             "AttentionBasedSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -212,6 +215,7 @@ public class AttentionBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         return weights;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -241,6 +245,7 @@ public class AttentionBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         throw new NotSupportedException("AttentionBasedSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

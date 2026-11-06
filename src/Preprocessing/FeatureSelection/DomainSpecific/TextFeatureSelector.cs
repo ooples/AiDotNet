@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.DomainSpecific;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _minDocumentFrequency;
@@ -35,12 +35,14 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double MinDocumentFrequency => _minDocumentFrequency;
     public double MaxDocumentFrequency => _maxDocumentFrequency;
     public bool UseChiSquare => _useChiSquare;
     public double[]? FeatureScores => _featureScores;
     public double[]? DocumentFrequencies => _documentFrequencies;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -73,6 +75,7 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "TextFeatureSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -234,6 +237,7 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -263,6 +267,7 @@ public class TextFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("TextFeatureSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

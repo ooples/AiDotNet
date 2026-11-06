@@ -22,7 +22,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Hybrid;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _correlationWeight;
@@ -34,11 +34,13 @@ public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double CorrelationWeight => _correlationWeight;
     public double[]? CorrelationScores => _correlationScores;
     public double[]? MIScores => _miScores;
     public double[]? HybridScores => _hybridScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -69,6 +71,7 @@ public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "CorrelationMIHybrid requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -194,6 +197,7 @@ public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return scores.Select(s => (s - min) / range).ToArray();
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -223,6 +227,7 @@ public class CorrelationMIHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("CorrelationMIHybrid does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

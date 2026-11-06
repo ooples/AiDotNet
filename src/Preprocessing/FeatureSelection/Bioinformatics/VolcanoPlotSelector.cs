@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Bioinformatics;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class VolcanoPlotSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class VolcanoPlotSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _minFoldChange;
@@ -35,10 +35,12 @@ public class VolcanoPlotSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? Log2FoldChanges => _log2FoldChanges;
     public double[]? PValues => _pValues;
     public double[]? VolcanoScores => _volcanoScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -69,6 +71,7 @@ public class VolcanoPlotSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "VolcanoPlotSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -284,6 +287,7 @@ public class VolcanoPlotSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return h;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -313,6 +317,7 @@ public class VolcanoPlotSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("VolcanoPlotSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

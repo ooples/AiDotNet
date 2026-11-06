@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _hiddenSize;
@@ -33,8 +33,10 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FeatureImportances => _featureImportances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -193,6 +195,7 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         throw new NotSupportedException("SparseAutoencoderSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

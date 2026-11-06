@@ -22,7 +22,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
@@ -32,9 +32,11 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? GainRatios => _gainRatios;
     public double[]? InformationGains => _informationGains;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -59,6 +61,7 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "GainRatio requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -174,6 +177,7 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -203,6 +207,7 @@ public class GainRatio<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("GainRatio does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

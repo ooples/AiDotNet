@@ -42,7 +42,7 @@ public enum SelectionMode
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly SelectionMode _mode;
     private readonly double _param;
@@ -58,6 +58,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
     public double Param => _param;
     public double[]? Scores => _scores;
     public double[]? PValues => _pValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -106,6 +107,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
             "GenericUnivariateSelect requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -391,6 +393,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return sign * y;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -420,6 +423,7 @@ public class GenericUnivariateSelect<T> : TransformerBase<T, Matrix<T>, Matrix<T
         throw new NotSupportedException("GenericUnivariateSelect does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

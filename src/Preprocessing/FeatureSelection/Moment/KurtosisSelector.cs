@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Moment;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly bool _preferHighKurtosis;
@@ -29,9 +29,11 @@ public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public bool PreferHighKurtosis => _preferHighKurtosis;
     public double[]? KurtosisValues => _kurtosisValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -138,6 +140,7 @@ public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("KurtosisSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

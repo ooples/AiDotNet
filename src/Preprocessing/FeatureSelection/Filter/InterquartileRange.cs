@@ -22,7 +22,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class InterquartileRange<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class InterquartileRange<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _minIQR;
@@ -33,10 +33,12 @@ public class InterquartileRange<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? IQRValues => _iqrValues;
     public double[]? Q1Values => _q1Values;
     public double[]? Q3Values => _q3Values;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -144,6 +146,7 @@ public class InterquartileRange<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("InterquartileRange does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

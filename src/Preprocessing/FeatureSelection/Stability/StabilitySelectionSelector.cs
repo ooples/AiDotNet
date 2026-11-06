@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Stability;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class StabilitySelectionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class StabilitySelectionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nSubsamples;
@@ -32,10 +32,12 @@ public class StabilitySelectionSelector<T> : TransformerBase<T, Matrix<T>, Matri
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NSubsamples => _nSubsamples;
     public double SubsampleRatio => _subsampleRatio;
     public double[]? StabilityScores => _stabilityScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -64,6 +66,7 @@ public class StabilitySelectionSelector<T> : TransformerBase<T, Matrix<T>, Matri
             "StabilitySelectionSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -157,6 +160,7 @@ public class StabilitySelectionSelector<T> : TransformerBase<T, Matrix<T>, Matri
         return denominator > 1e-10 ? numerator / denominator : 0;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -186,6 +190,7 @@ public class StabilitySelectionSelector<T> : TransformerBase<T, Matrix<T>, Matri
         throw new NotSupportedException("StabilitySelectionSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

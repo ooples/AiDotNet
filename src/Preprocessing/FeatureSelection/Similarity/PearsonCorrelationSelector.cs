@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Similarity;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class PearsonCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class PearsonCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
 
@@ -28,8 +28,10 @@ public class PearsonCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matri
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? Correlations => _correlations;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -52,6 +54,7 @@ public class PearsonCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matri
             "PearsonCorrelationSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -110,6 +113,7 @@ public class PearsonCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matri
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -139,6 +143,7 @@ public class PearsonCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matri
         throw new NotSupportedException("PearsonCorrelationSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

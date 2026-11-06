@@ -22,7 +22,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Statistical;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class MannWhitneyU<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class MannWhitneyU<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _alpha;
@@ -32,10 +32,12 @@ public class MannWhitneyU<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
     public double[]? UStatistics => _uStatistics;
     public double[]? PValues => _pValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -60,6 +62,7 @@ public class MannWhitneyU<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "MannWhitneyU requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -178,6 +181,7 @@ public class MannWhitneyU<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return x > 0 ? 1 - p : p;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -207,6 +211,7 @@ public class MannWhitneyU<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("MannWhitneyU does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

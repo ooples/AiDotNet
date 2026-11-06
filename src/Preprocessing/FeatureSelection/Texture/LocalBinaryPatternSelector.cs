@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Texture;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class LocalBinaryPatternSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class LocalBinaryPatternSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _neighborhoodSize;
@@ -29,9 +29,11 @@ public class LocalBinaryPatternSelector<T> : TransformerBase<T, Matrix<T>, Matri
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NeighborhoodSize => _neighborhoodSize;
     public double[]? PatternScores => _patternScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -151,6 +153,7 @@ public class LocalBinaryPatternSelector<T> : TransformerBase<T, Matrix<T>, Matri
         throw new NotSupportedException("LocalBinaryPatternSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

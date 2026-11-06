@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Nonlinear;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class MaximalInformationCoefficientSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class MaximalInformationCoefficientSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _maxBins;
@@ -30,9 +30,11 @@ public class MaximalInformationCoefficientSelector<T> : TransformerBase<T, Matri
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int MaxBins => _maxBins;
     public double[]? MICValues => _micValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -59,6 +61,7 @@ public class MaximalInformationCoefficientSelector<T> : TransformerBase<T, Matri
             "MaximalInformationCoefficientSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -174,6 +177,7 @@ public class MaximalInformationCoefficientSelector<T> : TransformerBase<T, Matri
         return Math.Max(0, mi);
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -203,6 +207,7 @@ public class MaximalInformationCoefficientSelector<T> : TransformerBase<T, Matri
         throw new NotSupportedException("MaximalInformationCoefficientSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

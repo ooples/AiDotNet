@@ -35,7 +35,7 @@ public enum SelectionDirection
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly SelectionDirection _direction;
@@ -47,9 +47,11 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public SelectionDirection Direction => _direction;
     public double[]? FeatureScores => _featureScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -80,6 +82,7 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
             "SequentialFeatureSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -309,6 +312,7 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return ssTot > 1e-10 ? 1 - ssRes / ssTot : 0;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -338,6 +342,7 @@ public class SequentialFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         throw new NotSupportedException("SequentialFeatureSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

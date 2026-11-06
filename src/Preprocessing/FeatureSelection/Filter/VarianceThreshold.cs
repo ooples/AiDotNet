@@ -22,7 +22,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFeatureSelector<T>
 {
     private readonly double _threshold;
 
@@ -32,6 +32,7 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
     public double Threshold => _threshold;
     public double[]? Variances => _variances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -102,6 +103,7 @@ public class VarianceThreshold<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("VarianceThreshold does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

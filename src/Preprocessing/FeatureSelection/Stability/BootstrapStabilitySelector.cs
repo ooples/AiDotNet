@@ -22,7 +22,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Stability;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class BootstrapStabilitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class BootstrapStabilitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nBootstraps;
@@ -32,8 +32,10 @@ public class BootstrapStabilitySelector<T> : TransformerBase<T, Matrix<T>, Matri
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? SelectionProbabilities => _selectionProbabilities;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -60,6 +62,7 @@ public class BootstrapStabilitySelector<T> : TransformerBase<T, Matrix<T>, Matri
             "BootstrapStabilitySelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -160,6 +163,7 @@ public class BootstrapStabilitySelector<T> : TransformerBase<T, Matrix<T>, Matri
             .ToList();
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -189,6 +193,7 @@ public class BootstrapStabilitySelector<T> : TransformerBase<T, Matrix<T>, Matri
         throw new NotSupportedException("BootstrapStabilitySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

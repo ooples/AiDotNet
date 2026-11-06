@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Similarity;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SpearmanCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SpearmanCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
 
@@ -28,8 +28,10 @@ public class SpearmanCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? Correlations => _correlations;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -52,6 +54,7 @@ public class SpearmanCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
             "SpearmanCorrelationSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -138,6 +141,7 @@ public class SpearmanCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         return ranks;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -167,6 +171,7 @@ public class SpearmanCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         throw new NotSupportedException("SpearmanCorrelationSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

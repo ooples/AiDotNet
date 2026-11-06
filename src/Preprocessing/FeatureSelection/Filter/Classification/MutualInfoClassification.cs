@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Classification;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class MutualInfoClassification<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class MutualInfoClassification<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
@@ -32,9 +32,11 @@ public class MutualInfoClassification<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
     public double[]? MIScores => _miScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -61,6 +63,7 @@ public class MutualInfoClassification<T> : TransformerBase<T, Matrix<T>, Matrix<
             "MutualInfoClassification requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -148,6 +151,7 @@ public class MutualInfoClassification<T> : TransformerBase<T, Matrix<T>, Matrix<
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -177,6 +181,7 @@ public class MutualInfoClassification<T> : TransformerBase<T, Matrix<T>, Matrix<
         throw new NotSupportedException("MutualInfoClassification does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

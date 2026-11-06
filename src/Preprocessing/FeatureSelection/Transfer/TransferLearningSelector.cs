@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Transfer;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class TransferLearningSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class TransferLearningSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double[]? _sourceImportances;
@@ -34,10 +34,12 @@ public class TransferLearningSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double TransferWeight => _transferWeight;
     public double[]? TargetImportances => _targetImportances;
     public double[]? CombinedImportances => _combinedImportances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -66,6 +68,7 @@ public class TransferLearningSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             "TransferLearningSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -146,6 +149,7 @@ public class TransferLearningSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return importances;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -175,6 +179,7 @@ public class TransferLearningSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         throw new NotSupportedException("TransferLearningSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

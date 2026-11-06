@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Frequency;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class FourierMagnitudeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class FourierMagnitudeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
 
@@ -28,8 +28,10 @@ public class FourierMagnitudeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? SpectralEnergies => _spectralEnergies;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -126,6 +128,7 @@ public class FourierMagnitudeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         throw new NotSupportedException("FourierMagnitudeSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

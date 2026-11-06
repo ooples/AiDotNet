@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly double _percentile;
     private readonly Func<Matrix<T>, Vector<T>, double[]>? _scoreFunc;
@@ -35,6 +35,7 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public double Percentile => _percentile;
     public double[]? Scores => _scores;
     public double[]? PValues => _pValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -61,6 +62,7 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "SelectPercentile requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -320,6 +322,7 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return scores;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -349,6 +352,7 @@ public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("SelectPercentile does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

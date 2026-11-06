@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Incremental;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _decayFactor;
@@ -38,9 +38,11 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double DecayFactor => _decayFactor;
     public double[]? CorrelationScores => _correlationScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     public int SampleCount => _sampleCount;
     /// <inheritdoc />
@@ -69,6 +71,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             "StreamingFeatureSelector requires target values. Use PartialFit or Fit with target.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         Reset();
@@ -168,6 +171,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         IsFitted = false;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -197,6 +201,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         throw new NotSupportedException("StreamingFeatureSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

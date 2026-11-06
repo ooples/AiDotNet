@@ -27,7 +27,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.HighDimensional;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly double _fdr;
     private readonly int? _randomState;
@@ -41,6 +41,7 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public double FDR => _fdr;
     public double[]? WStatistics => _wStats;
     public double Threshold => _threshold;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -67,6 +68,7 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "KnockoffFilter requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -212,6 +214,7 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return double.MaxValue;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -241,6 +244,7 @@ public class KnockoffFilter<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("KnockoffFilter does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

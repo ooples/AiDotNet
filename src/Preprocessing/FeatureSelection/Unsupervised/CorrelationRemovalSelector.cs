@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Unsupervised;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFeatureSelector<T>
 {
     private readonly double _threshold;
 
@@ -31,6 +31,7 @@ public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matri
 
     public double Threshold => _threshold;
     public double[,]? CorrelationMatrix => _correlationMatrix;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -134,6 +135,7 @@ public class CorrelationRemovalSelector<T> : TransformerBase<T, Matrix<T>, Matri
         throw new NotSupportedException("CorrelationRemovalSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

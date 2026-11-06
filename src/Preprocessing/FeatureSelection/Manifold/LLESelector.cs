@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Manifold;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nNeighbors;
@@ -29,9 +29,11 @@ public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NNeighbors => _nNeighbors;
     public double[]? LocalLinearityScores => _localLinearityScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -153,6 +155,7 @@ public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("LLESelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

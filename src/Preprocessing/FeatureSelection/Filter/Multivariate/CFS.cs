@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Multivariate;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
 
@@ -32,8 +32,10 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FeatureClassCorrelations => _featureClassCorrelations;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -56,6 +58,7 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "CFS requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -192,6 +195,7 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return denom > 1e-10 ? k * avgFCCorr / denom : 0;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -221,6 +225,7 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("CFS does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

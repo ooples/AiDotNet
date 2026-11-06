@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Distance;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
 
@@ -29,8 +29,10 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? DistanceContributions => _distanceContributions;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -53,6 +55,7 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
             "MahalanobisDistanceSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -139,6 +142,7 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -168,6 +172,7 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
         throw new NotSupportedException("MahalanobisDistanceSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

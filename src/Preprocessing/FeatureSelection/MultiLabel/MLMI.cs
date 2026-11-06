@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.MultiLabel;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class MLMI<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class MLMI<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
@@ -33,10 +33,12 @@ public class MLMI<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
     public bool ConsiderLabelCorrelations => _considerLabelCorrelations;
     public double[]? MutualInformation => _mutualInformation;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -319,6 +321,7 @@ public class MLMI<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("MLMI does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

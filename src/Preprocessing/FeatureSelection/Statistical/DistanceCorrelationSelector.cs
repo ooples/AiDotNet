@@ -22,7 +22,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Statistical;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
 
@@ -30,8 +30,10 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? DistanceCorrelations => _distanceCorrelations;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -54,6 +56,7 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
             "DistanceCorrelationSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -160,6 +163,7 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         return Math.Sqrt(dCovSq / Math.Sqrt(dVarASq * dVarBSq));
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -189,6 +193,7 @@ public class DistanceCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matr
         throw new NotSupportedException("DistanceCorrelationSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

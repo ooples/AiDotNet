@@ -24,7 +24,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Metaheuristic;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _populationSize;
@@ -36,11 +36,13 @@ public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int PopulationSize => _populationSize;
     public int NIterations => _nIterations;
     public double Amplitude => _a;
     public double[]? FeatureScores => _featureScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -73,6 +75,7 @@ public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "SineCosine requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -217,6 +220,7 @@ public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return selected > 0 ? fitness / selected - penalty : 0;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -246,6 +250,7 @@ public class SineCosine<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("SineCosine does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

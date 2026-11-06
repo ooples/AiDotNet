@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.TimeSeries;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class LaggedCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class LaggedCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _minLag;
@@ -32,9 +32,11 @@ public class LaggedCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? CorrelationScores => _correlationScores;
     public int[]? BestLags => _bestLags;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -65,6 +67,7 @@ public class LaggedCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
             "LaggedCorrelationSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -144,6 +147,7 @@ public class LaggedCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -173,6 +177,7 @@ public class LaggedCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         throw new NotSupportedException("LaggedCorrelationSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

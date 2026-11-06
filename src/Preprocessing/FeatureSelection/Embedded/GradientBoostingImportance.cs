@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Embedded;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nEstimators;
@@ -35,10 +35,12 @@ public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matri
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NEstimators => _nEstimators;
     public double LearningRate => _learningRate;
     public double[]? Importances => _importances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -69,6 +71,7 @@ public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matri
             "GradientBoostingImportance requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -234,6 +237,7 @@ public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matri
         BuildNode(data, residuals, right, predictions, importance, depth + 1, random);
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -263,6 +267,7 @@ public class GradientBoostingImportance<T> : TransformerBase<T, Matrix<T>, Matri
         throw new NotSupportedException("GradientBoostingImportance does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

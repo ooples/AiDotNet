@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Multivariate;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly double _threshold;
 
@@ -32,6 +32,7 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int _nInputFeatures;
 
     public double[]? SymmetricalUncertainties => _symmetricalUncertainties;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -51,6 +52,7 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "FCBF requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -194,6 +196,7 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return denom > 1e-10 ? 2 * mi / denom : 0;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -223,6 +226,7 @@ public class FCBF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("FCBF does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

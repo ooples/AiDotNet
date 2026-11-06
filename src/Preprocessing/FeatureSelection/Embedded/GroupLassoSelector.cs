@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Embedded;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly int _nGroupsToSelect;
     private readonly int[][]? _groups;
@@ -39,6 +39,7 @@ public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int NGroupsToSelect => _nGroupsToSelect;
     public double[]? GroupNorms => _groupNorms;
     public int[]? SelectedGroups => _selectedGroups;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -69,6 +70,7 @@ public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "GroupLassoSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -217,6 +219,7 @@ public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -246,6 +249,7 @@ public class GroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("GroupLassoSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

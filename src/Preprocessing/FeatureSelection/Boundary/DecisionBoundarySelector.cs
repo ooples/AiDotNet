@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Boundary;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class DecisionBoundarySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class DecisionBoundarySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
 
@@ -28,8 +28,10 @@ public class DecisionBoundarySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? BoundaryClarityScores => _boundaryClarityScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -52,6 +54,7 @@ public class DecisionBoundarySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             "DecisionBoundarySelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -134,6 +137,7 @@ public class DecisionBoundarySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -163,6 +167,7 @@ public class DecisionBoundarySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         throw new NotSupportedException("DecisionBoundarySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

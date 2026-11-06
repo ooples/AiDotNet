@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.DomainSpecific;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _variancePercentile;
@@ -36,6 +36,7 @@ public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double VariancePercentile => _variancePercentile;
     public bool UseFoldChangeFilter => _useFoldChangeFilter;
@@ -43,6 +44,7 @@ public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     public double[]? FeatureScores => _featureScores;
     public double[]? FoldChanges => _foldChanges;
     public double[]? Variances => _variances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -75,6 +77,7 @@ public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
             "GenomicFeatureSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -195,6 +198,7 @@ public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -224,6 +228,7 @@ public class GenomicFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         throw new NotSupportedException("GenomicFeatureSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Entropy;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _embeddingDimension;
@@ -31,10 +31,12 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int EmbeddingDimension => _embeddingDimension;
     public double Tolerance => _tolerance;
     public double[]? ApEnValues => _apenValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -170,6 +172,7 @@ public class ApproximateEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         throw new NotSupportedException("ApproximateEntropySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

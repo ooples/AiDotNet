@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Complexity;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _kMax;
@@ -30,9 +30,11 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int KMax => _kMax;
     public double[]? FractalDimensions => _fractalDimensions;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -181,6 +183,7 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         throw new NotSupportedException("FractalDimensionSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

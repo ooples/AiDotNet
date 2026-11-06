@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Quantile;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class QuantileDispersionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class QuantileDispersionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
 
@@ -29,8 +29,10 @@ public class QuantileDispersionSelector<T> : TransformerBase<T, Matrix<T>, Matri
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? QCDValues => _qcdValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -136,6 +138,7 @@ public class QuantileDispersionSelector<T> : TransformerBase<T, Matrix<T>, Matri
         throw new NotSupportedException("QuantileDispersionSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

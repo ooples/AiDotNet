@@ -25,7 +25,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Relief;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nNeighbors;
@@ -36,10 +36,12 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NNeighbors => _nNeighbors;
     public int NSamples => _nSamples;
     public double[]? FeatureWeights => _featureWeights;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -72,6 +74,7 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "ReliefF requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -201,6 +204,7 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return Math.Abs(NumOps.ToDouble(data[i1, j]) - NumOps.ToDouble(data[i2, j])) / range;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -230,6 +234,7 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("ReliefF does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

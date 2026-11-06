@@ -20,7 +20,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Moment;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class CoefOfVariationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class CoefOfVariationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly bool _preferHighCV;
@@ -29,9 +29,11 @@ public class CoefOfVariationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public bool PreferHighCV => _preferHighCV;
     public double[]? CVValues => _cvValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -128,6 +130,7 @@ public class CoefOfVariationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         throw new NotSupportedException("CoefOfVariationSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

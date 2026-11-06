@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Entropy;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _embeddingDimension;
@@ -31,10 +31,12 @@ public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int EmbeddingDimension => _embeddingDimension;
     public double Tolerance => _tolerance;
     public double[]? SampEnValues => _sampenValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -173,6 +175,7 @@ public class SampleEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("SampleEntropySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

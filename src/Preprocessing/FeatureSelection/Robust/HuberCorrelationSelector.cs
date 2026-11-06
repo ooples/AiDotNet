@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Robust;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class HuberCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class HuberCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _huberDelta;
@@ -30,9 +30,11 @@ public class HuberCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double HuberDelta => _huberDelta;
     public double[]? RobustCorrelations => _robustCorrelations;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -57,6 +59,7 @@ public class HuberCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             "HuberCorrelationSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -137,6 +140,7 @@ public class HuberCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return ComputeMedian(absDeviations) * 1.4826; // Scale factor for consistency
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -166,6 +170,7 @@ public class HuberCorrelationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         throw new NotSupportedException("HuberCorrelationSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

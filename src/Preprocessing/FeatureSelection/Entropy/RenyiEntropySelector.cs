@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Entropy;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class RenyiEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class RenyiEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nBins;
@@ -31,10 +31,12 @@ public class RenyiEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NBins => _nBins;
     public double Alpha => _alpha;
     public double[]? RenyiEntropies => _renyiEntropies;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -144,6 +146,7 @@ public class RenyiEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("RenyiEntropySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

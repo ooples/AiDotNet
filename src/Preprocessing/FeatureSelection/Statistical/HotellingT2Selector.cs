@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Statistical;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class HotellingT2Selector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class HotellingT2Selector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
 
@@ -29,8 +29,10 @@ public class HotellingT2Selector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? T2Contributions => _t2Contributions;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -53,6 +55,7 @@ public class HotellingT2Selector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "HotellingT2Selector requires binary target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -121,6 +124,7 @@ public class HotellingT2Selector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -150,6 +154,7 @@ public class HotellingT2Selector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("HotellingT2Selector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

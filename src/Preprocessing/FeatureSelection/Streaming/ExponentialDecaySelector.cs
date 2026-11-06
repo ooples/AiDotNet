@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Streaming;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _decayFactor;
@@ -36,9 +36,11 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double DecayFactor => _decayFactor;
     public double[]? FeatureScores => _featureScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -66,6 +68,7 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             "ExponentialDecaySelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         int n = data.Rows;
@@ -137,6 +140,7 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         Fit(data, target);
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -166,6 +170,7 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         throw new NotSupportedException("ExponentialDecaySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

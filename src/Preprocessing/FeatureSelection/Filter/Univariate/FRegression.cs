@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _pValueThreshold;
@@ -34,10 +34,12 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FStatistics => _fStatistics;
     public double[]? PValues => _pValues;
     public double[]? RSquaredValues => _rSquaredValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -62,6 +64,7 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "FRegression requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -237,6 +240,7 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return -tmp + Math.Log(2.5066282746310005 * ser / x);
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -266,6 +270,7 @@ public class FRegression<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("FRegression does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

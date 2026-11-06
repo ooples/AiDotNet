@@ -24,7 +24,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Spectral;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nClusters;
@@ -36,8 +36,10 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? MCFSScores => _mcfsScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -289,6 +291,7 @@ public class MCFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("MCFS does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

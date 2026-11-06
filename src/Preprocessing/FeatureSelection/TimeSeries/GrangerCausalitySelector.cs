@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.TimeSeries;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _maxLag;
@@ -30,9 +30,11 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int MaxLag => _maxLag;
     public double[]? GrangerFScores => _grangerFScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -59,6 +61,7 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
             "GrangerCausalitySelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -226,6 +229,7 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return x;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -255,6 +259,7 @@ public class GrangerCausalitySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         throw new NotSupportedException("GrangerCausalitySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

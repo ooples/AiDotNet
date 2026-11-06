@@ -24,7 +24,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Wrapper;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SimulatedAnnealingFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SimulatedAnnealingFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nIterations;
@@ -37,10 +37,12 @@ public class SimulatedAnnealingFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double InitialTemperature => _initialTemperature;
     public double CoolingRate => _coolingRate;
     public double[]? FeatureScores => _featureScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -77,6 +79,7 @@ public class SimulatedAnnealingFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "SimulatedAnnealingFS requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -237,6 +240,7 @@ public class SimulatedAnnealingFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return totalCorr / featureIndices.Length;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -266,6 +270,7 @@ public class SimulatedAnnealingFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("SimulatedAnnealingFS does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

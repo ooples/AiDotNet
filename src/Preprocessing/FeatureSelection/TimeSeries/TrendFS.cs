@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.TimeSeries;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class TrendFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class TrendFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly bool _absoluteTrend;
@@ -32,9 +32,11 @@ public class TrendFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public bool AbsoluteTrend => _absoluteTrend;
     public double[]? TrendScores => _trendScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -150,6 +152,7 @@ public class TrendFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("TrendFS does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

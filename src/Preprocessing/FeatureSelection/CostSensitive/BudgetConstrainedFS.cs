@@ -22,7 +22,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.CostSensitive;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class BudgetConstrainedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class BudgetConstrainedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly double _budget;
     private readonly double[]? _featureCosts;
@@ -37,6 +37,7 @@ public class BudgetConstrainedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public double[]? FeatureCosts => _featureCosts;
     public double[]? RelevanceScores => _relevanceScores;
     public double[]? ValuePerCost => _valuePerCost;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     public double UsedBudget => _usedBudget;
     /// <inheritdoc />
@@ -62,6 +63,7 @@ public class BudgetConstrainedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "BudgetConstrainedFS requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -192,6 +194,7 @@ public class BudgetConstrainedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return costs;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -221,6 +224,7 @@ public class BudgetConstrainedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("BudgetConstrainedFS does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

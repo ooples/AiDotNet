@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Causal;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class PCAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class PCAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly int _maxFeatures;
     private readonly double _alpha;
@@ -38,6 +38,7 @@ public class PCAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public double Alpha => _alpha;
     public bool[,]? AdjacencyMatrix => _adjacencyMatrix;
     public double[]? ConnectionStrengths => _connectionStrengths;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -66,6 +67,7 @@ public class PCAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "PCAlgorithmSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -359,6 +361,7 @@ public class PCAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return 0.5 * (1.0 + sign * y);
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -388,6 +391,7 @@ public class PCAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("PCAlgorithmSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Regression;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class RidgeImportanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class RidgeImportanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _alpha;
@@ -30,9 +30,11 @@ public class RidgeImportanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Alpha => _alpha;
     public double[]? Coefficients => _coefficients;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -57,6 +59,7 @@ public class RidgeImportanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
             "RidgeImportanceSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -173,6 +176,7 @@ public class RidgeImportanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return x;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -202,6 +206,7 @@ public class RidgeImportanceSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         throw new NotSupportedException("RidgeImportanceSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

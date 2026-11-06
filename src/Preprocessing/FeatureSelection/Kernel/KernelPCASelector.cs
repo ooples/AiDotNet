@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Kernel;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class KernelPCASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class KernelPCASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _gamma;
@@ -31,9 +31,11 @@ public class KernelPCASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double Gamma => _gamma;
     public double[]? FeatureImportances => _featureImportances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -197,6 +199,7 @@ public class KernelPCASelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("KernelPCASelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

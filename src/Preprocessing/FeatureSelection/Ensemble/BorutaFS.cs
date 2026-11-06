@@ -24,7 +24,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Ensemble;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class BorutaFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class BorutaFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly int _nIterations;
     private readonly double _percentile;
@@ -38,6 +38,7 @@ public class BorutaFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int NIterations => _nIterations;
     public double Percentile => _percentile;
     public double[]? FeatureImportances => _featureImportances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -68,6 +69,7 @@ public class BorutaFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "BorutaFS requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -230,6 +232,7 @@ public class BorutaFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return q < 0 ? -result : result;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -259,6 +262,7 @@ public class BorutaFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("BorutaFS does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

@@ -23,7 +23,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Wrapper;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ExhaustiveSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class ExhaustiveSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _maxFeaturesForExhaustive;
@@ -32,8 +32,10 @@ public class ExhaustiveSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double BestScore => _bestScore;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -60,6 +62,7 @@ public class ExhaustiveSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             "ExhaustiveSearch requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -192,6 +195,7 @@ public class ExhaustiveSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return (s11 > 1e-10 && s22 > 1e-10) ? Math.Abs(s12 / Math.Sqrt(s11 * s22)) : 0;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
@@ -221,6 +225,7 @@ public class ExhaustiveSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         throw new NotSupportedException("ExhaustiveSearch does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)

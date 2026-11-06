@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Entropy;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class PermutationEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class PermutationEntropySelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _embeddingDimension;
@@ -31,10 +31,12 @@ public class PermutationEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int EmbeddingDimension => _embeddingDimension;
     public int Delay => _delay;
     public double[]? EntropyValues => _entropyValues;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
     /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
@@ -162,6 +164,7 @@ public class PermutationEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         throw new NotSupportedException("PermutationEntropySelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
