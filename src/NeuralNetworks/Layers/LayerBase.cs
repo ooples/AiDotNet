@@ -6644,9 +6644,29 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// instance is skipped rather than fatal, so adding a buffer does not invalidate checkpoints.
     /// </para>
     /// </remarks>
-    private void WriteRegisteredBuffers(BinaryWriter writer)
+    private void WriteRegisteredBuffers(BinaryWriter writer) => WriteRegisteredBuffers(writer, inputSizedOnly: false);
+
+    /// <summary>
+    /// Writes only the input-sized buffers (<c>[FittedParameter(InputSized = true)]</c>, a graph layer's adjacency),
+    /// in the block format <see cref="ReadInputSizedBuffers"/> reads back.
+    /// </summary>
+    /// <remarks>
+    /// A network stores each layer as its parameter vector plus extras. Every other buffer is declared into that
+    /// vector, but input-sized state is kept out of it by design, so without this block a network's save and its
+    /// serializing clone came back with the layer's adjacency missing.
+    /// </remarks>
+    internal void WriteInputSizedBuffers(BinaryWriter writer) => WriteRegisteredBuffers(writer, inputSizedOnly: true);
+
+    /// <summary>Restores the block written by <see cref="WriteInputSizedBuffers"/>.</summary>
+    internal void ReadInputSizedBuffers(BinaryReader reader) => ReadRegisteredBuffers(reader);
+
+    private void WriteRegisteredBuffers(BinaryWriter writer, bool inputSizedOnly)
     {
-        var buffers = GetRegisteredBuffers();
+        var buffers = inputSizedOnly
+            ? GetRegisteredBuffers()
+                .Where(buffer => GetRegisteredBufferStateRole(buffer.Name) == ParameterSlotRole.InputSizedState)
+                .ToList()
+            : GetRegisteredBuffers();
         writer.Write(buffers.Count);
 
         foreach (var (name, tensor) in buffers)

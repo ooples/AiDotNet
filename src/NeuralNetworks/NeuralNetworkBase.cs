@@ -15925,7 +15925,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // parameters, and Serialize, which builds one byte array, overflowed it for any float model above
     // ~268M parameters (UnifiedMultimodalNetwork's GetModelMetadata did, #2087). A float model now
     // stores 4-byte floats, exactly; every other T keeps 8-byte doubles.
-    private const int SerializationVersion = 8;
+    // v9 writes each layer's input-sized buffers after its extras. They are kept out of the parameter vector by design
+    // (a graph layer's adjacency is sized by the graph, not the layer), and the vector plus extras was all this format
+    // stored, so a saved graph network, and every clone that fell back to this round trip, lost its graph.
+    private const int SerializationVersion = 9;
 
     /// <summary>How the parameter values of a serialized network are stored (format v8 and later).</summary>
     private enum SerializedParameterEncoding : byte
@@ -16126,6 +16129,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             {
                 writer.Write(0);
             }
+
+            if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> bufferedLayer)
+                bufferedLayer.WriteInputSizedBuffers(writer);
+            else
+                writer.Write(0);
         }
 
         WriteGeneratedAdditionalLayerState(writer);
@@ -16338,6 +16346,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             if (extraParametersVector != null && layer is AiDotNet.NeuralNetworks.Layers.ILayerSerializationExtras<T> extrasLayer)
             {
                 extrasLayer.SetExtraParameters(extraParametersVector);
+            }
+
+            if (version >= 9)
+            {
+                if (layer is AiDotNet.NeuralNetworks.Layers.LayerBase<T> bufferedLayer)
+                    bufferedLayer.ReadInputSizedBuffers(reader);
+                else if (reader.ReadInt32() != 0)
+                    throw new InvalidDataException(
+                        $"Layer '{layerType}' carries input-sized buffers but was reconstructed outside LayerBase<{typeof(T).Name}>.");
             }
 
             // Prefer restoring into the constructor-created layer at the same canonical slot when
