@@ -404,11 +404,16 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
          path interleaves four xoshiro256** lanes, the scalar path drew everything from lane 0), so one seed
          initialized different weights per CPU and the AVX2-off leg trained other models. AiDotNet.Tensors #1615
          (shipped in #1590, 0.145.0) gives every instruction set the four-lane stream. Evolution stays at 0.7.0,
-         the version 0.146.0 depends on. -->
-    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.146.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.146.0" />
+         the version 0.146.0 depends on.
+
+         Bumped 0.146.0 to 0.148.0 for #2388: AiDotNet.Tensors #1676 stops the shared-weight 1x1
+         convolution and the fp32 GEMM tiers from calling AVX2/FMA kernels with AVX2 off (the GraFPrint
+         PlatformNotSupportedException), and #1677 caches the IRFFT gather/sign tables per backend and shape.
+         Evolution stays at 0.7.0, the version 0.148.0 depends on. -->
+    <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.148.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.148.0" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.7.0" />
-    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.146.0" />
+    <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.148.0" />
     <!-- Microsoft / .NET -->
     <PackageVersion Include="Microsoft.CSharp" Version="4.7.0" />
     <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />

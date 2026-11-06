@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ooples/AiDotNet.Tensors
-          ref: 6172d5ec89da3513c598ec7687774f139ca9a345 # v0.146.0, the AiDotNet.Tensors version Directory.Packages.props references
+          ref: 46e1069bc677f60b386fbfb8d9c184f4fe6eaad2 # v0.148.0, the AiDotNet.Tensors version Directory.Packages.props references
           path: companion-tensors
           persist-credentials: false
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
