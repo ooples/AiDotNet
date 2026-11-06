@@ -800,6 +800,10 @@ public static class OptionSensitivityHarness
                 candidates = candidates.Where(value => Convert.ToDouble(value) >= 0 && Convert.ToDouble(value) <= 1);
             if (option == "TopP")
                 candidates = candidates.Where(value => Convert.ToDouble(value) > 0 && Convert.ToDouble(value) <= 1);
+            if (option == "FilterThreshold")
+                candidates = candidates.Where(value => Convert.ToDouble(value) >= 0 && Convert.ToDouble(value) < 1);
+            if (option == "RepetitionPenalty")
+                candidates = candidates.Where(value => Convert.ToDouble(value) > 0 && Convert.ToDouble(value) < 2);
             if (option == "NumMels" && current is int)
                 candidates = candidates.Concat(new object[] { 80, 128 }).Where(value => !Equals(value, current)).Distinct();
             if (option == "SampleRate" && current is int rate && rate > 0)

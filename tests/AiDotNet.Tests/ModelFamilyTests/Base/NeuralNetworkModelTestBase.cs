@@ -7792,6 +7792,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 network.SetTrainingMode(true);
                 PrepareForSupervisedTrainingInvariant(network, input);
                 var objectiveTarget = ResolveTrainingObjectiveTarget(network, input, target);
+                OptionSensitivityFixtureSetup.PrepareOptionTraining(network, option);
                 int optionSteps = OptionSensitivityFixtureSetup.TrainingSteps(network, option, steps);
                 for (int i = 0; i < optionSteps; i++)
                     if (!OptionSensitivityFixtureSetup.TryTrainOption(network, input, option))

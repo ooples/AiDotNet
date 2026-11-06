@@ -20,6 +20,29 @@ namespace AiDotNet.Tests.Audio;
 /// </summary>
 public class Wav2Vec2PretrainingReferenceTests
 {
+    [Fact]
+    public void ZeroMaskProbability_HasNoMaskedTargetsInTrainingOrEvaluation()
+    {
+        using var model = new Wav2Vec2<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            inputFeatures: 1, outputSize: 16), new Wav2Vec2Options
+        {
+            HiddenDim = 16, NumLayers = 1, NumAttentionHeads = 2, FeedForwardDim = 32,
+            FeatureEncoderDim = 8, NumQuantizationGroups = 2, QuantizationCodebookSize = 8,
+            CodevectorDim = 8, ProjectedCodevectorDim = 8, NumNegatives = 2,
+            MaskProbability = 0, DropoutRate = 0, LayerDrop = 0,
+        });
+        var waveform = new Tensor<double>(new[] { 1600 });
+        for (int i = 0; i < waveform.Length; i++) waveform[i] = Math.Sin(i * 0.13);
+        var parameters = model.GetParameters().ToArray();
+        var objective = (AiDotNet.Interfaces.ITrainingObjectiveProvider<double>)model;
+        Assert.Equal(0.0, objective.EvaluateTrainingObjective(waveform, waveform));
+        model.Train(waveform, waveform);
+        Assert.Equal(0.0, model.LastPretrainingLosses.Contrastive);
+        Assert.Equal(0.0, model.LastPretrainingLosses.Diversity);
+        Assert.Equal(0.0, objective.EvaluateTrainingObjective(waveform, waveform));
+        Assert.Equal(parameters, model.GetParameters().ToArray());
+    }
+
     private static JsonElement Fixture()
     {
         const string name = "wav2vec2_pretraining_reference.json";

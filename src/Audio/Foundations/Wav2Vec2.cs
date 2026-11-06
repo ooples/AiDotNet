@@ -267,6 +267,9 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
         {
             var output = network.Forward(input, training: true, _random, maskProbability: pretraining.Configuration.MaskProbability,
                 featureGradientScale: pretraining.Configuration.FeatureGradientScale);
+            // A zero mask probability disables masking in the encoder. The objective still
+            // needs an explicit empty mask so it has zero masked targets rather than null.
+            output = output.Mask is null ? output with { Mask = new bool[output.Hidden.Shape[0], output.Hidden.Shape[1]] } : output;
             var negatives = pretraining.SampleNegatives(output.Mask!, _random);
             var losses = pretraining.Loss(output, negatives, training: true, _random);
             LastPretrainingLosses = (NumOps.ToDouble(losses.Contrastive[0]), NumOps.ToDouble(losses.Diversity[0]), NumOps.ToDouble(losses.FeaturePenalty[0]));
@@ -290,7 +293,9 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
         var random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 2);
         var waveform = input.Rank == 1 ? Engine.Reshape(input, new[] { 1, input.Length })
             : input.Rank == 2 ? input : Engine.Reshape(input, new[] { input.Shape[0], input.Length / input.Shape[0] });
-        var mask = _network.DrawMask(waveform.Shape[0], _network.Frames(waveform.Shape[1]), _pretraining.Configuration.MaskProbability, random);
+        var mask = _pretraining.Configuration.MaskProbability > 0
+            ? _network.DrawMask(waveform.Shape[0], _network.Frames(waveform.Shape[1]), _pretraining.Configuration.MaskProbability, random)
+            : new bool[waveform.Shape[0], _network.Frames(waveform.Shape[1])];
         var output = _network.Forward(waveform, training: false, random, mask: mask);
         return _pretraining.Loss(output, _pretraining.SampleNegatives(mask, random), training: false, random).Total[0];
     }

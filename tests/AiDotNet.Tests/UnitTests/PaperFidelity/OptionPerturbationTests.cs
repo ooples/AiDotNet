@@ -36,6 +36,21 @@ public class OptionPerturbationTests
         Assert.DoesNotContain(current, candidates);
     }
 
+    [Theory]
+    [InlineData("FilterThreshold", 0.98, 1.0, false)]
+    [InlineData("RepetitionPenalty", 1.2, 2.0, true)]
+    public void SamplerCandidatesStayWithinSupportedBounds(string option, double current, double upper, bool strictLower)
+    {
+        var candidates = OptionSensitivityHarness.Perturbations(typeof(double), current, option).Cast<double>().ToArray();
+        Assert.NotEmpty(candidates);
+        Assert.All(candidates, value =>
+        {
+            Assert.True(strictLower ? value > 0 : value >= 0);
+            Assert.True(value < upper);
+            Assert.NotEqual(current, value);
+        });
+    }
+
     [Fact]
     public void SampleRatesPreferSimpleRatiosWithoutDroppingFineGrainedCandidates()
     {

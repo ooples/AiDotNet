@@ -108,3 +108,17 @@ train the changed model source and verify scheduler counts and rates before and
 after the configured boundary. The scoped source build passes with zero warnings
 or errors. No inherited ForwardTacotron option has been removed in this batch;
 its ownership audit remains open, as do the remaining sweep failures.
+
+The subsequent exception-repair batch passes the hosted-binary probes for
+MaskGCT FilterThreshold (0.98 to 0.49), FishSpeech RepetitionPenalty (1.2 to 0.6),
+and NaturalSpeech CurrentStage (Warmup to Joint). Sampler candidates stay inside
+their documented domains; the joint-stage probe initializes its memory bank by
+clustering posterior frames, as the public training contract requires.
+
+Wav2Vec2's zero masking probability previously returned a null mask from the
+encoder and dereferenced it in negative sampling. Training now represents that
+case as an empty mask, and evaluation uses the same zero-target semantics. A
+regression verifies zero contrastive/diversity loss, zero evaluation loss and
+unchanged parameters after training. The existing reference loss and one-step
+SGD comparison also passes. The scoped changed-source build has zero warnings
+and errors. Forty candidate-generation regressions and six span regressions pass.
