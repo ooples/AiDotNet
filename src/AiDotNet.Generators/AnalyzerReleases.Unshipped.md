@@ -84,7 +84,7 @@ AIDN097 | AiDotNet.FacadeConfiguration | Warning | FacadeConfigurationValidation
 AIDN098 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, Declared parameter axis cannot be proven resolved
 AIDN099 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, [TrainableParameter] on a non-partial class does nothing
 AIDN046 | AiDotNet.TestCoverage | Warning | TestScaffoldGenerator, Layer cannot be scaffolded and produces no generated tests
-AIDN106 | AiDotNet.ModelMetadata | Info | UnusedArchitectureParameterAnalyzer, Layer factory ignores the architecture it was handed
+AIDN111 | AiDotNet.ModelMetadata | Info | UnusedArchitectureParameterAnalyzer, Layer factory ignores the architecture it was handed
 AIDN077 | AiDotNet.GoldenPattern | Warning | GoldenPatternValidationGenerator, Optimizer builds its own random generator instead of drawing from the seeded OptimizerBase.Random
 AIDN100 | AiDotNet.ParameterAutomation | Error | ParameterUpdateInPlaceAnalyzer, Trainable parameter reassigned to an Engine result in UpdateParameters
 ADNCLONE001 | AiDotNet.ClonePlan | Warning | ClonePlanGenerator, Clone plan records a member name shadowed with an unrelated type
@@ -93,13 +93,23 @@ AIDN102 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Every [PaperO
 AIDN103 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Paper optimizer variants must be unique across optimizer kinds
 AIDN104 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Declared paper recipe is never used, because the optimizer is still hardcoded
 AIDN105 | AiDotNet.PaperFidelity | Error | PaperOptimizerAnalyzer, Citation URL claims to be arXiv but its identifier cannot exist
-AIDN107 | AiDotNet.PaperFidelity | Info | PaperOptimizerAnalyzer, Model cites a paper but does not declare the optimizer settings that paper specifies (Info while the backlog is large; promote per the AIDN087 ladder)
-AIDN108 | AiDotNet.ComponentMetadata | Warning | ComponentMetadataValidationGenerator, Component has [ComponentType] but is missing [PipelineStage]
-AIDN109 | AiDotNet.ComponentMetadata | Warning | ComponentMetadataValidationGenerator, Component has [PipelineStage] but is missing [ComponentType]
+AIDN106 | AiDotNet.PaperFidelity | Info | PaperOptimizerAnalyzer, Model cites a paper but does not declare the optimizer settings that paper specifies (Info while the backlog is large; promote per the AIDN087 ladder)
+AIDN107 | AiDotNet.Design | Warning | TrainOverrideAnalyzer, A model overrides Train instead of declaring its training step
+AIDN108 | AiDotNet.Design | Warning | TrainOverrideAnalyzer, Train-override baseline entry no longer overrides
+AIDN109 | AiDotNet.ComponentMetadata | Warning | ComponentMetadataValidationGenerator, Component has [ComponentType] but is missing [PipelineStage]
+AIDN110 | AiDotNet.ComponentMetadata | Warning | ComponentMetadataValidationGenerator, Component has [PipelineStage] but is missing [ComponentType]
 ADNDEF001 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Two models implement the same paper
 ADNDEF002 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Transformer factory yields attention without a residual connection
 ADNDEF003 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Model reuses another paper's layer factory without declaring it
 ADNDEF004 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Model defect baseline entry is stale
 ADNDEF005 | AiDotNet.ModelDefects | Error | ModelDefectClassAnalyzer, Duplicate-model declaration contradicted by the code
+ADNGEN003 | AiDotNet.PaperFidelity | Error | TestScaffoldGenerator, Model has no hand-written paper test
+ADNGEN004 | AiDotNet.PaperFidelity | Error | TestScaffoldGenerator, Missing-paper-test baseline entry is stale
+ADNGEN005 | AiDotNet.PaperFidelity | Error | TestScaffoldGenerator, Options class with [PaperDefault] cannot be constructed by the generated test
+ADNOPT001 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Options property is never read by the model
+ADNOPT002 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Options class of a paper model declares no paper defaults
+ADNOPT003 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Invalid [PaperDefault] declaration
+ADNOPT004 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Option-sensitivity exemption has no reason
+ADNOPT005 | AiDotNet.OptionsFidelity | Error | OptionsFidelityAnalyzer, Options fidelity baseline entry is stale
 ADN0065 | AiDotNet.Performance | Error | ActivationCacheGuardAnalyzer, Backward-activation cache written without a training-pass guard (fields baselined in ModelDefectBaselines.UnguardedActivationCaches; a stale entry is ADNDEF004)
 ADN0068 | AiDotNet.Performance | Error | ActivationCacheGuardAnalyzer, [KeepsActivation] declared without a reason

@@ -125,7 +125,36 @@ public class TestScaleOptionsGenerator : IIncrementalGenerator
     {
         context.RegisterSourceOutput(
             context.CompilationProvider,
-            static (spc, compilation) => Execute(spc, CollectOptionTypes(compilation)));
+            static (spc, compilation) =>
+            {
+                if (ReferencedAssemblyDefinesModelTestScale(compilation)) return;
+                Execute(spc, CollectOptionTypes(compilation));
+            });
+    }
+
+    private const string ModelTestScaleMetadataName = "AiDotNet.Testing.ModelTestScale";
+
+    /// <summary>Whether an assembly this compilation references already carries the table.</summary>
+    /// <remarks>
+    /// A copy emitted here would shadow that one for every lookup in this compilation. Execute's empty-table guard
+    /// assumed the test assembly declares no options types; OptionPerturbationTests.DepthOptions broke that, and the
+    /// test assembly's one-knob table answered every generated fixture, so CreateBoundedOptions returned null for
+    /// QwenVLOptions and every other type in AiDotNet's table. Deferring to the referenced table holds whatever
+    /// options types a referencing assembly declares.
+    /// </remarks>
+    private static bool ReferencedAssemblyDefinesModelTestScale(Compilation compilation)
+    {
+        foreach (var reference in compilation.References)
+        {
+            if (compilation.GetAssemblyOrModuleSymbol(reference) is IAssemblySymbol assembly
+                && !SymbolEqualityComparer.Default.Equals(assembly, compilation.Assembly)
+                && assembly.GetTypeByMetadataName(ModelTestScaleMetadataName) is not null)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static ImmutableArray<INamedTypeSymbol?> CollectOptionTypes(Compilation compilation)

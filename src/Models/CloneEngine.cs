@@ -238,6 +238,41 @@ public static partial class CloneEngine
         }
     }
 
+    /// <summary>
+    /// Whether a constructor argument read off <paramref name="source"/> is the optimizer its constructor built.
+    /// </summary>
+    /// <remarks>
+    /// A caller cannot hand a constructor an optimizer bound to the model being constructed, or to a network that
+    /// model creates, because neither exists yet. So an optimizer held in a READONLY field - only the constructor
+    /// assigns it - and bound to the source or to a network the source holds is the constructor's own default.
+    /// WGAN-GP builds Adam for its generator and critic from its options: replaying those made a copy built with
+    /// different options train with the source's learning rate and betas, and step with the source's Adam moments.
+    /// </remarks>
+    private static bool IsConstructorBuiltOptimizer(Type type, string member, object source, object? value)
+    {
+        if (value is null || member.IndexOf('.') >= 0 || !IsOptimizer(value.GetType())) return false;
+
+        const BindingFlags Flags = BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly;
+        FieldInfo? field = null;
+        for (var current = type; current is not null && field is null; current = current.BaseType)
+            field = current.GetField(member, Flags);
+        if (field is null || !field.IsInitOnly) return false;
+
+        object? bound = value.GetType().GetProperty("Model", BindingFlags.Instance | BindingFlags.Public)?.GetValue(value);
+        if (bound is null) return false;
+        if (ReferenceEquals(bound, source)) return true;
+
+        for (var current = source.GetType(); current is not null && current != typeof(object); current = current.BaseType)
+        {
+            foreach (var held in current.GetFields(Flags))
+            {
+                if (!held.FieldType.IsValueType && ReferenceEquals(held.GetValue(source), bound)) return true;
+            }
+        }
+
+        return false;
+    }
+
     private static bool IsOptimizer(Type type) =>
         type.GetInterfaces().Any(i => i.IsGenericType && i.Name.StartsWith("IOptimizer", StringComparison.Ordinal));
 
@@ -442,6 +477,15 @@ public static partial class CloneEngine
 
                 if (!TryReadMember(type, candidate[i], source, out arguments[i])) { readable = false; break; }
 
+                // The constructor's own default optimizer: replayed, the copy would be built holding an optimizer
+                // configured from the SOURCE's options and bound to the source's networks. Left unsupplied, the
+                // copy's constructor builds its default from the copy's options, as a new model would.
+                if (IsConstructorBuiltOptimizer(type, candidate[i], source, arguments[i]))
+                {
+                    arguments[i] = Type.Missing;
+                    continue;
+                }
+
                 arguments[i] = DuplicateConstructorArgument(arguments[i]);
             }
 
@@ -488,6 +532,13 @@ public static partial class CloneEngine
                 // this instance -- the value it wants was never stored because this object was not
                 // built that way. An optional one is fine: its default is what it would have got.
                 if (arguments[i] is null && !parameterInfos[i].HasDefaultValue)
+                {
+                    satisfied = false;
+                    break;
+                }
+
+                // A constructor-built optimizer left unsupplied needs a parameter that can default.
+                if (ReferenceEquals(arguments[i], Type.Missing) && !parameterInfos[i].HasDefaultValue)
                 {
                     satisfied = false;
                     break;

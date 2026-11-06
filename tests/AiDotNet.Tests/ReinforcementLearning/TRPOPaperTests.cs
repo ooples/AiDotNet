@@ -67,11 +67,14 @@ public class TRPOPaperTests
     }
 
     [Theory(Timeout = 120000)]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Step_ImprovesTheSurrogateInsideTheTrustRegion(bool continuous)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task Step_ImprovesTheSurrogateInsideTheTrustRegion(bool continuous, bool useArena)
     {
         await Task.Yield();
+        using var arena = useArena ? AiDotNet.Tensors.Helpers.TensorArena.Create() : null;
         const double delta = 0.01;
         var options = new TRPOOptions<double>
         {

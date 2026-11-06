@@ -676,7 +676,35 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
             // post-construction LayerHelper wiring update look seeded while it continues from the
             // previous seed (or from a clone-construction stream).
             _seededRandom = null;
-            if (value.HasValue) OnRandomSeedAssigned();
+            if (value.HasValue)
+            {
+                OnRandomSeedAssigned();
+                PropagateSeedToRegisteredSubLayers();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Hands each registered child the seed <see cref="RegisterSubLayer"/> would give it at its registration position,
+    /// so a composite whose seed arrives (or changes) after its children were built does not leave them on the seeds
+    /// they drew from whatever construction scope was armed then. A seed a caller gave a child is kept.
+    /// </summary>
+    /// <remarks>
+    /// Reads the registered list rather than the virtual <see cref="GetSubLayers"/>, which an override may compute from
+    /// fields a still-running constructor has not assigned. Children that initialise lazily take the seed on first use;
+    /// one that drew in its own constructor redoes the draw through its <see cref="OnRandomSeedAssigned"/>.
+    /// </remarks>
+    private void PropagateSeedToRegisteredSubLayers()
+    {
+        if (RandomSeed is not int assigned || _registeredSubLayers is not { Count: > 0 } children) return;
+        var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(assigned);
+        for (int i = 0; i < children.Count; i++)
+        {
+            // Drawn for every child, as RegisterSubLayer counts them, so the seed at a position never depends on
+            // which other children kept their own.
+            int childSeed = subSeedRng.Next();
+            if (children[i] is LayerBase<T> child)
+                child.AssignInheritedSeed(childSeed);
         }
     }
 
@@ -803,6 +831,11 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
 
     // Set while RandomSeed is one a composed parent handed down, which that parent's next seed may replace.
     private bool _randomSeedInherited;
+
+    // True while this layer resolves itself on its first forward (OnFirstForward or the shape-only reconciliation), when
+    // a lazy composite builds children outside any model's construction.
+    [AiDotNet.Attributes.Scratch]
+    private bool _resolvingOnFirstForward;
 
     /// <summary>
     /// Takes a seed from a composed parent unless a caller chose this layer's seed: one never set, drawn from a
@@ -3386,6 +3419,34 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     }
 
     /// <summary>
+    /// Runs <paramref name="build"/>, which constructs and registers child layers after this layer's constructor has
+    /// returned, so each child is seeded from this layer's own seed.
+    /// </summary>
+    /// <param name="build">The code that constructs the children and calls <see cref="RegisterSubLayer"/>.</param>
+    /// <remarks>
+    /// A child built after construction draws its seed from whatever construction scope the thread holds by then,
+    /// which depends on what else ran on the thread. Inside this call <see cref="RegisterSubLayer"/> replaces such a
+    /// seed with one derived from this layer's seed and the child's registration position; a seed a caller gave the
+    /// child outright is kept. Every route into <see cref="OnFirstForward"/> (the first real forward, the
+    /// shape-inference walk and <see cref="ResolveShapesOnly"/>) runs through it. A layer that rebuilds its children
+    /// elsewhere, for example when its forward sees a new input width, must call it too.
+    /// </remarks>
+    protected void BuildLateSubLayers(Action build)
+    {
+        if (build is null) throw new ArgumentNullException(nameof(build));
+        bool previous = _resolvingOnFirstForward;
+        _resolvingOnFirstForward = true;
+        try
+        {
+            build();
+        }
+        finally
+        {
+            _resolvingOnFirstForward = previous;
+        }
+    }
+
+    /// <summary>
     /// Convenience helper for deferred-shape layers: invokes <see cref="OnFirstForward"/>
     /// (if shapes are not yet resolved) followed by <see cref="EnsureInitialized"/>. Lazy
     /// layer Forward overrides should call this instead of <see cref="EnsureInitialized"/>
@@ -3401,13 +3462,21 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
                     "A disposed layer cannot execute a forward pass.");
             if (!_firstForwardRan)
             {
-                if (!IsShapeResolved)
+                _resolvingOnFirstForward = true;
+                try
                 {
-                    OnFirstForward(input);
+                    if (!IsShapeResolved)
+                    {
+                        OnFirstForward(input);
+                    }
+                    else if (_shapeOnlyResolutionPendingFirstForward)
+                    {
+                        ReconcileShapeOnlyResolution(input);
+                    }
                 }
-                else if (_shapeOnlyResolutionPendingFirstForward)
+                finally
                 {
-                    ReconcileShapeOnlyResolution(input);
+                    _resolvingOnFirstForward = false;
                 }
 
                 _firstForwardRan = true;
@@ -3541,7 +3610,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     {
         if (!IsShapeResolved)
         {
-            OnFirstForward(input);
+            BuildLateSubLayers(() => OnFirstForward(input));
             // This is the topology-aware counterpart of ResolveShapesOnly: OnFirstForward saw a
             // zero-filled shape probe, not a real activation. Custom forwards and preprocessing
             // pipelines can legitimately feed a different extent at execution time, so the first
@@ -3790,7 +3859,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         IsResolvingShapesOnly = true;
         try
         {
-            OnFirstForward(dummy);
+            BuildLateSubLayers(() => OnFirstForward(dummy));
         }
         finally
         {
@@ -8716,6 +8785,25 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         // Inherit the parent's current mode at registration so the entire
         // composite has one consistent state immediately.
         subLayer.SetTrainingMode(IsTrainingMode);
+
+        // A child a lazy composite creates after construction (BottleneckBlock's projection shortcut, built on the
+        // first Forward) is outside every seed scope and missed PropagateSeedToSubLayers, so it initialised from the
+        // process-shared stream and two identically seeded models differed in exactly those layers. An unseeded child
+        // of a seeded parent takes the seed PropagateSeedToSubLayers hands the child at its registration position. A
+        // child that already has a seed keeps it, so eagerly built children are unchanged.
+        // A child built during the first forward is late even when it HAS a seed: the construction scope stays armed
+        // on the thread after a model is built, so the child drew whatever that scope held at the time -- a seed that
+        // depends on what else ran on the thread (two identically seeded models differed in exactly their projection
+        // shortcuts). Such a scope-drawn seed is replaced; one the child was given outright is kept.
+        if (RandomSeed is int parentSeed && subLayer is LayerBase<T> lateChild
+            && (lateChild.RandomSeed is null || (_resolvingOnFirstForward && lateChild.RandomSeedCameFromConstructionScope)))
+        {
+            var subSeedRng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(parentSeed);
+            int childSeed = 0;
+            for (int i = 0; i < _registeredSubLayers.Count; i++)
+                childSeed = subSeedRng.Next();
+            lateChild.AssignInheritedSeed(childSeed);
+        }
 
         // Sub-layer's ParameterCount contributes to ours; invalidate the
         // cache so the next query picks up the addition.

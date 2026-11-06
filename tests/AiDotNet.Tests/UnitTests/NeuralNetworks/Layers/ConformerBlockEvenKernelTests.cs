@@ -20,7 +20,7 @@ public class ConformerBlockEvenKernelTests
         for (int i = 0; i < input.Length; i++) input[i] = Math.Sin(i * 0.13);
         var layer = new ConformerBlockLayer<double>(8, 2, convKernelSize: kernel, causalConvolution: causal);
         var output = layer.Forward(input);
-        Assert.Equal(shape, output.Shape);
+        Assert.Equal(shape, output.Shape.ToArray());
         Assert.All(output.ToArray(), value => Assert.False(double.IsNaN(value) || double.IsInfinity(value)));
     }
 }

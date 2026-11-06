@@ -27,6 +27,7 @@ public class SpeechTokenizerOptions : NeuralAudioCodecOptions
     }
 
     /// <summary>Gets or sets the base channel count C (32; App. D). The released checkpoint uses 64.</summary>
+    [AiDotNet.Attributes.PaperDefault(32, Source = "Zhang et al. 2024, Appendix D: SEANet base channel count C = 32.") ]
     public int Filters { get; set; } = 32;
 
     /// <summary>Gets or sets the strides in decoder order (8, 5, 4, 2); the encoder applies them reversed (2, 4, 5, 8).</summary>

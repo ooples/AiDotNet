@@ -312,7 +312,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         if (!IsFitted && !_usingCustomLayers && input.Length != _dataWidth && input.Length > 0)
         {
             _dataWidth = input.Length;
-            RebuildLayersWithActualDimensions();
+            BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions());
         }
     }
 
@@ -431,7 +431,7 @@ public partial class MedGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
 
         BuildOutputGroups();
         LearnObservedRanges(transformedData);
-        RebuildLayersWithActualDimensions();
+        BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions());
 
         double noiseMultiplier = _options.EnablePrivacy
             ? ComputeNoiseMultiplier(data.Rows, epochCount)

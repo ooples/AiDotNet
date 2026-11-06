@@ -84,12 +84,6 @@ public class HDBSCANOptions<T> : ClusteringOptions<T>
     /// </summary>
     /// <value>Alpha parameter. Default is 1.0.</value>
     public double Alpha { get; set; } = 1.0;
-
-    /// <summary>
-    /// Gets or sets the distance metric.
-    /// </summary>
-    /// <value>Distance metric, or null for Euclidean.</value>
-    public new IDistanceMetric<T>? DistanceMetric { get; set; }
 }
 
 /// <summary>

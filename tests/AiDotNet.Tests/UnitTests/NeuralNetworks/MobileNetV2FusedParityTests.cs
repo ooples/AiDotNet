@@ -5,6 +5,8 @@ using AiDotNet.Interfaces;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.NeuralNetworks.Options;
+using AiDotNet.Models.Options;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Optimization;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -52,6 +54,18 @@ public class MobileNetV2FusedParityTests
         DefaultStack,
     }
 
+    /// <summary>The optimizer both models step with.</summary>
+    public enum StepOptimizer
+    {
+        /// <summary>The network's default, Adam, with its default gradient clipping.</summary>
+        Adam,
+        /// <summary>
+        /// Plain SGD with clipping off: the update is -lr * gradient, so comparing updates compares gradients. Adam's
+        /// first step is about -lr * sign(gradient), which nearly hides how far apart two gradients' magnitudes are.
+        /// </summary>
+        Sgd,
+    }
+
     /// <summary>The input side for a variant: the default stack's five stride-2 stages need more than 8 pixels.</summary>
     private static int InputSize(StackVariant variant) => variant == StackVariant.DefaultStack ? 32 : Size;
 
@@ -92,7 +106,7 @@ public class MobileNetV2FusedParityTests
         return layers;
     }
 
-    private static NeuralNetworkBase<float> Build(StackVariant variant)
+    private static NeuralNetworkBase<float> Build(StackVariant variant, StepOptimizer optimizer)
     {
         int size = InputSize(variant);
         var arch = new NeuralNetworkArchitecture<float>(
@@ -104,7 +118,13 @@ public class MobileNetV2FusedParityTests
         var width = variant == StackVariant.DefaultStack ? MobileNetV2WidthMultiplier.Alpha035 : MobileNetV2WidthMultiplier.Alpha100;
         return new MobileNetV2Network<float>(arch,
             new MobileNetV2Configuration(width, Classes, size, size),
-            options: new MobileNetV2Options { DisableFusedOptimizerStep = false });
+            optimizer: optimizer == StepOptimizer.Sgd
+                ? new StochasticGradientDescentOptimizer<float, Tensor<float>, Tensor<float>>(null,
+                    new StochasticGradientDescentOptimizerOptions<float, Tensor<float>, Tensor<float>> { InitialLearningRate = 0.1 })
+                : null,
+            options: optimizer == StepOptimizer.Sgd
+                ? new MobileNetV2Options { DisableFusedOptimizerStep = false, MaxGradNorm = 0 }
+                : new MobileNetV2Options { DisableFusedOptimizerStep = false });
     }
 
     private static Tensor<float> Seeded(int seed, params int[] shape)
@@ -124,19 +144,74 @@ public class MobileNetV2FusedParityTests
     [InlineData(StackVariant.NoExpansion)]
     [InlineData(StackVariant.DefaultStack)]
     public void One_fused_step_matches_the_eager_tape(StackVariant variant)
+        => FusedMatchesEager(variant, StepOptimizer.Adam, new CpuEngine());
+
+    /// <summary>
+    /// The same comparison under plain SGD, where the update is the gradient scaled, so the cosine and relative
+    /// difference below hold the two gradients themselves to #2382's 0.9999.
+    /// </summary>
+    [Theory]
+    [InlineData(StackVariant.Stem)]
+    [InlineData(StackVariant.ConvBatchNorm)]
+    [InlineData(StackVariant.ConvRelu6)]
+    [InlineData(StackVariant.Residual)]
+    [InlineData(StackVariant.Stride2)]
+    [InlineData(StackVariant.NoExpansion)]
+    [InlineData(StackVariant.DefaultStack)]
+    public void One_fused_sgd_step_matches_the_eager_gradient(StackVariant variant)
+        => FusedMatchesEager(variant, StepOptimizer.Sgd, new CpuEngine());
+
+    /// <summary>
+    /// The same comparison on a GPU engine (#2382 asks for the fused step to engage on CPU and GPU). Skips with no
+    /// GPU backend.
+    /// </summary>
+    [SkippableTheory]
+    [InlineData(StackVariant.Residual, StepOptimizer.Adam)]
+    [InlineData(StackVariant.Stride2, StepOptimizer.Adam)]
+    [InlineData(StackVariant.DefaultStack, StepOptimizer.Adam)]
+    [InlineData(StackVariant.Residual, StepOptimizer.Sgd)]
+    [InlineData(StackVariant.Stride2, StepOptimizer.Sgd)]
+    [InlineData(StackVariant.DefaultStack, StepOptimizer.Sgd)]
+    public void One_fused_step_matches_the_eager_tape_on_the_gpu(StackVariant variant, StepOptimizer optimizer)
+    {
+        // A lane that requires the GPU fails here instead of skipping, so a broken runner cannot pass as "no GPU".
+        bool requireGpu = Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1";
+        // With no GPU the constructor falls back and reports IsGpuAvailable == false. A throw is a broken native
+        // installation: a required lane fails on it, an optional run logs it and skips.
+        AiDotNet.Tensors.Engines.DirectGpuTensorEngine gpu;
+        try { gpu = new AiDotNet.Tensors.Engines.DirectGpuTensorEngine(); }
+        catch (Exception ex) when (!requireGpu)
+        {
+            _output.WriteLine($"GPU engine construction failed: {ex}");
+            throw new SkipException($"GPU engine construction failed ({ex.GetType().Name}).");
+        }
+        try
+        {
+            bool gpuAvailable = gpu.SupportsGpu && gpu.IsGpuAvailable;
+            if (requireGpu) Assert.True(gpuAvailable, "AIDOTNET_REQUIRE_GPU_TESTS=1 but no GPU backend is available.");
+            Skip.IfNot(gpuAvailable, "No GPU backend available.");
+            FusedMatchesEager(variant, optimizer, gpu);
+        }
+        finally
+        {
+            gpu.Dispose();
+        }
+    }
+
+    private void FusedMatchesEager(StackVariant variant, StepOptimizer optimizer, IEngine engine)
     {
         var prior = AiDotNetEngine.Current;
         var priorOptions = TensorCodecOptions.Current;
         try
         {
-            AiDotNetEngine.Current = new CpuEngine();
+            AiDotNetEngine.Current = engine;
             int size = InputSize(variant);
             var x = Seeded(11, Batch, 3, size, size);
             var y = new Tensor<float>(new[] { Batch, Classes });
             for (int b = 0; b < Batch; b++) y[b, b % Classes] = 1f;
 
-            var fused = Build(variant);
-            var eager = Build(variant);
+            var fused = Build(variant, optimizer);
+            var eager = Build(variant, optimizer);
             if (variant == StackVariant.DefaultStack)
             {
                 // Otherwise the case does not test the block its name promises.
@@ -179,7 +254,7 @@ public class MobileNetV2FusedParityTests
             // Direction alone accepts an update 100x too large; the difference must be small next to the update.
             double relativeDiff = Math.Sqrt(nd / ne);
             double cosine = dot / Math.Sqrt(nf * ne);
-            _output.WriteLine($"{variant}: loss fused {lossFused:R} eager {lossEager:R}; update cosine {cosine:R}; " +
+            _output.WriteLine($"{variant}/{optimizer}: loss fused {lossFused:R} eager {lossEager:R}; update cosine {cosine:R}; " +
                               $"max |param diff| {maxAbs:E3}; params {p0.Length}");
 
             Assert.True(Math.Abs(lossFused - lossEager) <= 1e-4 * Math.Max(1.0, Math.Abs(lossEager)),

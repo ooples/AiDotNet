@@ -145,7 +145,7 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         NeuralNetworkArchitecture<T> architecture,
         string modelPath,
         ASTOptions? options = null)
-        : base(architecture)
+        : base(architecture, maxGradNorm: options?.MaxGradNorm ?? 1.0)
     {
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
@@ -174,7 +174,7 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
         NeuralNetworkArchitecture<T> architecture,
         ASTOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>())
+        : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>(), maxGradNorm: options?.MaxGradNorm ?? 1.0)
     {
         _options = options ?? new ASTOptions();
         Options = _options;

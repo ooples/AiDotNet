@@ -8,7 +8,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 /// <summary>Moshi's tasks on the tiny fixture: App. C's TTS and ASR, the dialogue, the inner monologue's text stream
 /// (Eq. 5), the language model's stages and Mimi's adversarial training.</summary>
-public class MoshiTaskTests
+public class StreamingMoshiPaperTests
 {
     // TtsPaperNumerics.IsFinite is not on .NET Framework.
     private static bool Finite(double x) => !double.IsNaN(x) && !double.IsInfinity(x);

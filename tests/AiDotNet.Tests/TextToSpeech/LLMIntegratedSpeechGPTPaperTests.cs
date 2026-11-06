@@ -11,7 +11,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// SpeechGPT's tasks on the tiny fixture: the release's prompts and unit strings, the three language-model stages, the
 /// multi-speaker vocoder's GAN training, synthesis, chat and the speech recognizer.
 /// </summary>
-public class SpeechGptTaskTests
+public class LLMIntegratedSpeechGPTPaperTests
 {
     [Fact(Timeout = 120000)]
     public async Task Prompts_AreTheReleaseTemplate()

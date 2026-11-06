@@ -151,11 +151,16 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
     {
         _options = options ?? new W2vBertOptions();
         Options = _options;
-        _useNativeMode = true;
+        _useNativeMode = _options.ModelPath is null;
         _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
         base.SampleRate = _options.SampleRate;
         _optimizer = optimizer;
         InitializeLayers();
+        if (!_useNativeMode)
+        {
+            if (string.IsNullOrWhiteSpace(_options.ModelPath)) throw new ArgumentException("Model path required.", nameof(options));
+            OnnxEncoder = new OnnxModel<T>(_options.ModelPath!, _options.OnnxOptions);
+        }
     }
 
     internal W2vBertNetwork<T>? Network => _network;

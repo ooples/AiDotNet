@@ -68,10 +68,10 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
     {
         _teacherHidden = teacherHidden ?? throw new ArgumentNullException(nameof(teacherHidden));
         if (readoutLayerCount < 1) throw new ArgumentOutOfRangeException(nameof(readoutLayerCount), "Must be at least 1.");
-        if (!(hiddenWeight >= 0)) throw new ArgumentOutOfRangeException(nameof(hiddenWeight), "Must be non-negative.");
-        if (!(kdAlpha >= 0 && kdAlpha <= 1)) throw new ArgumentOutOfRangeException(nameof(kdAlpha), "Must be in [0, 1].");
-        if (!(temperature > 0)) throw new ArgumentOutOfRangeException(nameof(temperature), "Must be positive.");
-        if (!(projectionLearningRate > 0)) throw new ArgumentOutOfRangeException(nameof(projectionLearningRate), "Must be positive.");
+        if (double.IsNaN(hiddenWeight) || double.IsInfinity(hiddenWeight) || hiddenWeight < 0) throw new ArgumentOutOfRangeException(nameof(hiddenWeight), "Must be non-negative and finite.");
+        if (double.IsNaN(kdAlpha) || kdAlpha < 0 || kdAlpha > 1) throw new ArgumentOutOfRangeException(nameof(kdAlpha), "Must be in [0, 1].");
+        if (double.IsNaN(temperature) || double.IsInfinity(temperature) || temperature <= 0) throw new ArgumentOutOfRangeException(nameof(temperature), "Must be positive and finite.");
+        if (double.IsNaN(projectionLearningRate) || double.IsInfinity(projectionLearningRate) || projectionLearningRate <= 0) throw new ArgumentOutOfRangeException(nameof(projectionLearningRate), "Must be positive and finite.");
         if (kdAlpha > 0 && teacherLogits is null) throw new ArgumentException("kdAlpha > 0 needs teacherLogits.", nameof(teacherLogits));
         _teacherLogits = teacherLogits;
         ReadoutLayerCount = readoutLayerCount;
@@ -116,6 +116,7 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
     /// <inheritdoc />
     public Tensor<T>? BuildLocalObjective(LocalObjectiveContext<T> context)
     {
+        // Exact configuration sentinel: a small positive weight must still train the hidden layers.
         if (_hiddenWeight == 0) return null;
         var s = context.Step;
         var teacher = TeacherStates(s.Input);
@@ -132,12 +133,14 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
         var diff = s.Engine.TensorSubtract(s.Engine.TensorMatMul(output, p), target);
         var axes = Enumerable.Range(0, diff.Shape.Length).ToArray();
         var mse = s.Engine.ReduceMean(s.Engine.TensorSquare(diff), axes, keepDims: false);
+        // Skip scaling only for the exact identity coefficient.
         return _hiddenWeight == 1.0 ? mse : s.Engine.TensorMultiplyScalar(mse, Ops.FromDouble(_hiddenWeight));
     }
 
     /// <inheritdoc />
     public Tensor<T>? BuildOutputObjective(LocalObjectiveStep<T> step, Tensor<T> prediction, Tensor<T> defaultLoss)
     {
+        // Only an exact zero disables the configured soft-logit objective.
         if (_kdAlpha == 0 || _teacherLogits is null) return null;
         var e = step.Engine;
         int axis = prediction.Shape.Length - 1;

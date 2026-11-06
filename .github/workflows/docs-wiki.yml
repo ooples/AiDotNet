@@ -94,8 +94,11 @@ jobs:
       # 1703 -> 1702 (#2269): the OCR audit deleted nine duplicated model copies (Document/OCR and
       # VisionLanguage/Document), and their generated wiki pages took one compiling example with them.
       # Every remaining example still compiles (--max-fail 0); nothing broke.
+      #
+      # 1702 -> 1715 (#2389): the samples that used an input they never declared now declare it, and one
+      # sample's syntax error no longer hides the semantic errors of the others compiled with it.
       - name: Compile-check doc + wiki snippets
-        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- website --min-pass 1702 --max-fail 0
+        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- website --min-pass 1715 --max-fail 0
 
       # Compile-check the <example> blocks in the source XML doc comments. These are the examples a user
       # sees in IntelliSense and on the API reference pages, and they were never gated: this step's
@@ -108,8 +111,12 @@ jobs:
       # --min-pass catches an existing example being broken in a change that also deletes another, where
       # the failure count could stay level. Tighten both whenever this step reports better numbers; do not
       # loosen either without saying why in the commit message.
+      #
+      # 1424 -> 1439 (#2389): this step never ran while the markdown pass above failed, so 17 broken examples
+      # accumulated unseen (14 clustering examples on an undeclared dataMatrix, three builder examples on undeclared
+      # network/optimizer/builder variables). All 17 compile now.
       - name: Compile-check XML doc-comment examples (ratchet)
-        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- "$DOC_XML" --min-pass 1424 --max-fail 0
+        run: dotnet run --project tools/DocSnippetVerify $TOOL_ARGS -- "$DOC_XML" --min-pass 1439 --max-fail 0
 
       # AiModelBuilder and AiModelResult are the whole supported surface. An example that trains or
       # predicts on the model object teaches readers to reach past the facade, skipping the validation,

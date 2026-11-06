@@ -220,7 +220,7 @@ public partial class MeshPoolLayer<T> : LayerBase<T>, IShapeContract
         T scale = NumOps.FromDouble(1.0 / Math.Sqrt(InputChannels));
 
         // Initialize importance weights in [-scale, scale] range
-        _importanceWeights = Engine.TensorRandomUniformRange<T>([InputChannels], NumOps.Negate(scale), scale);
+        _importanceWeights = Engine.TensorRandomUniformRange<T>([InputChannels], NumOps.Negate(scale), scale, Random.Next());
 
         RegisterTrainableParameter(_importanceWeights, PersistentTensorRole.Weights);
     }

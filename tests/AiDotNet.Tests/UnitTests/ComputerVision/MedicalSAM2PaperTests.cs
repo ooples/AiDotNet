@@ -16,7 +16,7 @@ namespace AiDotNet.Tests.UnitTests.ComputerVision;
 /// Medical SAM 2's self-sorting memory bank (Zhu et al. 2024, eqs. 2-5, and the official code's alternatives) and the
 /// model's image-set, volume and training surfaces.
 /// </summary>
-public class MedicalSam2MemoryBankTests
+public class MedicalSAM2PaperTests
 {
     private static Tensor<double> Vector(params double[] values) => new(new[] { values.Length }, new Vector<double>(values));
 

@@ -7748,6 +7748,116 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         }
         catch { /* reporting is best-effort */ }
     }
+
+    // =====================================================
+    // PAPER FIDELITY: Option Sensitivity
+    // Called by the scaffold generator's per-option theory. Perturbs one options property and
+    // requires the network to change: parameter count, parameter values or outputs on a fixed
+    // input, before or after OptionSensitivityTrainingSteps fixed training steps. Epic #2090
+    // found 104 of 117 networks storing options they never read; every invariant above still
+    // passed for them, because none of them asks whether the knobs do anything.
+    // =====================================================
+
+    /// <summary>Fixed training steps both builds take when their untrained fingerprints match.</summary>
+    protected virtual int OptionSensitivityTrainingSteps => 2;
+
+    /// <summary>
+    /// Asserts that perturbing <paramref name="option"/> on this fixture's options changes the
+    /// network's observable behaviour. See <see cref="OptionSensitivityHarness"/>.
+    /// </summary>
+    /// <param name="option">The options property to perturb.</param>
+    protected void AssertOptionChangesObservableBehaviour(string option)
+    {
+        // No TensorArena: it pins every buffer until disposal, and this check builds, observes and trains a
+        // control plus every candidate. Under one arena OpenSora held ~10 GB of attention tiles that gradient
+        // checkpointing should have freed, and its GuidanceScale check ran out of memory on the 16 GB runner.
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        Tensor<T> input;
+        Tensor<T> target;
+        using (var shapeProbe = CreateNetwork())
+        {
+            input = CreateRandomTensor(EffectiveInputShape, rng);
+            target = CreateLossCompatibleTarget(shapeProbe, ShapeCheckedOutputShape, rng);
+        }
+
+        int steps = OptionSensitivityTrainingSteps;
+        var probe = new OptionSensitivityProbe<INeuralNetworkModel<T>>(
+            CreateNetwork,
+            network => ObserveNetwork(network, input),
+            network =>
+            {
+                if (TrainingInvariantsNotApplicable(network)) return;
+                network.SetTrainingMode(true);
+                for (int i = 0; i < steps; i++) network.Train(input, target);
+                network.SetTrainingMode(false);
+            },
+            describe: network => DescribeNetwork(network, input),
+            prepareModel: PrepareRebuiltNetwork);
+        OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
+    }
+
+    /// <summary>
+    /// Re-applies the fixture's post-construction wiring to a network the option-sensitivity harness rebuilt through
+    /// its clone plan. Nothing by default; a family whose factory configures the instance after its constructor
+    /// (the graph family's synthetic adjacency) overrides it.
+    /// </summary>
+    protected virtual void PrepareRebuiltNetwork(INeuralNetworkModel<T> network)
+    {
+    }
+
+    /// <summary>
+    /// <see cref="ObserveNetwork"/> as named parts: the output, each layer's parameters (index and type), then every
+    /// parameter chunk, so a NonDeterministic verdict names the layer whose initialisation or update is unseeded.
+    /// </summary>
+    private static System.Collections.Generic.IReadOnlyList<System.Collections.Generic.KeyValuePair<string, long>> DescribeNetwork(
+        INeuralNetworkModel<T> network, Tensor<T> input)
+    {
+        network.SetTrainingMode(false);
+        var output = network.Predict(input);
+        var parts = new System.Collections.Generic.List<System.Collections.Generic.KeyValuePair<string, long>>
+        {
+            new("output", OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, output.Length).Select(i => ConvertToDouble(output[i])))),
+        };
+        if (network is NeuralNetworkBase<T> layered)
+        {
+            for (int i = 0; i < layered.Layers.Count; i++)
+            {
+                var layerParameters = layered.Layers[i].GetParameters();
+                // The seed is in the name, so a differing layer also says whether it had one: "seed none" is a layer
+                // that initialised from the process-shared stream.
+                string seed = layered.Layers[i] is AiDotNet.NeuralNetworks.Layers.LayerBase<T> seeded
+                    ? seeded.RandomSeed?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none"
+                    : "n/a";
+                parts.Add(new($"layer {i} ({layered.Layers[i].GetType().Name}, seed {seed})",
+                    OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, layerParameters.Length).Select(j => ConvertToDouble(layerParameters[j])))));
+            }
+        }
+        int chunkIndex = 0;
+        foreach (var chunk in EnumerateParameterChunks(network))
+        {
+            parts.Add(new($"parameter chunk {chunkIndex++} [{string.Join("x", chunk.Shape.ToArray())}]",
+                OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, chunk.Length).Select(i => ConvertToDouble(chunk[i])))));
+        }
+        return parts;
+    }
+
+    /// <summary>
+    /// Fingerprints a network's outputs on <paramref name="input"/> and then every parameter chunk,
+    /// value and length. The forward pass runs first so lazily-sized layers are materialized before
+    /// their parameters are read.
+    /// </summary>
+    private static long ObserveNetwork(INeuralNetworkModel<T> network, Tensor<T> input)
+    {
+        network.SetTrainingMode(false);
+        var output = network.Predict(input);
+        var parts = new System.Collections.Generic.List<long>
+        {
+            OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, output.Length).Select(i => ConvertToDouble(output[i]))),
+        };
+        foreach (var chunk in EnumerateParameterChunks(network))
+            parts.Add(OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, chunk.Length).Select(i => ConvertToDouble(chunk[i]))));
+        return OptionSensitivityHarness.Combine(parts.ToArray());
+    }
 }
 
 /// <summary>

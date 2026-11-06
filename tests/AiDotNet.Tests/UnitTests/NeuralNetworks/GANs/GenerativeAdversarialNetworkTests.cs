@@ -526,6 +526,45 @@ public class GenerativeAdversarialNetworkTests
     }
 
     [Fact(Timeout = 120000)]
+    public async Task WGANGP_Clone_BuildsItsOwnOptimizersFromItsOwnNetworks()
+    {
+        await Task.Yield();
+        var wgangp = new WGANGP<double>(
+            CreateThreeDimensionalGeneratorArchitecture(),
+            CreateThreeDimensionalDiscriminatorArchitecture(),
+            InputType.ThreeDimensional,
+            new WGANGPOptions { LearningRate = 3e-4, Beta1 = 0.5, Beta2 = 0.99 });
+
+        var clone = Assert.IsType<WGANGP<double>>(AiDotNet.Models.CloneEngine.CopyConfiguration(wgangp));
+
+        // The constructor builds Adam over the generator and the critic. A clone that replayed those objects
+        // stepped its networks with the source's Adam moments and trained at the source's learning rate even
+        // when built with different options.
+        foreach (var (field, sourceNetwork, cloneNetwork) in new[]
+                 {
+                     ("_generatorOptimizer", (object)wgangp.Generator, (object)clone.Generator),
+                     ("_criticOptimizer", wgangp.Critic, clone.Critic),
+                 })
+        {
+            var sourceOptimizer = ReadOptimizer(wgangp, field);
+            var cloneOptimizer = ReadOptimizer(clone, field);
+            Assert.NotSame(sourceOptimizer, cloneOptimizer);
+            Assert.Same(sourceNetwork, sourceOptimizer.Model);
+            Assert.Same(cloneNetwork, cloneOptimizer.Model);
+            var options = Assert.IsType<AiDotNet.Models.Options.AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>>(
+                cloneOptimizer.GetOptions());
+            Assert.Equal(3e-4, options.InitialLearningRate);
+            Assert.Equal(0.5, options.Beta1);
+            Assert.Equal(0.99, options.Beta2);
+        }
+
+        static AiDotNet.Optimizers.AdamOptimizer<double, Tensor<double>, Tensor<double>> ReadOptimizer(WGANGP<double> model, string field)
+            => Assert.IsType<AiDotNet.Optimizers.AdamOptimizer<double, Tensor<double>, Tensor<double>>>(
+                typeof(WGANGP<double>).GetField(field, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+                    ?.GetValue(model));
+    }
+
+    [Fact(Timeout = 120000)]
     public async Task WGANGP_GenerateRandomNoiseTensor_WithValidParameters_ReturnsCorrectShape()
     {
         // Arrange

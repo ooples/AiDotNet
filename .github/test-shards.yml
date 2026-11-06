@@ -660,7 +660,7 @@ shard:
     framework: net10.0
     filter: >-
       FullyQualifiedName~ModelFamilyTests.Generated&
-      (FullyQualifiedName~Generated.Tem|FullyQualifiedName~Generated.TensorParallelModelTests|FullyQualifiedName~Generated.Tex|FullyQualifiedName~Generated.Tho|FullyQualifiedName~Generated.Thr|FullyQualifiedName~Generated.TiD|FullyQualifiedName~Generated.Tie|FullyQualifiedName~Generated.TiM|FullyQualifiedName~Generated.Tim|FullyQualifiedName~Generated.Tin|FullyQualifiedName~Generated.Tit|FullyQualifiedName~Generated.Too|FullyQualifiedName~Generated.Tor|FullyQualifiedName~Generated.Tra|FullyQualifiedName~Generated.Tri|FullyQualifiedName~Generated.TET|FullyQualifiedName~Generated.TIM|FullyQualifiedName~Generated.Tok|FullyQualifiedName~Generated.TrO)
+      (FullyQualifiedName~Generated.Tem|FullyQualifiedName~Generated.TensorParallelModelTests|FullyQualifiedName~Generated.Tex|FullyQualifiedName~Generated.Tho|FullyQualifiedName~Generated.Thr|FullyQualifiedName~Generated.TiD|FullyQualifiedName~Generated.Tie|FullyQualifiedName~Generated.TiM|FullyQualifiedName~Generated.Tim|FullyQualifiedName~Generated.Tin|FullyQualifiedName~Generated.Tit|FullyQualifiedName~Generated.Too|FullyQualifiedName~Generated.Tor|FullyQualifiedName~Generated.Tra|FullyQualifiedName~Generated.Tri|FullyQualifiedName~Generated.TET|FullyQualifiedName~Generated.TIM|FullyQualifiedName~Generated.Tok|FullyQualifiedName~Generated.TrO|FullyQualifiedName~Generated.TtsModelTests.)
   - name: ModelFamily - Generated Layers U
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
@@ -1500,6 +1500,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Generators.ModelStateOwnershipContractTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ParameterGeneratorSemanticTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ParameterUpdateInPlaceAnalyzerTests.|
+      FullyQualifiedName~AiDotNet.Tests.Generators.PaperTestDetectionTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.TestScaffoldCoverageReportTests.|
       FullyQualifiedName~AiDotNet.Tests.Helpers.LicenseServerEndpointTests.|
       FullyQualifiedName~AiDotNet.Tests.Helpers.OnlineLicenseServicesTests.|
@@ -1686,6 +1687,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.Generators.GeneratedVisionFixtureContractTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ModelMetadataValidationGeneratorTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.PaperOptimizerAnalyzerTests.|
+      FullyQualifiedName~AiDotNet.Tests.Generators.OptionsFidelityReadGraphTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ParameterAutomationAnalyzerTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ShapeDeclarationValidationGeneratorTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.TensorLayoutRankTests.|
@@ -1860,6 +1862,11 @@ shard:
       Category!=GPU&Category!=Stress&Category!=Sweep&(
       FullyQualifiedName~AiDotNet.Tests.ComputerVision.|
       FullyQualifiedName~AiDotNet.Tests.VisionLanguage.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.ComputerVision.VGG16BackbonePaperTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.ComputerVision.MedicalSAM2PaperTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.PaperFidelity.AstOptionsRoutingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.PaperFidelity.OptionsModelPathRoutingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.PaperFidelity.AstEventOptionRoutingTests.|
       FullyQualifiedName~AiDotNet.Tests.ContinualLearning.ContinualLearningPenaltyTrainingTests.|
       FullyQualifiedName~AiDotNet.Tests.Generators.ModelDefectDuplicateTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.SelfOrganizingMapReferenceTests.)

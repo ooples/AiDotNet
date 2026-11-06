@@ -80,6 +80,13 @@ public partial class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     public Conformer(NeuralNetworkArchitecture<T> architecture, ConformerOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
     {
         _options = options ?? new ConformerOptions(); Options = _options; _useNativeMode = true;
+        if (_options.ModelPath is not null)
+        {
+            if (string.IsNullOrWhiteSpace(_options.ModelPath)) throw new ArgumentException("Model path required.", nameof(options));
+            if (!File.Exists(_options.ModelPath)) throw new FileNotFoundException($"ONNX model not found: {_options.ModelPath}", _options.ModelPath);
+            _useNativeMode = false;
+            OnnxEncoder = new OnnxModel<T>(_options.ModelPath, _options.OnnxOptions);
+        }
         _optimizer = optimizer
         ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this) ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         base.SampleRate = _options.SampleRate; base.NumMels = 0;

@@ -43,6 +43,27 @@ public abstract partial class RiskModelBase<T> : FinancialModelBase<T>, IRiskMod
     protected int _timeHorizon;
 
     /// <summary>
+    /// The options a risk model built without any takes: the options' defaults, with the feature count the
+    /// architecture states when it states one.
+    /// </summary>
+    /// <remarks>
+    /// A risk model sizes its layers from its options, so the feature count the base records and the one its layers are
+    /// built for must be the same number. Constructors used to hand the base a literal fallback (50 for SAINT, TabNet and
+    /// TabTransformer) while the options they created defaulted to 10, so the layers took 10 features under an
+    /// architecture stating 50, and rebuilding the model from its own options was refused.
+    /// </remarks>
+    /// <typeparam name="TOptions">The model's options type.</typeparam>
+    /// <param name="architecture">The architecture the model is built with.</param>
+    protected static TOptions DefaultOptionsFor<TOptions>(NeuralNetworkArchitecture<T> architecture)
+        where TOptions : RiskModelOptions<T>, new()
+    {
+        var options = new TOptions();
+        if (architecture is not null && architecture.InputSize > 0)
+            options.NumFeatures = architecture.InputSize;
+        return options;
+    }
+
+    /// <summary>
     /// Gets the confidence level for risk calculations.
     /// </summary>
     /// <remarks>

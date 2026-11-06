@@ -107,7 +107,7 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
     /// <summary>Initializes AST in ONNX inference mode, for a graph returning the clip representation
     /// <c>[batch, EmbeddingDim]</c> from the official input <c>[batch, TargetLength, NumMels]</c>.</summary>
     public ASTModel(NeuralNetworkArchitecture<T> architecture, string modelPath, ASTOptions? options)
-        : base(architecture)
+        : base(architecture, maxGradNorm: options?.MaxGradNorm ?? 1.0)
     {
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path is required for ONNX mode.", nameof(modelPath));
@@ -126,7 +126,7 @@ public partial class ASTModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprinte
 
     /// <summary>Initializes AST in native training / inference mode.</summary>
     public ASTModel(NeuralNetworkArchitecture<T> architecture, ASTOptions? options, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
-        : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>())
+        : base(architecture, new BinaryCrossEntropyWithLogitsLoss<T>(), maxGradNorm: options?.MaxGradNorm ?? 1.0)
     {
         _options = options ?? new ASTOptions();
         Options = _options;

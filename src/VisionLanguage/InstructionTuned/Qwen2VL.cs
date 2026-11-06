@@ -270,7 +270,9 @@ public partial class Qwen2VL<T> : VisionLanguageModelBase<T>, IInstructionTunedV
         if (IsOnnxMode && OnnxModel is not null)
             return OnnxModel.Run(input);
         SetTrainingMode(false);
-        var c = PreprocessImage(input);
+        // The native stack opens with attention over VisionDim, so it reads post-patch-embedding
+        // tokens [batch, tokens, VisionDim]; pixel normalization applies to images, not to them.
+        var c = input;
         foreach (var l in Layers)
             c = l.Forward(c);
         return c;

@@ -17,7 +17,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// HuBERT's layer output, both tokenizers, the Vevo-TTS transformer's loss, logits and greedy decoding, the Vevo-Voice
 /// transformer's decoding of its content-token input, the flow's guided Euler solution and training loss, and Vocos.
 /// </summary>
-public class VevoReferenceTests
+public class VevoPaperTests
 {
     private static readonly int[] Phones = { 3, 7, 11, 4, 9, 2 };
     private static readonly int[] StylePhones = { 5, 1, 8 };

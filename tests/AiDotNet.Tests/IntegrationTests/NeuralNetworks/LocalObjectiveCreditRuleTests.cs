@@ -27,7 +27,7 @@ namespace AiDotNet.Tests.IntegrationTests.NeuralNetworks;
 /// honoured by <c>Train()</c> (which previously ran back-propagation regardless of the configured rule), and both
 /// rules produce real held-out learning.
 /// </summary>
-public class LocalObjectiveCreditRuleTests
+public partial class LocalObjectiveCreditRuleTests
 {
     private const int Dim = 8, Classes = 3, Width = 16;
 

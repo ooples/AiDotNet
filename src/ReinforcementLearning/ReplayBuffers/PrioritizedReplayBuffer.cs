@@ -18,6 +18,7 @@ public class PrioritizedReplayBuffer<T>
     private int _position;
     private double _maxPriority;
     private readonly INumericOperations<T> _numOps;
+    private readonly Random _random;
 
     private const int DefaultCapacity = 10000;
 
@@ -31,8 +32,14 @@ public class PrioritizedReplayBuffer<T>
     {
     }
 
-    public PrioritizedReplayBuffer(int capacity)
+    /// <summary>
+    /// Initializes a new buffer holding up to <paramref name="capacity"/> experiences.
+    /// </summary>
+    /// <param name="capacity">The maximum number of experiences kept.</param>
+    /// <param name="seed">Seed for the sampling draws; null uses secure entropy.</param>
+    public PrioritizedReplayBuffer(int capacity, int? seed = null)
     {
+        _random = seed.HasValue ? RandomHelper.CreateSeededRandom(seed.Value) : RandomHelper.CreateSecureRandom();
         _capacity = capacity;
         _buffer = new List<(Vector<T>, Vector<T>, T, Vector<T>, bool)>(capacity);
         _priorities = new List<double>(capacity);
@@ -85,7 +92,7 @@ public class PrioritizedReplayBuffer<T>
         }
 
         // Sample with priorities
-        var random = RandomHelper.ThreadSafeRandom;
+        var random = _random;
         double minProbability = probabilities.Min();
         double maxWeight = Math.Pow(_buffer.Count * minProbability, -beta);
 

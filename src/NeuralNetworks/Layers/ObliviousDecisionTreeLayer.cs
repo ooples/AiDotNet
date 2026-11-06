@@ -153,8 +153,26 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
         _thresholdsGrad = new Tensor<T>([depth]);
         _leafValuesGrad = new Tensor<T>([_numLeaves, outputDim]);
 
-        InitializeParameters(initScale);
+        InitializeParameters(initScale, Random);
         _isInitialized = true;
+        NoteConstructorInitialization(_featureSelectionWeights, _thresholds, _leafValues);
+    }
+
+    /// <summary>
+    /// Redraws the constructor's initial values from a seed assigned after construction (a parent that builds this
+    /// tree outside its own construction, such as a NODE ensemble resized by its first input, hands it one), as long
+    /// as they are still exactly what construction drew.
+    /// </summary>
+    protected override void OnRandomSeedAssigned()
+    {
+        // Runs from the base constructor too, before these fields exist.
+        if (_featureSelectionWeights is null || _thresholds is null || _leafValues is null) return;
+        var drawn = new[] { _featureSelectionWeights, _thresholds, _leafValues };
+        if (TryBeginSeededReinitialization(drawn, out var random))
+        {
+            InitializeParameters(_initScale, random);
+            CompleteSeededReinitialization(drawn);
+        }
     }
 
     /// <summary>
@@ -267,30 +285,30 @@ public partial class ObliviousDecisionTreeLayer<T> : LayerBase<T>, IShapeContrac
 
         if (!weightsAlreadyValid)
         {
-            InitializeParameters(_initScale);
+            InitializeParameters(_initScale, Random);
         }
 
         _isInitialized = true;
     }
 
-    private void InitializeParameters(double scale)
+    private void InitializeParameters(double scale, Random random)
     {
         // Initialize feature selection weights (uniform, will be softmaxed)
         for (int i = 0; i < _featureSelectionWeights.Length; i++)
         {
-            _featureSelectionWeights[i] = NumOps.FromDouble(Random.NextGaussian() * scale);
+            _featureSelectionWeights[i] = NumOps.FromDouble(random.NextGaussian() * scale);
         }
 
         // Initialize thresholds to small random values
         for (int i = 0; i < _thresholds.Length; i++)
         {
-            _thresholds[i] = NumOps.FromDouble(Random.NextGaussian() * scale * 0.1);
+            _thresholds[i] = NumOps.FromDouble(random.NextGaussian() * scale * 0.1);
         }
 
         // Initialize leaf values
         for (int i = 0; i < _leafValues.Length; i++)
         {
-            _leafValues[i] = NumOps.FromDouble(Random.NextGaussian() * scale);
+            _leafValues[i] = NumOps.FromDouble(random.NextGaussian() * scale);
         }
     }
 

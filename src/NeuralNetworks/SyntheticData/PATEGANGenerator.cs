@@ -153,6 +153,7 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new PATEGANOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         if (_options.NumTeachers < 1)
             throw new ArgumentOutOfRangeException(nameof(options), "PATE-GAN needs at least one teacher.");
         if (_options.LaplaceScale <= 0)
@@ -266,8 +267,11 @@ public partial class PATEGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
         FitEncoding(data);
         var encoded = Encode(data);
-        if (!_usingCustomLayers) BuildGenerator(_dataWidth);
-        BuildDiscriminators(_dataWidth);
+        BuildFromConstructionSequence(() =>
+        {
+            if (!_usingCustomLayers) BuildGenerator(_dataWidth);
+            BuildDiscriminators(_dataWidth);
+        });
         _generatorOptimizer.Reset();
         _studentOptimizer = CreateAdam();
         _teacherOptimizers = Enumerable.Range(0, k).Select(_ => (IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>)CreateAdam()).ToArray();

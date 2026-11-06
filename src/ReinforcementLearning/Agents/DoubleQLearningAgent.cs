@@ -80,7 +80,7 @@ public partial class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
         _qTable1 = new Dictionary<string, Dictionary<int, T>>();
         _qTable2 = new Dictionary<string, Dictionary<int, T>>();
         _epsilon = _options.EpsilonStart;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = Random;
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

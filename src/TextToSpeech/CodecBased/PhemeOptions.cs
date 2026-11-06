@@ -102,6 +102,7 @@ public class PhemeOptions : TtsModelOptions
     }
 
     /// <summary>T5 model width d_model (512).</summary>
+    [AiDotNet.Attributes.PaperDefault(512, Source = "Budzianowski et al. 2024, Table 5: small text-model width 512.") ]
     public int TextModelDim { get; set; } = 512;
 
     /// <summary>T5 feed-forward width d_ff (2048).</summary>

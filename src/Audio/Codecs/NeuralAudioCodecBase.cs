@@ -99,10 +99,11 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
         _codec = options ?? throw new ArgumentNullException(nameof(options));
         // The clone plan replays the constructor from members named after its parameters.
         Options = _codec;
-        _useNativeMode = true;
+        _useNativeMode = _codec.ModelPath is null;
         _suppliedOptimizer = optimizer;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_codec.SamplingSeed);
         base.SampleRate = _codec.SampleRate;
+        if (!_useNativeMode) InitializeOnnx(_codec.ModelPath!);
         InitializeLayers();
     }
 
@@ -115,14 +116,17 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
         _useNativeMode = false;
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_codec.SamplingSeed);
         base.SampleRate = _codec.SampleRate;
-        if (string.IsNullOrWhiteSpace(modelPath))
-            throw new ArgumentException("Model path required.", nameof(modelPath));
-        if (!File.Exists(modelPath))
-            throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        InitializeOnnx(modelPath);
+        InitializeLayers();
+    }
+
+    private void InitializeOnnx(string modelPath)
+    {
+        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _codec.ModelPath = modelPath;
         OnnxEncoder = new OnnxModel<T>(_codec.EncoderModelPath ?? modelPath, _codec.OnnxOptions);
         if (_codec.DecoderModelPath is not null) OnnxDecoder = new OnnxModel<T>(_codec.DecoderModelPath, _codec.OnnxOptions);
-        InitializeLayers();
     }
 
     /// <summary>The codec options.</summary>

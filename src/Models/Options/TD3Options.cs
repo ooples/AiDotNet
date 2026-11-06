@@ -33,8 +33,6 @@ public class TD3Options<T> : ReinforcementLearningOptions<T>
     public List<int> ActorHiddenLayers { get; init; } = new List<int> { 256, 256 };
     /// <summary>Hidden layer sizes of the critic network.</summary>
     public List<int> CriticHiddenLayers { get; init; } = new List<int> { 256, 256 };
-    /// <summary>Number of environment steps taken with random actions before learning starts.</summary>
-    public new int WarmupSteps { get; init; } = 25000;
 
     /// <summary>Creates options with the default values.</summary>
     public TD3Options()
@@ -43,5 +41,9 @@ public class TD3Options<T> : ReinforcementLearningOptions<T>
         ActorLearningRate = numOps.FromDouble(0.001);
         CriticLearningRate = numOps.FromDouble(0.001);
         TargetUpdateTau = numOps.FromDouble(0.005);
+        // 25,000 random-action steps before learning starts: the authors' reference implementation
+        // (sfujim/TD3, start_timesteps = 25e3). The paper itself reports shorter warmups (1,000 steps, and 10,000 on
+        // some MuJoCo tasks). Set on the inherited WarmupSteps, which ReinforcementLearningAgentBase reads.
+        WarmupSteps = 25000;
     }
 }

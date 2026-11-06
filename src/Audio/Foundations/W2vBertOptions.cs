@@ -73,6 +73,7 @@ public class W2vBertOptions : ModelOptions
     public static W2vBertOptions Xxl() => new() { MaskedLayers = 30 };
 
     /// <summary>Audio sample rate (16 kHz).</summary>
+    [AiDotNet.Attributes.PaperDefault(16000, Source = "Chung et al. 2021, Sec. 3: 16 kHz speech input.") ]
     public int SampleRate { get; set; } = 16000;
 
     /// <summary>Log-mel filterbank bins (80).</summary>

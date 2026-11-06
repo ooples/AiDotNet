@@ -211,10 +211,10 @@ public sealed partial class TemporalConv3DLayer<T> : LayerBase<T>, IShapeContrac
             int fanIn = _inputChannels * _kernelDepth * _kernelHeight * _kernelWidth;
             T bound = NumOps.FromDouble(1.0 / System.Math.Sqrt(fanIn));
             var initialized = Engine.TensorRandomUniformRange<T>(
-                kernelShape, NumOps.Negate(bound), bound);
+                kernelShape, NumOps.Negate(bound), bound, Random.Next());
             initialized.AsSpan().CopyTo(_kernels.Data.Span);
             var initializedBias = Engine.TensorRandomUniformRange<T>(
-                [_outputChannels], NumOps.Negate(bound), bound);
+                [_outputChannels], NumOps.Negate(bound), bound, Random.Next());
             initializedBias.AsSpan().CopyTo(_biases.Data.Span);
         }
 

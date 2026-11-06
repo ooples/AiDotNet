@@ -263,7 +263,7 @@ public partial class Nougat<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             return;
         }
 
-        InitializeLayers();
+        BuildFromConstructionSequence(InitializeLayers);
         _nativeLayersInitialized = true;
         InvalidateParameterCountCache();
     }

@@ -101,12 +101,12 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
     /// <summary>
     /// The optimizer for the generator network.
     /// </summary>
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _generatorOptimizer;
 
     /// <summary>
     /// The optimizer for the critic network.
     /// </summary>
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _criticOptimizer;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _criticOptimizer;
 
     /// <summary>
     /// The coefficient for the gradient penalty term in the loss function.
@@ -531,7 +531,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
                 return current;
             }
             Tensor<T> EpsilonSampler(int bs) =>
-                Engine.TensorRandomUniformRange<T>(new[] { bs, 1 }, NumOps.Zero, NumOps.One);
+                Engine.TensorRandomUniformRange<T>(new[] { bs, 1 }, NumOps.Zero, NumOps.One, Random.Next());
             if (wganStep.TryStep(
                     discParameters: criticDiscParams,
                     realBatch: realImages,
@@ -572,7 +572,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
             var epsilonShape = new int[realImages.Shape.Length];
             epsilonShape[0] = batchSize;
             for (int d = 1; d < epsilonShape.Length; d++) epsilonShape[d] = 1;
-            var epsilonBase = Engine.TensorRandomUniform<T>(epsilonShape);
+            var epsilonBase = Engine.TensorRandomUniformRange<T>(epsilonShape, NumOps.Zero, NumOps.One, Random.Next());
             var tileFactors = new int[realImages.Shape.Length];
             tileFactors[0] = 1;
             for (int d = 1; d < tileFactors.Length; d++) tileFactors[d] = realImages.Shape[d];
@@ -646,7 +646,7 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         var epsilonShape = new int[realImages.Shape.Length];
         epsilonShape[0] = batchSize;
         for (int d = 1; d < epsilonShape.Length; d++) epsilonShape[d] = 1;
-        var epsilonBase = Engine.TensorRandomUniform<T>(epsilonShape);
+        var epsilonBase = Engine.TensorRandomUniformRange<T>(epsilonShape, NumOps.Zero, NumOps.One, Random.Next());
 
         // Tile epsilon to match full image shape
         var tileFactors = new int[realImages.Shape.Length];
@@ -814,7 +814,9 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         var totalElements = batchSize * noiseSize;
         var mean = NumOps.Zero;
         var stddev = NumOps.One;
-        var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev);
+        // From the model's seeded stream: unseeded, the engine drew from a process-shared generator, so two
+        // identically seeded models trained on different noise.
+        var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev, Random.Next());
         return Tensor<T>.FromVector(noiseVector, [batchSize, noiseSize]);
     }
 

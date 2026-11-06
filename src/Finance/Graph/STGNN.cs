@@ -257,8 +257,9 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         _useGatedFusion = _options.UseGatedFusion;
         _useResidualConnections = _options.UseResidualConnections;
 
+        GraphAdjacency.RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
         _adjacencyMatrix = adjacencyMatrix ?? CreateDefaultAdjacencyMatrix(_numNodes);
-        _random = RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
     }
 
     /// <summary>
@@ -303,8 +304,9 @@ public partial class STGNN<T> : ForecastingModelBase<T>
         _useGatedFusion = _options.UseGatedFusion;
         _useResidualConnections = _options.UseResidualConnections;
 
+        GraphAdjacency.RequireNodeCount(adjacencyMatrix, _numNodes, nameof(adjacencyMatrix));
         _adjacencyMatrix = adjacencyMatrix ?? CreateDefaultAdjacencyMatrix(_numNodes);
-        _random = RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         InitializeLayers();
     }

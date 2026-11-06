@@ -143,7 +143,7 @@ public partial class RainbowDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
         Networks.Add(_targetNetwork);
 
         // Initialize replay buffer directly in constructor
-        _replayBuffer = new PrioritizedReplayBuffer<T>(_options.ReplayBufferSize);
+        _replayBuffer = new PrioritizedReplayBuffer<T>(_options.ReplayBufferSize, Random.Next());
     }
 
     private NeuralNetwork<T> CreateDuelingNetwork()

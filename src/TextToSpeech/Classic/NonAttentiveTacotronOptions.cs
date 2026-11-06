@@ -56,6 +56,7 @@ public class NonAttentiveTacotronOptions : AcousticModelOptions
     }
 
     /// <summary>Gets or sets the token embedding width (512).</summary>
+    [AiDotNet.Attributes.PaperDefault(512, Source = "Shen et al. 2020, Appendix A, Table 6: 512-dimensional token embeddings.") ]
     public int EmbeddingDim { get; set; } = 512;
 
     /// <summary>Gets or sets the encoder convolutions' channels ([512, 512, 512]).</summary>

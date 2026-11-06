@@ -168,6 +168,7 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new OCTGANOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         if (_options.TimePoints < 2)
             throw new ArgumentOutOfRangeException(nameof(options), "OCT-GAN needs at least two ODE segments (one learnable time point).");
         if (_options.OdeSolverSteps < 1)
@@ -298,8 +299,11 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         _sampler.Fit(data, _columns);
         _condWidth = _sampler.ConditionalVectorWidth;
 
-        if (!_usingCustomLayers) BuildGenerator(_options.EmbeddingDimension + _condWidth, _dataWidth);
-        BuildDiscriminator(_dataWidth + _condWidth);
+        BuildFromConstructionSequence(() =>
+        {
+            if (!_usingCustomLayers) BuildGenerator(_options.EmbeddingDimension + _condWidth, _dataWidth);
+            BuildDiscriminator(_dataWidth + _condWidth);
+        });
         _timePoints = EvenlySpacedTimePoints(_options.TimePoints);
         _generatorOptimizer.Reset();
         _discriminatorOptimizer = CreateAdam();

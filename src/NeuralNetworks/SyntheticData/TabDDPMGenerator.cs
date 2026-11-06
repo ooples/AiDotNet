@@ -330,7 +330,7 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             _options.NumCategoricalDiffusionSteps, _options.BetaStart, _options.BetaEnd, _random);
 
         // Step 4: Build layers with actual dimensions
-        RebuildLayersWithActualDimensions();
+        BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions());
 
         // Step 5: Training loop
         int batchSize = Math.Min(_options.BatchSize, data.Rows);
@@ -380,7 +380,7 @@ public partial class TabDDPMGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             _multinomialDiffusion = new MultinomialDiffusion<T>(
                 _options.NumCategoricalDiffusionSteps, _options.BetaStart, _options.BetaEnd, _random);
 
-            RebuildLayersWithActualDimensions();
+            BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions());
 
             int batchSize = Math.Min(_options.BatchSize, data.Rows);
             int numBatches = Math.Max(1, data.Rows / batchSize);

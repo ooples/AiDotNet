@@ -86,7 +86,7 @@ public partial class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGr
         _qTable = new Dictionary<string, Dictionary<int, T>>();
         _nStepBuffer = new List<(string, int, T)>();
         _epsilon = _options.EpsilonStart;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = Random;
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

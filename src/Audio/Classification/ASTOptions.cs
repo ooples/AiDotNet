@@ -45,6 +45,7 @@ public class ASTOptions : ModelOptions
     {
         if (other is null) throw new ArgumentNullException(nameof(other));
         Seed = other.Seed;
+        MaxGradNorm = other.MaxGradNorm;
         SampleRate = other.SampleRate;
         NumMels = other.NumMels;
         TargetLength = other.TargetLength;
@@ -68,6 +69,9 @@ public class ASTOptions : ModelOptions
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
     }
+
+    /// <summary>Gets or sets the training gradient norm limit. Zero disables clipping.</summary>
+    public double MaxGradNorm { get; set; } = 1.0;
 
     #region Audio Front End
 
@@ -149,16 +153,19 @@ public class ASTOptions : ModelOptions
     /// AST uses sigmoid activation for multi-label AudioSet classification.</para>
     /// <para><b>For Beginners:</b> How confident the model must be to report a sound.</para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Threshold filters AST.Detect and streaming events, not clip probabilities or ASTModel fingerprint embeddings. Covered by AstEventOptionRoutingTests.")]
     public double Threshold { get; set; } = 0.3;
 
     /// <summary>
     /// Gets or sets the window size in seconds for event detection.
     /// </summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("WindowSize controls AST.Detect and streaming window duration; fixed-clip Predict/Train and ASTModel fingerprints do not use event windows. Covered by AstEventOptionRoutingTests.")]
     public double WindowSize { get; set; } = 10.0;
 
     /// <summary>
     /// Gets or sets the window overlap ratio (0-1) for event detection.
     /// </summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("WindowOverlap controls AST.Detect and streaming window spacing; fixed-clip Predict/Train and ASTModel fingerprints do not use event windows. Covered by AstEventOptionRoutingTests.")]
     public double WindowOverlap { get; set; } = 0.5;
 
     /// <summary>

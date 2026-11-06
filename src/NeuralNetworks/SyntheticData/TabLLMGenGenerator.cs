@@ -263,7 +263,7 @@ public partial class TabLLMGenGenerator<T> : NeuralSyntheticTabularGeneratorBase
         BuildTokenization(data, columns);
 
         // Build transformer layers with actual vocab dimensions
-        RebuildAuxiliaryLayers();
+        BuildFromConstructionSequence(() => RebuildAuxiliaryLayers());
 
         // Tokenize all data
         var tokenizedData = TokenizeData(data, columns);

@@ -247,8 +247,9 @@ $dotnetArgs = @(
   '-c', 'Release',
   '--framework', "$($env:SHARD_FRAMEWORK)",
   '--no-build', '--no-restore',
-  # HeavyTimeout and ModelPerformanceCensus have dedicated long-running/artifact lanes.
-  '--filter', "($($env:SHARD_FILTER))&Category!=HeavyTimeout&Category!=ModelPerformanceCensus"
+  # HeavyTimeout, ModelPerformanceCensus and PaperFidelity have dedicated lanes (PaperFidelity: the
+  # impact-gated paper-fidelity job in sonarcloud.yml and paper-fidelity-nightly.yml).
+  '--filter', "($($env:SHARD_FILTER))&Category!=HeavyTimeout&Category!=ModelPerformanceCensus&Category!=PaperFidelity"
 )
 if ($collectCoverage) {
   $runSettings = 'coverlet.runsettings'

@@ -221,6 +221,8 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         {
             return NumOps.Zero;
         }
+        // Batch tensors and conjugate-gradient iterates outlive individual tapes and their arena rewinds.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
 
         var (states, advantages, returns) = ComputeAdvantages();
         var actions = _trajectoryBuffer.Select(t => t.action).ToList();

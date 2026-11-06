@@ -52,14 +52,25 @@ namespace AiDotNet.RetrievalAugmentedGeneration.RerankingStrategies;
 /// 3. "Neural networks architecture guide" (NEW score: 0.72) ← Less relevant
 /// 
 /// ```csharp
-/// var store = new InMemoryDocumentStore&lt;double&gt;(vectorDimension: 384);
-/// var retriever = new DenseRetriever&lt;double&gt;(store, new StubEmbeddingModel&lt;double&gt;(384));
 /// var reranker = new CohereReranker&lt;double&gt;(
 ///     apiKey: "your-cohere-api-key",
 ///     model: "rerank-english-v3.0"
 /// );
 /// 
-/// string query = "How do vaccines train the immune system?";
+/// var documentStore = new InMemoryDocumentStore&lt;double&gt;(vectorDimension: 768);
+/// var embeddingModel = new StubEmbeddingModel&lt;double&gt;(embeddingDimension: 768);
+/// string[] passages =
+/// {
+///     "Vaccines expose the immune system to a harmless antigen so it builds memory cells.",
+///     "Neural networks architecture guide",
+///     "Booster doses refresh the antibody response a vaccine first trained."
+/// };
+/// for (int i = 0; i &lt; passages.Length; i++)
+///     documentStore.Add(new VectorDocument&lt;double&gt;(
+///         new Document&lt;double&gt;($"passage-{i}", passages[i]), embeddingModel.Embed(passages[i])));
+/// var retriever = new DenseRetriever&lt;double&gt;(documentStore, embeddingModel);
+/// var query = "How do vaccines train the immune system?";
+///
 /// var initialResults = retriever.Retrieve(query, topK: 20);  // Get 20 candidates
 /// var reranked = reranker.Rerank(query, initialResults);      // Rerank to improve order
 /// var final = reranked.Take(5);                               // Return best 5

@@ -167,9 +167,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             { InitialLearningRate = _options.LearningRate });
-        _random = _options.Seed.HasValue
-            ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
-            : RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         InitializeLayers();
     }
@@ -334,7 +332,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         var transformedData = _transformer.Transform(data);
 
         // Rebuild all auxiliary layers with actual dimensions
-        RebuildAuxiliaryLayers();
+        BuildFromConstructionSequence(() => RebuildAuxiliaryLayers());
 
         // Minibatching, as every other generator in this family does it (TVAE, the
         // closest analogue, is the reference). BatchSize bounds how many rows one
@@ -852,7 +850,7 @@ public partial class GOGGLEGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
             {
                 _columns.Add(new ColumnMetadata($"col_{c}", ColumnDataType.Continuous, columnIndex: c));
             }
-            RebuildAuxiliaryLayers();
+            BuildFromConstructionSequence(() => RebuildAuxiliaryLayers());
         }
     }
 

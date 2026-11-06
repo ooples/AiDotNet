@@ -363,7 +363,7 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
 
         // Step 4: Rebuild layers with actual dimensions
         int genInputDim = _options.EmbeddingDimension + _condWidth;
-        RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
+        BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim));
         InitializeTrainingBuffers(genInputDim);
 
         // Step 5: Transform data
@@ -445,7 +445,7 @@ public partial class DPCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             _packedInputDim = (_dataWidth + _condWidth) * _options.PacSize;
 
             int genInputDim = _options.EmbeddingDimension + _condWidth;
-            RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
+            BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim));
             InitializeTrainingBuffers(genInputDim);
 
             var transformedData = _transformer.Transform(data);

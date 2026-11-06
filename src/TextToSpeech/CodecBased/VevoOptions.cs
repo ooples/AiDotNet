@@ -90,6 +90,7 @@ public class VevoOptions : TtsModelOptions
     public int HubertLayer { get; set; } = 18;
 
     /// <summary>Content-style tokens (8192).</summary>
+    [AiDotNet.Attributes.PaperDefault(8192, Source = "Zhang et al. 2025, Sec. 3.1: content-style tokenizer with 8192 codes.") ]
     public int ContentStyleCodes { get; set; } = 8192;
 
     /// <summary>The content-style codebook's dimension (8).</summary>

@@ -21191,6 +21191,9 @@ override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.PatternSalt.g
 override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.TileCoefficients(double[,]! tile) -> double[]!
 override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.TileDelta(int height, int width, double[]! coefficientChanges) -> double[,]!
 override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.WatermarkDescription.get -> string!
+AiDotNet.RetrievalAugmentedGeneration.Retrievers.EmbeddingModelQueryEmbedder<T>
+AiDotNet.RetrievalAugmentedGeneration.Retrievers.EmbeddingModelQueryEmbedder<T>.EmbeddingModelQueryEmbedder(AiDotNet.Interfaces.IEmbeddingModel<T>! embeddingModel) -> void
+AiDotNet.RetrievalAugmentedGeneration.Retrievers.EmbeddingModelQueryEmbedder<T>.EmbedQuery(string! query) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.AppendToken(int tokenId) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.Dispose() -> void
 AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.ForwardLogits(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokenIds) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -21289,6 +21292,211 @@ AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.Exploratio
 AiDotNet.ReinforcementLearning.Policies.DiscretePolicy<T>.DiscretePolicy(AiDotNet.ReinforcementLearning.Policies.DiscretePolicyOptions<T>! options) -> void
 AiDotNet.ReinforcementLearning.Policies.MixedPolicy<T>.MixedPolicy(AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>! options) -> void
 AiDotNet.ReinforcementLearning.Policies.MultiModalPolicy<T>.MultiModalPolicy(AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>! options) -> void
+*REMOVED*AiDotNet.Audio.AudioGen.AudioGenOptions.Seed.get -> int?
+*REMOVED*AiDotNet.Audio.AudioGen.AudioGenOptions.Seed.set -> void
+*REMOVED*AiDotNet.Clustering.Options.AffinityPropagationOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.AffinityPropagationOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.BIRCHOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.BIRCHOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.CLARANSOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.CLARANSOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.COPKMeansOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.COPKMeansOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.DBSCANOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.DBSCANOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.DenclueOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.DenclueOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.FuzzyCMeansOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.FuzzyCMeansOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.GMeansOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.GMeansOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.HDBSCANOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.HDBSCANOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.HierarchicalOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.HierarchicalOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.KMedoidsOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.KMedoidsOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.MeanShiftOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.MeanShiftOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.OPTICSOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.OPTICSOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.OnlineKMeansOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.OnlineKMeansOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.SOMOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.SOMOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.SeededKMeansOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.SeededKMeansOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.SpectralOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.SpectralOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Clustering.Options.XMeansOptions<T>.DistanceMetric.get -> AiDotNet.Clustering.Interfaces.IDistanceMetric<T>?
+*REMOVED*AiDotNet.Clustering.Options.XMeansOptions<T>.DistanceMetric.set -> void
+*REMOVED*AiDotNet.Models.Options.AMSGradOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.AMSGradOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.AMSGradOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.AMSGradOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.AdaMaxOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.AdaMaxOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.AdaMaxOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.AdaMaxOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.BFGSOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.BFGSOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.BFGSOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.BFGSOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.CMAESOptimizerOptions<T, TInput, TOutput>.MaxGenerations.get -> int
+*REMOVED*AiDotNet.Models.Options.CMAESOptimizerOptions<T, TInput, TOutput>.MaxGenerations.set -> void
+*REMOVED*AiDotNet.Models.Options.CMAESOptimizerOptions<T, TInput, TOutput>.PopulationSize.get -> int
+*REMOVED*AiDotNet.Models.Options.CMAESOptimizerOptions<T, TInput, TOutput>.PopulationSize.set -> void
+*REMOVED*AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.DifferentialEvolutionOptions<T, TInput, TOutput>.CrossoverRate.get -> double
+*REMOVED*AiDotNet.Models.Options.DifferentialEvolutionOptions<T, TInput, TOutput>.CrossoverRate.set -> void
+*REMOVED*AiDotNet.Models.Options.DifferentialEvolutionOptions<T, TInput, TOutput>.MutationRate.get -> double
+*REMOVED*AiDotNet.Models.Options.DifferentialEvolutionOptions<T, TInput, TOutput>.MutationRate.set -> void
+*REMOVED*AiDotNet.Models.Options.DifferentialEvolutionOptions<T, TInput, TOutput>.PopulationSize.get -> int
+*REMOVED*AiDotNet.Models.Options.DifferentialEvolutionOptions<T, TInput, TOutput>.PopulationSize.set -> void
+*REMOVED*AiDotNet.Models.Options.FTRLOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.FTRLOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.LBFGSOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.LBFGSOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.LBFGSOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.LBFGSOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.MiniBatchGradientDescentOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.MiniBatchGradientDescentOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.MomentumOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.MomentumOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.MomentumOptimizerOptions<T, TInput, TOutput>.MomentumDecreaseFactor.get -> double
+*REMOVED*AiDotNet.Models.Options.MomentumOptimizerOptions<T, TInput, TOutput>.MomentumDecreaseFactor.set -> void
+*REMOVED*AiDotNet.Models.Options.MomentumOptimizerOptions<T, TInput, TOutput>.MomentumIncreaseFactor.get -> double
+*REMOVED*AiDotNet.Models.Options.MomentumOptimizerOptions<T, TInput, TOutput>.MomentumIncreaseFactor.set -> void
+*REMOVED*AiDotNet.Models.Options.NGBoostRegressionOptions<T>.MinSamplesSplit.get -> int
+*REMOVED*AiDotNet.Models.Options.NGBoostRegressionOptions<T>.MinSamplesSplit.set -> void
+*REMOVED*AiDotNet.Models.Options.NadamOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.NadamOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.NadamOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+*REMOVED*AiDotNet.Models.Options.NadamOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+*REMOVED*AiDotNet.Models.Options.NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>.MomentumDecreaseFactor.get -> double
+*REMOVED*AiDotNet.Models.Options.NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>.MomentumDecreaseFactor.set -> void
+*REMOVED*AiDotNet.Models.Options.NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>.MomentumIncreaseFactor.get -> double
+*REMOVED*AiDotNet.Models.Options.NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>.MomentumIncreaseFactor.set -> void
+*REMOVED*AiDotNet.Models.Options.SARIMAOptions<T>.SeasonalPeriod.get -> int
+*REMOVED*AiDotNet.Models.Options.SARIMAOptions<T>.SeasonalPeriod.set -> void
+*REMOVED*AiDotNet.Models.Options.STLDecompositionOptions<T>.SeasonalPeriod.get -> int
+*REMOVED*AiDotNet.Models.Options.STLDecompositionOptions<T>.SeasonalPeriod.set -> void
+*REMOVED*AiDotNet.Models.Options.TD3Options<T>.WarmupSteps.get -> int
+*REMOVED*AiDotNet.Models.Options.TD3Options<T>.WarmupSteps.init -> void
+*REMOVED*AiDotNet.Models.Options.TabuSearchOptions<T, TInput, TOutput>.MaxMutationRate.get -> double
+*REMOVED*AiDotNet.Models.Options.TabuSearchOptions<T, TInput, TOutput>.MaxMutationRate.set -> void
+*REMOVED*AiDotNet.Models.Options.TabuSearchOptions<T, TInput, TOutput>.MinMutationRate.get -> double
+*REMOVED*AiDotNet.Models.Options.TabuSearchOptions<T, TInput, TOutput>.MinMutationRate.set -> void
+*REMOVED*AiDotNet.Models.Options.TabuSearchOptions<T, TInput, TOutput>.MutationRate.get -> double
+*REMOVED*AiDotNet.Models.Options.TabuSearchOptions<T, TInput, TOutput>.MutationRate.set -> void
+*REMOVED*AiDotNet.Models.Options.TradingAgentOptions<T>.Seed.get -> int?
+*REMOVED*AiDotNet.Models.Options.TradingAgentOptions<T>.Seed.set -> void
+*REMOVED*AiDotNet.Models.Options.UnobservedComponentsOptions<T, TInput, TOutput>.SeasonalPeriod.get -> int
+*REMOVED*AiDotNet.Models.Options.UnobservedComponentsOptions<T, TInput, TOutput>.SeasonalPeriod.set -> void
+*REMOVED*AiDotNet.Models.ResidualBootstrapFitDetectorOptions.Seed.get -> int?
+*REMOVED*AiDotNet.Models.ResidualBootstrapFitDetectorOptions.Seed.set -> void
+*REMOVED*AiDotNet.PointCloud.Models.DGCNN<T>.DGCNN(AiDotNet.Models.Options.DGCNNOptions! options, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null, AiDotNet.Models.Options.DGCNNOptions? modelOptions = null) -> void
+*REMOVED*AiDotNet.PointCloud.Models.DGCNN<T>.DGCNN(int numClasses, int[]? edgeConvChannels = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.BetaPolicyOptions<T>.Seed.get -> int?
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.BetaPolicyOptions<T>.Seed.set -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.ContinuousPolicyOptions<T>.Seed.get -> int?
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.ContinuousPolicyOptions<T>.Seed.set -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.Seed.get -> int?
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.Seed.set -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.DiscretePolicyOptions<T>.Seed.get -> int?
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.DiscretePolicyOptions<T>.Seed.set -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>.Seed.get -> int?
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>.Seed.set -> void
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>.Seed.get -> int?
+*REMOVED*AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>.Seed.set -> void
+*REMOVED*AiDotNet.ReinforcementLearning.ReplayBuffers.PrioritizedReplayBuffer<T>.PrioritizedReplayBuffer(int capacity) -> void
+*REMOVED*static AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.Random.get -> System.Random!
+AiDotNet.Attributes.OptionBehaviourExemptAttribute
+AiDotNet.Attributes.OptionBehaviourExemptAttribute.OptionBehaviourExemptAttribute(string! reason) -> void
+AiDotNet.Attributes.OptionBehaviourExemptAttribute.Reason.get -> string!
+AiDotNet.Attributes.PaperDefaultAttribute
+AiDotNet.Attributes.PaperDefaultAttribute.PaperDefaultAttribute(object! value) -> void
+AiDotNet.Attributes.PaperDefaultAttribute.Source.get -> string!
+AiDotNet.Attributes.PaperDefaultAttribute.Source.set -> void
+AiDotNet.Attributes.PaperDefaultAttribute.Value.get -> object!
+AiDotNet.Models.Options.CMAESOptimizerOptions<T, TInput, TOutput>.CMAESOptimizerOptions(AiDotNet.Models.Options.CMAESOptimizerOptions<T, TInput, TOutput>! other) -> void
+AiDotNet.Models.Options.DQNOptions<T>.DQNOptions(AiDotNet.Models.Options.DQNOptions<T>! other) -> void
+AiDotNet.Models.Options.DifferentialEvolutionOptions<T, TInput, TOutput>.DifferentialEvolutionOptions(AiDotNet.Models.Options.DifferentialEvolutionOptions<T, TInput, TOutput>! other) -> void
+AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>.GeneticAlgorithmOptimizerOptions(AiDotNet.Models.Options.GeneticAlgorithmOptimizerOptions<T, TInput, TOutput>! other) -> void
+AiDotNet.Models.Options.MomentumOptimizerOptions<T, TInput, TOutput>.MomentumOptimizerOptions(AiDotNet.Models.Options.MomentumOptimizerOptions<T, TInput, TOutput>! other) -> void
+AiDotNet.Models.Options.NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>.NesterovAcceleratedGradientOptimizerOptions(AiDotNet.Models.Options.NesterovAcceleratedGradientOptimizerOptions<T, TInput, TOutput>! other) -> void
+AiDotNet.Models.Options.SARIMAOptions<T>.SARIMAOptions(AiDotNet.Models.Options.SARIMAOptions<T>! other) -> void
+AiDotNet.Models.Options.STLDecompositionOptions<T>.STLDecompositionOptions(AiDotNet.Models.Options.STLDecompositionOptions<T>! other) -> void
+AiDotNet.Models.Options.TabuSearchOptions<T, TInput, TOutput>.TabuSearchOptions(AiDotNet.Models.Options.TabuSearchOptions<T, TInput, TOutput>! other) -> void
+AiDotNet.Models.Options.UnobservedComponentsOptions<T, TInput, TOutput>.UnobservedComponentsOptions(AiDotNet.Models.Options.UnobservedComponentsOptions<T, TInput, TOutput>! other) -> void
+AiDotNet.NeuralNetworks.Layers.LayerBase<T>.BuildLateSubLayers(System.Action! build) -> void
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.BuildFromConstructionSequence(System.Action! build) -> void
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.ModelRandom.get -> System.Random!
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.Random.get -> System.Random!
+AiDotNet.PointCloud.Models.DGCNN<T>.DGCNN(AiDotNet.Models.Options.DGCNNOptions! options, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
+AiDotNet.ReinforcementLearning.Policies.BetaPolicy<T>.BetaPolicy(AiDotNet.Interfaces.INeuralNetwork<T>! policyNetwork, AiDotNet.ReinforcementLearning.Policies.BetaPolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.ContinuousPolicy<T>.ContinuousPolicy(AiDotNet.Interfaces.INeuralNetwork<T>! policyNetwork, AiDotNet.ReinforcementLearning.Policies.ContinuousPolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.DeterministicPolicy<T>.DeterministicPolicy(AiDotNet.Interfaces.INeuralNetwork<T>! policyNetwork, AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.DiscretePolicy<T>.DiscretePolicy(AiDotNet.Interfaces.INeuralNetwork<T>! policyNetwork, AiDotNet.ReinforcementLearning.Policies.DiscretePolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.MixedPolicy<T>.MixedPolicy(AiDotNet.Interfaces.INeuralNetwork<T>! discreteNetwork, AiDotNet.Interfaces.INeuralNetwork<T>! continuousNetwork, AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.Policies.MultiModalPolicy<T>.MultiModalPolicy(AiDotNet.Interfaces.INeuralNetwork<T>! policyNetwork, AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>! options) -> void
+AiDotNet.ReinforcementLearning.ReplayBuffers.PrioritizedReplayBuffer<T>.PrioritizedReplayBuffer(int capacity, int? seed = null) -> void
+override AiDotNet.Models.Options.AMSGradOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+override AiDotNet.Models.Options.AMSGradOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+override AiDotNet.Models.Options.AMSGradOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+override AiDotNet.Models.Options.AMSGradOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+override AiDotNet.Models.Options.AdaMaxOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+override AiDotNet.Models.Options.AdaMaxOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+override AiDotNet.Models.Options.AdaMaxOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+override AiDotNet.Models.Options.AdaMaxOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+override AiDotNet.Models.Options.BFGSOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+override AiDotNet.Models.Options.BFGSOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+override AiDotNet.Models.Options.BFGSOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+override AiDotNet.Models.Options.BFGSOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+override AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+override AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+override AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+override AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+override AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+override AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+override AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+override AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+override AiDotNet.Models.Options.FTRLOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+override AiDotNet.Models.Options.FTRLOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+override AiDotNet.Models.Options.LBFGSOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+override AiDotNet.Models.Options.LBFGSOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+override AiDotNet.Models.Options.LBFGSOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+override AiDotNet.Models.Options.LBFGSOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+override AiDotNet.Models.Options.MiniBatchGradientDescentOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+override AiDotNet.Models.Options.MiniBatchGradientDescentOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+override AiDotNet.Models.Options.MomentumOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+override AiDotNet.Models.Options.MomentumOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+override AiDotNet.Models.Options.NadamOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.get -> double
+override AiDotNet.Models.Options.NadamOptimizerOptions<T, TInput, TOutput>.MaxLearningRate.set -> void
+override AiDotNet.Models.Options.NadamOptimizerOptions<T, TInput, TOutput>.MinLearningRate.get -> double
+override AiDotNet.Models.Options.NadamOptimizerOptions<T, TInput, TOutput>.MinLearningRate.set -> void
+override AiDotNet.NeuralNetworks.Layers.ObliviousDecisionTreeLayer<T>.OnRandomSeedAssigned() -> void
+static AiDotNet.Finance.Base.RiskModelBase<T>.DefaultOptionsFor<TOptions>(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture) -> TOptions!
+static AiDotNet.ReinforcementLearning.Policies.PolicyBase<T>.RandomFromSeed(int? seed) -> System.Random?
+*REMOVED*override AiDotNet.VisionLanguage.Generative.IDEFICS2<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.Generative.IDEFICS3<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.Generative.IDEFICS<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.Generative.OpenFlamingo<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.MPLUGOwl2<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.MPLUGOwl3<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.MPLUGOwl<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.Qwen25VL<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.Qwen2VL<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.Qwen3VL<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+*REMOVED*override AiDotNet.VisionLanguage.InstructionTuned.QwenVL<T>.PrepareInputForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.VisionLanguage.Encoders.ViT<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.Enums.CreditRule.TiedReadoutLocalError = 11 -> AiDotNet.Enums.CreditRule
 AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>
 AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>.ApplyAuxiliaryGradients(System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients) -> void
@@ -21331,3 +21539,5 @@ AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.IsEx
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Name.get -> string!
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1) -> void
+AiDotNet.Audio.Classification.ASTOptions.MaxGradNorm.get -> double
+AiDotNet.Audio.Classification.ASTOptions.MaxGradNorm.set -> void

@@ -62,6 +62,7 @@ public class MedicalSAM2Options : SegmentationModelOptions, ISam2Settings
     public MemoryBankUpdateRule MemoryBankRule { get; set; } = MemoryBankUpdateRule.TopKDissimilarity;
 
     /// <summary>How the bank draws an image's memories (default: the paper's normalized similarity, eq. 4).</summary>
+    [AiDotNet.Attributes.PaperDefault(MemoryBankResampling.NormalizedSimilarity, Source = "Zhu et al. 2024, eq. 4: memory sampling normalized by similarity.") ]
     public MemoryBankResampling MemoryResampling { get; set; } = MemoryBankResampling.NormalizedSimilarity;
 
     /// <summary>The square size images are resized to for the image encoder (null: the paper's 256). Must be a multiple of

@@ -379,13 +379,38 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// another with the same seed built right after it. Continuing the model's own sequence gives exactly the seeds
     /// it would have drawn had nothing been constructed in between.
     /// </remarks>
-    private void InitializeLayersFromConstructionSequence()
+    private void InitializeLayersFromConstructionSequence() => BuildFromConstructionSequence(InitializeLayers);
+
+    /// <summary>
+    /// Runs <paramref name="build"/> with this model's own layer-seed sequence, so every layer it constructs draws
+    /// its seed from the sequence this model's construction armed.
+    /// </summary>
+    /// <param name="build">The code that constructs layers.</param>
+    /// <remarks>
+    /// <para>
+    /// Call it around any layer construction that happens after the constructor returns: a model that resizes its
+    /// layers to the data on its first <c>Train</c> or <c>Predict</c>, or that rebuilds them for a new
+    /// configuration. Outside it, those layers draw from whatever sequence the thread's scope holds by then (the
+    /// model constructed last, or none), so two models built with the same seed end up with different weights.
+    /// </para>
+    /// <para>
+    /// It is safe inside the constructor too: there the scope already holds this model's sequence. An unseeded model
+    /// resumes no sequence, so its layers stay unseeded, which keeps "reproducible if and only if a seed was
+    /// requested".
+    /// </para>
+    /// </remarks>
+    protected void BuildFromConstructionSequence(Action build)
     {
+        if (build is null)
+        {
+            throw new ArgumentNullException(nameof(build));
+        }
+
         var enclosing = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResumeSequence(_constructionSequence);
         try
         {
-            InitializeLayers();
+            build();
         }
         finally
         {
@@ -427,12 +452,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected Dictionary<int, Tensor<T>> _layerOutputs = new Dictionary<int, Tensor<T>>();
 
     /// <summary>
-    /// Gets the thread-safe random number generator for initialization.
+    /// Gets this model's random stream; the same stream as <see cref="ModelRandom"/>.
     /// </summary>
     /// <remarks>
-    /// Uses the centralized RandomHelper which is thread-safe and avoids creating multiple instances per thread.
+    /// This was once the process-shared stream, which made every model drawing from it irreproducible even under an
+    /// explicit seed. It is per-model and not thread-safe: draw from it on the calling thread, never inside a
+    /// parallel loop.
     /// </remarks>
-    protected static Random Random => RandomHelper.ThreadSafeRandom;
+    protected Random Random => ModelRandom;
+
+    /// <summary>
+    /// This model's own random stream, for draws a model makes itself rather than through a layer (a Gaussian
+    /// cloud's colours, densification jitter, sampling noise): seeded from the architecture's
+    /// <see cref="NeuralNetworkArchitecture{T}.RandomSeed"/>, else the options seed, else the ambient construction
+    /// seed, else secure entropy.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Random"/> is the process-shared stream, so two identically seeded models drawing from it differ.
+    /// Use this one in instance code.
+    /// </remarks>
+    protected Random ModelRandom => _modelRandom ??= AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CreateComponentRandom(Architecture?.RandomSeed);
+
+    private Random? _modelRandom;
 
     /// <summary>
     /// The loss function used to calculate error during training.
@@ -758,6 +799,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // training-determinism bug). Inert when no seed was requested (production
         // default), preserving the existing non-reproducible init behaviour.
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(architecture.RandomSeed);
+        _modelRandom = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CreateComponentRandom(architecture.RandomSeed);
         SeedCallerBuiltLayers();
         RecordConstructionScope();
         // Most models keep their options in a field of their own and expose them only through GetOptions(), which
@@ -7949,6 +7991,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 return;
             _optionsSeed = null;
             AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(Architecture?.RandomSeed);
+            _modelRandom = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CreateComponentRandom(Architecture?.RandomSeed);
             SeedCallerBuiltLayers();
             RecordConstructionScope();
             return;
@@ -7956,6 +7999,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         _optionsSeed = value;
         AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.ResetForModelConstruction(value);
+        _modelRandom = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CreateComponentRandom(value);
         SeedCallerBuiltLayers();
         RecordConstructionScope();
     }
@@ -9322,19 +9366,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     /// <example>
     /// <code>
-    /// // Enable with default settings (recommended for most cases)
-    /// network.EnableMixedPrecision();
+    /// // This method is internal: callers turn mixed precision on through the builder, which calls it.
+    /// var network = new NeuralNetwork&lt;float&gt;(new NeuralNetworkArchitecture&lt;float&gt;(inputFeatures: 8, outputSize: 4));
+    /// var features = Tensor&lt;float&gt;.CreateRandom(32, 8);
+    /// var labels = Tensor&lt;float&gt;.CreateRandom(32, 4);
     ///
-    /// // Enable with custom configuration
-    /// var config = new MixedPrecisionConfig
-    /// {
-    ///     InitialLossScale = 4096.0,
-    ///     ScaleGrowthInterval = 2000
-    /// };
-    /// network.EnableMixedPrecision(config);
-    ///
-    /// // Enable with conservative settings for sensitive models
-    /// network.EnableMixedPrecision(MixedPrecisionConfig.Conservative());
+    /// // Conservative loss scaling for sensitive models; omit the argument for the defaults
+    /// var result = new AiModelBuilder&lt;float, Tensor&lt;float&gt;, Tensor&lt;float&gt;&gt;()
+    ///     .ConfigureModel(network)
+    ///     .ConfigureMixedPrecision(AiDotNet.MixedPrecision.MixedPrecisionConfig.Conservative())
+    ///     .Build(features, labels);
     /// </code>
     /// </example>
     /// <exception cref="NotSupportedException">Thrown when T is not float.</exception>

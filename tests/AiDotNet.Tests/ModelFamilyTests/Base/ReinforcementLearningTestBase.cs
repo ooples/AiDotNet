@@ -1183,6 +1183,304 @@ public abstract class ReinforcementLearningTestBase<T>
             $"After training, GetParameters().Length ({parameterizable.GetParameters().Length}) " +
             $"disagrees with ParameterCount ({parameterizable.ParameterCount}).");
     }
+
+    // =====================================================
+    // PAPER FIDELITY: Learns A Toy Task (two-armed bandit)
+    //
+    // Policy_ShouldFollowTheReward asks whether rewarding A instead of B moves the policy at all.
+    // This asks the stronger, outcome-level question a paper's objective has to answer: on a
+    // one-state, two-armed bandit, does the agent's AVERAGE RETURN go up? A3C passed every other
+    // invariant here while applying softmax twice to its policy logits; an objective that broken
+    // cannot climb a bandit.
+    //
+    // Every episode is one step long (done = true on every transition), so on-policy agents get
+    // complete trajectories and are held to this too; only agents that cannot run the single-agent
+    // loop at all are skipped. The paid arm is the one the untrained greedy policy is FURTHER from,
+    // so the bound can only be cleared by learning, never by a lucky initialisation. Return is the
+    // greedy action's position on the unpaid-to-paid axis, scaled to [-1, 1]; the bound is a rise
+    // of BanditImprovementBound in that return. Failures known when this check was introduced are
+    // listed in RuntimeFidelityBaseline.ToyTaskFailures.
+    // =====================================================
+
+    /// <summary>Rise in greedy return (on a [-1, 1] scale) the bandit requires.</summary>
+    protected virtual double BanditImprovementBound => 0.5;
+
+    [SkippableFact(Timeout = 300000)]
+    [Trait("Category", "PaperFidelity")]
+    public async Task LearnsToyTask_TwoArmedBandit()
+    {
+        Skip.IfNot(SupportsSingleAgentOnlineLoop,
+            "This agent consumes joint multi-agent transitions through a different API, so the single-agent "
+            + "bandit loop cannot run against it.");
+
+        await Task.Yield();
+        // Training spans hundreds of updates; let each update's temporary buffers be reclaimed.
+        var state = CreateRandomState(ModelTestHelpers.CreateSeededRandom());
+
+        using (var probe = CreateModel())
+        {
+            Skip.If(probe is not IRLAgent<T>, "This fixture's model is not an IRLAgent.");
+        }
+
+        var (armX, armY) = TwoDistinctActions(state);
+        Skip.If(armX is null || armY is null,
+            "This agent's action space did not yield two distinct actions for one state, so a two-armed bandit "
+            + "cannot be expressed for it.");
+
+        Vector<T> initialGreedy;
+        Type modelType;
+        using (var untrained = CreateModelWithFixedInitialisation())
+        {
+            modelType = untrained.GetType();
+            initialGreedy = ((IRLAgent<T>)untrained).SelectAction(state, explore: false);
+        }
+
+        bool payX = Distance(initialGreedy, armX) >= Distance(initialGreedy, armY);
+        var paid = payX ? armX : armY;
+        var unpaid = payX ? armY : armX;
+        double before = BanditReturn(initialGreedy, paid, unpaid);
+
+        var (trainedGreedy, steps) = GreedyAfterBandit(state, paid, unpaid);
+        double after = trainedGreedy is null ? before : BanditReturn(trainedGreedy, paid, unpaid);
+        bool learned = after - before >= BanditImprovementBound;
+
+        RuntimeFidelityBaseline.EnforceToyTask(GetType(), modelType, nameof(LearnsToyTask_TwoArmedBandit), learned,
+            $"On a one-state two-armed bandit the greedy return went from {before:F4} to {after:F4} after {steps} "
+            + $"training steps; a rise of at least {BanditImprovementBound:F2} is required (return is -1 at the unpaid "
+            + "arm and +1 at the paid one)."
+            + (trainedGreedy is null ? " The agent's parameters never moved within the step budget." : string.Empty));
+    }
+
+    /// <summary>
+    /// The return of <paramref name="action"/> on the bandit: its position on the axis from the unpaid
+    /// arm (-1) to the paid arm (+1), clamped to that range.
+    /// </summary>
+    private static double BanditReturn(Vector<T> action, Vector<T> paid, Vector<T> unpaid)
+    {
+        int length = Math.Min(action.Length, Math.Min(paid.Length, unpaid.Length));
+        double dot = 0.0;
+        double norm = 0.0;
+        for (int i = 0; i < length; i++)
+        {
+            double axis = ToD(paid[i]) - ToD(unpaid[i]);
+            dot += (ToD(action[i]) - ToD(unpaid[i])) * axis;
+            norm += axis * axis;
+        }
+
+        if (norm <= 0.0) return 0.0;
+        double position = dot / norm;
+        return Math.Max(-1.0, Math.Min(1.0, 2.0 * position - 1.0));
+    }
+
+    /// <summary>
+    /// Trains a fresh, identically initialised agent on one-step bandit episodes and returns its greedy
+    /// action, or null when its parameters never moved within <see cref="RealLoopStepBudget"/>.
+    /// </summary>
+    private (Vector<T>?, int) GreedyAfterBandit(Vector<T> state, Vector<T> paid, Vector<T> unpaid)
+    {
+        using var model = CreateModelWithFixedInitialisation();
+        if (model is not IRLAgent<T> agent) return (null, 0);
+        LowerTrainingGates(model);
+
+        var parameterized = (IParameterizable<T, Vector<T>, Vector<T>>)model;
+        var before = parameterized.GetParameters();
+        var snapshot = new double[before.Length];
+        for (int i = 0; i < before.Length; i++) snapshot[i] = ToD(before[i]);
+
+        Func<Vector<T>, double> reward = action => BanditReturn(action, paid, unpaid);
+        bool agentDrawsItsOwnActions = false;
+        for (int i = 0; i < 256; i++)
+            StoreDrawnTransition(agent, state, i % 2 == 0 ? paid : unpaid, reward, state, true, ref agentDrawsItsOwnActions);
+
+        for (int step = 0; step < RealLoopStepBudget; step++)
+        {
+            int fed = 256 + step;
+            StoreDrawnTransition(agent, state, fed % 2 == 0 ? paid : unpaid, reward, state, true, ref agentDrawsItsOwnActions);
+            agent.Train();
+        }
+
+        bool moved = ParametersChanged(snapshot, parameterized.GetParameters());
+        return (moved ? agent.SelectAction(state, explore: false) : null, RealLoopStepBudget);
+    }
+
+    // =====================================================
+    // PAPER FIDELITY: Option Sensitivity
+    // Called by the scaffold generator's per-option theory. Perturbs one options property and
+    // requires the agent to change: parameters, or greedy actions over the state battery, before
+    // or after OptionSensitivityTrainingSteps training steps. An IRLAgent takes them through its own
+    // loop -- SelectAction with exploration, StoreExperience, Train() -- which is where exploration
+    // schedules, discounting, replay and target updates act; the supervised Train(state, target)
+    // shortcut reaches none of them. The agent's own warmup / batch gates are lowered on BOTH builds
+    // before the perturbation, so a training-time option is observed through real updates rather
+    // than through a gate neither build reaches.
+    // =====================================================
+
+    /// <summary>Single-transition training steps both builds take when their untrained fingerprints match.</summary>
+    protected virtual int OptionSensitivityTrainingSteps => 64;
+
+    /// <summary>
+    /// Asserts that perturbing <paramref name="option"/> on this fixture's options changes the agent's
+    /// observable behaviour. See <see cref="OptionSensitivityHarness"/>.
+    /// </summary>
+    /// <param name="option">The options property to perturb.</param>
+    protected void AssertOptionChangesObservableBehaviour(string option)
+    {
+        // No TensorArena: it pins every buffer until disposal, and this check builds, observes and trains a
+        // control plus every candidate. Under one arena OpenSora held ~10 GB of attention tiles that gradient
+        // checkpointing should have freed, and its GuidanceScale check ran out of memory on the 16 GB runner.
+        var rng = ModelTestHelpers.CreateSeededRandom();
+        var battery = BuildStateBattery();
+        var stateA = CreateRandomState(rng);
+        var stateB = CreateRandomState(rng);
+        int actionLength;
+        using (var shapeProbe = CreateModel())
+            actionLength = Math.Max(shapeProbe.Predict(stateA).Length, 2);
+        var targetA = new Vector<T>(actionLength);
+        var targetB = new Vector<T>(actionLength);
+        targetA[0] = ToT(1.0);
+        targetB[actionLength - 1] = ToT(0.3);
+
+        int steps = OptionSensitivityTrainingSteps;
+        var probe = new OptionSensitivityProbe<IFullModel<T, Vector<T>, Vector<T>>>(
+            CreateModel,
+            model => ObserveAgent(model, battery),
+            model =>
+            {
+                if (TrainMultiAgent(model, stateA, stateB, steps)) return;
+
+                if (model is IRLAgent<T> agent)
+                {
+                    for (int i = 0; i < steps; i++)
+                    {
+                        bool even = i % 2 == 0;
+                        var state = even ? stateA : stateB;
+                        // The agent's own exploratory draw, so its action-provenance checks accept it.
+                        var action = agent.SelectAction(state, explore: true);
+                        agent.StoreExperience(state, action, ToT(even ? 1.0 : -1.0), even ? stateB : stateA, i % 16 == 15);
+                        agent.Train();
+                    }
+
+                    return;
+                }
+
+                for (int i = 0; i < steps; i++)
+                    model.Train(i % 2 == 0 ? stateA : stateB, i % 2 == 0 ? targetA : targetB);
+            },
+            options =>
+            {
+                TryLowerInt(options, "WarmupSteps", 2);
+                TryLowerInt(options, "BatchSize", 8);
+                // Dreamer trains on min(BatchLength, longest stored run) steps; the loop above ends an episode
+                // every 16 steps, so the paper's 50 and every candidate near it clamped to 16 and measured
+                // Insensitive. Below the episode length the perturbation reaches the sequence it sizes.
+                TryLowerInt(options, "BatchLength", 8);
+            },
+            model => DescribeAgent(model, battery));
+        OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
+    }
+
+    /// <summary>
+    /// Takes the probe's training steps through a multi-agent agent's own joint-transition API: each agent's action
+    /// from SelectActionForAgent, the joint transition through StoreMultiAgentExperience, then Train(). MADDPG and
+    /// QMIX refuse single-agent transitions, so the single-agent loop never reached their training-time options.
+    /// </summary>
+    /// <returns>True when <paramref name="model"/> is a multi-agent agent and has been trained.</returns>
+    private static bool TrainMultiAgent(IFullModel<T, Vector<T>, Vector<T>> model, Vector<T> stateA, Vector<T> stateB, int steps)
+    {
+        if (model is AiDotNet.ReinforcementLearning.Agents.MADDPG.MADDPGAgent<T> maddpg
+            && maddpg.GetOptions() is AiDotNet.Models.Options.MADDPGOptions<T> maddpgOptions)
+        {
+            for (int i = 0; i < steps; i++)
+            {
+                bool even = i % 2 == 0;
+                var states = AgentStates(even ? stateA : stateB, maddpgOptions.NumAgents, maddpgOptions.StateSize);
+                var next = AgentStates(even ? stateB : stateA, maddpgOptions.NumAgents, maddpgOptions.StateSize);
+                var actions = states.Select((state, agent) => maddpg.SelectActionForAgent(agent, state, training: true)).ToList();
+                var rewards = Enumerable.Range(0, maddpgOptions.NumAgents).Select(_ => ToT(even ? 1.0 : -1.0)).ToList();
+                maddpg.StoreMultiAgentExperience(states, actions, rewards, next, i % 16 == 15);
+                maddpg.Train();
+            }
+
+            return true;
+        }
+
+        if (model is AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T> qmix
+            && qmix.GetOptions() is AiDotNet.Models.Options.QMIXOptions<T> qmixOptions)
+        {
+            for (int i = 0; i < steps; i++)
+            {
+                bool even = i % 2 == 0;
+                var states = AgentStates(even ? stateA : stateB, qmixOptions.NumAgents, qmixOptions.StateSize);
+                var next = AgentStates(even ? stateB : stateA, qmixOptions.NumAgents, qmixOptions.StateSize);
+                var actions = states.Select((state, agent) => qmix.SelectActionForAgent(agent, state, training: true)).ToList();
+                qmix.StoreMultiAgentExperience(states, actions, ToT(even ? 1.0 : -1.0), next,
+                    GlobalState(states, qmixOptions.GlobalStateSize), GlobalState(next, qmixOptions.GlobalStateSize), i % 16 == 15);
+                qmix.Train();
+            }
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Per-agent observations of <paramref name="size"/> drawn from <paramref name="source"/>, offset per agent.</summary>
+    private static List<Vector<T>> AgentStates(Vector<T> source, int agents, int size)
+    {
+        var states = new List<Vector<T>>(agents);
+        for (int agent = 0; agent < agents; agent++)
+        {
+            var state = new Vector<T>(size);
+            for (int j = 0; j < size; j++)
+                state[j] = NumOps.Add(source[j % source.Length], ToT(0.1 * agent));
+            states.Add(state);
+        }
+
+        return states;
+    }
+
+    /// <summary>The agents' observations concatenated and cut or zero-padded to <paramref name="size"/>.</summary>
+    private static Vector<T> GlobalState(List<Vector<T>> states, int size)
+    {
+        var global = new Vector<T>(size);
+        int k = 0;
+        foreach (var state in states)
+            for (int j = 0; j < state.Length && k < size; j++)
+                global[k++] = state[j];
+        return global;
+    }
+
+    /// <summary><see cref="ObserveAgent"/> as named parts: the parameters, then the output on each battery state.</summary>
+    private static IReadOnlyList<KeyValuePair<string, long>> DescribeAgent(IFullModel<T, Vector<T>, Vector<T>> model, Vector<T>[] battery)
+    {
+        var parameters = ((IParameterizable<T, Vector<T>, Vector<T>>)model).GetParameters();
+        var parts = new List<KeyValuePair<string, long>>
+        {
+            new("parameters", OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, parameters.Length).Select(i => ToD(parameters[i])))),
+        };
+        for (int s = 0; s < battery.Length; s++)
+        {
+            var output = model.Predict(battery[s]);
+            parts.Add(new($"output on state {s}", OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, output.Length).Select(i => ToD(output[i])))));
+        }
+
+        return parts;
+    }
+
+    /// <summary>Fingerprints an agent's parameters and its greedy outputs over the state battery.</summary>
+    private static long ObserveAgent(IFullModel<T, Vector<T>, Vector<T>> model, Vector<T>[] battery)
+    {
+        var parts = new List<long>();
+        var parameters = ((IParameterizable<T, Vector<T>, Vector<T>>)model).GetParameters();
+        parts.Add(OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, parameters.Length).Select(i => ToD(parameters[i]))));
+        foreach (var state in battery)
+        {
+            var output = model.Predict(state);
+            parts.Add(OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, output.Length).Select(i => ToD(output[i]))));
+        }
+
+        return OptionSensitivityHarness.Combine(parts.ToArray());
+    }
 }
 
 /// <summary>Default-precision alias, so existing derived fixtures need no change.</summary>
