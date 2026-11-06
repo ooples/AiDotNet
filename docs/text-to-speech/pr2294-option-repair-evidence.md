@@ -302,3 +302,9 @@ with enabled masking, one-frame spans and a reproducible random source.
 Its CTC prediction path does not apply pretraining noise. The compiled probe
 passes for 0.1 -> 0.2 through the actual pretraining loss; scoped build has
 zero warnings/errors.
+
+The same real pretraining-loss observation now covers CodeDim, StackedFrames,
+MaskLength and MaskProbability for GoogleSpeechV2, and all five pretraining
+settings for BESTRQ. All nine additional compiled probes pass, including span
+1 -> 2 and masking probability 0.5 -> 1. These properties affect BEST-RQ's
+masked targets/loss rather than CTC decoding; no exemptions were added.

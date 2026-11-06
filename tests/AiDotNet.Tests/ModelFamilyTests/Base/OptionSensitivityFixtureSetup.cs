@@ -6,6 +6,9 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// <summary>Replays the fitted assets installed by the generated fixture after configuration-only reconstruction.</summary>
 internal static class OptionSensitivityFixtureSetup
 {
+    private static bool IsGooglePretrainingOption(string option) => option is
+        "MaskNoiseStd" or "MaskLength" or "MaskProbability" or "CodeDim" or "StackedFrames";
+
     private sealed class RepetitionBoundaryRandom : Random
     {
         private int _draws;
@@ -31,7 +34,8 @@ internal static class OptionSensitivityFixtureSetup
                 "SilenceBlockSize" or "SilenceMagnitudeThreshold" => "e3-silence-trimming",
                 _ => string.Empty,
             }
-            : network is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T> && option == "MaskNoiseStd" ? "google-best-rq-masking"
+            : network is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T> && IsGooglePretrainingOption(option) ? "google-best-rq-masking"
+            : network is AiDotNet.SpeechRecognition.Foundation.BESTRQ<T> && IsGooglePretrainingOption(option) ? "best-rq-masking"
             : network is AiDotNet.PointCloud.Models.DGCNN<T> && option is "DropoutRate" or "UseDropout" ? "dgcnn-dropout"
             : network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds" ? "cam-audio-frontend"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
@@ -77,10 +81,16 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fish && option == "ConstrainToSemanticTokens")
             return ObserveFishFrames(fish, input);
         long fingerprint = observe(network, ObservationInput(network, input, option));
-        if (network is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T> google && option == "MaskNoiseStd")
+        if (network is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T> google && IsGooglePretrainingOption(option))
         {
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             double pretrainingLoss = ops.ToDouble(google.PretrainingLoss(input, new Random(1337)));
+            return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(new[] { pretrainingLoss }));
+        }
+        if (network is AiDotNet.SpeechRecognition.Foundation.BESTRQ<T> bestRq && IsGooglePretrainingOption(option))
+        {
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            double pretrainingLoss = ops.ToDouble(bestRq.PretrainingLoss(input, new Random(1337)));
             return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(new[] { pretrainingLoss }));
         }
         if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && option is "RepetitionWindow" or "RepetitionRatio")
@@ -318,7 +328,12 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
-        if (options is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2Options google && option == "MaskNoiseStd")
+        if (options is AiDotNet.SpeechRecognition.Foundation.BESTRQOptions bestRq && IsGooglePretrainingOption(option))
+        {
+            bestRq.MaskProbability = 0.5;
+            bestRq.MaskLength = 1;
+        }
+        if (options is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2Options google && IsGooglePretrainingOption(option))
         {
             google.MaskProbability = 0.5;
             google.MaskLength = 1;
