@@ -298,6 +298,12 @@ public partial class KMeans<T> : ClusteringBase<T>
         var labels = new Vector<T>(x.Rows);
         var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
 
+        // The centers are fixed for the whole pass; copying each one out again for every point allocated
+        // rows x clusters vectors per iteration.
+        var centerRows = new Vector<T>[centers.Rows];
+        for (int k = 0; k < centers.Rows; k++)
+            centerRows[k] = GetRow(centers, k);
+
         for (int i = 0; i < x.Rows; i++)
         {
             var point = GetRow(x, i);
@@ -306,7 +312,7 @@ public partial class KMeans<T> : ClusteringBase<T>
 
             for (int k = 0; k < centers.Rows; k++)
             {
-                var center = GetRow(centers, k);
+                var center = centerRows[k];
                 T dist = distanceMetric.Compute(point, center);
 
                 if (NumOps.LessThan(dist, minDist))

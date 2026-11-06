@@ -183,12 +183,14 @@ public partial class LogisticRegression<T> : RegressionBase<T>
         // Scale learning rate by sample count for stable convergence
         T scaledLearningRate = NumOps.Divide(NumOps.FromDouble(_options.LearningRate), NumOps.FromDouble(n));
         T interceptLearningRate = NumOps.FromDouble(_options.LearningRate);
+        // The data does not change between iterations, so neither does its transpose; building it inside the loop
+        // copied the whole training matrix once per iteration.
+        Matrix<T> xTranspose = xStandardized.Transpose();
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
             Vector<T> predictions = Predict(xStandardized);
             Vector<T> errors = y.Subtract(predictions);
             // Calculate gradient: X^T * (y - predictions)
-            Matrix<T> xTranspose = xStandardized.Transpose();
             Vector<T> gradient = xTranspose.Multiply(errors);
             // Apply regularization to the gradient (adds penalty term)
             if (Regularization != null)
