@@ -128,7 +128,7 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
         Tensor<T>? task = null;
         if (_localTaskWeight > 0 && context.HiddenIndex != s.HiddenLayerCount - 1)
         {
-            task = s.Loss(s.Readout(context.Output), s.Target);
+            task = s.ReadoutLoss(context.Output, s.Target);
             if (_localTaskWeight != 1.0) task = s.Engine.TensorMultiplyScalar(task, Ops.FromDouble(_localTaskWeight));
         }
         if (_hiddenWeight == 0) return task;

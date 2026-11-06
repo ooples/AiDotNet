@@ -100,7 +100,12 @@ internal static class LocalObjectiveGradientComputer<T>
             var prediction = Readout(current);
             var alignedTarget = alignTarget(prediction, target);
             Tensor<T> LossFn(Tensor<T> p, Tensor<T> t) => ReduceToScalar(engine, loss.ComputeTapeLoss(p, t));
-            var step = new LocalObjectiveStep<T>(input, alignedTarget, engine, Readout, LossFn, hiddenIdx.Count);
+            // A single-layer readout that fuses itself with the loss (an LM head + cross-entropy) serves every hidden
+            // layer's readout loss without putting a [rows, vocabulary] tensor on the tape per layer.
+            var fusedReadout = readoutCount == 1 ? layers[readoutStart] as IFusedReadoutLossLayer<T> : null;
+            Tensor<T> ReadoutLossFn(Tensor<T> h, Tensor<T> t) =>
+                fusedReadout?.TryComputeFusedLoss(h, t, loss) is { } fused ? ReduceToScalar(engine, fused) : LossFn(Readout(h), t);
+            var step = new LocalObjectiveStep<T>(input, alignedTarget, engine, Readout, LossFn, hiddenIdx.Count, ReadoutLossFn);
 
             var defaultLoss = LossFn(prediction, alignedTarget);
             var outputObjective = rule.BuildOutputObjective(step, prediction, defaultLoss) ?? defaultLoss;
