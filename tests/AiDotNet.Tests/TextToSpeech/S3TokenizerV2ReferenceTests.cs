@@ -20,6 +20,45 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class S3TokenizerV2ReferenceTests
 {
     [Theory]
+    [InlineData(0, 1)]
+    [InlineData(64, 0)]
+    [InlineData(-64, 1)]
+    [InlineData(64, -1)]
+    public void EncoderDimensions_RejectNonpositiveStateOrHeads(int state, int heads)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => new S3Tokenizer<double>(AiDotNetEngine.Current,
+            new List<LayerBase<double>>(), new S3TokenizerConfiguration(State: state, Heads: heads,
+                Layers: 1, CodebookSize: 6561, FirstStride: 2, Version: S3TokenizerVersion.V2), new Random(0)));
+    }
+
+    [Theory]
+    [InlineData(64, 2)]
+    [InlineData(128, 1)]
+    public void ReleasedRotaryWidth_RejectsUnpairedStateOrHeadChanges(int state, int heads)
+    {
+        var exception = Assert.Throws<ArgumentException>(() => new S3Tokenizer<double>(AiDotNetEngine.Current,
+            new List<LayerBase<double>>(), new S3TokenizerConfiguration(State: state, Heads: heads,
+                Layers: 1, CodebookSize: 6561, FirstStride: 2, Version: S3TokenizerVersion.V2), new Random(0)));
+        Assert.Contains("rotary table", exception.Message);
+    }
+
+    [Fact]
+    public void PairedStateAndHeadChanges_ResizeTheRealEncoder()
+    {
+        var counts = new List<int>();
+        foreach (var (state, heads) in new[] { (64, 1), (128, 2) })
+        {
+            var layers = new List<LayerBase<double>>();
+            var tokenizer = new S3Tokenizer<double>(AiDotNetEngine.Current, layers, new S3TokenizerConfiguration(
+                State: state, Heads: heads, Layers: 1, CodebookSize: 6561, FirstStride: 2, Version: S3TokenizerVersion.V2), new Random(0));
+            var hidden = tokenizer.Encode(new Tensor<double>(new[] { 128, 16 }));
+            Assert.Equal(state, hidden.Shape[1]);
+            counts.Add(layers.Sum(layer => layer.GetParameters().Length));
+        }
+        Assert.True(counts[1] > counts[0]);
+    }
+
+    [Theory]
     [InlineData(1)]
     [InlineData(6560)]
     [InlineData(6562)]

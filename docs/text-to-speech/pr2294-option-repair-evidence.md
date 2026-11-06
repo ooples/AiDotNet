@@ -244,3 +244,14 @@ dimensions have exactly 6,561 codes. Constructor tests reject 1, 6,560 and 6,562
 and the existing released encoder-state/token reference comparison passes.
 Both accessor declarations are registered in the public API manifest. This
 setting is retained because the paper model uses that cardinality.
+
+S3 v2 state/head settings carry the same explicit paired-constraint treatment:
+64/1 and 128/2 are valid and resize the real encoder, while either isolated
+change is rejected by the fixed 64-wide rotary table. Nonpositive state/head
+values now throw ArgumentOutOfRangeException before modulo or allocation.
+The paired resize, two unpaired failures, four nonpositive guards and the
+released states/tokens all pass against the changed tokenizer source. CosyVoice's
+single S3 stream is also explicit: counts 0, 2 and 8 are rejected by the real
+model constructor. These settings remain because they are used; no general
+NoValidPerturbation baseline was introduced. Six new accessor declarations
+are included in the API manifest.

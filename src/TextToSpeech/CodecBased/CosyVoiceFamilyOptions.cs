@@ -7,6 +7,10 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </summary>
 public abstract class CosyVoiceFamilyOptions : CodecTtsOptions
 {
+    /// <summary>The single S3 token stream used by the CosyVoice family.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("CosyVoice emits one stream of S3 tokens rather than RVQ codebooks. Its constructor requires NumCodebooks = 1; CosyVoiceOptionConstraintTests verifies that other counts are rejected.")]
+    public new int NumCodebooks { get => base.NumCodebooks; set => base.NumCodebooks = value; }
+
     /// <summary>Creates an instance with the default settings.</summary>
     protected CosyVoiceFamilyOptions() { }
 

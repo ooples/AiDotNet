@@ -21585,3 +21585,9 @@ AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.VocabSize.get -> int
 AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions.VocabSize.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.CodebookSize.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.CodebookSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.NumCodebooks.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.NumCodebooks.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.SpeechTokenizerState.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.SpeechTokenizerState.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.SpeechTokenizerHeads.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoice2Options.SpeechTokenizerHeads.set -> void

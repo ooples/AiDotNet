@@ -67,6 +67,8 @@ internal sealed class S3Tokenizer<T>
         _engine = engine;
         Configuration = configuration;
         var c = configuration;
+        if (c.State <= 0 || c.Heads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(configuration), "State and heads must be positive.");
         if (c.State % c.Heads != 0) throw new ArgumentException("The width must divide by the heads.", nameof(configuration));
         if (c.Version == S3TokenizerVersion.V2 && c.State / c.Heads != RotaryDim)
             throw new ArgumentException($"S3Tokenizer v2's rotary table is {RotaryDim} wide; its heads must be too.", nameof(configuration));
