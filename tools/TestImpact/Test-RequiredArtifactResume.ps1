@@ -17,7 +17,7 @@ public enum ArtifactResumeScenario
 {
     Interrupted, TimedOut, IgnoredRange, RejectedRange, WrongRange,
     RateLimited, Corrupt, AlreadyComplete, Exhausted, PermissionDenied, DuplicateRange,
-    WildcardTotal, ResumedCorrupt, ResumedCorruptExhausted
+    WildcardTotal, ResumedCorrupt, ResumedCorruptExhausted, SlowProgress, Stalled
 }
 
 public sealed class ArtifactResumeFixture : IDisposable
@@ -91,7 +91,7 @@ public sealed class ArtifactResumeFixture : IDisposable
                     {
                         bytes = (byte[])Payload.Clone(); bytes[0] = (byte)'z';
                     }
-                    else if (attempt == 1 || scenario == ArtifactResumeScenario.Exhausted)
+                    else if ((attempt == 1 && scenario != ArtifactResumeScenario.SlowProgress) || scenario == ArtifactResumeScenario.Exhausted)
                     {
                         count = Math.Min(1024, count); // Close early while advertising the full range.
                     }
@@ -115,9 +115,19 @@ public sealed class ArtifactResumeFixture : IDisposable
                     }
                     var response = Encoding.ASCII.GetBytes($"HTTP/1.1 {status} Fixture\r\nContent-Length: {declared}\r\n{extra}Connection: close\r\n\r\n");
                     stream.Write(response, 0, response.Length);
-                    stream.Write(bytes, start, count);
+                    if (scenario == ArtifactResumeScenario.SlowProgress)
+                    {
+                        for (int i = 0; i < count; i += 256)
+                        {
+                            stream.Write(bytes, start + i, Math.Min(256, count - i));
+                            stream.Flush();
+                            Thread.Sleep(100);
+                        }
+                    }
+                    else stream.Write(bytes, start, count);
                     stream.Flush();
                     if (scenario == ArtifactResumeScenario.TimedOut && attempt == 1) Thread.Sleep(1500);
+                    if (scenario == ArtifactResumeScenario.Stalled && attempt == 1) Thread.Sleep(1500);
                 }
             }
             catch (IOException) { if (stopped) return; }
@@ -154,7 +164,8 @@ try {
         try {
             Receive-ArtifactArchive -Url "http://127.0.0.1:$($fixture.Port)/$([int]$scenario)" `
                 -Archive $archive -Expected $expected -RequestHeaders @() -Attempts $attempts `
-                -WorkflowRunId 100 -MatrixJobIndex 0 -RequestTimeoutSeconds $timeout -Delay { param($seconds) }
+                -WorkflowRunId 100 -MatrixJobIndex 0 -RequestTimeoutSeconds $timeout -Delay { param($seconds) } `
+                -LowSpeedLimitBytesPerSecond 2048 -LowSpeedTimeSeconds 1
         }
         catch { $failure = $_.Exception.Message }
         $expectedFailure = switch ($scenario) {
@@ -175,6 +186,7 @@ try {
             ([ArtifactResumeScenario]::AlreadyComplete) { @(4096) }
             ([ArtifactResumeScenario]::PermissionDenied) { @(0) }
             ([ArtifactResumeScenario]::Corrupt) { @(0) }
+            ([ArtifactResumeScenario]::SlowProgress) { @(0) }
             ([ArtifactResumeScenario]::RejectedRange) { @(0, 1024, 0) }
             # A range that cannot continue the prefix, or a resumed archive failing its digest, restarts at 0.
             ([ArtifactResumeScenario]::WrongRange) { @(0, 1024, 0) }

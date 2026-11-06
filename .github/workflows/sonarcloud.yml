@@ -1611,7 +1611,8 @@ jobs:
 
       - name: Download required build artifact
         id: download-build-artifacts
-        timeout-minutes: 25
+        # An 816 MB artifact at the measured ~0.45 MB/s needs about 30 minutes, plus extraction.
+        timeout-minutes: 40
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ github.token }}
