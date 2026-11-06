@@ -157,4 +157,91 @@ public class FusedReadoutLossTests
         Assert.Equal(0, calls);
         for (int i = 0; i < fused.Length; i++) Assert.Equal(decomposed[i], fused[i]);
     }
+
+    // A subclass declines to fuse (its forward may differ), so this head takes the decomposed path with the same math.
+    private sealed class UnfusedDense : DenseLayer<double>
+    {
+        public UnfusedDense() : base(Vocab, (IActivationFunction<double>?)null) { }
+    }
+
+    private static NeuralNetwork<double> BuildWithDenseHead(DenseLayer<double> head, int seed)
+    {
+        var layers = new List<ILayer<double>> { new FullyConnectedLayer<double>(Dim, Width, new TanhActivation<double>()) };
+        for (int i = 0; i < 3; i++) layers.Add(new FullyConnectedLayer<double>(Width, Width, new TanhActivation<double>()));
+        layers.Add(head);
+        var arch = new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional,
+            taskType: NeuralNetworkTaskType.MultiClassClassification, complexity: NetworkComplexity.Simple,
+            inputSize: Dim, outputSize: Vocab, layers: layers) { RandomSeed = seed };
+        return new NeuralNetwork<double>(arch);
+    }
+
+    [Fact]
+    public void DenseHead_FusedLoss_EqualsTheLossOfItsForward()
+    {
+        var (x, ids) = Data(seed: 10);
+        var h = new Tensor<double>(new[] { Rows, Width });
+        for (int i = 0; i < h.Length; i++) h.SetFlat(i, x.GetFlat(i % x.Length) * 0.7);
+        var head = new DenseLayer<double>(Vocab, (IActivationFunction<double>?)null);
+        var logits = head.Forward(h);
+        var loss = new CrossEntropyWithLogitsLoss<double>();
+
+        var fused = head.TryComputeFusedLoss(h, ids, loss);
+        Assert.NotNull(fused);
+        double expected = loss.ComputeTapeLoss(logits, ids).GetFlat(0);
+        Assert.Equal(expected, fused.GetFlat(0), 12);
+    }
+
+    [Fact]
+    public void DenseHead_DeclinesWhenTheFusedOpWouldNotMatch()
+    {
+        var (_, ids) = Data(seed: 11);
+        var h = new Tensor<double>(new[] { Rows, Width });
+        var loss = new CrossEntropyWithLogitsLoss<double>();
+
+        var uninitialized = new DenseLayer<double>(Vocab, (IActivationFunction<double>?)null);
+        Assert.Null(uninitialized.TryComputeFusedLoss(h, ids, loss));
+
+        var tanhHead = new DenseLayer<double>(Vocab, (IActivationFunction<double>)new TanhActivation<double>());
+        tanhHead.Forward(h);
+        Assert.Null(tanhHead.TryComputeFusedLoss(h, ids, loss));
+
+        var head = new DenseLayer<double>(Vocab, (IActivationFunction<double>?)null);
+        head.Forward(h);
+        Assert.NotNull(head.TryComputeFusedLoss(h, ids, loss));
+        Assert.Null(head.TryComputeFusedLoss(h, ids, new CrossEntropyWithLogitsLoss<double>(classAxis: 0)));
+        Assert.Null(head.TryComputeFusedLoss(h, ids, new MeanSquaredErrorLoss<double>()));
+        var ignored = ids.Clone();
+        ignored.SetFlat(0, -1); // the loss leaves this row out of its mean; the fused op has no ignored rows
+        Assert.Null(head.TryComputeFusedLoss(h, ignored, loss));
+
+        var unfused = new UnfusedDense();
+        unfused.Forward(h);
+        Assert.Null(unfused.TryComputeFusedLoss(h, ids, loss));
+    }
+
+    [Fact]
+    public void TiedReadout_DenseHead_FusedMatchesDecomposedGradients()
+    {
+        var (x, ids) = Data(seed: 12);
+        var fusedNet = BuildWithDenseHead(new DenseLayer<double>(Vocab, (IActivationFunction<double>?)null), seed: 5);
+        var decomposedNet = BuildWithDenseHead(new UnfusedDense(), seed: 5);
+        fusedNet.Predict(x);
+        decomposedNet.Predict(x);
+        var init = fusedNet.GetParameters();
+        decomposedNet.SetParameters(init);
+        fusedNet.SetCreditRule(new TiedReadoutLocalErrorCreditRule<double>(readoutLayerCount: 1));
+        decomposedNet.SetCreditRule(new TiedReadoutLocalErrorCreditRule<double>(readoutLayerCount: 1));
+        var fused = fusedNet.ComputeGradients(x, ids, new CrossEntropyWithLogitsLoss<double>());
+        var decomposed = decomposedNet.ComputeGradients(x, ids, new CrossEntropyWithLogitsLoss<double>());
+
+        Assert.Equal(decomposed.Length, fused.Length);
+        double maxAbs = 0, maxDiff = 0;
+        for (int i = 0; i < fused.Length; i++)
+        {
+            maxAbs = Math.Max(maxAbs, Math.Abs(decomposed[i]));
+            maxDiff = Math.Max(maxDiff, Math.Abs(decomposed[i] - fused[i]));
+        }
+        Assert.True(maxAbs > 0);
+        Assert.True(maxDiff <= 1e-9 * Math.Max(1.0, maxAbs), $"fused vs decomposed gradient max diff {maxDiff:E3} (max |g| {maxAbs:E3})");
+    }
 }
