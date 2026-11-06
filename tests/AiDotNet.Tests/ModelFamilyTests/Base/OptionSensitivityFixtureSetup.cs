@@ -9,6 +9,9 @@ internal static class OptionSensitivityFixtureSetup
     private static bool IsGooglePretrainingOption(string option) => option is
         "MaskNoiseStd" or "MaskLength" or "MaskProbability" or "CodeDim" or "StackedFrames";
 
+    private static bool IsFishScheduleOption(string option) => option is
+        "TrainingSteps" or "CosineDecay" or "FinalLearningRateRatio" or "WarmupSteps";
+
     private sealed class RepetitionBoundaryRandom : Random
     {
         private int _draws;
@@ -37,6 +40,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T> && IsGooglePretrainingOption(option) ? "google-best-rq-masking"
             : network is AiDotNet.SpeechRecognition.Foundation.BESTRQ<T> && IsGooglePretrainingOption(option) ? "best-rq-masking"
             : network is AiDotNet.Audio.Generation.AudioLM<T> && option is "SemanticCropSeconds" or "CoarseCropSeconds" or "FineCropSeconds" ? "audiolm-stage-crop"
+            : network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> && IsFishScheduleOption(option) ? "fish-training-schedule"
             : network is AiDotNet.PointCloud.Models.DGCNN<T> && option is "DropoutRate" or "UseDropout" ? "dgcnn-dropout"
             : network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds" ? "cam-audio-frontend"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
@@ -347,6 +351,13 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions fish && IsFishScheduleOption(option))
+        {
+            fish.WarmupSteps = option == "WarmupSteps" ? 1 : 0;
+            fish.TrainingSteps = 4;
+            fish.CosineDecay = true;
+            fish.FinalLearningRateRatio = 0.5;
+        }
         if (options is AiDotNet.Audio.Generation.AudioLMOptions audioLm && option is "SemanticCropSeconds" or "CoarseCropSeconds" or "FineCropSeconds")
         {
             audioLm.SemanticCropSeconds = 0.08;

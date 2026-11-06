@@ -314,3 +314,9 @@ on eight semantic tokens and sixteen frames of valid codec ids. Controls use
 0.08-second crops so the fixture spans the crop boundary. All three compiled
 probes pass for 0.08 -> 0.16 through the actual semantic/coarse/fine losses;
 the scoped build has zero warnings/errors.
+
+FishSpeechV15 schedule probes now use a four-update cosine schedule and zero
+warmup (one for the warmup probe), bringing the schedule into the fixture's
+training horizon. TrainingSteps, CosineDecay, FinalLearningRateRatio and
+WarmupSteps all change actual post-training parameters/outputs in the compiled
+probe. The scoped build completes with zero warnings/errors.
