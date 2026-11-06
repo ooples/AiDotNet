@@ -1,4 +1,6 @@
 #nullable enable
+AiDotNet.TextToSpeech.Classic.FastSpeech2Options.DecoderDim.get -> int
+AiDotNet.TextToSpeech.Classic.FastSpeech2Options.DecoderDim.set -> void
 AiDotNet.TextToSpeech.Vocoders.ISTFTNetOptions.UpsampleKernelSizes.get -> int[]!
 AiDotNet.TextToSpeech.Vocoders.ISTFTNetOptions.UpsampleKernelSizes.set -> void
 AiDotNet.TextToSpeech.Vocoders.HiFiGANOptions.UpsampleKernelSizes.get -> int[]!

@@ -8,6 +8,16 @@ namespace AiDotNet.Tests.UnitTests.PaperFidelity;
 public class OptionPerturbationTests
 {
     [Fact]
+    public void SampleRatesPreferSimpleRatiosWithoutDroppingFineGrainedCandidates()
+    {
+        var candidates = OptionSensitivityHarness.Perturbations(typeof(int), 22050, "SampleRate").Cast<int>().ToArray();
+        Assert.Equal(44100, candidates[0]);
+        Assert.Equal(11025, candidates[1]);
+        Assert.Contains(22051, candidates);
+        Assert.Equal(candidates.Length, candidates.Distinct().Count());
+    }
+
+    [Fact]
     public void CandidatesStartFromThePreparedControlValue()
     {
         var probe = new OptionSensitivityProbe<ThresholdModel>(

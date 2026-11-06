@@ -7,6 +7,10 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </remarks>
 public class FastSpeech2Options : AcousticModelOptions
 {
+    /// <summary>Decoder output width in mel channels; an alias for <see cref="TtsModelOptions.MelChannels"/>.</summary>
+    /// <remarks>FastSpeech 2's FFT width is <see cref="TtsModelOptions.HiddenDim"/>; its final projection emits mel channels.</remarks>
+    public new int DecoderDim { get => MelChannels; set => MelChannels = value; }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>

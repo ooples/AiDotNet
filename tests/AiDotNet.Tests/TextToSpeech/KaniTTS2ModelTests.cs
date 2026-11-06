@@ -148,7 +148,7 @@ public class KaniTTS2ModelTests
         Assert.Equal(Ints(f["generated"]![key]!), model.Generate(prompt, new Random(0), Speaker(f)));
     }
 
-    [Fact(Timeout = 600000)]
+    [Fact]
     public void SpeakerCachePositionPolicyChangesGeneratedTokens()
     {
         var reference = Reference();

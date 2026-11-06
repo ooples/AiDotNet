@@ -7,6 +7,18 @@ namespace AiDotNet.Tests.UnitTests.PaperFidelity;
 public class TtsOptionOwnershipTests
 {
     [Fact]
+    public void FastSpeech2DecoderOutputWidthTracksMelChannelsAndSurvivesCopying()
+    {
+        var options = new AiDotNet.TextToSpeech.Classic.FastSpeech2Options { DecoderDim = 12 };
+        Assert.Equal(12, options.MelChannels);
+        options.MelChannels = 24;
+        Assert.Equal(24, options.DecoderDim);
+        var copy = new AiDotNet.TextToSpeech.Classic.FastSpeech2Options(options);
+        Assert.Equal(24, copy.DecoderDim);
+        Assert.Equal(24, copy.MelChannels);
+    }
+
+    [Fact]
     public void SpeakerInsertionSettingsBelongOnlyToKani2AndSurviveCopying()
     {
         Assert.Null(typeof(KaniTTSOptions).GetProperty("SpeakerEmbeddingDim"));

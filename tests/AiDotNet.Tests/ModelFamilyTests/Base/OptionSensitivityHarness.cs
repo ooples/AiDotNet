@@ -308,7 +308,7 @@ public static class OptionSensitivityHarness
         var rejected = new List<string>();
         var notHeld = new List<string>();
         var measured = new List<string>();
-        foreach (var candidate in Perturbations(property.PropertyType, fixtureValue))
+        foreach (var candidate in Perturbations(property.PropertyType, fixtureValue, option))
         {
             TModel? perturbed;
             // What the options property reads back after the set: a setter may clamp or normalise the candidate.
@@ -760,7 +760,7 @@ public static class OptionSensitivityHarness
     }
 
     /// <summary>Candidate valid different values, most preferred first.</summary>
-    internal static IEnumerable<object?> Perturbations(Type propertyType, object? current)
+    internal static IEnumerable<object?> Perturbations(Type propertyType, object? current, string? option = null)
     {
         var underlying = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
 
@@ -793,7 +793,17 @@ public static class OptionSensitivityHarness
 
         if (IsNumeric(underlying))
         {
-            foreach (var candidate in NumericCandidates(underlying, current))
+            IEnumerable<object> candidates = NumericCandidates(underlying, current);
+            if (option == "SampleRate" && current is int rate && rate > 0)
+            {
+                // A one-Hz change can make a polyphase resampler's ratio coprime and allocate gigabytes.
+                // Simple ratios test the same setting first; retain the fine-grained candidates as fallbacks.
+                var preferred = new List<object>();
+                if (rate <= int.MaxValue / 2) preferred.Add(rate * 2);
+                if (rate > 1 && rate % 2 == 0) preferred.Add(rate / 2);
+                candidates = preferred.Concat(candidates).Distinct();
+            }
+            foreach (var candidate in candidates)
                 yield return candidate;
             yield break;
         }
