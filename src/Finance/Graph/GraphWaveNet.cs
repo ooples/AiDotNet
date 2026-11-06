@@ -277,9 +277,10 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         _useAdaptiveGraph = _options.UseAdaptiveGraph;
         _usePredefinedGraph = _options.UsePredefinedGraph;
 
+        GraphAdjacency.RequireNodeCount(predefinedAdjacency, _numNodes, nameof(predefinedAdjacency));
         _predefinedAdjacency = predefinedAdjacency;
         _predefinedAdjacencyTranspose = predefinedAdjacency is not null ? TransposeMatrix(predefinedAdjacency) : null;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         if (_useAdaptiveGraph)
             InitializeNodeEmbeddings();
@@ -325,9 +326,10 @@ public partial class GraphWaveNet<T> : ForecastingModelBase<T>
         _useAdaptiveGraph = _options.UseAdaptiveGraph;
         _usePredefinedGraph = _options.UsePredefinedGraph;
 
+        GraphAdjacency.RequireNodeCount(predefinedAdjacency, _numNodes, nameof(predefinedAdjacency));
         _predefinedAdjacency = predefinedAdjacency ?? CreateDefaultAdjacencyMatrix(_numNodes);
         _predefinedAdjacencyTranspose = TransposeMatrix(_predefinedAdjacency);
-        _random = RandomHelper.CreateSecureRandom();
+        _random = LayerInitializationSeedScope.CreateComponentRandom(_options.Seed);
 
         if (_useAdaptiveGraph)
             InitializeNodeEmbeddings();

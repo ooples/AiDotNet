@@ -841,6 +841,14 @@ public partial class ImageBindNeuralNetwork<T> : MultimodalModelLayoutBase<T>, I
             _imagePositionalEmbeddings is null || _imageProjection is null)
             throw new InvalidOperationException("Native image encoder not initialized.");
 
+        // The positional table holds one row per patch of an ImageSize x ImageSize image, so any other
+        // size is a caller error, reported here as the ONNX path reports it.
+        int rank = image.Rank;
+        if (rank is not (3 or 4) || image.Shape[rank - 2] != _imageSize || image.Shape[rank - 1] != _imageSize)
+            throw new ArgumentException(
+                $"Image must be [C,{_imageSize},{_imageSize}] or [B,C,{_imageSize},{_imageSize}] for ImageSize {_imageSize}; " +
+                $"got [{string.Join(", ", image.Shape.ToArray())}].", nameof(image));
+
         var patches = _imagePatchEmbedding.Forward(image);
         if (activations is not null) activations["Image/PatchEmbedding"] = patches.Clone();
         if (patches.Rank is not (2 or 3))

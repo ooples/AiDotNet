@@ -173,6 +173,35 @@ public class TradingAgentLearningTests
         Assert.Equal(0.3, agent.CurrentEpsilon, 9);
     }
 
+    /// <summary>
+    /// TradingAgentOptions used to declare <c>new int? Seed</c>, so a seed set through the inherited
+    /// <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/> never reached <c>ApplyNetworkSeed</c>. Set that
+    /// way on architectures carrying no seed of their own, two agents must start from identical weights.
+    /// </summary>
+    [Fact]
+    public void Inherited_options_seed_makes_network_initialization_reproducible()
+    {
+        double[] InitialWeights()
+        {
+            var options = new FinancialDQNAgentOptions<double> { StateSize = StateSize, ActionSize = ActionSize };
+            AiDotNet.Models.Options.ModelOptions inherited = options;
+            inherited.Seed = 4242;
+            var architecture = new NeuralNetworkArchitecture<double>(
+                inputType: InputType.OneDimensional,
+                taskType: NeuralNetworkTaskType.Regression,
+                complexity: NetworkComplexity.Simple,
+                inputSize: StateSize,
+                outputSize: ActionSize);
+            using var agent = new FinancialDQNAgent<double>(architecture, options);
+            Assert.True(architecture.HasExplicitRandomSeed, "The options seed did not reach the agent's architecture.");
+            var onlineField = typeof(FinancialDQNAgent<double>).GetField("_qNetwork", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?? throw new InvalidOperationException("The probe must observe the online network.");
+            return Assert.IsAssignableFrom<INeuralNetwork<double>>(onlineField.GetValue(agent)).GetParameters().ToArray();
+        }
+
+        Assert.Equal(InitialWeights(), InitialWeights());
+    }
+
     [Theory]
     [InlineData(2)]
     [InlineData(5)]

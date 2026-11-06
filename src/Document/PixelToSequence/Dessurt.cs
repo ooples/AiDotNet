@@ -274,7 +274,7 @@ public partial class Dessurt<T> : DocumentNeuralNetworkBase<T>, IDocumentQA<T>
             return;
         }
 
-        InitializeLayers();
+        BuildFromConstructionSequence(InitializeLayers);
         InitializeEmbeddings();
         _nativeLayersInitialized = true;
         InvalidateParameterCountCache();

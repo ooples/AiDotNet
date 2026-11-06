@@ -149,8 +149,8 @@ public partial class DuelingCombinationLayer<T> : LayerBase<T>, IShapeContract
         _valueHiddenWidths = (int[])valueHiddenWidths.Clone();
         _advantageHiddenWidths = (int[])advantageHiddenWidths.Clone();
 
-        var rng = seed.HasValue
-            ? RandomHelper.CreateSeededRandom(seed.Value)
+        var rng = (seed ?? RandomSeed).HasValue
+            ? RandomHelper.CreateSeededRandom((seed ?? RandomSeed).GetValueOrDefault())
             : RandomHelper.CreateSecureRandom();
 
         int valueIn = featureDim;

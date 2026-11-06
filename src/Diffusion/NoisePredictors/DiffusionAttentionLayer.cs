@@ -190,7 +190,7 @@ public sealed partial class DiffusionAttentionLayer<T> : LayerBase<T>, IShapeCon
     {
         T bound = NumOps.FromDouble(1.0 / System.Math.Sqrt(fanIn));
         var initialized = Engine.TensorRandomUniformRange<T>(
-            tensor.Shape.ToArray(), NumOps.Negate(bound), bound);
+            tensor.Shape.ToArray(), NumOps.Negate(bound), bound, Random.Next());
         initialized.AsSpan().CopyTo(tensor.Data.Span);
     }
 

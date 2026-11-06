@@ -388,7 +388,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         _prevDagConstraint = double.MaxValue;
 
         // Step 4: Build networks with actual dimensions
-        RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth);
+        BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth));
 
         // Step 5: Training loop
         T lr = NumOps.FromDouble(_options.LearningRate);
@@ -450,7 +450,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             _lagrangeRho = 1.0;
             _prevDagConstraint = double.MaxValue;
 
-            RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth);
+            BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(_options.EmbeddingDimension, _dataWidth, _dataWidth));
 
             T lr = NumOps.FromDouble(_options.LearningRate);
             int batchSize = Math.Min(_options.BatchSize, data.Rows);
@@ -727,8 +727,8 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         int embedDim = _options.EmbeddingDimension;
         int totalElements = batchSize * embedDim;
         int halfElements = (totalElements + 1) / 2;
-        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
-        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One, _random.Next());
+        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One, _random.Next());
         var u1 = Engine.ScalarMinusTensor(NumOps.One, u1Temp);
         var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), NumOps.FromDouble(-2.0)));
         var theta = Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI));

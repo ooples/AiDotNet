@@ -225,7 +225,7 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             for (int i = 0; i < _options.ActionSize; i++)
             {
                 var std = NumOps.Exp(logStd[i]);
-                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
+                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One, Random);
                 action[i] = NumOps.Add(mean[i], NumOps.Multiply(std, noise));
             }
 

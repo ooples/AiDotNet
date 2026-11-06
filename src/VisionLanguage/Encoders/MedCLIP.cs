@@ -84,7 +84,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
     )
         : base(architecture)
     {
-        _options = options is null ? new MedCLIPOptions() : new MedCLIPOptions(options);
+        _options = CopyValidatedOptions(options);
         Options = _options;
         _logitScale = new LearnableLogitScaleLayer<T>(_options.Temperature);
         SyncImageSizeWithArchitecture();
@@ -121,7 +121,7 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
     )
         : base(architecture)
     {
-        _options = options is null ? new MedCLIPOptions() : new MedCLIPOptions(options);
+        _options = CopyValidatedOptions(options);
         Options = _options;
         _logitScale = new LearnableLogitScaleLayer<T>(_options.Temperature);
         SyncImageSizeWithArchitecture();
@@ -148,6 +148,21 @@ public partial class MedCLIP<T> : VisionLanguageModelBase<T>, IContrastiveVision
         base.EmbeddingDim = _options.ProjectionDim;
         _tokenizer = CreateTokenizer();
         InitializeLayers();
+    }
+
+    private static MedCLIPOptions CopyValidatedOptions(MedCLIPOptions? options)
+    {
+        var source = options ?? new MedCLIPOptions();
+        if (source.ImageMean is null || source.ImageStd is null
+            || source.ImageMean.Length != 3 || source.ImageStd.Length != 3)
+            throw new ArgumentException("MedCLIP requires three channel means and standard deviations.", nameof(options));
+        for (int c = 0; c < 3; c++)
+        {
+            if (double.IsNaN(source.ImageMean[c]) || double.IsInfinity(source.ImageMean[c])
+                || double.IsNaN(source.ImageStd[c]) || double.IsInfinity(source.ImageStd[c]) || source.ImageStd[c] <= 0)
+                throw new ArgumentException("MedCLIP channel means must be finite and standard deviations must be positive and finite.", nameof(options));
+        }
+        return new MedCLIPOptions(source);
     }
 
     private void SyncImageSizeWithArchitecture()

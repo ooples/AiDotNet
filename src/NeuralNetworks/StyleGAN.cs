@@ -676,7 +676,9 @@ public partial class StyleGAN<T> : ImageGeneratorModelLayoutBase<T>
         var stddev = NumOps.One;
 
         // Use Engine's vectorized Gaussian noise generation
-        var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev);
+        // From the model's seeded stream: unseeded, the engine drew from a process-shared generator, so two
+        // identically seeded models trained on different noise.
+        var noiseVector = Engine.GenerateGaussianNoise<T>(totalElements, mean, stddev, Random.Next());
 
         // Reshape to [batchSize, latentSize]
         return Tensor<T>.FromVector(noiseVector, [batchSize, _latentSize]);

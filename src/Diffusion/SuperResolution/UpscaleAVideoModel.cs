@@ -337,15 +337,7 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
         int defaultFPS = DEFAULT_FPS,
         int? seed = null)
         : base(
-            options is null
-                ? new DiffusionModelOptions<T>
-                {
-                    TrainTimesteps = 1000,
-                    BetaStart = 0.00085,
-                    BetaEnd = 0.012,
-                    BetaSchedule = BetaSchedule.ScaledLinear
-                }
-                : new DiffusionModelOptions<T>(options),
+            CreateSeededOptions(options, seed),
             scheduler ?? new DDIMScheduler<T>(SchedulerConfig<T>.CreateStableDiffusion()),
             defaultNumFrames,
             defaultFPS,
@@ -361,6 +353,23 @@ public partial class UpscaleAVideoModel<T> : VideoDiffusionModelBase<T>
     #endregion
 
     #region Layer Initialization
+
+    private static DiffusionModelOptions<T> CreateSeededOptions(DiffusionModelOptions<T>? options, int? seed)
+    {
+        var configured = options is null
+            ? new DiffusionModelOptions<T>
+            {
+                TrainTimesteps = 1000,
+                BetaStart = 0.00085,
+                BetaEnd = 0.012,
+                BetaSchedule = BetaSchedule.ScaledLinear
+            }
+            : new DiffusionModelOptions<T>(options);
+        // The base owns training timestep/noise sampling. Seed it before its
+        // constructor creates that stream, as well as seeding the child weights.
+        configured.Seed = seed ?? configured.Seed;
+        return configured;
+    }
 
     [MemberNotNull(nameof(_videoUNet), nameof(_temporalVAE))]
     private void EnsureInitialized()

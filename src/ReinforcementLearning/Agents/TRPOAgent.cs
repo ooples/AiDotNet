@@ -206,7 +206,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             for (int i = 0; i < _options.ActionSize; i++)
             {
                 var std = NumOps.Exp(logStd[i]);
-                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
+                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One, Random);
                 action[i] = NumOps.Add(mean[i], NumOps.Multiply(std, noise));
             }
 
@@ -266,6 +266,13 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         {
             return NumOps.Zero;
         }
+
+        // OUTSIDE THE STEP ARENA. One update runs a tape per value iteration, one for g and one per Fisher-vector
+        // product, and every top-level tape rewinds the active arena when it is disposed. The batch, g, the old
+        // policy's outputs and each conjugate-gradient iterate outlive the tape that made them, so under an arena the
+        // next tape was handed their buffers: two identically seeded agents diverged from the first update. Same rule
+        // as CreditAssignmentGradientComputer: what outlives a tape allocates outside it.
+        using var noArena = AiDotNet.Tensors.Helpers.TensorArena.Suspend();
 
         // Compute returns and advantages
         var (states, actions, advantages, returns) = ComputeAdvantages();

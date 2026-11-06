@@ -838,7 +838,7 @@ public partial class VideoCLIP<T> : NeuralNetworkBase<T>
     /// </summary>
     private void InitializeEmbeddingTable(Tensor<T> table, int numEmbeddings, int embeddingDim)
     {
-        var random = RandomHelper.CreateSecureRandom();
+        var random = ModelRandom;
 
         // Xavier/Glorot uniform: range = sqrt(6 / (fan_in + fan_out))
         // For embeddings: fan_in = 1, fan_out = embeddingDim

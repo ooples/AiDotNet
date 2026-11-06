@@ -454,7 +454,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
 
         // Step 5: Rebuild layers with actual data dimensions
         int genInputDim = _options.EmbeddingDimension + _condWidth;
-        RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
+        BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim));
 
         // Step 6: Transform data
         var transformedData = _transformer.Transform(copulaData);
@@ -518,7 +518,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             _packedInputDim = (_dataWidth + _condWidth) * _options.PacSize;
 
             int genInputDim = _options.EmbeddingDimension + _condWidth;
-            RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim);
+            BuildFromConstructionSequence(() => RebuildLayersWithActualDimensions(genInputDim, _dataWidth, _packedInputDim));
 
             // Pre-allocate training buffers
             InitializeTrainingBuffers(genInputDim);
@@ -779,8 +779,8 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         int embedDim = _options.EmbeddingDimension;
         int totalElements = batchSize * embedDim;
         int halfElements = (totalElements + 1) / 2;
-        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
-        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One);
+        var u2 = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One, _random.Next());
+        var u1Temp = Engine.TensorRandomUniformRange<T>([halfElements], NumOps.Zero, NumOps.One, _random.Next());
         var u1 = Engine.ScalarMinusTensor(NumOps.One, u1Temp);
         var radius = Engine.TensorSqrt(Engine.TensorMultiplyScalar(Engine.TensorLog(u1), NumOps.FromDouble(-2.0)));
         var theta = Engine.TensorMultiplyScalar(u2, NumOps.FromDouble(2.0 * Math.PI));

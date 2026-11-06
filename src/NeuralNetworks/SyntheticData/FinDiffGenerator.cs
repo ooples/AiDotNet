@@ -275,7 +275,7 @@ public partial class FinDiffGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
         _transformer.Fit(data, _columns);
         _dataWidth = _transformer.TransformedWidth;
 
-        RebuildLayersForDataWidth();
+        BuildFromConstructionSequence(() => RebuildLayersForDataWidth());
 
         var transformedData = _transformer.Transform(data);
 
@@ -311,7 +311,7 @@ public partial class FinDiffGenerator<T> : NeuralSyntheticTabularGeneratorBase<T
             _transformer.Fit(data, _columns);
             _dataWidth = _transformer.TransformedWidth;
 
-            RebuildLayersForDataWidth();
+            BuildFromConstructionSequence(() => RebuildLayersForDataWidth());
 
             var transformedData = _transformer.Transform(data);
 

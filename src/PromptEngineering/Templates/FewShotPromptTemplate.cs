@@ -18,7 +18,7 @@ namespace AiDotNet.PromptEngineering.Templates;
 /// // Create base template
 /// var baseTemplate = "Classify the sentiment of the following text.\n\n{examples}\n\nText: {text}\nSentiment:";
 ///
-/// // The examples to choose from
+/// // Labelled examples the template can draw from
 /// var exampleSelector = new FixedExampleSelector&lt;double&gt;();
 /// exampleSelector.AddExample(new FewShotExample { Input = "I loved this product!", Output = "Positive" });
 /// exampleSelector.AddExample(new FewShotExample { Input = "Terrible experience.", Output = "Negative" });
@@ -32,7 +32,7 @@ namespace AiDotNet.PromptEngineering.Templates;
 ///     exampleFormat: "Text: {input}\nSentiment: {output}"
 /// );
 ///
-/// var prompt = template.Format(new Dictionary&lt;string, string>
+/// var prompt = template.Format(new Dictionary&lt;string, string&gt;
 /// {
 ///     ["text"] = "This movie was amazing!"
 /// });

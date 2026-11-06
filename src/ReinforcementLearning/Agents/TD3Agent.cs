@@ -111,7 +111,7 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
         _options = options;
         Options = _options;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _random = options.Seed.HasValue ? RandomHelper.CreateSeededRandom(options.Seed.Value) : RandomHelper.CreateSecureRandom();
+        _random = Random;
         _stepCount = 0;
         _updateCount = 0;
 
@@ -235,7 +235,7 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             // Add exploration noise during training
             for (int i = 0; i < action.Length; i++)
             {
-                var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.FromDouble(_options.ExplorationNoise));
+                var noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.FromDouble(_options.ExplorationNoise), _random);
                 action[i] = _numOps.Add(action[i], noise);
                 action[i] = MathHelper.Clamp<T>(action[i], _numOps.FromDouble(-1), _numOps.FromDouble(1));
             }
@@ -336,7 +336,7 @@ public partial class TD3Agent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             var nextA = _targetActorNetwork.Predict(Tensor<T>.FromVector(exp.NextState)).ToVector();
             for (int k = 0; k < actionDim; k++)
             {
-                T noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.FromDouble(_options.TargetPolicyNoise));
+                T noise = MathHelper.GetNormalRandom<T>(_numOps.Zero, _numOps.FromDouble(_options.TargetPolicyNoise), _random);
                 noise = MathHelper.Clamp<T>(noise,
                     _numOps.FromDouble(-_options.TargetNoiseClip), _numOps.FromDouble(_options.TargetNoiseClip));
                 nextA[k] = MathHelper.Clamp<T>(_numOps.Add(nextA[k], noise),

@@ -355,7 +355,7 @@ public partial class BottleneckBlock<T> : LayerBase<T>, ILayerSerializationExtra
         // Lazy ctor leaves _hasDownsample / _inChannels unresolved until
         // OnFirstForward observes input.Shape. Resolve before the
         // identity-branch decision below.
-        if (!IsShapeResolved) OnFirstForward(input);
+        if (!IsShapeResolved) BuildLateSubLayers(() => OnFirstForward(input));
 
         // Main branch: conv1 -> bn1 -> relu -> conv2 -> bn2 -> relu -> conv3 -> bn3. In inference each convolution and its
         // batch norm (and the ReLU) run as one folded convolution (ConvolutionBatchNormFolding). The intermediates are

@@ -650,7 +650,10 @@ public class SEATSDecomposition<T> : TimeSeriesDecompositionBase<T>
             P = _sarimaOptions.P,
             D = _sarimaOptions.D,
             Q = _sarimaOptions.Q,
-            SeasonalPeriod = 1 // No seasonality for trend
+            SeasonalPeriod = 0, // The trend submodel has no seasonal component.
+            SeasonalP = 0,
+            SeasonalD = 0,
+            SeasonalQ = 0
         };
 
         var _trendModel = new SARIMAModel<T>(_trendOptions);

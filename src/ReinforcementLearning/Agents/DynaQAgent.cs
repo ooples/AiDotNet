@@ -61,7 +61,7 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
         _model = new Dictionary<string, Dictionary<int, (string, T)>>();
         _visitedStateActions = new List<(string, int)>();
         _epsilon = options.EpsilonStart;
-        _random = RandomHelper.CreateSecureRandom();
+        _random = Random;
     }
 
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)

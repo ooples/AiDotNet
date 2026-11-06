@@ -241,7 +241,7 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
             if (training)
             {
                 // Sample from Gaussian using MathHelper
-                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
+                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One, Random);
                 var rawAction = NumOps.Add(mean, NumOps.Multiply(std, noise));
 
                 // Apply tanh squashing using MathHelper
@@ -451,7 +451,7 @@ public partial class SACAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
                 var stds = Engine.TensorExp(logStds);
                 var noise = new Tensor<T>([batchCount, actionSize]);
                 for (int i = 0; i < noise.Length; i++)
-                    noise[i] = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One);
+                    noise[i] = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One, Random);
                 var preSquash = Engine.TensorAdd(means, Engine.TensorMultiply(stds, noise));
 
                 // SampleAction squashes with tanh, so the replay buffer holds squashed actions and the

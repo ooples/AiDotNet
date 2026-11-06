@@ -1026,6 +1026,15 @@ For each category, indicate if it's flagged (YES/NO) and confidence level (HIGH/
         bool batched = patches.Shape.Length == 3;
         int numPatches = batched ? patches.Shape[1] : patches.Shape[0];
         int dim = patches.Shape[patches.Shape.Length - 1];
+        // A patch count the positional table was not built for comes from the image: the table is sized from the
+        // configured image size, so an image of another size is the caller's argument, not the model's state.
+        if (positionalEmbeddings.Shape[0] != numPatches + 1 && clsToken.Shape[1] == dim && positionalEmbeddings.Shape[1] == dim)
+        {
+            throw new ArgumentException(
+                $"The image gives {numPatches} patches, but the model is configured for {positionalEmbeddings.Shape[0] - 1} " +
+                $"(its positional table is [{positionalEmbeddings.Shape[0]}, {dim}]). Pass an image of the configured image size.",
+                nameof(image));
+        }
         if (clsToken.Shape[1] != dim
             || positionalEmbeddings.Shape[0] != numPatches + 1
             || positionalEmbeddings.Shape[1] != dim)

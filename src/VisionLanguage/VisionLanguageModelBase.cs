@@ -179,33 +179,42 @@ public abstract partial class VisionLanguageModelBase<T> : NeuralNetworkBase<T>,
     protected abstract Tensor<T> PostprocessOutput(Tensor<T> modelOutput);
 
     /// <summary>
-    /// Normalizes an image tensor using ImageNet mean and standard deviation.
+    /// Normalizes each channel of each image using CLIP/OpenAI statistics by default.
     /// </summary>
-    /// <param name="image">Image tensor with values in [0, 1].</param>
-    /// <param name="mean">Per-channel mean values (default: ImageNet [0.485, 0.456, 0.406]).</param>
-    /// <param name="std">Per-channel standard deviation values (default: ImageNet [0.229, 0.224, 0.225]).</param>
+    /// <param name="image">Image tensor in [C,H,W] or [N,C,H,W] layout with values in [0,1].</param>
+    /// <param name="mean">Finite per-channel mean values.</param>
+    /// <param name="std">Positive finite per-channel standard deviations.</param>
     /// <returns>Normalized image tensor.</returns>
     protected Tensor<T> NormalizeImage(Tensor<T> image, double[]? mean = null, double[]? std = null)
     {
         mean ??= [0.48145466, 0.4578275, 0.40821073]; // CLIP/OpenAI default
         std ??= [0.26862954, 0.26130258, 0.27577711];
 
-        var result = new Tensor<T>(image._shape);
+        if (image is null) throw new ArgumentNullException(nameof(image));
         int channels = ImageChannels;
-        int spatialSize = image.Length / channels;
-
-        for (int c = 0; c < channels && c < mean.Length; c++)
+        if ((image.Rank != 3 && image.Rank != 4) || channels <= 0
+            || image.Shape[image.Rank == 4 ? 1 : 0] != channels || image.Length == 0)
+            throw new ArgumentException("Expected a nonempty [C,H,W] or [N,C,H,W] image with the model's channel count.", nameof(image));
+        if (mean.Length != channels || std.Length != channels)
+            throw new ArgumentException("Image normalization requires one mean and standard deviation per channel.");
+        for (int c = 0; c < channels; c++)
         {
-            double m = mean[c];
-            double s = std[c];
-            for (int i = 0; i < spatialSize; i++)
+            if (double.IsNaN(mean[c]) || double.IsInfinity(mean[c]))
+                throw new ArgumentOutOfRangeException(nameof(mean), "Channel means must be finite.");
+            if (double.IsNaN(std[c]) || double.IsInfinity(std[c]) || std[c] <= 0)
+                throw new ArgumentOutOfRangeException(nameof(std), "Channel standard deviations must be positive and finite.");
+        }
+
+        var result = new Tensor<T>(image._shape);
+        int batches = image.Rank == 4 ? image.Shape[0] : 1;
+        int spatialSize = image.Length / batches / channels;
+        for (int batch = 0; batch < batches; batch++)
+        {
+            for (int c = 0; c < channels; c++)
             {
-                int idx = c * spatialSize + i;
-                if (idx < image.Length)
-                {
-                    double val = NumOps.ToDouble(image[idx]);
-                    result[idx] = NumOps.FromDouble((val - m) / s);
-                }
+                int offset = (batch * channels + c) * spatialSize;
+                for (int i = 0; i < spatialSize; i++)
+                    result[offset + i] = NumOps.FromDouble((NumOps.ToDouble(image[offset + i]) - mean[c]) / std[c]);
             }
         }
 

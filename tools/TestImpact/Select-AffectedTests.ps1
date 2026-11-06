@@ -142,7 +142,11 @@ try {
     $all = @(yq -o=json -I=0 '.shard' (Join-Path $Repository '.github/test-shards.yml') | ConvertFrom-Json)
     if ($all.Count -eq 0) { throw 'test-shards.yml yielded no shards' }
     $manifest = Join-Path ([IO.Path]::GetTempPath()) 'type-impact-shards.json'
-    ConvertTo-Json -InputObject @($all) -Depth 6 | Set-Content -LiteralPath $manifest -Encoding utf8
+    # The paper-fidelity lane is planned alongside the shards so its pull-request jobs can run only the
+    # classes this change reaches (tools/PaperFidelity/PaperFidelity.ps1). It is not a test-shards.yml shard:
+    # the matrix below is built from $all, so the ordinary test jobs never run it.
+    . (Join-Path $PSScriptRoot '../PaperFidelity/PaperFidelity.ps1')
+    ConvertTo-Json -InputObject (@($all) + @(Get-PaperFidelityImpactEntry)) -Depth 6 | Set-Content -LiteralPath $manifest -Encoding utf8
 
     # Known-answer cases over a compiled fixture; a selector that fails them must not narrow anything.
     & pwsh -NoProfile -File (Join-Path $Repository 'tools/TestImpact/TypeImpact/Test-TypeImpact.ps1')

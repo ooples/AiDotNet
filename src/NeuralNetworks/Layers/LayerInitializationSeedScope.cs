@@ -78,6 +78,24 @@ internal static class LayerInitializationSeedScope
     }
 
     /// <summary>
+    /// The random stream a model keeps for its own draws (sampling, exploration, augmentation): seeded from
+    /// <paramref name="seed"/> (the model's <c>Options.Seed</c>), else from <see cref="AmbientFallbackSeed"/>, else
+    /// secure entropy. Create it once per model, never per call: a per-call seeded stream repeats the same draws.
+    /// </summary>
+    /// <remarks>
+    /// Reading the ambient seed does not consume the per-layer seed sequence, so a model's weights are the same
+    /// whether or not it creates this stream.
+    /// </remarks>
+    /// <param name="seed">The model's configured seed, or null when it has none.</param>
+    internal static Random CreateComponentRandom(int? seed)
+    {
+        int? effectiveSeed = seed ?? _ambientFallbackSeed;
+        return effectiveSeed.HasValue
+            ? RandomHelper.CreateSeededRandom(effectiveSeed.Value)
+            : RandomHelper.CreateSecureRandom();
+    }
+
+    /// <summary>
     /// Begins a fresh deterministic per-layer init-seed sequence for the model
     /// about to be constructed on this thread. Pass the architecture's resolved
     /// seed (or <c>null</c> to fall back to <see cref="AmbientFallbackSeed"/>, then

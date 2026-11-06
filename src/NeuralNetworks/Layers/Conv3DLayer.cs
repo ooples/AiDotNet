@@ -570,7 +570,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
         }
         else
         {
-            var randomKernels = Engine.TensorRandomUniformRange<T>(_kernels._shape, NumOps.Negate(scale), scale);
+            var randomKernels = Engine.TensorRandomUniformRange<T>(_kernels._shape, NumOps.Negate(scale), scale, Random.Next());
             randomKernels.AsSpan().CopyTo(_kernels.AsWritableSpan());
         }
 
