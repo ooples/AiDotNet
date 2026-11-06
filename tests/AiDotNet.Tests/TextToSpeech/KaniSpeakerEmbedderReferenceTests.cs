@@ -19,6 +19,31 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class KaniSpeakerEmbedderReferenceTests
 {
+    [Fact]
+    public void UnloadedEmbedderHasValidBatchNormStatisticsAndFiniteOutput()
+    {
+        var embedder = new KaniSpeakerEmbedder<double>(AiDotNetEngine.Current, new List<LayerBase<double>>(), new KaniSpeakerEmbedderConfiguration
+        {
+            WavLm = new WavLmConfiguration
+            {
+                ConvDims = Enumerable.Repeat(8, 7).ToArray(), HiddenSize = 16, Layers = 1, Heads = 2,
+                IntermediateSize = 32, PositionalConvKernel = 16, PositionalConvGroups = 2,
+                LayerNormFeatureEncoder = true, StableLayerNorm = true,
+            },
+            IntermediateSize = 6, EmbeddingSize = 6,
+        });
+        foreach (var mean in new[] { embedder.FirstMean, embedder.SecondMean })
+            Assert.All(mean.Weights.ToArray(), value => Assert.Equal(0, value));
+        foreach (var variance in new[] { embedder.FirstVariance, embedder.SecondVariance })
+            Assert.All(variance.Weights.ToArray(), value => Assert.Equal(1, value));
+        var audio = new Tensor<double>(new[] { 16000 });
+        for (int i = 0; i < audio.Length; i++) audio[i] = 0.4 * Math.Sin(2 * Math.PI * 180 * i / 16000);
+        using var scope = new NoGradScope<double>();
+        foreach (var hidden in embedder.WavLm.HiddenStates(audio))
+            Assert.All(hidden.ToArray(), value => Assert.True(!double.IsNaN(value) && !double.IsInfinity(value), "WavLM hidden state must be finite."));
+        Assert.All(embedder.Embed(audio).ToArray(), value => Assert.True(!double.IsNaN(value) && !double.IsInfinity(value)));
+    }
+
     [Fact(Timeout = 300000)]
     public async Task HiddenStateAndEmbedding_MatchTheRelease()
     {

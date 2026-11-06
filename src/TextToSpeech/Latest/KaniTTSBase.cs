@@ -57,7 +57,6 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
         ConfigureBase();
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
-        _options.ModelPath = modelPath;
         OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
         InitializeLayers();
     }
@@ -75,6 +74,7 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
     private void ConfigureBase()
     {
         var o = _options;
+        o.ValidateSampling();
         int hop = o.CodecDownsampleRates.Aggregate(1, (a, b) => a * b);
         if (hop != o.CodecUpsampleRates.Aggregate(1, (a, b) => a * b))
             throw new ArgumentException("The codec's decoder must upsample by its encoder's hop.");
@@ -325,6 +325,7 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
     internal List<int> Generate(IReadOnlyList<int> prompt, Random random, Tensor<T>? speaker = null)
     {
         var o = _options;
+        o.ValidateSampling();
         bool wasTraining = IsTrainingMode;
         SetTrainingMode(false);
         try

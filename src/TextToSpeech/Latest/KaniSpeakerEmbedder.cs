@@ -56,6 +56,11 @@ internal sealed class KaniSpeakerEmbedder<T>
         FirstVariance = Own(new BiasFreeLinearLayer<T>(1, configuration.IntermediateSize));
         SecondMean = Own(new BiasFreeLinearLayer<T>(1, configuration.EmbeddingSize));
         SecondVariance = Own(new BiasFreeLinearLayer<T>(1, configuration.EmbeddingSize));
+        // PyTorch BatchNorm buffers start at zero mean and unit variance, not random projection weights.
+        foreach (var mean in new[] { FirstMean, SecondMean })
+            for (int i = 0; i < mean.Weights.Length; i++) mean.Weights[i] = NumOps.Zero;
+        foreach (var variance in new[] { FirstVariance, SecondVariance })
+            for (int i = 0; i < variance.Weights.Length; i++) variance.Weights[i] = NumOps.One;
         _pooled = pooled;
     }
 

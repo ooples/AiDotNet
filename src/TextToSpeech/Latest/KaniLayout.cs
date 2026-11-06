@@ -105,14 +105,14 @@ internal sealed class KaniLayout
     {
         int start = IndexOf(sequence, StartOfSpeech), end = IndexOf(sequence, EndOfSpeech);
         if (start < 0 || end < 0)
-            throw new InvalidOperationException("The model wrote no speech span (start-of-speech and end-of-speech tokens).");
-        if (start >= end) throw new InvalidOperationException("The model's speech span ends before it starts.");
+            throw new KaniSpeechSpanException("The model wrote no speech span (start-of-speech and end-of-speech tokens).");
+        if (start >= end) throw new KaniSpeechSpanException("The model's speech span ends before it starts.");
         var tokens = sequence.Skip(start + 1).Take(end - start - 1).ToList();
         if (tokens.Count % Codebooks != 0)
-            throw new InvalidOperationException($"The model's speech span has {tokens.Count} codes, not whole frames of {Codebooks}.");
-        if (tokens.Count == 0) throw new InvalidOperationException("The model's speech span is empty.");
+            throw new KaniSpeechSpanException($"The model's speech span has {tokens.Count} codes, not whole frames of {Codebooks}.");
+        if (tokens.Count == 0) throw new KaniSpeechSpanException("The model's speech span is empty.");
         return Codes(tokens, tokens.Count / Codebooks)
-            ?? throw new InvalidOperationException("The model's speech span holds tokens that are not audio codes.");
+            ?? throw new KaniSpeechSpanException("The model's speech span holds tokens that are not audio codes.");
     }
 
     private static int IndexOf(IReadOnlyList<int> sequence, int token)

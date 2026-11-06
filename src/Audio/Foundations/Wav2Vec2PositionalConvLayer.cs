@@ -41,8 +41,20 @@ internal sealed partial class Wav2Vec2PositionalConvLayer<T> : LayerBase<T>, ISh
         _channels = channels;
         _kernel = kernel;
         _groups = groups;
-        _direction = new Tensor<T>([channels, channels / groups, kernel]);
+        // transformers initializes the positional convolution before applying weight_norm(dim=2).
+        _direction = NormalTensor([channels, channels / groups, kernel], 2.0 / Math.Sqrt(kernel * channels), Random);
         _magnitude = new Tensor<T>([kernel]);
+        for (int k = 0; k < kernel; k++)
+        {
+            double squares = 0;
+            for (int output = 0; output < channels; output++)
+                for (int input = 0; input < channels / groups; input++)
+                {
+                    double value = NumOps.ToDouble(_direction[output, input, k]);
+                    squares += value * value;
+                }
+            _magnitude[k] = NumOps.FromDouble(Math.Sqrt(squares));
+        }
         _bias = new Tensor<T>([channels]);
         RegisterTrainableParameter(_direction, PersistentTensorRole.Weights);
         RegisterTrainableParameter(_magnitude, PersistentTensorRole.Weights);

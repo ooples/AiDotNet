@@ -6,15 +6,58 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// <summary>Replays the fitted assets installed by the generated fixture after configuration-only reconstruction.</summary>
 internal static class OptionSensitivityFixtureSetup
 {
-    internal static long ParameterCountBeforeFitting<T>(INeuralNetworkModel<T> network)
+    internal static bool UsesFittedAssets<T>(INeuralNetworkModel<T> network)
         => network is AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>
             or AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>
             or AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>
-            or AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>
-                ? network.GetParameters().Length : 0;
+            or AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>;
 
-    internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options)
+    internal static long ParameterCountBeforeFitting<T>(INeuralNetworkModel<T> network)
+        => UsesFittedAssets(network) ? network.GetParameters().Length : 0;
+
+    internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
+        => network is AiDotNet.TextToSpeech.Latest.KaniTTSBase<T> ? KaniControlGroup(option) : string.Empty;
+
+    private static string KaniControlGroup(string option) => option switch
     {
+        "LoraRank" or "LoraAlpha" or "LoraDropout" or "LoraTargets" or "RankStabilizedLora" => "lora",
+        "TopK" or "TopP" or "SamplingSeed" => "sampling",
+        "WarmupRatio" => "warmup-ratio",
+        "WarmupSteps" => "warmup-steps",
+        "TrainingSteps" => "cosine",
+        _ => string.Empty,
+    };
+
+    internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
+    {
+        if (options is AiDotNet.TextToSpeech.Latest.KaniTTSOptions kani)
+        {
+            switch (KaniControlGroup(option))
+            {
+                case "lora":
+                    kani.UseLora = true;
+                    break;
+                case "sampling":
+                    kani.Temperature = 2;
+                    kani.LenientSpeechSpans = true;
+                    kani.StreamingChunkFrames = 1;
+                    kani.StreamingLookbackFrames = 0;
+                    break;
+                case "warmup-ratio":
+                    kani.TrainingSteps = 20;
+                    kani.WarmupSteps = 0;
+                    break;
+                case "warmup-steps":
+                    kani.TrainingSteps = 20;
+                    kani.WarmupSteps = 2;
+                    break;
+                case "cosine":
+                    kani.TrainingSteps = 20;
+                    kani.WarmupSteps = 0;
+                    kani.WarmupRatio = 0;
+                    break;
+            }
+        }
         if (options is not AiDotNet.TextToSpeech.TtsModelOptions) return;
         // Cross an epoch boundary within the probe's two training steps.
         var perEpoch = options.GetType().GetProperty("UpdatesPerEpoch");

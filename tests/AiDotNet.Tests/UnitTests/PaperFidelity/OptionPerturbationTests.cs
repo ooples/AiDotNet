@@ -7,6 +7,19 @@ namespace AiDotNet.Tests.UnitTests.PaperFidelity;
 
 public class OptionPerturbationTests
 {
+    [Fact]
+    public void CandidatesStartFromThePreparedControlValue()
+    {
+        var probe = new OptionSensitivityProbe<ThresholdModel>(
+            () => new(new ThresholdOptions()), model => model.Output, train: null,
+            prepareOptions: options => ((ThresholdOptions)options).Threshold = 0.5);
+        var result = OptionSensitivityHarness.Measure(typeof(PreparedValueProbe), "Threshold", probe);
+        Assert.Equal(OptionSensitivityOutcome.Sensitive, result.Outcome);
+        Assert.Contains("Threshold 0.5 ->", result.Detail);
+    }
+
+    private sealed class PreparedValueProbe { }
+
     [Theory]
     [InlineData(3)]
     [InlineData(5)]
@@ -38,6 +51,8 @@ public class OptionPerturbationTests
             typeof(CheckpointShapeModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
         CloneRegistry.Register(new ClonePlan(typeof(OptionPreservingFallbackModel), Array.Empty<ClonePlanEntry>(),
             constructorCandidates: new IReadOnlyList<string>[] { new[] { "_items", "_options" }, new[] { "_options" } }));
+        CloneRegistry.Register(new ClonePlan(
+            typeof(ProductConstrainedArrayModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
     }
 
     public sealed class FixedArrayOptions : ModelOptions
@@ -55,6 +70,52 @@ public class OptionPerturbationTests
             _options = options;
         }
         public long Output => _options.Widths.Sum();
+    }
+
+    public sealed class ProductConstrainedArrayModel
+    {
+        private readonly FixedArrayOptions _options;
+        public ProductConstrainedArrayModel(FixedArrayOptions options)
+        {
+            if (options.Widths.Length != 2 || options.Widths.Any(width => width <= 0)
+                || (long)options.Widths[0] * options.Widths[1] != 8)
+                throw new ArgumentException("The two stage rates must have product eight.", nameof(options));
+            _options = options;
+        }
+        public long Output => _options.Widths[0];
+        public int[] Shape => _options.Widths;
+    }
+
+    private sealed class ParameterShapeProbe { }
+    private sealed class FixedParameterShapeProbe { }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void EqualParameterCountsStillDetectAChangedTensorShape(bool observeShapes)
+    {
+        var probe = new OptionSensitivityProbe<ProductConstrainedArrayModel>(
+            () => new(new FixedArrayOptions()), _ => 0, train: null,
+            prepareModel: model =>
+            {
+                if (!model.Shape.SequenceEqual(new[] { 2, 4 })) throw new ArgumentException("The checkpoint is 2 by 4.");
+            },
+            parameterCount: _ => 8,
+            parameterShapes: model => new[] { observeShapes ? model.Shape : new[] { 2, 4 } });
+        var result = OptionSensitivityHarness.Measure(
+            observeShapes ? typeof(ParameterShapeProbe) : typeof(FixedParameterShapeProbe), "Widths", probe);
+        Assert.Equal(observeShapes ? OptionSensitivityOutcome.Sensitive : OptionSensitivityOutcome.NoValidPerturbation,
+            result.Outcome);
+        if (observeShapes) Assert.Contains("ordered parameter tensor shapes", result.Detail);
+    }
+
+    [Fact]
+    public void StageRatesCanChangeWithoutChangingTheirProduct()
+    {
+        var probe = new OptionSensitivityProbe<ProductConstrainedArrayModel>(
+            () => new(new FixedArrayOptions()), model => model.Output, train: null);
+        var result = OptionSensitivityHarness.Measure(typeof(ProductConstrainedArrayModel), "Widths", probe);
+        Assert.Equal(OptionSensitivityOutcome.Sensitive, result.Outcome);
     }
 
     [Fact]
@@ -92,6 +153,46 @@ public class OptionPerturbationTests
     private sealed class InferenceProbe { }
     private sealed class TrainingProbe { }
     private sealed class IgnoredProbe { }
+    private sealed class SpeechSpanProbe { }
+    private sealed class UnexpectedOperationProbe { }
+    private sealed class PreparedControlContextProbe { }
+
+    [Fact]
+    public void PreparedConfigurationContextsHaveIndependentCachedControls()
+    {
+        OptionSensitivityProbe<ThresholdModel> Probe(double threshold, string group) => new(
+            () => new(new ThresholdOptions()), model => model.Output, train: null,
+            prepareOptions: options => ((ThresholdOptions)options).Threshold = threshold,
+            controlGroup: group);
+        var first = OptionSensitivityHarness.Measure(typeof(PreparedControlContextProbe), "Threshold", Probe(1, "high"));
+        var second = OptionSensitivityHarness.Measure(typeof(PreparedControlContextProbe), "Threshold", Probe(0.5, "low"));
+        Assert.Equal(OptionSensitivityOutcome.Sensitive, first.Outcome);
+        Assert.Equal(OptionSensitivityOutcome.Sensitive, second.Outcome);
+        Assert.Contains("-> 0.5 changes", first.Detail);
+        Assert.Contains("0.5 -> 1 changes", second.Detail);
+    }
+
+    [Fact]
+    public void ChangedGenerationFormatIsAnObservableContractChange()
+    {
+        var probe = new OptionSensitivityProbe<ThresholdModel>(() => new(new ThresholdOptions()),
+            model => model.Output == 1
+                ? throw new AiDotNet.TextToSpeech.Latest.KaniSpeechSpanException("No complete speech frame.") : 0,
+            train: null);
+        var result = OptionSensitivityHarness.Measure(typeof(SpeechSpanProbe), "Threshold", probe);
+        Assert.Equal(OptionSensitivityOutcome.Sensitive, result.Outcome);
+        Assert.Contains("generated speech contract", result.Detail);
+    }
+
+    [Fact]
+    public void UnexpectedOperationFailuresStillPropagate()
+    {
+        var probe = new OptionSensitivityProbe<ThresholdModel>(() => new(new ThresholdOptions()),
+            model => model.Output == 1 ? throw new InvalidOperationException("Unexpected model failure.") : 0,
+            train: null);
+        Assert.Throws<InvalidOperationException>(() =>
+            OptionSensitivityHarness.Measure(typeof(UnexpectedOperationProbe), "Threshold", probe));
+    }
 
     public sealed class DepthOptions : ModelOptions
     {

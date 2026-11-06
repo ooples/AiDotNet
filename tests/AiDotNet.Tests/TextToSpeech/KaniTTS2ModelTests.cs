@@ -52,7 +52,7 @@ public class KaniTTS2ModelTests
                 FeedForwardMultipleOf = (int)c["block_multiple_of"]!, NormEpsilon = (double)c["norm_eps"]!, RopeTheta = (double)c["rope_theta"]!,
                 SpeakerEmbeddingDim = (int)f["speaker_dim"]!, AudioStep = audioStep,
                 // Four codebooks of 8·8 = 64 codes from a tiny NanoCodec; a tiny WavLM-Large-layout embedder (unused here).
-                CodecLevels = new[] { 8, 8 }, CodecEncodedDim = 8, CodecEncoderChannels = 2, CodecDownsampleRates = new[] { 2, 3 },
+                CodecLevels = new[] { 8, 8 }, CodecEncoderChannels = 2, CodecDownsampleRates = new[] { 2, 3 },
                 CodecDecoderChannels = 8, CodecUpsampleRates = new[] { 3, 2 },
                 EmbedderConvDims = Enumerable.Repeat(8, 7).ToArray(), EmbedderWidth = 16, EmbedderLayers = 1, EmbedderHeads = 2,
                 EmbedderIntermediate = 32, EmbedderPositionalKernel = 16, EmbedderPositionalGroups = 2, EmbedderHeadWidth = 6,

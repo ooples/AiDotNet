@@ -43,7 +43,7 @@ public class KaniTTSModelTests
                 Heads = (int)lm["num_attention_heads"]!, KeyValueHeads = (int)lm["num_key_value_heads"]!, Intermediate = (int)lm["intermediate_size"]!,
                 FeedForwardMultipleOf = (int)lm["block_multiple_of"]!, NormEpsilon = (double)lm["norm_eps"]!, RopeTheta = (double)lm["rope_theta"]!,
                 CodecEncoderChannels = (int)codec["encoder"]!["base_channels"]!, CodecDownsampleRates = Ints(codec["encoder"]!["down_sample_rates"]!),
-                CodecEncodedDim = (int)codec["encoder"]!["encoded_dim"]!, CodecDecoderChannels = (int)codec["decoder"]!["base_channels"]!,
+                CodecDecoderChannels = (int)codec["decoder"]!["base_channels"]!,
                 CodecUpsampleRates = Ints(codec["decoder"]!["up_sample_rates"]!), CodecLevels = Ints(codec["quantizer"]!["num_levels_per_group"]!),
                 Temperature = 0, MaxNewTokens = 20, UseLora = false, LenientSpeechSpans = lenient, TokenizerJson = (string)f["tokenizer"]!,
                 StreamingChunkFrames = (int)f["chunk"]!, StreamingLookbackFrames = (int)f["lookback"]!,
@@ -85,7 +85,7 @@ public class KaniTTSModelTests
         var strict = Model(f);
         Close(f["span_audio"]!, strict.AudioOf(Ints(f["sequence"]!)), "span audio");
         // The package rejects a span holding a token that is not a code; the streaming writer skips its windows.
-        Assert.Throws<InvalidOperationException>(() => strict.AudioOf(Ints(f["streamed_sequence"]!)));
+        Assert.Throws<KaniSpeechSpanException>(() => strict.AudioOf(Ints(f["streamed_sequence"]!)));
         Close(f["streamed_audio"]!, Model(f, lenient: true).AudioOf(Ints(f["streamed_sequence"]!)), "streamed audio");
     }
 

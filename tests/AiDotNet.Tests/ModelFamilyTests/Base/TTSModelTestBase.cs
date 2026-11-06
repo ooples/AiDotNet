@@ -205,13 +205,17 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
             int codebooks = network.CodecTokenCodebooks, vocabulary = network.CodecTokenVocabulary;
             // A waveform target [samples] holds one codec frame per hop; a frame-shaped target one per row.
             int codecFrames = target.Rank >= 2 ? frames : Math.Max(1, target.Length / Math.Max(1, network.HopSize));
+            bool repeatedCodecFrames = network is AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>;
+            if (repeatedCodecFrames) codecFrames = Math.Max(2, codecFrames);
             codecTokens = new Tensor<T>(new[] { codecFrames, codebooks });
             for (int f = 0; f < codecFrames; f++)
             {
+                // Kani's training pipeline removes repeated frames; exercise that policy with adjacent duplicates.
+                int patternFrame = repeatedCodecFrames ? f / 2 : f;
                 double level = 0;
-                for (int c = 0; c < channels; c++) level += Math.Abs(ops.ToDouble(mel[f, c]));
+                for (int c = 0; c < channels; c++) level += Math.Abs(ops.ToDouble(mel[patternFrame, c]));
                 for (int q = 0; q < codebooks; q++)
-                    codecTokens[f, q] = ops.FromDouble(((int)(level * 997) + 31 * q + 7 * f) % vocabulary);
+                    codecTokens[f, q] = ops.FromDouble(((int)(level * 997) + 31 * q + 7 * patternFrame) % vocabulary);
             }
         }
         if (network is not null && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.PromptCodecTokens) != 0)

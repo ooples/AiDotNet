@@ -36,7 +36,6 @@ public class KaniTTSOptions : AiDotNet.Models.Options.ModelOptions
         HiddenDim = other.HiddenDim;
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
-        ModelPath = other.ModelPath;
         OnnxOptions = new AiDotNet.Onnx.OnnxModelOptions(other.OnnxOptions);
         LearningRate = other.LearningRate;
         WeightDecay = other.WeightDecay;
@@ -56,7 +55,6 @@ public class KaniTTSOptions : AiDotNet.Models.Options.ModelOptions
         Codebooks = other.Codebooks;
         CodecEncoderChannels = other.CodecEncoderChannels;
         CodecDownsampleRates = (int[])other.CodecDownsampleRates.Clone();
-        CodecEncodedDim = other.CodecEncodedDim;
         CodecDecoderChannels = other.CodecDecoderChannels;
         CodecUpsampleRates = (int[])other.CodecUpsampleRates.Clone();
         CodecLevels = (int[])other.CodecLevels.Clone();
@@ -110,9 +108,6 @@ public class KaniTTSOptions : AiDotNet.Models.Options.ModelOptions
 
     /// <summary>Maximum input text-token count (1,000).</summary>
     public int MaxTextLength { get; set; } = 1000;
-
-    /// <summary>Optional exported ONNX model path.</summary>
-    public string? ModelPath { get; set; }
 
     /// <summary>Options for an exported ONNX model.</summary>
     public AiDotNet.Onnx.OnnxModelOptions OnnxOptions { get; set; } = new();
@@ -174,8 +169,8 @@ public class KaniTTSOptions : AiDotNet.Models.Options.ModelOptions
     /// <summary>The codec encoder's downsampling (2, 3, 6, 7, 7: 1764 samples a frame).</summary>
     public int[] CodecDownsampleRates { get; set; } = { 2, 3, 6, 7, 7 };
 
-    /// <summary>The codec's encoded width (16: four groups of four FSQ dimensions).</summary>
-    public int CodecEncodedDim { get; set; } = 16;
+    /// <summary>The codec's encoded width, fixed by the number of FSQ codebooks and dimensions per codebook.</summary>
+    public int CodecEncodedDim => checked(Codebooks * CodecLevels.Length);
 
     /// <summary>The codec decoder's first width (864).</summary>
     public int CodecDecoderChannels { get; set; } = 864;
@@ -305,4 +300,22 @@ public class KaniTTSOptions : AiDotNet.Models.Options.ModelOptions
 
     /// <summary>Seed of sampling and of LoRA's dropout.</summary>
     public int SamplingSeed { get; set; }
+
+    internal void ValidateSampling()
+    {
+        if (!(Temperature >= 0) || double.IsPositiveInfinity(Temperature))
+            throw new ArgumentOutOfRangeException(nameof(Temperature), "Temperature must be finite and nonnegative; zero selects greedy generation.");
+        if (!(TopP > 0 && TopP <= 1))
+            throw new ArgumentOutOfRangeException(nameof(TopP), "TopP must be in (0, 1].");
+        if (TopK < 0)
+            throw new ArgumentOutOfRangeException(nameof(TopK), "TopK must be nonnegative; zero disables the cutoff.");
+        if (!(RepetitionPenalty > 0) || double.IsPositiveInfinity(RepetitionPenalty))
+            throw new ArgumentOutOfRangeException(nameof(RepetitionPenalty), "RepetitionPenalty must be finite and positive.");
+        if (MaxNewTokens < 1)
+            throw new ArgumentOutOfRangeException(nameof(MaxNewTokens), "At least one new token must be allowed.");
+        if (StreamingChunkFrames < 1)
+            throw new ArgumentOutOfRangeException(nameof(StreamingChunkFrames), "Streaming chunks must contain at least one frame.");
+        if (StreamingLookbackFrames < 0)
+            throw new ArgumentOutOfRangeException(nameof(StreamingLookbackFrames), "Streaming lookback must be nonnegative.");
+    }
 }

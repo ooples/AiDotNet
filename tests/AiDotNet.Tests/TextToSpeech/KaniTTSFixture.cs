@@ -47,7 +47,7 @@ internal static class KaniTTSFixture
                 Heads = (int)lm["num_attention_heads"]!, KeyValueHeads = (int)lm["num_key_value_heads"]!, Intermediate = (int)lm["intermediate_size"]!,
                 FeedForwardMultipleOf = (int)lm["block_multiple_of"]!, NormEpsilon = (double)lm["norm_eps"]!, RopeTheta = (double)lm["rope_theta"]!,
                 CodecEncoderChannels = (int)codec["encoder"]!["base_channels"]!, CodecDownsampleRates = Ints(codec["encoder"]!["down_sample_rates"]!),
-                CodecEncodedDim = (int)codec["encoder"]!["encoded_dim"]!, CodecDecoderChannels = (int)codec["decoder"]!["base_channels"]!,
+                CodecDecoderChannels = (int)codec["decoder"]!["base_channels"]!,
                 CodecUpsampleRates = Ints(codec["decoder"]!["up_sample_rates"]!), CodecLevels = Ints(codec["quantizer"]!["num_levels_per_group"]!),
                 SpeakerEmbeddingDim = (int)speaking["speaker_dim"]!,
                 EmbedderConvDims = Enumerable.Repeat(8, 7).ToArray(), EmbedderWidth = 16, EmbedderLayers = 1, EmbedderHeads = 2,
@@ -61,7 +61,7 @@ internal static class KaniTTSFixture
     internal static void Prepare<T>(KaniTTS2<T> model)
     {
         var state = (JObject)Speaking2.Value["lm_state"]!;
-        model.LoadLanguageModel(name => state[name]?.Select(v => (double)v).ToArray());
+        model.LoadLanguageModel(name => ProjectionWeights(state, name));
     }
 
     public static KaniTTS<T> Create<T>()
@@ -78,7 +78,7 @@ internal static class KaniTTSFixture
                 Heads = (int)lm["num_attention_heads"]!, KeyValueHeads = (int)lm["num_key_value_heads"]!, Intermediate = (int)lm["intermediate_size"]!,
                 FeedForwardMultipleOf = (int)lm["block_multiple_of"]!, NormEpsilon = (double)lm["norm_eps"]!, RopeTheta = (double)lm["rope_theta"]!,
                 CodecEncoderChannels = (int)codec["encoder"]!["base_channels"]!, CodecDownsampleRates = Ints(codec["encoder"]!["down_sample_rates"]!),
-                CodecEncodedDim = (int)codec["encoder"]!["encoded_dim"]!, CodecDecoderChannels = (int)codec["decoder"]!["base_channels"]!,
+                CodecDecoderChannels = (int)codec["decoder"]!["base_channels"]!,
                 CodecUpsampleRates = Ints(codec["decoder"]!["up_sample_rates"]!), CodecLevels = Ints(codec["quantizer"]!["num_levels_per_group"]!),
                 LoraRank = 4, LoraAlpha = 4, Temperature = 0, MaxNewTokens = 40, GradientAccumulationSteps = 1, TokenizerJson = (string)f["tokenizer"]!,
             });
@@ -89,6 +89,15 @@ internal static class KaniTTSFixture
     internal static void Prepare<T>(KaniTTS<T> model)
     {
         var state = (JObject)Data.Value.Speaking["lm_state"]!;
-        model.LoadLanguageModel(name => state[name]?.Select(v => (double)v).ToArray());
+        model.LoadLanguageModel(name => ProjectionWeights(state, name));
+    }
+
+    private static double[]? ProjectionWeights(JObject state, string name)
+    {
+        // Enabling LoRA wraps an unchanged base projection in peft's base_layer namespace.
+        var weights = state[name] ?? state[name.Replace(".base_layer.", ".")];
+        if (weights is null && name.EndsWith(".weight", StringComparison.Ordinal))
+            weights = state[name.Substring(0, name.Length - ".weight".Length) + ".base_layer.weight"];
+        return weights?.Select(value => (double)value).ToArray();
     }
 }

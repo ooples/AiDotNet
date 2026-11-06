@@ -1,4 +1,27 @@
 #nullable enable
+AiDotNet.TextToSpeech.Vocoders.ISTFTNetOptions.UpsampleKernelSizes.get -> int[]!
+AiDotNet.TextToSpeech.Vocoders.ISTFTNetOptions.UpsampleKernelSizes.set -> void
+AiDotNet.TextToSpeech.Vocoders.HiFiGANOptions.UpsampleKernelSizes.get -> int[]!
+AiDotNet.TextToSpeech.Vocoders.HiFiGANOptions.UpsampleKernelSizes.set -> void
+AiDotNet.TextToSpeech.Vocoders.BigVGANOptions.UpsampleKernelSizes.get -> int[]!
+AiDotNet.TextToSpeech.Vocoders.BigVGANOptions.UpsampleKernelSizes.set -> void
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.SampleRate.get -> int
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.SampleRate.set -> void
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.HiddenDim.get -> int
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.HopSize.get -> int
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.HiddenDim.set -> void
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.VocabSize.set -> void
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.VocabSize.get -> int
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.MaxTextLength.set -> void
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.MaxTextLength.get -> int
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.OnnxOptions.get -> AiDotNet.Onnx.OnnxModelOptions!
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.OnnxOptions.set -> void
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.LearningRate.set -> void
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.LearningRate.get -> double
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.WeightDecay.get -> double
+AiDotNet.TextToSpeech.Latest.KaniTTSOptions.WeightDecay.set -> void
+*REMOVED*AiDotNet.TextToSpeech.Vocoders.VocoderOptions.UpsampleKernelSizes.get -> int[]!
+*REMOVED*AiDotNet.TextToSpeech.Vocoders.VocoderOptions.UpsampleKernelSizes.set -> void
 *REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>
 *REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult
 *REMOVED*AiDotNet.Autodiff.Testing.NumericalGradient<T>.ComparisonResult.AverageRelativeError.get -> double
@@ -9764,7 +9787,6 @@ AiDotNet.TextToSpeech.Latest.KaniTTSOptions.CodecEncoderChannels.set -> void
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.CodecDownsampleRates.get -> int[]!
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.CodecDownsampleRates.set -> void
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.CodecEncodedDim.get -> int
-AiDotNet.TextToSpeech.Latest.KaniTTSOptions.CodecEncodedDim.set -> void
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.CodecDecoderChannels.set -> void
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.CodecDecoderChannels.get -> int
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.CodecUpsampleRates.get -> int[]!

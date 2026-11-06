@@ -43,6 +43,16 @@ public class TtsOptionOwnershipTests
     }
 
     [Fact]
+    public void EncodedWidthFollowsTheQuantizerLayout()
+    {
+        var options = new KaniTTSOptions { Codebooks = 3, CodecLevels = new[] { 3, 3 } };
+        Assert.Equal(6, options.CodecEncodedDim);
+        options.CodecLevels = new[] { 3, 3, 3 };
+        Assert.Equal(9, options.CodecEncodedDim);
+        Assert.False(typeof(KaniTTSOptions).GetProperty(nameof(KaniTTSOptions.CodecEncodedDim))?.CanWrite);
+    }
+
+    [Fact]
     public void CodecHopIsDerivedAndCopiedWithItsRates()
     {
         var source = new KaniTTSOptions { Seed = 2294, CodecDownsampleRates = new[] { 2, 3 } };

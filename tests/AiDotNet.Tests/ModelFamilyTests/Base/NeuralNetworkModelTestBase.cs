@@ -7774,10 +7774,12 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         var rng = ModelTestHelpers.CreateSeededRandom();
         Tensor<T> input;
         Tensor<T> target;
+        string controlGroup;
         using (var shapeProbe = CreateNetwork())
         {
             input = CreateRandomTensor(EffectiveInputShape, rng);
             target = CreateLossCompatibleTarget(shapeProbe, ShapeCheckedOutputShape, rng);
+            controlGroup = OptionSensitivityFixtureSetup.ControlGroup(shapeProbe, option);
         }
 
         int steps = OptionSensitivityTrainingSteps;
@@ -7793,10 +7795,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 for (int i = 0; i < steps; i++) TrainOn(network, input, objectiveTarget);
                 network.SetTrainingMode(false);
             },
-            prepareOptions: OptionSensitivityFixtureSetup.PrepareOptions,
+            prepareOptions: options => OptionSensitivityFixtureSetup.PrepareOptions(options, option),
             describe: network => DescribeNetwork(network, input),
             prepareModel: PrepareRebuiltNetwork,
-            parameterCount: OptionSensitivityFixtureSetup.ParameterCountBeforeFitting);
+            parameterCount: OptionSensitivityFixtureSetup.ParameterCountBeforeFitting,
+            parameterShapes: network => OptionSensitivityFixtureSetup.UsesFittedAssets(network)
+                ? EnumerateParameterChunks(network).Select(chunk => chunk.Shape.ToArray()).ToArray()
+                : Array.Empty<int[]>(),
+            controlGroup: controlGroup);
         OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
     }
 
