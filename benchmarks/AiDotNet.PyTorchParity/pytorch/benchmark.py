@@ -257,6 +257,107 @@ class TinyViT(nn.Module):
         return self.head(self.norm(self.encoder(tokens))[:, 0])
 
 
+LM_VOCAB, LM_POSITIONS, LM_WIDTH = 512, 64, 128
+
+
+class PreNormBlock(nn.Module):
+    """AiDotNet's PreLNTransformerBlock: x + MHA(RMSNorm(x)), then h + Linear(GELU(Linear(RMSNorm(h)))). RMSNorm eps
+    1e-6 with a gain only; AiDotNet's attention has no Q/K/V bias, so in_proj_bias is zeroed and frozen."""
+
+    def __init__(self, width: int, heads: int, ffn: int) -> None:
+        super().__init__()
+        self.norm1 = nn.RMSNorm(width, eps=1e-6)
+        self.attn = nn.MultiheadAttention(width, heads, dropout=0.0, batch_first=True)
+        self.attn.in_proj_bias.data.zero_()
+        self.attn.in_proj_bias.requires_grad_(False)
+        self.norm2 = nn.RMSNorm(width, eps=1e-6)
+        self.up = nn.Linear(width, ffn)
+        self.down = nn.Linear(ffn, width)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        n = self.norm1(x)
+        mask = torch.triu(torch.ones(x.shape[1], x.shape[1], dtype=torch.bool, device=x.device), diagonal=1)
+        x = x + self.attn(n, n, n, attn_mask=mask, need_weights=False)[0]
+        return x + self.down(torch.nn.functional.gelu(self.up(self.norm2(x))))
+
+
+class DecoderLM(nn.Module):
+    """The C# "decoder-lm" row: Embedding(512, 128) + 2 causal pre-norm blocks + RMSNorm + Linear(128, 512)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.embed = nn.Embedding(LM_VOCAB, LM_WIDTH)
+        self.blocks = nn.Sequential(*[PreNormBlock(LM_WIDTH, 4, 4 * LM_WIDTH) for _ in range(2)])
+        self.norm = nn.RMSNorm(LM_WIDTH, eps=1e-6)
+        self.head = nn.Linear(LM_WIDTH, LM_VOCAB)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.head(self.norm(self.blocks(self.embed(x))))
+
+
+def lm_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+    """Sequences following t[i+1] = (7 t[i] + 3) mod V from a random first token; the target is the next token at
+    every position (the C# row's LoadSyntheticBatch)."""
+    tokens = torch.empty(batch_size, LM_POSITIONS + 1, dtype=torch.long)
+    tokens[:, 0] = torch.randint(0, LM_VOCAB, (batch_size,))
+    for t in range(LM_POSITIONS):
+        tokens[:, t + 1] = (7 * tokens[:, t] + 3) % LM_VOCAB
+    return tokens[:, :-1].to(device), tokens[:, 1:].to(device)
+
+
+def kipf_graph(nodes: int = 32) -> torch.Tensor:
+    """A ring over the nodes plus a chord i -> i+5 from every third node (so degrees differ), with self-loops,
+    normalized D^-1/2 (A + I) D^-1/2 -- the same graph as the C# row's KipfGraph."""
+    a = torch.zeros(nodes, nodes, dtype=torch.float64)
+    for i in range(nodes):
+        a[i, i] = 1
+        a[i, (i + 1) % nodes] = a[(i + 1) % nodes, i] = 1
+        if i % 3 == 0:
+            a[i, (i + 5) % nodes] = a[(i + 5) % nodes, i] = 1
+    inv_sqrt = a.sum(dim=1).rsqrt()
+    return (inv_sqrt[:, None] * a * inv_sqrt[None, :]).float()
+
+
+GCN_NODES, GCN_FEATURES = 32, 16
+
+
+def gcn_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+    """Standard-normal node features; the class is whichever of the first ten features has the largest mean over the
+    nodes, so the label is learnable (the C# row's LoadSyntheticBatch)."""
+    x = torch.randn(batch_size, GCN_NODES, GCN_FEATURES)
+    return x.to(device), x[:, :, :10].sum(dim=1).argmax(dim=1).to(device)
+
+
+class GraphConv(nn.Module):
+    """Kipf & Welling's layer as AiDotNet's GraphConvolutionalLayer computes it: A_hat (X W) + b. The bias is added
+    after propagation (nn.Linear inside the product would propagate it too)."""
+
+    def __init__(self, in_features: int, out_features: int) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.empty(in_features, out_features))
+        self.bias = nn.Parameter(torch.zeros(out_features))
+        nn.init.xavier_uniform_(self.weight)
+
+    def forward(self, x: torch.Tensor, adj: torch.Tensor) -> torch.Tensor:
+        return adj @ (x @ self.weight) + self.bias
+
+
+class GCNClassifier(nn.Module):
+    """2x GCN(16->64->64, ReLU) over one fixed 32-node graph, mean over nodes, Linear(64, 10). Input [B, 32, 16]."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("adj", kipf_graph())
+        self.gc1 = GraphConv(GCN_FEATURES, 64)
+        self.gc2 = GraphConv(64, 64)
+        self.head = nn.Linear(64, 10)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = torch.relu(self.gc1(x, self.adj))
+        h = torch.relu(self.gc2(h, self.adj))
+        return self.head(h.mean(dim=1))
+
+
 def make_vision_model(name: str) -> nn.Module:
     """torchvision's definition of each architecture, adjusted only where AiDotNet's builder adjusts it for a
     32x32 input, so both sides run the same network: VGG's classifier reads the 512x1x1 feature map directly
@@ -291,6 +392,10 @@ VISION_MODELS = ("resnet18", "resnet50", "vgg11", "mobilenetv2", "densenet121", 
 def make_model(name: str) -> tuple[nn.Module, tuple[int, ...]]:
     if name == "gru":
         return GRUClassifier(), (32, 32)
+    if name == "gcn":
+        return GCNClassifier(), (GCN_NODES, GCN_FEATURES)
+    if name == "decoder-lm":
+        return DecoderLM(), (LM_POSITIONS,)
     if name in VISION_MODELS:
         return make_vision_model(name), (3, 32, 32)
     if name == "mlp":
@@ -325,6 +430,10 @@ def synchronize(device: torch.device) -> None:
 
 
 def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+    if shape == (LM_POSITIONS,):
+        return lm_batch(batch_size, device)
+    if shape == (GCN_NODES, GCN_FEATURES):
+        return gcn_batch(batch_size, device)
     x = torch.randn((batch_size, *shape), device=device)
     y = torch.randint(0, 10, (batch_size,), device=device)
     return x, y
@@ -360,7 +469,8 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
 
                 optimizer.zero_grad(set_to_none=True)
                 logits = model(x)
-                loss = criterion(logits, y)
+                # Flattened so a per-position target (the decoder LM's [B, S] next tokens) is scored like a class one.
+                loss = criterion(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
                 if first_loss is None:
                     first_loss = loss.detach()
                 # Per-step device syncs inflate the step on GPU; they run only under --breakdown,
