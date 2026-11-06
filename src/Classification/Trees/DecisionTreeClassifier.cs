@@ -259,31 +259,51 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
         // Calculate current impurity
         T currentImpurity = CalculateImpurity(y, indices);
 
+        // One sort per feature and one sweep over it. This used to split and re-count every row for every candidate
+        // threshold: O(n^2) per feature per node, so a 100-tree forest on 20,000 rows ran for hours. The sweep keeps
+        // the same candidates (midpoints between consecutive distinct values, ascending), the same left set (rows
+        // whose value compares <= the threshold, which also covers a midpoint that rounds onto a neighbour), and the
+        // same impurity arithmetic and strict tie-breaking, so it picks the same split.
+        var rows = new (T Value, int Class)[indices.Count];
+        var leftCounts = new int[NumClasses];
+        var rightCounts = new int[NumClasses];
+        var totalCounts = new int[NumClasses];
+        for (int r = 0; r < indices.Count; r++)
+            totalCounts[GetClassIndex(y[indices[r]])]++;
+        T total = NumOps.FromDouble(indices.Count);
+
         foreach (int feature in featuresToConsider)
         {
-            // Get sorted unique values for this feature
-            var values = indices
-                .Select(i => x[i, feature])
-                .Distinct()
-                .OrderBy(v => NumOps.ToDouble(v))
-                .ToList();
+            for (int r = 0; r < indices.Count; r++)
+                rows[r] = (x[indices[r], feature], GetClassIndex(y[indices[r]]));
+            Array.Sort(rows, (a, b) => NumOps.ToDouble(a.Value).CompareTo(NumOps.ToDouble(b.Value)));
+            Array.Clear(leftCounts, 0, leftCounts.Length);
+            int leftCount = 0;
 
-            // Try midpoints between consecutive values as thresholds
-            for (int i = 0; i < values.Count - 1; i++)
+            for (int i = 0; i < rows.Length; )
             {
-                T threshold = NumOps.Divide(NumOps.Add(values[i], values[i + 1]), NumOps.FromDouble(2.0));
+                // The next distinct value after the run starting at i.
+                int next = i + 1;
+                while (next < rows.Length && NumOps.Equals(rows[next].Value, rows[i].Value)) next++;
+                if (next >= rows.Length) break;
 
-                // Calculate gain for this split
-                var (leftIndices, rightIndices) = SplitData(x, indices, feature, threshold);
+                T threshold = NumOps.Divide(NumOps.Add(rows[i].Value, rows[next].Value), NumOps.FromDouble(2.0));
+                while (leftCount < rows.Length && NumOps.Compare(rows[leftCount].Value, threshold) <= 0)
+                    leftCounts[rows[leftCount++].Class]++;
+                i = next;
 
-                if (leftIndices.Count < Options.MinSamplesLeaf || rightIndices.Count < Options.MinSamplesLeaf)
+                int rightCount = rows.Length - leftCount;
+                if (leftCount < Options.MinSamplesLeaf || rightCount < Options.MinSamplesLeaf)
                     continue;
 
-                T leftImpurity = CalculateImpurity(y, leftIndices);
-                T rightImpurity = CalculateImpurity(y, rightIndices);
+                for (int c = 0; c < NumClasses; c++)
+                    rightCounts[c] = totalCounts[c] - leftCounts[c];
 
-                T leftWeight = NumOps.Divide(NumOps.FromDouble(leftIndices.Count), NumOps.FromDouble(indices.Count));
-                T rightWeight = NumOps.Divide(NumOps.FromDouble(rightIndices.Count), NumOps.FromDouble(indices.Count));
+                T leftImpurity = CountImpurity(leftCounts, leftCount);
+                T rightImpurity = CountImpurity(rightCounts, rightCount);
+
+                T leftWeight = NumOps.Divide(NumOps.FromDouble(leftCount), total);
+                T rightWeight = NumOps.Divide(NumOps.FromDouble(rightCount), total);
 
                 T weightedImpurity = NumOps.Add(
                     NumOps.Multiply(leftWeight, leftImpurity),
@@ -343,12 +363,21 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
             classCounts[classIdx]++;
         }
 
+        return CountImpurity(classCounts, indices.Count);
+    }
+
+    /// <summary>The configured criterion over per-class counts of <paramref name="total"/> samples.</summary>
+    private T CountImpurity(int[] classCounts, int total)
+    {
+        if (total == 0)
+            return NumOps.Zero;
+
         return Options.Criterion switch
         {
-            ClassificationSplitCriterion.Gini => CalculateGiniImpurity(classCounts, indices.Count),
-            ClassificationSplitCriterion.Entropy => CalculateEntropy(classCounts, indices.Count),
-            ClassificationSplitCriterion.LogLoss => CalculateEntropy(classCounts, indices.Count), // Same as entropy for splits
-            _ => CalculateGiniImpurity(classCounts, indices.Count)
+            ClassificationSplitCriterion.Gini => CalculateGiniImpurity(classCounts, total),
+            ClassificationSplitCriterion.Entropy => CalculateEntropy(classCounts, total),
+            ClassificationSplitCriterion.LogLoss => CalculateEntropy(classCounts, total), // Same as entropy for splits
+            _ => CalculateGiniImpurity(classCounts, total)
         };
     }
 
