@@ -43,10 +43,13 @@ namespace AiDotNet.Clustering.AutoK;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new XMeansOptions&lt;double&gt;();
-/// var xMeans = new XMeans&lt;double&gt;(options);
-/// xMeans.Train(dataMatrix);
-/// Vector&lt;double> labels = xMeans.Labels;
+/// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 1.5, 1.8 }, { 5.0, 8.0 }, { 8.0, 8.0 }, { 1.0, 0.6 }, { 9.0, 11.0 } });
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new XMeans&lt;double&gt;(new XMeansOptions&lt;double&gt;()))
+///     .Build(dataMatrix);
+///
+/// // the cluster each training row was assigned to (Predict places rows the model has not seen)
+/// var labels = result.GetClusterLabels();
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

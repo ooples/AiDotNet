@@ -48,10 +48,13 @@ namespace AiDotNet.Clustering.Streaming;
 /// </remarks>
 /// <example>
 /// <code>
-/// var options = new OnlineKMeansOptions&lt;double&gt;();
-/// var onlineKMeans = new OnlineKMeans&lt;double&gt;(options);
-/// onlineKMeans.Train(dataMatrix);
-/// Vector&lt;double> labels = onlineKMeans.Labels;
+/// var dataMatrix = new Matrix&lt;double&gt;(new double[,] { { 1.0, 2.0 }, { 1.5, 1.8 }, { 5.0, 8.0 }, { 8.0, 8.0 }, { 1.0, 0.6 }, { 9.0, 11.0 } });
+/// var result = new AiModelBuilder&lt;double, Matrix&lt;double&gt;, Vector&lt;double&gt;&gt;()
+///     .ConfigureModel(new OnlineKMeans&lt;double&gt;(new OnlineKMeansOptions&lt;double&gt;()))
+///     .Build(dataMatrix);
+///
+/// // the cluster each training row was assigned to (Predict places rows the model has not seen)
+/// var labels = result.GetClusterLabels();
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.MachineLearning)]

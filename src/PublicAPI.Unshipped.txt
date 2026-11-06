@@ -625,6 +625,9 @@ override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.TileCoefficie
 override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.TileDelta(int height, int width, double[]! coefficientChanges) -> double[,]!
 override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.WatermarkDescription.get -> string!
 static AiDotNet.ReinforcementLearning.Agents.DeepReinforcementLearningAgentBase<T>.CreateNetworkOptimizer(T learningRate, double? maxGradientNorm = null) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.RetrievalAugmentedGeneration.Retrievers.EmbeddingModelQueryEmbedder<T>
+AiDotNet.RetrievalAugmentedGeneration.Retrievers.EmbeddingModelQueryEmbedder<T>.EmbeddingModelQueryEmbedder(AiDotNet.Interfaces.IEmbeddingModel<T>! embeddingModel) -> void
+AiDotNet.RetrievalAugmentedGeneration.Retrievers.EmbeddingModelQueryEmbedder<T>.EmbedQuery(string! query) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.AppendToken(int tokenId) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
 AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.Dispose() -> void
 AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.ForwardLogits(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokenIds) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
