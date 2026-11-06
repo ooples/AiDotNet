@@ -321,15 +321,14 @@ public partial class StochasticGradientDescentOptimizer<T, TInput, TOutput> : Gr
     /// <inheritdoc />
     protected override void StepCore(TapeStepContext<T> context)
     {
-        // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback when not GPU-resident.
+        // GPU-resident step; CPU fallback when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)
         {
             // True sparse scatter plain SGD.
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
                         param, velocity: null,

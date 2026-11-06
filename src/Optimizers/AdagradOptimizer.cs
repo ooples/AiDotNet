@@ -409,15 +409,14 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
 
         T epsilon = NumOps.FromDouble(_options.Epsilon);
 
-        // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
+        // GPU-resident step; CPU fallback per-param when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)
         {
             // True sparse scatter: accumulator + param at touched rows only.
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeAccSqGrad.TryGetValue(param, out var accSqSp)) { accSqSp = new Tensor<T>(param._shape); _tapeAccSqGrad[param] = accSqSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplyAdagradSparse(
@@ -432,7 +431,7 @@ public partial class AdagradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeAccSqGrad.TryGetValue(param, out var accSq)) { accSq = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) accSq.AsWritableSpan().Clear(); _tapeAccSqGrad[param] = accSq; }
+            if (!_tapeAccSqGrad.TryGetValue(param, out var accSq)) { accSq = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeAccSqGrad[param] = accSq; }
 
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryAdagradStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)accSq,

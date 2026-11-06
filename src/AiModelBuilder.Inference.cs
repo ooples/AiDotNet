@@ -95,6 +95,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
             JitCompilationConfig = _jitCompilationConfig,
             JitCompiledFunction = BuildCompiledPredictFunction(_model),
             AllowNondeterminism = _allowNondeterminism,
+            BenchmarkingOptions = _benchmarkingOptions,
         };
 
         return new AiModelResult<T, TInput, TOutput>(options);

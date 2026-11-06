@@ -583,7 +583,9 @@ public class BenchmarkingIntegrationTests
             BenchmarkSuite.StackOverflow,
             BenchmarkSuite.CIFAR10,
             BenchmarkSuite.CIFAR100,
-            BenchmarkSuite.TabularNonIID
+            BenchmarkSuite.TabularNonIID,
+            BenchmarkSuite.LAMBADA,
+            BenchmarkSuite.Perplexity
         };
 
         // Act & Assert
@@ -604,8 +606,8 @@ public class BenchmarkingIntegrationTests
         // Act
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
 
-        // Assert - We expect 23 total suites (14 reasoning + 9 dataset)
-        Assert.Equal(23, suites.Count);
+        // Assert - We expect 25 total suites (14 reasoning + 11 dataset)
+        Assert.Equal(25, suites.Count);
     }
 
     #endregion
@@ -619,7 +621,7 @@ public class BenchmarkingIntegrationTests
         var metrics = (BenchmarkMetric[])Enum.GetValues(typeof(BenchmarkMetric));
 
         // Assert
-        Assert.Equal(8, metrics.Length);
+        Assert.Equal(15, metrics.Length);
 
         Assert.Contains(BenchmarkMetric.Accuracy, (IEnumerable<BenchmarkMetric>)metrics);
         Assert.Contains(BenchmarkMetric.AverageConfidence, (IEnumerable<BenchmarkMetric>)metrics);
@@ -629,6 +631,13 @@ public class BenchmarkingIntegrationTests
         Assert.Contains(BenchmarkMetric.AverageTimePerItemMilliseconds, (IEnumerable<BenchmarkMetric>)metrics);
         Assert.Contains(BenchmarkMetric.MeanSquaredError, (IEnumerable<BenchmarkMetric>)metrics);
         Assert.Contains(BenchmarkMetric.RootMeanSquaredError, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.Perplexity, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.CrossEntropyLoss, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.BitsPerByte, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.SubwordTop1Accuracy, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.MedianTimePerItemMilliseconds, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.P95TimePerItemMilliseconds, (IEnumerable<BenchmarkMetric>)metrics);
+        Assert.Contains(BenchmarkMetric.EvaluatedTokens, (IEnumerable<BenchmarkMetric>)metrics);
     }
 
     #endregion

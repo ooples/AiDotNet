@@ -109,6 +109,85 @@ public static class AiModelResultTransformerExtensions
             : RandomHelper.CreateSecureRandom();
         var numOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
 
+        bool allowKvCache = result.GetInferenceOptimizationConfigForServing()?.EnableKVCache ?? true;
+        if (batch == 1 &&
+            allowKvCache &&
+            result.Model is AiDotNet.Agentic.Models.Local.IIncrementalCausalLanguageModel<T> incrementalLm)
+        {
+            int promptLen = startTokens.Shape[1];
+            var allIds = new List<int>(promptLen + maxNewTokens);
+            for (int t = 0; t < promptLen; t++)
+                allIds.Add((int)Math.Round(numOps.ToDouble(startTokens[0, t])));
+
+            try
+            {
+                incrementalLm.ResetCache();
+                Vector<T>? stepLogits = null;
+                for (int step = 0; step < maxNewTokens; step++)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    stepLogits = step == 0
+                        ? incrementalLm.StartSequence(allIds)
+                        : incrementalLm.AppendToken(allIds[allIds.Count - 1]);
+
+                    int vocab = stepLogits.Length;
+                    int picked;
+                    if (argmax)
+                    {
+                        picked = 0;
+                        T bestVal = stepLogits[0];
+                        for (int v = 1; v < vocab; v++)
+                        {
+                            if (numOps.GreaterThan(stepLogits[v], bestVal))
+                            {
+                                bestVal = stepLogits[v];
+                                picked = v;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var probs = new double[vocab];
+                        double invT = 1.0 / Math.Max(1e-6, Convert.ToDouble(temperature));
+                        double maxLogit = double.NegativeInfinity;
+                        for (int v = 0; v < vocab; v++)
+                        {
+                            double l = Convert.ToDouble(stepLogits[v]) * invT;
+                            probs[v] = l;
+                            if (l > maxLogit) maxLogit = l;
+                        }
+                        double sum = 0;
+                        for (int v = 0; v < vocab; v++)
+                        {
+                            probs[v] = Math.Exp(probs[v] - maxLogit);
+                            sum += probs[v];
+                        }
+                        double r = rng.NextDouble() * sum;
+                        double cum = 0;
+                        picked = vocab - 1;
+                        for (int v = 0; v < vocab; v++)
+                        {
+                            cum += probs[v];
+                            if (r <= cum) { picked = v; break; }
+                        }
+                    }
+
+                    allIds.Add(picked);
+                    onToken?.Report(picked);
+                    if (eosTokenId.HasValue && picked == eosTokenId.Value)
+                        break;
+                }
+            }
+            finally
+            {
+                incrementalLm.ResetCache();
+            }
+
+            var outTyped = new T[allIds.Count];
+            for (int i = 0; i < allIds.Count; i++)
+                outTyped[i] = numOps.FromDouble(allIds[i]);
+            return new Tensor<T>(new[] { 1, allIds.Count }, new Vector<T>(outTyped));
+        }
         for (int step = 0; step < maxNewTokens; step++)
         {
             cancellationToken.ThrowIfCancellationRequested();

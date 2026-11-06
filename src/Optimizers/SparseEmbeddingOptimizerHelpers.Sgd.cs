@@ -77,18 +77,23 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                 return false;
         }
 
+        // Host scatter cannot overwrite newer device-authoritative parameter data.
+        if (param.HasPendingGpuData) return false;
+
         bool hasMomentum = velocity is not null && momentum != 0.0;
 
         if (typeof(T) == typeof(double))
         {
             ApplySgdSparseDouble(param, velocity, sparseList, embeddingDim,
                 lr, momentum, weightDecay, hasMomentum);
+            param.MarkModified();
             return true;
         }
         if (typeof(T) == typeof(float))
         {
             ApplySgdSparseFloat(param, velocity, sparseList, embeddingDim,
                 (float)lr, (float)momentum, (float)weightDecay, hasMomentum);
+            param.MarkModified();
             return true;
         }
 
@@ -132,6 +137,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                 }
             }
         }
+        param.MarkModified();
         return true;
     }
 

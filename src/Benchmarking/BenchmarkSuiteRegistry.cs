@@ -35,7 +35,9 @@ public static class BenchmarkSuiteRegistry
             [BenchmarkSuite.HellaSwag] = new() { Suite = BenchmarkSuite.HellaSwag, Kind = BenchmarkSuiteKind.Reasoning, DisplayName = "HellaSwag", Description = "Commonsense inference for narrative completion." },
             [BenchmarkSuite.HumanEval] = new() { Suite = BenchmarkSuite.HumanEval, Kind = BenchmarkSuiteKind.Reasoning, DisplayName = "HumanEval", Description = "Code generation / program synthesis evaluation." },
             [BenchmarkSuite.MBPP] = new() { Suite = BenchmarkSuite.MBPP, Kind = BenchmarkSuiteKind.Reasoning, DisplayName = "MBPP", Description = "Mostly Basic Programming Problems." },
-            [BenchmarkSuite.LogiQA] = new() { Suite = BenchmarkSuite.LogiQA, Kind = BenchmarkSuiteKind.Reasoning, DisplayName = "LogiQA", Description = "Logical reasoning benchmark." }
+            [BenchmarkSuite.LogiQA] = new() { Suite = BenchmarkSuite.LogiQA, Kind = BenchmarkSuiteKind.Reasoning, DisplayName = "LogiQA", Description = "Logical reasoning benchmark." },
+            [BenchmarkSuite.LAMBADA] = new() { Suite = BenchmarkSuite.LAMBADA, Kind = BenchmarkSuiteKind.DatasetSuite, DisplayName = "LAMBADA", Description = "Full-context open-vocabulary final-word prediction over narrative passages." },
+            [BenchmarkSuite.Perplexity] = new() { Suite = BenchmarkSuite.Perplexity, Kind = BenchmarkSuiteKind.DatasetSuite, DisplayName = "Perplexity", Description = "Non-overlapping causal language-modeling cross-entropy and perplexity evaluation." }
         };
 
     private static readonly IReadOnlyDictionary<BenchmarkSuite, Func<IBenchmark<double>>> ReasoningFactories =

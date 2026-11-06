@@ -91,4 +91,10 @@ public sealed class BenchmarkingOptions
     /// Gets or sets federated text benchmark configuration (Sent140/Shakespeare suites).
     /// </summary>
     public FederatedTextBenchmarkOptions? Text { get; set; }
+
+    /// <summary>
+    /// Gets or sets causal language-model benchmark configuration (<see cref="BenchmarkSuite.LAMBADA"/>
+    /// and <see cref="BenchmarkSuite.Perplexity"/>).
+    /// </summary>
+    public CausalLmBenchmarkOptions? LanguageModel { get; set; }
 }

@@ -170,6 +170,14 @@ internal static class BenchmarkRunner
                 return await SyntheticTabularFederatedBenchmarkSuiteRunner.RunAsync(model, suite, options, cancellationToken).ConfigureAwait(false);
             }
 
+            if (suite is BenchmarkSuite.LAMBADA or BenchmarkSuite.Perplexity)
+            {
+                var lm = options.LanguageModel ?? throw new InvalidOperationException(
+                    $"BenchmarkingOptions.LanguageModel must be provided when running BenchmarkSuite.{suite}.");
+
+                return await CausalLmBenchmarkSuiteRunner.RunAsync(model, suite, options, lm, cancellationToken).ConfigureAwait(false);
+            }
+
             throw new NotSupportedException($"Dataset benchmark suite '{suite}' is not yet supported by the unified runner.");
         }
 

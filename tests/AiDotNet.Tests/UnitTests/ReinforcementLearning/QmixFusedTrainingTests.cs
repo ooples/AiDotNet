@@ -64,14 +64,31 @@ public class QmixFusedTrainingTests
         nextGlobalState: new Vector<double>(new[] { 0.1 * (step + 1) }),
         done: false);
 
+    private static TValue ReadField<TValue>(QMIXAgent<double> agent, string name) where TValue : class =>
+        typeof(QMIXAgent<double>).GetField(name, BindingFlags.NonPublic | BindingFlags.Instance)
+            ?.GetValue(agent) as TValue
+        ?? throw new InvalidOperationException($"QMIXAgent.{name} is not a {typeof(TValue).Name}.");
+
     private static Vector<double> AgentNetworkParameters(QMIXAgent<double> agent)
     {
-        var networks = (typeof(QMIXAgent<double>)
-                .GetField("_agentNetworks", BindingFlags.NonPublic | BindingFlags.Instance)
-                ?? throw new InvalidOperationException("QMIXAgent has no _agentNetworks field."))
-            .GetValue(agent) as List<INeuralNetwork<double>>
-            ?? throw new InvalidOperationException("QMIXAgent._agentNetworks is not a List<INeuralNetwork<double>>.");
+        var networks = ReadField<List<INeuralNetwork<double>>>(agent, "_agentNetworks");
         return new Vector<double>(networks.SelectMany(n => n.GetParameters().ToArray()).ToArray());
+    }
+
+    /// <summary>Copies the restored online weights to the target networks used for TD bootstrapping.</summary>
+    private static void SynchronizeTargetNetworks(QMIXAgent<double> agent)
+    {
+        var online = ReadField<List<INeuralNetwork<double>>>(agent, "_agentNetworks")
+            .Append(ReadField<INeuralNetwork<double>>(agent, "_mixingNetwork")).ToArray();
+        var targets = ReadField<List<INeuralNetwork<double>>>(agent, "_targetAgentNetworks")
+            .Append(ReadField<INeuralNetwork<double>>(agent, "_targetMixingNetwork")).ToArray();
+        Assert.Equal(online.Length, targets.Length);
+        for (int i = 0; i < online.Length; i++)
+        {
+            var parameters = online[i].GetParameters();
+            targets[i].SetParameters(parameters);
+            Assert.Equal(parameters.ToArray(), targets[i].GetParameters().ToArray());
+        }
     }
 
     private static (Vector<double> All, Vector<double> Agents) Train(QMIXAgent<double> agent, bool compile)
@@ -109,7 +126,15 @@ public class QmixFusedTrainingTests
         await Task.Yield();
         var eagerAgent = Make();
         var fusedAgent = Make();
+        // Keep every small ReLU mixing unit active. Random initialization can leave the
+        // entire mixer inactive, making zero agent gradients a valid result for this fixture.
+        var initial = eagerAgent.GetParameters();
+        for (int i = 0; i < initial.Length; i++) initial[i] = 0.1;
+        eagerAgent.SetParameters(initial);
         fusedAgent.SetParameters(eagerAgent.GetParameters());
+        // Target networks are excluded from GetParameters/SetParameters, but supply each TD target.
+        SynchronizeTargetNetworks(eagerAgent);
+        SynchronizeTargetNetworks(fusedAgent);
         var agentsBefore = AgentNetworkParameters(eagerAgent);
 
         var eager = Train(eagerAgent, compile: false);

@@ -469,15 +469,15 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T biasCorrectionV = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
         T nesterovFactor = NumOps.Divide(oneMinusBeta1, biasCorrectionM);
 
-        // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
+        // GPU-resident step; CPU fallback per-param when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)
         {
             // True sparse scatter NAdam: m + v + param at touched indices only.
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            // Existing momentum can still move rows absent from this step; retain the full update in that case.
+            if (!_tapeM.ContainsKey(param) && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
                 if (!_tapeV2.TryGetValue(param, out var vSp)) { vSp = new Tensor<T>(param._shape); _tapeV2[param] = vSp; }
@@ -497,8 +497,8 @@ public partial class NadamOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeM[param] = m; }
-            if (!_tapeV2.TryGetValue(param, out var v)) { v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) v.AsWritableSpan().Clear(); _tapeV2[param] = v; }
+            if (!_tapeM.TryGetValue(param, out var m)) { m = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeM[param] = m; }
+            if (!_tapeV2.TryGetValue(param, out var v)) { v = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeV2[param] = v; }
 
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryNadamStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m, (Tensor<float>)(object)v,
