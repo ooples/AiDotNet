@@ -104,6 +104,7 @@ internal static class ClassicalBench
     private static Dictionary<string, object> Classifier<TModel>(string name, Split train, Split test, int repeats,
         Func<TModel> create) where TModel : AiDotNet.Classification.ClassifierBase<double>
     {
+        Console.WriteLine($"[classical] {name}: fitting {repeats} time(s)...");
         var fit = new List<double>();
         var predict = new List<double>();
         double accuracy = 0;
@@ -125,6 +126,7 @@ internal static class ClassicalBench
     private static Dictionary<string, object> Regressor<TModel>(string name, Split train, Split test, int repeats,
         bool classify, Func<TModel> create) where TModel : RegressionBase<double>
     {
+        Console.WriteLine($"[classical] {name}: fitting {repeats} time(s)...");
         var fit = new List<double>();
         var predict = new List<double>();
         double quality = 0;
@@ -155,6 +157,7 @@ internal static class ClassicalBench
 
     private static Dictionary<string, object> KMeansRow(Split train, int repeats, int seed)
     {
+        Console.WriteLine($"[classical] kmeans: fitting {repeats} time(s)...");
         var fit = new List<double>();
         double inertia = 0;
         for (int i = 0; i < repeats; i++)
@@ -194,6 +197,12 @@ internal static class ClassicalBench
 
     private static Dictionary<string, object> Row(string name, List<double> fit, List<double> predict, string metric, double value)
     {
+        Console.WriteLine(string.Format(CultureInfo.InvariantCulture,
+            "[classical] {0}: fit median {1:F3} s, {2}{3} {4:F4}", name, Quantile(fit, 0.5),
+            predict.Count > 0
+                ? string.Format(CultureInfo.InvariantCulture, "predict median {0:F3} s, ", Quantile(predict, 0.5))
+                : string.Empty,
+            metric, value));
         var row = new Dictionary<string, object>
         {
             ["model"] = name,
