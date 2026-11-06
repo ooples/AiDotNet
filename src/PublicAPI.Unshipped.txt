@@ -949,6 +949,9 @@ AiDotNet.Interfaces.LocalObjectiveStep<T>.Engine.get -> AiDotNet.Tensors.Engines
 AiDotNet.Interfaces.LocalObjectiveStep<T>.HiddenLayerCount.get -> int
 AiDotNet.Interfaces.LocalObjectiveStep<T>.Input.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.Interfaces.LocalObjectiveStep<T>.Loss.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Interfaces.LocalObjectiveStep<T>.ReadoutLoss.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Interfaces.IFusedReadoutLossLayer<T>
+AiDotNet.Interfaces.IFusedReadoutLossLayer<T>.TryComputeFusedLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Interfaces.ILossFunction<T>! loss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 AiDotNet.Interfaces.LocalObjectiveStep<T>.Readout.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 AiDotNet.Interfaces.LocalObjectiveStep<T>.Target.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>
