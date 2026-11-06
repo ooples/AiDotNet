@@ -236,13 +236,12 @@ public partial class GradientDescentOptimizer<T, TInput, TOutput> : GradientBase
     protected override void StepCore(TapeStepContext<T> context)
     {
         bool gpuAdam = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)
         {
             // True sparse scatter plain SGD: param -= lr·g at touched indices.
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
                         param, velocity: null,

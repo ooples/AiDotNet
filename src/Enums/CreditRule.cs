@@ -110,4 +110,13 @@ public enum CreditRule
     /// <see cref="DifferenceTargetPropagation"/>, also applies to <b>non-contiguous</b> stacks.
     /// </summary>
     DirectDifferenceTargetPropagation = 10,
+
+    /// <summary>
+    /// <b>Tied-readout local error</b> — Local Error Signals for sequence models: each hidden layer is trained, with its
+    /// input detached, by the network's own loss applied to <c>readout(h_k)</c>, where the readout is the network's
+    /// trailing norm + output head (shared, zero extra parameters). Unlike <see cref="LocalErrorSignal"/> it needs no
+    /// per-layer <c>[features, classes]</c> classifier, so it applies to language models at real vocabularies. See
+    /// <c>TiedReadoutLocalErrorCreditRule</c>; construct that type directly to choose the readout depth or weight.
+    /// </summary>
+    TiedReadoutLocalError = 11,
 }

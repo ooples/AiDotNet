@@ -622,7 +622,7 @@ public partial class LAMBOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             // helper itself also bails when WeightDecay != 0 (untouched rows would
             // stop decaying); checking it here too lets the dense branch handle the
             // weight-decay case without an extra helper-internal failure path.
-            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param)
+            if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param)
                 && !_options.ClipTrustRatio
                 && _options.WeightDecay == 0.0)
             {

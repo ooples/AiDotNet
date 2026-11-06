@@ -825,7 +825,6 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
         // matching the CPU "subtract gradient, then L1 soft-threshold prox" path
         // exactly. Other regularizers (or non-GPU-resident tensors) fall back to CPU.
         bool gpuL1 = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine
             && _regularization is AiDotNet.Regularization.L1Regularization<T, TInput, TOutput>;
         float l1Strength = gpuL1 ? (float)_regularization.GetOptions().Strength : 0f;
@@ -837,7 +836,7 @@ public partial class ProximalGradientDescentOptimizer<T, TInput, TOutput> : Grad
             // operator may need to inspect every element).
             bool useSparseL1 = !gpuL1
                 && _regularization is AiDotNet.Regularization.L1Regularization<T, TInput, TOutput>
-                && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param);
+                && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param);
             if (useSparseL1)
             {
                 if (SparseEmbeddingOptimizerHelpers.TryApplyProximalL1Sparse(

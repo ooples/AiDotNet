@@ -25,11 +25,11 @@ public class BenchmarkingDeepMathIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GetAvailableSuites_Contains23Suites()
+    public async Task GetAvailableSuites_Contains25Suites()
     {
-        // Registry has 23 defined descriptors
+        // Includes the LAMBADA and Perplexity dataset suites.
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
-        Assert.Equal(23, suites.Count);
+        Assert.Equal(25, suites.Count);
     }
 
     [Fact(Timeout = 120000)]
@@ -95,6 +95,8 @@ public class BenchmarkingDeepMathIntegrationTests
     [InlineData(BenchmarkSuite.CIFAR10, BenchmarkSuiteKind.DatasetSuite)]
     [InlineData(BenchmarkSuite.CIFAR100, BenchmarkSuiteKind.DatasetSuite)]
     [InlineData(BenchmarkSuite.TabularNonIID, BenchmarkSuiteKind.DatasetSuite)]
+    [InlineData(BenchmarkSuite.LAMBADA, BenchmarkSuiteKind.DatasetSuite)]
+    [InlineData(BenchmarkSuite.Perplexity, BenchmarkSuiteKind.DatasetSuite)]
     public void GetSuiteKind_DatasetSuites_ReturnDatasetSuite(BenchmarkSuite suite, BenchmarkSuiteKind expectedKind)
     {
         Assert.Equal(expectedKind, BenchmarkSuiteRegistry.GetSuiteKind(suite));
@@ -121,15 +123,15 @@ public class BenchmarkingDeepMathIntegrationTests
     }
 
     [Fact(Timeout = 120000)]
-    public async Task GetSuiteKind_9DatasetSuites_14ReasoningSuites()
+    public async Task GetSuiteKind_11DatasetSuites_14ReasoningSuites()
     {
         var suites = BenchmarkSuiteRegistry.GetAvailableSuites();
         int datasetCount = suites.Count(s => s.Kind == BenchmarkSuiteKind.DatasetSuite);
         int reasoningCount = suites.Count(s => s.Kind == BenchmarkSuiteKind.Reasoning);
 
-        Assert.Equal(9, datasetCount);
+        Assert.Equal(11, datasetCount);
         Assert.Equal(14, reasoningCount);
-        Assert.Equal(23, datasetCount + reasoningCount);
+        Assert.Equal(25, datasetCount + reasoningCount);
     }
 
     // ============================

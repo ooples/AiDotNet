@@ -412,6 +412,20 @@ virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.DetectWatermark(stri
 virtual AiDotNet.Safety.Watermarking.TextWatermarkerBase<T>.ReportThreshold.get -> double
 *REMOVED*AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = true) -> void
 AiDotNet.Configuration.ResNetConfiguration.ResNetConfiguration(AiDotNet.Enums.ResNetVariant variant, int numClasses, int inputHeight = 224, int inputWidth = 224, int inputChannels = 3, bool includeClassifier = true, bool zeroInitResidual = false) -> void
+AiDotNet.Models.Checkpoint<T, TInput, TOutput>.ShouldSerializeModel() -> bool
+AiDotNet.Models.Checkpoint<T, TInput, TOutput>.OptimizerDataInSidecar.get -> bool
+AiDotNet.Models.Checkpoint<T, TInput, TOutput>.OptimizerDataInSidecar.set -> void
+AiDotNet.Models.Checkpoint<T, TInput, TOutput>.ShouldSerializeOptimizerData() -> bool
+AiDotNet.Enums.OptimizerMomentStorage
+AiDotNet.Enums.OptimizerMomentStorage.Float32 = 0 -> AiDotNet.Enums.OptimizerMomentStorage
+AiDotNet.Enums.OptimizerMomentStorage.BFloat16 = 1 -> AiDotNet.Enums.OptimizerMomentStorage
+AiDotNet.Enums.OptimizerMomentStorage.Int8Blockwise = 2 -> AiDotNet.Enums.OptimizerMomentStorage
+AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.MomentStorage.get -> AiDotNet.Enums.OptimizerMomentStorage
+AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.MomentStorage.set -> void
+AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.Int8MomentBlockSize.get -> int
+AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.Int8MomentBlockSize.set -> void
+AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.Int8MinQuantizedLength.get -> int
+AiDotNet.Models.Options.AdamWOptimizerOptions<T, TInput, TOutput>.Int8MinQuantizedLength.set -> void
 AiDotNet.Safety.Multimodal.TextImageAlignmentChecker<T>.TextImageAlignmentChecker(double mismatchThreshold) -> void
 AiDotNet.Safety.Watermarking.AudioSealWatermarker<T>.AudioSealWatermarker(double watermarkStrength, int segmentSamples) -> void
 AiDotNet.Safety.Watermarking.AudioWatermarker<T>.AudioWatermarker(double detectionThreshold, double watermarkStrength) -> void
@@ -611,6 +625,66 @@ override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.TileCoefficie
 override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.TileDelta(int height, int width, double[]! coefficientChanges) -> double[,]!
 override AiDotNet.Safety.Watermarking.InvisibleImageWatermarker<T>.WatermarkDescription.get -> string!
 static AiDotNet.ReinforcementLearning.Agents.DeepReinforcementLearningAgentBase<T>.CreateNetworkOptimizer(T learningRate, double? maxGradientNorm = null) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.AppendToken(int tokenId) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.Dispose() -> void
+AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.ForwardLogits(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokenIds) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.ResetCache() -> void
+AiDotNet.Agentic.Models.Local.NeuralNetworkCausalLanguageModel<T>.StartSequence(System.Collections.Generic.IReadOnlyList<int>! promptTokenIds) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.AiModelBuilder<T, TInput, TOutput>.ConfigureTokenizer() -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.AiModelBuilder<T, TInput, TOutput>.ConfigureTokenizer(AiDotNet.Tokenization.Configuration.TokenizationConfig? config) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.AiModelBuilder<T, TInput, TOutput>.ConfigureTokenizer(AiDotNet.Tokenization.Interfaces.ITokenizer! tokenizer, AiDotNet.Tokenization.Configuration.TokenizationConfig? config = null) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Configuration.BenchmarkingOptions.LanguageModel.get -> AiDotNet.Configuration.CausalLmBenchmarkOptions?
+AiDotNet.Configuration.BenchmarkingOptions.LanguageModel.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions
+AiDotNet.Configuration.CausalLmBenchmarkOptions.CalibrationTokenRange.get -> (int Start, int Count)?
+AiDotNet.Configuration.CausalLmBenchmarkOptions.CalibrationTokenRange.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.CausalLmBenchmarkOptions() -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.ContextWindowLength.get -> int
+AiDotNet.Configuration.CausalLmBenchmarkOptions.ContextWindowLength.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.EvaluationTokenCount.get -> int?
+AiDotNet.Configuration.CausalLmBenchmarkOptions.EvaluationTokenCount.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.EvaluationTokenStart.get -> int
+AiDotNet.Configuration.CausalLmBenchmarkOptions.EvaluationTokenStart.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.LambadaDatasetPath.get -> string?
+AiDotNet.Configuration.CausalLmBenchmarkOptions.LambadaDatasetPath.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.LambadaPassages.get -> System.Collections.Generic.IReadOnlyList<string!>?
+AiDotNet.Configuration.CausalLmBenchmarkOptions.LambadaPassages.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.MaxSubwordTokensPerWord.get -> int
+AiDotNet.Configuration.CausalLmBenchmarkOptions.MaxSubwordTokensPerWord.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.PerplexityCorpusPath.get -> string?
+AiDotNet.Configuration.CausalLmBenchmarkOptions.PerplexityCorpusPath.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.PerplexityCorpusText.get -> string?
+AiDotNet.Configuration.CausalLmBenchmarkOptions.PerplexityCorpusText.set -> void
+AiDotNet.Configuration.CausalLmBenchmarkOptions.WarmupItems.get -> int
+AiDotNet.Configuration.CausalLmBenchmarkOptions.WarmupItems.set -> void
+AiDotNet.Enums.BenchmarkMetric.BitsPerByte = 10 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkMetric.CrossEntropyLoss = 9 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkMetric.EvaluatedTokens = 14 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkMetric.MedianTimePerItemMilliseconds = 12 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkMetric.P95TimePerItemMilliseconds = 13 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkMetric.Perplexity = 8 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkMetric.SubwordTop1Accuracy = 11 -> AiDotNet.Enums.BenchmarkMetric
+AiDotNet.Enums.BenchmarkSuite.LAMBADA = 23 -> AiDotNet.Enums.BenchmarkSuite
+AiDotNet.Enums.BenchmarkSuite.Perplexity = 24 -> AiDotNet.Enums.BenchmarkSuite
+AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>.ConfigureTokenizer() -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>.ConfigureTokenizer(AiDotNet.Tokenization.Configuration.TokenizationConfig? config) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>.ConfigureTokenizer(AiDotNet.Tokenization.Interfaces.ITokenizer! tokenizer, AiDotNet.Tokenization.Configuration.TokenizationConfig? config = null) -> AiDotNet.Interfaces.IAiModelBuilder<T, TInput, TOutput>!
+AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.AppendToken(int tokenId) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.ForwardLogits(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! tokenIds) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.NextTokenLogits(System.Collections.Generic.IReadOnlyList<int>! tokenIds) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.ResetCache() -> void
+AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.StartSequence(System.Collections.Generic.IReadOnlyList<int>! promptTokenIds) -> AiDotNet.Tensors.LinearAlgebra.Vector<T>!
+AiDotNet.ModelLoading.Pretrained.OnnxFullModelAdapter<T>.VocabularySize.get -> int
+AiDotNet.ModelLoading.Pretrained.PretrainedSource.TokenizerLocator.get -> string?
+AiDotNet.ModelLoading.Pretrained.PretrainedSource.WithTokenizer(string! locator) -> AiDotNet.ModelLoading.Pretrained.PretrainedSource!
+AiDotNet.Models.Options.AiModelResultOptions<T, TInput, TOutput>.BenchmarkingOptions.get -> AiDotNet.Configuration.BenchmarkingOptions?
+AiDotNet.Models.Options.AiModelResultOptions<T, TInput, TOutput>.BenchmarkingOptions.set -> void
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.GenerateText(string! prompt, int maxNewTokens = 64, double temperature = 0, int? seed = null, System.Collections.Generic.IReadOnlyList<string!>? stopSequences = null) -> string!
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.PredictNextWord(string! prompt, int maxSubwordTokens = 8) -> string!
+AiDotNet.Tokenization.Configuration.TokenizationConfig.CacheDirectory.get -> string?
+AiDotNet.Tokenization.Configuration.TokenizationConfig.CacheDirectory.set -> void
+AiDotNet.Tokenization.Configuration.TokenizationConfig.PretrainedModelOrPath.get -> string?
+AiDotNet.Tokenization.Configuration.TokenizationConfig.PretrainedModelOrPath.set -> void
 static AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.SeparableProduct(double[,]! left, double[,]! x, double[,]! right) -> double[,]!
 static AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.Transpose(double[,]! matrix) -> double[,]!
 virtual AiDotNet.Safety.Watermarking.ImageWatermarkerBase<T>.MaxPixels.get -> long
@@ -649,3 +723,45 @@ AiDotNet.ReinforcementLearning.Policies.DeterministicPolicyOptions<T>.Exploratio
 AiDotNet.ReinforcementLearning.Policies.DiscretePolicy<T>.DiscretePolicy(AiDotNet.ReinforcementLearning.Policies.DiscretePolicyOptions<T>! options) -> void
 AiDotNet.ReinforcementLearning.Policies.MixedPolicy<T>.MixedPolicy(AiDotNet.ReinforcementLearning.Policies.MixedPolicyOptions<T>! options) -> void
 AiDotNet.ReinforcementLearning.Policies.MultiModalPolicy<T>.MultiModalPolicy(AiDotNet.ReinforcementLearning.Policies.MultiModalPolicyOptions<T>! options) -> void
+AiDotNet.Enums.CreditRule.TiedReadoutLocalError = 11 -> AiDotNet.Enums.CreditRule
+AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>
+AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>.ApplyAuxiliaryGradients(System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients) -> void
+AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>.AuxiliaryParameters.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>.BuildLocalObjective(AiDotNet.Interfaces.LocalObjectiveContext<T>! context) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>.BuildOutputObjective(AiDotNet.Interfaces.LocalObjectiveStep<T>! step, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! defaultLoss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.Interfaces.ILocalObjectiveCreditRule<T>.ReadoutLayerCount.get -> int
+AiDotNet.Interfaces.LocalObjectiveContext<T>
+AiDotNet.Interfaces.LocalObjectiveContext<T>.HiddenIndex.get -> int
+AiDotNet.Interfaces.LocalObjectiveContext<T>.Layer.get -> AiDotNet.Interfaces.ILayer<T>!
+AiDotNet.Interfaces.LocalObjectiveContext<T>.NetworkLayerIndex.get -> int
+AiDotNet.Interfaces.LocalObjectiveContext<T>.Output.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Interfaces.LocalObjectiveContext<T>.Step.get -> AiDotNet.Interfaces.LocalObjectiveStep<T>!
+AiDotNet.Interfaces.LocalObjectiveStep<T>
+AiDotNet.Interfaces.LocalObjectiveStep<T>.Engine.get -> AiDotNet.Tensors.Engines.IEngine!
+AiDotNet.Interfaces.LocalObjectiveStep<T>.HiddenLayerCount.get -> int
+AiDotNet.Interfaces.LocalObjectiveStep<T>.Input.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Interfaces.LocalObjectiveStep<T>.Loss.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Interfaces.LocalObjectiveStep<T>.Readout.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Interfaces.LocalObjectiveStep<T>.Target.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.ApplyAuxiliaryGradients(System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.AuxiliaryParameters.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.BuildLocalObjective(AiDotNet.Interfaces.LocalObjectiveContext<T>! context) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.BuildOutputObjective(AiDotNet.Interfaces.LocalObjectiveStep<T>! step, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! defaultLoss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.ComputeTeachingSignals(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.Initialize(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.IsExactBackprop.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.LayerwiseDistillationCreditRule(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>! teacherHidden, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? teacherLogits = null, int readoutLayerCount = 2, double hiddenWeight = 1, double kdAlpha = 0.5, double temperature = 2, double projectionLearningRate = 0.001, int? seed = null) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.Name.get -> string!
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.ReadoutLayerCount.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.ApplyAuxiliaryGradients(System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.AuxiliaryParameters.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.BuildLocalObjective(AiDotNet.Interfaces.LocalObjectiveContext<T>! context) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.BuildOutputObjective(AiDotNet.Interfaces.LocalObjectiveStep<T>! step, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! defaultLoss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.ComputeTeachingSignals(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Initialize(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.IsExactBackprop.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Name.get -> string!
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1) -> void

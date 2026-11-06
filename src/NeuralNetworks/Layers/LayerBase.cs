@@ -10312,6 +10312,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </summary>
     protected void InitializeLayerWeights(Tensor<T> tensor, int fanIn, int fanOut)
     {
+        // An interface-only strategy owns its initialization semantics. Without a reseeding
+        // contract, substituting Xavier would silently discard custom fills and failure behavior.
+        if (InitializationStrategy is { IsLazy: false } custom
+            && custom is not Initialization.InitializationStrategyBase<T>)
+        {
+            custom.InitializeWeights(tensor, fanIn, fanOut);
+            return;
+        }
+
         // Closes #1383, #1539: when this layer has a RandomSeed pinned (set by
         // LayerHelper from architecture.RandomSeed), drive initialization from a
         // FRESH seeded RNG so init is reproducible / order-independent. This

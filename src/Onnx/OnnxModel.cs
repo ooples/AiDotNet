@@ -53,6 +53,17 @@ public class OnnxModel<T> : IOnnxModel<T>
     public string ExecutionProvider { get; }
 
     /// <summary>
+    /// Internal access to the underlying ONNX Runtime session for multi-tensor KV-cache adapters.
+    /// </summary>
+    internal InferenceSession Session
+    {
+        get
+        {
+            ThrowIfDisposed();
+            return _session;
+        }
+    }
+    /// <summary>
     /// Creates a new OnnxModel from a file path.
     /// </summary>
     /// <param name="modelPath">Path to the ONNX model file.</param>

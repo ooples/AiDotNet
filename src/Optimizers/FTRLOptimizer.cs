@@ -310,11 +310,9 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         var lambda1 = NumOps.FromDouble(_options.Lambda1);
         var lambda2 = NumOps.FromDouble(_options.Lambda2);
 
-        // The AIDOTNET_GPU_ADAM env var is the shared opt-in gate for all GPU-resident
-        // optimizer fast paths (named for the first optimizer it enabled); here it
-        // selects the FTRL GPU step, so use a purpose-named local.
+        // On a float GPU engine the FTRL step runs on the device (falls back per parameter when a
+        // tensor is not device-resident).
         bool useGpuOptimizer = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)
@@ -322,14 +320,14 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             // True sparse scatter FTRL: z, n accumulators + param at touched indices.
             // FTRL's sqrt(n) schedule is encoded via lr_power = -0.5; pass that
             // explicitly so callers can override if they want a different power.
-            if (!useGpuOptimizer && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeZ.TryGetValue(param, out var zSp)) { zSp = new Tensor<T>(param._shape); _tapeZ[param] = zSp; }
                 if (!_tapeN.TryGetValue(param, out var nSp)) { nSp = new Tensor<T>(param._shape); _tapeN[param] = nSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplyFtrlSparse(
                         param, zSp, nSp,
-                        NumOps.ToDouble(CurrentLearningRate),
-                        _options.Lambda1, _options.Lambda2, lrPower: -0.5))
+                        _options.Alpha,
+                        _options.Lambda1, _options.Lambda2, lrPower: -0.5, beta: _options.Beta))
                 {
                     continue;
                 }
@@ -340,18 +338,12 @@ public partial class FTRLOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
 
             if (!_tapeZ.TryGetValue(param, out var z))
             {
-                z = useGpuOptimizer
-                    ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape)
-                    : new Tensor<T>(param._shape);
-                if (useGpuOptimizer) z.AsWritableSpan().Clear();
+                z = CreateOptimizerStateTensor(param._shape, useGpuOptimizer);
                 _tapeZ[param] = z;
             }
             if (!_tapeN.TryGetValue(param, out var n))
             {
-                n = useGpuOptimizer
-                    ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape)
-                    : new Tensor<T>(param._shape);
-                if (useGpuOptimizer) n.AsWritableSpan().Clear();
+                n = CreateOptimizerStateTensor(param._shape, useGpuOptimizer);
                 _tapeN[param] = n;
             }
 
