@@ -267,3 +267,9 @@ path used by synthesis. Controls use two rows per label and Paper mode; changing
 the first group to three rows or selecting ReleaseNearestSpeaker changes the
 actual mixed vector. Both compiled probes pass; E3 silence trimming still passes.
 The scoped build has zero warnings/errors.
+
+Upsampling-rate candidates can now transfer a factor of two between stages,
+preserving the total waveform ratio even when equal rates cannot be reordered.
+CosyVoice and CosyVoiceClone both pass with [8, 8] -> [4, 16], preserving
+HopSize while changing the actual generator. All 44 perturbation regressions
+pass, including two new waveform-ratio cases; scoped build has zero warnings/errors.

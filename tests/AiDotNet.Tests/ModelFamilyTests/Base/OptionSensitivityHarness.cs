@@ -835,6 +835,21 @@ public static class OptionSensitivityHarness
         if (element is not null && current is IEnumerable sequence)
         {
             var items = sequence.Cast<object?>().ToList();
+            if (option?.EndsWith("UpsampleRates", StringComparison.Ordinal) == true && element == typeof(int) && items.Count > 1)
+            {
+                // Equal rates cannot be reordered. Transfer a factor between two stages so the
+                // product (and the coupled waveform hop) stays fixed while stage geometry changes.
+                for (int from = 0; from < items.Count; from++)
+                    for (int to = 0; to < items.Count; to++)
+                        if (from != to && items[from] is int source && items[to] is int destination
+                            && source > 1 && source % 2 == 0 && destination > 0 && destination <= int.MaxValue / 2)
+                        {
+                            var redistributed = new List<object?>(items);
+                            redistributed[from] = source / 2;
+                            redistributed[to] = destination * 2;
+                            yield return BuildList(propertyType, element, redistributed);
+                        }
+            }
             // Stage arrays often require an exact length. Change one scalar element at a time
             // as well as the length, without sharing mutable containers with the fixture.
             var scalar = Nullable.GetUnderlyingType(element) ?? element;

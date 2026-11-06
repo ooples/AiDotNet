@@ -8,6 +8,19 @@ namespace AiDotNet.Tests.UnitTests.PaperFidelity;
 public class OptionPerturbationTests
 {
     [Theory]
+    [InlineData("HiftUpsampleRates")]
+    [InlineData("VocoderUpsampleRates")]
+    public void EqualUpsamplingRatesCanChangeWhilePreservingTheWaveformHop(string option)
+    {
+        var original = new[] { 8, 8 };
+        var candidates = OptionSensitivityHarness.Perturbations(typeof(int[]), original, option).Cast<int[]>().ToArray();
+        Assert.Contains(candidates, rates => !rates.SequenceEqual(original)
+            && rates.Length == original.Length && rates.All(rate => rate > 0)
+            && rates.Aggregate(1, (product, rate) => product * rate) == 64);
+        Assert.Equal(new[] { 8, 8 }, original);
+    }
+
+    [Theory]
     [InlineData(8)]
     [InlineData(16)]
     public void RotaryHeadWidthsPreferAnEvenStructuralChange(int current)
