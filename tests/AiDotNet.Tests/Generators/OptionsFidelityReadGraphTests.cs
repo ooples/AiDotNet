@@ -13,11 +13,15 @@ namespace AiDotNet.Tests.Generators;
 public class OptionsFidelityReadGraphTests
 {
     [Theory]
-    [InlineData(false, false)]
-    [InlineData(true, false)]
-    [InlineData(false, true)]
-    [InlineData(true, true)]
-    public async Task OnlyReachedValueHelpersAndGettersConsumeOptions(bool helper, bool getter)
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, false, true)]
+    [InlineData(true, false, true)]
+    [InlineData(false, true, true)]
+    [InlineData(true, true, true)]
+    public async Task OnlyReachedValueHelpersAndGettersConsumeOptions(bool helper, bool getter, bool documentation)
     {
         string source = @"
 namespace AiDotNet.Models.Options { public abstract class ModelOptions {} }
@@ -46,6 +50,7 @@ namespace Example {
         public Options(Options<T> other) { CopyOnly = other.CopyOnly; }
         public Options<T> Clone() => new Options<T> { CloneOnly = CloneOnly };
     }
+    /// <summary>Documents <see cref=""Options{T}.NeverUsed""/> without consuming it.</summary>
     public class Model : AiDotNet.Interfaces.IFullModel<int, int, int> {
         public int Value { get; }
         public Model(Options<double> options) {
@@ -62,7 +67,8 @@ namespace Example {
             .Select(a => a.Location).Distinct(StringComparer.OrdinalIgnoreCase)
             .Select(CachedMetadataReference.FromFile);
         var compilation = CSharpCompilation.Create("AiDotNet",
-            new[] { CSharpSyntaxTree.ParseText(source) }, references,
+            new[] { CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(
+                documentationMode: documentation ? DocumentationMode.Diagnose : DocumentationMode.None)) }, references,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
         var diagnostics = await compilation.WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(

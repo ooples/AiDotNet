@@ -296,6 +296,9 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
         OptionReadGraph read)
     {
         if (!candidateNames.Contains(name.Identifier.ValueText)) return;
+        // XML cref links describe an option; they never consume its runtime value.
+        // Binding these links depends on whether XML documentation output is enabled.
+        if (name.Ancestors().OfType<DocumentationCommentTriviaSyntax>().Any()) return;
         if (context.SemanticModel.GetSymbolInfo(name, context.CancellationToken).Symbol is not IPropertySymbol property) return;
         var declaring = property.OriginalDefinition.ContainingType;
         if (declaring is null || IsWriteOnly(context.Node) || IsInsideNameof(context.Node)) return;
