@@ -15,7 +15,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
 {
     internal static bool TryApplyFtrlSparse<T>(
         Tensor<T> param, Tensor<T> z, Tensor<T> n,
-        double lr, double l1Reg, double l2Reg, double lrPower)
+        double lr, double l1Reg, double l2Reg, double lrPower, double beta = 0.0)
     {
         if (param is null) throw new ArgumentNullException(nameof(param));
         if (z is null) throw new ArgumentNullException(nameof(z));
@@ -35,13 +35,13 @@ internal static partial class SparseEmbeddingOptimizerHelpers
 
         if (typeof(T) == typeof(double))
         {
-            ApplyFtrlSparseDouble(param, z, n, sparseList, embeddingDim, lr, l1Reg, l2Reg, lrPower);
+            ApplyFtrlSparseDouble(param, z, n, sparseList, embeddingDim, lr, l1Reg, l2Reg, lrPower, beta);
             return true;
         }
         if (typeof(T) == typeof(float))
         {
             ApplyFtrlSparseFloat(param, z, n, sparseList, embeddingDim,
-                (float)lr, (float)l1Reg, (float)l2Reg, (float)lrPower);
+                (float)lr, (float)l1Reg, (float)l2Reg, (float)lrPower, (float)beta);
             return true;
         }
 
@@ -72,7 +72,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     n[paramBase + c] = ops.FromDouble(nNew);
                     z[paramBase + c] = ops.FromDouble(zNew);
                     if (Math.Abs(zNew) <= l1Reg) { param[paramBase + c] = zeroT; continue; }
-                    double pre = Math.Pow(nNew, -lrPower) / lr + l2Reg;
+                    double pre = (Math.Pow(nNew, -lrPower) + beta) / lr + l2Reg;
                     param[paramBase + c] = ops.FromDouble((Math.Sign(zNew) * l1Reg - zNew) / pre);
                 }
             }
@@ -83,7 +83,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
     private static void ApplyFtrlSparseDouble<T>(
         Tensor<T> param, Tensor<T> z, Tensor<T> n,
         IReadOnlyList<SparseEmbeddingGradient<T>> sparseList, int embeddingDim,
-        double lr, double l1Reg, double l2Reg, double lrPower)
+        double lr, double l1Reg, double l2Reg, double lrPower, double beta)
     {
         var paramSpan = ((Tensor<double>)(object)param).Data.Span;
         var zSpan = ((Tensor<double>)(object)z).Data.Span;
@@ -113,7 +113,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     nSpan[paramBase + c] = nNew;
                     zSpan[paramBase + c] = zNew;
                     if (Math.Abs(zNew) <= l1Reg) { paramSpan[paramBase + c] = 0.0; continue; }
-                    double pre = Math.Pow(nNew, -lrPower) / lr + l2Reg;
+                    double pre = (Math.Pow(nNew, -lrPower) + beta) / lr + l2Reg;
                     paramSpan[paramBase + c] = (Math.Sign(zNew) * l1Reg - zNew) / pre;
                 }
             }
@@ -123,7 +123,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
     private static void ApplyFtrlSparseFloat<T>(
         Tensor<T> param, Tensor<T> z, Tensor<T> n,
         IReadOnlyList<SparseEmbeddingGradient<T>> sparseList, int embeddingDim,
-        float lr, float l1Reg, float l2Reg, float lrPower)
+        float lr, float l1Reg, float l2Reg, float lrPower, float beta)
     {
         var paramSpan = ((Tensor<float>)(object)param).Data.Span;
         var zSpan = ((Tensor<float>)(object)z).Data.Span;
@@ -153,7 +153,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
                     nSpan[paramBase + c] = nNew;
                     zSpan[paramBase + c] = zNew;
                     if (Math.Abs(zNew) <= l1Reg) { paramSpan[paramBase + c] = 0f; continue; }
-                    float pre = (float)Math.Pow(nNew, -lrPower) / lr + l2Reg;
+                    float pre = ((float)Math.Pow(nNew, -lrPower) + beta) / lr + l2Reg;
                     paramSpan[paramBase + c] = (Math.Sign(zNew) * l1Reg - zNew) / pre;
                 }
             }

@@ -30,6 +30,7 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         // only decay touched rows, so untouched embedding rows stop decaying).
         if (sparseList.Count != 1) return false;
         if (weightDecay != 0.0) return false;
+        if (momentum != 0.0) return false;
         if (HasDuplicateRows(sparseList)) return false;
         if (param.Rank != 2 || velocity.Rank != 2) return false;
         int vocabSize = param.Shape[0];

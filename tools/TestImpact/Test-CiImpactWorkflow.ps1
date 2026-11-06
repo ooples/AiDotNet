@@ -272,8 +272,8 @@ $tracedHeader = Get-JobHeader -JobBlock $tracedJob
 $tracedInit = Get-StepBlock -JobBlock $tracedJob -Step 'Initialize CodeQL (traced build)'
 $tracedAnalyze = Get-StepBlock -JobBlock $tracedJob -Step 'Perform CodeQL Analysis'
 Assert-Contract ($tracedInit.Contains('build-mode: manual')) 'master/nightly CodeQL lost its traced analysis'
-Assert-Contract ($tracedHeader.Contains("github.event_name != 'pull_request'")) `
-    'the traced CodeQL analysis runs on pull requests'
+Assert-Contract (-not $tracedHeader.Contains("github.event_name != 'pull_request'")) `
+    'the required traced CodeQL category is skipped on pull requests'
 Assert-Contract ($tracedAnalyze.Contains('category: "/language:csharp-traced"')) `
     'the traced CodeQL analysis shares the build-less baseline category'
 Assert-Contract (Test-JobDependency -JobHeader $tracedHeader -Dependency 'validation-source') `

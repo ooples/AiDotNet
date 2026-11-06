@@ -423,16 +423,16 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         var oneMinusBeta1 = NumOps.Subtract(NumOps.One, _currentBeta1);
         var oneMinusBeta2 = NumOps.Subtract(NumOps.One, _currentBeta2);
 
-        // GPU-resident step (AIDOTNET_GPU_ADAM=1): see AdamOptimizer.Step. Gated off; falls back to the CPU
+        // GPU-resident step: see AdamOptimizer.Step; falls back to the CPU
         // tensor-op path per-parameter when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)
         {
             // True sparse scatter Lion: m + param at touched indices only.
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            // Existing momentum can still move rows absent from this step; retain the full update in that case.
+            if (!_tapeMomentum.ContainsKey(param) && _options.WeightDecay == 0.0 && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeMomentum.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeMomentum[param] = mSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplyLionSparse(
@@ -448,7 +448,7 @@ public partial class LionOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeMomentum.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeMomentum[param] = m; }
+            if (!_tapeMomentum.TryGetValue(param, out var m)) { m = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeMomentum[param] = m; }
 
             if (gpuAdam && param.Length == grad.Length
                 && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryLionStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)m,

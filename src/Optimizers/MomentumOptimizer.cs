@@ -400,13 +400,12 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         PrepareTapeState(context);
 
         bool gpuAdam = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)
         {
             // True sparse scatter SGD-momentum: velocity + param at touched indices.
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeVelocity.TryGetValue(param, out var velSp)) { velSp = new Tensor<T>(param._shape); _tapeVelocity[param] = velSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplySgdSparse(
@@ -422,13 +421,10 @@ public partial class MomentumOptimizer<T, TInput, TOutput> : GradientBasedOptimi
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) vel.AsWritableSpan().Clear(); _tapeVelocity[param] = vel; }
+            if (!_tapeVelocity.TryGetValue(param, out var vel)) { vel = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeVelocity[param] = vel; }
 
-            if (gpuAdam && param.Length == grad.Length
-                && AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TrySgdMomentumStep((Tensor<float>)(object)param, (Tensor<float>)(object)grad, (Tensor<float>)(object)vel,
-                    (float)NumOps.ToDouble(CurrentLearningRate), (float)NumOps.ToDouble(CurrentMomentum), 0f))
-                continue;
-
+            // The fused SGD kernel stores unscaled gradients; this optimizer's velocity
+            // includes the learning rate, so retain that representation across all engines.
             // velocity = momentum * velocity + lr * grad
             var velNew = Engine.TensorAdd(Engine.TensorMultiplyScalar(vel, CurrentMomentum), Engine.TensorMultiplyScalar(grad, CurrentLearningRate));
             Engine.TensorCopy(velNew, vel);

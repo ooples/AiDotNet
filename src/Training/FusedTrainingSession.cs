@@ -341,7 +341,10 @@ internal sealed class FusedTrainingSession<T>
                 maxGradNorm: clip,
                 lrSchedule: config.Schedule,
                 eagerOptimizer: optimizer,
-                useBf16Moments: config.UseBf16Moments,
+                useBf16Moments: config.UseBf16Moments || config.MomentStorage == AiDotNet.Enums.OptimizerMomentStorage.BFloat16,
+                int8MomentBlockSize: config.MomentStorage == AiDotNet.Enums.OptimizerMomentStorage.Int8Blockwise
+                    ? config.Int8MomentBlockSize : 0,
+                int8MinQuantizedLength: config.Int8MinQuantizedLength,
                 extraTensors: request.ExtraParameters,
                 fusedExtras: config.Extras,
                 onGradients: OnGradients,

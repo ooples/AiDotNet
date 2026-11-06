@@ -1041,6 +1041,9 @@ public static class CompiledTapeTrainingStep<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null,
         bool useBf16Moments = false,
         IReadOnlyList<Tensor<T>>? extraTensors = null,
+        // > 0: 8-bit block-wise Adam/AdamW moments with this block size (bitsandbytes' Adam8bit / AdamW8bit).
+        int int8MomentBlockSize = 0,
+        int int8MinQuantizedLength = AiDotNet.Enums.OptimizerMomentDefaults.MinQuantizedLength,
         // Optimizer-specific coefficients for the kernels that do not read them from the
         // beta/epsilon slots: LARS (momentum, trust coefficient), FTRL (L1, L2, lr power),
         // ASGD and Rprop. Null for every other kernel — see FusedOptimizerConfig.Extras for
@@ -1080,7 +1083,7 @@ public static class CompiledTapeTrainingStep<T>
         try
         {
             _currentState = state;
-            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection, l2Regularization: l2Regularization, deferredLoss: deferredLoss);
+            return TryStepWithFusedOptimizerCore(layers: layers, input: input, target: target, forward: forward, computeLoss: computeLoss, optimizerType: optimizerType, learningRate: learningRate, beta1: beta1, beta2: beta2, epsilon: epsilon, weightDecay: weightDecay, lossValue: out lossValue, maxGradNorm: maxGradNorm, lrSchedule: lrSchedule, eagerOptimizer: eagerOptimizer, useBf16Moments: useBf16Moments, extraTensors: extraTensors, int8MomentBlockSize: int8MomentBlockSize, int8MinQuantizedLength: int8MinQuantizedLength, fusedExtras: fusedExtras, onGradients: onGradients, trainableSelection: trainableSelection, l2Regularization: l2Regularization, deferredLoss: deferredLoss);
         }
         finally
         {
@@ -1107,6 +1110,9 @@ public static class CompiledTapeTrainingStep<T>
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? eagerOptimizer = null,
         bool useBf16Moments = false,
         IReadOnlyList<Tensor<T>>? extraTensors = null,
+        // > 0: 8-bit block-wise Adam/AdamW moments with this block size (bitsandbytes' Adam8bit / AdamW8bit).
+        int int8MomentBlockSize = 0,
+        int int8MinQuantizedLength = AiDotNet.Enums.OptimizerMomentDefaults.MinQuantizedLength,
         // Optimizer-specific coefficients for the kernels that do not read them from the
         // beta/epsilon slots: LARS (momentum, trust coefficient), FTRL (L1, L2, lr power),
         // ASGD and Rprop. Null for every other kernel — see FusedOptimizerConfig.Extras for
@@ -1535,6 +1541,9 @@ public static class CompiledTapeTrainingStep<T>
                 // float Adam/AdamW kernel; a safe no-op for every other configuration.
                 if (useBf16Moments)
                     plan.RequestBf16MomentStorage(true);
+                // Last request wins: 8-bit moments take precedence over bf16 when both are asked for.
+                if (int8MomentBlockSize > 0)
+                    plan.RequestInt8MomentStorage(true, int8MomentBlockSize, int8MinQuantizedLength);
 
                 // First fused call on this thread. Configure the plan and
                 // commit to single-plan semantics from here on. When the

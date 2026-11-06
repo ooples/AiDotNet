@@ -146,6 +146,26 @@ internal static partial class SparseEmbeddingOptimizerHelpers
         return list is not null && list.Count > 0;
     }
 
+    internal static bool HasUnprocessedSparseEmbeddingGrad<T>(TapeStepContext<T> context, Tensor<T> param)
+        => (!context.Gradients.TryGetValue(param, out var dense) || dense is null) && HasSparseEmbeddingGrad(param);
+
+    // Processing (regularization, unscaling or clipping) must see the same coalesced gradient as the update.
+    // Once inserted here, the processed dense gradient takes priority over the raw sparse side channel.
+    internal static void MaterializeSparseGradients<T>(IEnumerable<Tensor<T>> parameters,
+        Dictionary<Tensor<T>, Tensor<T>> gradients, IEngine engine)
+    {
+        foreach (var param in parameters)
+        {
+            if (gradients.TryGetValue(param, out var dense) && dense is not null) continue;
+            var sparse = DifferentiableOps.GetSparseEmbeddingGradsFor(param);
+            if (sparse is null || sparse.Count == 0) continue;
+            var materialized = sparse[0].ToDense(engine);
+            for (int i = 1; i < sparse.Count; i++)
+                materialized = engine.TensorAdd(materialized, sparse[i].ToDense(engine));
+            gradients[param] = materialized;
+        }
+    }
+
     /// <summary>
     /// Returns true when any row index appears more than once in the sparse payload.
     /// Adaptive optimizers (Adam / AMSGrad / RMSProp / Adagrad / AdaDelta / NAdam /

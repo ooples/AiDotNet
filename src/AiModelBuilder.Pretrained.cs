@@ -19,7 +19,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // Resolve the descriptor to a concrete model (download + reconstruct + weight-load). Decoder
         // language models are Tensor<T> -> Tensor<T>; only then does the produced model satisfy the
         // builder's IFullModel<T, TInput, TOutput> — surface a clear error otherwise.
-        var model = PretrainedLoader<T>.Load(source);
+        IFullModel<T, Tensor<T>, Tensor<T>> model;
+        if (source.Kind == PretrainedModelKind.Gguf && _tokenizer is null && string.IsNullOrWhiteSpace(source.TokenizerLocator))
+        {
+            var (ggufModel, ggufTokenizer) = PretrainedLoader<T>.LoadGgufWithTokenizer(source.Locator, source);
+            model = ggufModel;
+            _tokenizer = ggufTokenizer;
+        }
+        else
+        {
+            model = PretrainedLoader<T>.Load(source);
+            if (_tokenizer is null)
+            {
+                _tokenizer = PretrainedLoader<T>.TryLoadTokenizer(source);
+            }
+        }
+
         if (model is not IFullModel<T, TInput, TOutput> typed)
             throw new InvalidOperationException(
                 $"Pretrained source '{source}' produces a Tensor<{typeof(T).Name}> -> Tensor<{typeof(T).Name}> " +
@@ -35,7 +50,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     {
         Guard.NotNull(source);
 
-        var model = PretrainedLoader<T>.Load(source);
+        IFullModel<T, Tensor<T>, Tensor<T>> model;
+        if (source.Kind == PretrainedModelKind.Gguf && _tokenizer is null && string.IsNullOrWhiteSpace(source.TokenizerLocator))
+        {
+            var (ggufModel, ggufTokenizer) = PretrainedLoader<T>.LoadGgufWithTokenizer(source.Locator, source);
+            model = ggufModel;
+            _tokenizer = ggufTokenizer;
+        }
+        else
+        {
+            model = PretrainedLoader<T>.Load(source);
+            if (_tokenizer is null)
+            {
+                _tokenizer = PretrainedLoader<T>.TryLoadTokenizer(source);
+            }
+        }
+
         if (model is not IFullModel<T, TInput, TOutput> typed)
             throw new InvalidOperationException(
                 $"Pretrained source '{source}' produces a Tensor<{typeof(T).Name}> -> Tensor<{typeof(T).Name}> " +

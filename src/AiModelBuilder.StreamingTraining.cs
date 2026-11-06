@@ -255,9 +255,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         return mean;
     }
 
+    /// <summary>
+    /// The held-out loss of one batch: the objective training minimizes. A tensor model is trained on
+    /// <see cref="ILossFunction{T}.ComputeTapeLoss"/> over the batch's shapes -- class-index targets
+    /// (<c>[B, S, V]</c> logits with <c>[B, S]</c> token ids, as PyTorch's <c>cross_entropy</c>), a per-row
+    /// mean -- so validation scores the same tensors the same way. Flattening both to vectors broke both:
+    /// class-index targets are shorter than the logits (the vector loss refused them), and a batch of rows
+    /// read as one vector is one distribution, not a mean of per-row losses.
+    /// </summary>
     private static T SampleLoss(IFullModel<T, TInput, TOutput> model, ILossFunction<T> lossFunction, TInput x, TOutput y)
     {
         var prediction = model.Predict(x);
+        if (prediction is Tensor<T> predicted && y is Tensor<T> target)
+        {
+            return lossFunction.ComputeTapeLoss(predicted, target).Data.Span[0];
+        }
+
         return lossFunction.CalculateLoss(
             ConversionsHelper.ConvertToVector<T, TOutput>(prediction),
             ConversionsHelper.ConvertToVector<T, TOutput>(y));

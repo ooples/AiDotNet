@@ -506,7 +506,7 @@ public partial class LARSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         {
             // True sparse fast path: ‖p‖₂ via full-param read; ‖g‖₂² over touched values
             // (= dense ‖g‖₂² since untouched g = 0); scatter velocity + param updates.
-            if (SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeVelocity.TryGetValue(param, out var velSp)) { velSp = new Tensor<T>(param._shape); _tapeVelocity[param] = velSp; }
                 if (SparseEmbeddingOptimizerHelpers.TryApplyLarsSparse(

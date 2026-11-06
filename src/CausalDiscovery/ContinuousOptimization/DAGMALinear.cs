@@ -216,7 +216,7 @@ public class DAGMALinear<T> : ContinuousOptimizationBase<T>
         _lastH = h;
 
         // Threshold and clean
-        return ThresholdAndClean(W, WThreshold);
+        return EnforceAcyclic(ThresholdAndClean(W, WThreshold));
     }
 
     /// <summary>

@@ -434,14 +434,13 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         // Existing GPU and sparse kernels implement only uncentered, momentum-free RMSProp.
         bool gpuRmsProp = !requiresExtendedState && SupportsGpuUpdate
             && typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)
         {
             if (!requiresExtendedState
                 && !gpuRmsProp
-                && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+                && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeSqGrad.TryGetValue(param, out var sqGradSp))
                 {
@@ -463,11 +462,8 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
 
             if (!_tapeSqGrad.TryGetValue(param, out var sqGrad))
             {
-                sqGrad = gpuRmsProp
-                    ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape)
-                    : new Tensor<T>(param._shape);
-                if (gpuRmsProp) sqGrad.AsWritableSpan().Clear();
-                else if (_options.InitialAccumulatorValue != 0)
+                sqGrad = CreateOptimizerStateTensor(param._shape, gpuRmsProp);
+                if (!gpuRmsProp && _options.InitialAccumulatorValue != 0)
                     sqGrad.AsWritableSpan().Fill(NumOps.FromDouble(_options.InitialAccumulatorValue));
                 _tapeSqGrad[param] = sqGrad;
             }

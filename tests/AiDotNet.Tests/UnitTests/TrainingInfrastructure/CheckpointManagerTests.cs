@@ -122,6 +122,101 @@ public class CheckpointManagerTests : IDisposable
         }
     }
 
+
+    private sealed class FailingStateModel : MockModel, ICheckpointableModel
+    {
+        public void SaveState(Stream stream)
+        {
+            stream.WriteByte(42);
+            throw new IOException("Injected model-state write failure.");
+        }
+
+        public void LoadState(Stream stream) => throw new NotSupportedException();
+    }
+
+    private sealed class CollidingStateModel : MockModel, ICheckpointableModel
+    {
+        public string CollisionPath { get; private set; } = string.Empty;
+
+        public void SaveState(Stream stream)
+        {
+            var stagePath = ((FileStream)stream).Name;
+            CollisionPath = stagePath.Substring(0, stagePath.LastIndexOf(".json.", StringComparison.Ordinal) + 5) + ".state";
+            File.WriteAllBytes(CollisionPath, new byte[] { 9, 8, 7 });
+            stream.WriteByte(1);
+        }
+
+        public void LoadState(Stream stream) => throw new NotSupportedException();
+    }
+
+    [Fact]
+    public void SaveCheckpoint_PublicationCollisionPreservesExistingFile()
+    {
+        var model = new CollidingStateModel();
+        Assert.Throws<IOException>(() => _manager.SaveCheckpoint(model, new MockOptimizer(), 0, 0, new()));
+        Assert.Equal(new byte[] { 9, 8, 7 }, File.ReadAllBytes(model.CollisionPath));
+        Assert.Equal(new[] { model.CollisionPath }, Directory.GetFiles(_testDirectory));
+        Assert.Empty(_manager.ListCheckpoints());
+    }
+
+    private sealed class FailingJsonValue
+    {
+        public string Value => throw new InvalidOperationException("Injected JSON failure.");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SaveCheckpoint_FailedWriteRemovesOnlyAttemptFiles(bool failJson)
+    {
+        var existingId = _manager.SaveCheckpoint(new CheckpointableMockModel(), new MockOptimizer(), 0, 0, new());
+        var before = Directory.GetFiles(_testDirectory).ToDictionary(path => path, File.ReadAllBytes);
+        var metadata = failJson ? new Dictionary<string, object> { ["bad"] = new FailingJsonValue() } : null;
+        if (failJson)
+            Assert.Throws<Newtonsoft.Json.JsonSerializationException>(() =>
+                _manager.SaveCheckpoint(new CheckpointableMockModel(), new MockOptimizer(), 1, 1, new(), metadata));
+        else
+            Assert.Throws<IOException>(() =>
+                _manager.SaveCheckpoint(new FailingStateModel(), new MockOptimizer(), 1, 1, new()));
+
+        Assert.Equal(before.Keys.OrderBy(path => path), Directory.GetFiles(_testDirectory).OrderBy(path => path));
+        foreach (var entry in before)
+            Assert.Equal(entry.Value, File.ReadAllBytes(entry.Key));
+        Assert.Single(_manager.ListCheckpoints());
+        Assert.Equal(existingId, _manager.LoadCheckpoint(existingId).CheckpointId);
+    }
+
+    [Theory]
+    [InlineData("missing")]
+    [InlineData("null")]
+    [InlineData("invalid")]
+    [InlineData("overflow")]
+    [InlineData("fractional")]
+    [InlineData("negative")]
+    [InlineData("mismatch")]
+    [InlineData("truncated")]
+    public void LoadCheckpoint_RejectsInvalidOptimizerSidecarLength(string corruption)
+    {
+        var id = _manager.SaveCheckpoint(new MockModel(), new MockOptimizer(), 0, 0, new());
+        var path = _manager.ListCheckpoints().Single().FilePath ?? throw new InvalidOperationException();
+        var json = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(path));
+        var state = (Newtonsoft.Json.Linq.JObject)(json["OptimizerState"] ?? throw new InvalidOperationException());
+        switch (corruption)
+        {
+            case "missing": state.Remove("SerializedStateLengthBytes"); break;
+            case "null": state["SerializedStateLengthBytes"] = null; break;
+            case "invalid": state["SerializedStateLengthBytes"] = "invalid"; break;
+            case "overflow": state["SerializedStateLengthBytes"] = "999999999999999999999999"; break;
+            case "fractional": state["SerializedStateLengthBytes"] = 6.1; break;
+            case "negative": state["SerializedStateLengthBytes"] = -1; break;
+            case "mismatch": state["SerializedStateLengthBytes"] = 100; break;
+            case "truncated": File.WriteAllBytes(path + ".optim", new byte[] { 1 }); break;
+        }
+        File.WriteAllText(path, json.ToString());
+        Assert.Throws<InvalidDataException>(() => _manager.LoadCheckpoint(id));
+    }
+
+
     #endregion
 
     #region SaveCheckpoint Tests

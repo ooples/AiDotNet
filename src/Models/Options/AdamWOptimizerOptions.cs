@@ -1,3 +1,4 @@
+using AiDotNet.Enums;
 namespace AiDotNet.Models.Options;
 
 /// <summary>
@@ -70,6 +71,9 @@ public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
         MaxBeta1 = other.MaxBeta1;
         MinBeta2 = other.MinBeta2;
         MaxBeta2 = other.MaxBeta2;
+        MomentStorage = other.MomentStorage;
+        Int8MomentBlockSize = other.Int8MomentBlockSize;
+        Int8MinQuantizedLength = other.Int8MinQuantizedLength;
     }
 
     /// <summary>
@@ -263,6 +267,42 @@ public class AdamWOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerO
     /// standard Adam/AdamW might not converge properly, though in practice the difference is often small.</para>
     /// </remarks>
     public bool UseAMSGrad { get; set; } = false;
+
+    /// <summary>
+    /// Gets or sets how the first and second moments are stored.
+    /// </summary>
+    /// <value><see cref="OptimizerMomentStorage.Float32"/> by default.</value>
+    /// <remarks>
+    /// <para><see cref="OptimizerMomentStorage.BFloat16"/> halves the moment memory and
+    /// <see cref="OptimizerMomentStorage.Int8Blockwise"/> quarters it (bitsandbytes' <c>AdamW8bit</c>); the update math
+    /// stays fp32. Supported for <c>float</c> models, without <see cref="UseAMSGrad"/> or a weight-decay mask. The same
+    /// compressed state is kept on the GPU and on the CPU, so a run can move between them and resume from a checkpoint
+    /// on either.</para>
+    /// <para><b>For Beginners:</b> Use <c>Int8Blockwise</c> when a large model's optimizer state does not fit in memory.</para>
+    /// </remarks>
+    public OptimizerMomentStorage MomentStorage { get; set; } = OptimizerMomentStorage.Float32;
+
+    /// <summary>
+    /// Gets or sets the number of elements that share one scale in <see cref="OptimizerMomentStorage.Int8Blockwise"/>.
+    /// </summary>
+    /// <value>256 by default (bitsandbytes' block size).</value>
+    /// <remarks>
+    /// <para>Must be positive; a step throws <see cref="InvalidOperationException"/> otherwise.
+    /// Used only with <see cref="OptimizerMomentStorage.Int8Blockwise"/>.</para>
+    /// <para><b>For Beginners:</b> Each block shares a scale. Leave this at 256 unless measurements justify changing it.</para>
+    /// </remarks>
+    public int Int8MomentBlockSize { get; set; } = OptimizerMomentDefaults.BlockSize;
+
+    /// <summary>
+    /// Gets or sets the smallest tensor that gets 8-bit moments in <see cref="OptimizerMomentStorage.Int8Blockwise"/>;
+    /// shorter tensors (biases, norms) keep 32-bit moments.
+    /// </summary>
+    /// <value>4096 by default (bitsandbytes' <c>min_8bit_size</c>).</value>
+    /// <remarks>
+    /// <para>Applies only with <see cref="OptimizerMomentStorage.Int8Blockwise"/>; shorter tensors retain 32-bit moments.</para>
+    /// <para><b>For Beginners:</b> Small tensors save little memory when compressed. This keeps their moments at full precision.</para>
+    /// </remarks>
+    public int Int8MinQuantizedLength { get; set; } = OptimizerMomentDefaults.MinQuantizedLength;
 
     /// <summary>
     /// Gets or sets whether to automatically adjust the Beta parameters during training.

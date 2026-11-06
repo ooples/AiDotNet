@@ -2378,6 +2378,22 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     }
 
     /// <summary>
+    /// Wires the pluggable credit-assignment rule (ConfigureCreditRule) onto the neural network, for both the
+    /// in-memory and the streaming build paths. When set, the network's training step routes the error to each
+    /// layer through the rule (Feedback Alignment / Direct Feedback Alignment / Sign-Symmetric / a local-objective
+    /// rule / a custom ICreditRule) instead of standard back-propagation. Null leaves the default path
+    /// byte-for-byte unchanged. The streaming path previously skipped this, so a configured rule was silently
+    /// replaced by back-propagation whenever a streaming loader was used.
+    /// </summary>
+    private void ApplyConfiguredCreditRule()
+    {
+        if (_creditRule is not null && _model is NeuralNetworks.NeuralNetworkBase<T> creditRuleNet)
+        {
+            creditRuleNet.SetCreditRule(_creditRule, _creditRuleSeed);
+        }
+    }
+
+    /// <summary>
     /// Performs true streaming supervised training without materializing all data in memory.
     /// </summary>
     /// <param name="streamingLoader">The streaming data loader to train from.</param>
@@ -2443,6 +2459,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // were silently ignored whenever a streaming loader was used.
         ApplyConfiguredLossFunction();
         ApplyConfiguredLearningRateScheduler();
+        ApplyConfiguredCreditRule();
 
         var numOps = MathHelper.GetNumericOperations<T>();
 
@@ -3737,14 +3754,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // which caused race conditions when multiple models were built concurrently.
         ConfigureDocumentTransformers(_model);
 
-        // Wire the pluggable credit-assignment rule (ConfigureCreditRule) onto the neural network. When set,
-        // NeuralNetworkBase.ComputeGradients routes the error to each layer through the rule (Feedback
-        // Alignment / Direct Feedback Alignment / Sign-Symmetric / a custom ICreditRule) instead of standard
-        // back-propagation. Null leaves the default path byte-for-byte unchanged.
-        if (_creditRule is not null && _model is NeuralNetworks.NeuralNetworkBase<T> creditRuleNet)
-        {
-            creditRuleNet.SetCreditRule(_creditRule, _creditRuleSeed);
-        }
+        ApplyConfiguredCreditRule();
 
         // Use defaults for the optimizer if not set. ConfigureRegularization
         // and ConfigureDistributedTraining both require gradient semantics:

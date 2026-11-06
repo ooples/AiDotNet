@@ -394,9 +394,8 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
         T biasCorrection1 = NumOps.FromDouble(FirstMomentCorrection(_tapeStep));
         T biasCorrection2 = NumOps.FromDouble(SecondMomentCorrection(_tapeStep));
 
-        // GPU-resident step (AIDOTNET_GPU_ADAM=1); gated off, CPU fallback per-param when not GPU-resident.
+        // GPU-resident step; CPU fallback per-param when not GPU-resident.
         bool gpuAdam = typeof(T) == typeof(float)
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         foreach (var param in context.Parameters)
@@ -404,7 +403,8 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             // True sparse scatter AMSGrad: m + v + vMax + param at touched indices.
             // vMax updates only at touched (untouched vMax stays at previous max — consistent
             // with the sparse-history semantics for state buffers).
-            if (!gpuAdam && SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(param))
+            // Existing momentum can still move rows absent from this step; retain the full update in that case.
+            if (!_tapeM.ContainsKey(param) && SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param))
             {
                 if (!_tapeM.TryGetValue(param, out var mSp)) { mSp = new Tensor<T>(param._shape); _tapeM[param] = mSp; }
                 if (!_tapeV.TryGetValue(param, out var vSp)) { vSp = new Tensor<T>(param._shape); _tapeV[param] = vSp; }
@@ -424,9 +424,9 @@ public partial class AMSGradOptimizer<T, TInput, TOutput> : GradientBasedOptimiz
             if (!SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var grad))
                 continue;
 
-            if (!_tapeM.TryGetValue(param, out var m)) { m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) m.AsWritableSpan().Clear(); _tapeM[param] = m; }
-            if (!_tapeV.TryGetValue(param, out var v)) { v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) v.AsWritableSpan().Clear(); _tapeV[param] = v; }
-            if (!_tapeVHat.TryGetValue(param, out var vHat)) { vHat = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape); if (gpuAdam) vHat.AsWritableSpan().Clear(); _tapeVHat[param] = vHat; }
+            if (!_tapeM.TryGetValue(param, out var m)) { m = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeM[param] = m; }
+            if (!_tapeV.TryGetValue(param, out var v)) { v = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeV[param] = v; }
+            if (!_tapeVHat.TryGetValue(param, out var vHat)) { vHat = CreateOptimizerStateTensor(param._shape, gpuAdam); _tapeVHat[param] = vHat; }
 
             // The GPU kernel is PyTorch's bias-corrected AMSGrad; KernelLearningRateAndEpsilon makes it compute the
             // configured variant exactly.
