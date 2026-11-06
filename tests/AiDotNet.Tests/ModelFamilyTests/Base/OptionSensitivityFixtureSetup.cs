@@ -26,7 +26,7 @@ internal static class OptionSensitivityFixtureSetup
                 _ => string.Empty,
             }
             : network is AiDotNet.PointCloud.Models.DGCNN<T> && option is "DropoutRate" or "UseDropout" ? "dgcnn-dropout"
-            : network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option == "FrameShiftMilliseconds" ? "cam-audio-frontend"
+            : network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds" ? "cam-audio-frontend"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "TokenizerPieces" ? "glamm-unloaded-tokenizer"
             : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option == "LatentFusionProbability" ? "index-latent-fusion"
@@ -116,7 +116,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
-        if (network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> cam && option == "FrameShiftMilliseconds")
+        if (network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> cam && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds")
         {
             var settings = (AiDotNet.Audio.Speaker.CAMPlusPlusOptions)cam.GetOptions();
             var camWaveform = new Tensor<T>(new[] { settings.SampleRate });

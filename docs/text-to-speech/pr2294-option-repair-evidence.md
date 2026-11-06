@@ -255,3 +255,8 @@ single S3 stream is also explicit: counts 0, 2 and 8 are rejected by the real
 model constructor. These settings remain because they are used; no general
 NoValidPerturbation baseline was introduced. Six new accessor declarations
 are included in the API manifest.
+
+CAM++ FrameLengthMilliseconds now uses the same real Kaldi audio frontend as
+FrameShiftMilliseconds during option observation. Both probes pass against the
+compiled harness: length 25 -> 50 and shift 10 -> 20 change outputs before
+training. The scoped probe build completed with zero warnings/errors.
