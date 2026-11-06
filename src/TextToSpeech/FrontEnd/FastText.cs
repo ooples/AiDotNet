@@ -378,7 +378,7 @@ internal sealed class FastText
 
     // Loss::sigmoid's 512-entry table over [-8, 8].
     private static readonly float[] SigmoidTable = Enumerable.Range(0, 513)
-        .Select(i => (float)(1.0 / (1.0 + Math.Exp(-((float)(i * 2 * 8) / 512 - 8))))).ToArray();
+        .Select(i => (float)(1.0 / (1.0 + Math.Exp(-((i * 2.0f * 8) / 512 - 8))))).ToArray();
 
     private static float TableSigmoid(float x)
     {

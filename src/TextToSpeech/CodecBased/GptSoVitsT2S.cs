@@ -84,7 +84,7 @@ internal sealed class GptSoVitsT2S<T>
     {
         var pe = new float[PositionRows * dim];
         var divTerm = new float[dim / 2];
-        for (int i = 0; i < divTerm.Length; i++) divTerm[i] = MathF.Exp((2 * i) * (float)(-(Math.Log(10000.0) / dim)));
+        for (int i = 0; i < divTerm.Length; i++) divTerm[i] = MathF.Exp((2.0f * i) * (float)(-(Math.Log(10000.0) / dim)));
         for (int p = 0; p < PositionRows; p++)
             for (int i = 0; i < divTerm.Length; i++)
             {

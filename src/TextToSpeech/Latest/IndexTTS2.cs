@@ -609,7 +609,7 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
     /// faded by a raised cosine (<c>fade_out_tail</c>).</summary>
     private double[] Join(List<double[]> waves)
     {
-        int silence = (int)(_options.SampleRate * _options.SegmentSilenceMilliseconds / 1000.0);
+        int silence = (int)((double)_options.SampleRate * _options.SegmentSilenceMilliseconds / 1000.0);
         var joined = new List<double>();
         for (int i = 0; i < waves.Count; i++)
         {
@@ -617,7 +617,7 @@ public partial class IndexTTS2<T> : TtsModelBase<T>
             joined.AddRange(waves[i]);
         }
         var result = joined.ToArray();
-        int n = Math.Min((int)(_options.SampleRate * 20 / 1000.0), result.Length);
+        int n = Math.Min((int)(_options.SampleRate * 20.0 / 1000.0), result.Length);
         if (n > 1)
             for (int i = 0; i < n; i++)
                 result[result.Length - n + i] *= 0.5 * (1 + Math.Cos(Math.PI * i / (n - 1)));

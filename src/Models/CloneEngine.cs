@@ -571,6 +571,10 @@ public static partial class CloneEngine
                 }
                 catch (TargetInvocationException ex) when (ex.InnerException is ArgumentException validation)
                 {
+                    // A rejected options blueprint must not be replaced by a narrower constructor's
+                    // defaults: those may allocate the full production model instead of the requested fixture.
+                    if (arguments.Any(argument => argument is ModelOptions)) throw;
+
                     // Type compatibility is necessary but not sufficient to identify how an
                     // instance was created. A serialization-only shell can hold an empty collection
                     // that matches a public constructor's parameter type while that constructor

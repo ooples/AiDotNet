@@ -531,7 +531,7 @@ public partial class NaturalSpeech<T>
             {
                 InitialLearningRate = o.LearningRate, Beta1 = o.Beta1, Beta2 = o.Beta2, Epsilon = o.Epsilon, WeightDecay = o.WeightDecay,
                 LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.LearningRate,
-                    s => perEpoch is int n && n > 0 ? Math.Pow(o.LearningRateDecay, s / n) : 1.0),
+                    s => perEpoch is int n && n > 0 ? Math.Pow(o.LearningRateDecay, Math.Truncate(s / (double)n)) : 1.0),
                 SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
             }));
         _optimizers[group] = optimizer;

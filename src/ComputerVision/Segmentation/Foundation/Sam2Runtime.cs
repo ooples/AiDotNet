@@ -488,7 +488,7 @@ internal sealed class Sam2Runtime<T>
             foreach (var (images, masks) in prepared)
                 for (int i = 0; i < draws; i++)
                     total += NumOps.ToDouble(trainer.Loss(images, masks, trainer.Draw(masks, random), random)[0]);
-            return NumOps.FromDouble(total / (draws * prepared.Count));
+            return NumOps.FromDouble(total / ((double)draws * prepared.Count));
         }
         finally
         {

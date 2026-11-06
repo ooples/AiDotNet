@@ -7782,18 +7782,28 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         int steps = OptionSensitivityTrainingSteps;
         var probe = new OptionSensitivityProbe<INeuralNetworkModel<T>>(
-            CreateNetwork,
+            CreateOptionSensitivityNetwork,
             network => ObserveNetwork(network, input),
             network =>
             {
                 if (TrainingInvariantsNotApplicable(network)) return;
                 network.SetTrainingMode(true);
-                for (int i = 0; i < steps; i++) network.Train(input, target);
+                PrepareForSupervisedTrainingInvariant(network, input);
+                var objectiveTarget = ResolveTrainingObjectiveTarget(network, input, target);
+                for (int i = 0; i < steps; i++) TrainOn(network, input, objectiveTarget);
                 network.SetTrainingMode(false);
             },
+            prepareOptions: OptionSensitivityFixtureSetup.PrepareOptions,
             describe: network => DescribeNetwork(network, input),
             prepareModel: PrepareRebuiltNetwork);
         OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
+    }
+
+    private INeuralNetworkModel<T> CreateOptionSensitivityNetwork()
+    {
+        var network = CreateNetwork();
+        OptionSensitivityFixtureSetup.UseConfiguredOptimizer(network);
+        return network;
     }
 
     /// <summary>
@@ -7803,6 +7813,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
     /// </summary>
     protected virtual void PrepareRebuiltNetwork(INeuralNetworkModel<T> network)
     {
+        OptionSensitivityFixtureSetup.Prepare(network);
     }
 
     /// <summary>

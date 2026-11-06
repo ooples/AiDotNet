@@ -28,8 +28,14 @@ internal static class MetaVoiceNativeFixture
 
     internal static MetaVoice1B<T> Create<T>()
     {
-        var engine = AiDotNetEngine.Current;
         var model = CreateUnloaded<T>();
+        Prepare(model);
+        return model;
+    }
+
+    internal static void Prepare<T>(MetaVoice1B<T> model)
+    {
+        var engine = AiDotNetEngine.Current;
         model.LoadLanguageModelCheckpoints(FilePath("metavoice_invariant_first.pt"), FilePath("metavoice_invariant_second.pt"));
         model.LoadSpeakerEncoderCheckpoint(FilePath("metavoice_public_speaker.pt"));
         var options = EnCodecOptions.OfficialCheckpoint24kHz();
@@ -68,6 +74,5 @@ internal static class MetaVoiceNativeFixture
             decoder.InstallBand(band, network, fitted);
         }
         model.InstallDecoder(codec, decoder, options);
-        return model;
     }
 }

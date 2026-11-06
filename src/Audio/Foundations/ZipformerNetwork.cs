@@ -192,7 +192,7 @@ internal sealed class ZipformerNetwork<T>
         }
         Fill(EmbedNormBias, 1e-4);
         foreach (var stack in Stacks) foreach (var block in stack.Blocks) Fill(block.NormBias, 1e-4);
-        if (DecoderConv is not null) Fill(DecoderConv, 1.0 / Math.Sqrt(4 * _o.ContextSize));
+        if (DecoderConv is not null) Fill(DecoderConv, 1.0 / Math.Sqrt(4.0 * _o.ContextSize));
     }
 
     private readonly int _embedWidth;

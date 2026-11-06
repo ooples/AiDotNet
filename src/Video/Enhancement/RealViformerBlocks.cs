@@ -89,7 +89,7 @@ internal static class RealViformerBlocks
         const double sigma = 1.5;
         int c = x.Shape[1];
         var g = new double[size];
-        for (int i = 0; i < size; i++) g[i] = Math.Exp(-Math.Pow(i - size / 2, 2) / (2 * sigma * sigma));
+        for (int i = 0; i < size; i++) g[i] = Math.Exp(-Math.Pow(i - (size - 1) / 2.0, 2) / (2 * sigma * sigma));
         double total = g.Sum();
         var kernel = new Tensor<T>(new[] { c, 1, size, size });
         for (int ch = 0; ch < c; ch++)

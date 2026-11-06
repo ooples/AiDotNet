@@ -39,7 +39,7 @@ internal sealed class Mars5SinePositions<T>
         var pe = new Tensor<T>(new[] { length, _dim });
         for (int i = 0; i < _dim / 2; i++)
         {
-            float div = MathF.Exp(2 * i * -(float)(Math.Log(10000.0) / _dim));
+            float div = MathF.Exp(2.0f * i * -(float)(Math.Log(10000.0) / _dim));
             for (int p = 0; p < length; p++)
             {
                 float a = p * div;
@@ -114,7 +114,7 @@ internal sealed class Mars5SwiGluLayer<T>
         var v = _engine.TensorNarrow(kv, 1, 2 * _dim, _dim);
         Tensor<T>? bias = keyBias is null ? null : _engine.TensorBroadcastTo(keyBias, new[] { query.Shape[0], keys.Shape[0] });
         var attended = IndexTtsOps.Attend(_engine, IndexTtsOps.SplitHeads(_engine, q, _heads), IndexTtsOps.SplitHeads(_engine, k, _heads),
-            IndexTtsOps.SplitHeads(_engine, v, _heads), 1.0 / Math.Sqrt(_dim / _heads), bias);
+            IndexTtsOps.SplitHeads(_engine, v, _heads), 1.0 / Math.Sqrt((double)_dim / _heads), bias);
         return outProjection.Forward(IndexTtsOps.MergeHeads(_engine, attended));
     }
 

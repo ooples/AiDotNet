@@ -484,7 +484,7 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         {
             var o = _options;
             int perEpoch = Math.Max(1, o.UpdatesPerEpoch);
-            var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.LearningRate, s => Math.Pow(o.LearningRateDecay, s / perEpoch));
+            var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.LearningRate, s => Math.Pow(o.LearningRateDecay, Math.Truncate(s / (double)perEpoch)));
             optimizer = PaperOptimizerFactory.VerifyHandBuilt(this, new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
                 new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
                 {

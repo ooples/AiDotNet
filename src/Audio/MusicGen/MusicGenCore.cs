@@ -138,7 +138,7 @@ internal sealed class MusicGenCore<T>
     private Tensor<T> Attend(Tensor<T> queries, Tensor<T> keys, Tensor<T> values, bool causal, int queryOffset, bool training, Random random)
     {
         int lq = queries.Shape[0], lk = keys.Shape[0], d = Configuration.ModelDim, heads = Configuration.Heads;
-        var q = _engine.TensorMultiplyScalar(SplitHeads(queries), NumOps.FromDouble(1.0 / Math.Sqrt(d / heads)));
+        var q = _engine.TensorMultiplyScalar(SplitHeads(queries), NumOps.FromDouble(1.0 / Math.Sqrt((double)d / heads)));
         var scores = _engine.BatchMatMul(q, _engine.TensorPermute(SplitHeads(keys), new[] { 0, 2, 1 }));       // [H, Lq, Lk]
         if (causal && lk > 1)
         {

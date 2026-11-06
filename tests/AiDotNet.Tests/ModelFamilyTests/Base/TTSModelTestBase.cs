@@ -34,6 +34,18 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
     protected sealed override INeuralNetworkModel<T> CreateNetwork()
     {
         var network = CreateTtsNetwork();
+        PrepareVoice(network);
+        return network;
+    }
+
+    protected override void PrepareRebuiltNetwork(INeuralNetworkModel<T> network)
+    {
+        base.PrepareRebuiltNetwork(network);
+        PrepareVoice(network);
+    }
+
+    private void PrepareVoice(INeuralNetworkModel<T> network)
+    {
         if (network is AiDotNet.TextToSpeech.TtsModelBase<T> tts
             && tts.SynthesisVoiceRequirement != AiDotNet.TextToSpeech.TtsSupervision.None
             && tts.Voice is null)
@@ -59,7 +71,6 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
                 Description = SyntheticDescription(),
             };
         }
-        return network;
     }
 
     /// <summary>Frames of the voice's reference mel spectrogram (12; a style encoder that pools by 16 needs more).</summary>

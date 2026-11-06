@@ -241,7 +241,7 @@ public abstract partial class FishSpeechBase<T> : TtsModelBase<T>, ICodecTts<T>,
     /// <remarks>Rounded: one frame per hop times the quantizer's downsampling (44,100 / 2,048 ≈ 21.5 Hz in the
     /// release).</remarks>
     public int CodecFrameRate =>
-        (int)Math.Round(_options.SampleRate / (double)(_options.HopSize * _options.CodecDownsampleFactors.Aggregate(1, (a, b) => a * b)));
+        (int)Math.Round(_options.SampleRate / (_options.HopSize * _options.CodecDownsampleFactors.Aggregate(1.0, (a, b) => a * b)));
 
     /// <inheritdoc />
     /// <remarks>Firefly-GAN's codes <c>[frames, codebooks]</c> of audio at the model's rate.</remarks>

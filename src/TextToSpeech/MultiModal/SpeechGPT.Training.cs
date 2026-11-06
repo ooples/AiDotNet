@@ -245,7 +245,7 @@ public partial class SpeechGPT<T>
         var optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
             InitialLearningRate = o.VocoderLearningRate, Beta1 = 0.8, Beta2 = 0.99, WeightDecay = 0.01,
-            LearningRateScheduler = new LambdaLRScheduler(o.VocoderLearningRate, step => Math.Pow(o.VocoderLearningRateDecay, step / perEpoch)),
+            LearningRateScheduler = new LambdaLRScheduler(o.VocoderLearningRate, step => Math.Pow(o.VocoderLearningRateDecay, Math.Truncate(step / (double)perEpoch))),
             SchedulerStepMode = SchedulerStepMode.StepPerBatch,
         });
         return _optimizers[group] = group == "vocoder" ? PaperOptimizerFactory.VerifyHandBuilt(this, optimizer, "vocoder") : optimizer;

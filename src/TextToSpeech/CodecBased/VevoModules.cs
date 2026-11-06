@@ -413,7 +413,7 @@ internal sealed class VevoFlowMatching<T>
         var target = _engine.TensorSubtract(mel, _engine.TensorMultiplyScalar(noise, NumOps.FromDouble(1 - c.Sigma)));
         var error = _engine.TensorMultiply(_engine.TensorAbs(_engine.TensorSubtract(predicted, target)), _engine.TensorSubtract(ones, keep));
         int counted = frames - Math.Min(prompt, frames);
-        return _engine.TensorMultiplyScalar(_engine.ReduceSum(error, null), NumOps.FromDouble(1.0 / (dim * Math.Max(counted, 1))));
+        return _engine.TensorMultiplyScalar(_engine.ReduceSum(error, null), NumOps.FromDouble(1.0 / ((double)dim * Math.Max(counted, 1))));
     }
 
     /// <summary>Loads the release's <c>cond_emb</c> and <c>diff_estimator.*</c>.</summary>

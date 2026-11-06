@@ -36,7 +36,7 @@ internal sealed partial class DiffWaveUpsampleLayer<T> : LayerBase<T>, IShapeCon
             ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
             : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
         // PyTorch's ConvTranspose2d default: U(−1/√fan_in, 1/√fan_in) with fan_in = out_channels · 3 · 2·stride.
-        double bound = 1.0 / Math.Sqrt(3 * 2 * stride);
+        double bound = 1.0 / Math.Sqrt(3.0 * 2 * stride);
         _kernel = new Tensor<T>(new[] { 1, 1, 3, 2 * stride });
         for (int i = 0; i < _kernel.Length; i++) _kernel[i] = NumOps.FromDouble((2 * random.NextDouble() - 1) * bound);
         _bias = new Tensor<T>(new[] { 1 });

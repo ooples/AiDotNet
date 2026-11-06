@@ -161,7 +161,7 @@ public partial class ParallelWaveGAN<T> : GanVocoderBase<T>
         var o = PaperOptions;
         double rate = group == "discriminator" ? o.DiscriminatorLearningRate : o.LearningRate;
         int halving = Math.Max(1, o.LearningRateHalvingSteps);
-        var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(rate, step => Math.Pow(0.5, step / halving));
+        var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(rate, step => Math.Pow(0.5, Math.Truncate(step / (double)halving)));
         var optimizer = new RAdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new RAdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
             InitialLearningRate = rate,

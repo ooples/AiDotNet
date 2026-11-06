@@ -70,7 +70,7 @@ internal sealed class MetaVoiceBandProcessor<T>
             Tensor<T> Aggregate(bool square, Tensor<T>[] values)
             {
                 var entries = values.Select(x => _engine.Reshape(Scale(_engine.ReduceSum(square ? _engine.TensorMultiply(x, x) : x,
-                    new[] { 0, 1, 2 }, true), 1.0 / (x.Shape[1] * x.Shape[2])), new[] { 1 })).ToArray();
+                    new[] { 0, 1, 2 }, true), 1.0 / ((double)x.Shape[1] * x.Shape[2])), new[] { 1 })).ToArray();
                 return _engine.TensorConcatenate(entries, 0);
             }
             _count += input.Shape[0];

@@ -87,7 +87,7 @@ internal sealed class FishFireflyCodec<T>
     public FishConv Post { get; }
 
     /// <summary>Codes per second.</summary>
-    public double FrameRate => Configuration.SampleRate / (double)(Configuration.HopSize * Configuration.DownsampleFactors.Aggregate(1, (a, b) => a * b));
+    public double FrameRate => Configuration.SampleRate / (Configuration.HopSize * Configuration.DownsampleFactors.Aggregate(1.0, (a, b) => a * b));
 
     // ---------------------------------------------------------------- construction
 

@@ -17,6 +17,30 @@ namespace AiDotNet.Tests.UnitTests.TimeSeries;
 /// </summary>
 public class DeepARNetworkModelTests
 {
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void BatchedUnivariateTargetsMayOmitTheSingletonSeriesAxis(int batch)
+    {
+        using var model = new DeepAR<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), Small());
+        var input = new Tensor<double>(new[] { batch, 12, 1 });
+        var flatTarget = new Tensor<double>(new[] { batch, 4 });
+        var explicitTarget = new Tensor<double>(new[] { batch, 4, 1 });
+        for (int i = 0; i < input.Length; i++) input.SetFlat(i, 2 + Math.Sin(i * 0.3));
+        for (int i = 0; i < flatTarget.Length; i++)
+        {
+            double value = 2 + Math.Cos(i * 0.3);
+            flatTarget.SetFlat(i, value);
+            explicitTarget.SetFlat(i, value);
+        }
+        var objective = (AiDotNet.Interfaces.ITrainingObjectiveProvider<double>)model;
+        Assert.Equal(objective.EvaluateTrainingObjective(input, explicitTarget),
+            objective.EvaluateTrainingObjective(input, flatTarget), 12);
+        model.Train(input, flatTarget);
+        Assert.All(model.GetParameters().ToArray(), value => Assert.False(double.IsNaN(value) || double.IsInfinity(value)));
+    }
+
     private static DeepAROptions<double> Small(string likelihood = "Gaussian") => new()
     {
         LookbackWindow = 12, ForecastHorizon = 4, HiddenSize = 8, NumLayers = 2, DropoutRate = 0.0, Epochs = 3,

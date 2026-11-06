@@ -146,6 +146,7 @@ public abstract partial class SpanBasedNERBase<T> : SequenceLabeling.SequenceLab
     public override Tensor<T> PredictLabels(Tensor<T> tokenEmbeddings)
     {
         ThrowIfDisposed();
+        SetTrainingMode(false);
         var preprocessed = PreprocessTokens(tokenEmbeddings);
         var output = IsOnnxMode ? RunOnnxInference(preprocessed) : Forward(preprocessed);
         return PostprocessOutput(output);
@@ -161,6 +162,7 @@ public abstract partial class SpanBasedNERBase<T> : SequenceLabeling.SequenceLab
     public IReadOnlyList<NamedEntitySpan> PredictSpans(Tensor<T> tokenEmbeddings)
     {
         ThrowIfDisposed();
+        SetTrainingMode(false);
         if (!_usesPaperHead) throw new NotSupportedException("Span predictions are defined for the paper's head; this model runs custom layers or ONNX.");
         var preprocessed = PreprocessTokens(tokenEmbeddings);
         if (preprocessed.Rank != 2) throw new ArgumentException("PredictSpans takes one sequence [seqLen, hiddenDim].", nameof(tokenEmbeddings));

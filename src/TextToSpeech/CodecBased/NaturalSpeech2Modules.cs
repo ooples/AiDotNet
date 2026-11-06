@@ -83,7 +83,7 @@ internal static class Ns2Ops
         for (int p = 0; p < length; p++)
             for (int i = 0; 2 * i < dim; i++)
             {
-                double angle = (first + p) * Math.Exp(2 * i * (-Math.Log(10000.0) / dim));
+                double angle = (first + p) * Math.Exp(2.0 * i * (-Math.Log(10000.0) / dim));
                 table[p, 2 * i] = ops.FromDouble(Math.Sin(angle));
                 if (2 * i + 1 < dim) table[p, 2 * i + 1] = ops.FromDouble(Math.Cos(angle));
             }
@@ -152,7 +152,7 @@ internal sealed class Ns2Attention<T>
         var k = IndexTtsOps.SplitHeads(_engine, _engine.TensorNarrow(kv, 1, _dim, _dim), _heads);
         var v = IndexTtsOps.SplitHeads(_engine, _engine.TensorNarrow(kv, 1, 2 * _dim, _dim), _heads);
         var scores = _engine.TensorMultiplyScalar(_engine.BatchMatMul(IndexTtsOps.SplitHeads(_engine, q, _heads), _engine.TensorPermute(k, new[] { 0, 2, 1 })),
-            NumOps.FromDouble(1.0 / Math.Sqrt(_dim / _heads)));
+            NumOps.FromDouble(1.0 / Math.Sqrt((double)_dim / _heads)));
         var weights = Ns2Ops.Dropout(_engine, _engine.Softmax(scores, axis: 2), _dropout, training, random);
         return OutProjection.Forward(IndexTtsOps.MergeHeads(_engine, _engine.BatchMatMul(weights, v)));
     }

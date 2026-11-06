@@ -164,8 +164,8 @@ internal sealed class GlmVoiceDecoder<T>
             var faded = mel.Clone();
             for (int f = 0; f < overlap; f++)
             {
-                double fadeIn = 0.54 - 0.46 * Math.Cos(2 * Math.PI * f / (2 * overlap - 1));
-                double fadeOut = 0.54 - 0.46 * Math.Cos(2 * Math.PI * (overlap + f) / (2 * overlap - 1));
+                double fadeIn = 0.54 - 0.46 * Math.Cos(2 * Math.PI * f / (2.0 * overlap - 1));
+                double fadeOut = 0.54 - 0.46 * Math.Cos(2 * Math.PI * (overlap + f) / (2.0 * overlap - 1));
                 for (int c = 0; c < channels; c++)
                     faded[0, c, f] = NumOps.FromDouble(NumOps.ToDouble(mel[0, c, f]) * fadeIn
                         + NumOps.ToDouble(state.Overlap[0, c, previous - overlap + f]) * fadeOut);

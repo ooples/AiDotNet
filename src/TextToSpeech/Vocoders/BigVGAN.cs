@@ -152,7 +152,7 @@ public partial class BigVGAN<T> : GanVocoderBase<T>
     {
         var o = PaperOptions;
         int perEpoch = Math.Max(1, o.UpdatesPerEpoch);
-        var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.LearningRate, step => Math.Pow(o.LearningRateDecay, step / perEpoch));
+        var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.LearningRate, step => Math.Pow(o.LearningRateDecay, Math.Truncate(step / (double)perEpoch)));
         return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {

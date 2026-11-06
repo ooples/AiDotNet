@@ -283,7 +283,7 @@ internal sealed class VoiceboxTransformerBlock<T>
         if (n < heads)
         {
             double extra = Math.Pow(2.0, -4.0 / n);
-            for (int i = n; i < heads; i++) result[i] = Math.Pow(extra, 2 * (i - n) + 1);
+            for (int i = n; i < heads; i++) result[i] = Math.Pow(extra, 2.0 * (i - n) + 1);
         }
         return result;
     }

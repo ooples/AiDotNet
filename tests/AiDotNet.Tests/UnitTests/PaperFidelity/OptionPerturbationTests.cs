@@ -7,6 +7,15 @@ namespace AiDotNet.Tests.UnitTests.PaperFidelity;
 
 public class OptionPerturbationTests
 {
+    [Theory]
+    [InlineData(3)]
+    [InlineData(5)]
+    public void IntegerCandidatesIncludeDifferentPositiveOddKernel(int kernel)
+    {
+        var candidates = OptionSensitivityHarness.Perturbations(typeof(int), kernel).Cast<int>().ToArray();
+        Assert.Contains(candidates, value => value > 0 && value % 2 == 1 && value != kernel);
+    }
+
     static OptionPerturbationTests()
     {
         CloneRegistry.Register(new ClonePlan(
@@ -23,6 +32,8 @@ public class OptionPerturbationTests
             typeof(LateRandomModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
         CloneRegistry.Register(new ClonePlan(
             typeof(DeepFixtureModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
+        CloneRegistry.Register(new ClonePlan(
+            typeof(RejectingOptionsModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
     }
 
     public sealed class FixedArrayOptions : ModelOptions
@@ -81,6 +92,27 @@ public class OptionPerturbationTests
     public sealed class DepthOptions : ModelOptions
     {
         public int Depth { get; set; } = 5;
+    }
+
+    public sealed class RejectingOptionsModel
+    {
+        private readonly DepthOptions _options;
+        public RejectingOptionsModel() : this(new DepthOptions()) { }
+        public RejectingOptionsModel(DepthOptions options)
+        {
+            if (options.Depth > 6) throw new ArgumentOutOfRangeException(nameof(options));
+            _options = options;
+        }
+    }
+
+    [Fact]
+    public void RejectedOptionsDoNotFallBackToTheParameterlessConstructor()
+    {
+        var options = new DepthOptions();
+        var model = new RejectingOptionsModel(options);
+        options.Depth = 7;
+        var error = Assert.Throws<System.Reflection.TargetInvocationException>(() => CloneEngine.CopyConfiguration(model));
+        Assert.IsType<ArgumentOutOfRangeException>(error.InnerException);
     }
 
     public sealed class DeepFixtureModel

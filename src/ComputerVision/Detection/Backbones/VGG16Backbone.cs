@@ -72,10 +72,11 @@ public partial class VGG16Backbone<T> : NeuralNetworkBase<T>, IDetectionBackbone
     /// <param name="options">Input channels; defaults to three.</param>
     public VGG16Backbone(VGG16BackboneOptions? options = null)
         : base(DetectionBackboneArchitecture<T>.Create(VGG16BackboneOptions.OrDefault(options).InChannels),
-              new MeanSquaredErrorLoss<T>())
+              new MeanSquaredErrorLoss<T>(), maxGradNorm: VGG16BackboneOptions.OrDefault(options).MaxGradNorm)
     {
         var resolved = VGG16BackboneOptions.OrDefault(options);
         resolved.Validate();
+        Options = resolved;
         _inChannels = resolved.InChannels;
         int inputs = _inChannels;
         _blocks = new List<ConvolutionalLayer<T>[]>();
@@ -135,7 +136,7 @@ public partial class VGG16Backbone<T> : NeuralNetworkBase<T>, IDetectionBackbone
             var values = new double[count];
             if (name.EndsWith(".weight", StringComparison.Ordinal))
             {
-                double std = Math.Sqrt(2.0 / (shape[0] * shape[2] * shape[3]));
+                double std = Math.Sqrt(2.0 / ((double)shape[0] * shape[2] * shape[3]));
                 for (int i = 0; i < count; i++) values[i] = std * Normal();
             }
             return values;

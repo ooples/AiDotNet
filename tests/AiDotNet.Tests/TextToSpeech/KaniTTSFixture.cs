@@ -54,9 +54,14 @@ internal static class KaniTTSFixture
                 EmbedderIntermediate = 32, EmbedderPositionalKernel = 16, EmbedderPositionalGroups = 2, EmbedderHeadWidth = 6,
                 Temperature = 0, MaxNewTokens = 40, GradientAccumulationSteps = 1, TokenizerJson = (string)f["tokenizer"]!,
             });
-        var state = (JObject)speaking["lm_state"]!;
-        model.LoadLanguageModel(name => state[name]?.Select(v => (double)v).ToArray());
+        Prepare(model);
         return model;
+    }
+
+    internal static void Prepare<T>(KaniTTS2<T> model)
+    {
+        var state = (JObject)Speaking2.Value["lm_state"]!;
+        model.LoadLanguageModel(name => state[name]?.Select(v => (double)v).ToArray());
     }
 
     public static KaniTTS<T> Create<T>()
@@ -77,8 +82,13 @@ internal static class KaniTTSFixture
                 CodecUpsampleRates = Ints(codec["decoder"]!["up_sample_rates"]!), CodecLevels = Ints(codec["quantizer"]!["num_levels_per_group"]!),
                 LoraRank = 4, LoraAlpha = 4, Temperature = 0, MaxNewTokens = 40, GradientAccumulationSteps = 1, TokenizerJson = (string)f["tokenizer"]!,
             });
-        var state = (JObject)speaking["lm_state"]!;
-        model.LoadLanguageModel(name => state[name]?.Select(v => (double)v).ToArray());
+        Prepare(model);
         return model;
+    }
+
+    internal static void Prepare<T>(KaniTTS<T> model)
+    {
+        var state = (JObject)Data.Value.Speaking["lm_state"]!;
+        model.LoadLanguageModel(name => state[name]?.Select(v => (double)v).ToArray());
     }
 }

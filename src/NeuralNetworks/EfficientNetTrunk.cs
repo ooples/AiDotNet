@@ -280,7 +280,7 @@ internal sealed class EfficientNetTrunk<T>
         {
             int k = conv.KernelSize, outputs = conv.OutputDepth;
             conv.SetParameters(TextToSpeech.CodecBased.TorchParameters.Gaussian<T>(random, outputs * KernelInputs(conv) * k * k,
-                Math.Sqrt(2.0 / (k * k * outputs / conv.Groups))));
+                Math.Sqrt(2.0 / ((double)k * k * outputs / conv.Groups))));
             TextToSpeech.CodecBased.TorchParameters.BatchNorm(norm, Enumerable.Repeat(1.0, outputs).ToArray(), new double[outputs], new double[outputs],
                 Enumerable.Repeat(1.0, outputs).ToArray());
         }

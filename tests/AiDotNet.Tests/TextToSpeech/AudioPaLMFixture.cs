@@ -72,15 +72,23 @@ internal static class AudioPaLMFixture
     public static AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T> Tts<T>(AudioPaLMOptions? options = null)
     {
         var model = new AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>(Architecture<T>(), options ?? Options());
+        Prepare(model);
+        return model;
+    }
+
+    internal static void Prepare<T>(AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T> model)
+    {
         model.FitSpeechTokenizer(new[] { Tones<T>(1.0), Tones<T>(1.0, 260.0, 610.0) });
         model.Voice = new TtsVoice<T> { ReferenceAudio = Tones<T>(0.25) };
-        return model;
     }
 
     public static AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> Asr<T>()
     {
         var model = new AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>(Architecture<T>(), Options());
-        model.FitSpeechTokenizer(new[] { Tones<T>(1.0), Tones<T>(1.0, 260.0, 610.0) });
+        Prepare(model);
         return model;
     }
+
+    internal static void Prepare<T>(AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> model)
+        => model.FitSpeechTokenizer(new[] { Tones<T>(1.0), Tones<T>(1.0, 260.0, 610.0) });
 }

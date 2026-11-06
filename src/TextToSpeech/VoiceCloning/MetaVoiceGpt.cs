@@ -96,7 +96,7 @@ internal sealed class MetaVoiceGpt<T>
     private BiasFreeLinearLayer<T> Linear(int input, int output, bool residual = false)
     {
         var layer = Own(() => new BiasFreeLinearLayer<T>(input, output), (long)input * output);
-        if (_restoredLayers is null) layer.SetParameters(TorchParameters.Gaussian<T>(_random, input * output, residual ? .02 / Math.Sqrt(2 * _config.Layers) : .02));
+        if (_restoredLayers is null) layer.SetParameters(TorchParameters.Gaussian<T>(_random, input * output, residual ? .02 / Math.Sqrt(2.0 * _config.Layers) : .02));
         return layer;
     }
     private Tensor<T> Ids(IEnumerable<int> values)

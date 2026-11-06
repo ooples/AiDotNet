@@ -527,7 +527,7 @@ internal sealed class LlamaNetwork<T>
         double m0 = Math.Pow(2.0, -8.0 / n);
         for (int k = 1; k <= n; k++) slopes[k - 1] = Math.Pow(m0, k);
         double m1 = Math.Pow(2.0, -4.0 / n);
-        for (int k = 0; k < heads - n; k++) slopes[n + k] = Math.Pow(m1, 2 * k + 1);
+        for (int k = 0; k < heads - n; k++) slopes[n + k] = Math.Pow(m1, 2.0 * k + 1);
         return slopes;
     }
 

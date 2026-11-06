@@ -64,7 +64,7 @@ internal sealed class MinMoCore<T>
             o.VoiceDecoder);
         int voiceWidth = o.VoiceDecoder.LLMDim;
         OutputProjector = new DenseLayer<T>(voiceWidth, (IActivationFunction<T>)new AiDotNet.ActivationFunctions.IdentityActivation<T>());
-        double bound = 1.0 / Math.Sqrt(2 * o.HiddenDim);
+        double bound = 1.0 / Math.Sqrt(2.0 * o.HiddenDim);
         TorchParameters.Linear(engine, OutputProjector, 2 * o.HiddenDim, voiceWidth,
             Enumerable.Range(0, 2 * o.HiddenDim * voiceWidth).Select(_ => bound * (2 * random.NextDouble() - 1)).ToArray(),
             Enumerable.Range(0, voiceWidth).Select(_ => bound * (2 * random.NextDouble() - 1)).ToArray());

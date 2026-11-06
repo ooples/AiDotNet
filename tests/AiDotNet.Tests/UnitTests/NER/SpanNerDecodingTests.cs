@@ -67,7 +67,9 @@ public class SpanNerDecodingTests
         await Task.Yield();
         using var model = Create(name);
         var input = Sentence(3);
+        model.SetTrainingMode(true);
         var labels = model.PredictLabels(input);
+        Assert.Equal(labels.ToArray(), model.PredictLabels(input).ToArray());
         Assert.Equal(new[] { Tokens }, labels.Shape.ToArray());
         var spans = model.PredictSpans(input);
         foreach (var span in spans)

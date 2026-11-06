@@ -308,7 +308,11 @@ public partial class DeepAR<T> : ForecastingModelBase<T>, ITrainingObjectiveProv
     private Tensor<T> WindowLoss(Tensor<T> input, Tensor<T> target, bool training)
     {
         var x = Batched(input);
-        var y = target.Rank == 2 ? Engine.Reshape(target, new[] { 1, target.Shape[0], target.Shape[1] }) : target;
+        var y = target.Rank == 2
+            ? input.Rank == 3 && x.Shape[2] == 1
+                ? Engine.Reshape(target, new[] { target.Shape[0], target.Shape[1], 1 })
+                : Engine.Reshape(target, new[] { 1, target.Shape[0], target.Shape[1] })
+            : target;
         int batch = x.Shape[0], length = x.Shape[1], series = x.Shape[2], horizon = y.Shape[1];
         if (y.Rank != 3 || y.Shape[0] != batch || y.Shape[2] != series)
             throw new ArgumentException($"The target must be [{batch}, horizon, {series}].", nameof(target));

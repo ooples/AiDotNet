@@ -387,7 +387,7 @@ public partial class GPTSoVITS<T>
                     InitialLearningRate = o.SynthesizerLearningRate, Beta1 = o.Beta1, Beta2 = o.Beta2, Epsilon = o.Epsilon, WeightDecay = o.WeightDecay,
                     MaskParameters = parameters, LearningRateMask = rateMask,
                     LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.SynthesizerLearningRate,
-                        s => perEpoch is int n && n > 0 ? Math.Pow(o.LearningRateDecay, s / n) : 1.0),
+                        s => perEpoch is int n && n > 0 ? Math.Pow(o.LearningRateDecay, Math.Truncate(s / (double)n)) : 1.0),
                     SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
                 }), group);
         }

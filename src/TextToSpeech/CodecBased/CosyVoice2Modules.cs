@@ -32,7 +32,7 @@ internal sealed class UpsampleConformerEncoder<T>
             var conv = new NormedConv1DLayer<T>(inputs, outputs, kernel, 1, 1, 1, 0, false, ConvolutionNormalization.None, useBias: true);
             layers.Add(conv);
             // nn.Conv1d's default initialization: weights and bias from U(±1/√(in·k)).
-            double bound = 1.0 / Math.Sqrt(inputs * kernel);
+            double bound = 1.0 / Math.Sqrt((double)inputs * kernel);
             conv.LoadTorchWeights(Enumerable.Range(0, outputs * inputs * kernel).Select(_ => bound * (2 * initialization.NextDouble() - 1)).ToArray(),
                 null, Enumerable.Range(0, outputs).Select(_ => bound * (2 * initialization.NextDouble() - 1)).ToArray());
             return conv;

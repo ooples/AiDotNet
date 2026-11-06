@@ -83,7 +83,7 @@ internal sealed class VocosEncodecDecoder<T>
         // embedding(codes + offsets).sum(dim=0): codebook q's code k is row q · bins + k.
         var ids = new Tensor<T>(new[] { codebooks * frames });
         for (int q = 0; q < codebooks; q++)
-            for (int f = 0; f < frames; f++) ids[q * frames + f] = NumOps.FromDouble(q * Configuration.CodebookSize + codes[q, f]);
+            for (int f = 0; f < frames; f++) ids[q * frames + f] = NumOps.FromDouble((double)q * Configuration.CodebookSize + codes[q, f]);
         var vectors = _engine.Reshape(Codebooks.Forward(ids), new[] { codebooks, frames, Configuration.LatentDim });
         var summed = _engine.ReduceSum(vectors, new[] { 0 }, keepDims: false);                                     // [F, latent]
         var features = _engine.Reshape(_engine.TensorTranspose(summed), new[] { 1, Configuration.LatentDim, frames });

@@ -198,7 +198,6 @@ internal sealed class FishDualAr<T>
         var tokens = new int[l];
         for (int t = 0; t < l; t++) tokens[t] = rows[0, t];
         var x = Embeddings.Forward(IndexTtsOps.Ids<T>(tokens));
-        var codes = new List<int>();
         var mask = new Tensor<T>(new[] { l, 1 });
         for (int t = 0; t < l; t++)
         {

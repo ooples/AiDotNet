@@ -767,7 +767,7 @@ public abstract partial class VitsTtsModelBase<T> : TtsModelBase<T>, IEndToEndTt
     {
         int perEpoch = Math.Max(1, _vits.UpdatesPerEpoch);
         var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(_vits.LearningRate,
-            step => Math.Pow(_vits.LearningRateDecay, step / perEpoch));
+            step => Math.Pow(_vits.LearningRateDecay, Math.Truncate(step / (double)perEpoch)));
         return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {

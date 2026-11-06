@@ -157,7 +157,7 @@ public partial class MultiBandMelGAN<T> : GanVocoderBase<T>
         var o = PaperOptions;
         int halving = Math.Max(1, o.LearningRateHalvingSteps);
         var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.LearningRate,
-            step => Math.Max(Math.Pow(0.5, step / halving), o.MinimumLearningRate / o.LearningRate));
+            step => Math.Max(Math.Pow(0.5, Math.Truncate(step / (double)halving)), o.MinimumLearningRate / o.LearningRate));
         return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {

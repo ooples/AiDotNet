@@ -315,7 +315,7 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         AdditionalInfo = new Dictionary<string, object>
         {
             ["ModelType"] = "DiTTo-TTS", ["Mode"] = _useNativeMode ? "Native" : "ONNX",
-            ["LatentDim"] = _options.LatentDim, ["LatentRateHz"] = _options.SampleRate / (double)(_options.HopSize * _options.MelVaeDownsampleFactor),
+            ["LatentDim"] = _options.LatentDim, ["LatentRateHz"] = _options.SampleRate / ((double)_options.HopSize * _options.MelVaeDownsampleFactor),
             ["DiTHiddenDim"] = _options.DiTHiddenDim, ["DiTLayers"] = _options.DiTLayers, ["DiTHeads"] = _options.DiTHeads,
             ["AdaLNParametersPerBlock"] = 9 * _options.DiTHiddenDim, ["DiffusionSteps"] = _options.InferenceSteps,
             ["GuidanceScale"] = _options.GuidanceScale, ["SampleRate"] = _options.SampleRate

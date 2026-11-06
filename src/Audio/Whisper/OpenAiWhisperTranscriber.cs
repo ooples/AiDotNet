@@ -676,7 +676,7 @@ internal sealed class OpenAiWhisperTranscriber<T>
                 }
         }
         MergePunctuations(alignment, PrependPunctuations, AppendPunctuations);
-        double timeOffset = segments[0].Seek * HopLength / (double)SampleRate;
+        double timeOffset = (double)segments[0].Seek * HopLength / SampleRate;
         int wordIndex = 0;
         for (int s = 0; s < segments.Count; s++)
         {

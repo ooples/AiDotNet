@@ -94,7 +94,7 @@ public partial class Conv2DLayer<T> : LayerBase<T>, IShapeContract
         var random = RandomSeed.HasValue
             ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(RandomSeed.Value)
             : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
-        double bound = 1.0 / Math.Sqrt(inChannels * kernelHeight * kernelWidth);
+        double bound = 1.0 / Math.Sqrt((double)inChannels * kernelHeight * kernelWidth);
         _kernel = new Tensor<T>(new[] { outChannels, inChannels, kernelHeight, kernelWidth });
         for (int i = 0; i < _kernel.Length; i++) _kernel[i] = NumOps.FromDouble((2 * random.NextDouble() - 1) * bound);
         _bias = new Tensor<T>(new[] { outChannels });

@@ -11,7 +11,9 @@ public class VGG16BackbonePaperTests
     [Fact]
     public void ConfigurationD_ProducesTheFourDetectionPyramidLevels()
     {
-        using var model = new VGG16Backbone<double>();
+        var options = new VGG16BackboneOptions { Seed = 19, MaxGradNorm = 0.25 };
+        using var model = new VGG16Backbone<double>(options);
+        Assert.Same(options, model.GetOptions());
         // Simonyan and Zisserman, Table 1, configuration D: 13 convolutions, five 2x2 pools.
         Assert.Equal(14_714_688, model.GetParameters().Length);
         model.LoadTorchWeights((name, shape) => Enumerable.Repeat(

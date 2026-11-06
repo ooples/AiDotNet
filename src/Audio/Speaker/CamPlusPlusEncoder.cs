@@ -66,7 +66,7 @@ internal sealed class CamPlusPlusEncoder<T>
             int count = outputs * inputs * size * size;
             var holder = Add(new BiasFreeLinearLayer<T>(1, count));
             TorchParameters.Linear(holder, 1, count, Enumerable.Range(0, count)
-                .Select(_ => (2 * initialization.NextDouble() - 1) / Math.Sqrt(inputs * size * size)).ToArray());
+                .Select(_ => (2 * initialization.NextDouble() - 1) / Math.Sqrt((double)inputs * size * size)).ToArray());
             return holder;
         }
         BatchNormalizationLayer<T> Norm(int channels, bool sequence) =>

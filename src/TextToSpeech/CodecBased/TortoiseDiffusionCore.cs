@@ -140,7 +140,7 @@ internal sealed class TortoiseDiffusionCore<T>
         var embedding = new Tensor<T>(new[] { 1, d });
         for (int i = 0; i < d / 2; i++)
         {
-            double angle = timestep * Math.Exp(-Math.Log(10000) * i / (d / 2));
+            double angle = timestep * Math.Exp(-Math.Log(10000) * i / Math.Truncate(d / 2.0));
             embedding[0, i] = TortoiseOps<T>.NumOps.FromDouble(Math.Cos(angle));
             embedding[0, i + d / 2] = TortoiseOps<T>.NumOps.FromDouble(Math.Sin(angle));
         }

@@ -71,7 +71,7 @@ internal sealed class OpenVoiceTrainingController<T>
         if (_supplied is not null) return _supplied;
         if (_optimizers.TryGetValue(group, out var existing)) return existing;
         var schedule = new LambdaLRScheduler(_options.LearningRate,
-            _ => Math.Pow(_options.LearningRateDecay, _options.TrainingSteps / Math.Max(1, _options.UpdatesPerEpoch)));
+            _ => Math.Pow(_options.LearningRateDecay, Math.Truncate(_options.TrainingSteps / (double)Math.Max(1, _options.UpdatesPerEpoch))));
         var optimizer = new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(_owner, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
             InitialLearningRate = _options.LearningRate, Beta1 = _options.Beta1, Beta2 = _options.Beta2,

@@ -71,7 +71,7 @@ public partial class ActNormFlowLayer<T> : LayerBase<T>, IInvertibleFlowStep<T>
             return (Engine.TensorDivide(Engine.TensorSubtract(input, bias), scale), null);
         var output = Engine.TensorAdd(bias, Engine.TensorMultiply(scale, input));
         var logDet = Engine.TensorMultiplyScalar(Engine.ReduceSum(_logScale, new[] { 0 }, keepDims: false),
-            NumOps.FromDouble(batch * time));
+            NumOps.FromDouble((double)batch * time));
         return (output, logDet);
     }
 

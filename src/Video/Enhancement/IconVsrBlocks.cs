@@ -18,7 +18,7 @@ internal static class EdvrConv
     internal static ConvolutionalLayer<T> Module<T>(int outChannels, int kernel, bool activation, int stride = 1)
     {
         double slope = activation ? 0.1 : 0.0;
-        double std = Math.Sqrt(2.0 / (1 + slope * slope)) / Math.Sqrt(outChannels * kernel * kernel);
+        double std = Math.Sqrt(2.0 / (1 + slope * slope)) / Math.Sqrt((double)outChannels * kernel * kernel);
         return new ConvolutionalLayer<T>(outChannels, kernel, stride, kernel / 2,
             activation ? new LeakyReLUActivation<T>(0.1) : null, new NormalInitializationStrategy<T>(0.0, std), null, 1,
             Enums.BiasMode.Always);
@@ -44,7 +44,7 @@ internal sealed class ModulatedDcnPack<T>
         layers.Add(BasicVsrBlocks.Conv<T>(3 * deformGroups * 9, 3, null, new ZeroInitializationStrategy<T>()));
         _main = layers.Count;
         var main = new ConvolutionalLayer<T>(channels, 3, 1, 1, null,
-            new UniformInitializationStrategy<T>(1.0 / Math.Sqrt(channels * 9)), null, 1, Enums.BiasMode.Always);
+            new UniformInitializationStrategy<T>(1.0 / Math.Sqrt(channels * 9.0)), null, 1, Enums.BiasMode.Always);
         layers.Add(main);
         // Materialize the kernel: it is read directly below, never through the holder's own forward.
         using (new NoGradScope<T>()) main.Forward(new Tensor<T>(new[] { 1, channels, 4, 4 }));

@@ -530,7 +530,7 @@ internal sealed class T5Seq2Seq<T>
         }
         void Attention(T5Attention<T> attention)
         {
-            Fill(attention.Query, c.ModelDim, inner, Math.Pow(c.ModelDim * c.KeyValueDim, -0.5));
+            Fill(attention.Query, c.ModelDim, inner, Math.Pow((double)c.ModelDim * c.KeyValueDim, -0.5));
             Fill(attention.Key, c.ModelDim, inner, Math.Pow(c.ModelDim, -0.5));
             Fill(attention.Value, c.ModelDim, inner, Math.Pow(c.ModelDim, -0.5));
             Fill(attention.Output, inner, c.ModelDim, Math.Pow(inner, -0.5));
@@ -782,7 +782,7 @@ internal sealed class T5DecoderOnly<T>
         foreach (var block in Blocks)
         {
             var a = block.SelfAttention;
-            Fill(a.Query, c.ModelDim, inner, Math.Pow(c.ModelDim * c.KeyValueDim, -0.5));
+            Fill(a.Query, c.ModelDim, inner, Math.Pow((double)c.ModelDim * c.KeyValueDim, -0.5));
             Fill(a.Key, c.ModelDim, inner, Math.Pow(c.ModelDim, -0.5));
             Fill(a.Value, c.ModelDim, inner, Math.Pow(c.ModelDim, -0.5));
             Fill(a.Output, inner, c.ModelDim, Math.Pow(inner, -0.5));
