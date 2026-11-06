@@ -190,6 +190,11 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         bool clips = GradientOptions.EnableGradientClipping;
         if (clips && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByValue) return false;
         if (!TryGetFusedLrSchedule(out var schedule)) return false;
+        // Compressed moments have no AMSGrad kernel (its running max is a third moment); the eager step refuses the
+        // combination with a clear error, so decline here rather than compile a plan that drops the storage request.
+        if (_options.UseAMSGrad && _options.MomentStorage != OptimizerMomentStorage.Float32) return false;
+        if (_options.MomentStorage != OptimizerMomentStorage.Float32 && typeof(T) != typeof(float)) return false;
+        if (_options.MomentStorage == OptimizerMomentStorage.Int8Blockwise && _options.Int8MomentBlockSize <= 0) return false;
         // AdamW + AMSGrad runs the max-second-moment kernel with its decay switched to decoupled via Extras.
         config = new Fused.FusedOptimizerConfig(
             _options.UseAMSGrad
@@ -199,6 +204,10 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             _options.Beta1, _options.Beta2, _options.Epsilon,
             _options.WeightDecay, schedule)
         {
+            // The fused plan stores the same compressed moments (bf16, or 8-bit with decay inside the kernel).
+            MomentStorage = _options.MomentStorage,
+            Int8MomentBlockSize = _options.Int8MomentBlockSize,
+            Int8MinQuantizedLength = _options.Int8MinQuantizedLength,
             // The AMSGrad kernel's own decay is Adam's L2 (g += wd*p); AdamW's is decoupled, so say so -
             // otherwise the fused step silently ran L2-regularized AMSGrad instead of AdamW + AMSGrad.
             Extras = _options.UseAMSGrad
@@ -738,11 +747,10 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         T biasCorrection2 = NumOps.FromDouble(1 - Math.Pow(_options.Beta2, _tapeStep));
         T weightDecay = NumOps.FromDouble(_options.WeightDecay);
 
-        // GPU-RESIDENT ADAMW (env AIDOTNET_GPU_ADAM=1): see AdamOptimizer.Step for the rationale — run the
+        // GPU-RESIDENT ADAMW: see AdamOptimizer.Step for the rationale — run the
         // update on the GPU (GpuOptimizer.TryAdamWStep -> backend.AdamWUpdate, decoupled weight decay) so grads
-        // never download. Moments are GPU-resident; falls back to the tensor-op path per-param otherwise. Gated off.
+        // never download. Moments are GPU-resident; falls back to the tensor-op path per-param otherwise.
         bool gpuAdam = configuredMask is null && typeof(T) == typeof(float) && !_options.UseAMSGrad
-            && System.Environment.GetEnvironmentVariable("AIDOTNET_GPU_ADAM") == "1"
             && AiDotNet.Tensors.Engines.AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine;
 
         int maskOffset = 0;
@@ -759,16 +767,26 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             if (!hasDenseGrad && !hasSparseGrad)
                 continue;
 
+            // Compressed moments (MomentStorage bf16 / 8-bit): one state for the device and host steps, no 32-bit m/v.
+            if (UsesCompressedMoments(param))
+            {
+                if (SparseEmbeddingOptimizerHelpers.TryGetEffectiveGradient(context, param, Engine, out var compressedGrad))
+                {
+                    if (compressedGrad.Length != param.Length)
+                        throw new ArgumentException("Compressed AdamW gradient length must match the parameter length.", nameof(context));
+                    CompressedMomentStep(param, compressedGrad, gpuAdam);
+                }
+                continue;
+            }
+
             if (!_tapeM.TryGetValue(param, out var m))
             {
-                m = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
-                if (gpuAdam) m.AsWritableSpan().Clear();
+                m = CreateOptimizerStateTensor(param._shape, gpuAdam);
                 _tapeM[param] = m;
             }
             if (!_tapeV.TryGetValue(param, out var v))
             {
-                v = gpuAdam ? AiDotNet.Tensors.Helpers.TensorAllocator.RentPinnedOnGpu<T>(param._shape) : new Tensor<T>(param._shape);
-                if (gpuAdam) v.AsWritableSpan().Clear();
+                v = CreateOptimizerStateTensor(param._shape, gpuAdam);
                 _tapeV[param] = v;
             }
 
@@ -779,7 +797,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             // from Adam only in decoupled weight decay (θ ← θ(1 − lr·wd) − step),
             // which the helper applies per-row when weightDecay > 0. AMSGrad
             // keeps the dense path (vMax invariant requires touching every row).
-            if (configuredMask is null && !_options.UseAMSGrad
+            if (SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param)
+                && configuredMask is null && !_options.UseAMSGrad
                 && SparseEmbeddingOptimizerHelpers.TryApplyAdamSparse(
                     param, m, v,
                     NumOps.ToDouble(CurrentLearningRate),
@@ -806,7 +825,9 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
                         (Tensor<float>)(object)m, (Tensor<float>)(object)v,
                         (float)NumOps.ToDouble(CurrentLearningRate), (float)_options.Beta1, (float)_options.Beta2,
                         (float)_options.Epsilon, (float)_options.WeightDecay, _tapeStep))
+                {
                     continue;
+                }
             }
 
             // Host fast path: one fused pass per parameter (m, v and the decayed parameter updated in place),
@@ -1037,6 +1058,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         _tapeM.Clear();
         _tapeV.Clear();
         _tapeVMax.Clear();
+        ResetCompressedMoments();
         _tapeStep = 0;
     }
 
@@ -1073,13 +1095,17 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// Gets whether this optimizer supports GPU-accelerated parameter updates.
     /// </summary>
-    public override bool SupportsGpuUpdate => _options.WeightDecayMask is null;
+    public override bool SupportsGpuUpdate =>
+        _options.WeightDecayMask is null && _options.MomentStorage == OptimizerMomentStorage.Float32;
 
     /// <summary>
     /// Initializes AdamW optimizer state on the GPU.
     /// </summary>
     public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
     {
+        if (_options.MomentStorage != OptimizerMomentStorage.Float32)
+            throw new NotSupportedException("The scalar GPU AdamW kernel supports only Float32 moments. Use the eager optimizer path for compressed moments.");
+
         if (_gpuStateInitialized && _gpuM != null && _gpuV != null)
             return;
 
@@ -1096,6 +1122,9 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// </summary>
     public override void UpdateParametersGpu(IGpuBuffer parameters, IGpuBuffer gradients, int parameterCount, IDirectGpuBackend backend)
     {
+        if (_options.MomentStorage != OptimizerMomentStorage.Float32)
+            throw new NotSupportedException("The scalar GPU AdamW kernel supports only Float32 moments. Use the eager optimizer path for compressed moments.");
+
         if (GetValidatedWeightDecayMask(parameterCount) is not null)
         {
             throw new NotSupportedException(
@@ -1128,13 +1157,42 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
     /// <summary>
     /// Disposes GPU-allocated optimizer state.
     /// </summary>
+    /// <remarks>
+    /// Compressed moments are read back to the host first. A slot whose read-back fails (the active engine is no
+    /// longer the GPU engine, or the download throws) still has its device buffers freed, every other slot is still
+    /// read back, and the dense device moments are still disposed; the failures are rethrown afterwards, because the
+    /// failed slots' moments are lost and the caller must not continue as if they were kept.
+    /// </remarks>
     public override void DisposeGpuState()
     {
-        _gpuM?.Dispose();
-        _gpuM = null;
-        _gpuV?.Dispose();
-        _gpuV = null;
-        _gpuStateInitialized = false;
+        List<Exception>? failures = null;
+        try
+        {
+            foreach (var slot in _compressedSlots.Values)
+            {
+                try
+                {
+                    slot.MoveToHost();
+                }
+                catch (Exception ex)
+                {
+                    slot.FreeDevice();
+                    (failures ??= new List<Exception>()).Add(ex);
+                }
+            }
+        }
+        finally
+        {
+            _gpuM?.Dispose();
+            _gpuM = null;
+            _gpuV?.Dispose();
+            _gpuV = null;
+            _gpuStateInitialized = false;
+        }
+        if (failures is { Count: 1 })
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failures[0]).Throw();
+        if (failures is not null)
+            throw new AggregateException("AdamW could not read its compressed moments back from the GPU.", failures);
     }
 
     #endregion

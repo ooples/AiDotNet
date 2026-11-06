@@ -125,5 +125,15 @@ public enum BenchmarkSuite
     /// <summary>
     /// LogiQA - logical reasoning benchmark.
     /// </summary>
-    LogiQA
+    LogiQA,
+
+    /// <summary>
+    /// LAMBADA - full-context open-vocabulary final-word prediction over narrative passages.
+    /// </summary>
+    LAMBADA,
+
+    /// <summary>
+    /// Perplexity - non-overlapping causal language-modeling cross-entropy and perplexity evaluation.
+    /// </summary>
+    Perplexity
 }

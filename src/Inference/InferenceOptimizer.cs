@@ -215,7 +215,7 @@ internal class InferenceOptimizer<T>
         if (_config.EnableKVCache)
         {
             anyOptimizationsApplied |= _config.EnablePagedKVCache
-                ? InitializePagedKVCache(model)
+                ? (InitializePagedKVCache(model) || InitializeKVCache(model))
                 : InitializeKVCache(model);
         }
         else

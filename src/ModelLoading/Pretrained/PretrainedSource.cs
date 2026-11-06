@@ -67,6 +67,12 @@ public sealed class PretrainedSource
     /// </summary>
     public string? ArchitectureOverride { get; private set; }
 
+    /// <summary>
+    /// Optional tokenizer locator (directory path, <c>tokenizer.json</c> file path, or Hugging Face repo id)
+    /// used when auto-attaching a tokenizer during <c>AiModelBuilder.ConfigureModel(PretrainedSource)</c>.
+    /// When <c>null</c>, sibling tokenizer files next to the checkpoint are discovered automatically.
+    /// </summary>
+    public string? TokenizerLocator { get; private set; }
     /// <summary>Creates a source pointing at a Hugging Face Hub repository id.</summary>
     /// <param name="repoId">The repo id, e.g. <c>meta-llama/Llama-3.1-8B-Instruct</c>.</param>
     public static PretrainedSource HuggingFace(string repoId) =>
@@ -127,6 +133,18 @@ public sealed class PretrainedSource
         return this;
     }
 
+    /// <summary>
+    /// Explicitly specifies the tokenizer directory, <c>tokenizer.json</c> file, or Hugging Face Hub repository id
+    /// to load alongside this pretrained model when no tokenizer was already configured on the builder.
+    /// </summary>
+    public PretrainedSource WithTokenizer(string locator)
+    {
+        if (string.IsNullOrWhiteSpace(locator))
+            throw new ArgumentException("Tokenizer locator must be non-empty.", nameof(locator));
+
+        TokenizerLocator = locator;
+        return this;
+    }
     /// <inheritdoc/>
     public override string ToString() =>
         $"{Kind}:{Locator}" +

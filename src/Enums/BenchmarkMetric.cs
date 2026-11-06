@@ -49,5 +49,40 @@ public enum BenchmarkMetric
     /// <summary>
     /// Root mean squared error (regression-style error metric).
     /// </summary>
-    RootMeanSquaredError
+    RootMeanSquaredError,
+
+    /// <summary>
+    /// Exponential of token-level cross-entropy loss (<c>exp(CrossEntropyLoss)</c>), unclamped.
+    /// </summary>
+    Perplexity,
+
+    /// <summary>
+    /// Mean negative log-likelihood in nats per evaluated token.
+    /// </summary>
+    CrossEntropyLoss,
+
+    /// <summary>
+    /// Corpus cross-entropy normalized into bits per UTF-8 byte.
+    /// </summary>
+    BitsPerByte,
+
+    /// <summary>
+    /// Subword-level top-1 next-token accuracy (0.0 to 1.0).
+    /// </summary>
+    SubwordTop1Accuracy,
+
+    /// <summary>
+    /// Raw unscaled median wall-clock inference time per evaluated passage or window in milliseconds.
+    /// </summary>
+    MedianTimePerItemMilliseconds,
+
+    /// <summary>
+    /// Raw unscaled 95th-percentile wall-clock inference time per evaluated passage or window in milliseconds.
+    /// </summary>
+    P95TimePerItemMilliseconds,
+
+    /// <summary>
+    /// Total number of target tokens scored across the evaluation slice.
+    /// </summary>
+    EvaluatedTokens
 }

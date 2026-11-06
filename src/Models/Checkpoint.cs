@@ -27,6 +27,19 @@ public class Checkpoint<T, TInput, TOutput>
     public object? Model { get; set; }
 
     /// <summary>
+    /// Whether the checkpoint's JSON carries <see cref="Model"/> (Newtonsoft's <c>ShouldSerialize</c> convention).
+    /// </summary>
+    /// <remarks>
+    /// A model that persists itself (<see cref="ICheckpointableModel"/>, every neural network) is written to the
+    /// checkpoint's state sidecar, which is what a resume restores from. Reflecting over the live model as well put
+    /// every public property of every layer into the JSON -- weights, caches, nested objects -- which reloads only as
+    /// an un-rehydrated <c>JObject</c> and, for a 16.7M-parameter gated-DeltaNet language model, exceeded the
+    /// string builder's capacity and threw <see cref="OutOfMemoryException"/> at the first save. Other models keep
+    /// their JSON entry.
+    /// </remarks>
+    public bool ShouldSerializeModel() => Model is not ICheckpointableModel;
+
+    /// <summary>
     /// Gets or sets the optimizer state as a serializable dictionary.
     /// </summary>
     /// <remarks>
@@ -51,6 +64,24 @@ public class Checkpoint<T, TInput, TOutput>
     /// as lightweight metadata for inspection and backwards compatibility.
     /// </remarks>
     public byte[] OptimizerData { get; set; } = Array.Empty<byte>();
+
+    /// <summary>
+    /// Whether <see cref="OptimizerData"/> was written to the checkpoint's binary optimizer sidecar instead of the
+    /// JSON.
+    /// </summary>
+    /// <remarks>
+    /// The optimizer payload holds every moment tensor. As base64 inside the JSON it took 4/3 of its size again and
+    /// was built as one string, so a 16.7M-parameter AdamW model wrote a 331 MB JSON, and a model a few times larger
+    /// exceeded the largest string .NET can build. The checkpoint manager writes the bytes beside the JSON as they are
+    /// (as <c>torch.save</c> keeps the optimizer's tensors out of any text format) and reads them back on load.
+    /// </remarks>
+    public bool OptimizerDataInSidecar { get; set; }
+
+    /// <summary>
+    /// Whether the checkpoint's JSON carries <see cref="OptimizerData"/> (Newtonsoft's <c>ShouldSerialize</c>
+    /// convention): only when it is not in the optimizer sidecar.
+    /// </summary>
+    public bool ShouldSerializeOptimizerData() => !OptimizerDataInSidecar;
 
     /// <summary>
     /// Gets or sets the optimizer type name for reconstruction.

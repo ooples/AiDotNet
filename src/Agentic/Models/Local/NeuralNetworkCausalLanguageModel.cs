@@ -1,59 +1,43 @@
+using System;
+using System.Collections.Generic;
+using AiDotNet.Configuration;
+using AiDotNet.Helpers;
+using AiDotNet.Inference;
+using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors;
+using AiDotNet.Tensors.Helpers;
 
 namespace AiDotNet.Agentic.Models.Local;
 
 /// <summary>
 /// Adapts a trained AiDotNet <see cref="NeuralNetworkBase{T}"/> language model (e.g.,
 /// <c>MambaLanguageModel</c>, <c>GLALanguageModel</c>, or a Transformer LM head) to the
-/// <see cref="ICausalLanguageModel{T}"/> seam, so <see cref="LocalEngineChatClient{T}"/> can run real,
-/// fully in-process generation over the library's own networks.
+/// <see cref="IIncrementalCausalLanguageModel{T}"/> and <see cref="ILanguageModel{T}"/> seams,
+/// enabling KV-cached incremental generation as well as full-context forward passes.
 /// </summary>
 /// <typeparam name="T">The tensor element type of the network (e.g., <see cref="float"/> or <see cref="double"/>).</typeparam>
-/// <remarks>
-/// <para>
-/// AiDotNet's language models accept a one-hot input tensor of shape <c>[1, sequence, vocab]</c> and return
-/// logits of the same leading shape. This adapter encodes the context as that one-hot tensor, runs a forward
-/// pass, and returns the final position's logits. It re-feeds the full context each step (no KV-cache yet)
-/// and calls <see cref="NeuralNetworkBase{T}.ResetState"/> before each pass so recurrent models (Mamba/GLA)
-/// start fresh — correct, if not yet optimal. A KV-cached fast path is a planned follow-up.
-/// </para>
-/// <para>
-/// <b>Quantization</b> composes through this adapter rather than being re-implemented here: quantize the
-/// network with the repository's <c>ModelCompression</c> stack first, then wrap the quantized
-/// <see cref="NeuralNetworkBase{T}"/> — the adapter accepts any such network unchanged, so a smaller/faster
-/// model needs no engine-side code.
-/// </para>
-/// <para><b>For Beginners:</b> This is the bridge that lets the local chat engine talk to a real AiDotNet
-/// network. It turns the running list of tokens into the exact tensor shape the network expects, asks the
-/// network for its prediction, and hands back the scores for the next token — which the engine then samples
-/// from. The result: a chatbot powered entirely by an in-house model, no external service.
-/// </para>
-/// </remarks>
-public sealed class NeuralNetworkCausalLanguageModel<T> : ICausalLanguageModel<T>
+public sealed class NeuralNetworkCausalLanguageModel<T>
+    : IIncrementalCausalLanguageModel<T>,
+      ILanguageModel<T>,
+      IDisposable
 {
-    private static readonly T One = (T)Convert.ChangeType(1.0, typeof(T));
-
     private readonly NeuralNetworkBase<T> _network;
     private readonly int _maxContextTokens;
-
-    // ResetState() + Predict() mutate shared network state (recurrent models
-    // carry hidden state between the two calls); interleaved concurrent
-    // requests through one adapter instance would corrupt each other's logits.
     private readonly object _sync = new();
+
+    private InferenceOptimizer<T>? _kvOptimizer;
+    private NeuralNetworkBase<T>? _kvNetwork;
+    private bool _ownsKvNetwork;
+    private bool _kvInitAttempted;
+    private bool _hasActiveKvCache;
+    private List<int>? _runningTokens;
+    private bool _disposed;
 
     /// <summary>
     /// Initializes a new adapter over a network language model.
     /// </summary>
-    /// <param name="network">The trained network whose <c>Predict</c> maps one-hot tokens to vocab logits.</param>
-    /// <param name="vocabularySize">The model's vocabulary size (the width of the one-hot input and logits).</param>
-    /// <param name="maxContextTokens">
-    /// The maximum number of most-recent tokens to feed the network (typically its max sequence length).
-    /// <c>null</c> or non-positive feeds the entire context.
-    /// </param>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="network"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="vocabularySize"/> is not positive.</exception>
     public NeuralNetworkCausalLanguageModel(NeuralNetworkBase<T> network, int vocabularySize, int? maxContextTokens = null)
     {
         Guard.NotNull(network);
@@ -67,9 +51,20 @@ public sealed class NeuralNetworkCausalLanguageModel<T> : ICausalLanguageModel<T
     public int VocabularySize { get; }
 
     /// <inheritdoc/>
-    /// <exception cref="ArgumentNullException">Thrown when <paramref name="tokenIds"/> is <c>null</c>.</exception>
-    /// <exception cref="ArgumentException">Thrown when <paramref name="tokenIds"/> is empty.</exception>
-    /// <exception cref="ArgumentOutOfRangeException">Thrown when a token id is outside the vocabulary.</exception>
+    public Tensor<T> ForwardLogits(Tensor<T> tokenIds)
+    {
+        Guard.NotNull(tokenIds);
+        if (tokenIds.Shape.Length != 2)
+            throw new ArgumentException("tokenIds must have shape [batch, seqLen].", nameof(tokenIds));
+
+        lock (_sync)
+        {
+            _network.ResetState();
+            return _network.Predict(tokenIds);
+        }
+    }
+
+    /// <inheritdoc/>
     public Vector<T> NextTokenLogits(IReadOnlyList<int> tokenIds)
     {
         Guard.NotNull(tokenIds);
@@ -81,10 +76,7 @@ public sealed class NeuralNetworkCausalLanguageModel<T> : ICausalLanguageModel<T
         var start = _maxContextTokens == int.MaxValue ? 0 : Math.Max(0, tokenIds.Count - _maxContextTokens);
         var sequenceLength = tokenIds.Count - start;
 
-        // Token IDS, shape [1, seq]. The networks this adapts -- MambaLanguageModel,
-        // GLALanguageModel, a Transformer LM head -- all begin with an embedding LOOKUP, so a
-        // one-hot [1, seq, vocab] tensor was read as a length-vocab sequence and the model returned
-        // rank-4 logits, which ExtractLastPositionLogits then rejected outright.
+        var numOps = MathHelper.GetNumericOperations<T>();
         var input = new Tensor<T>(new[] { 1, sequenceLength });
         for (var position = 0; position < sequenceLength; position++)
         {
@@ -95,7 +87,7 @@ public sealed class NeuralNetworkCausalLanguageModel<T> : ICausalLanguageModel<T
                     nameof(tokenIds), id, $"Token id is outside the vocabulary [0, {VocabularySize}).");
             }
 
-            input[new[] { 0, position }] = (T)Convert.ChangeType((double)id, typeof(T));
+            input[new[] { 0, position }] = numOps.FromDouble(id);
         }
 
         Tensor<T> output;
@@ -108,6 +100,139 @@ public sealed class NeuralNetworkCausalLanguageModel<T> : ICausalLanguageModel<T
         return ExtractLastPositionLogits(output);
     }
 
+    /// <inheritdoc/>
+    public void ResetCache()
+    {
+        lock (_sync)
+        {
+            _kvOptimizer?.ClearCache();
+            _kvNetwork?.ResetState();
+            _runningTokens = null;
+        }
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> StartSequence(IReadOnlyList<int> promptTokenIds)
+    {
+        Guard.NotNull(promptTokenIds);
+        if (promptTokenIds.Count == 0)
+            throw new ArgumentException("The prompt must contain at least one token.", nameof(promptTokenIds));
+
+        lock (_sync)
+        {
+            EnsureKvOptimizerInitializedLocked();
+            _kvOptimizer?.ClearCache();
+            _kvNetwork?.ResetState();
+
+            var start = _maxContextTokens == int.MaxValue ? 0 : Math.Max(0, promptTokenIds.Count - _maxContextTokens);
+            int seqLen = promptTokenIds.Count - start;
+            _runningTokens = new List<int>(seqLen + 16);
+
+            var numOps = MathHelper.GetNumericOperations<T>();
+            var input = new Tensor<T>(new[] { 1, seqLen });
+            for (int i = 0; i < seqLen; i++)
+            {
+                int id = promptTokenIds[start + i];
+                if (id < 0 || id >= VocabularySize)
+                    throw new ArgumentOutOfRangeException(nameof(promptTokenIds), id, $"Token id is outside [0, {VocabularySize}).");
+                _runningTokens.Add(id);
+                input[0, i] = numOps.FromDouble(id);
+            }
+
+            if (_hasActiveKvCache && _kvNetwork != null)
+            {
+                var cachedOut = _kvNetwork.Predict(input);
+                return ExtractLastPositionLogits(cachedOut);
+            }
+
+            _network.ResetState();
+            return ExtractLastPositionLogits(_network.Predict(input));
+        }
+    }
+
+    /// <inheritdoc/>
+    public Vector<T> AppendToken(int tokenId)
+    {
+        if (tokenId < 0 || tokenId >= VocabularySize)
+            throw new ArgumentOutOfRangeException(nameof(tokenId), tokenId, $"Token id is outside [0, {VocabularySize}).");
+
+        lock (_sync)
+        {
+            if (_runningTokens == null)
+                throw new InvalidOperationException("StartSequence must be called before AppendToken.");
+
+            _runningTokens.Add(tokenId);
+            if (_hasActiveKvCache && _kvNetwork != null && _runningTokens.Count <= _maxContextTokens)
+            {
+                var stepInput = new Tensor<T>(new[] { 1, 1 });
+                stepInput[0, 0] = MathHelper.GetNumericOperations<T>().FromDouble(tokenId);
+                var stepOut = _kvNetwork.Predict(stepInput);
+                return ExtractLastPositionLogits(stepOut);
+            }
+
+            return NextTokenLogits(_runningTokens);
+        }
+    }
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+
+        lock (_sync)
+        {
+            if (_disposed)
+                return;
+
+            _kvOptimizer?.ClearCache();
+            if (_ownsKvNetwork && _kvNetwork != null && !ReferenceEquals(_kvNetwork, _network))
+            {
+                DisposeOnceGuard.TryDispose(_kvNetwork);
+            }
+            _kvNetwork = null;
+            _kvOptimizer = null;
+            _runningTokens = null;
+            _disposed = true;
+        }
+    }
+
+    private void EnsureKvOptimizerInitializedLocked()
+    {
+        if (_kvInitAttempted)
+            return;
+        _kvInitAttempted = true;
+
+        try
+        {
+            var cfg = new InferenceOptimizationConfig
+            {
+                EnableKVCache = true,
+                EnablePagedKVCache = true,
+                AttentionMasking = AttentionMaskingMode.Causal,
+                KVCacheWindowSize = _maxContextTokens == int.MaxValue ? 4096 : _maxContextTokens
+            };
+            var opt = new InferenceOptimizer<T>(cfg);
+            var (optModel, anyApplied) = opt.OptimizeForInference(_network, cloneModel: true);
+            bool kvActive = opt.KVCache != null || opt.PagedKVCache != null;
+            if (anyApplied && kvActive)
+            {
+                _kvOptimizer = opt;
+                _kvNetwork = optModel;
+                _ownsKvNetwork = !ReferenceEquals(optModel, _network);
+                _hasActiveKvCache = true;
+            }
+            else if (!ReferenceEquals(optModel, _network))
+            {
+                DisposeOnceGuard.TryDispose(optModel);
+            }
+        }
+        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException)
+        {
+            System.Diagnostics.Trace.TraceWarning($"[NeuralNetworkCausalLanguageModel] KV cache optimization unavailable: {ex}");
+            _hasActiveKvCache = false;
+        }
+    }
     private Vector<T> ExtractLastPositionLogits(Tensor<T> output)
     {
         var shape = output._shape;
