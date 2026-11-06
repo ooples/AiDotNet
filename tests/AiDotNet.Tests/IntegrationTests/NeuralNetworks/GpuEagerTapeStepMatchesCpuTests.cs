@@ -31,10 +31,25 @@ public class GpuEagerTapeStepMatchesCpuTests
 {
     private const int Inputs = 16, Hidden = 32, Outputs = 4, Batch = 32, Steps = 6;
 
-    // Warm eager steps the readback test measures, and the reads each may make: three device norm records (network
-    // clip, optimizer clip, finiteness check) and the loss. A record's bytes are those of the pooled buffer it was
-    // rented into, so they are fixed per model but not pinned here.
-    private const int MeasuredSteps = 3, ScalarReadsPerStep = 4;
+    // Warm eager steps the readback test measures.
+    private const int MeasuredSteps = 3;
+
+    // The reads a warm eager step may make, by the method that issues them, and the bytes of each: a device norm
+    // record for the network clip, the optimizer clip and the finiteness check, and the loss.
+    private static readonly (string Caller, int Bytes)[] AllowedReadbacks =
+    {
+        ("NeuralNetworkBase`1.ApplyGradientClipping", NormRecordBytes),
+        ("GradientBasedOptimizerBase`3.ApplyTapeGlobalNormGradientClipping", NormRecordBytes),
+        ("GradientBasedOptimizerBase`3.HasAnomalousTapeGradients", NormRecordBytes),
+        ("NeuralNetworkBase`1.TrainWithTape", sizeof(float)),
+    };
+
+    private const int NormRecordBytes = AiDotNet.Tensors.Engines.Gpu.DeterministicGradientNorm.RecordWords * sizeof(uint);
+
+    // A probe site reads "{count}x {total bytes} B {issuing frame} <- {caller}".
+    private static readonly System.Text.RegularExpressions.Regex ReadbackSite = new(
+        @"^(?<count>\d+)x (?<bytes>[\d,]+) B .* <- (?<caller>\S+)$",
+        System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1));
 
     private sealed class ClipProbe : AdamWOptimizer<float, Tensor<float>, Tensor<float>>
     {
@@ -134,22 +149,43 @@ public class GpuEagerTapeStepMatchesCpuTests
 
         var narrow = ReadbackTotalsOverWarmSteps(gpu, Hidden);
         var wide = ReadbackTotalsOverWarmSteps(gpu, Hidden * 16);
-        string Show((long Count, long Bytes, int Parameters, string Sites) r) =>
-            $"{r.Count} readbacks, {r.Bytes} B over {MeasuredSteps} steps and {r.Parameters} parameters ({r.Sites})";
-        // The loss is always read back, so a zero count means the probe saw nothing and the checks below are vacuous.
-        Assert.True(narrow.Count > 0 && wide.Count > 0,
-            $"the readback probe recorded nothing: narrow {Show(narrow)}; wide {Show(wide)}");
-        // Totals, not per-step averages, so a step that splits or adds a read cannot hide behind integer division.
-        Assert.True(wide.Count <= ScalarReadsPerStep * MeasuredSteps,
-            $"a wide step made more than the {ScalarReadsPerStep} scalar reads per step: {Show(wide)}");
-        // Each read is a loss or a norm record, never a gradient-sized buffer.
-        Assert.True(wide.Bytes < (long)wide.Parameters * sizeof(float),
-            $"a wide step read back gradient-sized data: {Show(wide)}");
-        Assert.True(wide.Count == narrow.Count && wide.Bytes == narrow.Bytes,
-            $"readbacks grew with the model: narrow {Show(narrow)}; wide {Show(wide)}");
+        AssertOnlyScalarReadbacks(narrow, "narrow");
+        AssertOnlyScalarReadbacks(wide, "wide");
     }
 
-    private static (long Count, long Bytes, int Parameters, string Sites) ReadbackTotalsOverWarmSteps(IEngine engine, int hidden)
+    /// <summary>
+    /// Every read over the measured steps is one of <see cref="AllowedReadbacks"/>, once per step at its exact size,
+    /// and each of them happened: a gradient download is a read from another caller or of another size, and a probe
+    /// that recorded nothing fails on the missing loss read. Totals, not per-step averages, so a step that splits or
+    /// adds a read cannot hide behind integer division.
+    /// </summary>
+    private static void AssertOnlyScalarReadbacks((long Count, long Bytes, int Parameters, string[] Sites) run, string name)
+    {
+        string context = $"{name} model, {run.Parameters} parameters, {MeasuredSteps} steps: {run.Count} readbacks, "
+            + $"{run.Bytes} B ({string.Join("; ", run.Sites)})";
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string site in run.Sites)
+        {
+            var match = ReadbackSite.Match(site);
+            Assert.True(match.Success, $"unparsed readback site '{site}'; {context}");
+            string caller = match.Groups["caller"].Value;
+            long count = long.Parse(match.Groups["count"].Value, System.Globalization.CultureInfo.InvariantCulture);
+            long bytes = long.Parse(match.Groups["bytes"].Value, System.Globalization.NumberStyles.AllowThousands,
+                System.Globalization.CultureInfo.InvariantCulture);
+            var allowed = AllowedReadbacks.Where(a => a.Caller == caller).ToArray();
+            Assert.True(allowed.Length == 1, $"readback from an unexpected caller '{caller}'; {context}");
+            Assert.True(count == MeasuredSteps && bytes == (long)allowed[0].Bytes * MeasuredSteps,
+                $"'{caller}' should read {allowed[0].Bytes} B once per step; {context}");
+            seen.Add(caller);
+        }
+
+        foreach (var (caller, _) in AllowedReadbacks)
+            Assert.True(seen.Contains(caller), $"no readback from '{caller}'; {context}");
+        Assert.Equal(AllowedReadbacks.Length * (long)MeasuredSteps, run.Count);
+        Assert.Equal(AllowedReadbacks.Sum(a => (long)a.Bytes) * MeasuredSteps, run.Bytes);
+    }
+
+    private static (long Count, long Bytes, int Parameters, string[] Sites) ReadbackTotalsOverWarmSteps(IEngine engine, int hidden)
     {
         var previous = AiDotNetEngine.Current;
         bool priorCapture = GpuLaunchProbe.CaptureReadbackSites;
@@ -173,7 +209,7 @@ public class GpuEagerTapeStepMatchesCpuTests
                 Assert.True(GpuLaunchProbe.AdamWDispatches > beforeDispatch, "eager training did not dispatch GPU AdamW");
             }
             return (GpuLaunchProbe.Readbacks, GpuLaunchProbe.ReadbackBytes,
-                parameters, string.Join("; ", GpuLaunchProbe.ReadbackSites));
+                parameters, GpuLaunchProbe.ReadbackSites);
         }
         finally
         {
