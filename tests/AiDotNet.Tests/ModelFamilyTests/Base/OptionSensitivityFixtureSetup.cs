@@ -29,6 +29,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds" ? "cam-audio-frontend"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "TokenizerPieces" ? "glamm-unloaded-tokenizer"
+            : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option is "EmotionGroupSizes" or "EmotionMode" ? "index-emotion-table"
             : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option == "LatentFusionProbability" ? "index-latent-fusion"
             : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && IsIndexFlowOption(option) ? "index-semantic-to-mel"
             : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option == "SpeakerAdversaryWeight" ? "index-emotion-adversary"
@@ -69,6 +70,27 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fish && option == "ConstrainToSemanticTokens")
             return ObserveFishFrames(fish, input);
         long fingerprint = observe(network, ObservationInput(network, input, option));
+        if (network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> emotionIndex && option is "EmotionGroupSizes" or "EmotionMode")
+        {
+            var settings = (AiDotNet.TextToSpeech.Latest.IndexTTS2Options)emotionIndex.GetOptions();
+            int rows = settings.EmotionGroupSizes!.Sum();
+            // Nonconstant rows distinguish group boundaries, means and nearest-speaker selection.
+            var emotions = Enumerable.Range(0, rows).Select(r =>
+                Enumerable.Range(0, settings.HiddenDim).Select(k => (r + 1) * 0.1 + k * 0.01).ToArray()).ToArray();
+            var speakers = Enumerable.Range(0, rows).Select(r =>
+                Enumerable.Range(0, settings.StyleDim).Select(k => k == 0 ? 1.0 : (r + 1) * 0.1).ToArray()).ToArray();
+            emotionIndex.LoadEmotionTable(emotions, speakers);
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var style = new Tensor<T>(new[] { 1, settings.StyleDim });
+            style[0] = ops.FromDouble(1);
+            var weights = new double[settings.EmotionLabels.Length];
+            weights[0] = 1;
+            var mixed = (Tensor<T>)typeof(AiDotNet.TextToSpeech.Latest.IndexTTS2<T>).GetMethod("EmotionTableMix",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(emotionIndex, new object[] { weights, style, new Random(1337) })!;
+            return OptionSensitivityHarness.Combine(fingerprint,
+                OptionSensitivityHarness.Fingerprint(mixed.Select(value => ops.ToDouble(value))));
+        }
         if (network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> e3 && option is "SilenceBlockSize" or "SilenceMagnitudeThreshold")
         {
             var waveform = new Tensor<T>(new[] { 16 });
@@ -285,6 +307,11 @@ internal static class OptionSensitivityFixtureSetup
         }
         if (options is AiDotNet.TextToSpeech.Latest.IndexTTS2Options stagedIndex)
         {
+            if (option is "EmotionGroupSizes" or "EmotionMode")
+            {
+                stagedIndex.EmotionGroupSizes = Enumerable.Repeat(2, stagedIndex.EmotionLabels.Length).ToArray();
+                stagedIndex.EmotionMode = AiDotNet.TextToSpeech.Latest.IndexTts2EmotionMode.Paper;
+            }
             if (IsIndexFlowOption(option))
             {
                 stagedIndex.CurrentStage = AiDotNet.TextToSpeech.Latest.IndexTts2Stage.SemanticToMel;

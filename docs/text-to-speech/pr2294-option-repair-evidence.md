@@ -260,3 +260,10 @@ CAM++ FrameLengthMilliseconds now uses the same real Kaldi audio frontend as
 FrameShiftMilliseconds during option observation. Both probes pass against the
 compiled harness: length 25 -> 50 and shift 10 -> 20 change outputs before
 training. The scoped probe build completed with zero warnings/errors.
+
+IndexTTS2 EmotionGroupSizes and EmotionMode now load deterministic nonconstant
+emotion/speaker rows through LoadEmotionTable and observe the real EmotionTableMix
+path used by synthesis. Controls use two rows per label and Paper mode; changing
+the first group to three rows or selecting ReleaseNearestSpeaker changes the
+actual mixed vector. Both compiled probes pass; E3 silence trimming still passes.
+The scoped build has zero warnings/errors.
