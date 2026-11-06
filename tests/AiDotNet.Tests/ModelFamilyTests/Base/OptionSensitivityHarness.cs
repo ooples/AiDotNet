@@ -753,7 +753,7 @@ public static class OptionSensitivityHarness
         var raw = current is null
             ? new[] { 1.0, 2.0 }
             : integral
-                ? new[] { value + 1, value - 1, value + 2, value - 2, value / 2, value * 2 }
+                ? new[] { value + 1, value - 1, value + 2, value - 2, value / 2, 1.0, value * 2 }
                 : new[] { value * 2, value / 2, value + 0.1, value - 0.1, value + 1, value - 1 };
 
         var seen = new HashSet<double>();
