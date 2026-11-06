@@ -154,15 +154,16 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
         // Calculate max features to consider at each split
         int maxFeatures = CalculateMaxFeatures();
 
-        // Train each tree
-        // Note: In a production implementation, this could be parallelized
+        // Draw every tree's bootstrap sample and seed first, in tree order, so the forest is the same whatever
+        // NJobs is.
+        var trees = new DecisionTreeClassifier<T>[Options.NEstimators];
+        var samples = new int[Options.NEstimators][];
         for (int i = 0; i < Options.NEstimators; i++)
         {
-            // Create bootstrap sample
             var (bootstrapIndices, oobIndices) = CreateBootstrapSample(x.Rows);
+            samples[i] = bootstrapIndices.ToArray();
 
-            // Create the tree with appropriate options
-            var treeOptions = new DecisionTreeClassifierOptions<T>
+            trees[i] = new DecisionTreeClassifier<T>(new DecisionTreeClassifierOptions<T>
             {
                 MaxDepth = Options.MaxDepth,
                 MinSamplesSplit = Options.MinSamplesSplit,
@@ -171,21 +172,17 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
                 Criterion = Options.Criterion,
                 Seed = _random.Next(),
                 MinImpurityDecrease = Options.MinImpurityDecrease
-            };
-
-            var tree = new DecisionTreeClassifier<T>(treeOptions);
-
-            // Create bootstrap sample matrices
-            var (xBootstrap, yBootstrap) = CreateBootstrapData(x, y, bootstrapIndices);
-
-            // Train the tree
-            tree.Train(xBootstrap, yBootstrap);
-
-            Estimators.Add(tree);
+            });
 
             // Store OOB indices for this tree (for proper OOB score calculation)
             _oobIndicesPerTree.Add(new HashSet<int>(oobIndices));
         }
+
+        // Rank the data once; each tree grows on its bootstrap rows of it without copying them out.
+        var data = DecisionTreeClassifier<T>.CreateDenseData(x);
+        Parallel.For(0, trees.Length, new ParallelOptions { MaxDegreeOfParallelism = ResolveJobCount() },
+            i => trees[i].TrainOnRows(data, y, samples[i]));
+        Estimators.AddRange(trees);
 
         // Aggregate feature importances
         AggregateFeatureImportances();
@@ -226,24 +223,19 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
     }
 
     /// <summary>
-    /// Creates bootstrap sample data matrices.
+    /// The number of trees trained at once: <see cref="RandomForestClassifierOptions{T}.NJobs"/> when positive,
+    /// otherwise counted back from the processor count as joblib does (-1 all processors, -2 all but one).
     /// </summary>
-    private (Matrix<T> x, Vector<T> y) CreateBootstrapData(Matrix<T> x, Vector<T> y, List<int> indices)
+    private int ResolveJobCount()
     {
-        var xBootstrap = new Matrix<T>(indices.Count, x.Columns);
-        var yBootstrap = new Vector<T>(indices.Count);
-
-        for (int i = 0; i < indices.Count; i++)
+        int jobs = Options.NJobs;
+        if (jobs == 0)
         {
-            int srcIdx = indices[i];
-            for (int j = 0; j < x.Columns; j++)
-            {
-                xBootstrap[i, j] = x[srcIdx, j];
-            }
-            yBootstrap[i] = y[srcIdx];
+            throw new InvalidOperationException(
+                $"{nameof(Options.NJobs)} must be positive, or negative to count back from the processor count; got 0.");
         }
 
-        return (xBootstrap, yBootstrap);
+        return jobs > 0 ? jobs : Math.Max(1, Environment.ProcessorCount + 1 + jobs);
     }
 
     /// <summary>

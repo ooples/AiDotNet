@@ -26,24 +26,26 @@ internal static class ClassicalBench
     private const int TrainRows = 20_000;
     private const int TestRows = 5_000;
 
-    public static int Run(string outputDirectory, int repeats, int seed)
+    /// <param name="only">Row names to run (for profiling one row); empty runs every row.</param>
+    public static int Run(string outputDirectory, int repeats, int seed, IReadOnlyCollection<string> only)
     {
         Directory.CreateDirectory(outputDirectory);
         var (train, test) = WriteData(outputDirectory, seed);
 
-        var rows = new List<Dictionary<string, object>>
+        var all = new (string Name, Func<Dictionary<string, object>> Measure)[]
         {
-            Classifier("random_forest", train, test, repeats,
-                () => new RandomForestClassifier<double>(new RandomForestClassifierOptions<double> { NEstimators = 100, Seed = seed })),
-            Classifier("hist_gradient_boosting", train, test, repeats,
+            ("random_forest", () => Classifier("random_forest", train, test, repeats,
+                () => new RandomForestClassifier<double>(new RandomForestClassifierOptions<double> { NEstimators = 100, Seed = seed }))),
+            ("hist_gradient_boosting", () => Classifier("hist_gradient_boosting", train, test, repeats,
                 () => new HistGradientBoostingClassifier<double>(maxBins: 256, maxDepth: 6, nEstimators: 100,
-                    learningRate: 0.1, minSamplesLeaf: 20, seed: seed)),
-            Regressor("logistic_regression", train, test, repeats, classify: true,
-                () => new LogisticRegression<double>(new LogisticRegressionOptions<double>())),
-            Regressor("ridge", train, test, repeats, classify: false,
-                () => new RidgeRegression<double>(new RidgeRegressionOptions<double> { Alpha = 1.0 })),
-            KMeansRow(train, repeats, seed),
+                    learningRate: 0.1, minSamplesLeaf: 20, seed: seed))),
+            ("logistic_regression", () => Regressor("logistic_regression", train, test, repeats, classify: true,
+                () => new LogisticRegression<double>(new LogisticRegressionOptions<double>()))),
+            ("ridge", () => Regressor("ridge", train, test, repeats, classify: false,
+                () => new RidgeRegression<double>(new RidgeRegressionOptions<double> { Alpha = 1.0 }))),
+            ("kmeans", () => KMeansRow(train, repeats, seed)),
         };
+        var rows = all.Where(row => only.Count == 0 || only.Contains(row.Name)).Select(row => row.Measure()).ToList();
 
         string path = Path.Combine(outputDirectory, "aidotnet_classical.json");
         File.WriteAllText(path, JsonSerializer.Serialize(new Dictionary<string, object>

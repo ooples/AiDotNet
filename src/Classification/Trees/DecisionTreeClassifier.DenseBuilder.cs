@@ -3,7 +3,7 @@ using AiDotNet.Enums;
 namespace AiDotNet.Classification.Trees;
 
 /// <summary>
-/// Tree construction on a dense column-major <see cref="double"/> copy of the training data.
+/// Tree construction on ranked, column-major training data (<see cref="DenseTreeData"/>).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -17,60 +17,89 @@ namespace AiDotNet.Classification.Trees;
 /// feature draws in the same depth-first order, and child rows in their original order. For <c>double</c> a tree is
 /// identical to the one the generic builder grew; other numeric types now compute splits in double precision.
 /// </para>
+/// <para>
+/// Each considered feature's node rows are sorted as one 64-bit key per row, the rank above the class index, so a
+/// large node sorts by radix on the rank bits alone and a small one by <see cref="Array.Sort{T}(T[], int, int)"/>.
+/// </para>
 /// </remarks>
 public partial class DecisionTreeClassifier<T>
 {
-    /// <summary>Feature values, column-major: feature <c>f</c> of row <c>i</c> is at <c>f * rows + i</c>.</summary>
-    private double[] _denseFeatures = new double[0];
+    /// <summary>Nodes below this many rows sort by comparison; larger ones by radix.</summary>
+    private const int RadixSortMinRows = 256;
 
-    /// <summary>Each training row's index into <see cref="ClassifierBase{T}.ClassLabels"/>.</summary>
+    private DenseTreeData _denseData = EmptyDenseData;
+
+    /// <summary>Each training row's index into <see cref="ClassifierBase{T}.ClassLabels"/>, by data row.</summary>
     private int[] _denseClasses = new int[0];
 
-    /// <summary>Row indices; each node owns a contiguous range, partitioned in place for its children.</summary>
+    /// <summary>Data rows of the training sample, repeats allowed; each node owns a contiguous range.</summary>
     private int[] _denseRows = new int[0];
 
-    /// <summary>Scratch for the split search and the partition, sized to the training rows.</summary>
-    private double[] _sortKeys = new double[0];
-    private int[] _sortClasses = new int[0];
+    /// <summary>Scratch for the split search and the partition, sized to the training sample.</summary>
+    private ulong[] _sortKeys = new ulong[0];
+    private ulong[] _radixScratch = new ulong[0];
     private int[] _partitionScratch = new int[0];
+    private int[] _featurePool = new int[0];
+    private int[] _selectedFeatures = new int[0];
 
-    private int _denseRowCount;
+    private static readonly DenseTreeData EmptyDenseData = new(new double[0], 0, 0);
 
-    /// <summary>Copies the training data into the dense buffers and grows the tree from every row.</summary>
-    private DecisionNode<T> BuildDense(Matrix<T> x, Vector<T> y)
+    /// <summary>Ranks <paramref name="x"/> for <see cref="BuildDense"/>.</summary>
+    internal static DenseTreeData CreateDenseData(Matrix<T> x)
     {
+        var numOps = MathHelper.GetNumericOperations<T>();
         int rows = x.Rows;
         int features = x.Columns;
-        _denseRowCount = rows;
-        _denseFeatures = new double[rows * features];
-        _denseClasses = new int[rows];
-        _denseRows = new int[rows];
-        _sortKeys = new double[rows];
-        _sortClasses = new int[rows];
-        _partitionScratch = new int[rows];
-
+        var columnMajor = new double[rows * features];
         for (int i = 0; i < rows; i++)
         {
-            _denseClasses[i] = GetClassIndex(y[i]);
-            _denseRows[i] = i;
             var row = x.GetRowReadOnlySpan(i);
             for (int f = 0; f < features; f++)
-                _denseFeatures[f * rows + i] = NumOps.ToDouble(row[f]);
+                columnMajor[f * rows + i] = numOps.ToDouble(row[f]);
+        }
+
+        return new DenseTreeData(columnMajor, rows, features);
+    }
+
+    /// <summary>
+    /// Grows the tree from the data rows <paramref name="rows"/> of <paramref name="data"/>, labelled by
+    /// <paramref name="y"/> (indexed by data row). A row listed twice counts twice, as in a bootstrap sample.
+    /// </summary>
+    private DecisionNode<T> BuildDense(DenseTreeData data, Vector<T> y, int[] rows)
+    {
+        int count = rows.Length;
+        _denseData = data;
+        _denseClasses = new int[data.Rows];
+        _denseRows = (int[])rows.Clone();
+        _sortKeys = new ulong[count];
+        _radixScratch = new ulong[count];
+        _partitionScratch = new int[count];
+        _featurePool = new int[NumFeatures];
+        _selectedFeatures = new int[NumFeatures];
+
+        var labelled = new bool[data.Rows];
+        foreach (int row in rows)
+        {
+            if (labelled[row]) continue;
+            labelled[row] = true;
+            _denseClasses[row] = GetClassIndex(y[row]);
         }
 
         try
         {
-            return BuildDenseNode(0, rows, 0);
+            return BuildDenseNode(0, count, 0);
         }
         finally
         {
             // The buffers are training scratch, not model state.
-            _denseFeatures = new double[0];
+            _denseData = EmptyDenseData;
             _denseClasses = new int[0];
             _denseRows = new int[0];
-            _sortKeys = new double[0];
-            _sortClasses = new int[0];
+            _sortKeys = new ulong[0];
+            _radixScratch = new ulong[0];
             _partitionScratch = new int[0];
+            _featurePool = new int[0];
+            _selectedFeatures = new int[0];
         }
     }
 
@@ -83,18 +112,19 @@ public partial class DecisionTreeClassifier<T>
         if (ShouldStopDense(counts, count, depth))
             return CreateDenseLeaf(counts, count);
 
-        var (bestFeature, bestThreshold, bestGain) = FindBestDenseSplit(start, count, counts);
+        var (bestFeature, bestThreshold, bestThresholdRank, bestGain) = FindBestDenseSplit(start, count, counts);
         if (bestFeature < 0 || !(bestGain > Options.MinImpurityDecrease))
             return CreateDenseLeaf(counts, count);
 
-        // Stable partition: the left child keeps rows comparing <= the threshold, in their original order.
-        int column = bestFeature * _denseRowCount;
+        // Stable partition: the left child keeps rows whose value is <= the threshold, in their original order.
+        var ranks = _denseData.Ranks;
+        int column = bestFeature * _denseData.Rows;
         int leftCount = 0;
         int rightCount = 0;
         for (int r = start; r < start + count; r++)
         {
             int row = _denseRows[r];
-            if (_denseFeatures[column + row] <= bestThreshold)
+            if (ranks[column + row] <= bestThresholdRank)
                 _denseRows[start + leftCount++] = row;
             else
                 _partitionScratch[rightCount++] = row;
@@ -159,45 +189,86 @@ public partial class DecisionTreeClassifier<T>
     }
 
     /// <summary>
+    /// The features one split considers: all of them, or <see cref="DecisionTreeClassifierOptions{T}.MaxFeatures"/>
+    /// drawn without replacement, one <see cref="Random.Next(int)"/> over the remaining features per draw.
+    /// </summary>
+    private int SelectDenseFeatures()
+    {
+        if (!Options.MaxFeatures.HasValue || Options.MaxFeatures.Value >= NumFeatures)
+        {
+            for (int f = 0; f < NumFeatures; f++) _selectedFeatures[f] = f;
+            return NumFeatures;
+        }
+
+        var random = _random ?? throw new InvalidOperationException("_random has not been initialized.");
+        for (int f = 0; f < NumFeatures; f++) _featurePool[f] = f;
+        int remaining = NumFeatures;
+        int selected = Options.MaxFeatures.Value;
+        for (int i = 0; i < selected; i++)
+        {
+            int idx = random.Next(remaining);
+            _selectedFeatures[i] = _featurePool[idx];
+            Array.Copy(_featurePool, idx + 1, _featurePool, idx, remaining - idx - 1);
+            remaining--;
+        }
+
+        return selected;
+    }
+
+    /// <summary>
     /// The best split of the node's rows: one sort per considered feature and one sweep over it, moving rows into the
     /// left class counts as the threshold rises.
     /// </summary>
-    private (int Feature, double Threshold, double Gain) FindBestDenseSplit(int start, int count, int[] totalCounts)
+    private (int Feature, double Threshold, int ThresholdRank, double Gain) FindBestDenseSplit(
+        int start, int count, int[] totalCounts)
     {
         int bestFeature = -1;
         double bestThreshold = 0;
+        int bestThresholdRank = 0;
         double bestGain = 0;
 
-        var featuresToConsider = GetFeaturesToConsider();
+        int featureCount = SelectDenseFeatures();
         double currentImpurity = DenseImpurity(totalCounts, count);
         double total = count;
         var leftCounts = new int[NumClasses];
         var rightCounts = new int[NumClasses];
+        var ranks = _denseData.Ranks;
 
-        foreach (int feature in featuresToConsider)
+        for (int s = 0; s < featureCount; s++)
         {
-            int column = feature * _denseRowCount;
+            int feature = _selectedFeatures[s];
+            int column = feature * _denseData.Rows;
             for (int r = 0; r < count; r++)
             {
                 int row = _denseRows[start + r];
-                _sortKeys[r] = _denseFeatures[column + row];
-                _sortClasses[r] = _denseClasses[row];
+                _sortKeys[r] = ((ulong)(uint)ranks[column + row] << 32) | (uint)_denseClasses[row];
             }
 
-            Array.Sort(_sortKeys, _sortClasses, 0, count);
+            SortByRank(count);
+
+            // A NaN compares false with every threshold, so no row ever moves left: the feature cannot split here.
+            if (_denseData.HasNaN[feature] && (int)(_sortKeys[0] >> 32) == 0)
+                continue;
+
+            var values = _denseData.Values[feature];
             Array.Clear(leftCounts, 0, leftCounts.Length);
             int leftCount = 0;
 
             for (int i = 0; i < count; )
             {
                 // The next distinct value after the run starting at i.
+                int rank = (int)(_sortKeys[i] >> 32);
                 int next = i + 1;
-                while (next < count && _sortKeys[next] == _sortKeys[i]) next++;
+                while (next < count && (int)(_sortKeys[next] >> 32) == rank) next++;
                 if (next >= count) break;
 
-                double threshold = (_sortKeys[i] + _sortKeys[next]) / 2.0;
-                while (leftCount < count && _sortKeys[leftCount] <= threshold)
-                    leftCounts[_sortClasses[leftCount++]]++;
+                int nextRank = (int)(_sortKeys[next] >> 32);
+                double threshold = (values[rank] + values[nextRank]) / 2.0;
+
+                // The midpoint can round onto the upper value, which then also compares <= the threshold.
+                int thresholdRank = threshold >= values[nextRank] ? nextRank : rank;
+                while (leftCount < count && (int)(_sortKeys[leftCount] >> 32) <= thresholdRank)
+                    leftCounts[(int)(uint)_sortKeys[leftCount++]]++;
                 i = next;
 
                 int rightCount = count - leftCount;
@@ -217,11 +288,54 @@ public partial class DecisionTreeClassifier<T>
                     bestGain = gain;
                     bestFeature = feature;
                     bestThreshold = threshold;
+                    bestThresholdRank = thresholdRank;
                 }
             }
         }
 
-        return (bestFeature, bestThreshold, bestGain);
+        return (bestFeature, bestThreshold, bestThresholdRank, bestGain);
+    }
+
+    /// <summary>
+    /// Sorts the first <paramref name="count"/> keys by their rank (upper 32 bits). Rows of equal rank may end in any
+    /// order: the sweep moves whole runs of a rank at once.
+    /// </summary>
+    private void SortByRank(int count)
+    {
+        if (count < RadixSortMinRows)
+        {
+            Array.Sort(_sortKeys, 0, count);
+            return;
+        }
+
+        // LSD radix sort, 8 bits per pass, over the rank bits only.
+        var source = _sortKeys;
+        var target = _radixScratch;
+        Span<int> offsets = stackalloc int[256];
+        for (int shift = 32; shift < 32 + _denseData.RankBits; shift += 8)
+        {
+            offsets.Clear();
+            for (int i = 0; i < count; i++) offsets[(int)(source[i] >> shift) & 0xFF]++;
+
+            int sum = 0;
+            for (int d = 0; d < 256; d++)
+            {
+                int bucket = offsets[d];
+                offsets[d] = sum;
+                sum += bucket;
+            }
+
+            for (int i = 0; i < count; i++)
+            {
+                ulong key = source[i];
+                target[offsets[(int)(key >> shift) & 0xFF]++] = key;
+            }
+
+            (source, target) = (target, source);
+        }
+
+        if (!ReferenceEquals(source, _sortKeys))
+            Array.Copy(source, _sortKeys, count);
     }
 
     /// <summary>The configured criterion over per-class counts of <paramref name="total"/> samples.</summary>

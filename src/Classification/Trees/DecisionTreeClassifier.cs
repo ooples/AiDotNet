@@ -107,10 +107,30 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
             throw new ArgumentException("Number of samples in X must match length of y.");
         }
 
-        NumFeatures = x.Columns;
-        ClassLabels = ExtractClassLabels(y);
+        var rows = new int[x.Rows];
+        for (int i = 0; i < rows.Length; i++) rows[i] = i;
+        TrainDense(CreateDenseData(x), y, rows, y);
+    }
+
+    /// <summary>
+    /// Trains on the data rows <paramref name="rows"/> of already-ranked <paramref name="data"/> (a row listed twice
+    /// counts twice), exactly as <see cref="Train"/> would on a matrix holding those rows in that order. A forest
+    /// ranks its data once and trains every tree on its bootstrap rows this way, without copying them out.
+    /// </summary>
+    /// <param name="y">Labels indexed by data row.</param>
+    internal void TrainOnRows(DenseTreeData data, Vector<T> y, int[] rows)
+    {
+        var sampleLabels = new Vector<T>(rows.Length);
+        for (int i = 0; i < rows.Length; i++) sampleLabels[i] = y[rows[i]];
+        TrainDense(data, y, rows, sampleLabels);
+    }
+
+    private void TrainDense(DenseTreeData data, Vector<T> y, int[] rows, Vector<T> sampleLabels)
+    {
+        NumFeatures = data.Features;
+        ClassLabels = ExtractClassLabels(sampleLabels);
         NumClasses = ClassLabels.Length;
-        TaskType = InferTaskType(y);
+        TaskType = InferTaskType(sampleLabels);
 
         // Initialize random number generator
         _random = Options.Seed.HasValue
@@ -120,35 +140,11 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
         // Initialize feature importances
         FeatureImportances = new Vector<T>(NumFeatures);
 
-        // Build the tree on a dense copy of the data (DecisionTreeClassifier.DenseBuilder.cs).
-        _root = BuildDense(x, y);
+        // Grow the tree on the ranked data (DecisionTreeClassifier.DenseBuilder.cs).
+        _root = BuildDense(data, y, rows);
 
         // Normalize feature importances
         NormalizeFeatureImportances();
-    }
-
-    /// <summary>
-    /// Gets the features to consider for splitting based on MaxFeatures setting.
-    /// </summary>
-    private int[] GetFeaturesToConsider()
-    {
-        if (!Options.MaxFeatures.HasValue || Options.MaxFeatures.Value >= NumFeatures)
-        {
-            return Enumerable.Range(0, NumFeatures).ToArray();
-        }
-
-        // Randomly select MaxFeatures features
-        var allFeatures = Enumerable.Range(0, NumFeatures).ToList();
-        var selectedFeatures = new int[Options.MaxFeatures.Value];
-
-        for (int i = 0; i < Options.MaxFeatures.Value; i++)
-        {
-            int idx = (_random ?? throw new InvalidOperationException("_random has not been initialized.")).Next(allFeatures.Count);
-            selectedFeatures[i] = allFeatures[idx];
-            allFeatures.RemoveAt(idx);
-        }
-
-        return selectedFeatures;
     }
 
     /// <summary>

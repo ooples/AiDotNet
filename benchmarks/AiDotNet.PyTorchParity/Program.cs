@@ -97,7 +97,7 @@ if (fusedDiag)
     };
 }
 
-// `--classical DIR [--repeats N] [--seed N]`: the classical-ML rows (ClassicalBench.cs), on the CPU engine; then run
+// `--classical DIR [--repeats N] [--seed N] [--rows a,b]`: the classical-ML rows (ClassicalBench.cs), on the CPU engine; then run
 // pytorch/classical.py DIR for the scikit-learn, XGBoost and LightGBM side.
 int classicalAt = Array.IndexOf(args, "--classical");
 if (classicalAt >= 0 && classicalAt + 1 < args.Length)
@@ -105,7 +105,11 @@ if (classicalAt >= 0 && classicalAt + 1 < args.Length)
     int Flag(string name, int fallback)
         => Array.IndexOf(args, name) is int at and >= 0 && at + 1 < args.Length
             && int.TryParse(args[at + 1], out int value) ? value : fallback;
-    return AiDotNet.PyTorchParity.ClassicalBench.Run(args[classicalAt + 1], Flag("--repeats", 9), Flag("--seed", 42));
+    int rowsAt = Array.IndexOf(args, "--rows");
+    var only = rowsAt >= 0 && rowsAt + 1 < args.Length
+        ? args[rowsAt + 1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        : Array.Empty<string>();
+    return AiDotNet.PyTorchParity.ClassicalBench.Run(args[classicalAt + 1], Flag("--repeats", 9), Flag("--seed", 42), only);
 }
 
 var benchOptions = BenchmarkOptions.Parse(args);
