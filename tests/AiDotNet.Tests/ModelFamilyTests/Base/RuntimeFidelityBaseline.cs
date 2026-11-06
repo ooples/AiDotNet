@@ -3153,7 +3153,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.NeuralNetworks.WGANGP`1::DiscriminatorChannels", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.WGANGP`1::EncoderLayerCount", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.WGANGP`1::GeneratorChannels", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.NeuralNetworks.WGANGP`1::GradientPenaltyCoefficient", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.WGANGP`1::ImageChannels", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.WGANGP`1::InitialLearningRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.NeuralNetworks.WGANGP`1::LatentSize", OptionSensitivityOutcome.Insensitive },

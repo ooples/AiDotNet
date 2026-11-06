@@ -650,7 +650,7 @@ foreach ($job in $artifactConsumers) {
         "artifact consumer '$job' does not bind the build artifact digest"
     Assert-Contract (-not $download.Contains('continue-on-error: true')) `
         "artifact consumer '$job' can pass without its required build output"
-    Assert-Contract ($download.Contains('timeout-minutes: 25')) `
+    Assert-Contract ($download.Contains('timeout-minutes: 40')) `
         "artifact consumer '$job' does not reserve the bounded retry and extraction budget"
     Assert-Contract (-not $consumer.Contains('Retry build artifact download')) `
         "artifact consumer '$job' retains the immediate retry that caused repeated 403 responses"
