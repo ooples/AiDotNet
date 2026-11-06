@@ -31,6 +31,7 @@ internal static class OptionSensitivityFixtureSetup
                 "SilenceBlockSize" or "SilenceMagnitudeThreshold" => "e3-silence-trimming",
                 _ => string.Empty,
             }
+            : network is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T> && option == "MaskNoiseStd" ? "google-best-rq-masking"
             : network is AiDotNet.PointCloud.Models.DGCNN<T> && option is "DropoutRate" or "UseDropout" ? "dgcnn-dropout"
             : network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds" ? "cam-audio-frontend"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
@@ -76,6 +77,12 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fish && option == "ConstrainToSemanticTokens")
             return ObserveFishFrames(fish, input);
         long fingerprint = observe(network, ObservationInput(network, input, option));
+        if (network is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T> google && option == "MaskNoiseStd")
+        {
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            double pretrainingLoss = ops.ToDouble(google.PretrainingLoss(input, new Random(1337)));
+            return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(new[] { pretrainingLoss }));
+        }
         if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && option is "RepetitionWindow" or "RepetitionRatio")
         {
             const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
@@ -311,6 +318,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2Options google && option == "MaskNoiseStd")
+        {
+            google.MaskProbability = 0.5;
+            google.MaskLength = 1;
+        }
         if (options is AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions e3)
         {
             if (option == "DefaultSpeakerId") e3.SpeakerCount = 2;

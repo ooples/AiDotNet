@@ -296,3 +296,9 @@ configuration, preserving its original/newer fallback profile. A deterministic
 two-draw random source exercises the exact 10 * 0.1 repeat boundary. Compiled
 RepetitionWindow probes pass for CosyVoice, CosyVoiceClone and CosyVoice2;
 CosyVoice2 RepetitionRatio also passes. The scoped build has zero warnings/errors.
+
+GoogleSpeechV2 MaskNoiseStd now observes its public BEST-RQ PretrainingLoss
+with enabled masking, one-frame spans and a reproducible random source.
+Its CTC prediction path does not apply pretraining noise. The compiled probe
+passes for 0.1 -> 0.2 through the actual pretraining loss; scoped build has
+zero warnings/errors.
