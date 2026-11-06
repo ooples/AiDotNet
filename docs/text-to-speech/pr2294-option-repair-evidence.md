@@ -289,3 +289,10 @@ The actual IndexTtsDiT velocity estimator runs at paired widths 16 and 32,
 produces finite [3,5] outputs, and increases parameter count at width 32.
 All three focused constraint tests pass with the matching hosted dependencies.
 No single-property candidate can satisfy this enforced equality.
+
+CosyVoice repetition probes now additionally call the real repetition-aware
+sampler with settings read from the rebuilt language model's installed
+configuration, preserving its original/newer fallback profile. A deterministic
+two-draw random source exercises the exact 10 * 0.1 repeat boundary. Compiled
+RepetitionWindow probes pass for CosyVoice, CosyVoiceClone and CosyVoice2;
+CosyVoice2 RepetitionRatio also passes. The scoped build has zero warnings/errors.

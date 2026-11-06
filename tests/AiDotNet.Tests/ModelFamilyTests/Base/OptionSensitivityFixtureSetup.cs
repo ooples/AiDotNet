@@ -6,6 +6,12 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// <summary>Replays the fitted assets installed by the generated fixture after configuration-only reconstruction.</summary>
 internal static class OptionSensitivityFixtureSetup
 {
+    private sealed class RepetitionBoundaryRandom : Random
+    {
+        private int _draws;
+        public override double NextDouble() => _draws++ == 0 ? 0.1 : 0.99;
+    }
+
     internal static bool UsesFittedAssets<T>(INeuralNetworkModel<T> network)
         => network is AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>
             or AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>
@@ -70,6 +76,26 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fish && option == "ConstrainToSemanticTokens")
             return ObserveFishFrames(fish, input);
         long fingerprint = observe(network, ObservationInput(network, input, option));
+        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && option is "RepetitionWindow" or "RepetitionRatio")
+        {
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+            object? languageModel = null;
+            for (var type = network.GetType(); type is not null && languageModel is null; type = type.BaseType)
+                languageModel = type.GetProperty("LanguageModel", flags)?.GetValue(network);
+            var configuration = languageModel!.GetType().GetProperty("Configuration", flags)!.GetValue(languageModel)!;
+            object Setting(string name) => configuration.GetType().GetProperty(name)!.GetValue(configuration)!;
+            var sampler = network.GetType().Assembly.GetType("AiDotNet.TextToSpeech.CodecBased.CosyVoiceLm`1")!.MakeGenericType(typeof(T));
+            var method = sampler.GetMethods(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
+                .Single(candidate => candidate.Name == "SampleRepetitionAware" && candidate.GetParameters().Length == 8);
+            // One recent repeat is exactly the default 10 * .1 boundary. A second draw
+            // chooses the other token, exposing whether the real configured sampler resampled.
+            int token = (int)method.Invoke(null, new object[] { new[] { Math.Log(.6), Math.Log(.4) },
+                new[] { 0 }, Setting("TopP"), Setting("TopK"), Setting("RepetitionWindow"),
+                Setting("RepetitionRatio"), new RepetitionBoundaryRandom(),
+                configuration.GetType().GetProperty("ExcludeRepeatedTokenOnFallback")?.GetValue(configuration) ?? true })!;
+            return OptionSensitivityHarness.Combine(fingerprint, token);
+        }
         if (network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> emotionIndex && option is "EmotionGroupSizes" or "EmotionMode")
         {
             var settings = (AiDotNet.TextToSpeech.Latest.IndexTTS2Options)emotionIndex.GetOptions();
