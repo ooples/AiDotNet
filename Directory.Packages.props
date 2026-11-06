@@ -409,7 +409,12 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
          Bumped 0.146.0 to 0.148.0 for #2388: AiDotNet.Tensors #1676 stops the shared-weight 1x1
          convolution and the fp32 GEMM tiers from calling AVX2/FMA kernels with AVX2 off (the GraFPrint
          PlatformNotSupportedException), and #1677 caches the IRFFT gather/sign tables per backend and shape.
-         Evolution stays at 0.7.0, the version 0.148.0 depends on. -->
+         Evolution stays at 0.7.0, the version 0.148.0 depends on.
+
+         0.148.0 also carries AiDotNet.Tensors #1682 (#2322: TensorArena withheld one set of returned gradients per
+         step and never gave them back, about 2.6 GB a step for ParaformerLarge) and #1681 (AffineGrid and the mode
+         GridSample are differentiable in compiled training and on the GPU tape, which StegaStamp's spatial
+         transformer needs). -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.148.0" />
     <PackageVersion Include="AiDotNet.Tensors" Version="0.148.0" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.7.0" />
