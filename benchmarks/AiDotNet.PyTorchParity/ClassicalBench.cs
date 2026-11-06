@@ -167,6 +167,7 @@ internal static class ClassicalBench
             model.Train(train.X);
             fit.Add(clock.Elapsed.TotalSeconds);
             inertia = model.Inertia;
+            Console.WriteLine($"[classical] kmeans: repeat {i} ran {model.NumIterations} iteration(s)");
         }
 
         return Row("kmeans", fit, [], "inertia", inertia);

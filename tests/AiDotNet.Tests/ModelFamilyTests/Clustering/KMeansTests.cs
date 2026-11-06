@@ -1,8 +1,12 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Clustering.Partitioning;
+using AiDotNet.Clustering.DistanceMetrics;
+using AiDotNet.Clustering.Interfaces;
 using AiDotNet.Clustering.Options;
+using AiDotNet.Tensors.Helpers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Tests.ModelFamilyTests.Base;
+using Xunit;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Clustering;
 
@@ -13,4 +17,67 @@ public class KMeansTests : ClusteringModelTestBase
 
     protected override IFullModel<double, Matrix<double>, Vector<double>> CreateSingleClusterModel()
         => new KMeans<double>(new KMeansOptions<double> { NumClusters = 1 });
+
+    /// <summary>
+    /// Plain Euclidean distance trains on a dedicated dense kernel; any other metric, including a subclass of
+    /// <see cref="EuclideanDistance{T}"/>, keeps the generic path. Both must find the same clustering.
+    /// </summary>
+    [Fact]
+    public void Train_EuclideanFastPathMatchesGenericMetricPath()
+    {
+        var rand = RandomHelper.CreateSeededRandom(11);
+        const int rows = 600, columns = 5;
+        var x = new Matrix<double>(rows, columns);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < columns; j++)
+                x[i, j] = (i % 4) * 3.0 * (j % 2 == 0 ? 1 : -1) + rand.NextDouble() * 4 - 2;
+
+        KMeans<double> Fit(IDistanceMetric<double>? metric)
+        {
+            var model = new KMeans<double>(new KMeansOptions<double>
+            {
+                NumClusters = 4, NumInitializations = 3, Seed = 7, DistanceMetric = metric
+            });
+            model.Train(x, new Vector<double>(rows));
+            return model;
+        }
+
+        var fast = Fit(null);
+        var generic = Fit(new SubclassedEuclidean());
+
+        Assert.NotNull(fast.Labels);
+        Assert.NotNull(generic.Labels);
+        Assert.NotNull(fast.ClusterCenters);
+        Assert.NotNull(generic.ClusterCenters);
+        var fastLabels = fast.Labels ?? new Vector<double>(0);
+        var genericLabels = generic.Labels ?? new Vector<double>(0);
+        var fastCenters = fast.ClusterCenters ?? new Matrix<double>(0, 0);
+        var genericCenters = generic.ClusterCenters ?? new Matrix<double>(0, 0);
+
+        Assert.Equal(generic.NumIterations, fast.NumIterations);
+        for (int i = 0; i < rows; i++)
+            Assert.Equal(genericLabels[i], fastLabels[i]);
+        for (int k = 0; k < 4; k++)
+            for (int j = 0; j < columns; j++)
+                Assert.Equal(genericCenters[k, j], fastCenters[k, j], 9);
+        Assert.Equal(generic.Inertia, fast.Inertia, 6);
+
+        var probe = new Matrix<double>(3, columns);
+        for (int j = 0; j < columns; j++) { probe[0, j] = 0.5; probe[1, j] = -4 + j; probe[2, j] = 6 - j; }
+        var fastPredicted = fast.Predict(probe);
+        var genericPredicted = generic.Predict(probe);
+        var fastDistances = fast.Transform(probe);
+        var genericDistances = generic.Transform(probe);
+        for (int i = 0; i < 3; i++)
+        {
+            Assert.Equal(genericPredicted[i], fastPredicted[i]);
+            for (int k = 0; k < 4; k++)
+                Assert.Equal(genericDistances[i, k], fastDistances[i, k], 9);
+        }
+    }
+
+    /// <summary>Euclidean distance under another type, which routes training through the generic metric path.</summary>
+    private sealed class SubclassedEuclidean : EuclideanDistance<double>
+    {
+    }
 }
