@@ -69,13 +69,15 @@ public sealed class OptionSensitivityProbe<TModel> where TModel : class
     /// instance after its constructor (a graph model's synthetic adjacency) is not part of the clone plan, so the
     /// rebuild would otherwise drop it.
     /// </param>
+    /// <param name="parameterCount">Optional parameter count measured before fitting/loading fixture assets.</param>
     public OptionSensitivityProbe(
         Func<TModel> create,
         Func<TModel, long> observe,
         Action<TModel>? train,
         Action<ModelOptions>? prepareOptions = null,
         Func<TModel, IReadOnlyList<KeyValuePair<string, long>>>? describe = null,
-        Action<TModel>? prepareModel = null)
+        Action<TModel>? prepareModel = null,
+        Func<TModel, long>? parameterCount = null)
     {
         Create = create ?? throw new ArgumentNullException(nameof(create));
         Observe = observe ?? throw new ArgumentNullException(nameof(observe));
@@ -83,6 +85,7 @@ public sealed class OptionSensitivityProbe<TModel> where TModel : class
         PrepareOptions = prepareOptions;
         Describe = describe;
         PrepareModel = prepareModel;
+        ParameterCount = parameterCount;
     }
 
     /// <summary>The fixture's factory.</summary>
@@ -102,6 +105,10 @@ public sealed class OptionSensitivityProbe<TModel> where TModel : class
 
     /// <summary>The fixture's post-construction wiring, re-applied to each rebuilt model.</summary>
     public Action<TModel>? PrepareModel { get; }
+
+    /// <summary>Parameter count before the fixture loads fitted assets, or null for families without parameters.</summary>
+    public Func<TModel, long>? ParameterCount { get; }
+
 }
 
 /// <summary>The result of measuring one option on one model.</summary>
@@ -296,7 +303,12 @@ public static class OptionSensitivityHarness
                 {
                     property.SetValue(options, candidate);
                     applied = property.GetValue(options);
-                });
+                }, expectedParameterCount: control.ParameterCount);
+            }
+            catch (ParameterCountChangedException change)
+            {
+                return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Sensitive,
+                    $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} changes the parameter count from {change.Previous} to {change.Current} before fitted fixture assets are loaded.");
             }
             catch (Exception ex) when (IsConstructionRejection(ex))
             {
@@ -457,6 +469,7 @@ public static class OptionSensitivityHarness
 
     private sealed class ControlFingerprint
     {
+        public long? ParameterCount { get; set; }
         public long Untrained { get; set; }
         public long? Trained { get; set; }
         public string? Failure { get; set; }
@@ -471,9 +484,10 @@ public static class OptionSensitivityHarness
         var result = new ControlFingerprint();
         TModel first;
         TModel second;
+        long? secondParameterCount = null;
         try
         {
-            first = Rebuild(probe, declaredOptions, mutate: null);
+            first = Rebuild(probe, declaredOptions, mutate: null, recordParameterCount: count => result.ParameterCount = count);
         }
         catch (Exception ex) when (IsConstructionRejection(ex))
         {
@@ -485,7 +499,7 @@ public static class OptionSensitivityHarness
 
         try
         {
-            second = Rebuild(probe, declaredOptions, mutate: null);
+            second = Rebuild(probe, declaredOptions, mutate: null, recordParameterCount: count => secondParameterCount = count);
         }
         catch
         {
@@ -497,7 +511,7 @@ public static class OptionSensitivityHarness
         {
             long a = Seeded(() => probe.Observe(first));
             long b = Seeded(() => probe.Observe(second));
-            if (a != b)
+            if (a != b || result.ParameterCount != secondParameterCount)
             {
                 result.Failure = "Two identical, identically seeded builds already differ before training, so no difference can be "
                     + "attributed to an option." + DescribeDifference(probe, first, second);
@@ -570,11 +584,23 @@ public static class OptionSensitivityHarness
         }
     }
 
+    private sealed class ParameterCountChangedException : Exception
+    {
+        internal ParameterCountChangedException(long previous, long current)
+        {
+            Previous = previous;
+            Current = current;
+        }
+        internal long Previous { get; }
+        internal long Current { get; }
+    }
+
     /// <summary>
     /// Builds the fixture's model, swaps its options for an independent (optionally perturbed) copy,
     /// and reconstructs it through the clone plan under the fixed initialisation seed.
     /// </summary>
-    private static TModel Rebuild<TModel>(OptionSensitivityProbe<TModel> probe, Type declaredOptions, Action<ModelOptions>? mutate)
+    private static TModel Rebuild<TModel>(OptionSensitivityProbe<TModel> probe, Type declaredOptions, Action<ModelOptions>? mutate,
+        long? expectedParameterCount = null, Action<long>? recordParameterCount = null)
         where TModel : class
     {
         var shell = Seeded(probe.Create);
@@ -588,8 +614,23 @@ public static class OptionSensitivityHarness
             mutate?.Invoke(copy);
             ReplaceReferences(shell, held, copy);
             var rebuilt = Seeded(() => (TModel)CloneEngine.CopyConfiguration(shell));
-            Seeded(() => probe.PrepareModel?.Invoke(rebuilt));
-            return rebuilt;
+            try
+            {
+                if (probe.ParameterCount is not null)
+                {
+                    long count = Seeded(() => probe.ParameterCount(rebuilt));
+                    recordParameterCount?.Invoke(count);
+                    if (expectedParameterCount.HasValue && expectedParameterCount.Value != count)
+                        throw new ParameterCountChangedException(expectedParameterCount.Value, count);
+                }
+                Seeded(() => probe.PrepareModel?.Invoke(rebuilt));
+                return rebuilt;
+            }
+            catch
+            {
+                (rebuilt as IDisposable)?.Dispose();
+                throw;
+            }
         }
         finally
         {

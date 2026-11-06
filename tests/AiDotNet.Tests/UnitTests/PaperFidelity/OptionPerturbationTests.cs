@@ -34,6 +34,10 @@ public class OptionPerturbationTests
             typeof(DeepFixtureModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
         CloneRegistry.Register(new ClonePlan(
             typeof(RejectingOptionsModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
+        CloneRegistry.Register(new ClonePlan(
+            typeof(CheckpointShapeModel), Array.Empty<ClonePlanEntry>(), new[] { "_options" }));
+        CloneRegistry.Register(new ClonePlan(typeof(OptionPreservingFallbackModel), Array.Empty<ClonePlanEntry>(),
+            constructorCandidates: new IReadOnlyList<string>[] { new[] { "_items", "_options" }, new[] { "_options" } }));
     }
 
     public sealed class FixedArrayOptions : ModelOptions
@@ -94,6 +98,39 @@ public class OptionPerturbationTests
         public int Depth { get; set; } = 5;
     }
 
+    public sealed class CheckpointShapeModel : IDisposable
+    {
+        private readonly DepthOptions _options;
+        public CheckpointShapeModel(DepthOptions options) => _options = options;
+        public int ParameterCount => _options.Depth;
+        public bool Disposed { get; private set; }
+        public void Dispose() => Disposed = true;
+    }
+
+    private sealed class CheckpointShapeProbe { }
+    private sealed class FixedCheckpointShapeProbe { }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CheckpointLoadingDoesNotHideAParameterCountChange(bool observeCount)
+    {
+        var rebuilt = new List<CheckpointShapeModel>();
+        var probe = new OptionSensitivityProbe<CheckpointShapeModel>(
+            () => new(new DepthOptions()), _ => 0, train: null,
+            prepareModel: model =>
+            {
+                rebuilt.Add(model);
+                if (model.ParameterCount != 5) throw new ArgumentException("The fixture checkpoint has five parameters.");
+            },
+            parameterCount: model => observeCount ? model.ParameterCount : 5);
+        var result = OptionSensitivityHarness.Measure(
+            observeCount ? typeof(CheckpointShapeProbe) : typeof(FixedCheckpointShapeProbe), "Depth", probe);
+        Assert.Equal(observeCount ? OptionSensitivityOutcome.Sensitive : OptionSensitivityOutcome.NoValidPerturbation,
+            result.Outcome);
+        Assert.All(rebuilt, model => Assert.True(model.Disposed));
+    }
+
     public sealed class RejectingOptionsModel
     {
         private readonly DepthOptions _options;
@@ -103,6 +140,29 @@ public class OptionPerturbationTests
             if (options.Depth > 6) throw new ArgumentOutOfRangeException(nameof(options));
             _options = options;
         }
+    }
+
+    public sealed class OptionPreservingFallbackModel
+    {
+        private readonly int[] _items = Array.Empty<int>();
+        private readonly DepthOptions _options;
+        public OptionPreservingFallbackModel() : this(new DepthOptions()) { }
+        public OptionPreservingFallbackModel(DepthOptions options) => _options = options;
+        public OptionPreservingFallbackModel(int[] items, DepthOptions options)
+        {
+            if (items.Length == 0) throw new ArgumentException("At least one item is required.", nameof(items));
+            _items = items;
+            _options = options;
+        }
+        public int Depth => _options.Depth;
+    }
+
+    [Fact]
+    public void RejectedAuxiliaryStateCanUseANarrowerConstructorThatPreservesOptions()
+    {
+        var model = new OptionPreservingFallbackModel(new DepthOptions { Depth = 9 });
+        var copy = Assert.IsType<OptionPreservingFallbackModel>(CloneEngine.CopyConfiguration(model));
+        Assert.Equal(9, copy.Depth);
     }
 
     [Fact]

@@ -6,6 +6,13 @@ namespace AiDotNet.Tests.ModelFamilyTests.Base;
 /// <summary>Replays the fitted assets installed by the generated fixture after configuration-only reconstruction.</summary>
 internal static class OptionSensitivityFixtureSetup
 {
+    internal static long ParameterCountBeforeFitting<T>(INeuralNetworkModel<T> network)
+        => network is AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>
+            or AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>
+            or AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>
+            or AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>
+                ? network.GetParameters().Length : 0;
+
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options)
     {
         if (options is not AiDotNet.TextToSpeech.TtsModelOptions) return;

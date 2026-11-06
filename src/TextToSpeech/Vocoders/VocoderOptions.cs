@@ -35,7 +35,6 @@ public class VocoderOptions : TtsModelOptions
             throw new ArgumentNullException(nameof(other));
 
         UpsampleRates = other.UpsampleRates;
-        UpsampleKernelSizes = other.UpsampleKernelSizes;
         UpsampleInitialChannels = other.UpsampleInitialChannels;
         ResblockKernelSizes = other.ResblockKernelSizes;
         NumDiffusionSteps = other.NumDiffusionSteps;
@@ -43,9 +42,6 @@ public class VocoderOptions : TtsModelOptions
 
     /// <summary>Gets or sets the upsample rates for each upsampling block.</summary>
     public int[] UpsampleRates { get; set; } = [8, 8, 2, 2];
-
-    /// <summary>Gets or sets the kernel sizes for each upsampling block.</summary>
-    public int[] UpsampleKernelSizes { get; set; } = [16, 16, 4, 4];
 
     /// <summary>Gets or sets the initial upsample channel count.</summary>
     public int UpsampleInitialChannels { get; set; } = 512;

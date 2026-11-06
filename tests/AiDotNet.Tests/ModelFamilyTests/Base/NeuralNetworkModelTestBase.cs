@@ -7795,7 +7795,8 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             },
             prepareOptions: OptionSensitivityFixtureSetup.PrepareOptions,
             describe: network => DescribeNetwork(network, input),
-            prepareModel: PrepareRebuiltNetwork);
+            prepareModel: PrepareRebuiltNetwork,
+            parameterCount: OptionSensitivityFixtureSetup.ParameterCountBeforeFitting);
         OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
     }
 

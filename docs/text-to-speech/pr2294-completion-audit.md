@@ -1,5 +1,21 @@
 # PR #2294 completion audit
 
+## 2026-11-06 option ownership review (integration pending)
+
+The owner permits breaking API changes after checking actual paper-model consumers. The [option ownership review](../../tools/TtsCheckpointAudit/pr2294-option-ownership-review.json) records the compiled-call inventory, pinned reference source, migrations and validation limits.
+
+- `UpsampleKernelSizes` moves from `VocoderOptions` to `BigVGANOptions`, `HiFiGANOptions` and `ISTFTNetOptions`. All three actual readers retain their setting, type and defaults. Access it through the concrete options type and recompile existing callers. Other vocoders no longer inherit this unused setting; APNet2's reference generator reconstructs frame-level predictions with an inverse STFT.
+- `KaniTTSOptions` now derives from `ModelOptions`, retaining its real audio, LFM2, codec, optimizer and ONNX settings. It no longer inherits `MelChannels`, `FftSize`, `NumEncoderLayers`, `NumDecoderLayers`, `NumHeads`, `MaxMelLength` or `DropoutRate`. Use `Heads`/`KeyValueHeads` and `AttentionLayers` for its topology; LoRA still has `LoraDropout`. Other TTS models retain the shared `NumHeads` they consume. Kani options are no longer assignable to `TtsModelOptions`.
+- Kani's `HopSize` is read-only and derived from `CodecDownsampleRates`, matching the model's existing codec calculation. Configure matching encoder and decoder rate products instead of setting an ignored independent hop.
+
+The direct-call audit resolves all tokens across 252,235 compiled methods. All retained defaults match the original assembly in seven affected options classes, and eight ownership/copy regressions pass. APNet, APNet2, BigVGAN, HiFi-GAN and iSTFTNet have identical parameters and waveforms before and after one training step in the scoped comparison, with training required to change parameters. The review describes the standalone harness's five shape-access adaptations.
+
+Fitted-asset probes now compare parameter counts before loading fixed-shape checkpoints, so a real architecture change cannot be hidden by an incompatible fixture checkpoint. All six checked structural options in each Kani model are Sensitive. The 22 perturbation regressions include an unchanged-count negative control, disposal after rejected setup, and constructor fallback that retains supplied options.
+
+
+Kani's fragment-build reference checks retain two identical precision failures before and after this cleanup; the existing full assembly passes the five checked methods. This comparison is evidence against a cleanup regression, not a substitute for full-assembly validation of the changed source. Full integration and strict package compatibility remain pending.
+
+
 ## Post-merge validation snapshot
 
 The integration at `21a4bcac43d4e443a21abb4071acdb11ca621919` includes master `495c7c0ddedeb25e03b52803f1bbf1cb70245c09` and preserves the concurrent native ABME and AMT video implementations. Its production .NET 10 build and normal test-project compilation passed with zero errors. All 127 expanded regression tests passed with zero failures or skips, including ABME, AMT, native reinforcement-learning graphs, optimizer contracts, shared attention and cloning. The tested production DLL and the normal test project's copied DLL both have SHA256 `45f4301b4c151d81784a829358931e38d4046fb2e6ebfa18309f354ab140701a`. This extends the earlier 119-case ABME-integrated regression pass.

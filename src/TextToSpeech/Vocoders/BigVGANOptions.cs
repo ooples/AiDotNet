@@ -23,6 +23,7 @@ public class BigVGANOptions : VocoderOptions
     public BigVGANOptions(BigVGANOptions other)
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
+        UpsampleKernelSizes = (int[])other.UpsampleKernelSizes.Clone();
         ResblockDilationSizes = other.ResblockDilationSizes.Select(d => (int[])d.Clone()).ToArray();
         DiscriminatorPeriods = (int[])other.DiscriminatorPeriods.Clone();
         DiscriminatorWidthDivisor = other.DiscriminatorWidthDivisor;
@@ -57,6 +58,9 @@ public class BigVGANOptions : VocoderOptions
         LearningRate = 1e-4;
         WeightDecay = 0.01;
     }
+
+    /// <summary>Gets or sets the transposed-convolution kernels (8, 8, 4, 4, 4, 4 for BigVGAN).</summary>
+    public int[] UpsampleKernelSizes { get; set; } = [8, 8, 4, 4, 4, 4];
 
     /// <summary>BigVGAN-base: h = 512, upsampling 8, 8, 2, 2 with kernels 16, 16, 4, 4 (14M parameters).</summary>
     public static BigVGANOptions Base() => new()

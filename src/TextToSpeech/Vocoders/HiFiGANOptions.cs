@@ -19,6 +19,7 @@ public class HiFiGANOptions : VocoderOptions
     public HiFiGANOptions(HiFiGANOptions other)
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
+        UpsampleKernelSizes = (int[])other.UpsampleKernelSizes.Clone();
         ResblockDilationSizes = other.ResblockDilationSizes.Select(d => (int[])d.Clone()).ToArray();
         ResblockType = other.ResblockType;
         DiscriminatorPeriods = (int[])other.DiscriminatorPeriods.Clone();
@@ -48,6 +49,9 @@ public class HiFiGANOptions : VocoderOptions
         WeightDecay = 0.01;
         DropoutRate = 0.0;
     }
+
+    /// <summary>Gets or sets the transposed-convolution kernels (16, 16, 4, 4 for HiFi-GAN V1).</summary>
+    public int[] UpsampleKernelSizes { get; set; } = [16, 16, 4, 4];
 
     /// <summary>Gets or sets the dilations of each residual block's convolutions ((1, 3, 5) for each kernel).</summary>
     public int[][] ResblockDilationSizes { get; set; } =

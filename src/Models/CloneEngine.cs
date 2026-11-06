@@ -462,6 +462,8 @@ public static partial class CloneEngine
         // stored, from one trained natively, which does not: taking the widest constructor
         // unconditionally passed null for onnxModelPath and made 51 models throw on clone.
         var rejectedCandidates = new List<string>();
+        TargetInvocationException? rejectedConfiguration = null;
+        HashSet<Type>? requiredOptionTypes = null;
 
         foreach (var candidate in plan.ConstructorCandidates)
         {
@@ -490,6 +492,10 @@ public static partial class CloneEngine
             }
 
             if (!readable) continue;
+            if (requiredOptionTypes is not null
+                && !requiredOptionTypes.All(required => arguments.Any(argument => argument is ModelOptions && required.IsInstanceOfType(argument))))
+                continue;
+
 
             // Matched on parameter NAMES, not on how many there are. Overloads of equal arity are
             // ordinary -- a model taking (options, regularization) beside one taking
@@ -571,9 +577,14 @@ public static partial class CloneEngine
                 }
                 catch (TargetInvocationException ex) when (ex.InnerException is ArgumentException validation)
                 {
-                    // A rejected options blueprint must not be replaced by a narrower constructor's
-                    // defaults: those may allocate the full production model instead of the requested fixture.
-                    if (arguments.Any(argument => argument is ModelOptions)) throw;
+                    // A narrower candidate may still preserve the supplied options (for example when only an
+                    // empty auxiliary collection was rejected). Never fall back to a constructor that drops them.
+                    var configuredTypes = arguments.OfType<ModelOptions>().Select(options => options.GetType()).ToArray();
+                    if (configuredTypes.Length > 0)
+                    {
+                        rejectedConfiguration ??= ex;
+                        requiredOptionTypes ??= new HashSet<Type>(configuredTypes);
+                    }
 
                     // Type compatibility is necessary but not sufficient to identify how an
                     // instance was created. A serialization-only shell can hold an empty collection
@@ -585,6 +596,9 @@ public static partial class CloneEngine
                 }
             }
         }
+
+        if (rejectedConfiguration is not null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(rejectedConfiguration).Throw();
 
         var constructor = type.GetConstructor(
             BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,

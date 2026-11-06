@@ -23,6 +23,7 @@ public class ISTFTNetOptions : VocoderOptions
     public ISTFTNetOptions(ISTFTNetOptions other)
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
+        UpsampleKernelSizes = (int[])other.UpsampleKernelSizes.Clone();
         ResblockDilationSizes = other.ResblockDilationSizes.Select(d => (int[])d.Clone()).ToArray();
         ResblockType = other.ResblockType;
         InverseFftSize = other.InverseFftSize;
@@ -56,6 +57,9 @@ public class ISTFTNetOptions : VocoderOptions
         LearningRate = 2e-4;
         WeightDecay = 0.0;
     }
+
+    /// <summary>Gets or sets the transposed-convolution kernels before the inverse STFT (16, 16).</summary>
+    public int[] UpsampleKernelSizes { get; set; } = [16, 16];
 
     /// <summary>Gets or sets the residual block dilations ((1, 3, 5) for each kernel).</summary>
     public int[][] ResblockDilationSizes { get; set; } = [[1, 3, 5], [1, 3, 5], [1, 3, 5]];

@@ -15,25 +15,31 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// <para><b>For Beginners:</b> These settings size KaniTTS's language model and its audio codec, how it picks each next
 /// sound token, and how it fine-tunes; the defaults reproduce the released models.</para>
 /// </remarks>
-public class KaniTTSOptions : TtsModelOptions
+public class KaniTTSOptions : AiDotNet.Models.Options.ModelOptions
 {
     /// <summary>Creates the released configuration.</summary>
     public KaniTTSOptions()
     {
         SampleRate = 22050;
-        HopSize = 1764;
         HiddenDim = 1024;
         VocabSize = 80539;
         MaxTextLength = 1000;
         LearningRate = 5e-5;
         WeightDecay = 0.02;
-        DropoutRate = 0.0;
     }
 
     /// <summary>Copies another instance.</summary>
     public KaniTTSOptions(KaniTTSOptions other)
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
+        SampleRate = other.SampleRate;
+        HiddenDim = other.HiddenDim;
+        VocabSize = other.VocabSize;
+        MaxTextLength = other.MaxTextLength;
+        ModelPath = other.ModelPath;
+        OnnxOptions = new AiDotNet.Onnx.OnnxModelOptions(other.OnnxOptions);
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
         AttentionLayers = (bool[])other.AttentionLayers.Clone();
         Heads = other.Heads;
         KeyValueHeads = other.KeyValueHeads;
@@ -89,6 +95,33 @@ public class KaniTTSOptions : TtsModelOptions
         ReleaseSpeakerCachePosition = other.ReleaseSpeakerCachePosition;
         SamplingSeed = other.SamplingSeed;
     }
+
+    /// <summary>Audio sample rate in Hz (22,050).</summary>
+    public int SampleRate { get; set; } = 22050;
+
+    /// <summary>Codec samples per frame, derived from the encoder's downsampling rates.</summary>
+    public int HopSize => CodecDownsampleRates.Aggregate(1, (hop, rate) => checked(hop * rate));
+
+    /// <summary>LFM2 hidden width (1,024).</summary>
+    public int HiddenDim { get; set; } = 1024;
+
+    /// <summary>Combined text, control-token and audio-code vocabulary size (80,539).</summary>
+    public int VocabSize { get; set; } = 80539;
+
+    /// <summary>Maximum input text-token count (1,000).</summary>
+    public int MaxTextLength { get; set; } = 1000;
+
+    /// <summary>Optional exported ONNX model path.</summary>
+    public string? ModelPath { get; set; }
+
+    /// <summary>Options for an exported ONNX model.</summary>
+    public AiDotNet.Onnx.OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    /// <summary>Initial language-model optimizer learning rate (5e-5).</summary>
+    public double LearningRate { get; set; } = 5e-5;
+
+    /// <summary>AdamW weight decay (0.02).</summary>
+    public double WeightDecay { get; set; } = 0.02;
 
     /// <summary>Which of the language model's layers attend (the rest are short convolutions): LFM2-350M's 16 layers attend
     /// at 2, 5, 8, 10, 12 and 14.</summary>
