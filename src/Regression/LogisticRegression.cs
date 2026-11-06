@@ -145,6 +145,7 @@ public partial class LogisticRegression<T> : RegressionBase<T>
 
     private List<T> _classLabels = new List<T>();
 
+    /// <inheritdoc />
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         if (x.Rows != y.Length)

@@ -35,6 +35,7 @@ public class LaplacianScoreSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? LaplacianScores => _laplacianScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public LaplacianScoreSelector(
@@ -52,6 +53,7 @@ public class LaplacianScoreSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         _sigma = sigma;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -142,6 +144,7 @@ public class LaplacianScoreSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -158,6 +161,7 @@ public class LaplacianScoreSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("LaplacianScoreSelector does not support inverse transformation.");
@@ -175,6 +179,7 @@ public class LaplacianScoreSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

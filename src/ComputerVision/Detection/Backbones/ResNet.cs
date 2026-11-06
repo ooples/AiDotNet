@@ -59,7 +59,9 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 
     public bool IsFrozen { get; private set; }
     public string Name => $"ResNet-{GetLayerCount(_variant)}";
+    /// <inheritdoc />
     public IReadOnlyList<int> OutputChannels { get; }
+    /// <inheritdoc />
     public IReadOnlyList<int> Strides => new[] { 4, 8, 16, 32 };
 
     /// <summary>
@@ -124,6 +126,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         _ => new[] { 3, 4, 6, 3 }
     };
 
+    /// <inheritdoc />
     public List<Tensor<T>> ExtractFeatures(Tensor<T> input)
     {
         // Backbones accept a single [C,H,W] image or a batched [N,C,H,W] tensor.
@@ -149,6 +152,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         return features;
     }
 
+    /// <inheritdoc />
     public IReadOnlyList<Tensor<T>> GetFeatureMaps(Tensor<T> input) => ExtractFeatures(input);
 
     /// <summary>
@@ -186,6 +190,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     }
 
 
+    /// <inheritdoc />
     public void WriteParameters(BinaryWriter writer)
     {
         writer.Write((int)_variant);
@@ -194,6 +199,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         foreach (var stage in _stages) stage.WriteParameters(writer);
     }
 
+    /// <inheritdoc />
     public void ReadParameters(BinaryReader reader)
     {
         var variant = (ResNetVariant)reader.ReadInt32();
@@ -210,6 +216,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     public virtual void Unfreeze() => IsFrozen = false;
     public (int Height, int Width) GetExpectedInputSize() => (640, 640);
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         var features = ExtractFeatures(input);
@@ -224,6 +231,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         // Backbones own their per-stage layers directly; the inherited Layers list stays empty.
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T>
     {
         Name = Name,
@@ -238,6 +246,7 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
 
 
 
+    /// <inheritdoc />
     public override IFullModel<T, Tensor<T>, Tensor<T>> WithParameters(Vector<T> parameters) =>
         throw new NotSupportedException(
             $"{GetType().Name}: WithParameters(Vector<T>) is unsupported on backbones. " +

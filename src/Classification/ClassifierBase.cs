@@ -764,6 +764,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         }
     }
 
+    /// <inheritdoc />
     public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
 
     /// <summary>
@@ -818,6 +819,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         return copy;
     }
 
+    /// <inheritdoc />
     public virtual long ParameterCount => Registry.ParameterCount;
 
     /// <summary>
@@ -851,6 +853,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
 
+    /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
         byte[] serializedData = Serialize();

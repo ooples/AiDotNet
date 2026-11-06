@@ -33,6 +33,7 @@ public class CorrelationClusterSelector<T> : TransformerBase<T, Matrix<T>, Matri
     public double CorrelationThreshold => _correlationThreshold;
     public double[]? ClusterRepresentativeScores => _clusterRepresentativeScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public CorrelationClusterSelector(
@@ -48,6 +49,7 @@ public class CorrelationClusterSelector<T> : TransformerBase<T, Matrix<T>, Matri
         _correlationThreshold = correlationThreshold;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -174,6 +176,7 @@ public class CorrelationClusterSelector<T> : TransformerBase<T, Matrix<T>, Matri
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -190,6 +193,7 @@ public class CorrelationClusterSelector<T> : TransformerBase<T, Matrix<T>, Matri
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("CorrelationClusterSelector does not support inverse transformation.");
@@ -207,6 +211,7 @@ public class CorrelationClusterSelector<T> : TransformerBase<T, Matrix<T>, Matri
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

@@ -40,6 +40,7 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     public double DecayFactor => _decayFactor;
     public double[]? FeatureScores => _featureScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public ExponentialDecaySelector(
@@ -58,6 +59,7 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _effectiveN = 0;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -141,6 +143,7 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -157,6 +160,7 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("ExponentialDecaySelector does not support inverse transformation.");
@@ -174,6 +178,7 @@ public class ExponentialDecaySelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

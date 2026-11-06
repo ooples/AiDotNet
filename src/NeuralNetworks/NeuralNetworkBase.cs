@@ -1231,6 +1231,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return readiness;
     }
 
+    /// <inheritdoc />
     public virtual Vector<T> GetParameters()
     {
         // Pre-resolve any lazy layer shapes from the architecture before
@@ -1390,6 +1391,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected virtual AiDotNet.Models.Parameters.ParameterSlotRole ResolveExtraTensorParameterRole(
         Tensor<T> tensor, AiDotNet.Models.Parameters.ParameterSlotRole declared) => declared;
 
+    /// <inheritdoc />
     public virtual IEnumerable<AiDotNet.Models.Parameters.ParameterChunk<T>> GetParameterStateChunks()
     {
         ResolveLazyLayerShapes();
@@ -5284,6 +5286,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return gradients;
     }
 
+    /// <inheritdoc />
     public virtual Vector<T> GetParameterGradients()
     {
         if (_gradientSurfaceUnavailable)
@@ -6972,6 +6975,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Train(input, expectedOutput);
     }
 
+    /// <inheritdoc />
     public virtual Tensor<T> Predict(Tensor<T> input)
     {
         RequireArchitectureAgreesWithInput();
@@ -10645,6 +10649,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </remarks>
     internal bool HasRecordedLoss => _lastLossRecorded;
 
+    /// <inheritdoc />
     public virtual T GetLastLoss()
     {
         // A missing loss means training has not produced one yet. Preserve NaN/Infinity:
@@ -11010,6 +11015,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
+    /// <inheritdoc />
     public virtual void Train(Tensor<T> input, Tensor<T> expectedOutput)
     {
         Guard.NotNull(input);
@@ -18489,6 +18495,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
+    /// <inheritdoc />
     public virtual void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         if (featureIndices == null)
@@ -19785,6 +19792,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return result;
     }
 
+    /// <inheritdoc />
     public virtual Vector<T> ComputeGradients(Tensor<T> input, Tensor<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Pluggable credit-assignment rule (Feedback Alignment, Direct Feedback Alignment, Sign-Symmetric,

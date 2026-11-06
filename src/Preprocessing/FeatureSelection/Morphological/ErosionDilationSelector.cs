@@ -33,6 +33,7 @@ public class ErosionDilationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     public int WindowSize => _windowSize;
     public double[]? MorphologicalScores => _morphologicalScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public ErosionDilationSelector(
@@ -48,6 +49,7 @@ public class ErosionDilationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         _windowSize = windowSize;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -114,6 +116,7 @@ public class ErosionDilationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -130,6 +133,7 @@ public class ErosionDilationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("ErosionDilationSelector does not support inverse transformation.");
@@ -147,6 +151,7 @@ public class ErosionDilationSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

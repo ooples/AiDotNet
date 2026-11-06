@@ -1214,6 +1214,7 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
     }
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

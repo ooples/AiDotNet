@@ -163,6 +163,7 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override bool MakesUpstreamBiasRedundant => false;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -610,8 +611,10 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
 

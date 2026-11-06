@@ -23,6 +23,7 @@ public abstract class FederatedTrainerBase<TModel, TData, TMetadata, T> :
     private int _numberOfClients;
     private bool _initialized;
 
+    /// <inheritdoc />
     public void Initialize(TModel globalModel, int numberOfClients)
     {
         if (globalModel is null)
@@ -40,6 +41,7 @@ public abstract class FederatedTrainerBase<TModel, TData, TMetadata, T> :
         _initialized = true;
     }
 
+    /// <inheritdoc />
     public TModel GetGlobalModel()
     {
         if (!_initialized)
@@ -50,14 +52,17 @@ public abstract class FederatedTrainerBase<TModel, TData, TMetadata, T> :
         return _globalModel ?? throw new InvalidOperationException("Global model has not been set.");
     }
 
+    /// <inheritdoc />
     public void SetAggregationStrategy(IAggregationStrategy<TModel> strategy)
     {
         Guard.NotNull(strategy);
         _aggregationStrategy = strategy;
     }
 
+    /// <inheritdoc />
     public abstract TMetadata TrainRound(Dictionary<int, TData> clientData, double clientSelectionFraction = 1.0, int localEpochs = 1);
 
+    /// <inheritdoc />
     public abstract TMetadata Train(Dictionary<int, TData> clientData, int rounds, double clientSelectionFraction = 1.0, int localEpochs = 1);
 
     protected IAggregationStrategy<TModel> GetAggregationStrategyOrThrow()

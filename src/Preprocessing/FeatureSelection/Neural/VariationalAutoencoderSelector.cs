@@ -33,6 +33,7 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FeatureImportances => _featureImportances;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public VariationalAutoencoderSelector(
@@ -50,6 +51,7 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
         _nEpochs = nEpochs;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -184,6 +186,7 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
         return Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -200,6 +203,7 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("VariationalAutoencoderSelector does not support inverse transformation.");
@@ -217,6 +221,7 @@ public class VariationalAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, M
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

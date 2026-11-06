@@ -32,6 +32,7 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? DistanceContributions => _distanceContributions;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public MahalanobisDistanceSelector(
@@ -45,6 +46,7 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
         _nFeaturesToSelect = nFeaturesToSelect;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -143,6 +145,7 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -159,6 +162,7 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("MahalanobisDistanceSelector does not support inverse transformation.");
@@ -176,6 +180,7 @@ public class MahalanobisDistanceSelector<T> : TransformerBase<T, Matrix<T>, Matr
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

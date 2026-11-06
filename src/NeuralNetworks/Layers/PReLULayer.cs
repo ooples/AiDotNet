@@ -185,6 +185,7 @@ public partial class PReLULayer<T> : LayerBase<T>
         metadata["ChannelAxis"] = _channelAxis.ToString(System.Globalization.CultureInfo.InvariantCulture);
         return metadata;
     }
+    /// <inheritdoc />
     public override void ResetState()
     {
     }

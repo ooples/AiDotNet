@@ -452,6 +452,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     /// </remarks>
     public NumericalReproducibility Reproducibility { get; set; } = NumericalReproducibility.Exact;
 
+    /// <inheritdoc />
     public virtual bool MakesUpstreamBiasRedundant => false;
 
     /// <summary>
@@ -6278,6 +6279,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     internal static int ParameterSurfaceEpoch =>
         System.Threading.Volatile.Read(ref s_parameterEpoch);
 
+    /// <inheritdoc />
     public virtual long ParameterCount
     {
         get
@@ -7326,6 +7328,7 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
         return true;
     }
 
+    /// <inheritdoc />
     public virtual Vector<T> GetParameters()
     {
         // Reading a value vector is an explicit materialization boundary. ParameterCount itself

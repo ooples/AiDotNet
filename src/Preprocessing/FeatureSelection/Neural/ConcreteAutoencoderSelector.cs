@@ -37,6 +37,7 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? SelectionProbabilities => _selectionProbabilities;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public ConcreteAutoencoderSelector(
@@ -58,6 +59,7 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
         _minTemperature = minTemperature;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -198,6 +200,7 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -214,6 +217,7 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("ConcreteAutoencoderSelector does not support inverse transformation.");
@@ -231,6 +235,7 @@ public class ConcreteAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matr
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

@@ -111,6 +111,7 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
         _random = Random;
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         string stateKey = VectorToStateKey(state);
@@ -130,6 +131,7 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
         return action;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         string stateKey = VectorToStateKey(state);
@@ -183,6 +185,7 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
         return NumOps.Add(greedyPart, explorePart);
     }
 
+    /// <inheritdoc />
     public override T Train()
     {
         return NumOps.Zero;
@@ -257,6 +260,7 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
         return bestAction;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -266,8 +270,10 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
         };
     }
 
+    /// <inheritdoc />
     public override int FeatureCount => _options.StateSize;
 
+    /// <inheritdoc />
     public Vector<T> ComputeGradients(Vector<T> input, Vector<T> target, ILossFunction<T>? lossFunction = null)
     {
         // Returned GetParameters() -- the WEIGHTS -- where this interface promises
@@ -286,6 +292,7 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
             + "return. Call Train() instead.");
     }
 
+    /// <inheritdoc />
     public void ApplyGradients(Vector<T> gradients, T learningRate)
     {
         // An empty body silently accepted a gradient vector and did nothing with it, so a
@@ -296,6 +303,7 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
             + "Call Train() instead.");
     }
 
+    /// <inheritdoc />
     public override void SaveModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))
@@ -307,6 +315,7 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
+    /// <inheritdoc />
     public override void LoadModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))

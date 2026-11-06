@@ -33,6 +33,7 @@ public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public bool PreferHighKurtosis => _preferHighKurtosis;
     public double[]? KurtosisValues => _kurtosisValues;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public KurtosisSelector(
@@ -48,6 +49,7 @@ public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _preferHighKurtosis = preferHighKurtosis;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -113,6 +115,7 @@ public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -129,6 +132,7 @@ public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("KurtosisSelector does not support inverse transformation.");
@@ -146,6 +150,7 @@ public class KurtosisSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

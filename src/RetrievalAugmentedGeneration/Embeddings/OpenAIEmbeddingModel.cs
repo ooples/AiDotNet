@@ -30,7 +30,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         private readonly bool _ownsHttpClient;
         private bool _disposed;
 
+        /// <inheritdoc />
         public override int EmbeddingDimension => _dimension;
+        /// <inheritdoc />
         public override int MaxTokens => _maxTokens;
 
         /// <summary>
@@ -65,6 +67,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             }
         }
 
+        /// <inheritdoc />
         protected override Vector<T> EmbedCore(string text)
         {
             // Surface API/transport failures instead of fabricating a fake vector.
@@ -90,6 +93,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             return await EmbedBatchCoreAsync(textList);
         }
 
+        /// <inheritdoc />
         protected override async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
         {
             var requestBody = new
@@ -182,6 +186,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             public double[] Embedding { get; set; } = Array.Empty<double>();
         }
 
+        /// <inheritdoc />
         protected override void Dispose(bool disposing)
         {
             if (!_disposed)

@@ -56,6 +56,7 @@ public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>, IShapeContr
     [SubLayerInput("_ffnDim")]
     private readonly DenseLayer<T> _ffnDown;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     public TimeSformerBlockLayer(
@@ -160,11 +161,13 @@ public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>, IShapeContr
         return Engine.TensorAdd(sequenceOut, ffn);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         return Forward(input, _configuredFrames);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -172,12 +175,14 @@ public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>, IShapeContr
             layer.ClearGradients();
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         foreach (var layer in ParameterLayers)
             layer.UpdateParameters(learningRate);
     }
 
+    /// <inheritdoc />
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
@@ -185,6 +190,7 @@ public sealed partial class TimeSformerBlockLayer<T> : LayerBase<T>, IShapeContr
             layer.SetTrainingMode(isTraining);
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         foreach (var layer in ParameterLayers)

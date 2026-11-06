@@ -123,12 +123,16 @@ public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguag
             _options.ImageSize = h;
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.FusionDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int FusionEmbeddingDim => _options.FusionDim;
+    /// <inheritdoc />
     public int MaxSequenceLength => _options.MaxSequenceLength;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -141,6 +145,7 @@ public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguag
         return L2Normalize(c);
     }
 
+    /// <inheritdoc />
     public Tensor<T> FuseImageText(Tensor<T> image, string text)
     {
         ThrowIfDisposed();
@@ -166,6 +171,7 @@ public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguag
         return fused;
     }
 
+    /// <inheritdoc />
     public T ComputeMatchingScore(Tensor<T> image, string text)
     {
         var imageEmb = EncodeImage(image);
@@ -249,6 +255,7 @@ public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguag
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -264,11 +271,14 @@ public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguag
     // This forwarded to a helper the base now calls from its own
     // GetExtraTrainableLayers, so the override restated it. Removed under AIDN082.
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -295,6 +305,7 @@ public partial class BridgeTower<T> : VisionLanguageModelBase<T>, IVisionLanguag
             throw new ObjectDisposedException(GetType().FullName ?? nameof(BridgeTower<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

@@ -46,10 +46,14 @@ public class ShuffleSplitStrategy<T> : ICrossValidationStrategy<T>
         _randomSeed = randomSeed;
     }
 
+    /// <inheritdoc />
     public string Name => "ShuffleSplit";
+    /// <inheritdoc />
     public int NumSplits => _numSplits;
+    /// <inheritdoc />
     public string Description => $"Random {(int)(_testSize * 100)}% test splits, repeated {_numSplits} times.";
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         int testCount = Math.Max(1, (int)(dataSize * _testSize));

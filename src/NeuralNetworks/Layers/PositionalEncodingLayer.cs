@@ -295,6 +295,7 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     protected override bool IsShapePreserving => true;
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Handle 1D input by treating it as [1, embed] (single position with embedding)

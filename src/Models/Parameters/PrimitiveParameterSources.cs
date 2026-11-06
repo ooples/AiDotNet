@@ -18,8 +18,10 @@ public sealed class DoubleScalarParameterSource<T> : IParameterSource<T>, IParam
         _set = set ?? throw new ArgumentNullException(nameof(set));
     }
 
+    /// <inheritdoc />
     public long ParameterCount => 1;
 
+    /// <inheritdoc />
     public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout() =>
         new[]
         {
@@ -27,8 +29,10 @@ public sealed class DoubleScalarParameterSource<T> : IParameterSource<T>, IParam
                 "$", ParameterSlotRole.Trainable, ParameterReadiness.Materialized, 1)
         };
 
+    /// <inheritdoc />
     public Vector<T> GetParameters() => new(new[] { _numOps.FromDouble(_get()) });
 
+    /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
@@ -49,8 +53,10 @@ public sealed class DoubleArrayParameterSource<T> : IParameterSource<T>, IParame
         _get = get ?? throw new ArgumentNullException(nameof(get));
     }
 
+    /// <inheritdoc />
     public long ParameterCount => _get()?.LongLength ?? 0;
 
+    /// <inheritdoc />
     public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
     {
         var value = _get();
@@ -65,6 +71,7 @@ public sealed class DoubleArrayParameterSource<T> : IParameterSource<T>, IParame
         };
     }
 
+    /// <inheritdoc />
     public Vector<T> GetParameters()
     {
         var value = _get();
@@ -74,6 +81,7 @@ public sealed class DoubleArrayParameterSource<T> : IParameterSource<T>, IParame
         return result;
     }
 
+    /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));
@@ -99,6 +107,7 @@ public sealed class DoubleJaggedParameterSource<T> : IParameterSource<T>, IParam
         _get = get ?? throw new ArgumentNullException(nameof(get));
     }
 
+    /// <inheritdoc />
     public long ParameterCount
     {
         get
@@ -112,6 +121,7 @@ public sealed class DoubleJaggedParameterSource<T> : IParameterSource<T>, IParam
         }
     }
 
+    /// <inheritdoc />
     public IReadOnlyList<ParameterSlotDescriptor> GetParameterLayout()
     {
         var value = _get();
@@ -148,6 +158,7 @@ public sealed class DoubleJaggedParameterSource<T> : IParameterSource<T>, IParam
         return slots;
     }
 
+    /// <inheritdoc />
     public Vector<T> GetParameters()
     {
         var value = _get();
@@ -165,6 +176,7 @@ public sealed class DoubleJaggedParameterSource<T> : IParameterSource<T>, IParam
         return result;
     }
 
+    /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
         if (parameters is null) throw new ArgumentNullException(nameof(parameters));

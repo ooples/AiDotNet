@@ -14,6 +14,7 @@ public class UniformAugment<T> : ImageAugmenterBase<T>
         MaxOps = maxOps;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var ops = (AugmentOp[])Enum.GetValues(typeof(AugmentOp));
@@ -66,6 +67,7 @@ public class UniformAugment<T> : ImageAugmenterBase<T>
         }
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

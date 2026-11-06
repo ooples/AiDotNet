@@ -34,6 +34,7 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     public int NBins => _nBins;
     public double[]? MIValues => _miValues;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public MutualInformationSelector(
@@ -51,6 +52,7 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         _nBins = nBins;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -171,6 +173,7 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -187,6 +190,7 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("MutualInformationSelector does not support inverse transformation.");
@@ -204,6 +208,7 @@ public class MutualInformationSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

@@ -1557,6 +1557,7 @@ public partial class AudioVisualEventLocalizationNetwork<T> : MultimodalModelLay
     /// </remarks>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => EncodeAudioTensor(input);
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
 

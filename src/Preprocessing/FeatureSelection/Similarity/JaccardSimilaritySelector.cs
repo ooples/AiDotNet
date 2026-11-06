@@ -31,6 +31,7 @@ public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? JaccardScores => _jaccardScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public JaccardSimilaritySelector(
@@ -44,6 +45,7 @@ public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix
         _nFeaturesToSelect = nFeaturesToSelect;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -124,6 +126,7 @@ public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -140,6 +143,7 @@ public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("JaccardSimilaritySelector does not support inverse transformation.");
@@ -157,6 +161,7 @@ public class JaccardSimilaritySelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

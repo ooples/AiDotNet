@@ -33,6 +33,7 @@ public class ClusterSeparabilitySelector<T> : TransformerBase<T, Matrix<T>, Matr
     public int NClusters => _nClusters;
     public double[]? SeparabilityScores => _separabilityScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public ClusterSeparabilitySelector(
@@ -48,6 +49,7 @@ public class ClusterSeparabilitySelector<T> : TransformerBase<T, Matrix<T>, Matr
         _nClusters = nClusters;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -190,6 +192,7 @@ public class ClusterSeparabilitySelector<T> : TransformerBase<T, Matrix<T>, Matr
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -206,6 +209,7 @@ public class ClusterSeparabilitySelector<T> : TransformerBase<T, Matrix<T>, Matr
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("ClusterSeparabilitySelector does not support inverse transformation.");
@@ -223,6 +227,7 @@ public class ClusterSeparabilitySelector<T> : TransformerBase<T, Matrix<T>, Matr
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

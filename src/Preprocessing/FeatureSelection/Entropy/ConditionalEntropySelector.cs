@@ -33,6 +33,7 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
     public int NBins => _nBins;
     public double[]? EntropyReductions => _entropyReductions;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public ConditionalEntropySelector(
@@ -48,6 +49,7 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         _nBins = nBins;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -155,6 +157,7 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -171,6 +174,7 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("ConditionalEntropySelector does not support inverse transformation.");
@@ -188,6 +192,7 @@ public class ConditionalEntropySelector<T> : TransformerBase<T, Matrix<T>, Matri
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

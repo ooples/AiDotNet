@@ -35,6 +35,7 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
     public double HighFreqCutoff => _highFreqCutoff;
     public double[]? PSDScores => _psdScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public PowerSpectralDensitySelector(
@@ -52,6 +53,7 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
         _highFreqCutoff = highFreqCutoff;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -117,6 +119,7 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -133,6 +136,7 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("PowerSpectralDensitySelector does not support inverse transformation.");
@@ -150,6 +154,7 @@ public class PowerSpectralDensitySelector<T> : TransformerBase<T, Matrix<T>, Mat
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

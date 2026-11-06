@@ -36,6 +36,7 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int WindowSize => _windowSize;
     public double[]? FeatureScores => _featureScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public SlidingWindowSelector(
@@ -55,6 +56,7 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _windowY = new Queue<double>();
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -144,6 +146,7 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -160,6 +163,7 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("SlidingWindowSelector does not support inverse transformation.");
@@ -177,6 +181,7 @@ public class SlidingWindowSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

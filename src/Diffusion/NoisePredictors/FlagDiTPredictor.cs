@@ -328,6 +328,7 @@ public partial class FlagDiTPredictor<T> : NoisePredictorBase<T>
         return Engine.Reshape(permuted, new[] { batch, _inputChannels, height, width });
     }
 
+    /// <inheritdoc />
     protected override Vector<T> GetParameterGradients()
     {
         var all = new List<T>();

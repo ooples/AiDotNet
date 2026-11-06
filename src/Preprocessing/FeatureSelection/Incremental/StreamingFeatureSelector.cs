@@ -43,6 +43,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     public double[]? CorrelationScores => _correlationScores;
     public int[]? SelectedIndices => _selectedIndices;
     public int SampleCount => _sampleCount;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public StreamingFeatureSelector(
@@ -61,6 +62,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _sampleCount = 0;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -172,6 +174,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -188,6 +191,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("StreamingFeatureSelector does not support inverse transformation.");
@@ -205,6 +209,7 @@ public class StreamingFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

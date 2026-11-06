@@ -39,6 +39,7 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? SelectionProbabilities => _selectionProbabilities;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public StabilitySelection(
@@ -68,6 +69,7 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _randomState = randomState;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -202,6 +204,7 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -218,6 +221,7 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("StabilitySelection does not support inverse transformation.");
@@ -235,6 +239,7 @@ public class StabilitySelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return Array.Empty<string>();

@@ -82,6 +82,7 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
     private readonly DropoutLayer<T>? _crossDropout;
     private readonly DropoutLayer<T>? _ffnDropout;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>Initialises a Pre-LN transformer decoder block.</summary>

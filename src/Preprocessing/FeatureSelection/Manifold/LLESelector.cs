@@ -33,6 +33,7 @@ public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int NNeighbors => _nNeighbors;
     public double[]? LocalLinearityScores => _localLinearityScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public LLESelector(
@@ -48,6 +49,7 @@ public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nNeighbors = nNeighbors;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -128,6 +130,7 @@ public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -144,6 +147,7 @@ public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("LLESelector does not support inverse transformation.");
@@ -161,6 +165,7 @@ public class LLESelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

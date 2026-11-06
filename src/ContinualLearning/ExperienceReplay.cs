@@ -121,6 +121,7 @@ public class ExperienceReplay<T> : IContinualLearningStrategy<T>
     /// </remarks>
     public bool AccumulatesAcrossTasks => false;
 
+    /// <inheritdoc />
     public double Lambda
     {
         get => _lambda;

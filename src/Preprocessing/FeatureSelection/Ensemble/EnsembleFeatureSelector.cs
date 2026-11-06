@@ -44,6 +44,7 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? AggregateScores => _aggregateScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public EnsembleFeatureSelector(
@@ -73,6 +74,7 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         _selectors.Add(selector);
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -341,6 +343,7 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -357,6 +360,7 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("EnsembleFeatureSelector does not support inverse transformation.");
@@ -374,6 +378,7 @@ public class EnsembleFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return Array.Empty<string>();

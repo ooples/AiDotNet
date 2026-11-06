@@ -499,6 +499,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     private static bool DiffusionCudaGraphEnabled =>
         System.Environment.GetEnvironmentVariable("AIDOTNET_DIFFUSION_CUDA_GRAPH") == "1";
 
+    /// <inheritdoc />
     public override Tensor<T> PredictNoise(Tensor<T> noisySample, int timestep, Tensor<T>? conditioning = null)
     {
         EnsureLayersInitialized();

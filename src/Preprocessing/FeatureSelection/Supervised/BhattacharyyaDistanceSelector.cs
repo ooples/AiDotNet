@@ -32,6 +32,7 @@ public class BhattacharyyaDistanceSelector<T> : TransformerBase<T, Matrix<T>, Ma
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? DistanceScores => _distanceScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public BhattacharyyaDistanceSelector(
@@ -45,6 +46,7 @@ public class BhattacharyyaDistanceSelector<T> : TransformerBase<T, Matrix<T>, Ma
         _nFeaturesToSelect = nFeaturesToSelect;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -137,6 +139,7 @@ public class BhattacharyyaDistanceSelector<T> : TransformerBase<T, Matrix<T>, Ma
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -153,6 +156,7 @@ public class BhattacharyyaDistanceSelector<T> : TransformerBase<T, Matrix<T>, Ma
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("BhattacharyyaDistanceSelector does not support inverse transformation.");
@@ -170,6 +174,7 @@ public class BhattacharyyaDistanceSelector<T> : TransformerBase<T, Matrix<T>, Ma
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

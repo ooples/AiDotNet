@@ -31,7 +31,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         private readonly object _initLock = new();
         private bool _disposed;
 
+        /// <inheritdoc />
         public override int EmbeddingDimension => _dimension;
+        /// <inheritdoc />
         public override int MaxTokens => _maxTokens;
 
         public ONNXSentenceTransformer(string modelPath, int dimension = 384, int maxTokens = 512)
@@ -114,6 +116,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             }
         }
 
+        /// <inheritdoc />
         protected override Vector<T> EmbedCore(string text)
         {
             if (string.IsNullOrWhiteSpace(text))
@@ -244,6 +247,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             return new Vector<T>(values);
         }
 
+        /// <inheritdoc />
         protected override void Dispose(bool disposing)
         {
             if (!_disposed)

@@ -38,6 +38,7 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public double Epsilon => _epsilon;
     public double[]? FeatureScores => _featureScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public OSFS(
@@ -55,6 +56,7 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _epsilon = epsilon;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -252,6 +254,7 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -268,6 +271,7 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("OSFS does not support inverse transformation.");
@@ -285,6 +289,7 @@ public class OSFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

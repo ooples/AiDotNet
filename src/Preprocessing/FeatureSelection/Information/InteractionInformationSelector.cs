@@ -33,6 +33,7 @@ public class InteractionInformationSelector<T> : TransformerBase<T, Matrix<T>, M
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? InteractionScores => _interactionScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public InteractionInformationSelector(
@@ -48,6 +49,7 @@ public class InteractionInformationSelector<T> : TransformerBase<T, Matrix<T>, M
         _nBins = nBins;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -213,6 +215,7 @@ public class InteractionInformationSelector<T> : TransformerBase<T, Matrix<T>, M
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -229,6 +232,7 @@ public class InteractionInformationSelector<T> : TransformerBase<T, Matrix<T>, M
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("InteractionInformationSelector does not support inverse transformation.");
@@ -246,6 +250,7 @@ public class InteractionInformationSelector<T> : TransformerBase<T, Matrix<T>, M
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

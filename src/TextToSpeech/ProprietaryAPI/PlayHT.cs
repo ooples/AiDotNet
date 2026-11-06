@@ -85,8 +85,11 @@ public partial class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int HiddenDim => _options.HiddenDim;
+    /// <inheritdoc />
     public int NumFlowSteps => _options.NumFlowSteps;
 
     /// <summary>Synthesizes speech using PlayHT's API-compatible local inference pipeline.</summary>
@@ -100,6 +103,7 @@ public partial class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
         return PostprocessAudio(output);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
         int len = Math.Min(text.Length, _options.MaxTextLength);
@@ -109,6 +113,7 @@ public partial class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
         return t;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
@@ -130,6 +135,7 @@ public partial class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
             );
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -158,6 +164,7 @@ public partial class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -185,6 +192,7 @@ public partial class PlayHT<T> : TtsModelBase<T>, IEndToEndTts<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(PlayHT<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

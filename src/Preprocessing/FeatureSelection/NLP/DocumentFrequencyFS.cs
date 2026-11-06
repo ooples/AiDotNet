@@ -46,6 +46,7 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int MaxDf => _maxDf;
     public int[]? DocumentFrequencies => _documentFrequencies;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public DocumentFrequencyFS(
@@ -67,6 +68,7 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _maxDf = maxDf;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -121,6 +123,7 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -137,6 +140,7 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("DocumentFrequencyFS does not support inverse transformation.");
@@ -154,6 +158,7 @@ public class DocumentFrequencyFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

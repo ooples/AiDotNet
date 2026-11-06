@@ -37,6 +37,7 @@ public class SparseGroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     public double GroupRatio => _groupRatio;
     public double[]? Coefficients => _coefficients;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public SparseGroupLassoSelector(
@@ -58,6 +59,7 @@ public class SparseGroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _groupIndices = groupIndices;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -184,6 +186,7 @@ public class SparseGroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -200,6 +203,7 @@ public class SparseGroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("SparseGroupLassoSelector does not support inverse transformation.");
@@ -217,6 +221,7 @@ public class SparseGroupLassoSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

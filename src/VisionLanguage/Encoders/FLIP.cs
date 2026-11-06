@@ -133,14 +133,20 @@ public partial class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLan
         InitializeLayers();
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.VisionEmbeddingDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxSequenceLength => _options.MaxSequenceLength;
+    /// <inheritdoc />
     public int TextEmbeddingDimension => _options.TextEmbeddingDim;
+    /// <inheritdoc />
     public int ProjectionDimension => _options.ProjectionDim;
+    /// <inheritdoc />
     public T Temperature => NumOps.FromDouble(_options.Temperature);
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -150,6 +156,7 @@ public partial class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLan
         return L2Normalize(ForwardVisionEncoder(p));
     }
 
+    /// <inheritdoc />
     public Tensor<T> EncodeText(string text)
     {
         ThrowIfDisposed();
@@ -159,6 +166,7 @@ public partial class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLan
         return L2Normalize(ForwardTextEncoder(t));
     }
 
+    /// <inheritdoc />
     public Tensor<T>[] EncodeTexts(string[] texts)
     {
         var e = new Tensor<T>[texts.Length];
@@ -167,9 +175,11 @@ public partial class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLan
         return e;
     }
 
+    /// <inheritdoc />
     public T ComputeSimilarity(Tensor<T> image, string text) =>
         CosineSimilarity(EncodeImage(image), EncodeText(text));
 
+    /// <inheritdoc />
     public Dictionary<string, T> ZeroShotClassify(Tensor<T> image, string[] labels)
     {
         var imageEmb = EncodeImage(image);
@@ -221,6 +231,7 @@ public partial class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLan
         );
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -249,11 +260,14 @@ public partial class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLan
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var meta = new ModelMetadata<T>
@@ -307,6 +321,7 @@ public partial class FLIP<T> : VisionLanguageModelBase<T>, IContrastiveVisionLan
             throw new ObjectDisposedException(GetType().FullName ?? nameof(FLIP<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

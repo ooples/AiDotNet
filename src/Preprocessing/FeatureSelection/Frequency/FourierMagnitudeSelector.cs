@@ -31,6 +31,7 @@ public class FourierMagnitudeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? SpectralEnergies => _spectralEnergies;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public FourierMagnitudeSelector(
@@ -44,6 +45,7 @@ public class FourierMagnitudeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _nFeaturesToSelect = nFeaturesToSelect;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -101,6 +103,7 @@ public class FourierMagnitudeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -117,6 +120,7 @@ public class FourierMagnitudeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("FourierMagnitudeSelector does not support inverse transformation.");
@@ -134,6 +138,7 @@ public class FourierMagnitudeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

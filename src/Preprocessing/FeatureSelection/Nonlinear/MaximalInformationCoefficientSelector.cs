@@ -34,6 +34,7 @@ public class MaximalInformationCoefficientSelector<T> : TransformerBase<T, Matri
     public int MaxBins => _maxBins;
     public double[]? MICValues => _micValues;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public MaximalInformationCoefficientSelector(
@@ -51,6 +52,7 @@ public class MaximalInformationCoefficientSelector<T> : TransformerBase<T, Matri
         _maxBins = maxBins;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -178,6 +180,7 @@ public class MaximalInformationCoefficientSelector<T> : TransformerBase<T, Matri
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -194,6 +197,7 @@ public class MaximalInformationCoefficientSelector<T> : TransformerBase<T, Matri
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("MaximalInformationCoefficientSelector does not support inverse transformation.");
@@ -211,6 +215,7 @@ public class MaximalInformationCoefficientSelector<T> : TransformerBase<T, Matri
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

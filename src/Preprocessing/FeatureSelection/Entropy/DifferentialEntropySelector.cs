@@ -34,6 +34,7 @@ public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matr
     public int KNeighbors => _kNeighbors;
     public double[]? EntropyValues => _entropyValues;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public DifferentialEntropySelector(
@@ -51,6 +52,7 @@ public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matr
         _kNeighbors = kNeighbors;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -127,6 +129,7 @@ public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matr
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -143,6 +146,7 @@ public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matr
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("DifferentialEntropySelector does not support inverse transformation.");
@@ -160,6 +164,7 @@ public class DifferentialEntropySelector<T> : TransformerBase<T, Matrix<T>, Matr
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

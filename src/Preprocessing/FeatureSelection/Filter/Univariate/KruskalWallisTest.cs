@@ -37,6 +37,7 @@ public class KruskalWallisTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public double[]? HStatistics => _hStatistics;
     public double[]? PValues => _pValues;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public KruskalWallisTest(
@@ -52,6 +53,7 @@ public class KruskalWallisTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _pValueThreshold = pValueThreshold;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -245,6 +247,7 @@ public class KruskalWallisTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -261,6 +264,7 @@ public class KruskalWallisTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("KruskalWallisTest does not support inverse transformation.");
@@ -278,6 +282,7 @@ public class KruskalWallisTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return Array.Empty<string>();

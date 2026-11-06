@@ -34,6 +34,7 @@ public class MutualInformationRegression<T> : TransformerBase<T, Matrix<T>, Matr
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? MutualInfoScores => _mutualInfoScores;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public MutualInformationRegression(
@@ -51,6 +52,7 @@ public class MutualInformationRegression<T> : TransformerBase<T, Matrix<T>, Matr
         _nBins = nBins;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
@@ -149,6 +151,7 @@ public class MutualInformationRegression<T> : TransformerBase<T, Matrix<T>, Matr
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -165,6 +168,7 @@ public class MutualInformationRegression<T> : TransformerBase<T, Matrix<T>, Matr
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("MutualInformationRegression does not support inverse transformation.");
@@ -182,6 +186,7 @@ public class MutualInformationRegression<T> : TransformerBase<T, Matrix<T>, Matr
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return Array.Empty<string>();

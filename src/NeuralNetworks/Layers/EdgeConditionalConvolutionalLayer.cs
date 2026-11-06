@@ -147,6 +147,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
     [Scratch]
     private Tensor<T>? _biasGradient;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>
@@ -726,6 +727,7 @@ public partial class EdgeConditionalConvolutionalLayer<T> : LayerBase<T>, IGraph
         Engine.InvalidatePersistentTensor(_bias);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         _edgeNetworkWeights1Gradient = null;

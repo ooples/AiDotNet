@@ -33,6 +33,7 @@ public class LOFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int NNeighbors => _nNeighbors;
     public double[]? LOFContributions => _lofContributions;
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public LOFBasedSelector(
@@ -48,6 +49,7 @@ public class LOFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _nNeighbors = nNeighbors;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -166,6 +168,7 @@ public class LOFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return values.Sum(v => (v - mean) * (v - mean)) / values.Length;
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -182,6 +185,7 @@ public class LOFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("LOFBasedSelector does not support inverse transformation.");
@@ -199,6 +203,7 @@ public class LOFBasedSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

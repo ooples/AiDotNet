@@ -30,10 +30,15 @@ public class Food101DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
     private int _sampleCount;
     private int _imageSize;
 
+    /// <inheritdoc />
     public override string Name => "Food-101";
+    /// <inheritdoc />
     public override string Description => "Food-101 fine-grained image classification (101 classes)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _imageSize * _imageSize * 3;
+    /// <inheritdoc />
     public override int OutputDimension => NumClasses;
 
     public Food101DataLoader(Food101DataLoaderOptions? options = null)

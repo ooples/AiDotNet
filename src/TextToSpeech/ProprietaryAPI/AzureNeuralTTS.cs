@@ -88,8 +88,11 @@ public partial class AzureNeuralTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int HiddenDim => _options.HiddenDim;
+    /// <inheritdoc />
     public int NumFlowSteps => _options.NumFlowSteps;
 
     /// <summary>Synthesizes speech using a local neural synthesis pipeline.</summary>
@@ -130,6 +133,7 @@ public partial class AzureNeuralTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return waveform;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
         int len = Math.Min(text.Length, _options.MaxTextLength);
@@ -139,6 +143,7 @@ public partial class AzureNeuralTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         return t;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
@@ -160,6 +165,7 @@ public partial class AzureNeuralTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             );
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -177,6 +183,7 @@ public partial class AzureNeuralTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -204,6 +211,7 @@ public partial class AzureNeuralTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(AzureNeuralTTS<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

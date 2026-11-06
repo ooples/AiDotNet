@@ -1142,6 +1142,7 @@ public partial class S4DLayer<T> : LayerBase<T>, IShapeContract
 
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
