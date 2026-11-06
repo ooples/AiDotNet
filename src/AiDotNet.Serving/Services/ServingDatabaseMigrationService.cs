@@ -11,7 +11,9 @@ namespace AiDotNet.Serving.Services;
 /// <see cref="ServingPersistenceOptions.MigrateOnStartup"/> is set.
 /// </summary>
 /// <remarks>
-/// Hosted services start before the server accepts requests, so no request reaches an unmigrated database.
+/// Hosted services start before the server accepts requests, so with startup migrations enabled no request
+/// reaches an unmigrated database. With <see cref="ServingPersistenceOptions.MigrateOnStartup"/> off, the
+/// schema must be migrated out of band before the server starts.
 /// </remarks>
 public sealed class ServingDatabaseMigrationService : IHostedService
 {
