@@ -66,13 +66,13 @@ public class GpuEagerTapeStepMatchesCpuTests
         protected override bool SupportsFusedCompiledTraining => false;
     }
 
-    private static EagerNetwork BuildNetwork()
+    private static EagerNetwork BuildNetwork(int hidden = Hidden)
     {
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(Hidden, (IActivationFunction<float>)new ReLUActivation<float>()),
+            new DenseLayer<float>(hidden, (IActivationFunction<float>)new ReLUActivation<float>()),
             // A norm gain read through the device weight path, at a nonzero offset of the flat parameter array.
-            new LayerNormalizationLayer<float>(Hidden),
+            new LayerNormalizationLayer<float>(hidden),
             new DenseLayer<float>(Outputs, (IActivationFunction<float>?)null),
         };
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -104,9 +104,72 @@ public class GpuEagerTapeStepMatchesCpuTests
     {
         var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         var baseType = typeof(NeuralNetworkBase<float>);
-        int version = (int)baseType.GetField("_layerStructureVersion", flags)!.GetValue(net)!;
-        baseType.GetField("_skipParameterBuffer", flags)!.SetValue(net, true);
-        baseType.GetField("_skipParameterBufferVersion", flags)!.SetValue(net, version);
+        System.Reflection.FieldInfo Field(string name) => baseType.GetField(name, flags)
+            ?? throw new InvalidOperationException($"NeuralNetworkBase has no field {name}.");
+        int version = Field("_layerStructureVersion").GetValue(net) is int v
+            ? v : throw new InvalidOperationException("_layerStructureVersion is not an int.");
+        Field("_skipParameterBuffer").SetValue(net, true);
+        Field("_skipParameterBufferVersion").SetValue(net, version);
+    }
+
+    /// <summary>
+    /// The #2433 transfer contract: a warm eager GPU step with the default global-norm clipping and the anomaly guard
+    /// reads back no gradient or weight. Those host passes downloaded every device gradient each step (27M-parameter
+    /// LM: 164 readbacks, 538 MB per step), so their bytes grew with the model; the device step reads only scalars, the
+    /// same count and bytes at any width. A 16x wider hidden layer is the control that would expose a per-parameter
+    /// download.
+    /// </summary>
+    [SkippableFact]
+    public void Gpu_eager_step_reads_back_no_gradients_at_any_width()
+    {
+        using var gpu = new DirectGpuTensorEngine();
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.SupportsGpu && gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+
+        var narrow = ReadbackBytesPerWarmStep(gpu, Hidden);
+        var wide = ReadbackBytesPerWarmStep(gpu, Hidden * 16);
+        string Show((long Count, long Bytes, int Parameters, string Sites) r) =>
+            $"{r.Count} readbacks, {r.Bytes} B over {r.Parameters} parameters ({r.Sites})";
+        // Each of these is a scalar read (loss, norm, finiteness flag), never a gradient-sized buffer.
+        Assert.True(wide.Bytes < wide.Parameters * sizeof(float),
+            $"a wide step read back gradient-sized data: {Show(wide)}");
+        Assert.True(wide.Count == narrow.Count && wide.Bytes == narrow.Bytes,
+            $"readbacks grew with the model: narrow {Show(narrow)}; wide {Show(wide)}");
+    }
+
+    private static (long Count, long Bytes, int Parameters, string Sites) ReadbackBytesPerWarmStep(IEngine engine, int hidden)
+    {
+        var previous = AiDotNetEngine.Current;
+        bool priorCapture = GpuLaunchProbe.CaptureReadbackSites;
+        AiDotNetEngine.Current = engine;
+        try
+        {
+            var net = BuildNetwork(hidden);
+            var (x, y) = Data();
+            net.SetTrainingMode(true);
+            net.Predict(x);
+            net.SetTrainingMode(true);
+            for (int s = 0; s < 3; s++) net.Train(x, y);      // warm: device state, kernels and caches exist
+            int parameters = net.GetParameters().Length;     // before the probe: it reads every weight
+
+            GpuLaunchProbe.CaptureReadbackSites = true;
+            GpuLaunchProbe.Reset();
+            const int Measured = 3;
+            for (int s = 0; s < Measured; s++)
+            {
+                long beforeDispatch = GpuLaunchProbe.AdamWDispatches;
+                net.Train(x, y);
+                Assert.True(GpuLaunchProbe.AdamWDispatches > beforeDispatch, "eager training did not dispatch GPU AdamW");
+            }
+            return (GpuLaunchProbe.Readbacks / Measured, GpuLaunchProbe.ReadbackBytes / Measured,
+                parameters, string.Join("; ", GpuLaunchProbe.ReadbackSites));
+        }
+        finally
+        {
+            GpuLaunchProbe.CaptureReadbackSites = priorCapture;
+            AiDotNetEngine.Current = previous;
+        }
     }
 
     private static List<double> Trajectory(IEngine engine, float[] initialParameters, bool withoutParameterBuffer)
@@ -145,13 +208,12 @@ public class GpuEagerTapeStepMatchesCpuTests
     [InlineData(true)]
     public void Gpu_eager_step_follows_the_cpu_trajectory(bool withoutParameterBuffer)
     {
-        DirectGpuTensorEngine? gpu = null;
-        gpu = new DirectGpuTensorEngine();
+        var gpu = new DirectGpuTensorEngine();
         try
         {
             if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
                 Assert.True(gpu.SupportsGpu && gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
-            Skip.If(gpu is null || !gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+            Skip.If(!gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
 
             // One shared initialization for both engines.
             float[] init;
@@ -169,7 +231,7 @@ public class GpuEagerTapeStepMatchesCpuTests
             }
 
             var cpu = Trajectory(new CpuEngine(), init, withoutParameterBuffer);
-            var gpuLosses = Trajectory(gpu!, init, withoutParameterBuffer);
+            var gpuLosses = Trajectory(gpu, init, withoutParameterBuffer);
             string Show(List<double> l) => string.Join(" -> ", l.Select(v => v.ToString("G5")));
             Assert.True(cpu[^1] < 0.9 * cpu[0], $"the CPU reference did not learn: {Show(cpu)}");
             for (int s = 0; s < Steps; s++)
@@ -178,7 +240,7 @@ public class GpuEagerTapeStepMatchesCpuTests
         }
         finally
         {
-            gpu?.Dispose();
+            gpu.Dispose();
         }
     }
 }
