@@ -43,13 +43,17 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers;
 /// 
 /// ```csharp
 /// var documentStore = new InMemoryDocumentStore&lt;double&gt;(vectorDimension: 768);
+/// // StubEmbeddingModel hashes text, so its similarities carry no meaning; it only keeps this example
+/// // self-contained. Use a trained embedding model for retrieval that ranks by relevance.
 /// var embeddingModel = new StubEmbeddingModel&lt;double&gt;(embeddingDimension: 768);
 /// // One stored vector per section, with ids of the form "docId_vector_N" so they group back to their document.
+/// // Each vector embeds its section but stores the whole book, so the document returned for a group is the book.
 /// string[] sections = { "Introduction to quantum computing", "Qubits and superposition",
 ///     "Quantum gates", "Error correction", "Applications in chemistry and cryptography" };
+/// string book = string.Join(" ", sections);
 /// for (int i = 0; i &lt; sections.Length; i++)
 ///     documentStore.Add(new VectorDocument&lt;double&gt;(
-///         new Document&lt;double&gt;($"quantum-book_vector_{i}", sections[i]),
+///         new Document&lt;double&gt;($"quantum-book_vector_{i}", book),
 ///         embeddingModel.Embed(sections[i])));
 ///
 /// var retriever = new MultiVectorRetriever&lt;double&gt;(
