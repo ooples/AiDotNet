@@ -16,7 +16,15 @@ internal static class OptionSensitivityFixtureSetup
         => UsesFittedAssets(network) ? network.GetParameters().Length : 0;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
-        => network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && IsCosyFlowOption(option) ? "cosy-flow"
+        => network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames" ? "diffusion-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "InferenceNoiseSchedule" ? "diffusion-fast-sampling"
+            : network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option == "AdversarialWeight" ? "multi-band-adversarial"
+            : network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option == "SegmentSize" ? "multi-band-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option is "MelMean" or "MelScale" ? "vocoder-normalization"
+            : IsVocoderFrontendOption(option) && network is AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T>
+                or AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T> ? "vocoder-frontend"
+            : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option == "MaximumAudioFrames" ? "voicebox-audio-chunk"
+            : network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && IsCosyFlowOption(option) ? "cosy-flow"
             : network is AiDotNet.TextToSpeech.Classic.ForwardTacotron<T> ? option switch
             {
                 "SecondStageLearningRate" or "SecondStageStartStep" => "forward-second-stage",
@@ -36,6 +44,22 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (IsVocoderFrontendOption(option) && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> native
+            && native.GetOptions() is AiDotNet.TextToSpeech.Vocoders.VocoderOptions vocoder
+            && network is AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T> or AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>)
+        {
+            var recording = VocoderRecording<T>(vocoder);
+            return network is AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T> segment
+                ? segment.ComputeMel(recording) : ((AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>)network).ComputeMel(recording);
+        }
+        if (option == "MaximumAudioFrames" && network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && input.Length > 0)
+        {
+            // Keep synthesis below the smallest valid budget; training retains the longer utterance
+            // so its real phone-aligned chunking path can respond to that budget.
+            var phone = new Tensor<T>(new[] { 1 });
+            phone[0] = input[0];
+            return phone;
+        }
         if (option != "MaxAudioLengthSeconds" || input.Length == 0
             || network.GetType().Namespace?.StartsWith("AiDotNet.SpeechRecognition", StringComparison.Ordinal) != true)
             return input;
@@ -64,6 +88,18 @@ internal static class OptionSensitivityFixtureSetup
     private static bool IsCosyFlowOption(string option) => option is
         "TrainingCfgRate" or "FlowLoss" or "FlowAttentionDropoutRate";
 
+    private static bool IsVocoderFrontendOption(string option) => option is
+        "MelMinFrequency" or "MelMaxFrequency" or "WindowSize" or "MelMean" or "MelScale" or "EnergyMin";
+
+    private static Tensor<T> VocoderRecording<T>(AiDotNet.TextToSpeech.Vocoders.VocoderOptions options)
+    {
+        var recording = new Tensor<T>(new[] { Math.Max(2 * options.FftSize, 8 * options.HopSize) });
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < recording.Length; i++)
+            recording[i] = ops.FromDouble(0.4 * Math.Sin(i * 0.13) + 0.2 * Math.Cos(i * 0.37));
+        return recording;
+    }
+
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
         => network is AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> && IsSpiralPretrainingOption(option)
             ? Math.Max(3, steps) : steps;
@@ -87,6 +123,18 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if ((network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames"
+                || network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option == "SegmentSize")
+            && network is AiDotNet.TextToSpeech.TtsModelBase<T> vocoder
+            && vocoder.GetOptions() is AiDotNet.TextToSpeech.Vocoders.VocoderOptions options)
+        {
+            vocoder.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+            {
+                Tokens = input,
+                Audio = VocoderRecording<T>(options),
+            });
+            return true;
+        }
         if (network is not AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> spiral || !IsSpiralPretrainingOption(option))
             return false;
         spiral.Pretrain(input);
@@ -109,7 +157,24 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
-        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions cosy && option == "TrainingCfgRate")
+        if (options is AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions diffusion)
+        {
+            if (option == "CropFrames") diffusion.CropFrames = 2;
+            if (option == "InferenceNoiseSchedule") diffusion.UseFastSampling = true;
+        }
+        if (options is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGANOptions gan)
+        {
+            if (option == "AdversarialWeight") gan.PretrainingSteps = 0;
+            if (option == "SegmentSize") gan.SegmentSize = checked(2 * gan.HopSize);
+        }
+        if (options is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGANOptions multiBand && option is "MelMean" or "MelScale")
+        {
+            multiBand.MelMean = new double[multiBand.MelChannels];
+            multiBand.MelScale = Enumerable.Repeat(1.0, multiBand.MelChannels).ToArray();
+        }
+        if (options is AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions voicebox && option == "MaximumAudioFrames")
+            voicebox.MaximumPhoneDuration = 1;
+        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions cosy && IsCosyFlowOption(option))
             cosy.TrainingCfgRate = 0.5;
         if (options is AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions forward)
         {

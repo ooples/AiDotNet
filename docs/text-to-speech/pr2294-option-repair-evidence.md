@@ -128,3 +128,18 @@ CosyVoice, CosyVoiceClone and CosyVoice2 pass against hosted binaries after
 selecting the public Flow training stage. The original fixture always selected
 LanguageModel, whose objective does not run the flow. These options are retained;
 their paper paths are active and observably affect training.
+
+Voicebox MaximumAudioFrames passes by observing a single-phone synthesis with a
+one-frame phone limit while retaining the longer supervised training utterance;
+the one-frame budget changes the actual phone-aligned training crop. It is not
+treated as unused merely because an oversized synthesis is correctly rejected.
+
+The FreGrad and MultiBandMelGAN frontend probes now run a deterministic waveform
+through the public ComputeMel entry point before observing synthesis. Minimum
+and maximum mel frequency and window size pass for both models. MultiBandMelGAN
+mean and scale pass with both per-band statistics present, as normalization
+requires. FreGrad EnergyMin and its fast inference schedule pass with a
+waveform-derived mel and fast sampling enabled, respectively. MultiBandMelGAN's
+adversarial weight passes with the discriminator stage active rather than its
+200,000-step generator-only warm-up. Longer recordings through typed sample
+training make FreGrad CropFrames and MultiBandMelGAN SegmentSize observable.
