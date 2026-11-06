@@ -40,7 +40,7 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
     private static readonly INumericOperations<T> Ops = MathHelper.GetNumericOperations<T>();
     private readonly Func<Tensor<T>, IReadOnlyList<Tensor<T>>> _teacherHidden;
     private readonly Func<Tensor<T>, Tensor<T>>? _teacherLogits;
-    private readonly double _hiddenWeight, _kdAlpha, _temperature, _projectionLr;
+    private readonly double _hiddenWeight, _kdAlpha, _temperature, _projectionLr, _localTaskWeight;
     private readonly Random _random;
     private readonly List<Tensor<T>> _projections = new();
     private readonly Dictionary<int, Tensor<T>> _projectionOf = new();
@@ -56,6 +56,10 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
     /// <param name="temperature">Softmax temperature of the soft-logit term (the term is scaled by T²).</param>
     /// <param name="projectionLearningRate">SGD step size of the per-layer projections.</param>
     /// <param name="seed">Seed for projection initialisation.</param>
+    /// <param name="localTaskWeight">Weight of each hidden layer's own task loss through the shared readout
+    /// (<c>loss(readout(h_k), target)</c>, as <see cref="TiedReadoutLocalErrorCreditRule{T}"/>). 0 (the default) trains
+    /// every detached hidden layer by teacher regression alone, so no task signal reaches it; a positive weight makes
+    /// the teacher a per-layer regulariser on top of local task credit.</param>
     public LayerwiseDistillationCreditRule(
         Func<Tensor<T>, IReadOnlyList<Tensor<T>>> teacherHidden,
         Func<Tensor<T>, Tensor<T>>? teacherLogits = null,
@@ -64,7 +68,8 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
         double kdAlpha = 0.5,
         double temperature = 2.0,
         double projectionLearningRate = 1e-3,
-        int? seed = null)
+        int? seed = null,
+        double localTaskWeight = 0.0)
     {
         _teacherHidden = teacherHidden ?? throw new ArgumentNullException(nameof(teacherHidden));
         if (readoutLayerCount < 1) throw new ArgumentOutOfRangeException(nameof(readoutLayerCount), "Must be at least 1.");
@@ -72,10 +77,12 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
         if (!(kdAlpha >= 0 && kdAlpha <= 1)) throw new ArgumentOutOfRangeException(nameof(kdAlpha), "Must be in [0, 1].");
         if (!(temperature > 0)) throw new ArgumentOutOfRangeException(nameof(temperature), "Must be positive.");
         if (!(projectionLearningRate > 0)) throw new ArgumentOutOfRangeException(nameof(projectionLearningRate), "Must be positive.");
+        if (!(localTaskWeight >= 0)) throw new ArgumentOutOfRangeException(nameof(localTaskWeight), "Must be non-negative.");
         if (kdAlpha > 0 && teacherLogits is null) throw new ArgumentException("kdAlpha > 0 needs teacherLogits.", nameof(teacherLogits));
         _teacherLogits = teacherLogits;
         ReadoutLayerCount = readoutLayerCount;
         _hiddenWeight = hiddenWeight; _kdAlpha = kdAlpha; _temperature = temperature; _projectionLr = projectionLearningRate;
+        _localTaskWeight = localTaskWeight;
         _random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed ?? 12345);
     }
 
@@ -116,8 +123,15 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
     /// <inheritdoc />
     public Tensor<T>? BuildLocalObjective(LocalObjectiveContext<T> context)
     {
-        if (_hiddenWeight == 0) return null;
         var s = context.Step;
+        // The last hidden layer feeds the readout undetached, so the output loss already gives it task credit.
+        Tensor<T>? task = null;
+        if (_localTaskWeight > 0 && context.HiddenIndex != s.HiddenLayerCount - 1)
+        {
+            task = s.Loss(s.Readout(context.Output), s.Target);
+            if (_localTaskWeight != 1.0) task = s.Engine.TensorMultiplyScalar(task, Ops.FromDouble(_localTaskWeight));
+        }
+        if (_hiddenWeight == 0) return task;
         var teacher = TeacherStates(s.Input);
         int lt = teacher.Count - 1, h = s.HiddenLayerCount;
         int j = h <= 1 ? lt : (int)Math.Round((double)context.HiddenIndex * lt / (h - 1));
@@ -132,7 +146,8 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
         var diff = s.Engine.TensorSubtract(s.Engine.TensorMatMul(output, p), target);
         var axes = Enumerable.Range(0, diff.Shape.Length).ToArray();
         var mse = s.Engine.ReduceMean(s.Engine.TensorSquare(diff), axes, keepDims: false);
-        return _hiddenWeight == 1.0 ? mse : s.Engine.TensorMultiplyScalar(mse, Ops.FromDouble(_hiddenWeight));
+        var regression = _hiddenWeight == 1.0 ? mse : s.Engine.TensorMultiplyScalar(mse, Ops.FromDouble(_hiddenWeight));
+        return task is null ? regression : s.Engine.TensorAdd(task, regression);
     }
 
     /// <inheritdoc />
