@@ -122,3 +122,9 @@ regression verifies zero contrastive/diversity loss, zero evaluation loss and
 unchanged parameters after training. The existing reference loss and one-step
 SGD comparison also passes. The scoped changed-source build has zero warnings
 and errors. Forty candidate-generation regressions and six span regressions pass.
+
+All nine TrainingCfgRate, FlowLoss and FlowAttentionDropoutRate probes for
+CosyVoice, CosyVoiceClone and CosyVoice2 pass against hosted binaries after
+selecting the public Flow training stage. The original fixture always selected
+LanguageModel, whose objective does not run the flow. These options are retained;
+their paper paths are active and observably affect training.

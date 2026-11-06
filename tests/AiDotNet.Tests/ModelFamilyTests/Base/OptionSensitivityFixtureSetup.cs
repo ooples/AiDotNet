@@ -16,7 +16,8 @@ internal static class OptionSensitivityFixtureSetup
         => UsesFittedAssets(network) ? network.GetParameters().Length : 0;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
-        => network is AiDotNet.TextToSpeech.Classic.ForwardTacotron<T> ? option switch
+        => network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && IsCosyFlowOption(option) ? "cosy-flow"
+            : network is AiDotNet.TextToSpeech.Classic.ForwardTacotron<T> ? option switch
             {
                 "SecondStageLearningRate" or "SecondStageStartStep" => "forward-second-stage",
                 "GradientClipNorm" => "forward-clipping",
@@ -60,12 +61,17 @@ internal static class OptionSensitivityFixtureSetup
         or "TimeMaskProbability" or "TimeMaskLength" or "FrequencyMaskProbability" or "FrequencyMaskLength"
         or "Temperature" or "Negatives";
 
+    private static bool IsCosyFlowOption(string option) => option is
+        "TrainingCfgRate" or "FlowLoss" or "FlowAttentionDropoutRate";
+
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
         => network is AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> && IsSpiralPretrainingOption(option)
             ? Math.Max(3, steps) : steps;
 
     internal static void PrepareOptionTraining<T>(INeuralNetworkModel<T> network, string option)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosy && IsCosyFlowOption(option))
+            cosy.CurrentStage = AiDotNet.TextToSpeech.CodecBased.CosyVoiceTrainingStage.Flow;
         if (option != "CurrentStage" || network is not AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> natural
             || natural.GetOptions() is not AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions options
             || options.CurrentStage != AiDotNet.TextToSpeech.CodecBased.NaturalSpeechStage.Joint) return;
@@ -103,6 +109,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions cosy && option == "TrainingCfgRate")
+            cosy.TrainingCfgRate = 0.5;
         if (options is AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions forward)
         {
             if (option is "SecondStageLearningRate" or "SecondStageStartStep")
