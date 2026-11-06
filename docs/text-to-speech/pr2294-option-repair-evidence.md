@@ -186,3 +186,7 @@ parameter fingerprint is included in this observation. FishSpeechV15's
 CodebookSize probe passes on its changed parameter count before forward
 execution; it no longer tries to decode an untrained, resized vocabulary first.
 All five probes pass, as do the 42 perturbation and six span regressions.
+
+CAM++ FrameShiftMilliseconds passes through the same Kaldi preprocessing path
+used by ExtractEmbedding on a one-second waveform (10 to 20 ms); precomputed
+filterbank inputs cannot exercise frame-shift configuration.

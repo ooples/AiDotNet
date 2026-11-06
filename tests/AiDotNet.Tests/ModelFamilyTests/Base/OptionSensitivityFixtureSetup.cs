@@ -17,7 +17,8 @@ internal static class OptionSensitivityFixtureSetup
             ? network.GetParameters().Length : 0;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
-        => network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
+        => network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option == "FrameShiftMilliseconds" ? "cam-audio-frontend"
+            : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "TokenizerPieces" ? "glamm-unloaded-tokenizer"
             : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option == "LatentFusionProbability" ? "index-latent-fusion"
             : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && IsIndexFlowOption(option) ? "index-semantic-to-mel"
@@ -96,6 +97,16 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> cam && option == "FrameShiftMilliseconds")
+        {
+            var settings = (AiDotNet.Audio.Speaker.CAMPlusPlusOptions)cam.GetOptions();
+            var camWaveform = new Tensor<T>(new[] { settings.SampleRate });
+            var frontendOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < camWaveform.Length; i++)
+                camWaveform[i] = frontendOps.FromDouble(0.4 * Math.Sin(i * 0.13) + 0.2 * Math.Cos(i * 0.37));
+            return (Tensor<T>)typeof(AiDotNet.Audio.Speaker.CAMPlusPlus<T>).GetMethod("PreprocessAudio",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(cam, new object[] { camWaveform })!;
+        }
         if (network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> index && IsIndexEmotionArchitecture(option))
             index.DetectEmotion("I feel happy."); // The text-to-emotion model is built lazily by its public entry point.
         if (IsVocoderFrontendOption(option) && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> native
