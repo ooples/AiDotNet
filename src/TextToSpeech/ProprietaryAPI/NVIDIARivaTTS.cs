@@ -76,7 +76,13 @@ public partial class NVIDIARivaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         _options = options ?? new NVIDIARivaTTSOptions();
         Options = _options;
         _useNativeMode = true;
-        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        // The configured rate and decay: AdamW's own defaults (1e-3, 0.01) ignored both options.
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                WeightDecay = _options.WeightDecay
+            });
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -133,7 +139,8 @@ public partial class NVIDIARivaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
                     _options.NumEncoderLayers,
                     _options.NumDecoderLayers,
                     _options.NumHeads,
-                    _options.DropoutRate
+                    _options.DropoutRate,
+                    _options.VocabSize
                 )
             );
     }

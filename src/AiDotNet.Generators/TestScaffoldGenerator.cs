@@ -250,23 +250,6 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         // build it (#2138). DiffusionAutoMLTrainingTests covers the search itself.
         "DiffusionAutoML",
 
-        // Proprietary-API TTS wrappers (ElevenLabs, AmazonPolly, AzureNeuralTTS,
-        // GoogleCloudTTS, Murf, NVIDIARivaTTS): real inference is a remote API
-        // call, not a local Predict pipeline — these classes have no published
-        // architecture paper to be faithful to. Their native-mode placeholder
-        // layer chain (CreateDefaultProprietaryTTSLayers) starts with a 192-dim
-        // MHA expecting tokenized text input, but the auto-generated test
-        // harness feeds 80-dim mel-spectrogram input. Rather than add a non-
-        // paper-faithful adapter to the layer chain, skip auto-test generation
-        // for the wrapper class. Manual API-mocking integration tests cover
-        // the wrappers' actual contracts.
-        "ElevenLabsTTS",
-        "AmazonPolly",
-        "AzureNeuralTTS",
-        "GoogleCloudTTS",
-        "Murf",
-        "NVIDIARivaTTS",
-
         // Janus / Janus-Pro (DeepSeek): paper-faithful unified understanding +
         // generation VLMs at ~1.5B (Janus, decoderDim=2048) / ~7B (Janus-Pro,
         // decoderDim=4096, 24 vision + 32 decoder layers). At paper scale a
