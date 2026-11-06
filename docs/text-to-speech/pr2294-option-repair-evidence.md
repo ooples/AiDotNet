@@ -308,3 +308,9 @@ MaskLength and MaskProbability for GoogleSpeechV2, and all five pretraining
 settings for BESTRQ. All nine additional compiled probes pass, including span
 1 -> 2 and masking probability 0.5 -> 1. These properties affect BEST-RQ's
 masked targets/loss rather than CTC decoding; no exemptions were added.
+
+AudioLM's three crop probes now use stage-specific EvaluateTrainingObjective
+on eight semantic tokens and sixteen frames of valid codec ids. Controls use
+0.08-second crops so the fixture spans the crop boundary. All three compiled
+probes pass for 0.08 -> 0.16 through the actual semantic/coarse/fine losses;
+the scoped build has zero warnings/errors.

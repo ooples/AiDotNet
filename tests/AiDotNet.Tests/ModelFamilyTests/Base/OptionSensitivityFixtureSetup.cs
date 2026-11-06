@@ -36,6 +36,7 @@ internal static class OptionSensitivityFixtureSetup
             }
             : network is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T> && IsGooglePretrainingOption(option) ? "google-best-rq-masking"
             : network is AiDotNet.SpeechRecognition.Foundation.BESTRQ<T> && IsGooglePretrainingOption(option) ? "best-rq-masking"
+            : network is AiDotNet.Audio.Generation.AudioLM<T> && option is "SemanticCropSeconds" or "CoarseCropSeconds" or "FineCropSeconds" ? "audiolm-stage-crop"
             : network is AiDotNet.PointCloud.Models.DGCNN<T> && option is "DropoutRate" or "UseDropout" ? "dgcnn-dropout"
             : network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds" ? "cam-audio-frontend"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
@@ -81,6 +82,24 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fish && option == "ConstrainToSemanticTokens")
             return ObserveFishFrames(fish, input);
         long fingerprint = observe(network, ObservationInput(network, input, option));
+        if (network is AiDotNet.Audio.Generation.AudioLM<T> audioLm && option is "SemanticCropSeconds" or "CoarseCropSeconds" or "FineCropSeconds")
+        {
+            var settings = (AiDotNet.Audio.Generation.AudioLMOptions)audioLm.GetOptions();
+            audioLm.CurrentStage = option switch
+            {
+                "SemanticCropSeconds" => AiDotNet.Audio.Generation.AudioLMStage.Semantic,
+                "FineCropSeconds" => AiDotNet.Audio.Generation.AudioLMStage.FineAcoustic,
+                _ => AiDotNet.Audio.Generation.AudioLMStage.CoarseAcoustic,
+            };
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var semantic = new Tensor<T>(new[] { 8 });
+            var codes = new Tensor<T>(new[] { 16, settings.NumCodebooks });
+            for (int i = 0; i < semantic.Length; i++) semantic[i] = ops.FromDouble(i % settings.SemanticCodes);
+            for (int frame = 0; frame < 16; frame++)
+                for (int q = 0; q < settings.NumCodebooks; q++) codes[frame, q] = ops.FromDouble((frame + q) % settings.CodebookSize);
+            double cropLoss = ops.ToDouble(audioLm.EvaluateTrainingObjective(semantic, codes));
+            return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(new[] { cropLoss }));
+        }
         if (network is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T> google && IsGooglePretrainingOption(option))
         {
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
@@ -328,6 +347,12 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.Audio.Generation.AudioLMOptions audioLm && option is "SemanticCropSeconds" or "CoarseCropSeconds" or "FineCropSeconds")
+        {
+            audioLm.SemanticCropSeconds = 0.08;
+            audioLm.CoarseCropSeconds = 0.08;
+            audioLm.FineCropSeconds = 0.08;
+        }
         if (options is AiDotNet.SpeechRecognition.Foundation.BESTRQOptions bestRq && IsGooglePretrainingOption(option))
         {
             bestRq.MaskProbability = 0.5;
