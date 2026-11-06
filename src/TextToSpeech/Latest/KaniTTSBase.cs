@@ -184,7 +184,7 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
             LoraRank = o.UseLora ? o.LoraRank : 0, LoraAlpha = o.LoraAlpha, LoraDropout = o.LoraDropout,
             LoraTargets = (string[])o.LoraTargets.Clone(), RankStabilizedLora = o.RankStabilizedLora,
             LearnableRope = o.LearnableRope, RopeAlphaMin = o.RopeAlphaMin, RopeAlphaMax = o.RopeAlphaMax,
-            SpeakerEmbeddingDim = o.SpeakerEmbeddingDim,
+            SpeakerEmbeddingDim = (o as KaniTTS2Options)?.SpeakerEmbeddingDim ?? 0,
         });
         _lm.InitializeLikeReference(random);
         _codec = new NanoCodec<T>(Engine, new NanoCodecConfiguration
@@ -373,7 +373,7 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
                 }
                 // With a speaker, generate()'s cache position runs one behind the cache (the inserted slot is not counted),
                 // and the causal mask it builds hides the new token's own key.
-                int lag = speaker is not null && o.ReleaseSpeakerCachePosition ? 1 : 0;
+                int lag = speaker is not null && o is KaniTTS2Options { ReleaseSpeakerCachePosition: true } ? 1 : 0;
                 logits = lm.Forward(lm.Embed(Row(new[] { next })), cache, lastLogitsOnly: true, position, lag).Logits;
             }
             return generated;

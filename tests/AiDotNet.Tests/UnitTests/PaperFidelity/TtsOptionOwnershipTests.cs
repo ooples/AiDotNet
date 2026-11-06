@@ -6,6 +6,17 @@ namespace AiDotNet.Tests.UnitTests.PaperFidelity;
 
 public class TtsOptionOwnershipTests
 {
+    [Fact]
+    public void SpeakerInsertionSettingsBelongOnlyToKani2AndSurviveCopying()
+    {
+        Assert.Null(typeof(KaniTTSOptions).GetProperty("SpeakerEmbeddingDim"));
+        Assert.Null(typeof(KaniTTSOptions).GetProperty("ReleaseSpeakerCachePosition"));
+        var options = new KaniTTS2Options { SpeakerEmbeddingDim = 6, ReleaseSpeakerCachePosition = false };
+        var copy = new KaniTTS2Options(options);
+        Assert.Equal(6, copy.SpeakerEmbeddingDim);
+        Assert.False(copy.ReleaseSpeakerCachePosition);
+    }
+
     [Theory]
     [InlineData(typeof(BigVGANOptions))]
     [InlineData(typeof(HiFiGANOptions))]

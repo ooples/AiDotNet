@@ -147,4 +147,18 @@ public class KaniTTS2ModelTests
         var prompt = Ints(f["prompt"]!);
         Assert.Equal(Ints(f["generated"]![key]!), model.Generate(prompt, new Random(0), Speaker(f)));
     }
+
+    [Fact(Timeout = 600000)]
+    public void SpeakerCachePositionPolicyChangesGeneratedTokens()
+    {
+        var reference = Reference();
+        using var model = Model(reference);
+        var prompt = Ints(reference["prompt"]!);
+        var speaker = Speaker(reference);
+        var release = model.Generate(prompt, new Random(0), speaker);
+        var options = Assert.IsType<KaniTTS2Options>(model.GetOptions());
+        options.ReleaseSpeakerCachePosition = false;
+        var training = model.Generate(prompt, new Random(0), speaker);
+        Assert.False(release.SequenceEqual(training), "The inserted speaker slot must affect the cached causal mask.");
+    }
 }

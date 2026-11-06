@@ -25,6 +25,10 @@ internal static class OptionSensitivityFixtureSetup
         "WarmupRatio" => "warmup-ratio",
         "WarmupSteps" => "warmup-steps",
         "TrainingSteps" => "cosine",
+        "RopeAlphaMin" or "RopeAlphaMax" or "RopeAlphaLearningRateRatio" => "learnable-rope",
+        "AudioStep" => "frame-positions",
+        "LenientSpeechSpans" or "StreamingChunkFrames" or "StreamingLookbackFrames" => "streaming",
+        "MaxReferenceSeconds" => "reference-crop",
         _ => string.Empty,
     };
 
@@ -55,6 +59,21 @@ internal static class OptionSensitivityFixtureSetup
                     kani.TrainingSteps = 20;
                     kani.WarmupSteps = 0;
                     kani.WarmupRatio = 0;
+                    break;
+                case "learnable-rope":
+                    kani.LearnableRope = true;
+                    kani.UseLora = false;
+                    break;
+                case "frame-positions":
+                    kani.FrameLevelPositions = true;
+                    break;
+                case "streaming":
+                    kani.LenientSpeechSpans = true;
+                    kani.StreamingChunkFrames = 1;
+                    kani.StreamingLookbackFrames = 0;
+                    break;
+                case "reference-crop":
+                    if (kani is AiDotNet.TextToSpeech.Latest.KaniTTS2Options kani2) kani2.MaxReferenceSeconds = 0.5;
                     break;
             }
         }

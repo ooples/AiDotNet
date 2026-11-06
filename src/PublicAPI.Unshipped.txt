@@ -9866,10 +9866,10 @@ AiDotNet.TextToSpeech.Latest.KaniTTSOptions.RopeAlphaMax.get -> double
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.RopeAlphaMax.set -> void
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.RopeAlphaLearningRateRatio.get -> double
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.RopeAlphaLearningRateRatio.set -> void
-AiDotNet.TextToSpeech.Latest.KaniTTSOptions.SpeakerEmbeddingDim.get -> int
-AiDotNet.TextToSpeech.Latest.KaniTTSOptions.SpeakerEmbeddingDim.set -> void
-AiDotNet.TextToSpeech.Latest.KaniTTSOptions.ReleaseSpeakerCachePosition.get -> bool
-AiDotNet.TextToSpeech.Latest.KaniTTSOptions.ReleaseSpeakerCachePosition.set -> void
+AiDotNet.TextToSpeech.Latest.KaniTTS2Options.SpeakerEmbeddingDim.get -> int
+AiDotNet.TextToSpeech.Latest.KaniTTS2Options.SpeakerEmbeddingDim.set -> void
+AiDotNet.TextToSpeech.Latest.KaniTTS2Options.ReleaseSpeakerCachePosition.get -> bool
+AiDotNet.TextToSpeech.Latest.KaniTTS2Options.ReleaseSpeakerCachePosition.set -> void
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.WarmupSteps.set -> void
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.WarmupSteps.get -> int
 AiDotNet.TextToSpeech.Latest.KaniTTSOptions.SamplingSeed.set -> void

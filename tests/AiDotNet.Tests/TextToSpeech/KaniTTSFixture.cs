@@ -94,6 +94,9 @@ internal static class KaniTTSFixture
 
     private static double[]? ProjectionWeights(JObject state, string name)
     {
+        // A Kani 1 fixture can enable Kani 2's rotary scales; the release initializes their new weights to zero.
+        if (state[name] is null && name.StartsWith("model.learnable_rope_layers.", StringComparison.Ordinal)
+            && name.EndsWith(".alpha_weight", StringComparison.Ordinal)) return new[] { 0.0 };
         // Enabling LoRA wraps an unchanged base projection in peft's base_layer namespace.
         var weights = state[name] ?? state[name.Replace(".base_layer.", ".")];
         if (weights is null && name.EndsWith(".weight", StringComparison.Ordinal))

@@ -46,6 +46,8 @@ public class KaniTTS2Options : KaniTTSOptions
         EmbedderPositionalGroups = other.EmbedderPositionalGroups;
         EmbedderHeadWidth = other.EmbedderHeadWidth;
         MaxReferenceSeconds = other.MaxReferenceSeconds;
+        SpeakerEmbeddingDim = other.SpeakerEmbeddingDim;
+        ReleaseSpeakerCachePosition = other.ReleaseSpeakerCachePosition;
     }
 
     /// <summary>The checkpoint's language tags (<c>config.json</c>'s <c>language_settings.language_tags_list</c>, which
@@ -78,4 +80,12 @@ public class KaniTTS2Options : KaniTTSOptions
 
     /// <summary>The longest speaker reference read, in seconds (30); longer recordings are cut.</summary>
     public double MaxReferenceSeconds { get; set; } = 30;
+
+    /// <summary>Speaker embedding width (128), projected and inserted after the first token.</summary>
+    public int SpeakerEmbeddingDim { get; set; } = 128;
+
+    /// <summary>Keep the release's generation cache positions despite its inserted speaker token (on).
+    /// Off, generation attends to the current token as the training forward does.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The fitted speaking fixture emits the same decoded audio for both cache masks; KaniTTS2ModelTests.SpeakerCachePositionPolicyChangesGeneratedTokens checks the switch on the release-reference token sequence with an inserted speaker.")]
+    public bool ReleaseSpeakerCachePosition { get; set; } = true;
 }

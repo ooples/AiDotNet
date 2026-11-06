@@ -133,8 +133,8 @@ public partial class KaniTTS2<T> : KaniTTSBase<T>
 
     private Tensor<T> AsSpeaker(double[] embedding)
     {
-        if (embedding.Length != KaniOptions.SpeakerEmbeddingDim)
-            throw new ArgumentException($"A speaker embedding has {KaniOptions.SpeakerEmbeddingDim} values.", nameof(embedding));
+        if (embedding.Length != Options2.SpeakerEmbeddingDim)
+            throw new ArgumentException($"A speaker embedding has {Options2.SpeakerEmbeddingDim} values.", nameof(embedding));
         return new Tensor<T>(new[] { 1, embedding.Length }, new Vector<T>(embedding.Select(v => NumOps.FromDouble(v)).ToArray()));
     }
 

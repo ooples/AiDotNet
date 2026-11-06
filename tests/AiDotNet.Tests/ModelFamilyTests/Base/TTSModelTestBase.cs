@@ -47,7 +47,8 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
     private void PrepareVoice(INeuralNetworkModel<T> network)
     {
         if (network is AiDotNet.TextToSpeech.TtsModelBase<T> tts
-            && tts.SynthesisVoiceRequirement != AiDotNet.TextToSpeech.TtsSupervision.None
+            && (tts.SynthesisVoiceRequirement != AiDotNet.TextToSpeech.TtsSupervision.None
+                || network is AiDotNet.TextToSpeech.Latest.KaniTTS2<T>)
             && tts.Voice is null)
         {
             int melChannels = tts.MelChannels;
@@ -229,7 +230,8 @@ public abstract class TTSModelTestBase<T> : NeuralNetworkModelTestBase<T>
                 for (int q = 0; q < codebooks; q++)
                     promptCodecTokens[f, q] = ops.FromDouble((13 * f + 5 * q + 3) % vocabulary);
         }
-        if (network is not null && (network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.ReferenceRecording) != 0)
+        if (network is not null && ((network.TrainingSupervision & AiDotNet.TextToSpeech.TtsSupervision.ReferenceRecording) != 0
+            || network is AiDotNet.TextToSpeech.Latest.KaniTTS2<T>))
         {
             // The same one-second two-tone waveform CreateNetwork gives as the voice.
             int samples = Math.Max(1, network.SampleRate);

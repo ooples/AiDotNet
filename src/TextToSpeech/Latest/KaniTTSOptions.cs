@@ -88,9 +88,7 @@ public class KaniTTSOptions : AiDotNet.Models.Options.ModelOptions
         RopeAlphaMin = other.RopeAlphaMin;
         RopeAlphaMax = other.RopeAlphaMax;
         RopeAlphaLearningRateRatio = other.RopeAlphaLearningRateRatio;
-        SpeakerEmbeddingDim = other.SpeakerEmbeddingDim;
         WarmupSteps = other.WarmupSteps;
-        ReleaseSpeakerCachePosition = other.ReleaseSpeakerCachePosition;
         SamplingSeed = other.SamplingSeed;
     }
 
@@ -282,18 +280,6 @@ public class KaniTTSOptions : AiDotNet.Models.Options.ModelOptions
     /// <summary>The learnable rotary scales' learning rate as a multiple of <see cref="ModelOptions"/>'s
     /// (<c>alpha_lr_ratio</c>, 1.5), with no weight decay.</summary>
     public double RopeAlphaLearningRateRatio { get; set; } = 1.5;
-
-    /// <summary>KaniTTS 2's speaker embedding width (128), projected and inserted after the first token; 0 for none
-    /// (Kani 1).</summary>
-    public int SpeakerEmbeddingDim { get; set; }
-
-    /// <summary>
-    /// Whether generation with a speaker embedding keeps the release's cache position (on): KaniTTS2ForCausalLM inserts
-    /// the speaker after the first token, but transformers' generate() keeps counting cache positions without it, so from
-    /// the second step on the causal mask it builds hides each new token from its own key. Off attends as the training
-    /// forward does.
-    /// </summary>
-    public bool ReleaseSpeakerCachePosition { get; set; } = true;
 
     /// <summary>Linear warm-up steps (KaniTTS 2's 2000); 0 to warm up over <see cref="WarmupRatio"/> of the steps.</summary>
     public int WarmupSteps { get; set; }
