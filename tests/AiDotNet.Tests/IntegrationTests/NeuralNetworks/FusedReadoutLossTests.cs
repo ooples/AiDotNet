@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LossFunctions;
@@ -23,8 +24,18 @@ public class FusedReadoutLossTests
     private const int Dim = 6, Width = 8, Vocab = 11, Rows = 20;
 
     /// <summary>Linear LM head <c>logits = h @ W</c> (W [Width, Vocab]) that can fuse itself with cross-entropy.</summary>
-    private sealed class FusableHead : LayerBase<double>, IFusedReadoutLossLayer<double>
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Input)]
+    [TensorLayout(TensorAxis.Batch, TensorAxis.Features, Direction = TensorLayoutDirection.Output)]
+    private sealed class FusableHead : LayerBase<double>, IFusedReadoutLossLayer<double>, IShapeContract
     {
+        public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => inputRank == 2
+            ? new[]
+            {
+                new OutputAxisContract(TensorAxis.Batch, AxisRelation.Same(TensorAxis.Batch)),
+                new OutputAxisContract(TensorAxis.Features, AxisRelation.Fixed(Vocab)),
+            }
+            : null;
+
         private Tensor<double> _w;
         private readonly Tensor<double> _zeroBias = new(new[] { Vocab });
         public bool Fuse = true;
