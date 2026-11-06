@@ -16,7 +16,61 @@ internal static class OptionSensitivityFixtureSetup
         => UsesFittedAssets(network) ? network.GetParameters().Length : 0;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
-        => network is AiDotNet.TextToSpeech.Latest.KaniTTSBase<T> ? KaniControlGroup(option) : string.Empty;
+        => network is AiDotNet.TextToSpeech.Classic.ForwardTacotron<T> ? option switch
+            {
+                "SecondStageLearningRate" or "SecondStageStartStep" => "forward-second-stage",
+                "GradientClipNorm" => "forward-clipping",
+                "PitchMinHz" => "forward-pitch-bound",
+                _ => string.Empty,
+            }
+            : network is AiDotNet.TextToSpeech.Latest.KaniTTSBase<T> ? KaniControlGroup(option)
+            : network is AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> && IsSpiralPretrainingOption(option)
+                ? "spiral-pretraining" : option switch
+                {
+                    "FrequencyMaskWidth" => "frequency-masking",
+                    "TimeMaskRatio" => "time-masking",
+                    "MaxAudioLengthSeconds" => "audio-crop",
+                    _ => string.Empty,
+                };
+
+    internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
+    {
+        if (option != "MaxAudioLengthSeconds" || input.Length == 0
+            || network.GetType().Namespace?.StartsWith("AiDotNet.SpeechRecognition", StringComparison.Ordinal) != true)
+            return input;
+        var options = network.GetType().GetMethod("GetOptions", Type.EmptyTypes)?.Invoke(network, null);
+        if (options?.GetType().GetProperty("SampleRate")?.GetValue(options) is not int sampleRate || sampleRate < 1)
+            return input;
+        var preprocess = network.GetType().GetMethod("PreprocessAudio", System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic,
+            binder: null, types: new[] { typeof(Tensor<T>) }, modifiers: null);
+        if (preprocess is null) return input;
+        // Exercise the same clipping front end as Transcribe, beyond the one-second control limit.
+        network.SetTrainingMode(false);
+        var waveform = new Tensor<T>(new[] { checked(2 * sampleRate) });
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < waveform.Length; i++)
+            waveform[i] = i < sampleRate ? input[i % input.Length] : ops.Negate(input[i % input.Length]);
+        return (Tensor<T>)(preprocess.Invoke(network, new object[] { waveform })
+            ?? throw new InvalidOperationException("The audio front end returned no input."));
+    }
+
+    private static bool IsSpiralPretrainingOption(string option) => option is
+        "TeacherMomentumStart" or "TeacherMomentumEnd" or "PretrainingSteps" or "MaxTeacherPaddingUnits"
+        or "TimeMaskProbability" or "TimeMaskLength" or "FrequencyMaskProbability" or "FrequencyMaskLength"
+        or "Temperature" or "Negatives";
+
+    internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
+        => network is AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> && IsSpiralPretrainingOption(option)
+            ? Math.Max(3, steps) : steps;
+
+    internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
+    {
+        if (network is not AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> spiral || !IsSpiralPretrainingOption(option))
+            return false;
+        spiral.Pretrain(input);
+        return true;
+    }
 
     private static string KaniControlGroup(string option) => option switch
     {
@@ -34,6 +88,32 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions forward)
+        {
+            if (option is "SecondStageLearningRate" or "SecondStageStartStep")
+                forward.SecondStageStartStep = 1;
+            if (option == "GradientClipNorm") forward.GradientClipNorm = 1e-8;
+            // Synthetic supervision spans 100–200 Hz; cross its voiced/unvoiced boundary.
+            if (option == "PitchMinHz") forward.PitchMinHz = 125;
+        }
+        string? dependency = option switch
+        {
+            "FrequencyMaskWidth" => "FrequencyMasks",
+            "TimeMaskRatio" => "TimeMasks",
+            "MaxAudioLengthSeconds" => "MaxAudioLengthSeconds",
+            _ => null,
+        };
+        if (dependency is not null)
+        {
+            var property = options.GetType().GetProperty(dependency);
+            if (property?.PropertyType == typeof(int) && property.CanWrite) property.SetValue(options, 1);
+        }
+        if (options is AiDotNet.SpeechRecognition.Foundation.SPIRALOptions spiral && IsSpiralPretrainingOption(option))
+        {
+            spiral.PretrainingSteps = 4; // The third student step observes the teacher's changing EMA schedule.
+            spiral.TeacherMomentumStart = 0.5;
+            spiral.MaxTeacherPaddingUnits = 1; // The tiny fixture caps larger values to the same padding limit.
+        }
         if (options is AiDotNet.TextToSpeech.Latest.KaniTTSOptions kani)
         {
             switch (KaniControlGroup(option))

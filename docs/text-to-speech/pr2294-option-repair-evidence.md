@@ -82,3 +82,29 @@ access for the small source harness. They do not establish a successful full
 library build or passing hosted shards. A full local compile was stopped below
 1 GB free RAM; subsequent builds use the machine-wide build queue. Hosted build,
 framework compatibility, packaging and complete shard validation remain required.
+
+## Recovered sweep follow-up
+
+The partial `d32204019` hosted sweep recorded 378 failed assertions. This is
+additional repair work; the focused successes above do not establish passing
+paper-fidelity shards. Fifty-four baseline entries whose recorded probes now
+report Sensitive were removed individually rather than regenerating a baseline
+over unresolved defects.
+
+The scoped harness using the hosted binaries passes all 36 previously failing
+audio-duration, frequency-mask-width and time-mask-ratio probes. Duration probes
+now exercise the protected preprocessing path used by transcription; masking
+probes enable the corresponding augmentation. SPIRAL teacher and contrastive
+settings are exercised through actual pretraining over multiple student steps.
+Supported 80/128 mel widths and valid probability/moment candidates avoid
+rejecting every candidate or manufacturing invalid-domain numerical failures.
+All 38 perturbation regressions and six span-validation regressions pass.
+
+ForwardTacotron pitch-bound and clipping probes pass when synthetic pitch crosses
+the bound and clipping is active. Its progressive learning-rate schedule had a
+real defect: it used the optimizer's default epoch cadence despite defining its
+boundary in updates. The model now selects StepPerBatch. Two regression cases
+train the changed model source and verify scheduler counts and rates before and
+after the configured boundary. The scoped source build passes with zero warnings
+or errors. No inherited ForwardTacotron option has been removed in this batch;
+its ownership audit remains open, as do the remaining sweep failures.

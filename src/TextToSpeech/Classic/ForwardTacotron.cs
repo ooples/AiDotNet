@@ -112,6 +112,7 @@ public partial class ForwardTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
                 {
                     InitialLearningRate = first,
                     LearningRateScheduler = new LambdaLRScheduler(first, step => step < switchStep ? 1.0 : second / first),
+                    SchedulerStepMode = SchedulerStepMode.StepPerBatch,
                     UseAdaptiveBetas = false,
                 }));
         MaxGradNorm = NumOps.FromDouble(_options.GradientClipNorm);

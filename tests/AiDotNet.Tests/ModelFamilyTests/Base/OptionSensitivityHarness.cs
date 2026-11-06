@@ -794,6 +794,14 @@ public static class OptionSensitivityHarness
         if (IsNumeric(underlying))
         {
             IEnumerable<object> candidates = NumericCandidates(underlying, current);
+            if (option is "Beta1" or "Beta2" or "AdamBeta1" or "AdamBeta2")
+                candidates = candidates.Where(value => Convert.ToDouble(value) >= 0 && Convert.ToDouble(value) < 1);
+            if (option is "TeacherMomentumStart" or "TeacherMomentumEnd" || option?.EndsWith("Probability", StringComparison.Ordinal) == true)
+                candidates = candidates.Where(value => Convert.ToDouble(value) >= 0 && Convert.ToDouble(value) <= 1);
+            if (option == "TopP")
+                candidates = candidates.Where(value => Convert.ToDouble(value) > 0 && Convert.ToDouble(value) <= 1);
+            if (option == "NumMels" && current is int)
+                candidates = candidates.Concat(new object[] { 80, 128 }).Where(value => !Equals(value, current)).Distinct();
             if (option == "SampleRate" && current is int rate && rate > 0)
             {
                 // A one-Hz change can make a polyphase resampler's ratio coprime and allocate gigabytes.

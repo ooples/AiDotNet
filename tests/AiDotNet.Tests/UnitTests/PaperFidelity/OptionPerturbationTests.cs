@@ -7,6 +7,35 @@ namespace AiDotNet.Tests.UnitTests.PaperFidelity;
 
 public class OptionPerturbationTests
 {
+    [Theory]
+    [InlineData("Beta1", 0.9, false, false)]
+    [InlineData("Beta2", 0.999, false, false)]
+    [InlineData("TeacherMomentumStart", 0.5, false, true)]
+    [InlineData("TeacherMomentumEnd", 1.0, false, true)]
+    [InlineData("TimeMaskProbability", 0.025, false, true)]
+    [InlineData("TopP", 0.95, true, true)]
+    public void ProbabilityAndMomentCandidatesStayInTheirMathematicalDomain(string option, double current, bool strictLower, bool inclusiveUpper)
+    {
+        var candidates = OptionSensitivityHarness.Perturbations(typeof(double), current, option).Cast<double>().ToArray();
+        Assert.NotEmpty(candidates);
+        Assert.All(candidates, value =>
+        {
+            Assert.True(strictLower ? value > 0 : value >= 0);
+            Assert.True(inclusiveUpper ? value <= 1 : value < 1);
+            Assert.NotEqual(current, value);
+        });
+    }
+
+    [Theory]
+    [InlineData(80, 128)]
+    [InlineData(128, 80)]
+    public void LogMelCandidatesIncludeTheOtherSupportedFrontendWidth(int current, int alternative)
+    {
+        var candidates = OptionSensitivityHarness.Perturbations(typeof(int), current, "NumMels").Cast<int>().ToArray();
+        Assert.Contains(alternative, candidates);
+        Assert.DoesNotContain(current, candidates);
+    }
+
     [Fact]
     public void SampleRatesPreferSimpleRatiosWithoutDroppingFineGrainedCandidates()
     {

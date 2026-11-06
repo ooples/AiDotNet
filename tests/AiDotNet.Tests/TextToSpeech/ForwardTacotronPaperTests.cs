@@ -25,7 +25,7 @@ public class ForwardTacotronPaperTests
 {
     private const int MelBins = 8;
 
-    private static ForwardTacotron<double> CreateModel() => new(
+    private static ForwardTacotron<double> CreateModel(int secondStageStartStep = 150000, double secondStageLearningRate = 1e-5) => new(
         new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
             inputSize: 8, outputSize: MelBins) { RandomSeed = 11 },
         new ForwardTacotronOptions
@@ -34,6 +34,7 @@ public class ForwardTacotronPaperTests
             PitchConvDim = 8, PitchRnnDim = 4, EnergyConvDim = 8, EnergyRnnDim = 4, DurationDropout = 0.0, PitchDropout = 0.0,
             EnergyDropout = 0.0, PrenetDim = 8, PrenetBankSize = 3, PrenetDropout = 0.0, RnnDim = 8, PostnetChannels = 8,
             PostnetBankSize = 2, LearningRate = 2e-3,
+            SecondStageStartStep = secondStageStartStep, SecondStageLearningRate = secondStageLearningRate,
         });
 
     private static TtsTrainingSample<double> Sample()
@@ -49,6 +50,24 @@ public class ForwardTacotronPaperTests
             Tokens = tokens, Mel = mel, Durations = new[] { 3, 3, 3, 3, 2 },
             Pitch = Enumerable.Range(0, frames).Select(f => f % 5 == 0 ? 0.0 : 140.0 + 10.0 * f).ToArray(),
         };
+    }
+
+    [Theory]
+    [InlineData(1, 1e-5)]
+    [InlineData(2, 3e-4)]
+    public void Training_AdvancesTheProgressiveSchedulePerUpdate(int switchStep, double secondRate)
+    {
+        using var model = CreateModel(switchStep, secondRate);
+        var optimizer = (AiDotNet.Optimizers.GradientBasedOptimizerBase<double, Tensor<double>, Tensor<double>>)
+            typeof(ForwardTacotron<double>).GetField("_optimizer", System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.NonPublic)!.GetValue(model)!;
+        Assert.Equal(2e-3, optimizer.GetCurrentLearningRate(), 12);
+        for (int step = 1; step <= switchStep + 1; step++)
+        {
+            model.Train(Sample());
+            Assert.Equal(step < switchStep ? 2e-3 : secondRate, optimizer.GetCurrentLearningRate(), 12);
+            Assert.Equal(step, optimizer.LearningRateScheduler!.CurrentStep);
+        }
     }
 
     [Fact(Timeout = 180000)]
