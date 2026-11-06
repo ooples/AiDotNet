@@ -176,3 +176,13 @@ SentencePiece protobuf. The existing SentencePiece BPE and pinned GLaMM
 tokenizer reference tests both pass, including the real model bytes and
 tokenization/decoding behavior. The options source compiles without warnings
 or errors; no general exception-swallowing rule was added to the harness.
+
+CosyVoice and CosyVoiceClone TopK pass with TopP = 1 and a two-token control,
+allowing top-k to act before nucleus filtering makes it redundant. Fish Speech
+1.4 and 1.5 ConstrainToSemanticTokens pass by observing the actual generated
+frame rows before audio decoding: an untrained unconstrained model may emit
+non-speech frames that the codec correctly refuses to decode as audio. Its
+parameter fingerprint is included in this observation. FishSpeechV15's
+CodebookSize probe passes on its changed parameter count before forward
+execution; it no longer tries to decode an untrained, resized vocabulary first.
+All five probes pass, as do the 42 perturbation and six span regressions.

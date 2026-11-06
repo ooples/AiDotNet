@@ -13,7 +13,8 @@ internal static class OptionSensitivityFixtureSetup
             or AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>;
 
     internal static long ParameterCountBeforeFitting<T>(INeuralNetworkModel<T> network)
-        => UsesFittedAssets(network) ? network.GetParameters().Length : 0;
+        => UsesFittedAssets(network) || network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T>
+            ? network.GetParameters().Length : 0;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
@@ -33,6 +34,7 @@ internal static class OptionSensitivityFixtureSetup
             : IsVocoderFrontendOption(option) && network is AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T>
                 or AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T> ? "vocoder-frontend"
             : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option == "MaximumAudioFrames" ? "voicebox-audio-chunk"
+            : network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && option == "TopK" ? "cosy-top-k"
             : network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && IsCosyFlowOption(option) ? "cosy-flow"
             : network is AiDotNet.TextToSpeech.Classic.ForwardTacotron<T> ? option switch
             {
@@ -54,6 +56,8 @@ internal static class OptionSensitivityFixtureSetup
     internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fish && option == "ConstrainToSemanticTokens")
+            return ObserveFishFrames(fish, input);
         long fingerprint = observe(network, ObservationInput(network, input, option));
         if (network is not AiDotNet.VisionLanguage.Grounding.GLaMM<T> glamm || option != "RegionGroupNormGroups")
             return fingerprint;
@@ -63,6 +67,31 @@ internal static class OptionSensitivityFixtureSetup
             new[] { new[] { 0.1, 0.1, 0.8, 0.8 } });
         double loss = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble(glamm.EvaluateConversationLoss(sample));
         return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(new[] { loss }));
+    }
+
+    private static long ObserveFishFrames<T>(AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> model, Tensor<T> input)
+    {
+        model.SetTrainingMode(false);
+        // Observe the actual generated frame rows before codec decoding: an untrained unconstrained
+        // model can emit non-speech frames that a waveform decoder correctly refuses to interpret.
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var type = typeof(AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T>);
+        var format = type.GetProperty("Format", flags)!.GetValue(model)!;
+        var transformer = type.GetProperty("Transformer", flags)!.GetValue(model)!;
+        var options = (AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions)model.GetOptions();
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var ids = Enumerable.Range(0, input.Length).Select(i => (int)ops.ToDouble(input[i])).ToArray();
+        var prompt = (int[,])format.GetType().GetMethod("Segment", new[] { typeof(int[]), typeof(int[,]) })!
+            .Invoke(format, new object?[] { ids, null })!;
+        var generator = type.Assembly.GetType("AiDotNet.TextToSpeech.CodecBased.FishSpeechGenerator`1")!.MakeGenericType(typeof(T));
+        var frames = (int[,])generator.GetMethod("Generate", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object[] { AiDotNet.Tensors.Engines.AiDotNetEngine.Current, transformer, format, prompt,
+                4, options.Temperature, options.TopP, options.RepetitionPenalty,
+                new Random(options.SamplingSeed), options.ConstrainToSemanticTokens })!;
+        return OptionSensitivityHarness.Combine(
+            OptionSensitivityHarness.Fingerprint(frames.Cast<int>().Select(value => (double)value)),
+            OptionSensitivityHarness.Fingerprint(model.GetParameters().Select(value => ops.ToDouble(value))));
     }
 
     internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
@@ -251,6 +280,11 @@ internal static class OptionSensitivityFixtureSetup
             voicebox.MaximumPhoneDuration = 1;
         if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions cosy && IsCosyFlowOption(option))
             cosy.TrainingCfgRate = 0.5;
+        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions sampling && option == "TopK")
+        {
+            sampling.TopK = 2;
+            sampling.TopP = 1;
+        }
         if (options is AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions forward)
         {
             if (option is "SecondStageLearningRate" or "SecondStageStartStep")

@@ -325,12 +325,12 @@ public static class OptionSensitivityHarness
             catch (ParameterCountChangedException change)
             {
                 return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Sensitive,
-                    $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} changes the parameter count from {change.Previous} to {change.Current} before fitted fixture assets are loaded.");
+                    $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} changes the parameter count from {change.Previous} to {change.Current} before fixture fitting or execution.");
             }
             catch (ParameterShapesChangedException)
             {
                 return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Sensitive,
-                    $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} changes the ordered parameter tensor shapes before fitted fixture assets are loaded.");
+                    $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} changes the ordered parameter tensor shapes before fixture fitting or execution.");
             }
             catch (Exception ex) when (IsConstructionRejection(ex))
             {
