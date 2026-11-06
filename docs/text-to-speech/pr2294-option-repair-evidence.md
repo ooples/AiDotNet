@@ -9,6 +9,13 @@ APNet2 operate on spectral frames and do not consume these transposed-convolutio
 kernels. The removed inherited Kani topology fields are replaced by its existing
 LFM2 settings, including `Heads` and `AttentionLayers`.
 
+The SDK assembly compatibility comparison against package 0.234.0 reports exactly
+two additional net10.0 diagnostics: removal of the base kernel getter and setter.
+All 1,943 preceding net10.0 exceptions still correspond to actual differences.
+The two approved removals are acknowledged separately on net10.0, net471 and
+net8.0, the baseline package's frameworks. No wildcard compatibility suppression
+or package-validation bypass is introduced.
+
 Kani1's `SynthesisSpeakerEmbedding` and `TrainingSpeakerEmbedding` return null;
 Kani2 overrides both. Speaker width and cache-position policy therefore belong to
 `KaniTTS2Options`. Its defaults and copy constructor preserve both settings.

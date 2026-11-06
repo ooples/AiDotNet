@@ -39866,4 +39866,49 @@
     <Right>lib/net8.0/AiDotNet.dll</Right>
     <IsBaselineSuppression>true</IsBaselineSuppression>
   </Suppression>
+  <!-- Approved breaking ownership change: only BigVGAN, HiFiGAN and ISTFTNet consume these kernels.
+       Their options retain the setting; frame-level APNet/APNet2 no longer inherit an unused knob.
+       Exact SDK ApiCompat comparison against 0.234.0 adds only these two removed accessors per baseline TFM. -->
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.TextToSpeech.Vocoders.VocoderOptions.get_UpsampleKernelSizes</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.TextToSpeech.Vocoders.VocoderOptions.set_UpsampleKernelSizes(System.Int32[])</Target>
+    <Left>lib/net10.0/AiDotNet.dll</Left>
+    <Right>lib/net10.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.TextToSpeech.Vocoders.VocoderOptions.get_UpsampleKernelSizes</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.TextToSpeech.Vocoders.VocoderOptions.set_UpsampleKernelSizes(System.Int32[])</Target>
+    <Left>lib/net471/AiDotNet.dll</Left>
+    <Right>lib/net471/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.TextToSpeech.Vocoders.VocoderOptions.get_UpsampleKernelSizes</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
+  <Suppression>
+    <DiagnosticId>CP0002</DiagnosticId>
+    <Target>M:AiDotNet.TextToSpeech.Vocoders.VocoderOptions.set_UpsampleKernelSizes(System.Int32[])</Target>
+    <Left>lib/net8.0/AiDotNet.dll</Left>
+    <Right>lib/net8.0/AiDotNet.dll</Right>
+    <IsBaselineSuppression>true</IsBaselineSuppression>
+  </Suppression>
 </Suppressions>
