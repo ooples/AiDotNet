@@ -13,6 +13,9 @@
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Newtonsoft.Json" />
+    <!-- AiDotNet references only the managed ONNX Runtime API. Without the native package no onnxruntime.dll is
+         copied here, and Windows loads System32's older WinML build (1.17), which rejects API version 31. -->
+    <PackageReference Include="Microsoft.ML.OnnxRuntime" />
     <PackageReference Include="Xunit.SkippableFact" />
     <ProjectReference Include="../../src/AiDotNet.csproj" />
     <ProjectReference Include="../../src/AiDotNet.CodeAnalysis.TreeSitter/AiDotNet.CodeAnalysis.TreeSitter.csproj" />
