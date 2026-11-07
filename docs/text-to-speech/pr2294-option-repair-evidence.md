@@ -332,3 +332,9 @@ MaxAudioLengthSeconds=1 and that metadata reports 1: this existing field is
 explicitly informational, serialized metadata, now explained to the option
 harness. The changed-source stage and all previous stage checks pass with
 zero build warnings/errors.
+
+CIFDecoder TailThreshold is inference-only: its public Transcribe path calls
+the real CIF tail firing, whereas Predict produces training-aligned logits.
+The observer now transcribes deterministic recordings at four short lengths.
+The compiled probe passes for tail threshold 0.5 -> 0.25 through actual public
+transcription; scoped build has zero warnings/errors.

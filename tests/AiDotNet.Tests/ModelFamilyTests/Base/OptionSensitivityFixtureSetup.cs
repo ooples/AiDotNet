@@ -86,6 +86,19 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fish && option == "ConstrainToSemanticTokens")
             return ObserveFishFrames(fish, input);
         long fingerprint = observe(network, ObservationInput(network, input, option));
+        if (network is AiDotNet.SpeechRecognition.CTCVariants.CIFDecoder<T> cif && option == "TailThreshold")
+        {
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            foreach (int samples in new[] { 1600, 3200, 6400, 16000 })
+            {
+                var waveform = new Tensor<T>(new[] { samples });
+                for (int i = 0; i < samples; i++) waveform[i] = ops.FromDouble(0.4 * Math.Sin(i * .13) + 0.2 * Math.Cos(i * .37));
+                string text = cif.Transcribe(waveform, includeTimestamps: false).Text;
+                fingerprint = OptionSensitivityHarness.Combine(fingerprint,
+                    OptionSensitivityHarness.Fingerprint(text.Select(character => (double)character)));
+            }
+            return fingerprint;
+        }
         if (network is AiDotNet.Audio.Generation.AudioLM<T> audioLm && option is "SemanticCropSeconds" or "CoarseCropSeconds" or "FineCropSeconds")
         {
             var settings = (AiDotNet.Audio.Generation.AudioLMOptions)audioLm.GetOptions();
