@@ -406,3 +406,12 @@ entries were removed. All 18 new accessor declarations are registered, and SDK
 ApiCompat finds exactly CP0007 for MaskGCTOptions on net10.0/net471/net8.0;
 three exact base-type acknowledgments were added. Full package validation
 remains a hosted check.
+
+MaskGCT's remaining isolated-candidate constraints have positive native tests:
+NumQuantizers must vary with the schedule array length; paired counts two
+and three increase parameters and generate four target frames with the correct
+number of valid acoustic codes. HopSize must vary with the encoder strides;
+valid hops 480 and 320 decode four frames into exactly 1920 and 1280 finite
+waveform samples. Unpaired changes are rejected. Both settings are retained
+with explicit constrained-option explanations, backed by five changed-source
+checks; no no-op baselines were added.

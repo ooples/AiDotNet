@@ -58,6 +58,7 @@ public class MaskGCTOptions : ModelOptions
     /// <summary>The acoustic codec's waveform sample rate (24 kHz).</summary>
     public int SampleRate { get; set; } = 24000;
     /// <summary>Samples per acoustic frame; must match the codec encoder strides.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("HopSize must equal the product of CodecEncoderRates. MaskGctOptionConstraintTests rejects isolated changes and verifies actual waveform lengths for paired native codec configurations.")]
     public int HopSize { get; set; } = 480;
     /// <summary>The semantic-to-acoustic transformer width.</summary>
     public int HiddenDim { get; set; } = 1024;
@@ -135,6 +136,7 @@ public class MaskGCTOptions : ModelOptions
     public int CodecLatentDim { get; set; } = 256;
 
     /// <summary>The acoustic layers (12).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("NumQuantizers requires one positive entry per layer in SemanticToAcousticSteps. MaskGctOptionConstraintTests rejects unpaired changes and verifies paired resizing and actual acoustic generation with two and three quantizers.")]
     public int NumQuantizers { get; set; } = 12;
 
     /// <summary>Each acoustic layer's codes (1,024).</summary>
