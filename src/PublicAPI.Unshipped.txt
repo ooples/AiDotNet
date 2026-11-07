@@ -1115,3 +1115,5 @@ override AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.ModuleName.get 
 virtual AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Safety.Watermarking.WatermarkResult!
 virtual AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.ModuleName.get -> string!
 override AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+AiDotNet.Models.Options.RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>.InitialMeanSquare.get -> double
+AiDotNet.Models.Options.RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>.InitialMeanSquare.set -> void
