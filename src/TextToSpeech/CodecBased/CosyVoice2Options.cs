@@ -10,7 +10,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// HiFT at 24 kHz (upsampling 8·5·3, iSTFT 16/4); a 192-wide CAM++ x-vector.</para>
 /// <para><b>For Beginners:</b> These options configure the CosyVoice 2 model. Default values follow the released model.</para>
 /// </remarks>
-public class CosyVoice2Options : CosyVoiceFamilyOptions
+public class CosyVoice2Options : CosyVoiceAutoregressiveOptions
 {
     /// <summary>The released S3Tokenizer v2 cardinality: eight ternary FSQ dimensions give 3^8 = 6,561 codes.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("S3Tokenizer v2 has exactly 3^8 = 6,561 codes; other cardinalities are rejected by its constructor, rather than changing a valid model. S3TokenizerV2ReferenceTests verifies the released states/tokens and rejects alternative cardinalities.")]

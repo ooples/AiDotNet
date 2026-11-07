@@ -41,10 +41,6 @@ public abstract class CosyVoiceFamilyOptions : CodecTtsOptions
         HiftUpsampleRates = (int[])other.HiftUpsampleRates.Clone();
         HiftUpsampleKernels = (int[])other.HiftUpsampleKernels.Clone();
         HiftSourceKernels = (int[])other.HiftSourceKernels.Clone();
-        TopP = other.TopP;
-        TopK = other.TopK;
-        RepetitionWindow = other.RepetitionWindow;
-        RepetitionRatio = other.RepetitionRatio;
         SpeechTokenizerState = other.SpeechTokenizerState;
         SpeechTokenizerHeads = other.SpeechTokenizerHeads;
         SpeechTokenizerLayers = other.SpeechTokenizerLayers;
@@ -125,17 +121,6 @@ public abstract class CosyVoiceFamilyOptions : CodecTtsOptions
     /// <summary>HiFT's source-branch residual block kernels, one per upsampling stage.</summary>
     public int[] HiftSourceKernels { get; set; } = { 7, 11 };
 
-    /// <summary>The LM sampler's nucleus (<c>top_p</c>).</summary>
-    public double TopP { get; set; } = 0.8;
-
-    /// <summary>The LM sampler's candidate count (<c>top_k</c>).</summary>
-    public int TopK { get; set; } = 25;
-
-    /// <summary>The repetition-aware sampler's window (<c>win_size</c>).</summary>
-    public int RepetitionWindow { get; set; } = 10;
-
-    /// <summary>The repetition-aware sampler's threshold ratio (<c>tau_r</c>).</summary>
-    public double RepetitionRatio { get; set; } = 0.1;
 
     /// <summary>The S3 speech tokenizer's width (1,280 in every release).</summary>
     public int SpeechTokenizerState { get; set; } = 1280;

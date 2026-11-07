@@ -66,6 +66,35 @@ public class ChatterboxOptionContextTests
             changed.LanguageModelLayers.SelectMany(layer => layer.GetParameters())));
     }
 
+    [Theory]
+    [InlineData("TrainingCfgRate")]
+    [InlineData("FlowLoss")]
+    [InlineData("FlowAttentionDropoutRate")]
+    public void FlowTrainingOptionsChangeTheNativeUpdate(string option)
+    {
+        var options = ChatterboxFixture.Options();
+        options.TrainingCfgRate = 0;
+        var alternative = new ChatterboxOptions(options);
+        switch (option)
+        {
+            case "TrainingCfgRate": alternative.TrainingCfgRate = 1; break;
+            case "FlowLoss": alternative.FlowLoss = CosyVoiceFlowLoss.SquaredError; break;
+            case "FlowAttentionDropoutRate": alternative.FlowAttentionDropoutRate = 0.5; break;
+            default: throw new ArgumentOutOfRangeException(nameof(option));
+        }
+        using var control = Create(options);
+        using var changed = Create(alternative);
+        control.CurrentStage = changed.CurrentStage = CosyVoiceTrainingStage.Flow;
+        Assert.Equal(control.GetParameters().ToArray(), changed.GetParameters().ToArray());
+        double first = control.Train(Sample(control));
+        double second = changed.Train(Sample(changed));
+        Assert.True(TtsPaperNumerics.IsFinite(first));
+        Assert.True(TtsPaperNumerics.IsFinite(second));
+        Assert.NotEqual(first, second);
+        Assert.False(control.FlowLayers.SelectMany(layer => layer.GetParameters()).SequenceEqual(
+            changed.FlowLayers.SelectMany(layer => layer.GetParameters())));
+    }
+
     [Fact]
     public void SharedSeedControlsNativeAndFrozenVoiceInitializationIndependentlyOfSampling()
     {
@@ -78,5 +107,19 @@ public class ChatterboxOptionContextTests
         var voice = VoiceLayers(first).SelectMany(layer => layer.GetParameters()).ToArray();
         Assert.Equal(voice, VoiceLayers(repeat).SelectMany(layer => layer.GetParameters()).ToArray());
         Assert.False(voice.SequenceEqual(VoiceLayers(changed).SelectMany(layer => layer.GetParameters())));
+    }
+
+    [Fact]
+    public void PartialRateChangesTheNativeVoiceEmbeddingWhenWindowsOverlap()
+    {
+        var options = ChatterboxFixture.Options();
+        options.VoiceEncoderPartialFrames = 160;
+        using var control = Create(options);
+        using var changed = Create(new ChatterboxOptions(options) { VoiceEncoderPartialRate = 2 });
+        Assert.Equal(control.GetParameters().ToArray(), changed.GetParameters().ToArray());
+        var recording = ChatterboxFixture.Recording<double>(2);
+        var first = control.VoiceEncoderModel!.Embed(recording, 24000);
+        var second = changed.VoiceEncoderModel!.Embed(recording, 24000);
+        Assert.False(first.SequenceEqual(second));
     }
 }

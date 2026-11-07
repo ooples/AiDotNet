@@ -9120,14 +9120,22 @@ AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.HiftUpsampleRates.set ->
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.HiftUpsampleKernels.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.HiftSourceKernels.get -> int[]!
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.HiftSourceKernels.set -> void
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.TopP.get -> double
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.TopP.set -> void
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.TopK.get -> int
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.TopK.set -> void
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.RepetitionWindow.get -> int
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.RepetitionWindow.set -> void
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.RepetitionRatio.get -> double
-AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.RepetitionRatio.set -> void
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.TopP.get -> double
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.TopP.get -> double
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.TopP.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.TopP.set -> void
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.TopK.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.TopK.get -> int
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.TopK.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.TopK.set -> void
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.RepetitionWindow.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.RepetitionWindow.get -> int
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.RepetitionWindow.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.RepetitionWindow.set -> void
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.RepetitionRatio.get -> double
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.RepetitionRatio.get -> double
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.RepetitionRatio.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.RepetitionRatio.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeechTokenizerState.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeechTokenizerState.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SpeechTokenizerHeads.get -> int
@@ -21780,3 +21788,6 @@ AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions.WeightDecay.get -> double
 AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions.WeightDecay.set -> void
 virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.CreateComponentOptimizer(string! component, int warmupSteps) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
 override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.CreateComponentOptimizer(string! component, int warmupSteps) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.CosyVoiceAutoregressiveOptions() -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.CosyVoiceAutoregressiveOptions(AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions! other) -> void

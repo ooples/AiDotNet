@@ -6,6 +6,37 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class CosyVoiceOptionConstraintTests
 {
+    [Fact]
+    public void StandardSamplerOwnershipPreservesCopiesAndNativeConfiguration()
+    {
+        var options = SmallOptions(2);
+        options.TopP = 0.6;
+        options.TopK = 3;
+        options.RepetitionWindow = 7;
+        options.RepetitionRatio = 0.2;
+        var copy = new CosyVoiceOptions(options);
+        using var model = new CosyVoice<double>(Architecture(), copy);
+        var configuration = model.LanguageModel!.Configuration;
+        Assert.Equal(options.TopP, configuration.TopP);
+        Assert.Equal(options.TopK, configuration.TopK);
+        Assert.Equal(options.RepetitionWindow, configuration.RepetitionWindow);
+        Assert.Equal(options.RepetitionRatio, configuration.RepetitionRatio);
+        var second = new CosyVoice2Options { TopP = 0.7, TopK = 4, RepetitionWindow = 8, RepetitionRatio = 0.3 };
+        var third = new CosyVoice3Options { TopP = 0.9, TopK = 5, RepetitionWindow = 9, RepetitionRatio = 0.4 };
+        AssertSamplerCopy(second, new CosyVoice2Options(second));
+        AssertSamplerCopy(third, new CosyVoice3Options(third));
+        foreach (string name in new[] { "TopP", "TopK", "RepetitionWindow", "RepetitionRatio" })
+            Assert.Null(typeof(AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions).GetProperty(name));
+    }
+
+    private static void AssertSamplerCopy(CosyVoiceAutoregressiveOptions source, CosyVoiceAutoregressiveOptions copy)
+    {
+        Assert.Equal(source.TopP, copy.TopP);
+        Assert.Equal(source.TopK, copy.TopK);
+        Assert.Equal(source.RepetitionWindow, copy.RepetitionWindow);
+        Assert.Equal(source.RepetitionRatio, copy.RepetitionRatio);
+    }
+
     [Theory]
     [InlineData(4, 8)]
     [InlineData(8, 4)]

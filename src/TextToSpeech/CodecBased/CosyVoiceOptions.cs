@@ -10,7 +10,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// 192-wide CAM++ x-vector.</para>
 /// <para><b>For Beginners:</b> These options configure the CosyVoice model. Default values follow the released model.</para>
 /// </remarks>
-public class CosyVoiceOptions : CosyVoiceFamilyOptions
+public class CosyVoiceOptions : CosyVoiceAutoregressiveOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
     public CosyVoiceOptions()

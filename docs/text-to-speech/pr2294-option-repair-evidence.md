@@ -875,3 +875,11 @@ Chatterbox has inference checkpoints but no declared released stage optimizer re
 
 Scoped source validation: ChatterboxOptionContextTests passed native flow updates with unchanged LM/frozen/voice weights, native T3 parameter updates with differing warmup trajectories, and repeatable backbone/voice initialization independent of SamplingSeed. The warmup issue was configuration (initial rate equalled peak rate), not a fused-scheduler defect. Full hosted validation remains pending.
 All four ChatterboxPaperTests also passed in the same source scope: released defaults, native component construction, punctuation/BPE, and bounded S3Gen versus full T3 reference conditioning.
+
+### Standard CosyVoice sampler ownership and Chatterbox partial windows
+
+TopP, TopK, RepetitionWindow and RepetitionRatio are consumed by the native CosyVoice/CosyVoice2/CosyVoice3 LM configurations (CosyVoice.cs:184, CosyVoice2.cs:191, CosyVoice3.cs:147). Chatterbox uses T3's GenerationTopP, MinP and RepetitionPenalty instead. The four standard controls now belong to CosyVoiceAutoregressiveOptions, inherited by all three standard models but not Chatterbox. All retained serialized defaults match the earlier hosted core for all four options classes; copies preserve nondefault sampler settings, and a constructed native CosyVoice LM receives them. Chatterbox's four release checks and native training checks remain passing.
+
+VoiceEncoderPartialRate was saturated by the tiny fixture's four-frame windows. The option probe now uses the released 160-frame partial size and observes the actual voice embedding for a two-second reference. The permanent regression verifies different rates change embeddings while initialization remains equal. The reference get_frame_step formula was checked against resemble-ai/chatterbox src/chatterbox/models/voice_encoder/voice_encoder.py (blob d986f17fd6afab59364863b5e92fd56eec21236b); no production formula was changed.
+
+Three permanent flow counterfactuals also pass: TrainingCfgRate, FlowLoss and FlowAttentionDropoutRate each change finite native losses and updated flow weights.

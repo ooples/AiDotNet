@@ -250,7 +250,10 @@ internal static class OptionSensitivityFixtureSetup
             double pretrainingLoss = ops.ToDouble(bestRq.PretrainingLoss(input, new Random(1337)));
             return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(new[] { pretrainingLoss }));
         }
-        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && option is "RepetitionWindow" or "RepetitionRatio")
+        if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> chatter && option == "VoiceEncoderPartialRate")
+            return OptionSensitivityHarness.Fingerprint(chatter.VoiceEncoderModel!.Embed(ChatterboxFixture.Recording<T>(2), 24000)
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosySampler && cosySampler.GetOptions() is AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions && option is "RepetitionWindow" or "RepetitionRatio")
         {
             const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
                 | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
@@ -650,7 +653,9 @@ internal static class OptionSensitivityFixtureSetup
             voicebox.MaximumPhoneDuration = 1;
         if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions cosy && IsCosyFlowOption(option))
             cosy.TrainingCfgRate = 0.5;
-        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions sampling && option == "TopK")
+        if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chatter && option == "VoiceEncoderPartialRate")
+            chatter.VoiceEncoderPartialFrames = 160;
+        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions sampling && option == "TopK")
         {
             sampling.TopK = 2;
             sampling.TopP = 1;
