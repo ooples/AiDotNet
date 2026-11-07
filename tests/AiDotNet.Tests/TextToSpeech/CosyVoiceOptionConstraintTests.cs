@@ -17,6 +17,8 @@ public class CosyVoiceOptionConstraintTests
         var copy = new CosyVoiceOptions(options);
         using var model = new CosyVoice<double>(Architecture(), copy);
         var configuration = model.LanguageModel!.Configuration;
+        Assert.Equal(options.TextEncoderDim, configuration.TextEncoderInputSize);
+        Assert.Equal(options.NumEncoderLayers, copy.NumEncoderLayers);
         Assert.Equal(options.TopP, configuration.TopP);
         Assert.Equal(options.TopK, configuration.TopK);
         Assert.Equal(options.RepetitionWindow, configuration.RepetitionWindow);
@@ -27,6 +29,23 @@ public class CosyVoiceOptionConstraintTests
         AssertSamplerCopy(third, new CosyVoice3Options(third));
         foreach (string name in new[] { "TopP", "TopK", "RepetitionWindow", "RepetitionRatio" })
             Assert.Null(typeof(AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions).GetProperty(name));
+        foreach (string name in new[] { "TextEncoderDim", "NumEncoderLayers", "HiddenDim", "NumDecoderLayers",
+            "MaxMelLength", "MaxCodecFrames", "LanguageModelName", "ModelPath" })
+            Assert.Null(typeof(AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions).GetProperty(name));
+    }
+
+    [Theory]
+    [InlineData("TextEncoderDim")]
+    [InlineData("NumEncoderLayers")]
+    public void V1RetainsItsConsumedTextEncoderControls(string option)
+    {
+        var options = SmallOptions(2);
+        using var control = new CosyVoice<double>(Architecture(), options);
+        var changedOptions = new CosyVoiceOptions(options);
+        if (option == "TextEncoderDim") changedOptions.TextEncoderDim = 12;
+        else changedOptions.NumEncoderLayers = 2;
+        using var changed = new CosyVoice<double>(Architecture(), changedOptions);
+        Assert.NotEqual(control.GetParameters().Length, changed.GetParameters().Length);
     }
 
     private static void AssertSamplerCopy(CosyVoiceAutoregressiveOptions source, CosyVoiceAutoregressiveOptions copy)

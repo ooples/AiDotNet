@@ -101,6 +101,7 @@ public class ChatterboxOptionContextTests
     [InlineData("TrainingCfgRate")]
     [InlineData("FlowLoss")]
     [InlineData("FlowAttentionDropoutRate")]
+    [InlineData("DropoutRate")]
     public void FlowTrainingOptionsChangeTheNativeUpdate(string option)
     {
         var options = ChatterboxFixture.Options();
@@ -111,6 +112,7 @@ public class ChatterboxOptionContextTests
             case "TrainingCfgRate": alternative.TrainingCfgRate = 1; break;
             case "FlowLoss": alternative.FlowLoss = CosyVoiceFlowLoss.SquaredError; break;
             case "FlowAttentionDropoutRate": alternative.FlowAttentionDropoutRate = 0.5; break;
+            case "DropoutRate": alternative.DropoutRate = 0.5; break;
             default: throw new ArgumentOutOfRangeException(nameof(option));
         }
         using var control = Create(options);
@@ -152,5 +154,20 @@ public class ChatterboxOptionContextTests
         var first = control.VoiceEncoderModel!.Embed(recording, 24000);
         var second = changed.VoiceEncoderModel!.Embed(recording, 24000);
         Assert.False(first.SequenceEqual(second));
+    }
+
+    [Fact]
+    public void StaticChunksChangeStreamingFlowEncoding()
+    {
+        var options = ChatterboxFixture.Options();
+        options.StaticChunkSize = 2;
+        using var control = Create(options);
+        using var changed = Create(new ChatterboxOptions(options) { StaticChunkSize = 3 });
+        Assert.Equal(control.GetParameters().ToArray(), changed.GetParameters().ToArray());
+        var codes = Enumerable.Range(0, 12).ToArray();
+        Assert.Equal(control.FlowModel!.Encode(codes, false, new Random(7)).ToArray(),
+            changed.FlowModel!.Encode(codes, false, new Random(7)).ToArray());
+        Assert.False(control.FlowModel.Encode(codes, false, new Random(7), streaming: true).SequenceEqual(
+            changed.FlowModel.Encode(codes, false, new Random(7), streaming: true)));
     }
 }

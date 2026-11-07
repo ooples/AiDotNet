@@ -49,7 +49,6 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     {
         _options = options ?? new ChatterboxOptions();
         Options = _options;
-        _options.ModelPath = modelPath;
         Validate();
         LoadConfiguredTokenizer();
         Initialize();

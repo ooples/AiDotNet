@@ -1,3 +1,6 @@
+using AiDotNet.Models.Options;
+using AiDotNet.Onnx;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 /// <summary>
@@ -5,15 +8,48 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// S3 tokenizer and CAM++ front end, the language model's sampling, and training. Each model's options set its release's
 /// values.
 /// </summary>
-public abstract class CosyVoiceFamilyOptions : CodecTtsOptions
+[AiDotNet.Attributes.DimensionDivisibility(nameof(LLMDim), nameof(NumHeads))]
+public abstract class CosyVoiceFamilyOptions : ModelOptions
 {
     /// <summary>Samples per mel frame; must equal four times the product of HiFT upsampling rates.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("HiFT fixes its iSTFT hop at four, so HopSize must vary with HiftUpsampleRates. CosyVoiceOptionConstraintTests rejects unpaired changes and verifies the actual waveform length for valid pairs.")]
-    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+    public int HopSize { get; set; } = 256;
 
     /// <summary>The single S3 token stream used by the CosyVoice family.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("CosyVoice emits one stream of S3 tokens rather than RVQ codebooks. Its constructor requires NumCodebooks = 1; CosyVoiceOptionConstraintTests verifies that other counts are rejected.")]
-    public new int NumCodebooks { get => base.NumCodebooks; set => base.NumCodebooks = value; }
+    public int NumCodebooks { get; set; } = 8;
+
+    /// <summary>Audio sample rate in Hz.</summary>
+    public int SampleRate { get; set; } = 22050;
+    /// <summary>Mel-spectrogram frequency channels.</summary>
+    public int MelChannels { get; set; } = 80;
+    /// <summary>FFT window size for the conditioning frontend.</summary>
+    public int FftSize { get; set; } = 1024;
+    /// <summary>Language-model query attention heads.</summary>
+    public int NumHeads { get; set; } = 8;
+    /// <summary>Text vocabulary size.</summary>
+    public int VocabSize { get; set; } = 256;
+    /// <summary>Maximum input text length.</summary>
+    public int MaxTextLength { get; set; } = 512;
+    /// <summary>Native encoder dropout probability.</summary>
+    public double DropoutRate { get; set; } = 0.1;
+    /// <summary>Exported graph runtime settings.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Configured native training learning rate.</summary>
+    public double LearningRate { get; set; } = 1e-4;
+    /// <summary>Configured native AdamW weight decay.</summary>
+    public double WeightDecay { get; set; } = 0.01;
+    /// <summary>Speech-token vocabulary cardinality.</summary>
+    [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]
+    public int CodebookSize { get; set; } = 1024;
+    /// <summary>Speech tokens per second.</summary>
+    public int CodecFrameRate { get; set; } = 50;
+    /// <summary>Language-model hidden width.</summary>
+    public int LLMDim { get; set; } = 1024;
+    /// <summary>Language-model decoder blocks.</summary>
+    public int NumLLMLayers { get; set; } = 12;
+    /// <summary>Flow conditioning x-vector width.</summary>
+    public int SpeakerEmbeddingDim { get; set; } = 256;
 
     /// <summary>Creates an instance with the default settings.</summary>
     protected CosyVoiceFamilyOptions() { }
@@ -22,6 +58,23 @@ public abstract class CosyVoiceFamilyOptions : CodecTtsOptions
     protected CosyVoiceFamilyOptions(CosyVoiceFamilyOptions other)
         : base(other)
     {
+        SampleRate = other.SampleRate;
+        MelChannels = other.MelChannels;
+        HopSize = other.HopSize;
+        FftSize = other.FftSize;
+        NumHeads = other.NumHeads;
+        VocabSize = other.VocabSize;
+        MaxTextLength = other.MaxTextLength;
+        DropoutRate = other.DropoutRate;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        NumCodebooks = other.NumCodebooks;
+        CodebookSize = other.CodebookSize;
+        CodecFrameRate = other.CodecFrameRate;
+        LLMDim = other.LLMDim;
+        NumLLMLayers = other.NumLLMLayers;
+        SpeakerEmbeddingDim = other.SpeakerEmbeddingDim;
         FlowDim = other.FlowDim;
         FlowHeads = other.FlowHeads;
         FlowFeedForwardDim = other.FlowFeedForwardDim;

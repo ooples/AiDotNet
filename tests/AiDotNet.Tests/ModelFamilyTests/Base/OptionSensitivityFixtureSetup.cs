@@ -253,6 +253,10 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> chatter && option == "VoiceEncoderPartialRate")
             return OptionSensitivityHarness.Fingerprint(chatter.VoiceEncoderModel!.Embed(ChatterboxFixture.Recording<T>(2), 24000)
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> chunked && option == "StaticChunkSize")
+            return OptionSensitivityHarness.Fingerprint(chunked.FlowModel!.Encode(Enumerable.Range(0, 12).ToArray(),
+                training: false, new Random(1337), streaming: true)
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
         if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosySampler && cosySampler.GetOptions() is AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions && option is "RepetitionWindow" or "RepetitionRatio")
         {
             const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
@@ -395,7 +399,7 @@ internal static class OptionSensitivityFixtureSetup
         or "Temperature" or "Negatives";
 
     private static bool IsCosyFlowOption(string option) => option is
-        "TrainingCfgRate" or "FlowLoss" or "FlowAttentionDropoutRate";
+        "TrainingCfgRate" or "FlowLoss" or "FlowAttentionDropoutRate" or "DropoutRate";
 
     private static bool IsNaturalJointOption(string option) => option is
         "MemoryKMeansIterations" or "MemoryHeads" or "DurationLossAfterWarmup" or "ForwardKlWeight";
@@ -655,6 +659,8 @@ internal static class OptionSensitivityFixtureSetup
             cosy.TrainingCfgRate = 0.5;
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chatter && option == "VoiceEncoderPartialRate")
             chatter.VoiceEncoderPartialFrames = 160;
+        if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chunked && option == "StaticChunkSize")
+            chunked.StaticChunkSize = 2;
         if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions sampling && option == "TopK")
         {
             sampling.TopK = 2;

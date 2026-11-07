@@ -94,7 +94,6 @@ public partial class CosyVoice<T> : CosyVoiceBase<T>
     {
         _options = options ?? new CosyVoiceOptions();
         Options = _options;
-        _options.ModelPath = modelPath;
         _text = WhisperTiktoken.Multilingual(_options.TextLanguages);
         // The text vocabulary is the tokenizer's, as text_token_size is.
         _options.VocabSize = _text.VocabularySize;

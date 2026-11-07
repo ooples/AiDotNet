@@ -92,7 +92,6 @@ public partial class CosyVoice2<T> : CosyVoiceBase<T>
     {
         _options = options ?? new CosyVoice2Options();
         Options = _options;
-        _options.ModelPath = modelPath;
         Validate();
         Initialize();
         InitializeReleasedFrontends();

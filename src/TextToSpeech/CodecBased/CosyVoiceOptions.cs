@@ -10,8 +10,13 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// 192-wide CAM++ x-vector.</para>
 /// <para><b>For Beginners:</b> These options configure the CosyVoice model. Default values follow the released model.</para>
 /// </remarks>
+[AiDotNet.Attributes.DimensionDivisibility(nameof(TextEncoderDim), nameof(NumHeads))]
 public class CosyVoiceOptions : CosyVoiceAutoregressiveOptions
 {
+    /// <summary>The v1 Conformer text encoder's input width.</summary>
+    public int TextEncoderDim { get; set; } = 512;
+    /// <summary>The v1 Conformer text encoder's block count.</summary>
+    public int NumEncoderLayers { get; set; } = 6;
     /// <summary>Initializes a new instance with default values.</summary>
     public CosyVoiceOptions()
     {
@@ -42,6 +47,8 @@ public class CosyVoiceOptions : CosyVoiceAutoregressiveOptions
     public CosyVoiceOptions(CosyVoiceOptions other)
         : base(other)
     {
+        TextEncoderDim = other.TextEncoderDim;
+        NumEncoderLayers = other.NumEncoderLayers;
         TextLanguages = other.TextLanguages;
         LmFeedForwardDim = other.LmFeedForwardDim;
     }
