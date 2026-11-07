@@ -141,6 +141,36 @@ public partial class LocalObjectiveCreditRuleTests
     }
 
     [Fact]
+    public void LayerwiseDistillation_LocalTaskWeightOnly_EqualsTiedReadout()
+    {
+        // localTaskWeight gives each detached hidden layer its own task loss through the shared readout. With the
+        // teacher terms switched off (hiddenWeight 0, kdAlpha 0) the rule must be exactly TiedReadoutLocalError.
+        var (x, y, _) = MakeBlobs(24, seed: 3);
+        var loss = new CategoricalCrossEntropyLoss<double>();
+        var init = BuildNet(hidden: 4, seed: 9).GetParameters();
+        Vector<double> Grad(ICreditRule<double> rule)
+        {
+            var net = BuildNet(hidden: 4, seed: 9);
+            net.SetParameters(init);
+            net.SetCreditRule(rule);
+            return net.ComputeGradients(x, y, loss);
+        }
+        var tied = Grad(new TiedReadoutLocalErrorCreditRule<double>(readoutLayerCount: 1));
+        var kdTask = Grad(new LayerwiseDistillationCreditRule<double>(
+            _ => throw new InvalidOperationException("teacher must not run when hiddenWeight is 0"), teacherLogits: null,
+            readoutLayerCount: 1, hiddenWeight: 0.0, kdAlpha: 0.0, seed: 3, localTaskWeight: 1.0));
+        var kdOnly = Grad(new LayerwiseDistillationCreditRule<double>(
+            input => { var h = input; var states = new List<Tensor<double>>(); var t = BuildNet(hidden: 2, seed: 5);
+                       for (int i = 0; i < t.Layers.Count - 1; i++) { h = t.Layers[i].Forward(h); states.Add(Detach(h)); } return states; },
+            teacherLogits: null, readoutLayerCount: 1, hiddenWeight: 1.0, kdAlpha: 0.0, seed: 3));
+        Assert.Equal(tied.Length, kdTask.Length);
+        double gap = 0, kdGap = 0;
+        for (int i = 0; i < tied.Length; i++) { gap = Math.Max(gap, Math.Abs(tied[i] - kdTask[i])); kdGap = Math.Max(kdGap, Math.Abs(tied[i] - kdOnly[i])); }
+        Assert.Equal(0.0, gap);
+        Assert.True(kdGap > 1e-9, "teacher-regression-only gradients matched the tied rule; the comparison cannot distinguish the terms");
+    }
+
+    [Fact]
     public void SetCreditRule_IsHonouredByTrain()
     {
         var (x, y, _) = MakeBlobs(30, seed: 4);

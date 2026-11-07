@@ -1,5 +1,6 @@
 using AiDotNet.Serving.Security.Licensing;
 using AiDotNet.Validation;
+using AiDotNet.Serving.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -10,7 +11,7 @@ namespace AiDotNet.Serving.Controllers.Admin;
 /// </summary>
 [ApiController]
 [Route("api/admin/licenses")]
-[Authorize(Policy = "AiDotNetAdmin")]
+[Authorize(Policy = ServingAuthorizationPolicies.Admin)]
 public sealed class LicensesController : ControllerBase
 {
     private readonly ILicenseService _licenses;

@@ -6,13 +6,15 @@
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `ConnectionStrings__ServingDb` | Yes | EF Core connection string for the persistence database (SQLite, PostgreSQL, SQL Server, or MySQL) |
-| `Persistence__Provider` | No | Database provider: `Sqlite` (default), `PostgreSQL`, `SqlServer`, `MySql` |
+| `ServingPersistenceOptions__Provider` | No | Database provider: `Sqlite` (default), `PostgreSql`, `SqlServer`, `MySql` |
+| `ServingPersistenceOptions__ConnectionString` | No | EF Core connection string. Empty with SQLite uses `data/aidn-serving.db` beside the app |
+| `ServingPersistenceOptions__MySqlServerVersion` | No | MySQL server version, e.g. `8.0.21` (default `8.0.0`) |
+| `ServingPersistenceOptions__MigrateOnStartup` | No | Apply EF Core migrations before the server accepts requests (default `true`) |
 
 Example (PostgreSQL):
 ```
-ConnectionStrings__ServingDb=Host=myserver;Database=aidotnet;Username=app;Password=secret
-Persistence__Provider=PostgreSQL
+ServingPersistenceOptions__Provider=PostgreSql
+ServingPersistenceOptions__ConnectionString=Host=myserver;Database=aidotnet;Username=app;Password=secret
 ```
 
 ### Stripe Payment Integration
@@ -27,20 +29,44 @@ Persistence__Provider=PostgreSQL
 | `Stripe__SuccessUrl` | Yes | Redirect URL after successful checkout |
 | `Stripe__CancelUrl` | Yes | Redirect URL after cancelled checkout |
 
-### Authentication (JWT)
+### Authentication
+
+Every endpoint except `/health`, Stripe checkout/webhook and license validation needs an API key or, when enabled, a
+JWT. The `ServingSecurity` section is validated at startup: an invalid value stops the server with an error naming it.
+
+**API keys.** A key has the form `aidn.<keyId>.<secret>` and is sent in the API key header or as
+`Authorization: Bearer <key>`. Keys created through `POST /api/admin/api-keys` live in the database. Config-backed
+(static) keys hold only a PBKDF2-SHA256 hash; mint one, with its configuration entry, with
+`StaticApiKeys.Generate(...)`. A static entry decides its own key id: wrong secret, `Revoked` or a past `ExpiresAt` refuse it.
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `Authentication__Authority` | Yes | OAuth2/OIDC authority URL |
-| `Authentication__Audience` | Yes | Expected JWT audience |
+| `ServingSecurity__ApiKeys__HeaderName` | No | API key header (default `X-AiDotNet-ApiKey`). The legacy `ApiKeyAuthenticationOptions__HeaderName` still overrides it, with a startup warning |
+| `ServingSecurity__ApiKeys__Pbkdf2Iterations` | No | PBKDF2 iterations for newly created keys (default 600,000; existing keys keep theirs) |
+| `ServingSecurity__ApiKeys__HmacSecrets__0` | No | HMAC secrets, newest first. When set, every static key must carry `HmacIdBase64` = HMAC-SHA256(secret, keyId) under one of them |
+| `ServingSecurity__ApiKeys__StaticApiKeys__0__Prefix` | No | Static key id, then `__HmacIdBase64`, `__Pbkdf2SaltBase64`, `__Pbkdf2HashBase64`, `__Pbkdf2Iterations`, `__Tier` (`Free`, `Premium` = Pro, `Enterprise`), `__ExpiresAt`, `__Revoked` |
+
+**JWT.** With `Enabled`, a bearer token that is not an `aidn.` key is validated as a JWT, against an OpenID Connect
+authority or a symmetric signing key. Claim names are kept as issued.
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `ServingSecurity__JwtAuthentication__Enabled` | No | Accept JWT bearer callers (default `false`) |
+| `ServingSecurity__JwtAuthentication__Authority` | One of these two | OAuth2/OIDC authority URL (signing keys and issuer from its metadata) |
+| `ServingSecurity__JwtAuthentication__SigningKey` | One of these two | Symmetric HMAC-SHA256 key, base64 or UTF-8, at least 32 bytes |
+| `ServingSecurity__JwtAuthentication__Issuer` | With `SigningKey` | Expected issuer (overrides the authority's when both are set) |
+| `ServingSecurity__JwtAuthentication__Audience` | Yes, when enabled | Expected audience |
+| `ServingSecurity__JwtAuthentication__RequireHttpsMetadata` | No | Fetch authority metadata over HTTPS only (default `true`) |
+| `ServingSecurity__Jwt__TierClaimType` | No | Claim holding the caller's tier, `Free`/`Pro`/`Enterprise` (default `tier`) |
+| `ServingSecurity__Admin__ClaimType` / `__ClaimValue` | No | Claim that grants a JWT caller the admin endpoints (default `role` = `admin`). API keys need the `Admin` scope |
 
 ### Model Serving
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `Serving__Port` | No | Server port (default: 52432) |
-| `Serving__ModelDirectory` | No | Root directory for model files (default: `models`) |
-| `Serving__MaxBatchSize` | No | Maximum inference batch size (default: 100) |
+| `ServingOptions__Port` | No | Server port (default: 52432; the `PORT` variable takes precedence) |
+| `ServingOptions__ModelDirectory` | No | Root directory for model files (default: `models`) |
+| `ServingOptions__MaxBatchSize` | No | Maximum inference batch size (default: 100) |
 
 ## GitHub Repository Secrets
 

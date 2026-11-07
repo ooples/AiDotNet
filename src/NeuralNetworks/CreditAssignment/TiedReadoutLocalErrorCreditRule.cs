@@ -67,7 +67,7 @@ public sealed class TiedReadoutLocalErrorCreditRule<T> : ILocalObjectiveCreditRu
     {
         if (context.HiddenIndex == context.Step.HiddenLayerCount - 1) return null; // trained exactly by the output loss
         var s = context.Step;
-        var local = s.Loss(s.Readout(context.Output), s.Target);
+        var local = s.ReadoutLoss(context.Output, s.Target);
         // Skip scaling only for the exact identity coefficient.
         return _localWeight == 1.0 ? local : s.Engine.TensorMultiplyScalar(local, Ops.FromDouble(_localWeight));
     }

@@ -5,30 +5,39 @@ using AiDotNet.Serving.Persistence.Entities;
 using AiDotNet.Serving.Security;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using AiDotNet.Serving.Configuration;
 using AiDotNet.Validation;
 
 namespace AiDotNet.Serving.Security.ApiKeys;
 
 /// <summary>
-/// EF Core-backed API key service.
+/// EF Core-backed API key service that also accepts the config-backed static keys.
 /// </summary>
+/// <remarks>
+/// A key id owned by a static entry is decided by that entry alone (see <see cref="StaticApiKeys"/>); every other
+/// key is looked up in the database. New keys are hashed with
+/// <see cref="ServingApiKeyOptions.Pbkdf2Iterations"/>.
+/// </remarks>
 public sealed class ApiKeyService : IApiKeyService
 {
     private const int KeyIdBytes = 8;
     private const int SecretBytes = 32;
     private const int SaltBytes = 16;
-    private const int DefaultPbkdf2Iterations = 210_000;
     private const int HashBytes = 32;
 
     private readonly ServingDbContext _db;
     private readonly ILogger<ApiKeyService> _logger;
+    private readonly ServingApiKeyOptions _options;
 
-    public ApiKeyService(ServingDbContext db, ILogger<ApiKeyService> logger)
+    public ApiKeyService(ServingDbContext db, ILogger<ApiKeyService> logger, IOptions<ServingSecurityOptions> security)
     {
         Guard.NotNull(db);
         _db = db;
         Guard.NotNull(logger);
         _logger = logger;
+        Guard.NotNull(security);
+        _options = security.Value.ApiKeys;
     }
 
     public async Task<ApiKeyAuthenticationResult?> AuthenticateAsync(string apiKey, CancellationToken cancellationToken = default)
@@ -40,6 +49,21 @@ public sealed class ApiKeyService : IApiKeyService
 
         if (!Base64Url.TryDecode(secretText, out var secretBytes))
         {
+            return null;
+        }
+
+        if (StaticApiKeys.TryAuthenticate(
+                _options, keyId, secretBytes, DateTimeOffset.UtcNow, out bool ownedByStatic, out var staticResult)
+            && staticResult is not null)
+        {
+            CryptographicOperations.ZeroMemory(secretBytes);
+            return staticResult;
+        }
+
+        if (ownedByStatic)
+        {
+            // A static entry's refusal is final: the database must not get a second chance at its key id.
+            CryptographicOperations.ZeroMemory(secretBytes);
             return null;
         }
 
@@ -101,7 +125,7 @@ public sealed class ApiKeyService : IApiKeyService
         var apiKey = ApiKeyFormat.Create(keyId, secretText);
 
         var salt = RandomNumberGenerator.GetBytes(SaltBytes);
-        int iterations = DefaultPbkdf2Iterations;
+        int iterations = _options.Pbkdf2Iterations;
         var hash = Pbkdf2(secretBytes, salt, iterations, HashBytes);
 
         var scopes = request.Scopes ?? DefaultScopesForTier(request.Tier);
@@ -162,7 +186,7 @@ public sealed class ApiKeyService : IApiKeyService
         return true;
     }
 
-    private static ApiKeyScopes DefaultScopesForTier(SubscriptionTier tier)
+    internal static ApiKeyScopes DefaultScopesForTier(SubscriptionTier tier)
     {
         return tier switch
         {

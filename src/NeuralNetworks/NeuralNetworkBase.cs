@@ -8150,6 +8150,67 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
+    // -1 = not yet resolved; 0 = this model uses the base ForwardForTraining; 1 = it overrides it.
+    private int _forwardForTrainingOverridden = -1;
+
+    /// <summary>
+    /// The last layer when the training step may stop the forward before it and take the loss from
+    /// <see cref="IFusedReadoutLossLayer{T}.TryComputeFusedLoss"/> - an LM head fused with cross-entropy never forms its
+    /// <c>[rows, vocabulary]</c> output, on the tape or anywhere else. Only for the plain layer chain: no weight
+    /// streaming, no gradient checkpointing, no composite objective, and a model that does not override
+    /// <see cref="ForwardForTraining"/> (its forward may not be a layer chain). Null = use the full forward.
+    /// The readout must also be initialized. The compiled step runs the forward to initialize every layer before it
+    /// collects the parameters it trains, and a lazy head reached only inside the loss misses that forward: MobileNetV2
+    /// then predicted differently from its own clone after training. The full forward runs until the head is initialized.
+    /// </summary>
+    private IFusedReadoutLossLayer<T>? FusedReadoutForTraining()
+    {
+        if (Layers.Count < 2 || Layers[^1] is not IFusedReadoutLossLayer<T> head) return null;
+        if (Layers[^1] is Layers.LayerBase<T> { IsInitialized: false }) return null;
+        if (_weightLifetimeConfigured || GradientCheckpointingSegmentSize > 0
+            || (_memoryManager is not null && _memoryManager.IsCheckpointingEnabled) || this is ICompositeLoss<T>)
+            return null;
+        if (_forwardForTrainingOverridden < 0)
+        {
+            var declaring = GetType().GetMethod(nameof(ForwardForTraining), [typeof(Tensor<T>)])?.DeclaringType;
+            _forwardForTrainingOverridden = declaring == typeof(NeuralNetworkBase<T>) ? 0 : 1;
+        }
+        return _forwardForTrainingOverridden == 0 ? head : null;
+    }
+
+    /// <summary>The training forward through every layer but the last: the input of a fused readout.</summary>
+    private Tensor<T> ForwardForTrainingToReadout(Tensor<T> input)
+    {
+        EnsureLayerRandomSeedsWired();
+        var current = input;
+        for (int i = 0; i < Layers.Count - 1; i++)
+        {
+            var layerInput = current;
+            current = Layers[i].Forward(current);
+            if (Layers[i] is Layers.LayerBase<T> verifiable) verifiable.VerifyReportedOutputShape(current, layerInput);
+        }
+        if (!_firstForwardCompleted)
+        {
+            _firstForwardCompleted = true;
+            TryAutoEnableWeightStreaming();
+        }
+        return current;
+    }
+
+    /// <summary>
+    /// The training objective from the readout's input: the fused readout loss when the readout supports this loss and
+    /// target, else the readout's forward and <paramref name="loss"/> (the same value either way).
+    /// </summary>
+    private Tensor<T> FusedReadoutObjective(IFusedReadoutLossLayer<T> head, Tensor<T> readoutInput, Tensor<T> target,
+        ILossFunction<T> loss, Tensor<T> compositeInput)
+    {
+        if (head.TryComputeFusedLoss(readoutInput, target, loss) is { } fused)
+            return ApplyCompositeObjective(fused, compositeInput);
+        var prediction = Layers[^1].Forward(readoutInput);
+        return ApplyCompositeObjective(loss.ComputeTapeLoss(prediction, AlignTargetToOutputShape(prediction, target)),
+            compositeInput);
+    }
+
     public virtual Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         // Propagate the architecture's RandomSeed to every layer once, before the first training
@@ -12709,6 +12770,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             else
             {
             stepTape = new GradientTape<T>();
+            if (FusedReadoutForTraining() is { } fusedReadout)
+            {
+                // The readout fuses itself with the loss: its [rows, vocabulary] output is never formed. `output` is
+                // the readout input here (it only feeds the step diagnostics' rank/length).
+                output = ForwardForTrainingToReadout(input);
+                lossTensor = FusedReadoutObjective(fusedReadout, output, expected, loss, input);
+            }
+            else
+            {
             output = ForwardForTraining(input);
 
             // Align output shape to target: when ranks mismatch, ALWAYS reshape the
@@ -12726,6 +12796,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Same declared objective as every other tape-loss path. Wiring only some of them left the
             // composite inert for whichever path a model happened to take - ABCNet took this one.
             lossTensor = ApplyCompositeObjective(loss.ComputeTapeLoss(output, expected), input);
+            }
             }
             using var tape = stepTape;
 
@@ -13863,17 +13934,20 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // per-step transient arena, the #1822 persistence check, the committed state): FusedTrainingSession owns it
         // for every base class. What stays here is what only a NeuralNetworkBase knows: its gates above, its
         // target alignment and composite objective, its gradient publication, and its post-step bookkeeping.
+        var fusedReadoutHead = FusedReadoutForTraining();
         var request = new Training.FusedTrainingStepRequest<T>
         {
             Layers = trainableLayers,
             Input = input,
             Target = expected,
-            Forward = ForwardForTraining,
-            ComputeLoss = (pred, tgt) =>
-            {
-                tgt = AlignTargetToOutputShape(pred, tgt);
-                return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred);
-            },
+            Forward = fusedReadoutHead is null ? ForwardForTraining : ForwardForTrainingToReadout,
+            ComputeLoss = fusedReadoutHead is null
+                ? (pred, tgt) =>
+                {
+                    tgt = AlignTargetToOutputShape(pred, tgt);
+                    return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred);
+                }
+                : (h, tgt) => FusedReadoutObjective(fusedReadoutHead, h, tgt, loss, h),
             Optimizer = resolvedOptimizer,
             ExtraParameters = fusedExtraParameters,
             Selection = selectedParameters,
