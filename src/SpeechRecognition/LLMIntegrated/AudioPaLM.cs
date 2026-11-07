@@ -185,6 +185,10 @@ public partial class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     }
 
     /// <inheritdoc />
+    /// <remarks>The public ASR input is a waveform; the decoder's embeddings consume tokens only after speech tokenization.</remarks>
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) => LayerInputDomain.Continuous;
+
+    /// <inheritdoc />
     /// <remarks>The decoder's layers are not a chain.</remarks>
     protected override void ResolveLazyLayerShapes()
     {

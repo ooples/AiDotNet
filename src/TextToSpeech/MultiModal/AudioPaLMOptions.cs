@@ -1,5 +1,7 @@
 using AiDotNet.Audio.Foundations;
 using AiDotNet.Audio.Generation;
+using AiDotNet.Models.Options;
+using AiDotNet.Onnx;
 using AiDotNet.TextToSpeech.CodecBased;
 
 namespace AiDotNet.TextToSpeech.MultiModal;
@@ -36,7 +38,7 @@ public enum AudioPalmDetokenizer
 /// model can read text aloud, transcribe speech or translate speech into another language's speech. These settings size
 /// the language model, choose how speech becomes audio words and back, and control training and generation.</para>
 /// </remarks>
-public class AudioPaLMOptions : TtsModelOptions
+public class AudioPaLMOptions : ModelOptions
 {
     /// <summary>Creates PaLM 8B's configuration.</summary>
     public AudioPaLMOptions()
@@ -48,8 +50,26 @@ public class AudioPaLMOptions : TtsModelOptions
         MaxTextLength = 2048;
         DropoutRate = 0.1;
         LearningRate = 5e-5;
-        WeightDecay = 0.0;
     }
+
+    /// <summary>The speech tokenizer's waveform sample rate (16 kHz).</summary>
+    public int SampleRate { get; set; } = 16000;
+    /// <summary>The language decoder's hidden width (4096 for PaLM 8B).</summary>
+    public int HiddenDim { get; set; } = 4096;
+    /// <summary>The language decoder's query attention heads.</summary>
+    public int NumHeads { get; set; } = 16;
+    /// <summary>The text vocabulary size before the added audio tokens.</summary>
+    public int VocabSize { get; set; } = 256000;
+    /// <summary>The text sequence limit used by generation.</summary>
+    public int MaxTextLength { get; set; } = 2048;
+    /// <summary>The language decoder's training dropout.</summary>
+    public double DropoutRate { get; set; } = 0.1;
+    /// <summary>The Adafactor learning rate.</summary>
+    public double LearningRate { get; set; } = 5e-5;
+    /// <summary>The exported ONNX graph path, when a graph is loaded.</summary>
+    public string? ModelPath { get; set; }
+    /// <summary>Settings for the exported ONNX graph runtime.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
 
     /// <summary>§5.4.8's optimization for the PaLM-2 experiments: dropout 0.2 and a linear ramp to 1e-4 followed by an
     /// exponential decay to 1e-5 over the given steps (the paper does not state them).</summary>

@@ -1,4 +1,23 @@
 #nullable enable
+override AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.DropoutRate.get -> double
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.DropoutRate.set -> void
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.HiddenDim.get -> int
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.HiddenDim.set -> void
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.LearningRate.get -> double
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.LearningRate.set -> void
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.MaxTextLength.get -> int
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.MaxTextLength.set -> void
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.ModelPath.get -> string?
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.ModelPath.set -> void
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.NumHeads.get -> int
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.NumHeads.set -> void
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.OnnxOptions.get -> AiDotNet.Onnx.OnnxModelOptions!
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.OnnxOptions.set -> void
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.SampleRate.get -> int
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.SampleRate.set -> void
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.VocabSize.get -> int
+AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.VocabSize.set -> void
 AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.HiddenDim.get -> int
 AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.HiddenDim.set -> void
 AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.HopSize.get -> int

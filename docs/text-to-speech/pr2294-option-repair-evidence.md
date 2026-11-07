@@ -419,3 +419,33 @@ checks; no no-op baselines were added.
 The MaskGCT ONNX loader now reads its recorded ModelPath when opening the
 graph, keeping the newly owned asset option connected to the load path; scoped
 changed-source compilation passes with zero warnings/errors.
+
+AudioPaLM's shared options now own only the settings read by its native TTS,
+ASR and shared decoder implementations. Seven unused TtsModelOptions fields
+(MelChannels, HopSize, FftSize, NumEncoderLayers, NumDecoderLayers,
+MaxMelLength, WeightDecay) are removed; NumHeads and DropoutRate are retained
+because AudioPalmCore consumes them. The ONNX loader reads recorded ModelPath.
+Scoped API comparisons on net10.0/net471/net8.0 report only the acknowledged
+CP0007 base change; public accessors are registered and five stale TTS baseline
+rows removed. No baseline was added to hide these failures.
+
+Changed-source native TTS task losses, updated common parent parameters and
+every frozen child parameter vector match the hosted implementation exactly.
+ASR fitted-tokenizer predictions and post-training predictions match as well.
+The scoped assembly has a shorter parent flattened surface (181,912 values),
+already present before migration; equality covers its common parent surface
+and each child separately, not the complete hosted flattened vector.
+
+ASR public Predict incorrectly inferred an index domain from decoder embeddings
+and rejected waveforms before tokenization. Its input domain is now Continuous;
+a fitted-tokenizer regression verifies Predict agrees with Transcribe on tones,
+with finite confidence and correct duration. Changed-source regression passes.
+
+The 39 historical LLMIntegratedAudioPaLM OOMs allocate the default PaLM through
+the generated factory. Its namespace-specific branch now uses the existing
+AudioPaLMFixture.Asr factory, fitting the same compact native tokenizer used by
+task tests. The generator builds successfully; actual scaffold emission verifies
+both ASR and TTS route to their respective compact factories, including float
+scaffold conversion. The full changed-source stage passes, including prior
+MaskGCT references, codec constraints and native parity checks. Hosted shard
+validation remains required.

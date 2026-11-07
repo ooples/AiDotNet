@@ -10670,6 +10670,14 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 // tokenizer on two seconds of tones and gives a quarter-second voice.
                 constructorExpr = "AiDotNet.Tests.TextToSpeech.AudioPaLMFixture.Tts<double>()";
             }
+            else if (model.ClassName == "AudioPaLM" && model.TypeParameterCount == 1 &&
+                     model.FullyQualifiedName.IndexOf(
+                         "AiDotNet.SpeechRecognition.LLMIntegrated.", System.StringComparison.Ordinal) >= 0)
+            {
+                // Fit the same compact speech tokenizer used by the native ASR task tests.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.AudioPaLMFixture.Asr<double>()";
+            }
+
             else if (model.ClassName == "CodeSwitchingASR" && model.TypeParameterCount == 1)
             {
                 // Zeng et al.'s ESPnet model (VGG2L, BLSTM encoder, location-aware LSTM decoder, CTC, LID decoder) with
