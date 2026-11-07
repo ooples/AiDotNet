@@ -949,6 +949,9 @@ AiDotNet.Interfaces.LocalObjectiveStep<T>.Engine.get -> AiDotNet.Tensors.Engines
 AiDotNet.Interfaces.LocalObjectiveStep<T>.HiddenLayerCount.get -> int
 AiDotNet.Interfaces.LocalObjectiveStep<T>.Input.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.Interfaces.LocalObjectiveStep<T>.Loss.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Interfaces.LocalObjectiveStep<T>.ReadoutLoss.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.Interfaces.IFusedReadoutLossLayer<T>
+AiDotNet.Interfaces.IFusedReadoutLossLayer<T>.TryComputeFusedLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Interfaces.ILossFunction<T>! loss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 AiDotNet.Interfaces.LocalObjectiveStep<T>.Readout.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
 AiDotNet.Interfaces.LocalObjectiveStep<T>.Target.get -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>
@@ -959,7 +962,7 @@ AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.Buil
 AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.ComputeTeachingSignals(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
 AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.Initialize(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
 AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.IsExactBackprop.get -> bool
-AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.LayerwiseDistillationCreditRule(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>! teacherHidden, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? teacherLogits = null, int readoutLayerCount = 2, double hiddenWeight = 1, double kdAlpha = 0.5, double temperature = 2, double projectionLearningRate = 0.001, int? seed = null) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.LayerwiseDistillationCreditRule(System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>! teacherHidden, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? teacherLogits = null, int readoutLayerCount = 2, double hiddenWeight = 1, double kdAlpha = 0.5, double temperature = 2, double projectionLearningRate = 0.001, int? seed = null, double localTaskWeight = 0) -> void
 AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.Name.get -> string!
 AiDotNet.NeuralNetworks.CreditAssignment.LayerwiseDistillationCreditRule<T>.ReadoutLayerCount.get -> int
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>
@@ -988,3 +991,4 @@ AiDotNet.Regression.LogisticRegression<T>.CreateGradientDescentSolver() -> AiDot
 AiDotNet.Classification.Boosting.HistGradientBoostingClassifier<T>.NJobs.get -> int
 AiDotNet.Classification.Boosting.HistGradientBoostingClassifier<T>.NJobs.set -> void
 override AiDotNet.Classification.Ensemble.RandomForestClassifier<T>.PredictProbabilities(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.TryComputeFusedLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Interfaces.ILossFunction<T>! loss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?

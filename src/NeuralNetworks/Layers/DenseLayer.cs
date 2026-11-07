@@ -80,7 +80,7 @@ namespace AiDotNet.NeuralNetworks.Layers;
 [TensorLayout(TensorAxis.Batch, TensorAxis.Channels, TensorAxis.Height, TensorAxis.Features,
     Direction = TensorLayoutDirection.Output)]
 [AutoParameters]
-public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract
+public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShapeContract, IFusedReadoutLossLayer<T>
 {
 
     /// <summary>Construction state, retained so the layer can be rebuilt exactly rather than inferred from its shape.</summary>
@@ -292,6 +292,56 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
 
     /// <summary>The bias handed to the fused kernels: the bias tensor, or null when there is none.</summary>
     private Tensor<T>? BiasOrNull() => UseBias ? _biases : null;
+
+    /// <summary>Fused readout losses this thread has computed; tests read it to see that the fused path ran.</summary>
+    [ThreadStatic] internal static long FusedReadoutLossCount;
+
+    private static void CountFusedReadoutLoss() => FusedReadoutLossCount++;
+
+    /// <summary>
+    /// This layer as an LM head fused with <see cref="AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss{T}"/>:
+    /// <c>mean CE(input @ W + b, ids)</c> as one differentiable op that keeps no <c>[rows, outputSize]</c> logits on
+    /// the tape.
+    /// </summary>
+    /// <remarks>
+    /// Returns null, so the caller computes <c>loss(Forward(input), target)</c>, whenever the fused op would not give
+    /// that exact value: a subclass (its forward may differ), a non-identity activation, low-precision-resident or
+    /// not yet initialized weights, a different loss or a subclass of it (its ComputeTapeLoss may differ), another
+    /// class axis, a target that is not one class id per input row,
+    /// or an id outside <c>[0, outputSize)</c> (the loss leaves such rows out of its mean; the fused op has no
+    /// ignored rows).
+    /// </remarks>
+    public Tensor<T>? TryComputeFusedLoss(Tensor<T> input, Tensor<T> target, ILossFunction<T> loss)
+    {
+        if (input is null) throw new ArgumentNullException(nameof(input));
+        if (target is null) throw new ArgumentNullException(nameof(target));
+        if (loss is null) throw new ArgumentNullException(nameof(loss));
+        if (GetType() != typeof(DenseLayer<T>) || !_isInitialized || LowPrecisionResident) return null;
+        object? activation = ScalarActivation ?? (object?)VectorActivation;
+        if (activation is not null && activation is not IdentityActivation<T>) return null;
+        if (loss.GetType() != typeof(AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)
+            || !((AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss<T>)loss).ReadsClassIndexTargetsOverLastAxis(input.Rank))
+            return null;
+
+        int inputSize = _weights.Shape[0], outputSize = _weights.Shape[1];
+        if (input.Rank < 2 || input.Shape[^1] != inputSize || outputSize < 2 || target.Rank != input.Rank - 1) return null;
+        for (int axis = 0; axis < target.Rank; axis++)
+            if (target.Shape[axis] != input.Shape[axis]) return null;
+
+        int rows = target.Length;
+        var ids = new Tensor<int>(new[] { rows });
+        for (int r = 0; r < rows; r++)
+        {
+            double id = NumOps.ToDouble(target.GetFlat(r));
+            if (!(id >= 0 && id < outputSize) || Math.Floor(id) < id) return null;
+            ids.SetFlat(r, (int)id);
+        }
+
+        var hidden = input.Rank == 2 ? input : Engine.Reshape(input, new[] { rows, inputSize });
+        var bias = UseBias ? _biases : new Tensor<T>(new[] { outputSize });
+        CountFusedReadoutLoss();
+        return Engine.FusedLinearCrossEntropyWithLogits(hidden, _weights, bias, ids);
+    }
 
     /// <summary>
     /// fp16-resident copy of the weight matrix, used only when <see cref="LayerBase{T}.LowPrecisionResident"/>

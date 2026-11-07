@@ -276,6 +276,14 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
     /// supervision signal, so a fresh tensor here doesn't disturb gradient
     /// flow through the logits side of the multiply.
     /// </summary>
+    /// <summary>
+    /// Whether class-index targets of shape <c>logits.Shape[:-1]</c> are read over the last logits axis, as the fused
+    /// LM-head kernels read them: always without an explicit class axis (the last axis is preferred when it matches),
+    /// and with one only when it names the last axis.
+    /// </summary>
+    internal bool ReadsClassIndexTargetsOverLastAxis(int logitsRank) =>
+        !_classAxis.HasValue || (_classAxis.Value < 0 ? logitsRank + _classAxis.Value : _classAxis.Value) == logitsRank - 1;
+
     private int ResolveClassAxis(Tensor<T> predicted, Tensor<T> target)
     {
         int rank = predicted.Shape.Length;

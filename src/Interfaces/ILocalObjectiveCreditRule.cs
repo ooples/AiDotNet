@@ -65,10 +65,20 @@ public interface ILocalObjectiveCreditRule<T> : ICreditRule<T>
 public sealed class LocalObjectiveStep<T>
 {
     internal LocalObjectiveStep(Tensor<T> input, Tensor<T> target, IEngine engine,
-        Func<Tensor<T>, Tensor<T>> readout, Func<Tensor<T>, Tensor<T>, Tensor<T>> loss, int hiddenLayerCount)
+        Func<Tensor<T>, Tensor<T>> readout, Func<Tensor<T>, Tensor<T>, Tensor<T>> loss, int hiddenLayerCount,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>>? readoutLoss = null)
     {
         Input = input; Target = target; Engine = engine; Readout = readout; Loss = loss; HiddenLayerCount = hiddenLayerCount;
+        ReadoutLoss = readoutLoss ?? ((h, t) => loss(readout(h), t));
     }
+
+    /// <summary>
+    /// The scalar task loss of a hidden state through the shared readout, <c>Loss(Readout(h), target)</c>. When the
+    /// readout is a single layer implementing <see cref="IFusedReadoutLossLayer{T}"/> (a language-model head fused with
+    /// its cross-entropy) the readout output is never materialised on the tape; otherwise this is exactly
+    /// <c>Loss(Readout(h), target)</c>. Local-objective rules should prefer it over composing the two.
+    /// </summary>
+    public Func<Tensor<T>, Tensor<T>, Tensor<T>> ReadoutLoss { get; }
 
     /// <summary>The step's network input (for a language model: token ids). Not tape-tracked.</summary>
     public Tensor<T> Input { get; }
