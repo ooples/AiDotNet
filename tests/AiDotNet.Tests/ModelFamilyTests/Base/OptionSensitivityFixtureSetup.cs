@@ -28,14 +28,16 @@ internal static class OptionSensitivityFixtureSetup
         => network is AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>
             or AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>
             or AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>
-            or AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>;
+            or AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>
+            or AiDotNet.TextToSpeech.MultiModal.SpiritLM<T>;
 
     internal static long ParameterCountBeforeFitting<T>(INeuralNetworkModel<T> network)
         => UsesFittedAssets(network) || network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T>
             ? network.GetParameters().Length : 0;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
-        => network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> ? option switch
+        => network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> ? option switch
             {
                 "DefaultSpeakerId" => "e3-speaker-selection",
                 "TrainingBetaEnd" => "e3-training-schedule",
@@ -95,6 +97,9 @@ internal static class OptionSensitivityFixtureSetup
     internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> spirit
+            && SpiritLmFixture.Observe(spirit, option) is { } spiritObservation)
+            return spiritObservation;
         if (network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> guidanceMask && option == "GuidanceRescale")
         {
             guidanceMask.SetTrainingMode(false);
@@ -411,6 +416,28 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> spirit)
+        {
+            if (option is "VocoderLearningRate" or "VocoderLearningRateDecay" or "VocoderUpdatesPerEpoch")
+            {
+                spirit.TrainPitchQuantizer(SpiritLmFixture.Tones<T>(1.0));
+                return true;
+            }
+            if (option == "DropoutRate")
+            {
+                int width = ((AiDotNet.TextToSpeech.MultiModal.SpiritLMOptions)spirit.GetOptions()).SonarWidth;
+                var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+                var semantic = new Tensor<T>(new[] { width });
+                for (int i = 0; i < width; i++) semantic[i] = ops.FromDouble(Math.Sin(i * 0.37));
+                spirit.TrainSonarExpressive(SpiritLmFixture.Tones<T>(0.25), semantic, true);
+                return true;
+            }
+            if (option == "SpeechPropLearningRate")
+            {
+                spirit.TrainSpeechPropStyle(SpiritLmFixture.Tones<T>(0.25), 1);
+                return true;
+            }
+        }
         if (network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> e3 && option == "PaddingLossWeight"
             && e3.GetOptions() is AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions e3Options)
         {
@@ -454,6 +481,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.MultiModal.SpiritLMOptions spirit)
+            SpiritLmFixture.PrepareOptions(spirit, option);
         if (options is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions guidanceMask && option == "GuidanceRescale")
             guidanceMask.Guidance = 2.5;
         if (options is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions acousticMask && option == "SemanticToAcousticHeads")
@@ -675,6 +704,9 @@ internal static class OptionSensitivityFixtureSetup
     {
         switch (network)
         {
+            case AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> model:
+                SpiritLmFixture.Prepare(model);
+                break;
             case AiDotNet.TextToSpeech.Latest.KaniTTS<T> model:
                 KaniTTSFixture.Prepare(model);
                 break;

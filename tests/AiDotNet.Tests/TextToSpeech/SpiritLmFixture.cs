@@ -46,6 +46,77 @@ internal static class SpiritLmFixture
 
     public static int VocabularySize => (int)Reference.Value["tiny_pieces"]!;
 
+    internal static void PrepareOptions(SpiritLMOptions options, string option)
+    {
+        if (option == "MaxGradientNorm") options.MaxGradientNorm = 0.01;
+        if (option == "MaxTextLength") options.MaxTextLength = 10;
+        bool pitchTraining = option is "VocoderLearningRate" or "VocoderLearningRateDecay" or "VocoderUpdatesPerEpoch";
+        if (pitchTraining) options.VocoderUpdatesPerEpoch = 1;
+        bool speechProp = option.StartsWith("SpeechProp", StringComparison.Ordinal)
+            || option.StartsWith("Sonar", StringComparison.Ordinal)
+            || option is "ExpressoStyles" or "IncludeSonarTextEncoder" or "DropoutRate";
+        bool expressive = speechProp || pitchTraining || option.StartsWith("StyleEncoder", StringComparison.Ordinal)
+            || option.StartsWith("Fcpe", StringComparison.Ordinal)
+            || option.StartsWith("Pitch", StringComparison.Ordinal)
+            || option is "StyleTokens" or "StyleTokenizer";
+        if (!expressive) return;
+
+        // Activate the network that owns the setting, using the existing native task fixture's scale.
+        // Apply before perturbation so control and candidate differ only in the tested setting.
+        var tiny = SpeechPropOptions();
+        foreach (var property in typeof(SpiritLMOptions).GetProperties())
+            if (property.CanWrite && (property.Name.StartsWith("SpeechProp", StringComparison.Ordinal)
+                || property.Name.StartsWith("Sonar", StringComparison.Ordinal)
+                || property.Name.StartsWith("StyleEncoder", StringComparison.Ordinal)
+                || property.Name.StartsWith("Fcpe", StringComparison.Ordinal)
+                || property.Name.StartsWith("Pitch", StringComparison.Ordinal)
+                || property.Name is "StyleTokens" or "ExpressoStyles" or "IncludeSonarTextEncoder"))
+                property.SetValue(options, property.GetValue(tiny));
+        options.Variant = SpiritLmVariant.Expressive;
+        options.VocoderStyles = 0;
+        if (speechProp) options.StyleTokenizer = SpiritLmStyleTokenizer.SpeechProp;
+    }
+
+    internal static void Prepare<T>(SpiritLM<T> model)
+    {
+        SpreadUnits(model);
+        model.SpeechPropCodec?.InitializeCodebooks(Tones<T>(1.0));
+    }
+
+    internal static long? Observe<T>(SpiritLM<T> model, string option)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        long Fingerprint(Tensor<T> values) => ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(values.Select(ops.ToDouble));
+        using var scope = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        if (option == "VocoderSegmentSize")
+            return Fingerprint(model.VocoderTrainingSegment(Tones<T>(1.0), Enumerable.Range(0, 25).Select(i => i % Units).ToArray(),
+                null, null, new Random(1337)).Recording);
+        if (option == "HubertHeads")
+            return Fingerprint(model.UnitExtractor.Network.Forward(Tones<T>(0.25), model.UnitExtractor.Layer)[model.UnitExtractor.Layer]);
+        if (option == "StyleEncoderHeads")
+            return Fingerprint(model.StyleEncoder.Logits(Tones<double>(0.25).ToArray()));
+        if (option == "SpeechPropHeads")
+            return Fingerprint(model.SpeechPropStyleFeatures(Tones<T>(0.25)));
+        if (option == "SonarHeads")
+            return Fingerprint(model.SonarEmbedding("the cat sat", "eng_Latn"));
+        if (option is "MinTextSpanWords" or "MaxTextSpanWords" or "MinSpeechSpanWords" or "MaxSpeechSpanWords")
+        {
+            var words = Enumerable.Range(0, 30).Select(i => new SpiritLmWord("word" + i, i / 30.0, (i + 1) / 30.0)).ToArray();
+            var sequence = model.InterleavedSequence(Tones<T>(1.0), words, new Random(1337));
+            return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(sequence.Select(c => (double)c));
+        }
+        if (option is "MaxNewTextTokens" or "MaxNewSpeechTokensFromSpeech" or "MaxTextLength")
+        {
+            // Forbid EOS so the actual generation loop reaches its configured budget/context boundary.
+            var options = (SpiritLMOptions)model.GetOptions();
+            int limit = option == "MaxTextLength" ? 12 : model.MaxNewTokens(
+                option == "MaxNewTextTokens" ? SpiritLmModality.Text : SpiritLmModality.Speech, true);
+            var ids = model.GenerateIds(new[] { 0 }, new HashSet<int>(Enumerable.Range(1, options.VocabSize - 1)), limit, new Random(1337));
+            return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(ids.Select(id => (double)id));
+        }
+        return null;
+    }
+
     /// <summary>The tiny SentencePiece model written to a temporary file (Moshi's fixture reads it too).</summary>
     public static string TinyTokenizerPath => TokenizerPath.Value;
 

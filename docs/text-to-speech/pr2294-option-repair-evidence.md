@@ -449,3 +449,26 @@ both ASR and TTS route to their respective compact factories, including float
 scaffold conversion. The full changed-source stage passes, including prior
 MaskGCT references, codec constraints and native parity checks. Hosted shard
 validation remains required.
+
+SpiritLM's option probes now activate the actual Expressive/SpeechProp/SONAR
+subnetworks at the existing native task-fixture scale. Each option has its own
+control group, so cached observations cannot cross variant or observation
+contexts. Architecture changes are detected before replaying fitted HuBERT
+centroids and EnCodec codebooks. Twenty-seven of thirty isolated variant probes
+passed immediately; the remaining SpeechProp/SONAR head counts now observe
+continuous native features/embeddings, and dropout now runs the SONAR
+fine-tuning loss that actually applies it. All three then pass.
+
+Fourteen targeted probes pass for HuBERT/style attention, actual generation
+budget/context boundaries (EOS forbidden), deterministic word interleaving,
+active gradient clipping, SpeechProp optimization and the shared pitch/vocoder
+optimizer schedule. Decay candidates remain in [0,1]; 0.999 -> 0.4995 changes
+trained parameters. The focused regression suite passes 59 tests.
+
+VocoderTrainingSegment extracts the unchanged native training crop; TrainVocoder
+calls it directly. The segment-size probe observes that actual waveform crop.
+Three changed-source tests verify code, pitch, style and waveform alignment for
+four/eight-frame budgets and a budget longer than the source. The complete
+changed-source stage passes with zero compilation warnings/errors. No SpiritLM
+production setting was removed in this batch; NumEncoderLayers still needs its
+separate ownership audit. Hosted current-head shards remain pending.

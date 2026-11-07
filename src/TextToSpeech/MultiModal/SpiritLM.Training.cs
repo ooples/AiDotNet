@@ -263,15 +263,8 @@ public partial class SpiritLM<T>
         int[]? framePitch = pitch is null ? null : CodeHiFiGan<T>.Upsample(pitch, codes.Length, vocoder.Configuration.PitchRatio);
         int[]? frameStyle = styles is null ? null : CodeHiFiGan<T>.Upsample(styles, codes.Length, vocoder.Configuration.StyleRatio);
         int? utteranceStyle = IsExpressive || _options.VocoderStyles == 0 ? null : style ?? _options.VocoderStyle;
-        int hop = vocoder.Configuration.HopSize, frames = Math.Min(codes.Length, Math.Max(1, _options.VocoderSegmentSize / hop));
         var random = TrainingRandom;
-        int start = random.Next(codes.Length - frames + 1);
-        int[] Cut(int[] values) => values.Skip(start).Take(frames).ToArray();
-        var segment = Cut(codes);
-        var segmentPitch = framePitch is null ? null : Cut(framePitch);
-        var segmentStyle = frameStyle is null ? null : Cut(frameStyle);
-        var real = new Tensor<T>(new[] { frames * hop });
-        for (int i = 0; i < real.Length; i++) real[i] = start * hop + i < recording.Length ? recording.GetFlat(start * hop + i) : Ops.Zero;
+        var (segment, segmentPitch, segmentStyle, real) = VocoderTrainingSegment(recording, codes, framePitch, frameStyle, random);
         (Tensor<T> Waveform, Tensor<T>? DurationLoss) Generate() => vocoder.TrainingForward(segment, speaker, random, utteranceStyle, segmentPitch, segmentStyle);
 
         _trainedGroup = "discriminator";
@@ -316,6 +309,19 @@ public partial class SpiritLM<T>
     }
 
     // ---------------------------------------------------------------- the pitch VQ-VAE
+
+    internal (int[] Codes, int[]? Pitch, int[]? Styles, Tensor<T> Recording) VocoderTrainingSegment(
+        Tensor<T> recording, int[] codes, int[]? framePitch, int[]? frameStyle, Random random)
+    {
+        int hop = Vocoder.Configuration.HopSize;
+        int frames = Math.Min(codes.Length, Math.Max(1, _options.VocoderSegmentSize / hop));
+        int start = random.Next(codes.Length - frames + 1);
+        int[] Cut(int[] values) => values.Skip(start).Take(frames).ToArray();
+        var real = new Tensor<T>(new[] { frames * hop });
+        for (int i = 0; i < real.Length; i++)
+            real[i] = start * hop + i < recording.Length ? recording.GetFlat(start * hop + i) : Ops.Zero;
+        return (Cut(codes), framePitch is null ? null : Cut(framePitch), frameStyle is null ? null : Cut(frameStyle), real);
+    }
 
     /// <summary>
     /// One step of SpiritLM Expressive's F0 VQ-VAE (§3.2) on 16 kHz speech: its F0 by pYAAPT (the paper's extractor for this
