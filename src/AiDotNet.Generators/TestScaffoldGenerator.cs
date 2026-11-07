@@ -10971,7 +10971,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "FlowFeedForwardDim = 64, FlowEncoderLayers = 1, DecoderChannels = new[] { 32 }, DecoderHeads = 2, " +
                     "DecoderHeadDim = 16, DecoderBlocks = 1, DecoderMidBlocks = 1, HiftBaseChannels = 32, " +
                     "SpeechTokenizerState = 32, SpeechTokenizerHeads = 2, SpeechTokenizerLayers = 1, " +
-                    "SpeakerEncoderChannels = 8, SpeakerEncoderGrowthRate = 4, MaxTextLength = 8, MaxCodecFrames = 8, " +
+                    "SpeakerEncoderChannels = 8, SpeakerEncoderGrowthRate = 4, MaxTextLength = 8, " +
                     "MinReferenceDurationSec = 0.1, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "AdaSpeech2" && model.TypeParameterCount == 1)
