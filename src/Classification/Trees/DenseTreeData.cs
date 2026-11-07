@@ -40,12 +40,12 @@ internal sealed class DenseTreeData
         Values = new double[features][];
         HasNaN = new bool[features];
 
-        var keys = new double[rows];
-        var order = new int[rows];
-        var distinct = new double[rows];
-        int maxRank = 0;
-        for (int f = 0; f < features; f++)
+        // Features rank independently, so they run in parallel; each worker reuses its own sort buffers.
+        System.Threading.Tasks.Parallel.For(0, features,
+            () => (Keys: new double[rows], Order: new int[rows], Distinct: new double[rows]),
+            (f, _, buffers) =>
         {
+            var (keys, order, distinct) = buffers;
             Array.Copy(columnMajor, f * rows, keys, 0, rows);
             for (int i = 0; i < rows; i++) order[i] = i;
 
@@ -63,8 +63,12 @@ internal sealed class DenseTreeData
             Values[f] = new double[rank + 1];
             Array.Copy(distinct, Values[f], rank + 1);
             HasNaN[f] = rows > 0 && double.IsNaN(Values[f][0]);
-            maxRank = Math.Max(maxRank, rank);
-        }
+            return buffers;
+        },
+            _ => { });
+
+        int maxRank = 0;
+        foreach (var values in Values) maxRank = Math.Max(maxRank, values.Length - 1);
 
         int bits = 0;
         while (bits < 31 && (maxRank >> bits) != 0) bits++;

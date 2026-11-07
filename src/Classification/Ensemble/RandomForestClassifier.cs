@@ -88,10 +88,10 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
     public double OobScore_ { get; private set; }
 
     /// <summary>
-    /// Out-of-bag sample indices for each tree.
+    /// For each tree, which training rows its bootstrap sample left out (true = out of bag).
     /// Used for proper OOB score calculation.
     /// </summary>
-    private readonly List<HashSet<int>> _oobIndicesPerTree = new();
+    private readonly List<bool[]> _oobIndicesPerTree = new();
 
     /// <inheritdoc/>
     public int MaxDepth => Options.MaxDepth ?? CalculateMaxDepth();
@@ -160,8 +160,8 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
         var samples = new int[Options.NEstimators][];
         for (int i = 0; i < Options.NEstimators; i++)
         {
-            var (bootstrapIndices, oobIndices) = CreateBootstrapSample(x.Rows);
-            samples[i] = bootstrapIndices.ToArray();
+            var (bootstrapIndices, outOfBag) = CreateBootstrapSample(x.Rows);
+            samples[i] = bootstrapIndices;
 
             trees[i] = new DecisionTreeClassifier<T>(new DecisionTreeClassifierOptions<T>
             {
@@ -175,7 +175,7 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
             });
 
             // Store OOB indices for this tree (for proper OOB score calculation)
-            _oobIndicesPerTree.Add(new HashSet<int>(oobIndices));
+            _oobIndicesPerTree.Add(outOfBag);
         }
 
         // Rank the data once; each tree grows on its bootstrap rows of it without copying them out.
@@ -195,31 +195,33 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
     }
 
     /// <summary>
-    /// Creates a bootstrap sample of indices.
+    /// Creates a bootstrap sample of indices, and marks the rows it left out of the bag.
     /// </summary>
-    private (List<int> bootstrap, List<int> oob) CreateBootstrapSample(int nSamples)
+    private (int[] Bootstrap, bool[] OutOfBag) CreateBootstrapSample(int nSamples)
     {
-        var bootstrapIndices = new List<int>();
-        var oobSet = new HashSet<int>(Enumerable.Range(0, nSamples));
+        var bootstrapIndices = new int[nSamples];
+        var outOfBag = new bool[nSamples];
 
         if (Options.Bootstrap)
         {
+            var random = _random ?? throw new InvalidOperationException("_random has not been initialized.");
+            for (int i = 0; i < nSamples; i++) outOfBag[i] = true;
+
             // Sample with replacement
             for (int i = 0; i < nSamples; i++)
             {
-                int idx = (_random ?? throw new InvalidOperationException("_random has not been initialized.")).Next(nSamples);
-                bootstrapIndices.Add(idx);
-                oobSet.Remove(idx);
+                int idx = random.Next(nSamples);
+                bootstrapIndices[i] = idx;
+                outOfBag[idx] = false;
             }
         }
         else
         {
             // Use all samples
-            bootstrapIndices.AddRange(Enumerable.Range(0, nSamples));
-            oobSet.Clear();
+            for (int i = 0; i < nSamples; i++) bootstrapIndices[i] = i;
         }
 
-        return (bootstrapIndices, oobSet.ToList());
+        return (bootstrapIndices, outOfBag);
     }
 
     /// <summary>
@@ -288,7 +290,7 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
             for (int treeIdx = 0; treeIdx < Estimators.Count; treeIdx++)
             {
                 // Check if this sample was OOB for this tree
-                if (_oobIndicesPerTree[treeIdx].Contains(sampleIdx))
+                if (_oobIndicesPerTree[treeIdx][sampleIdx])
                 {
                     // Get prediction for this single sample
                     var sample = new Matrix<T>(1, x.Columns);
