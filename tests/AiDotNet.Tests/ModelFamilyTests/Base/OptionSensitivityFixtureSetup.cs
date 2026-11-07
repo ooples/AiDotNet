@@ -41,6 +41,8 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> ? "spark-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.FireRedTTS<T> ? "firered-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.VALLEX<T> ? "vallex-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.GPTSoVITS<T> ? "gptsovits-" + option
+
 
             : network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> ? option switch
             {
@@ -102,6 +104,9 @@ internal static class OptionSensitivityFixtureSetup
     internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.GPTSoVITS<T> gptSoVits)
+            return GptSoVitsFixture.Observe(gptSoVits, input, option);
+
         if (network is AiDotNet.TextToSpeech.CodecBased.VALLEX<T> vallEX
             && VallEXCloneFixture.Observe(vallEX, option) is { } vallEXObservation)
             return vallEXObservation;
@@ -503,6 +508,9 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions gptSoVits)
+            GptSoVitsFixture.PrepareOptions(gptSoVits, option);
+
         if (options is AiDotNet.TextToSpeech.CodecBased.VALLEXOptions vallEX)
             VallEXCloneFixture.PrepareOptions(vallEX, option);
 
@@ -731,6 +739,9 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void Prepare<T>(INeuralNetworkModel<T> network)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.GPTSoVITS<T> gptSoVits)
+            GptSoVitsFixture.Prepare(gptSoVits);
+
         switch (network)
         {
             case AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> model:

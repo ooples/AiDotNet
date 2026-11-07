@@ -6527,24 +6527,9 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "GPTSoVITS" && model.TypeParameterCount == 1)
             {
-                // GPT-SoVITS is the semantic GPT, the v2ProPlus SoVITS synthesizer with its discriminators, chinese-hubert,
-                // chinese-roberta and ERes2NetV2; keep every one at width 8-32 with one or two layers (the generator still
-                // hopping 640 samples). English text needs no downloaded front end; generation stops after 50 tokens
-                // (MaxSeconds 1). s1 steps on every sample (no accumulation) at 1e-2 so fifteen steps descend.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 1, outputSize: 1), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions { " +
-                    "HiddenDim = 16, NumHeads = 2, T2SLayers = 1, SemanticCodebookSize = 32, " +
-                    "InterChannels = 8, SynthesizerHidden = 16, SynthesizerFilter = 32, SynthesizerHeads = 2, SynthesizerLayers = 2, " +
-                    "StyleChannels = 16, MrteChannels = 16, StyleHidden = 16, UpsampleInitialChannels = 32, " +
-                    "ResblockKernels = new[] { 3 }, ResblockDilations = new[] { new[] { 1, 3, 5 } }, " +
-                    "HubertHidden = 16, HubertLayers = 1, HubertHeads = 2, HubertIntermediate = 32, HubertConvDims = new[] { 8, 8, 8, 8, 8, 8, 8 }, " +
-                    "HubertPositionKernel = 8, HubertPositionGroups = 2, BertHidden = 16, BertLayers = 3, BertHeads = 2, BertIntermediate = 32, " +
-                    "SpeakerChannels = 8, SpeakerBlocks = new[] { 1, 1, 1, 1 }, " +
-                    "TextLanguage = AiDotNet.TextToSpeech.FrontEnd.GptSoVitsTextLanguage.English, " +
-                    "PromptLanguage = AiDotNet.TextToSpeech.FrontEnd.GptSoVitsTextLanguage.English, MaxSeconds = 1, T2SAccumulation = 1 })";
+                // The bounded v3 graph keeps the semantic GPT, flow synthesizer, BigVGAN, HuBERT and BERT.
+                // GAN-specific settings switch to the native GAN version in their option contexts.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.GptSoVitsFixture.Create<double>()";
             }
             else if (model.ClassName == "IART" && model.TypeParameterCount == 1)
             {

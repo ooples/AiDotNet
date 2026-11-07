@@ -1,4 +1,6 @@
 #nullable enable
+override AiDotNet.TextToSpeech.CodecBased.GPTSoVITS<T>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.VallEModelOptions() -> void
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.VallEModelOptions(AiDotNet.TextToSpeech.CodecBased.VallEModelOptions! other) -> void

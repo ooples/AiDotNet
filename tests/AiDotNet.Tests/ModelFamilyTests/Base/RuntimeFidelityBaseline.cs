@@ -4102,7 +4102,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.CodecBased.FishSpeech`1::SpeakerEmbeddingDim", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.GPTSoVITS`1::CodecFrameRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.GPTSoVITS`1::FftSize", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.TextToSpeech.CodecBased.GPTSoVITS`1::HiddenDim", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.GPTSoVITS`1::HopSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.GPTSoVITS`1::LearningRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.GPTSoVITS`1::MaxCodecFrames", OptionSensitivityOutcome.Insensitive },

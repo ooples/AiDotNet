@@ -713,3 +713,41 @@ vocabularies 64/128, verifying code bounds, finite audio and decoded sample coun
 Together with paired-depth tests these justify constrained-property annotations;
 they do not remove any consumed setting. The complete changed-source facade run
 now covers 25 native cases and the four-family retained-default comparison.
+
+GPT-SoVITS: the previous bounded v2ProPlus fixture still had 63,936,119
+parameters, dominated by the actual GAN discriminators; repeated full snapshots
+exhausted a 2 GB local probe budget. The generated fixture now uses a complete
+native v3 graph with 574,474 parameters (semantic GPT, CFM synthesizer, BigVGAN,
+HuBERT and BERT). GAN-only option contexts select the real v2 GAN explicitly.
+The actual generator emitter confirms both float/double factory substitution.
+This changes test configuration, not the released model defaults.
+
+Eight structural probes and ten task/stage probes pass against the hosted core:
+HiddenDim, DitDim/Depth/Heads/HeadDim/ConvLayers, BridgeChannels,
+VocoderInitialChannels; CfgRate in V5Dev, SampleSteps, Cut, HubertHeads,
+BertHeads, Beta1/Beta2/Epsilon, SynthesizerLearningRate and UpdatesPerEpoch.
+Two further vocoder stride/kernel probes pass using actual native vocoder audio.
+Inference-only flow settings observe native SynthesizeMel, frontend heads observe
+actual continuous features, and s2 optimizer settings train the native CFM
+objective. Per-option controls prevent cross-context cache reuse. Unused inherited
+settings and remaining GAN/task constraints are still under audit.
+
+The v3 factory exposed a real existing persistence defect: CreateVoice stored its
+transcript and original sample rate only in a ConditionalWeakTable. Clones lost
+them and refused inference. The model now declares the active reference's source
+samples/rate/text as state, restores them independently, and lazily recomputes
+features with restored weights. Changed-source v3/V5Dev tests preserve actual
+waveforms through cloning AND serialization with a 16 kHz reference, despite
+24/48 kHz model outputs. The console serialization run uses the existing isolated
+trial-file test hook, as xUnit's assembly-wide trial-isolation attribute does.
+
+Paired native GAN upsampling tests decode six frames to exactly 1,920/3,840
+samples at hops 320/640. They exposed an eight-sample overrun for an odd stride
+paired with an even kernel; constructors now reject kernel/stride pairs whose
+difference is odd, mismatched arrays and invalid vocoder upsampling products.
+Residual kernels must be positive odd values with matching positive dilation
+arrays. Native v3 inference passes with residual kernels 3 and 5, and invalid
+GAN/CFM residual kernels are rejected before inference. The eight permanent
+native cases pass with zero compilation warnings/errors. All 574,474 initial
+and trained parameters and semantic losses still exactly match the old hosted
+model under the same valid v3 configuration.

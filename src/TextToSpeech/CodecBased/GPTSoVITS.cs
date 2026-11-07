@@ -144,9 +144,21 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>
         if (o.UpsampleRates.Aggregate(1, (a, b) => a * b) != o.HopSize)
             throw new ArgumentException($"The GAN generator's upsampling rates must multiply to HopSize {o.HopSize}.");
         if (o.SegmentSize % o.HopSize != 0) throw new ArgumentException("SegmentSize must be a whole number of hops.");
+        var rates = IsCfm ? o.VocoderUpsampleRates ?? (o.Version == GptSoVitsVersion.V3 ? new[] { 4, 4, 2, 2, 2, 2 } : new[] { 10, 6, 2, 2, 2 }) : o.UpsampleRates;
+        var kernels = IsCfm ? o.VocoderUpsampleKernels ?? (o.Version == GptSoVitsVersion.V3 ? new[] { 8, 8, 4, 4, 4, 4 } : new[] { 20, 12, 4, 4, 4 }) : SynthesizerConfiguration().UpsampleKernels;
+        if (rates.Length == 0 || rates.Length != kernels.Length || rates.Where((rate, i) => rate <= 0 || kernels[i] < rate || (kernels[i] - rate) % 2 != 0).Any())
+            throw new ArgumentException("Upsampling requires paired positive rates and kernels with a nonnegative even kernel-minus-stride difference.", "options");
+        if (IsCfm && rates.Aggregate(1, (product, rate) => checked(product * rate)) != (o.Version == GptSoVitsVersion.V3 ? 256 : 480))
+            throw new ArgumentException("The vocoder upsampling product must match its version's mel hop and output rate.", "options");
         if (o.T2SAccumulation < 1) throw new ArgumentException("T2SAccumulation must be positive.");
         if (o.LoraRank < 0) throw new ArgumentException("LoraRank must be 0 (no LoRA) or positive.");
         if (o.Speed <= 0) throw new ArgumentException("Speed must be positive.");
+        var residualKernels = IsCfm ? o.VocoderResblockKernels : o.ResblockKernels;
+        var residualDilations = IsCfm ? o.VocoderResblockDilations : o.ResblockDilations;
+        if (residualKernels.Length == 0 || residualKernels.Length != residualDilations.Length
+            || residualKernels.Any(kernel => kernel <= 0 || kernel % 2 == 0)
+            || residualDilations.Any(dilations => dilations.Length == 0 || dilations.Any(dilation => dilation <= 0)))
+            throw new ArgumentException("Residual blocks require one positive dilation array per positive odd kernel.", "options");
         // ERes2NetV2's Res2Net splits are ⌊m_channels · 24/64⌋ wide.
         if (IsV2Pro && o.SpeakerChannels * 24 / 64 < 1) throw new ArgumentException("SpeakerChannels must be at least 3 (ERes2NetV2's splits are ⌊m·24/64⌋ wide).");
         if (o.CurrentStage == GptSoVitsStage.SoVits && IsCfm)
@@ -415,6 +427,35 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>
 
     private readonly ConditionalWeakTable<TtsVoice<T>, PromptInfo> _prompts = new();
     private int _weightsGeneration;
+
+    // Persist the active voice's source, not features computed with a particular set of weights.
+    private sealed class PromptRecording
+    {
+        public double[] Samples { get; set; } = Array.Empty<double>();
+        public int SampleRate { get; set; }
+        public string? Text { get; set; }
+    }
+
+    /// <inheritdoc />
+    protected override void RegisterState(AiDotNet.Models.ModelStateRegistry<T> state)
+    {
+        base.RegisterState(state);
+        state.DeclareObject<PromptRecording>("ActivePromptRecording", () =>
+            Voice is { } voice && _prompts.TryGetValue(voice, out var prompt)
+                ? new PromptRecording { Samples = prompt.Samples, SampleRate = prompt.SampleRate, Text = prompt.PromptText }
+                : null,
+            recording =>
+            {
+                if (recording is null) return;
+                if (recording.SampleRate <= 0) throw new InvalidDataException("The reference recording sample rate must be positive.");
+                var voice = new TtsVoice<T> { ReferenceAudio = Wave(recording.Samples) };
+                _prompts.Add(voice, new PromptInfo
+                {
+                    Generation = int.MinValue, Samples = recording.Samples, SampleRate = recording.SampleRate, PromptText = recording.Text,
+                });
+                Voice = voice;
+            });
+    }
 
     /// <summary>
     /// A voice from a recording of the speaker at <paramref name="sampleRate"/> and what it says
