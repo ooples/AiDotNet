@@ -7,6 +7,50 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class StyleTts2OptionContextTests
 {
     [Fact]
+    public void SharedStyleOptionsExcludeUnusedGenericLayerControls()
+    {
+        foreach (var type in new[] { typeof(StyleTTSOptions), typeof(StyleTTS2Options), typeof(StyleTTSZSOptions) })
+            foreach (string name in new[] { "NumEncoderLayers", "NumDecoderLayers", "NumHeads", "MaxMelLength" })
+                Assert.Null(type.GetProperty(name));
+    }
+
+    [Fact]
+    public void SharedStyleOptionCopiesPreserveConsumedNondefaultSettings()
+    {
+        foreach (var source in new StyleTtsBaseOptions[] { new StyleTTSOptions(), new StyleTTS2Options(), new StyleTTSZSOptions() })
+        {
+            source.SampleRate = 16000; source.MelChannels = 32; source.HopSize = 32; source.FftSize = 256;
+            source.HiddenDim = 16; source.VocabSize = 192; source.MaxTextLength = 64; source.DropoutRate = 0.35;
+            source.ModelPath = "contract.onnx"; source.LearningRate = 0.002; source.WeightDecay = 0.005;
+            source.Seed = 13; source.PitchExtractorChannels = new[] { 4, 8, 16, 8 };
+            if (source is StyleTtsWaveformOptions waveform)
+            {
+                waveform.DecoderType = StyleTts2DecoderType.IstftNet; waveform.IstftHopSize = 4;
+                waveform.UpsampleRates = new[] { 2, 4 }; waveform.UpsampleKernels = new[] { 4, 8 };
+                waveform.ResBlockKernels = new[] { 3, 5 };
+                waveform.ResBlockDilations = new[] { new[] { 1, 3, 5 }, new[] { 1, 3, 5 } };
+            }
+            StyleTtsBaseOptions copy = source switch
+            {
+                StyleTTSOptions first => new StyleTTSOptions(first),
+                StyleTTS2Options second => new StyleTTS2Options(second),
+                StyleTTSZSOptions zeroShot => new StyleTTSZSOptions(zeroShot),
+                _ => throw new InvalidOperationException(),
+            };
+            Assert.True(Newtonsoft.Json.Linq.JToken.DeepEquals(Newtonsoft.Json.Linq.JObject.FromObject(source),
+                Newtonsoft.Json.Linq.JObject.FromObject(copy)), source.GetType().Name);
+            Assert.NotSame(source.OnnxOptions, copy.OnnxOptions);
+            Assert.NotSame(source.PitchExtractorChannels, copy.PitchExtractorChannels);
+            if (source is StyleTtsWaveformOptions originalWaveform && copy is StyleTtsWaveformOptions copiedWaveform)
+            {
+                Assert.NotSame(originalWaveform.UpsampleRates, copiedWaveform.UpsampleRates);
+                Assert.NotSame(originalWaveform.UpsampleKernels, copiedWaveform.UpsampleKernels);
+                Assert.NotSame(originalWaveform.ResBlockKernels, copiedWaveform.ResBlockKernels);
+            }
+        }
+    }
+
+    [Fact]
     public void SlmSampleRateChangesTheActualFrozenWavLmObjective()
     {
         var options = StyleTts2Fixture.Options();

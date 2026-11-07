@@ -1,3 +1,6 @@
+using AiDotNet.Models.Options;
+using AiDotNet.Onnx;
+
 namespace AiDotNet.TextToSpeech.StyleEmotion;
 
 /// <summary>Which loss weighting StyleTTS trains with.</summary>
@@ -39,8 +42,33 @@ public enum StyleTtsTrainingStage
 /// <para><b>For Beginners:</b> These options set the sizes of StyleTTS's networks, its audio features and how it is
 /// trained. The defaults reproduce the paper.</para>
 /// </remarks>
-public abstract class StyleTtsBaseOptions : TtsModelOptions
+public abstract class StyleTtsBaseOptions : ModelOptions
 {
+    /// <summary>Audio sample rate in Hz.</summary>
+    public int SampleRate { get; set; } = 22050;
+    /// <summary>Mel frequency channels.</summary>
+    public int MelChannels { get; set; } = 80;
+    /// <summary>Samples per mel frame.</summary>
+    public int HopSize { get; set; } = 256;
+    /// <summary>Analysis FFT size.</summary>
+    public int FftSize { get; set; } = 1024;
+    /// <summary>Native text and prosody hidden width.</summary>
+    public int HiddenDim { get; set; } = 256;
+    /// <summary>Phoneme vocabulary size.</summary>
+    public int VocabSize { get; set; } = 256;
+    /// <summary>Maximum input phoneme count.</summary>
+    public int MaxTextLength { get; set; } = 512;
+    /// <summary>Native prosody-predictor dropout probability.</summary>
+    public double DropoutRate { get; set; } = 0.1;
+    /// <summary>Loaded whole-model ONNX graph path.</summary>
+    public string? ModelPath { get; set; }
+    /// <summary>Whole-model ONNX runtime settings.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>Native optimizer learning rate.</summary>
+    public double LearningRate { get; set; } = 1e-4;
+    /// <summary>Native AdamW weight decay.</summary>
+    public double WeightDecay { get; set; } = 0.01;
+
     /// <summary>Creates the papers' shared options.</summary>
     protected StyleTtsBaseOptions()
     {
@@ -59,6 +87,18 @@ public abstract class StyleTtsBaseOptions : TtsModelOptions
     protected StyleTtsBaseOptions(StyleTtsBaseOptions other)
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
+        SampleRate = other.SampleRate;
+        MelChannels = other.MelChannels;
+        HopSize = other.HopSize;
+        FftSize = other.FftSize;
+        HiddenDim = other.HiddenDim;
+        VocabSize = other.VocabSize;
+        MaxTextLength = other.MaxTextLength;
+        DropoutRate = other.DropoutRate;
+        ModelPath = other.ModelPath;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
         WindowLength = other.WindowLength;
         MelMean = other.MelMean;
         MelStd = other.MelStd;

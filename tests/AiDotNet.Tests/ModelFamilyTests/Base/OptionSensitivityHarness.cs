@@ -813,7 +813,7 @@ public static class OptionSensitivityHarness
                 && current is int headDim && headDim > 0 && headDim <= int.MaxValue / 2)
                 // Rotary embeddings need even head widths: prefer a valid structural change before +/-1.
                 candidates = new object[] { headDim * 2 }.Concat(candidates).Distinct();
-            if (option.EndsWith("SampleRate", StringComparison.Ordinal) && current is int rate && rate > 0)
+            if (option?.EndsWith("SampleRate", StringComparison.Ordinal) == true && current is int rate && rate > 0)
             {
                 // A one-Hz change can make a polyphase resampler's ratio coprime and allocate gigabytes.
                 // Simple ratios test the same setting first; retain the fine-grained candidates as fallbacks.

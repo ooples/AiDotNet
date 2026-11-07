@@ -19,7 +19,10 @@ public abstract class StyleTtsWaveformOptions : StyleTtsBaseOptions
     {
         DecoderType = other.DecoderType;
         DecoderBottleneck = other.DecoderBottleneck;
+        ResBlockKernels = (int[])other.ResBlockKernels.Clone();
         ResBlockDilations = other.ResBlockDilations.Select(d => (int[])d.Clone()).ToArray();
+        UpsampleRates = (int[])other.UpsampleRates.Clone();
+        UpsampleKernels = (int[])other.UpsampleKernels.Clone();
         UpsampleInitialChannels = other.UpsampleInitialChannels;
         IstftFftSize = other.IstftFftSize;
         IstftHopSize = other.IstftHopSize;
@@ -50,7 +53,7 @@ public abstract class StyleTtsWaveformOptions : StyleTtsBaseOptions
     public int[][] ResBlockDilations { get; set; } = { new[] { 1, 3, 5 }, new[] { 1, 3, 5 }, new[] { 1, 3, 5 } };
 
     /// <summary>The generator's upsampling factors; their product (times <see cref="IstftHopSize"/> for iSTFTNet) is the
-    /// mel hop (<see cref="TtsModelOptions.HopSize"/>, 300).</summary>
+    /// mel hop (<see cref="StyleTtsBaseOptions.HopSize"/>, 300).</summary>
     public int[] UpsampleRates { get; set; } = { 10, 5, 3, 2 };
 
     /// <summary>Kernel sizes of the upsampling transposed convolutions.</summary>

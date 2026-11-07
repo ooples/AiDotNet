@@ -39,9 +39,6 @@ public class StyleTTS2Options : StyleTtsWaveformOptions
     {
         Multispeaker = other.Multispeaker;
         DurationBins = other.DurationBins;
-        ResBlockKernels = (int[])other.ResBlockKernels.Clone();
-        UpsampleRates = (int[])other.UpsampleRates.Clone();
-        UpsampleKernels = (int[])other.UpsampleKernels.Clone();
         DiffusionLayers = other.DiffusionLayers;
         DiffusionHeads = other.DiffusionHeads;
         DiffusionHeadFeatures = other.DiffusionHeadFeatures;
