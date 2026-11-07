@@ -987,3 +987,4 @@ AiDotNet.Models.Options.LogisticRegressionOptions<T>.Solver.set -> void
 AiDotNet.Regression.LogisticRegression<T>.CreateGradientDescentSolver() -> AiDotNet.Interfaces.IFunctionOptimizer<T>!
 AiDotNet.Classification.Boosting.HistGradientBoostingClassifier<T>.NJobs.get -> int
 AiDotNet.Classification.Boosting.HistGradientBoostingClassifier<T>.NJobs.set -> void
+override AiDotNet.Classification.Ensemble.RandomForestClassifier<T>.PredictProbabilities(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!

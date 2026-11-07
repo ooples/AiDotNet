@@ -338,88 +338,165 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
             throw new ArgumentException($"Expected {NumFeatures} features but got {input.Columns}.", nameof(input));
         }
 
-        var binnedX = BinFeatures(input, _binBoundaries);
+        var forest = new FlatForest(_trees, _binBoundaries);
+        var initialPrediction = _initialPrediction;
+        var classLabels = ClassLabels;
         int numOutputs = NumClasses == 2 ? 1 : NumClasses;
+        int columns = input.Columns;
         var predictions = new Vector<T>(input.Rows);
 
-        for (int i = 0; i < input.Rows; i++)
+        // Rows are independent, so fixed blocks of them run in parallel.
+        int jobs = ResolveHistJobs();
+        int blocks = (input.Rows + PredictBlockRows - 1) / PredictBlockRows;
+        Parallel.For(0, blocks, new ParallelOptions { MaxDegreeOfParallelism = jobs }, block =>
         {
+            var row = new double[columns];
             var rawPred = new double[numOutputs];
-            for (int k = 0; k < numOutputs; k++)
+            int end = Math.Min(input.Rows, (block + 1) * PredictBlockRows);
+            for (int i = block * PredictBlockRows; i < end; i++)
             {
-                rawPred[k] = _initialPrediction[k];
+                var source = input.GetRowReadOnlySpan(i);
+                for (int j = 0; j < columns; j++) row[j] = NumOps.ToDouble(source[j]);
+                predictions[i] = PredictRow(forest, row, rawPred, initialPrediction, classLabels, numOutputs);
             }
-
-            // Sum tree predictions
-            for (int treeIdx = 0; treeIdx < _trees.Count; treeIdx++)
-            {
-                int k = treeIdx % numOutputs;
-                double treeOutput = PredictTree(_trees[treeIdx], binnedX, i);
-                rawPred[k] += _learningRate * treeOutput;
-            }
-
-            // Convert to class prediction
-            if (NumClasses == 2)
-            {
-                double prob = 1.0 / (1.0 + Math.Exp(-rawPred[0]));
-                predictions[i] = prob >= 0.5 ? ClassLabels[1] : ClassLabels[0];
-            }
-            else
-            {
-                // Softmax and argmax
-                double maxVal = rawPred.Max();
-                double sumExp = 0;
-                for (int k = 0; k < NumClasses; k++)
-                {
-                    sumExp += Math.Exp(rawPred[k] - maxVal);
-                }
-
-                int bestClass = 0;
-                double bestProb = 0;
-                for (int k = 0; k < NumClasses; k++)
-                {
-                    double prob = Math.Exp(rawPred[k] - maxVal) / sumExp;
-                    if (prob > bestProb)
-                    {
-                        bestProb = prob;
-                        bestClass = k;
-                    }
-                }
-                predictions[i] = ClassLabels[bestClass];
-            }
-        }
+        });
 
         return predictions;
     }
 
-    /// <summary>
-    /// Bins features using precomputed boundaries.
-    /// </summary>
-    /// <param name="x">Feature matrix.</param>
-    /// <param name="boundaries">Bin boundaries for each feature.</param>
-    /// <returns>Binned feature matrix.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Converts continuous feature values to bin indices.
-    /// A value of 5.3 might become bin 42 if that's where 5.3 falls in the boundaries.</para>
-    /// </remarks>
-    private int[,] BinFeatures(Matrix<T> x, double[][] boundaries)
-    {
-        int n = x.Rows;
-        int p = x.Columns;
-        var binned = new int[n, p];
+    /// <summary>Rows per block of a parallel prediction: small, as a row costs a walk down every tree.</summary>
+    private const int PredictBlockRows = 128;
 
-        for (int i = 0; i < n; i++)
+    /// <summary>The predicted label of one row: the trees' outputs summed in tree order, then the likeliest class.</summary>
+    private T PredictRow(FlatForest forest, double[] row, double[] rawPred, double[] initialPrediction,
+        Vector<T> classLabels, int numOutputs)
+    {
+        for (int k = 0; k < numOutputs; k++)
         {
-            for (int j = 0; j < p; j++)
+            rawPred[k] = initialPrediction[k];
+        }
+
+        // Sum tree predictions
+        for (int treeIdx = 0; treeIdx < forest.Trees; treeIdx++)
+        {
+            int k = treeIdx % numOutputs;
+            rawPred[k] += _learningRate * forest.Evaluate(treeIdx, row);
+        }
+
+        // Convert to class prediction
+        if (NumClasses == 2)
+        {
+            double prob = 1.0 / (1.0 + Math.Exp(-rawPred[0]));
+            return prob >= 0.5 ? classLabels[1] : classLabels[0];
+        }
+        else
+        {
+            // Softmax and argmax
+            double maxVal = double.MinValue;
+            for (int k = 0; k < NumClasses; k++) maxVal = Math.Max(maxVal, rawPred[k]);
+            double sumExp = 0;
+            for (int k = 0; k < NumClasses; k++)
             {
-                double val = NumOps.ToDouble(x[i, j]);
-                int bin = Array.BinarySearch(boundaries[j], val);
-                if (bin < 0) bin = ~bin;
-                binned[i, j] = bin;
+                sumExp += Math.Exp(rawPred[k] - maxVal);
+            }
+
+            int bestClass = 0;
+            double bestProb = 0;
+            for (int k = 0; k < NumClasses; k++)
+            {
+                double prob = Math.Exp(rawPred[k] - maxVal) / sumExp;
+                if (prob > bestProb)
+                {
+                    bestProb = prob;
+                    bestClass = k;
+                }
+            }
+            return classLabels[bestClass];
+        }
+    }
+
+    /// <summary>
+    /// The trees as flat arrays for prediction, each split compared against its bin's upper boundary in feature units.
+    /// </summary>
+    /// <remarks>
+    /// A value falls in bin <c>b</c> when <c>b</c> boundaries lie below it (equal goes to the lower bin), so it is in a
+    /// bin &lt;= <c>t</c> exactly when it is not above boundary <c>t</c>: prediction reads the raw value instead of
+    /// binning every row first. NaN, which binning put in bin 0, is not above any boundary, so it goes left too.
+    /// </remarks>
+    private sealed class FlatForest
+    {
+        private readonly int[] _roots;
+        private readonly int[] _feature;
+        private readonly double[] _threshold;
+        private readonly int[] _left;
+        private readonly int[] _right;
+        private readonly double[] _value;
+
+        public FlatForest(List<HistTree> trees, double[][] boundaries)
+        {
+            int nodes = 0;
+            var stack = new Stack<HistTree>();
+            foreach (var tree in trees)
+            {
+                stack.Push(tree);
+                while (stack.Count > 0)
+                {
+                    var node = stack.Pop();
+                    nodes++;
+                    if (node.LeftChild is not null && node.RightChild is not null)
+                    {
+                        stack.Push(node.LeftChild);
+                        stack.Push(node.RightChild);
+                    }
+                }
+            }
+
+            _roots = new int[trees.Count];
+            _feature = new int[nodes];
+            _threshold = new double[nodes];
+            _left = new int[nodes];
+            _right = new int[nodes];
+            _value = new double[nodes];
+            int next = 0;
+            var pending = new Stack<(HistTree Node, int Index)>();
+            for (int t = 0; t < trees.Count; t++)
+            {
+                _roots[t] = next;
+                pending.Push((trees[t], next++));
+                while (pending.Count > 0)
+                {
+                    var (node, index) = pending.Pop();
+                    if (node.LeftChild is not null && node.RightChild is not null)
+                    {
+                        var bounds = boundaries[node.FeatureIndex];
+                        _feature[index] = node.FeatureIndex;
+                        _threshold[index] = node.BinThreshold < bounds.Length
+                            ? bounds[node.BinThreshold]
+                            : double.PositiveInfinity;
+                        _left[index] = next++;
+                        _right[index] = next++;
+                        pending.Push((node.LeftChild, _left[index]));
+                        pending.Push((node.RightChild, _right[index]));
+                    }
+                    else
+                    {
+                        _feature[index] = -1;
+                        _value[index] = node.LeafValue;
+                    }
+                }
             }
         }
 
-        return binned;
+        public int Trees => _roots.Length;
+
+        /// <summary>The leaf value tree <paramref name="tree"/> gives <paramref name="row"/>.</summary>
+        public double Evaluate(int tree, double[] row)
+        {
+            int node = _roots[tree];
+            while (_feature[node] >= 0)
+                node = row[_feature[node]] > _threshold[node] ? _right[node] : _left[node];
+            return _value[node];
+        }
     }
 
     /// <summary>
@@ -536,33 +613,6 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         return (gradients, hessians);
     }
 
-    /// <summary>
-    /// Gets the prediction from a tree for a single sample.
-    /// </summary>
-    /// <param name="tree">The tree to evaluate.</param>
-    /// <param name="binnedX">Binned feature matrix.</param>
-    /// <param name="sampleIdx">Index of the sample.</param>
-    /// <returns>Tree prediction value.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Traverses the tree from root to leaf by comparing
-    /// the sample's binned feature values to the split thresholds.</para>
-    /// </remarks>
-    private double PredictTree(HistTree tree, int[,] binnedX, int sampleIdx)
-    {
-        var node = tree;
-        while (node.LeftChild is not null && node.RightChild is not null)
-        {
-            if (binnedX[sampleIdx, node.FeatureIndex] <= node.BinThreshold)
-            {
-                node = node.LeftChild;
-            }
-            else
-            {
-                node = node.RightChild;
-            }
-        }
-        return node.LeafValue;
-    }
 
     /// <summary>
     /// Creates a new instance with the specified parameters.

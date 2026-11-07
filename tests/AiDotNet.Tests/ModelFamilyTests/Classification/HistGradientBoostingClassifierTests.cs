@@ -62,4 +62,37 @@ public class HistGradientBoostingClassifierTests : ClassificationModelTestBase
 
         Assert.Throws<InvalidOperationException>(() => model.Train(x, y));
     }
+
+    /// <summary>
+    /// Prediction compares raw values with the bin boundaries instead of binning each row. A value equal to a boundary
+    /// is in that boundary's bin, the same bin as a value just below it, so with few distinct values (where every
+    /// boundary is a data value) moving each value just below itself must not change a prediction.
+    /// </summary>
+    [Fact]
+    public void Predict_ValueOnABoundaryFallsInTheLowerBin()
+    {
+        const int rows = 600, features = 3;
+        var x = new Matrix<double>(rows, features);
+        var y = new Vector<double>(rows);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < features; j++)
+                x[i, j] = (i * 7 + j * 3 + i * j) % 5;
+            y[i] = x[i, 0] + x[i, 1] > 4 ? 1 : 0;
+        }
+
+        var model = new HistGradientBoostingClassifier<double>(maxBins: 16, maxDepth: 3, nEstimators: 20,
+            learningRate: 0.3, minSamplesLeaf: 5, seed: 1);
+        model.Train(x, y);
+
+        var below = new Matrix<double>(rows, features);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < features; j++)
+                below[i, j] = x[i, j] - 1e-9;
+
+        var onBoundary = model.Predict(x);
+        var justBelow = model.Predict(below);
+        for (int i = 0; i < rows; i++)
+            Assert.Equal(justBelow[i], onBoundary[i]);
+    }
 }

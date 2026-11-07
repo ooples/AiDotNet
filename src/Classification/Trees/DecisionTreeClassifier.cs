@@ -200,6 +200,9 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
         throw new ArgumentException($"Label {label} not found in class labels.");
     }
 
+    /// <summary>The trained tree as flat arrays for batch evaluation, or null before training.</summary>
+    internal FlatDecisionTree<T>? Flatten() => _root is null ? null : FlatDecisionTree<T>.From(_root);
+
     /// <inheritdoc/>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)
     {

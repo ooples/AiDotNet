@@ -224,6 +224,73 @@ public partial class RandomForestClassifier<T> : EnsembleClassifierBase<T>, ITre
         return (bootstrapIndices, outOfBag);
     }
 
+    /// <summary>Rows per block of a parallel prediction.</summary>
+    private const int PredictBlockRows = 256;
+
+    /// <summary>
+    /// Averages the trees' class probabilities. For <c>double</c> and <c>float</c> features the trees are walked as
+    /// flat arrays over fixed blocks of rows in parallel (<see cref="RandomForestClassifierOptions{T}.NJobs"/>). A block
+    /// runs one tree over all its rows before the next, as scikit-learn does, so a tree stays in cache instead of every
+    /// row pulling in the whole forest. Each row's probabilities are still summed in tree order and divided by the
+    /// tree count exactly as the general path does, so both give the same result.
+    /// </summary>
+    public override Matrix<T> PredictProbabilities(Matrix<T> input)
+    {
+        if (typeof(T) != typeof(double) && typeof(T) != typeof(float))
+            return base.PredictProbabilities(input);
+
+        var trees = new FlatDecisionTree<T>[Estimators.Count];
+        for (int t = 0; t < trees.Length; t++)
+        {
+            // A tree of another type (or not yet trained) takes the general path, which reports it.
+            if (Estimators[t].GetType() != typeof(DecisionTreeClassifier<T>)
+                || ((DecisionTreeClassifier<T>)Estimators[t]).Flatten() is not { } flat)
+            {
+                return base.PredictProbabilities(input);
+            }
+
+            trees[t] = flat;
+        }
+
+        if (trees.Length == 0)
+            return base.PredictProbabilities(input);
+
+        int classes = NumClasses;
+        int columns = input.Columns;
+        T treeCount = NumOps.FromDouble(trees.Length);
+        var probabilities = new Matrix<T>(input.Rows, classes);
+        int blocks = (input.Rows + PredictBlockRows - 1) / PredictBlockRows;
+        Parallel.For(0, blocks, new ParallelOptions { MaxDegreeOfParallelism = ResolveJobCount() }, block =>
+        {
+            int start = block * PredictBlockRows;
+            int rows = Math.Min(input.Rows, start + PredictBlockRows) - start;
+            var data = new double[rows * columns];
+            var sums = new T[rows * classes];
+            for (int r = 0; r < rows; r++)
+            {
+                var source = input.GetRowReadOnlySpan(start + r);
+                for (int j = 0; j < columns; j++) data[r * columns + j] = NumOps.ToDouble(source[j]);
+                for (int c = 0; c < classes; c++) sums[r * classes + c] = NumOps.Zero;
+            }
+
+            foreach (var tree in trees)
+            {
+                for (int r = 0; r < rows; r++)
+                {
+                    var leaf = tree.Leaf(data, r * columns);
+                    for (int c = 0; c < classes; c++)
+                        sums[r * classes + c] = NumOps.Add(sums[r * classes + c], leaf[c]);
+                }
+            }
+
+            for (int r = 0; r < rows; r++)
+                for (int c = 0; c < classes; c++)
+                    probabilities[start + r, c] = NumOps.Divide(sums[r * classes + c], treeCount);
+        });
+
+        return probabilities;
+    }
+
     /// <summary>
     /// The number of trees trained at once: <see cref="RandomForestClassifierOptions{T}.NJobs"/> when positive,
     /// otherwise counted back from the processor count as joblib does (-1 all processors, -2 all but one).
