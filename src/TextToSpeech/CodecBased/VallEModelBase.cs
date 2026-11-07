@@ -206,14 +206,14 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
         var o = _options;
         if (o.NumEncoderLayers != o.NumDecoderLayers)
             throw new ArgumentException($"{GetType().Name}'s AR and NAR models have the same depth; set NumEncoderLayers = NumDecoderLayers.");
-        BuildNetworks(_arLayers, _narLayers, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.SamplingSeed));
+        BuildNetworks(_arLayers, _narLayers, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.Seed ?? Architecture.RandomSeed ?? o.SamplingSeed));
         _networksBuilt = true;
 
         // The codec (pretrained, frozen) only encodes and decodes.
         var codecOptions = (EnCodecOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(o.Codec);
         codecOptions.IncludeDiscriminators = false;
         var codec = new EnCodec<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional,
-            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1) { RandomSeed = Architecture.RandomSeed }, codecOptions);
+            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1) { RandomSeed = o.Seed ?? Architecture.RandomSeed }, codecOptions);
         int codecRate = ((IAudioCodec<T>)codec).SampleRate;
         if (codec.HopLength != o.HopSize || codecRate != o.SampleRate)
             throw new ArgumentException($"{GetType().Name}'s {o.SampleRate} Hz audio and {o.HopSize}-sample frames must be its codec's " +
@@ -455,6 +455,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
                 Epsilon = 1e-8,
                 WeightDecay = o.WeightDecay,
                 LearningRateScheduler = schedule,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             };
             optimizer = PaperOptimizerFactory.VerifyHandBuilt(this, new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, options),
                 OptimizerComponent(CurrentStage));

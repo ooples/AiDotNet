@@ -13,6 +13,42 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class VALLEXClonePaperTests
 {
     [Theory]
+    [InlineData("WarmupSteps")]
+    [InlineData("TrainingSteps")]
+    public void NativeLearningRateScheduleAdvancesForEachTrainingBatch(string option)
+    {
+        var controlOptions = Tiny();
+        controlOptions.WarmupSteps = 0;
+        controlOptions.TrainingSteps = 8;
+        var changedOptions = new VALLEXCloneOptions(controlOptions);
+        if (option == "WarmupSteps") changedOptions.WarmupSteps = 4;
+        else changedOptions.TrainingSteps = 2;
+        using var control = Create(controlOptions);
+        using var changed = Create(changedOptions);
+        var sample = new TtsTrainingSample<double>
+        {
+            Tokens = control.TextToTokens("你好"), CodecTokens = Codes(6, 0), PromptCodecTokens = Codes(3, 17),
+            LanguageId = (int)VallEXLanguage.Mandarin,
+        };
+        Assert.Equal(control.GetParameters().ToArray(), changed.GetParameters().ToArray());
+        for (int step = 0; step < 2; step++) { control.Train(sample); changed.Train(sample); }
+        Assert.False(control.GetParameters().SequenceEqual(changed.GetParameters()));
+    }
+
+    [Fact]
+    public void InitializationSeedIsReproducibleAndSeparateFromSamplingSeed()
+    {
+        var firstOptions = Tiny(); firstOptions.Seed = 11;
+        var repeatOptions = new VALLEXCloneOptions(firstOptions) { SamplingSeed = 1 };
+        var changedOptions = new VALLEXCloneOptions(firstOptions) { Seed = 12 };
+        using var first = Create(firstOptions);
+        using var repeat = Create(repeatOptions);
+        using var changed = Create(changedOptions);
+        Assert.Equal(first.GetParameters().ToArray(), repeat.GetParameters().ToArray());
+        Assert.False(first.GetParameters().SequenceEqual(changed.GetParameters()));
+    }
+
+    [Theory]
     [InlineData(17, 2)]
     [InlineData(16, 3)]
     [InlineData(16, 0)]

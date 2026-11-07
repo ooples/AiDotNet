@@ -656,3 +656,21 @@ checks pass. Valid graph behavior remains covered by the canonical graph,
 AR/NAR training and cross-lingual inference checks. Fresh generated option
 outcomes are being audited after the OOM fix; several previously unreachable
 controls still need stage/frontend/ownership work.
+
+Fresh VALL-E facade probes exposed two real shared-base defects. The linear
+warmup/decay scheduler inherited StepPerEpoch, so Train(sample) never advanced
+it. Its native stage optimizers now step per batch. Two changed-source tests
+show WarmupSteps and TrainingSteps change actual native parameter updates over
+two batches; these were bit-identical in the old hosted probes. The shared
+Seed also now controls AR/NAR and codec initialization, ahead of architecture
+and sampling-seed fallbacks. Native seed tests verify repeatability, changed
+parameters for a changed seed and independence from SamplingSeed. Null shared
+Seed preserves the existing initialization fallback.
+
+The four negative Transformer-geometry tests, nine existing native facade paper
+checks and three new schedule/seed cases all pass with source VallEModelBase,
+VALLEX and VALLEXClone linked (zero compile warnings/errors). In this source
+assembly the parent's flattened surface excludes the separately owned codec,
+so its parent count is 65,857 versus the hosted full 113,168; those counts are
+not a parameter-loss claim. Current option outcomes still need the new hosted
+model metadata, and remaining frontend/task-specific ownership is under audit.
