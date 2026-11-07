@@ -159,6 +159,8 @@ public class FusedReadoutLossTests
     }
 
     // A subclass declines to fuse (its forward may differ), so this head takes the decomposed path with the same math.
+    private sealed class SubclassedCrossEntropy : CrossEntropyWithLogitsLoss<double> { }
+
     private sealed class UnfusedDense : DenseLayer<double>
     {
         public UnfusedDense() : base(Vocab, (IActivationFunction<double>?)null) { }
@@ -210,6 +212,7 @@ public class FusedReadoutLossTests
         Assert.NotNull(head.TryComputeFusedLoss(h, ids, loss));
         Assert.Null(head.TryComputeFusedLoss(h, ids, new CrossEntropyWithLogitsLoss<double>(classAxis: 0)));
         Assert.Null(head.TryComputeFusedLoss(h, ids, new MeanSquaredErrorLoss<double>()));
+        Assert.Null(head.TryComputeFusedLoss(h, ids, new SubclassedCrossEntropy())); // may override ComputeTapeLoss
         var ignored = ids.Clone();
         ignored.SetFlat(0, -1); // the loss leaves this row out of its mean; the fused op has no ignored rows
         Assert.Null(head.TryComputeFusedLoss(h, ignored, loss));
@@ -231,8 +234,14 @@ public class FusedReadoutLossTests
         decomposedNet.SetParameters(init);
         fusedNet.SetCreditRule(new TiedReadoutLocalErrorCreditRule<double>(readoutLayerCount: 1));
         decomposedNet.SetCreditRule(new TiedReadoutLocalErrorCreditRule<double>(readoutLayerCount: 1));
+        long before = DenseLayer<double>.FusedReadoutLossCount;
         var fused = fusedNet.ComputeGradients(x, ids, new CrossEntropyWithLogitsLoss<double>());
+        long fusedCalls = DenseLayer<double>.FusedReadoutLossCount - before;
         var decomposed = decomposedNet.ComputeGradients(x, ids, new CrossEntropyWithLogitsLoss<double>());
+        long decomposedCalls = DenseLayer<double>.FusedReadoutLossCount - before - fusedCalls;
+
+        Assert.Equal(3, fusedCalls);     // 4 hidden layers; the last is trained by the output loss
+        Assert.Equal(0, decomposedCalls);
 
         Assert.Equal(decomposed.Length, fused.Length);
         double maxAbs = 0, maxDiff = 0;
