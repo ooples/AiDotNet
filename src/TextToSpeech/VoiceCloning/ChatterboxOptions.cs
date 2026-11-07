@@ -7,7 +7,7 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <para>The defaults reproduce the released 2025 model: the 520M T3 decoder (30 Llama layers, 1,024 channels),
 /// the 25 Hz S3Tokenizer-v2 vocabulary, the causal S3Gen flow, CAM++ and the 24 kHz HiFT vocoder.</para>
 /// </remarks>
-public class ChatterboxOptions : CosyVoiceFamilyOptions
+public class ChatterboxOptions : CosyVoiceConformerOptions
 {
     /// <summary>S3Tokenizer v2's fixed eight-dimensional ternary FSQ vocabulary.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("S3Tokenizer v2 requires exactly 3^8 = 6561 codes. ChatterboxOptionContextTests rejects unpaired cardinalities and exercises valid native codec configurations.")]

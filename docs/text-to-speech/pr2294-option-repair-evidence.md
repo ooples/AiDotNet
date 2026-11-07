@@ -907,3 +907,9 @@ All 27 historical Chatterbox option failures have local evidence: 14 active obse
 ### CosyVoice3 paired DiT geometry
 
 Three valid DiTDim/DiTHeads/DiTHeadDim geometries (16/2/8, 32/2/16 and 32/4/8) pass actual native flow training-loss evaluation and inference, with finite outputs and six mel frames for three speech tokens. Independent invalid changes to each width and to the released fixed TokenMelRatio are rejected by the actual model constructor. Constraint metadata now points to these permanent positive and negative tests.
+
+### CosyVoice3 consumes DiT options, not the inherited Conformer/S3 controls
+
+CosyVoice3.BuildFlow constructs CosyVoice3Flow from DiT settings; its shared FlowConfiguration is explicitly mapped from DiT fields. BuildSpeechTokenizer is intentionally empty, and SpeechTokens invokes the released v3 ONNX graph. Seventeen Conformer/U-Net/native-S3 controls therefore have no v3 consumer. They now belong to CosyVoiceConformerOptions, retained by v1/v2 and Chatterbox. V3 keeps its Qwen sampler, DiT, causal HiFT, CAM++ and ONNX controls on a separate common-family branch. The permanent ownership test ensures the removed controls remain available to their actual native model owners.
+
+Runtime evidence: all 2,950,365 initial parameters of a complete bounded native v3 model and its actual DiT token encoding exactly match the earlier hosted core. Retained serialized defaults match all four hosted options classes. Native v1 encoder/HiFT, Chatterbox reference/training, and v3 paired DiT checks pass. API option-surface comparisons continue to report only the four acknowledged CP0007 option inheritance changes across net10.0/net8.0/net471. The actual generator was rebuilt and emitted v3 construction without the obsolete MaxCodecFrames assignment, which was also removed from the scaffold. Full hosted compilation/shards remain pending.

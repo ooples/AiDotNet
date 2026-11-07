@@ -8,6 +8,21 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class CosyVoice3OptionContextTests
 {
+    [Fact]
+    public void DitOptionsExcludeUnusedConformerAndNativeS3Controls()
+    {
+        foreach (string option in new[] { "FlowDim", "FlowHeads", "FlowFeedForwardDim", "FlowEncoderLayers",
+            "FlowAttentionDropoutRate", "DecoderChannels", "DecoderHeads", "DecoderHeadDim", "DecoderBlocks",
+            "DecoderMidBlocks", "FlowTimesteps", "TrainingCfgRate", "InferenceCfgRate", "FlowLoss",
+            "SpeechTokenizerState", "SpeechTokenizerHeads", "SpeechTokenizerLayers" })
+        {
+            Assert.Null(typeof(CosyVoice3Options).GetProperty(option));
+            Assert.NotNull(typeof(CosyVoiceOptions).GetProperty(option));
+            Assert.NotNull(typeof(CosyVoice2Options).GetProperty(option));
+            Assert.NotNull(typeof(AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions).GetProperty(option));
+        }
+    }
+
     [Theory]
     [InlineData(16, 2, 8)]
     [InlineData(32, 2, 16)]

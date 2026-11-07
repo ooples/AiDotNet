@@ -11001,7 +11001,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "KeyValueHeads = 2, LmFeedForwardDim = 64, NumCodebooks = 1, CodebookSize = 6561, ReservedSpeechTokens = 4, MelChannels = 16, " +
                     "SpeakerEmbeddingDim = 16, HiftBaseChannels = 32, DiTInputDim = 16, PreLookaheadChannels = 32, " +
                     "DiTDim = 32, DiTDepth = 1, DiTHeads = 2, DiTHeadDim = 16, DiTFeedForwardMultiplier = 2, " +
-                    "MaxTextLength = 128, MaxCodecFrames = 8, DropoutRate = 0.0 }, " +
+                    "MaxTextLength = 128, DropoutRate = 0.0 }, " +
                     "optimizer: new AiDotNet.Optimizers.AdamOptimizer<double, AiDotNet.Tensors.LinearAlgebra.Tensor<double>, AiDotNet.Tensors.LinearAlgebra.Tensor<double>>(null))";
             }
             else if (model.ClassName == "Chatterbox" && model.TypeParameterCount == 1)

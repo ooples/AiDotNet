@@ -267,7 +267,10 @@ internal static class OptionSensitivityFixtureSetup
             return OptionSensitivityHarness.Combine(OptionSensitivityHarness.Fingerprint(targets.Audio.Select(ops.ToDouble)),
                 OptionSensitivityHarness.Fingerprint(vocoder.Vocoder!.Forward(targets.Mel, new Random(1337)).Select(ops.ToDouble)));
         }
-        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosySampler && cosySampler.GetOptions() is AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions && option is "RepetitionWindow" or "RepetitionRatio")
+        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosySampler
+            && cosySampler.GetOptions() is AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions
+                or AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options
+            && option is "RepetitionWindow" or "RepetitionRatio")
         {
             const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
                 | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
@@ -665,7 +668,7 @@ internal static class OptionSensitivityFixtureSetup
         }
         if (options is AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions voicebox && option == "MaximumAudioFrames")
             voicebox.MaximumPhoneDuration = 1;
-        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions cosy && IsCosyFlowOption(option))
+        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions cosy && IsCosyFlowOption(option))
             cosy.TrainingCfgRate = 0.5;
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chatter && option == "VoiceEncoderPartialRate")
             chatter.VoiceEncoderPartialFrames = 160;
@@ -675,6 +678,11 @@ internal static class OptionSensitivityFixtureSetup
         {
             sampling.TopK = 2;
             sampling.TopP = 1;
+        }
+        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options sampling3 && option == "TopK")
+        {
+            sampling3.TopK = 2;
+            sampling3.TopP = 1;
         }
         if (options is AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions forward)
         {

@@ -1,7 +1,7 @@
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 /// <summary>Shared settings for the standard CosyVoice language models and their repetition-aware sampler.</summary>
-public abstract class CosyVoiceAutoregressiveOptions : CosyVoiceFamilyOptions
+public abstract class CosyVoiceAutoregressiveOptions : CosyVoiceConformerOptions
 {
     /// <summary>Creates the released sampler defaults.</summary>
     protected CosyVoiceAutoregressiveOptions() { }

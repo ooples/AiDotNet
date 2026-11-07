@@ -26,7 +26,11 @@ public class CosyVoiceOptionConstraintTests
         var second = new CosyVoice2Options { TopP = 0.7, TopK = 4, RepetitionWindow = 8, RepetitionRatio = 0.3 };
         var third = new CosyVoice3Options { TopP = 0.9, TopK = 5, RepetitionWindow = 9, RepetitionRatio = 0.4 };
         AssertSamplerCopy(second, new CosyVoice2Options(second));
-        AssertSamplerCopy(third, new CosyVoice3Options(third));
+        var thirdCopy = new CosyVoice3Options(third);
+        Assert.Equal(third.TopP, thirdCopy.TopP);
+        Assert.Equal(third.TopK, thirdCopy.TopK);
+        Assert.Equal(third.RepetitionWindow, thirdCopy.RepetitionWindow);
+        Assert.Equal(third.RepetitionRatio, thirdCopy.RepetitionRatio);
         foreach (string name in new[] { "TopP", "TopK", "RepetitionWindow", "RepetitionRatio" })
             Assert.Null(typeof(AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions).GetProperty(name));
         foreach (string name in new[] { "TextEncoderDim", "NumEncoderLayers", "HiddenDim", "NumDecoderLayers",
