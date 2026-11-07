@@ -857,6 +857,8 @@ AiDotNet.Attributes.OptionBehaviourExemptAttribute.OptionBehaviourExemptAttribut
 AiDotNet.Attributes.OptionBehaviourExemptAttribute.Reason.get -> string!
 AiDotNet.Attributes.PaperDefaultAttribute
 AiDotNet.Attributes.PaperDefaultAttribute.PaperDefaultAttribute(object! value) -> void
+AiDotNet.Attributes.PaperDefaultAttribute.PaperDefaultAttribute(string! property, object! value) -> void
+AiDotNet.Attributes.PaperDefaultAttribute.Property.get -> string?
 AiDotNet.Attributes.PaperDefaultAttribute.Source.get -> string!
 AiDotNet.Attributes.PaperDefaultAttribute.Source.set -> void
 AiDotNet.Attributes.PaperDefaultAttribute.Value.get -> object!

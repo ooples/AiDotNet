@@ -49,10 +49,8 @@ public static class PaperDefaultsHarness
 
         var mismatches = new List<string>();
         int declared = 0;
-        foreach (var property in optionsType.GetProperties(BindingFlags.Instance | BindingFlags.Public))
+        foreach (var (property, declaration) in Declarations(optionsType))
         {
-            var declaration = property.GetCustomAttribute<PaperDefaultAttribute>(inherit: true);
-            if (declaration is null) continue;
             declared++;
             object? actual = property.GetValue(instance);
             if (!Matches(declaration.Value, actual))
@@ -68,6 +66,37 @@ public static class PaperDefaultsHarness
         Assert.True(declared > 0, $"{optionsType.Name} declares no [PaperDefault]; this test should not have been generated.");
         Assert.True(mismatches.Count == 0,
             $"{optionsType.Name} does not ship the values its paper states:\n  " + string.Join("\n  ", mismatches));
+    }
+
+    /// <summary>
+    /// Every declared paper value of an options type, property-level or class-level, the nearest declaration
+    /// winning: walking from the type itself up its bases, a class's own declarations come before its bases'.
+    /// </summary>
+    internal static List<(PropertyInfo Property, PaperDefaultAttribute Declaration)> Declarations(Type optionsType)
+    {
+        var found = new List<(PropertyInfo, PaperDefaultAttribute)>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        const BindingFlags declaredOnly = BindingFlags.Instance | BindingFlags.Public | BindingFlags.DeclaredOnly;
+        for (Type? walk = optionsType; walk is not null && walk != typeof(object); walk = walk.BaseType)
+        {
+            foreach (var declaration in walk.GetCustomAttributes<PaperDefaultAttribute>(inherit: false))
+            {
+                if (declaration.Property is null || !seen.Add(declaration.Property)) continue;
+                var property = optionsType.GetProperty(declaration.Property, BindingFlags.Instance | BindingFlags.Public)
+                    ?? throw new InvalidOperationException(
+                        $"{walk.Name} declares a paper default for '{declaration.Property}', which {optionsType.Name} does not have.");
+                found.Add((property, declaration));
+            }
+
+            foreach (var property in walk.GetProperties(declaredOnly))
+            {
+                var declaration = property.GetCustomAttribute<PaperDefaultAttribute>(inherit: false);
+                if (declaration is null || !seen.Add(property.Name)) continue;
+                found.Add((optionsType.GetProperty(property.Name, BindingFlags.Instance | BindingFlags.Public) ?? property, declaration));
+            }
+        }
+
+        return found;
     }
 
     /// <summary>Whether a property value equals a declared paper value.</summary>

@@ -133,6 +133,8 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
 
             start.RegisterSymbolAction(symbolContext =>
                 ValidatePropertyAttributes(symbolContext, (IPropertySymbol)symbolContext.Symbol), SymbolKind.Property);
+            start.RegisterSymbolAction(symbolContext =>
+                ValidateClassPaperDefaults(symbolContext, (INamedTypeSymbol)symbolContext.Symbol), SymbolKind.NamedType);
 
             start.RegisterCompilationEndAction(end =>
             {
@@ -351,8 +353,79 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
                     "has no Source; name the section or table of the paper that states this value"));
             }
 
-            if (attribute.ConstructorArguments.Length != 1) continue;
+            if (attribute.ConstructorArguments.Length != 1)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(InvalidPaperDefault, location, display,
+                    "on a property takes only the value; the property-naming form belongs on the options class"));
+                continue;
+            }
+
             string? problem = DescribeIncompatibility(attribute.ConstructorArguments[0], property.Type);
+            if (problem is not null)
+                context.ReportDiagnostic(Diagnostic.Create(InvalidPaperDefault, location, display, problem));
+        }
+    }
+
+    /// <summary>Whether any of these attributes is a <c>[PaperDefault]</c>.</summary>
+    internal static bool HasPaperDefault(ImmutableArray<AttributeData> attributes)
+        => attributes.Any(a => a.AttributeClass?.ToDisplayString() == PaperDefaultAttributeName);
+
+    /// <summary>
+    /// ADNOPT003 for class-level <c>[PaperDefault(nameof(Property), value)]</c>: a source, a public instance
+    /// property of the class (its own or inherited) by that name, a value that property can hold, and one
+    /// declaration per property on a class.
+    /// </summary>
+    private static void ValidateClassPaperDefaults(SymbolAnalysisContext context, INamedTypeSymbol type)
+    {
+        var declared = new HashSet<string>(System.StringComparer.Ordinal);
+        foreach (var property in type.GetMembers().OfType<IPropertySymbol>())
+        {
+            if (HasPaperDefault(property.GetAttributes())) declared.Add(property.Name);
+        }
+
+        foreach (var attribute in type.GetAttributes())
+        {
+            if (attribute.AttributeClass?.ToDisplayString() != PaperDefaultAttributeName) continue;
+            Location location = attribute.ApplicationSyntaxReference is { } reference
+                ? Location.Create(reference.SyntaxTree, reference.Span)
+                : type.Locations.FirstOrDefault() ?? Location.None;
+            if (attribute.ConstructorArguments.Length != 2)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(InvalidPaperDefault, location, type.ToDisplayString(),
+                    "on a class must name its property: [PaperDefault(nameof(Property), value, Source = \"...\")]"));
+                continue;
+            }
+
+            string? name = attribute.ConstructorArguments[0].Value as string;
+            string display = type.ToDisplayString() + "." + name;
+            string? source = attribute.NamedArguments.Where(a => a.Key == "Source").Select(a => a.Value.Value as string).FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(source))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(InvalidPaperDefault, location, display,
+                    "has no Source; name the section or table of the paper that states this value"));
+            }
+
+            IPropertySymbol? property = null;
+            for (INamedTypeSymbol? walk = type; walk is not null && property is null; walk = walk.BaseType)
+            {
+                property = walk.GetMembers(name ?? string.Empty).OfType<IPropertySymbol>()
+                    .FirstOrDefault(p => !p.IsStatic && p.DeclaredAccessibility == Accessibility.Public);
+            }
+
+            if (property is null)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(InvalidPaperDefault, location, display,
+                    "names no public instance property of the class; write the name with nameof"));
+                continue;
+            }
+
+            if (name is not null && !declared.Add(name))
+            {
+                context.ReportDiagnostic(Diagnostic.Create(InvalidPaperDefault, location, display,
+                    "is declared more than once on this class"));
+            }
+
+            string? problem = DescribeIncompatibility(attribute.ConstructorArguments[1], property.Type);
             if (problem is not null)
                 context.ReportDiagnostic(Diagnostic.Create(InvalidPaperDefault, location, display, problem));
         }
@@ -436,10 +509,10 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
     {
         for (INamedTypeSymbol? walk = options.OriginalDefinition; walk is not null; walk = walk.BaseType?.OriginalDefinition)
         {
+            if (HasPaperDefault(walk.GetAttributes())) return true;
             foreach (var property in walk.GetMembers().OfType<IPropertySymbol>())
             {
-                if (property.GetAttributes().Any(a => a.AttributeClass?.ToDisplayString() == PaperDefaultAttributeName))
-                    return true;
+                if (HasPaperDefault(property.GetAttributes())) return true;
             }
         }
 

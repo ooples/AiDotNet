@@ -366,8 +366,8 @@ public partial class TestScaffoldGenerator
             bool declares = false;
             for (INamedTypeSymbol? walk = type; walk is not null && !declares; walk = walk.BaseType)
             {
-                declares = walk.GetMembers().OfType<IPropertySymbol>().Any(p => p.GetAttributes().Any(a =>
-                    a.AttributeClass?.ToDisplayString() == OptionsFidelityAnalyzer.PaperDefaultAttributeName));
+                declares = OptionsFidelityAnalyzer.HasPaperDefault(walk.GetAttributes())
+                    || walk.GetMembers().OfType<IPropertySymbol>().Any(p => OptionsFidelityAnalyzer.HasPaperDefault(p.GetAttributes()));
             }
 
             if (declares) declaring.Add(type);
