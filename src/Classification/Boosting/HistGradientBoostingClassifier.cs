@@ -257,8 +257,10 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         // Step 1: Compute bin boundaries for each feature
         _binBoundaries = ComputeBinBoundaries(x);
 
-        // Step 2: Bin the features
-        var binnedX = BinFeatures(x, _binBoundaries);
+        // Step 2: Bin the features (column-major, HistGradientBoostingClassifier.HistBuilder.cs)
+        PrepareHistBuilder(x, _binBoundaries);
+        var targets = new int[n];
+        for (int i = 0; i < n; i++) targets[i] = GetClassIndexFromLabel(y[i]);
 
         // Step 3: Initialize predictions
         _initialPrediction = ComputeInitialPrediction(y);
@@ -278,34 +280,32 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         }
 
         // Step 4: Gradient boosting iterations
-        for (int iter = 0; iter < _nEstimators; iter++)
+        try
         {
-            // Compute all gradients from the same predictions snapshot
-            var grads = new double[numOutputs][];
-            var hess = new double[numOutputs][];
-            for (int k = 0; k < numOutputs; k++)
+            for (int iter = 0; iter < _nEstimators; iter++)
             {
-                (grads[k], hess[k]) = ComputeGradientsAndHessians(y, predictions, k);
-            }
-
-            // Build trees for all classes
-            var treesThisIter = new HistTree[numOutputs];
-            for (int k = 0; k < numOutputs; k++)
-            {
-                var tree = BuildHistTree(binnedX, grads[k], hess[k], 0);
-                treesThisIter[k] = tree;
-                _trees.Add(tree);
-            }
-
-            // Update predictions for all classes together
-            for (int i = 0; i < n; i++)
-            {
+                // Compute all gradients from the same predictions snapshot
+                var grads = new double[numOutputs][];
+                var hess = new double[numOutputs][];
                 for (int k = 0; k < numOutputs; k++)
                 {
-                    double treeOutput = PredictTree(treesThisIter[k], binnedX, i);
-                    predictions[i, k] += _learningRate * treeOutput;
+                    (grads[k], hess[k]) = ComputeGradientsAndHessians(targets, predictions, k);
+                }
+
+                // Build each class's tree; its leaves record every sample's output for the update.
+                for (int k = 0; k < numOutputs; k++)
+                {
+                    _trees.Add(BuildHistTreeDense(grads[k], hess[k]));
+                    for (int i = 0; i < n; i++)
+                    {
+                        predictions[i, k] += _learningRate * _sampleLeafValue[i];
+                    }
                 }
             }
+        }
+        finally
+        {
+            ReleaseHistBuilder();
         }
     }
 
@@ -521,7 +521,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <summary>
     /// Computes gradients and hessians for gradient boosting.
     /// </summary>
-    /// <param name="y">Target labels.</param>
+    /// <param name="targets">Each sample's class index.</param>
     /// <param name="predictions">Current predictions.</param>
     /// <param name="classIdx">Class index for multiclass problems.</param>
     /// <returns>Tuple of gradients and hessians.</returns>
@@ -531,9 +531,9 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// Together they help us build trees that efficiently reduce the loss.</para>
     /// </remarks>
     private (double[] gradients, double[] hessians) ComputeGradientsAndHessians(
-        Vector<T> y, double[,] predictions, int classIdx)
+        int[] targets, double[,] predictions, int classIdx)
     {
-        int n = y.Length;
+        int n = targets.Length;
         var gradients = new double[n];
         var hessians = new double[n];
 
@@ -542,7 +542,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
             // Binary cross-entropy gradients
             for (int i = 0; i < n; i++)
             {
-                double target = GetClassIndexFromLabel(y[i]) == 1 ? 1.0 : 0.0;
+                double target = targets[i] == 1 ? 1.0 : 0.0;
                 double pred = 1.0 / (1.0 + Math.Exp(-predictions[i, 0]));
                 gradients[i] = pred - target;
                 hessians[i] = pred * (1 - pred);
@@ -568,7 +568,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
                 }
 
                 double pred = Math.Exp(predictions[i, classIdx] - maxVal) / sumExp;
-                double target = GetClassIndexFromLabel(y[i]) == classIdx ? 1.0 : 0.0;
+                double target = targets[i] == classIdx ? 1.0 : 0.0;
 
                 gradients[i] = pred - target;
                 hessians[i] = pred * (1 - pred);
@@ -577,139 +577,6 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         }
 
         return (gradients, hessians);
-    }
-
-    /// <summary>
-    /// Builds a histogram-based decision tree.
-    /// </summary>
-    /// <param name="binnedX">Binned feature matrix.</param>
-    /// <param name="gradients">Gradient values.</param>
-    /// <param name="hessians">Hessian values.</param>
-    /// <param name="depth">Current depth.</param>
-    /// <param name="sampleIndices">Indices of samples in this node.</param>
-    /// <returns>Root node of the tree.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This builds a tree by:
-    /// <list type="number">
-    /// <item>Building histograms of gradients and hessians for each feature</item>
-    /// <item>Finding the best split by scanning histogram bins</item>
-    /// <item>Recursively splitting until stopping criteria are met</item>
-    /// </list>
-    /// The key speedup is that we only evaluate O(bins) splits per feature instead of O(samples).
-    /// </para>
-    /// </remarks>
-    private HistTree BuildHistTree(int[,] binnedX, double[] gradients, double[] hessians,
-        int depth, int[]? sampleIndices = null)
-    {
-        int n = binnedX.GetLength(0);
-        sampleIndices ??= Enumerable.Range(0, n).ToArray();
-
-        // Compute leaf value
-        double sumGrad = 0;
-        double sumHess = 0;
-        foreach (int i in sampleIndices)
-        {
-            sumGrad += gradients[i];
-            sumHess += hessians[i];
-        }
-
-        double leafValue = -sumGrad / (sumHess + _l2Regularization);
-
-        // Stopping conditions
-        if (depth >= _maxDepth || sampleIndices.Length < 2 * _minSamplesLeaf)
-        {
-            return new HistTree { LeafValue = leafValue };
-        }
-
-        // Find best split
-        int bestFeature = -1;
-        int bestBin = -1;
-        double bestGain = 0;
-
-        for (int j = 0; j < NumFeatures; j++)
-        {
-            // Build histogram for this feature
-            int numBins = _binBoundaries is not null ? _binBoundaries[j].Length + 1 : _maxBins;
-            var binGradSum = new double[numBins];
-            var binHessSum = new double[numBins];
-            var binCount = new int[numBins];
-
-            foreach (int i in sampleIndices)
-            {
-                int bin = binnedX[i, j];
-                binGradSum[bin] += gradients[i];
-                binHessSum[bin] += hessians[i];
-                binCount[bin]++;
-            }
-
-            // Scan for best split
-            double leftGradSum = 0;
-            double leftHessSum = 0;
-            int leftCount = 0;
-
-            for (int b = 0; b < numBins - 1; b++)
-            {
-                leftGradSum += binGradSum[b];
-                leftHessSum += binHessSum[b];
-                leftCount += binCount[b];
-
-                double rightGradSum = sumGrad - leftGradSum;
-                double rightHessSum = sumHess - leftHessSum;
-                int rightCount = sampleIndices.Length - leftCount;
-
-                if (leftCount < _minSamplesLeaf || rightCount < _minSamplesLeaf)
-                {
-                    continue;
-                }
-
-                // Compute gain
-                double leftVal = leftGradSum * leftGradSum / (leftHessSum + _l2Regularization);
-                double rightVal = rightGradSum * rightGradSum / (rightHessSum + _l2Regularization);
-                double parentVal = sumGrad * sumGrad / (sumHess + _l2Regularization);
-                double gain = 0.5 * (leftVal + rightVal - parentVal);
-
-                if (gain > bestGain)
-                {
-                    bestGain = gain;
-                    bestFeature = j;
-                    bestBin = b;
-                }
-            }
-        }
-
-        // No good split found
-        if (bestFeature < 0)
-        {
-            return new HistTree { LeafValue = leafValue };
-        }
-
-        // Split samples
-        var leftIndices = new List<int>();
-        var rightIndices = new List<int>();
-
-        foreach (int i in sampleIndices)
-        {
-            if (binnedX[i, bestFeature] <= bestBin)
-            {
-                leftIndices.Add(i);
-            }
-            else
-            {
-                rightIndices.Add(i);
-            }
-        }
-
-        // Build child trees
-        var leftTree = BuildHistTree(binnedX, gradients, hessians, depth + 1, [.. leftIndices]);
-        var rightTree = BuildHistTree(binnedX, gradients, hessians, depth + 1, [.. rightIndices]);
-
-        return new HistTree
-        {
-            FeatureIndex = bestFeature,
-            BinThreshold = bestBin,
-            LeftChild = leftTree,
-            RightChild = rightTree
-        };
     }
 
     /// <summary>

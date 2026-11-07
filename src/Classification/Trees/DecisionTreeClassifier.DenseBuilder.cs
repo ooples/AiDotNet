@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Enums;
 
 namespace AiDotNet.Classification.Trees;
@@ -27,19 +28,27 @@ public partial class DecisionTreeClassifier<T>
     /// <summary>Nodes below this many rows sort by comparison; larger ones by radix.</summary>
     private const int RadixSortMinRows = 256;
 
+    [Scratch]
     private DenseTreeData _denseData = EmptyDenseData;
 
     /// <summary>Each training row's index into <see cref="ClassifierBase{T}.ClassLabels"/>, by data row.</summary>
+    [Scratch]
     private int[] _denseClasses = new int[0];
 
     /// <summary>Data rows of the training sample, repeats allowed; each node owns a contiguous range.</summary>
+    [Scratch]
     private int[] _denseRows = new int[0];
 
     /// <summary>Scratch for the split search and the partition, sized to the training sample.</summary>
+    [Scratch]
     private ulong[] _sortKeys = new ulong[0];
+    [Scratch]
     private ulong[] _radixScratch = new ulong[0];
+    [Scratch]
     private int[] _partitionScratch = new int[0];
+    [Scratch]
     private int[] _featurePool = new int[0];
+    [Scratch]
     private int[] _selectedFeatures = new int[0];
 
     private static readonly DenseTreeData EmptyDenseData = new(new double[0], 0, 0);
