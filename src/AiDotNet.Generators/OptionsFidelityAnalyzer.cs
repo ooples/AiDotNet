@@ -104,6 +104,22 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
                 foreach (var method in type.GetMembers().OfType<IMethodSymbol>().Where(m => !m.ReturnsVoid))
                     candidateMethods.Add(method.Name);
             }
+            // OptionReadGraph drops every Clone target, so binding the assembly's Clone calls (tensor clones
+            // among them) found nothing and cost most of the invocation pass.
+            candidateMethods.Remove("Clone");
+
+            // A simple name binds to an options property only through member scope (code inside an options
+            // type or a type nested in one) or a using static import; property patterns have their own action.
+            // Without this check every identifier sharing a name with some option (LearningRate, SampleRate,
+            // ModelPath in model code) was bound: the compat build's net471 compile spent 684 s here.
+            var usingStaticTrees = new HashSet<SyntaxTree>(start.Compilation.SyntaxTrees.Where(tree =>
+                tree.GetRoot(start.CancellationToken)
+                    .DescendantNodes(n => n is CompilationUnitSyntax || n is BaseNamespaceDeclarationSyntax)
+                    .OfType<UsingDirectiveSyntax>()
+                    .Any(u => u.StaticKeyword.IsKind(SyntaxKind.StaticKeyword))));
+            bool globalUsingStatic = usingStaticTrees.Any(tree =>
+                tree.GetRoot(start.CancellationToken).ChildNodes().OfType<UsingDirectiveSyntax>()
+                    .Any(u => u.StaticKeyword.IsKind(SyntaxKind.StaticKeyword) && u.GlobalKeyword.IsKind(SyntaxKind.GlobalKeyword)));
 
             var read = new OptionReadGraph(modelOptions, sourceOptions);
             var models = new ConcurrentBag<(INamedTypeSymbol Model, INamedTypeSymbol Options, bool CitesPaper)>();
@@ -141,6 +157,9 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
                 var name = (IdentifierNameSyntax)nodeContext.Node;
                 if ((name.Parent is MemberAccessExpressionSyntax access && access.Name == name)
                     || name.Parent is MemberBindingExpressionSyntax) return;
+                if (!candidateNames.Contains(name.Identifier.ValueText)) return;
+                if (!globalUsingStatic && !usingStaticTrees.Contains(name.SyntaxTree)
+                    && !InOptionsMemberScope(nodeContext.ContainingSymbol, modelOptions)) return;
                 RecordRead(nodeContext, name, modelOptions, candidateNames, read);
             }, SyntaxKind.IdentifierName);
             start.RegisterSyntaxNodeAction(nodeContext =>
@@ -326,6 +345,15 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
         return target.Parent is AssignmentExpressionSyntax assignment
             && assignment.IsKind(SyntaxKind.SimpleAssignmentExpression)
             && assignment.Left == target;
+    }
+
+    /// <summary>True when code in <paramref name="containing"/> can reach an options property by its simple
+    /// name: an enclosing type (the type itself or one it is nested in) derives from the options base.</summary>
+    private static bool InOptionsMemberScope(ISymbol? containing, INamedTypeSymbol modelOptions)
+    {
+        for (var type = containing as INamedTypeSymbol ?? containing?.ContainingType; type is not null; type = type.ContainingType)
+            if (DerivesFrom(type, modelOptions)) return true;
+        return false;
     }
 
     private static bool IsInsideNameof(SyntaxNode node)
