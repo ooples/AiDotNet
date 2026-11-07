@@ -20,7 +20,7 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <para><b>For Beginners:</b> These options set VALL-E 2's sizes, how many codes it predicts per step, how it samples,
 /// and how it is trained. The defaults follow the paper.</para>
 /// </remarks>
-public class VALLE2Options : VALLEOptions
+public class VALLE2Options : VallEModelOptions
 {
     /// <summary>Creates the paper's options.</summary>
     public VALLE2Options()

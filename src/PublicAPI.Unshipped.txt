@@ -1,4 +1,32 @@
 #nullable enable
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.VallEModelOptions() -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.VallEModelOptions(AiDotNet.TextToSpeech.CodecBased.VallEModelOptions! other) -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.SampleRate.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.SampleRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.HopSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.HopSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.HiddenDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.HiddenDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.NumHeads.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.NumHeads.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.NumEncoderLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.NumEncoderLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.NumDecoderLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.NumDecoderLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.DropoutRate.get -> double
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.DropoutRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.LearningRate.get -> double
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.LearningRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.WeightDecay.get -> double
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.WeightDecay.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.MaxTextLength.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.MaxTextLength.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.ModelPath.get -> string?
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.ModelPath.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.OnnxOptions.get -> AiDotNet.Onnx.OnnxModelOptions!
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.OnnxOptions.set -> void
+
 override AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>.GetInputDomain(int[]? inputShape) -> AiDotNet.NeuralNetworks.Layers.LayerInputDomain
 AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.DropoutRate.get -> double
 AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions.DropoutRate.set -> void
@@ -7061,10 +7089,10 @@ override AiDotNet.TextToSpeech.Vocoders.AmplitudePhaseVocoderBase<T>.SegmentSize
 override AiDotNet.TextToSpeech.Vocoders.AmplitudePhaseVocoderBase<T>.KeepsCentredFrame.get -> bool
 override AiDotNet.TextToSpeech.Vocoders.AmplitudePhaseVocoderBase<T>.CreateGenerator() -> System.Collections.Generic.IReadOnlyList<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>!
 override AiDotNet.TextToSpeech.Vocoders.AmplitudePhaseVocoderBase<T>.ComputeInputMel(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.VallEModelBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! modelPath, AiDotNet.TextToSpeech.CodecBased.VALLEOptions! options) -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.VallEModelBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, string! modelPath, AiDotNet.TextToSpeech.CodecBased.VallEModelOptions! options) -> void
 override AiDotNet.TextToSpeech.Vocoders.APNet2<T>.PredictComponents(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! LogAmplitude, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Real, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Imaginary)
-AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.Settings.get -> AiDotNet.TextToSpeech.CodecBased.VALLEOptions!
-AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.VallEModelBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.CodecBased.VALLEOptions! options, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer) -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.Settings.get -> AiDotNet.TextToSpeech.CodecBased.VallEModelOptions!
+AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.VallEModelBase(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.CodecBased.VallEModelOptions! options, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer) -> void
 abstract AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.PhonemeTable.get -> System.Collections.Generic.IReadOnlyList<string!>!
 virtual AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.LanguageCount.get -> int
 virtual AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.LanguagePlacement.get -> AiDotNet.TextToSpeech.CodecBased.VallELanguagePlacement
@@ -7101,30 +7129,30 @@ AiDotNet.TextToSpeech.CodecBased.VALLE2Options.MaxCodePositions.set -> void
 AiDotNet.TextToSpeech.CodecBased.VALLE2Options.DecoderDim.get -> int
 AiDotNet.TextToSpeech.CodecBased.VALLE2Options.DecoderDim.set -> void
 AiDotNet.TextToSpeech.CodecBased.VALLEOptions.VALLEOptions(AiDotNet.TextToSpeech.CodecBased.VALLEOptions! other) -> void
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.FeedForwardDim.get -> int
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.FeedForwardDim.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.TextTokens.get -> int
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.NumCodebooks.get -> int
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.TextTokens.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.CodebookSize.get -> int
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.NumCodebooks.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.CodebookSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.FeedForwardDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.FeedForwardDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.TextTokens.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.NumCodebooks.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.TextTokens.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.CodebookSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.NumCodebooks.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.CodebookSize.set -> void
 AiDotNet.TextToSpeech.CodecBased.VALLEOptions.PromptSeconds.set -> void
 AiDotNet.TextToSpeech.CodecBased.VALLEOptions.PromptSeconds.get -> double
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.WarmupSteps.get -> int
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.WarmupSteps.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.TrainingSteps.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.TrainingSteps.get -> int
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.Temperature.get -> double
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.Temperature.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.TopK.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.TopK.get -> int
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.MaxCodesPerTextToken.get -> int
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.Codec.get -> AiDotNet.Audio.Generation.EnCodecOptions!
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.MaxCodesPerTextToken.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.Codec.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.SamplingSeed.get -> int
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.SamplingSeed.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.WarmupSteps.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.WarmupSteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.TrainingSteps.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.TrainingSteps.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.Temperature.get -> double
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.Temperature.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.TopK.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.TopK.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.MaxCodesPerTextToken.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.Codec.get -> AiDotNet.Audio.Generation.EnCodecOptions!
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.MaxCodesPerTextToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.Codec.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.SamplingSeed.get -> int
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.SamplingSeed.set -> void
 static AiDotNet.TextToSpeech.CodecBased.VALLEOptions.CreatePaperCodec() -> AiDotNet.Audio.Generation.EnCodecOptions!
 AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.Tokens.get -> System.Collections.Generic.IReadOnlyList<string!>!
 AiDotNet.TextToSpeech.CodecBased.VallEModelBase<T>.MaxTextLength.get -> int
@@ -19454,10 +19482,10 @@ AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.UseReleasedTextFrontend.set -> 
 AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent
 AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent.LanguageModel = 0 -> AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent
 AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent.UniversalCodec = 1 -> AiDotNet.TextToSpeech.CodecBased.UniAudioTrainingComponent
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.PrependBos.get -> bool
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.PrependBos.set -> void
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.StopOnMostLikelyEndToken.get -> bool
-AiDotNet.TextToSpeech.CodecBased.VALLEOptions.StopOnMostLikelyEndToken.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.PrependBos.get -> bool
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.PrependBos.set -> void
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.StopOnMostLikelyEndToken.get -> bool
+AiDotNet.TextToSpeech.CodecBased.VallEModelOptions.StopOnMostLikelyEndToken.set -> void
 AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.LanguageCount.get -> int
 AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.LanguageCount.set -> void
 AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.SynthesisLanguage.get -> AiDotNet.TextToSpeech.CodecBased.VallEXLanguage?

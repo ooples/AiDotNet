@@ -104,7 +104,7 @@ public partial class VALLE<T> : VallEModelBase<T>
     protected override Func<Tensor<T>, Tensor<T>, Tensor<T>> NonAutoRegressiveObjective(TtsTrainingSample<T> sample,
         int[] text, int[,] codes, bool training, Random random)
     {
-        int promptFrames = (int)Math.Round(Settings.PromptSeconds * CodecFrameRate);
+        int promptFrames = (int)Math.Round(((VALLEOptions)Settings).PromptSeconds * CodecFrameRate);
         return (_, _) => PaperCore.NarLoss(text, codes, promptFrames, training, random);
     }
 

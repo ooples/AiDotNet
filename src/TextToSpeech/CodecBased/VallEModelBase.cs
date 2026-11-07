@@ -36,7 +36,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     /// <summary>The frame tokens.</summary>
     protected const int PadToken = 0, BeginToken = 1, EndToken = 2;
 
-    private readonly VALLEOptions _options;
+    private readonly VallEModelOptions _options;
     private readonly bool _useNativeMode;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _suppliedOptimizer;
     private readonly Dictionary<VallETrainingStage, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>> _stageOptimizers = new();
@@ -54,7 +54,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     private AudioCodecLayer<T>? _codec;
 
     /// <summary>Creates an ONNX-backed model for inference.</summary>
-    protected VallEModelBase(NeuralNetworkArchitecture<T> architecture, string modelPath, VALLEOptions options)
+    protected VallEModelBase(NeuralNetworkArchitecture<T> architecture, string modelPath, VallEModelOptions options)
         : base(architecture)
     {
         _options = options ?? throw new ArgumentNullException(nameof(options));
@@ -73,7 +73,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Creates a native, trainable model.</summary>
-    protected VallEModelBase(NeuralNetworkArchitecture<T> architecture, VALLEOptions options,
+    protected VallEModelBase(NeuralNetworkArchitecture<T> architecture, VallEModelOptions options,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer)
         : base(architecture)
     {
@@ -88,7 +88,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>The model's options.</summary>
-    protected VALLEOptions Settings => _options;
+    protected VallEModelOptions Settings => _options;
 
     /// <summary>The model's phoneme table (sorted into the vocabulary after the three frame tokens).</summary>
     protected abstract IReadOnlyList<string> PhonemeTable { get; }

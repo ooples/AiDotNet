@@ -674,3 +674,24 @@ assembly the parent's flattened surface excludes the separately owned codec,
 so its parent count is 65,857 versus the hosted full 113,168; those counts are
 not a parameter-loss claim. Current option outcomes still need the new hosted
 model metadata, and remaining frontend/task-specific ownership is under audit.
+
+VALL-E option ownership now follows the actual native consumers. The common
+VallEModelOptions retains both Transformer depths and all 25 consumed shared
+properties. VALLE alone retains PromptSeconds: its NAR samples the same-utterance
+prompt using that duration. VALLEX/Clone use an explicit second-utterance prompt
+(NarLossWithPrompt), while VALLE2 uses MinPromptSeconds/MaxPromptSeconds. The
+public configurable VocabSize was overwritten by the selected phone table;
+it is now internal computed state. MelChannels/FftSize/MaxMelLength and the old
+codec facade settings have no native consumers and are absent.
+
+Changed-source family compilation passes with zero warnings/errors. Every
+retained default on VALLEOptions, VALLEXOptions, VALLE2Options and
+VALLEXCloneOptions matches the old hosted configuration, including nested codec
+and ONNX settings. All 16 prior native facade cases still pass. Two positive
+paired-depth cases (depth 1 and 2) train both real AR/NAR objectives and change
+parameters. API comparison against release 0.234.0 for net10.0, net8.0 and net471
+reports only the three already acknowledged CP0007 base changes for these option
+types. The newly introduced protected base signatures and moved declarations
+are updated in PublicAPI.Unshipped.txt. Removed baseline rows correspond only
+to properties absent from the new public configuration; retained behavioral
+probes still need their real task contexts.

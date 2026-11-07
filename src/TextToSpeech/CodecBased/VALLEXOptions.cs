@@ -27,7 +27,7 @@ public enum VallEXLanguage
 /// <para><b>For Beginners:</b> These options set VALL-E X's sizes, codec and training. The defaults reproduce the
 /// paper; <see cref="LanguagePlacement"/> switches to the reference reproduction's language embedding.</para>
 /// </remarks>
-public class VALLEXOptions : VALLEOptions
+public class VALLEXOptions : VallEModelOptions
 {
     /// <summary>Creates the paper's options.</summary>
     public VALLEXOptions()

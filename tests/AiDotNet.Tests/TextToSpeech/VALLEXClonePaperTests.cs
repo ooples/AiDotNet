@@ -13,6 +13,28 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class VALLEXClonePaperTests
 {
     [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void PairedTransformerDepthsRunBothNativeObjectives(int depth)
+    {
+        var options = Tiny();
+        options.NumEncoderLayers = options.NumDecoderLayers = depth;
+        using var model = Create(options);
+        var sample = new TtsTrainingSample<double>
+        {
+            Tokens = model.TextToTokens("你好"), CodecTokens = Codes(6, 0), PromptCodecTokens = Codes(3, 17),
+            LanguageId = (int)VallEXLanguage.Mandarin,
+        };
+        foreach (var stage in new[] { VallETrainingStage.AutoRegressive, VallETrainingStage.NonAutoRegressive })
+        {
+            model.CurrentStage = stage;
+            var before = model.GetParameters().ToArray();
+            Assert.True(TtsPaperNumerics.IsFinite(model.Train(sample)));
+            Assert.False(before.SequenceEqual(model.GetParameters()));
+        }
+    }
+
+    [Theory]
     [InlineData("WarmupSteps")]
     [InlineData("TrainingSteps")]
     public void NativeLearningRateScheduleAdvancesForEachTrainingBatch(string option)
