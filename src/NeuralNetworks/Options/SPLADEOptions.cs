@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
@@ -5,6 +6,8 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the SPLADE model.
 /// </summary>
+[PaperDefault(nameof(VocabSize), 30522, Source = "Formal et al. 2021, Sec. 3.1: the BERT WordPiece vocabulary, |V| = 30522")]
+[PaperDefault(nameof(MaxSequenceLength), 256, Source = "Formal et al. 2021, Sec. 4: a maximum length of 256 for input sequences")]
 public class SPLADEOptions : TransformerEmbeddingOptions
 {
     /// <summary>
@@ -26,7 +29,7 @@ public class SPLADEOptions : TransformerEmbeddingOptions
     {
         VocabSize = 30522;
         EmbeddingDimension = 768;
-        MaxSequenceLength = 512;
+        MaxSequenceLength = 256;
         NumLayers = 12;
         NumHeads = 12;
         FeedForwardDim = 3072;

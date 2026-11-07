@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
@@ -5,6 +6,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the WGAN neural network.
 /// </summary>
+[PaperDefault(nameof(CriticIterations), 5, Source = "Arjovsky et al. 2017, Algorithm 1: default n_critic = 5")]
 public class WGANOptions : GanOptions
 {
     /// <summary>

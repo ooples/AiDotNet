@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
@@ -13,6 +14,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// so the model silently inherited whatever the base supplied.
 /// </para>
 /// </remarks>
+[PaperDefault(nameof(VocabSize), 256000, Source = "Botev et al. 2024, Table 1 and Sec. 3.1: a vocabulary of 256k tokens")]
 public class RecurrentGemmaOptions : SequenceModelOptions
 {
     /// <summary>

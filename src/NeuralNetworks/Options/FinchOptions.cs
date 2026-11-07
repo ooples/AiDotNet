@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
@@ -5,6 +6,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the FinchLanguageModel.
 /// </summary>
+[PaperDefault(nameof(VocabSize), 65536, Source = "Peng et al. 2024, Sec. 5: the RWKV World tokenizer, V = 65536")]
 public class FinchOptions : SequenceModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
