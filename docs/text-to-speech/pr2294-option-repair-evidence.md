@@ -338,3 +338,8 @@ the real CIF tail firing, whereas Predict produces training-aligned logits.
 The observer now transcribes deterministic recordings at four short lengths.
 The compiled probe passes for tail threshold 0.5 -> 0.25 through actual public
 transcription; scoped build has zero warnings/errors.
+
+DAC QuantizerDropout now uses four quantizers in both control and candidate.
+With only one quantizer, U[1,N] always returns one and cannot exercise dropout.
+The compiled probe now passes for probability 1 -> 0.5 through real training;
+the scoped build has zero warnings/errors.
