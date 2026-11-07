@@ -9,6 +9,27 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class CosyVoice3OptionContextTests
 {
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void PairedCausalHiftRatesAndMelHopControlDecodedLength(int rate)
+    {
+        var options = CosyVoice3Fixture.Options();
+        options.HiftUpsampleRates = new[] { rate };
+        options.HiftUpsampleKernels = new[] { 2 * rate };
+        options.HopSize = 4 * rate;
+        using var model = CosyVoice3Fixture.Create(options);
+        var wave = model.CausalVocoder!.Forward(new Tensor<double>(new[] { 1, options.MelChannels, 4 }), new Random(7));
+        Assert.Equal(4 * options.HopSize, wave.Length);
+    }
+
+    [Fact]
+    public void UnpairedCausalHiftMelHopIsRejected()
+    {
+        var options = CosyVoice3Fixture.Options(); options.HopSize++;
+        Assert.Throws<ArgumentException>(() => CosyVoice3Fixture.Create(options));
+    }
+
     [Fact]
     public void NativeNucleusSamplerReadsConfiguredTopP()
     {
