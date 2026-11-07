@@ -6,6 +6,69 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class StyleTts2OptionContextTests
 {
+    [Fact]
+    public void SlmSampleRateChangesTheActualFrozenWavLmObjective()
+    {
+        var options = StyleTts2Fixture.Options();
+        using var control = StyleTts2Fixture.Create(options);
+        using var changed = StyleTts2Fixture.Create(new StyleTTS2Options(options) { SlmSampleRate = 32000 });
+        control.CurrentStage = changed.CurrentStage = StyleTts2TrainingStage.Joint;
+        Assert.Equal(control.GetParameters().ToArray(), changed.GetParameters().ToArray());
+        var sample = StyleTts2Fixture.Sample();
+        double first = control.EvaluateTrainingObjective(sample, adversarialTerms: true);
+        double second = changed.EvaluateTrainingObjective(sample, adversarialTerms: true);
+        Assert.True(TtsPaperNumerics.IsFinite(first));
+        Assert.True(TtsPaperNumerics.IsFinite(second));
+        Assert.NotEqual(first, second);
+    }
+
+    [Theory]
+    [InlineData(StyleTts2DecoderType.HiFiGan, 2, 4, 20, 5)]
+    [InlineData(StyleTts2DecoderType.HiFiGan, 4, 2, 20, 5)]
+    [InlineData(StyleTts2DecoderType.HiFiGan, 3, 2, 20, 5)]
+    [InlineData(StyleTts2DecoderType.IstftNet, 2, 4, 20, 5)]
+    [InlineData(StyleTts2DecoderType.IstftNet, 2, 4, 24, 4)]
+    [InlineData(StyleTts2DecoderType.IstftNet, 2, 4, 4, 1)]
+    public void PairedDecoderGeometryControlsTheNativeWaveform(StyleTts2DecoderType type, int firstRate, int secondRate, int fft, int istftHop)
+    {
+        var options = StyleTts2Fixture.Options();
+        options.DecoderType = type;
+        options.UpsampleRates = new[] { firstRate, secondRate };
+        options.UpsampleKernels = new[] { 2 * firstRate, 2 * secondRate };
+        options.IstftFftSize = fft; options.IstftHopSize = istftHop;
+        options.HopSize = firstRate * secondRate * (type == StyleTts2DecoderType.IstftNet ? istftHop : 1);
+        using var model = StyleTts2Fixture.Create(options);
+        var asr = new Tensor<double>(new[] { 1, options.HiddenDim, 3 });
+        for (int i = 0; i < asr.Length; i++) asr[i] = 0.1 * Math.Sin(i * 0.17);
+        var pitch = new Tensor<double>(new[] { 6 });
+        var energy = new Tensor<double>(new[] { 6 });
+        for (int i = 0; i < 6; i++) { pitch[i] = 180; energy[i] = 0.3; }
+        var style = new Tensor<double>(new[] { 1, options.StyleDim });
+        var wave = model.DecoderNetwork.Forward(asr, pitch, energy, style, false, new Random(7));
+        Assert.Equal(6 * options.HopSize, wave.Length);
+        Assert.All(wave, value => Assert.True(TtsPaperNumerics.IsFinite(value)));
+        Assert.True(wave.Any(value => Math.Abs(value) > 1e-12));
+    }
+
+    [Theory]
+    [InlineData("UpsampleRates")]
+    [InlineData("UpsampleKernels")]
+    [InlineData("HopSize")]
+    [InlineData("IstftHopSize")]
+    public void UnpairedDecoderGeometryIsRejectedBeforeAllocation(string option)
+    {
+        var options = StyleTts2Fixture.Options();
+        switch (option)
+        {
+            case "UpsampleRates": options.UpsampleRates = new[] { 4, 4 }; break;
+            case "UpsampleKernels": options.UpsampleKernels = new[] { 5, 8 }; break;
+            case "HopSize": options.HopSize++; break;
+            case "IstftHopSize": options.DecoderType = StyleTts2DecoderType.IstftNet; options.HopSize = 40; options.IstftHopSize = 4; break;
+            default: throw new ArgumentOutOfRangeException(nameof(option));
+        }
+        Assert.Throws<ArgumentException>(() => StyleTts2Fixture.Create(options));
+    }
+
     [Theory]
     [InlineData(-0.1)]
     [InlineData(1)]

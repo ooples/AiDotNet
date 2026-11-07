@@ -21892,3 +21892,11 @@ AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.RepetitionWindow.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.RepetitionWindow.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.DiscriminatorWidthDivisor.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.DiscriminatorWidthDivisor.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.HopSize.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.HopSize.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.UpsampleRates.get -> int[]!
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.UpsampleRates.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.UpsampleKernels.get -> int[]!
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.UpsampleKernels.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.IstftHopSize.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.IstftHopSize.set -> void

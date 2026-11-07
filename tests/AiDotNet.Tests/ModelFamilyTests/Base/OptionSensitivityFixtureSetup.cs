@@ -90,7 +90,9 @@ internal static class OptionSensitivityFixtureSetup
                 or AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T> ? "vocoder-frontend"
             : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option == "MaximumAudioFrames" ? "voicebox-audio-chunk"
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T>
-                ? IsStyleTts2JointOption(option) ? "styletts2-joint" : "styletts2-pretraining"
+                ? option == "DecoderType" ? "styletts2-decoder-switch"
+                : option == "IstftFftSize" ? "styletts2-istft"
+                : IsStyleTts2JointOption(option) ? "styletts2-joint" : "styletts2-pretraining"
             : network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && option == "TopK" ? "cosy-top-k"
             : network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && IsCosyFlowOption(option) ? "cosy-flow"
             : network is AiDotNet.TextToSpeech.Classic.ForwardTacotron<T> ? option switch
@@ -479,7 +481,9 @@ internal static class OptionSensitivityFixtureSetup
     }
 
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
-        => network is AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> && IsSpiralPretrainingOption(option)
+        => network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "BertBeta1"
+            ? Math.Max(2, steps)
+            : network is AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> && IsSpiralPretrainingOption(option)
             || network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> && option == "TrainingBetaEnd"
             ? Math.Max(3, steps) : steps;
 
@@ -721,6 +725,19 @@ internal static class OptionSensitivityFixtureSetup
             cosy.TrainingCfgRate = 0.5;
         if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options dit && option == "DiTTrainingCfgRate")
             dit.DiTTrainingCfgRate = 0.5;
+        if (options is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options styleDecoder)
+        {
+            if (option == "DecoderType")
+            {
+                styleDecoder.IstftHopSize = 1;
+                styleDecoder.IstftFftSize = 4;
+            }
+            if (option == "IstftFftSize")
+            {
+                styleDecoder.DecoderType = AiDotNet.TextToSpeech.StyleEmotion.StyleTts2DecoderType.IstftNet;
+                styleDecoder.HopSize = styleDecoder.UpsampleRates.Aggregate(1, (a, b) => a * b) * styleDecoder.IstftHopSize;
+            }
+        }
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chatter && option == "VoiceEncoderPartialRate")
             chatter.VoiceEncoderPartialFrames = 160;
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chunked && option == "StaticChunkSize")

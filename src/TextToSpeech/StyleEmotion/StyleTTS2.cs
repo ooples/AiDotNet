@@ -136,6 +136,9 @@ public partial class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (o.WindowLength > o.FftSize) throw new ArgumentException("The analysis window must fit the FFT.");
         if (o.UpsampleRates.Length == 0 || o.UpsampleRates.Length != o.UpsampleKernels.Length)
             throw new ArgumentException("Give one upsampling kernel per upsampling rate.");
+        for (int i = 0; i < o.UpsampleRates.Length; i++)
+            if (o.UpsampleRates[i] <= 0 || o.UpsampleKernels[i] != 2L * o.UpsampleRates[i])
+                throw new ArgumentException("Each positive upsampling rate needs a kernel twice its size.", nameof(o.UpsampleKernels));
         if (o.ResBlockKernels.Length != o.ResBlockDilations.Length)
             throw new ArgumentException("Give one dilation list per residual-block kernel.");
         int hop = o.UpsampleRates.Aggregate(1, (a, b) => a * b) * (o.DecoderType == StyleTts2DecoderType.IstftNet ? o.IstftHopSize : 1);
