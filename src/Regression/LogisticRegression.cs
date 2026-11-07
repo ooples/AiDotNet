@@ -176,18 +176,17 @@ public partial class LogisticRegression<T> : RegressionBase<T>
         // regression. The back-transform at the end keeps Coefficients and Intercept meaningful on the
         // caller's own scale, so nothing outside this method has to know.
         var (featureMean, featureStd) = ComputeStandardization(x, p);
-        Matrix<T> xStandardized = Standardize(x, featureMean, featureStd);
+        var (standardized, targets) = StandardizedDoubles(x, y, featureMean, featureStd);
 
         // One objective for every solver: the mean log loss plus the regularization penalty, over [coefficients,
         // intercept]. This was a hand-written gradient ascent of 1,000 fixed steps, 160x slower than scikit-learn's
         // L-BFGS on 20,000 rows to the same accuracy, and it added the penalty's gradient with the ascent's sign, so
         // regularization pushed the coefficients AWAY from zero during the fit and a single shrink at the end stood
         // in for it. As a term of the minimized objective the penalty now acts throughout.
-        Matrix<T> xTranspose = xStandardized.Transpose();
         var solver = _options.Solver ?? LBFGSOptimizer<T, Matrix<T>, Vector<T>>.CreateForFunction();
         var solution = solver.Minimize(
             new Vector<T>(p + 1),
-            weights => LogLossAndGradient(weights, xStandardized, xTranspose, y),
+            weights => LogLossAndGradient(weights, standardized, targets, p),
             _options.MaxIterations,
             NumOps.FromDouble(_options.Tolerance));
 
@@ -243,38 +242,66 @@ public partial class LogisticRegression<T> : RegressionBase<T>
     /// linear along that ray. The objective and gradient must agree for a line search to work, and
     /// <see cref="IRegularization{T, TInput, TOutput}"/> exposes only the gradient. The intercept is not penalized.
     /// </remarks>
+    /// <summary>Rows per block of the objective's parallel pass.</summary>
+    private const int LossBlockRows = 2048;
+
     private (T Objective, Vector<T> Gradient) LogLossAndGradient(
-        Vector<T> weights, Matrix<T> x, Matrix<T> xTranspose, Vector<T> y)
+        Vector<T> weights, double[] x, double[] y, int p)
     {
-        int n = x.Rows;
-        int p = x.Columns;
+        int n = y.Length;
         var coefficients = new Vector<T>(p);
+        var beta = new double[p];
         for (int j = 0; j < p; j++)
-            coefficients[j] = weights[j];
-        T intercept = weights[p];
-
-        var margins = x.Multiply(coefficients);
-        var residuals = new Vector<T>(n);
-        T loss = NumOps.Zero;
-        T residualSum = NumOps.Zero;
-        for (int i = 0; i < n; i++)
         {
-            T z = NumOps.Add(margins[i], intercept);
-            // softplus(z) = max(z, 0) + log(1 + exp(-|z|))
-            T absZ = NumOps.Abs(z);
-            T softplus = NumOps.Add(
-                NumOps.GreaterThan(z, NumOps.Zero) ? z : NumOps.Zero,
-                NumOps.Log(NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(absZ)))));
-            loss = NumOps.Add(loss, NumOps.Subtract(softplus, NumOps.Multiply(y[i], z)));
-
-            T probability = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, NumOps.Exp(NumOps.Negate(z))));
-            residuals[i] = NumOps.Subtract(probability, y[i]);
-            residualSum = NumOps.Add(residualSum, residuals[i]);
+            coefficients[j] = weights[j];
+            beta[j] = NumOps.ToDouble(weights[j]);
         }
 
-        T count = NumOps.FromDouble(n);
-        var coefficientGradient = xTranspose.Multiply(residuals).Divide(count);
-        T objective = NumOps.Divide(loss, count);
+        double intercept = NumOps.ToDouble(weights[p]);
+
+        // One pass over the rows: the margin, its loss term and residual, and the residual's share of the gradient.
+        // Fixed blocks of rows run in parallel and their sums are added in block order, so the result does not
+        // depend on how many threads ran it. Each block keeps [gradient sums..., loss, residual total].
+        int blocks = (n + LossBlockRows - 1) / LossBlockRows;
+        var partials = new double[blocks][];
+        System.Threading.Tasks.Parallel.For(0, blocks, block =>
+        {
+            var sums = new double[p + 2];
+            int end = Math.Min(n, (block + 1) * LossBlockRows);
+            for (int i = block * LossBlockRows; i < end; i++)
+            {
+                int offset = i * p;
+                double z = intercept;
+                for (int j = 0; j < p; j++) z += x[offset + j] * beta[j];
+
+                // One exponential serves both terms: with e = exp(-|z|),
+                // softplus(z) = max(z, 0) + log(1 + e), and sigmoid(z) = 1 / (1 + e) for z >= 0, e / (1 + e) below.
+                double e = Math.Exp(-Math.Abs(z));
+                double onePlusE = 1.0 + e;
+                sums[p] += (z > 0 ? z : 0) + Math.Log(onePlusE) - y[i] * z;
+
+                double residual = (z >= 0 ? 1.0 : e) / onePlusE - y[i];
+                sums[p + 1] += residual;
+                for (int j = 0; j < p; j++) sums[j] += residual * x[offset + j];
+            }
+
+            partials[block] = sums;
+        });
+
+        var gradientSums = new double[p];
+        double loss = 0;
+        double residualTotal = 0;
+        foreach (var sums in partials)
+        {
+            for (int j = 0; j < p; j++) gradientSums[j] += sums[j];
+            loss += sums[p];
+            residualTotal += sums[p + 1];
+        }
+
+        var coefficientGradient = new Vector<T>(p);
+        for (int j = 0; j < p; j++) coefficientGradient[j] = NumOps.FromDouble(gradientSums[j] / n);
+        T objective = NumOps.FromDouble(loss / n);
+        T residualSum = NumOps.FromDouble(residualTotal);
 
         if (Regularization != null)
         {
@@ -295,7 +322,7 @@ public partial class LogisticRegression<T> : RegressionBase<T>
         var gradient = new Vector<T>(p + 1);
         for (int j = 0; j < p; j++)
             gradient[j] = coefficientGradient[j];
-        gradient[p] = NumOps.Divide(residualSum, count);
+        gradient[p] = NumOps.Divide(residualSum, NumOps.FromDouble(n));
         return (objective, gradient);
     }
 
@@ -311,25 +338,34 @@ public partial class LogisticRegression<T> : RegressionBase<T>
         var std = new Vector<T>(featureCount);
         int n = x.Rows;
 
+        // Row by row, each column's sums accumulating in row order (the order a column-by-column pass would take).
+        var sums = new double[featureCount];
+        for (int i = 0; i < n; i++)
+        {
+            var row = x.GetRowReadOnlySpan(i);
+            for (int j = 0; j < featureCount; j++) sums[j] += NumOps.ToDouble(row[j]);
+        }
+
+        var means = new double[featureCount];
+        for (int j = 0; j < featureCount; j++) means[j] = sums[j] / n;
+
+        var squares = new double[featureCount];
+        for (int i = 0; i < n; i++)
+        {
+            var row = x.GetRowReadOnlySpan(i);
+            for (int j = 0; j < featureCount; j++)
+            {
+                double d = NumOps.ToDouble(row[j]) - means[j];
+                squares[j] += d * d;
+            }
+        }
+
         for (int j = 0; j < featureCount; j++)
         {
-            double sum = 0.0;
-            for (int i = 0; i < n; i++)
-            {
-                sum += NumOps.ToDouble(x[i, j]);
-            }
-            double m = sum / n;
-
-            double sq = 0.0;
-            for (int i = 0; i < n; i++)
-            {
-                double d = NumOps.ToDouble(x[i, j]) - m;
-                sq += d * d;
-            }
-            double s = Math.Sqrt(sq / n);
+            double s = Math.Sqrt(squares[j] / n);
             if (s < 1e-10) s = 1.0;
 
-            mean[j] = NumOps.FromDouble(m);
+            mean[j] = NumOps.FromDouble(means[j]);
             std[j] = NumOps.FromDouble(s);
         }
 
@@ -337,20 +373,31 @@ public partial class LogisticRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Returns a copy of the design matrix with each column centered and scaled.
+    /// The design matrix with each column centered and scaled, row-major in double precision, and the 0/1 targets:
+    /// the data every evaluation of the objective reads.
     /// </summary>
-    private Matrix<T> Standardize(Matrix<T> x, Vector<T> mean, Vector<T> std)
+    private (double[] X, double[] Y) StandardizedDoubles(Matrix<T> x, Vector<T> y, Vector<T> mean, Vector<T> std)
     {
-        var result = new Matrix<T>(x.Rows, x.Columns);
-        for (int i = 0; i < x.Rows; i++)
+        int p = x.Columns;
+        var meanValues = new double[p];
+        var stdValues = new double[p];
+        for (int j = 0; j < p; j++)
         {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                result[i, j] = NumOps.Divide(NumOps.Subtract(x[i, j], mean[j]), std[j]);
-            }
+            meanValues[j] = NumOps.ToDouble(mean[j]);
+            stdValues[j] = NumOps.ToDouble(std[j]);
         }
 
-        return result;
+        var result = new double[x.Rows * p];
+        for (int i = 0; i < x.Rows; i++)
+        {
+            var source = x.GetRowReadOnlySpan(i);
+            for (int j = 0; j < p; j++)
+                result[i * p + j] = (NumOps.ToDouble(source[j]) - meanValues[j]) / stdValues[j];
+        }
+
+        var targets = new double[y.Length];
+        for (int i = 0; i < y.Length; i++) targets[i] = NumOps.ToDouble(y[i]);
+        return (result, targets);
     }
 
     /// <summary>
