@@ -368,3 +368,10 @@ constraint explanation and two API accessor declarations. Changed-source tests
 reject 0, 2 and -1, and a mono model still reconstructs finite 256-sample
 audio through the actual encoder, quantizer and decoder. All existing stage
 checks continue to pass; scoped build has zero warnings/errors.
+
+MaskGCT duration probes now clear the fixed-duration override, select the
+actual predictor and use its Duration training stage. DurationMode changes
+TargetLength; DurationSteps, DurationGuidance and DurationHeads are observed
+in the predictor's continuous per-phone output before frame rounding. All
+four compiled probes pass, with no baseline/exemption additions; scoped build
+has zero warnings/errors.

@@ -9,6 +9,9 @@ internal static class OptionSensitivityFixtureSetup
     private static bool IsGooglePretrainingOption(string option) => option is
         "MaskNoiseStd" or "MaskLength" or "MaskProbability" or "CodeDim" or "StackedFrames";
 
+    private static bool IsMaskGctDurationOption(string option) => option is
+        "DurationMode" or "DurationSteps" or "DurationGuidance" or "DurationHeads";
+
     private static bool IsMaskGctSamplingOption(string option) => option is
         "TextToSemanticSteps" or "TextToSemanticTemperature" or "SemanticToAcousticTemperature" or "SamplingSeed";
 
@@ -47,6 +50,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> && IsFishScheduleOption(option) ? "fish-training-schedule"
             : network is AiDotNet.Audio.Effects.DAC<T> && option == "QuantizerDropout" ? "dac-quantizer-dropout"
             : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && IsMaskGctSamplingOption(option) ? "maskgct-token-sampling"
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && IsMaskGctDurationOption(option) ? "maskgct-duration-predictor"
             : network is AiDotNet.PointCloud.Models.DGCNN<T> && option is "DropoutRate" or "UseDropout" ? "dgcnn-dropout"
             : network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds" ? "cam-audio-frontend"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
@@ -91,6 +95,28 @@ internal static class OptionSensitivityFixtureSetup
     {
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fish && option == "ConstrainToSemanticTokens")
             return ObserveFishFrames(fish, input);
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> durationMask && IsMaskGctDurationOption(option))
+        {
+            durationMask.SetTrainingMode(false);
+            var settings = (AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions)durationMask.GetOptions();
+            if (settings.TargetDurationSeconds is not null) throw new InvalidOperationException("Duration predictor probes require no fixed-duration override.");
+            var phones = Enumerable.Range(0, 8).Select(i => 1 + i % 4).ToArray();
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var random = new Random(settings.SamplingSeed);
+            int frames = (int)durationMask.GetType().GetMethod("TargetLength", flags)!.Invoke(durationMask,
+                new object[] { new[] { 1, 2 }, phones, 640, random })!;
+            long result = OptionSensitivityHarness.Fingerprint(new[] { (double)frames });
+            if (option != "DurationMode")
+            {
+                var predictor = durationMask.GetType().GetProperty("DurationPredictor", flags)!.GetValue(durationMask)!;
+                random = new Random(settings.SamplingSeed);
+                var noise = phones.Select(_ => Math.Sqrt(-2 * Math.Log(1 - random.NextDouble())) * Math.Cos(2 * Math.PI * random.NextDouble())).ToArray();
+                var durations = (double[])predictor.GetType().GetMethod("Generate")!.Invoke(predictor,
+                    new object[] { Array.Empty<int>(), Array.Empty<int>(), phones, settings.DurationSteps, settings.DurationGuidance, noise })!;
+                result = OptionSensitivityHarness.Combine(result, OptionSensitivityHarness.Fingerprint(durations));
+            }
+            return result;
+        }
         long fingerprint = observe(network, ObservationInput(network, input, option));
         if (network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> mask && IsMaskGctSamplingOption(option))
         {
@@ -398,6 +424,13 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions durationMask && IsMaskGctDurationOption(option))
+        {
+            durationMask.TargetDurationSeconds = null;
+            durationMask.DurationMode = AiDotNet.TextToSpeech.FlowDiffusion.MaskGctDurationMode.Predictor;
+            durationMask.DurationSteps = 2;
+            durationMask.CurrentStage = AiDotNet.TextToSpeech.FlowDiffusion.MaskGctStage.Duration;
+        }
         if (options is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions mask && IsMaskGctSamplingOption(option))
         {
             mask.FilterThreshold = 0; // A top-one filter removes every temperature/sampling distinction.
