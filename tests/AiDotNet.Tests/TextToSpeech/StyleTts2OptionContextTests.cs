@@ -20,7 +20,19 @@ public class StyleTts2OptionContextTests
         foreach (var source in new StyleTtsBaseOptions[] { new StyleTTSOptions(), new StyleTTS2Options(), new StyleTTSZSOptions() })
         {
             source.SampleRate = 16000; source.MelChannels = 32; source.HopSize = 32; source.FftSize = 256;
-            source.HiddenDim = 16; source.VocabSize = 192; source.MaxTextLength = 64; source.DropoutRate = 0.35;
+            source.VocabSize = 192; source.MaxTextLength = 64;
+            if (source is StyleTTSOptions firstEncoder)
+            {
+                firstEncoder.HiddenDim = 16; firstEncoder.DropoutRate = .35;
+                firstEncoder.TextLayers = 2; firstEncoder.TextKernel = 3;
+                firstEncoder.StyleEncoderDim = 8; firstEncoder.MaxConvDim = 32;
+            }
+            if (source is StyleTTS2Options secondEncoder)
+            {
+                secondEncoder.HiddenDim = 16; secondEncoder.DropoutRate = .35;
+                secondEncoder.TextLayers = 2; secondEncoder.TextKernel = 3;
+                secondEncoder.StyleEncoderDim = 8; secondEncoder.MaxConvDim = 32;
+            }
             source.ModelPath = "contract.onnx"; source.LearningRate = 0.002; source.WeightDecay = 0.005;
             source.Seed = 13; source.PitchExtractorChannels = new[] { 4, 8, 16, 8 };
             if (source is StyleTtsWaveformOptions waveform)
@@ -48,6 +60,20 @@ public class StyleTts2OptionContextTests
                 Assert.NotSame(originalWaveform.ResBlockKernels, copiedWaveform.ResBlockKernels);
             }
         }
+    }
+
+    [Fact]
+    public void ZeroShotOptionsRetainTheirOwnNativeEncoderControls()
+    {
+        foreach (string name in new[] { "HiddenDim", "DropoutRate", "TextLayers", "TextKernel", "StyleEncoderDim", "MaxConvDim" })
+        {
+            Assert.Null(typeof(StyleTTSZSOptions).GetProperty(name));
+            Assert.NotNull(typeof(StyleTTSOptions).GetProperty(name));
+            Assert.NotNull(typeof(StyleTTS2Options).GetProperty(name));
+        }
+        Assert.Equal(512, new StyleTTSZSOptions().ModelDim);
+        Assert.Equal(8, new StyleTTSZSOptions().Heads);
+        Assert.Equal(.1, new StyleTTSZSOptions().ConformerDropout);
     }
 
     [Fact]

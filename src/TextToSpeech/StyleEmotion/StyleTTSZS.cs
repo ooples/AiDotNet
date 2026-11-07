@@ -138,10 +138,16 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
         base.MelChannels = o.MelChannels;
         base.HopSize = o.HopSize;
         base.HiddenDim = o.ModelDim;
-        if (o.ModelDim % o.Heads != 0) throw new ArgumentException("The model width must divide by the heads.");
+        if (o.ModelDim <= 0 || o.Heads <= 0 || o.ModelDim % o.Heads != 0)
+            throw new ArgumentException("The positive model width must divide by the positive head count.");
         if (o.StyleDim != o.ModelDim)
             throw new ArgumentException("The global style is the prompt-text encoder's pooled output: StyleDim must equal ModelDim.");
         if (o.WindowLength > o.FftSize) throw new ArgumentException("The analysis window must fit the FFT.");
+        if (o.UpsampleRates.Length == 0 || o.UpsampleRates.Length != o.UpsampleKernels.Length)
+            throw new ArgumentException("Give one upsampling kernel per upsampling rate.");
+        for (int i = 0; i < o.UpsampleRates.Length; i++)
+            if (o.UpsampleRates[i] <= 0 || o.UpsampleKernels[i] != 2L * o.UpsampleRates[i])
+                throw new ArgumentException("Each positive upsampling rate needs a kernel twice its size.", nameof(o.UpsampleKernels));
         int hop = o.UpsampleRates.Aggregate(1, (a, b) => a * b) * (o.DecoderType == StyleTts2DecoderType.IstftNet ? o.IstftHopSize : 1);
         if (hop != o.HopSize) throw new ArgumentException($"The generator's hop ({hop}) must equal the mel hop ({o.HopSize}).");
         if (o.Bert.VocabSize < o.VocabSize) throw new ArgumentException("PL-BERT must embed every phoneme symbol.");

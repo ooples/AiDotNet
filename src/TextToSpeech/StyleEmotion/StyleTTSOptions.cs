@@ -26,9 +26,8 @@ public enum StyleTtsTrainingStage
     Prosody,
 }
 
-/// <summary>The options StyleTTS (Li et al. 2022) and StyleTTS 2 (Li et al. 2023) share: audio features, the text
-/// encoder, style encoders, decoder residual widths, prosody predictor, text aligner and pitch extractor, and the
-/// AdamW settings and first-stage schedule of both.</summary>
+/// <summary>Shared StyleTTS, StyleTTS 2 and StyleTTS-ZS audio features, style-vector width, decoder residual widths,
+/// text aligner, pitch extractor, and optimizer settings. Each model owns its native encoder configuration.</summary>
 /// <remarks>
 /// <para>
 /// The defaults are StyleTTS's paper's (§III, Appendix D) with the released code's configuration where the paper is silent
@@ -52,14 +51,10 @@ public abstract class StyleTtsBaseOptions : ModelOptions
     public int HopSize { get; set; } = 256;
     /// <summary>Analysis FFT size.</summary>
     public int FftSize { get; set; } = 1024;
-    /// <summary>Native text and prosody hidden width.</summary>
-    public int HiddenDim { get; set; } = 256;
     /// <summary>Phoneme vocabulary size.</summary>
     public int VocabSize { get; set; } = 256;
     /// <summary>Maximum input phoneme count.</summary>
     public int MaxTextLength { get; set; } = 512;
-    /// <summary>Native prosody-predictor dropout probability.</summary>
-    public double DropoutRate { get; set; } = 0.1;
     /// <summary>Loaded whole-model ONNX graph path.</summary>
     public string? ModelPath { get; set; }
     /// <summary>Whole-model ONNX runtime settings.</summary>
@@ -76,9 +71,7 @@ public abstract class StyleTtsBaseOptions : ModelOptions
         HopSize = 300;
         FftSize = 2048;
         MelChannels = 80;
-        HiddenDim = 512;
         VocabSize = 178;
-        DropoutRate = 0.2;
         LearningRate = 1e-4;
         WeightDecay = 1e-4;
     }
@@ -91,10 +84,8 @@ public abstract class StyleTtsBaseOptions : ModelOptions
         MelChannels = other.MelChannels;
         HopSize = other.HopSize;
         FftSize = other.FftSize;
-        HiddenDim = other.HiddenDim;
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
-        DropoutRate = other.DropoutRate;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         LearningRate = other.LearningRate;
@@ -103,10 +94,6 @@ public abstract class StyleTtsBaseOptions : ModelOptions
         MelMean = other.MelMean;
         MelStd = other.MelStd;
         StyleDim = other.StyleDim;
-        TextLayers = other.TextLayers;
-        TextKernel = other.TextKernel;
-        StyleEncoderDim = other.StyleEncoderDim;
-        MaxConvDim = other.MaxConvDim;
         ResidualDim = other.ResidualDim;
         AlignerHidden = other.AlignerHidden;
         AlignerTokenEmbedding = other.AlignerTokenEmbedding;
@@ -133,18 +120,6 @@ public abstract class StyleTtsBaseOptions : ModelOptions
 
     /// <summary>Width of the style vector (128).</summary>
     public int StyleDim { get; set; } = 128;
-
-    /// <summary>Convolutions of the text encoder, and layers of the duration encoder (3).</summary>
-    public int TextLayers { get; set; } = 3;
-
-    /// <summary>The text encoder's convolution kernel (5).</summary>
-    public int TextKernel { get; set; } = 5;
-
-    /// <summary>The style encoder's and discriminator's first width (64).</summary>
-    public int StyleEncoderDim { get; set; } = 64;
-
-    /// <summary>The style encoder's and discriminator's widest layer (512).</summary>
-    public int MaxConvDim { get; set; } = 512;
 
     /// <summary>The decoder's residual phoneme, pitch and energy feature width (64).</summary>
     public int ResidualDim { get; set; } = 64;
@@ -205,6 +180,19 @@ public abstract class StyleTtsBaseOptions : ModelOptions
 /// </remarks>
 public class StyleTTSOptions : StyleTtsBaseOptions
 {
+    /// <summary>Native text and prosody hidden width.</summary>
+    public int HiddenDim { get; set; } = 512;
+    /// <summary>Native prosody-predictor dropout probability.</summary>
+    public double DropoutRate { get; set; } = .2;
+    /// <summary>Text convolution and duration encoder layers.</summary>
+    public int TextLayers { get; set; } = 3;
+    /// <summary>Text convolution kernel.</summary>
+    public int TextKernel { get; set; } = 5;
+    /// <summary>Initial width of the native style encoder and spectrogram discriminator.</summary>
+    public int StyleEncoderDim { get; set; } = 64;
+    /// <summary>Maximum width of the native style encoder and spectrogram discriminator.</summary>
+    public int MaxConvDim { get; set; } = 512;
+
     /// <summary>Creates the paper's options.</summary>
     public StyleTTSOptions()
     {
@@ -214,6 +202,12 @@ public class StyleTTSOptions : StyleTtsBaseOptions
     public StyleTTSOptions(StyleTTSOptions other)
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
+        HiddenDim = other.HiddenDim;
+        DropoutRate = other.DropoutRate;
+        TextLayers = other.TextLayers;
+        TextKernel = other.TextKernel;
+        StyleEncoderDim = other.StyleEncoderDim;
+        MaxConvDim = other.MaxConvDim;
         Objective = other.Objective;
         R1Weight = other.R1Weight;
         MaxStretch = other.MaxStretch;

@@ -95,6 +95,9 @@ public partial class StyleTTSZS<T>
     /// <inheritdoc />
     /// <remarks>The current stage's generator objective without its adversarial terms, with dropout off and fixed draws.</remarks>
     public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
+        => EvaluateTrainingObjective(sample, adversarialTerms: false);
+
+    internal T EvaluateTrainingObjective(TtsTrainingSample<T> sample, bool adversarialTerms)
     {
         ThrowIfDisposed();
         Validation.Guard.NotNull(sample);
@@ -110,7 +113,7 @@ public partial class StyleTTSZS<T>
                 ?? throw new ArgumentException($"{GetType().Name} evaluates segments of at least {_options.MinTrainingFrames} frames; this one has {mel.Shape[1]}.", nameof(sample));
             return CurrentStage == StyleTtsZsTrainingStage.Distillation
                 ? DistillationLoss(prepared, training: false)[0]
-                : GeneratorPass(prepared, training: false, adversarialTerms: false).Loss![0];
+                : GeneratorPass(prepared, training: false, adversarialTerms: adversarialTerms).Loss![0];
         }
         finally
         {
@@ -302,15 +305,26 @@ public partial class StyleTTSZS<T>
     {
         int frames = 2 * p.Length;
         var phonemeOfFrame = new int[frames];
-        var duration = new Tensor<T>(new[] { frames, 1 });
         for (int f = 0; f < frames; f++)
-        {
             phonemeOfFrame[f] = f / 2;
-            duration[f, 0] = NumOps.FromDouble(segmentDurations[f / 2]);
-        }
+        var duration = FrameDurationCondition(segmentDurations, frames);
         var text = Upsample(segmentText, phonemeOfFrame);
         return Engine.TensorConcatenate(new[] { text, Engine.TensorTile(style, new[] { frames, 1 }),
             Engine.TensorTranspose(p.SegmentPitch), Engine.TensorTranspose(p.SegmentEnergy), duration }, 1);
+    }
+
+    /// <summary>Repeats each cropped phoneme's duration over its mel frames (two per aligner frame).</summary>
+    internal static Tensor<T> FrameDurationCondition(int[] segmentDurations, int frames)
+    {
+        if (segmentDurations.Any(value => value < 0))
+            throw new ArgumentOutOfRangeException(nameof(segmentDurations), "Phoneme durations must be nonnegative.");
+        var phonemes = PhonemeOfFrame(segmentDurations, 2);
+        if (phonemes.Length != frames)
+            throw new ArgumentException("The cropped phoneme durations must cover every segment frame.", nameof(segmentDurations));
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var duration = new Tensor<T>(new[] { frames, 1 });
+        for (int f = 0; f < frames; f++) duration[f, 0] = ops.FromDouble(segmentDurations[phonemes[f]]);
+        return duration;
     }
 
     /// <summary>

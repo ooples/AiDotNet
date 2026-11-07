@@ -13,6 +13,22 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// </remarks>
 public class StyleTTSZSOptions : StyleTtsWaveformOptions
 {
+    /// <summary>Global style width, equal to the native prompt-text encoder's ModelDim.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("StyleDim and ModelDim must change together. StyleTtsZsOptionContextTests executes complete native models at widths 16 and 32 and rejects unpaired changes.")]
+    public new int StyleDim { get => base.StyleDim; set => base.StyleDim = value; }
+
+    /// <summary>Mel hop paired with the decoder rates and, for iSTFTNet, the inverse-STFT hop.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Mel hop and decoder rates must change together. StyleTtsZsOptionContextTests executes native HiFi-GAN/iSTFTNet geometries and rejects unpaired changes.")]
+    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+
+    /// <summary>Decoder upsampling factors paired with doubled kernels and the mel hop.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Upsampling rates, doubled kernels and HopSize must change together. StyleTtsZsOptionContextTests verifies native waveform lengths for multiple paired geometries.")]
+    public new int[] UpsampleRates { get => base.UpsampleRates; set => base.UpsampleRates = value; }
+
+    /// <summary>One kernel per upsampling stage, twice the corresponding positive rate.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Upsampling kernels must be twice their paired rates. StyleTtsZsOptionContextTests verifies native paired geometries and rejects trailing or unpaired kernels before allocation.")]
+    public new int[] UpsampleKernels { get => base.UpsampleKernels; set => base.UpsampleKernels = value; }
+
     /// <summary>Creates the paper's options.</summary>
     public StyleTTSZSOptions()
     {
@@ -63,6 +79,7 @@ public class StyleTTSZSOptions : StyleTtsWaveformOptions
     }
 
     /// <summary>Width of every new module (512, Tables VII–XI).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("ModelDim and StyleDim must change together. StyleTtsZsOptionContextTests executes complete native models at widths 16 and 32 and rejects unpaired changes.")]
     public int ModelDim { get; set; } = 512;
 
     /// <summary>Attention heads of the conformer blocks (8, of 64 features each).</summary>

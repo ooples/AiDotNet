@@ -43,6 +43,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
+            : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> ? "stylezs-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T> ? "whisperspeech-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> ? "speecht5-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> ? "spark-" + option
@@ -117,6 +118,10 @@ internal static class OptionSensitivityFixtureSetup
     internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> styleZs
+            && StyleTtsZsFixture.Observe(styleZs, option) is { } styleZsObservation)
+            return styleZsObservation;
+
         if (network is AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T> whisperSpeech
             && WhisperSpeechFixture.Observe(whisperSpeech, option) is { } whisperObservation)
             return whisperObservation;
@@ -493,6 +498,8 @@ internal static class OptionSensitivityFixtureSetup
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
         => network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "BertBeta1"
             ? Math.Max(2, steps)
+            : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> && option == "TmaStartStep"
+            ? Math.Max(2, steps)
             : network is AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> && IsSpiralPretrainingOption(option)
             || network is AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T>
             || network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> && SpeechT5Fixture.IsPretraining(option)
@@ -522,6 +529,12 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> styleZs)
+        {
+            StyleTtsZsFixture.Train(styleZs, option);
+            return true;
+        }
+
         if (network is AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T> whisperSpeech)
         {
             whisperSpeech.Train(WhisperSpeechFixture.Sample<T>());
@@ -614,6 +627,9 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions styleZs)
+            StyleTtsZsFixture.PrepareOptions(styleZs, option);
+
         if (options is AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions whisperSpeech)
             WhisperSpeechFixture.PrepareOptions(whisperSpeech, option);
 

@@ -1,6 +1,30 @@
 #nullable enable
 *REMOVED*AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.TextEncoderDim.get -> int
 *REMOVED*AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.TextEncoderDim.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSOptions.HiddenDim.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSOptions.HiddenDim.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSOptions.DropoutRate.get -> double
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSOptions.DropoutRate.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSOptions.TextLayers.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSOptions.TextLayers.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSOptions.TextKernel.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSOptions.TextKernel.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSOptions.StyleEncoderDim.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSOptions.StyleEncoderDim.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSOptions.MaxConvDim.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSOptions.MaxConvDim.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.HiddenDim.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.HiddenDim.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.DropoutRate.get -> double
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.DropoutRate.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.TextLayers.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.TextLayers.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.TextKernel.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.TextKernel.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.StyleEncoderDim.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.StyleEncoderDim.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.MaxConvDim.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.MaxConvDim.set -> void
 AiDotNet.TextToSpeech.CodecBased.ZonosOptions.SampleRate.get -> int
 AiDotNet.TextToSpeech.CodecBased.ZonosOptions.SampleRate.set -> void
 AiDotNet.TextToSpeech.CodecBased.ZonosOptions.HiddenDim.get -> int
@@ -5715,14 +5739,6 @@ AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MelStd.get -> double
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.StyleDim.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MelStd.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.StyleDim.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.TextLayers.get -> int
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.TextKernel.get -> int
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.TextLayers.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.TextKernel.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.StyleEncoderDim.get -> int
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.StyleEncoderDim.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MaxConvDim.get -> int
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MaxConvDim.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.ResidualDim.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.ResidualDim.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.AlignerHidden.get -> int
@@ -16283,8 +16299,6 @@ override AiDotNet.Finance.Forecasting.Foundation.Chronos<T>.GetNamedLayerActivat
 *REMOVED*AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T>.Synthesize(string! text) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 *REMOVED*AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.NumStyleLayers.get -> int
 *REMOVED*AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.NumStyleLayers.set -> void
-*REMOVED*AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.StyleDim.get -> int
-*REMOVED*AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.StyleDim.set -> void
 *REMOVED*AiDotNet.TextToSpeech.Vocoders.APNet2<T>.APNet2(AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<T>! architecture, AiDotNet.TextToSpeech.Vocoders.APNet2Options? options = null, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null, AiDotNet.Interfaces.ILossFunction<T>? lossFunction = null) -> void
 *REMOVED*AiDotNet.TextToSpeech.Vocoders.APNet2Options.AmplitudeLossWeight.get -> double
 *REMOVED*AiDotNet.TextToSpeech.Vocoders.APNet2Options.AmplitudeLossWeight.set -> void
@@ -21904,8 +21918,6 @@ AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.IstftHopSize.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.IstftHopSize.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.VocabSize.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.VocabSize.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.DropoutRate.get -> double
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.DropoutRate.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.ModelPath.get -> string?
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.ModelPath.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.WeightDecay.get -> double
@@ -21916,8 +21928,6 @@ AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.OnnxOptions.get -> AiDotN
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.OnnxOptions.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MelChannels.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MelChannels.set -> void
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.HiddenDim.get -> int
-AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.HiddenDim.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.SampleRate.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.SampleRate.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.LearningRate.get -> double
@@ -21936,3 +21946,9 @@ AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.ModelPath.get -> string?
 AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.ModelPath.set -> void
 AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.OnnxOptions.get -> AiDotNet.Onnx.OnnxModelOptions!
 AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.OnnxOptions.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.HopSize.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.HopSize.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleRates.get -> int[]!
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleRates.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleKernels.get -> int[]!
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleKernels.set -> void

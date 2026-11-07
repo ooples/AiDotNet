@@ -12,6 +12,19 @@ namespace AiDotNet.TextToSpeech.StyleEmotion;
 /// </remarks>
 public class StyleTTS2Options : StyleTtsWaveformOptions
 {
+    /// <summary>Native text and prosody hidden width.</summary>
+    public int HiddenDim { get; set; } = 512;
+    /// <summary>Native prosody-predictor dropout probability.</summary>
+    public double DropoutRate { get; set; } = .2;
+    /// <summary>Text convolution and duration encoder layers.</summary>
+    public int TextLayers { get; set; } = 3;
+    /// <summary>Text convolution kernel.</summary>
+    public int TextKernel { get; set; } = 5;
+    /// <summary>Initial width of each native style encoder.</summary>
+    public int StyleEncoderDim { get; set; } = 64;
+    /// <summary>Maximum width of each native style encoder.</summary>
+    public int MaxConvDim { get; set; } = 512;
+
     /// <summary>Samples per mel frame, paired with the waveform generator's upsampling and iSTFT hop.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("HopSize must equal the product of UpsampleRates and, for iSTFTNet, IstftHopSize. StyleTts2OptionContextTests runs valid native decoder geometries and rejects unpaired changes.")]
     public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
@@ -37,6 +50,12 @@ public class StyleTTS2Options : StyleTtsWaveformOptions
     public StyleTTS2Options(StyleTTS2Options other)
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
+        HiddenDim = other.HiddenDim;
+        DropoutRate = other.DropoutRate;
+        TextLayers = other.TextLayers;
+        TextKernel = other.TextKernel;
+        StyleEncoderDim = other.StyleEncoderDim;
+        MaxConvDim = other.MaxConvDim;
         Multispeaker = other.Multispeaker;
         DurationBins = other.DurationBins;
         DiffusionLayers = other.DiffusionLayers;
