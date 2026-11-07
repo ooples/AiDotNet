@@ -56,6 +56,8 @@ internal sealed class WhisperSpeechCore<T>
         _engine = engine;
         _o = options;
         var o = options;
+        if (double.IsNaN(o.VqCodebookDecay) || o.VqCodebookDecay is < 0 or >= 1)
+            throw new ArgumentOutOfRangeException(nameof(options), "VqCodebookDecay must lie in [0, 1).");
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed ?? o.Seed ?? 42);
         if (o.WhisperAudioContext % o.VqDownsample != 0) throw new ArgumentException("The VQ downsampling must divide Whisper's audio context.");
         if (o.WhisperWidth % o.VqHeads != 0) throw new ArgumentException("The VQ heads must divide Whisper's width.");

@@ -359,13 +359,16 @@ internal sealed class InverseStft<T>
     private readonly int _hop;
     private readonly int _windowSize;
     private double[] _window;
-    private Tensor<T> _cos;       // [bins, fft], windowed and scaled
-    private Tensor<T> _sin;       // [bins, fft]
-    private readonly Tensor<T> _overlap;   // [fft, 1, 1, fft] identity for overlap-add
+    private Tensor<T> _windowTensor;
+    private Tensor<T>? _cos;
+    private Tensor<T>? _sin;
     private readonly int? _samePad;
 
     public InverseStft(IEngine engine, int fftSize, int hopSize, int windowSize, bool samePadding = false)
     {
+        if (fftSize < 1) throw new ArgumentOutOfRangeException(nameof(fftSize));
+        if (hopSize < 1) throw new ArgumentOutOfRangeException(nameof(hopSize));
+        if (windowSize < 1 || windowSize > fftSize) throw new ArgumentOutOfRangeException(nameof(windowSize));
         _samePad = samePadding ? (windowSize - hopSize) / 2 : null;
         _engine = engine;
         _fft = fftSize;
@@ -373,53 +376,79 @@ internal sealed class InverseStft<T>
         _windowSize = windowSize;
         var hann = new double[windowSize];
         for (int n = 0; n < windowSize; n++) hann[n] = 0.5 - 0.5 * Math.Cos(2 * Math.PI * n / windowSize);
-        (_window, _cos, _sin) = Tables(hann);
-        _overlap = new Tensor<T>(new[] { fftSize, 1, 1, fftSize });
-        for (int c = 0; c < fftSize; c++) _overlap[c, 0, 0, c] = NumOps.One;
+        _window = FrameWindow(hann);
+        _windowTensor = WindowTensor();
     }
 
-    /// <summary>Replaces the Hann window with stored values (a checkpoint's <c>window</c> buffer, which PyTorch computed in
-    /// single precision).</summary>
+    /// <summary>Loads the checkpoint's window, including its original floating-point rounding.</summary>
     internal void LoadWindow(double[] window)
     {
         if (window.Length != _windowSize) throw new ArgumentException($"Expected {_windowSize} window values, got {window.Length}.", nameof(window));
-        (_window, _cos, _sin) = Tables(window);
+        _window = FrameWindow(window);
+        _windowTensor = WindowTensor();
+        _cos = _sin = null;
     }
 
-    private (double[] Window, Tensor<T> Cos, Tensor<T> Sin) Tables(double[] window)
+    private double[] FrameWindow(double[] window)
     {
-        int fftSize = _fft, bins = fftSize / 2 + 1, offset = (fftSize - _windowSize) / 2;
-        var framed = new double[fftSize];
-        for (int n = 0; n < _windowSize; n++) framed[offset + n] = window[n];
-        var cos = new Tensor<T>(new[] { bins, fftSize });
-        var sin = new Tensor<T>(new[] { bins, fftSize });
+        var framed = new double[_fft];
+        Array.Copy(window, 0, framed, (_fft - _windowSize) / 2, window.Length);
+        return framed;
+    }
+
+    private Tensor<T> WindowTensor() => new(new[] { 1, _fft },
+        new Vector<T>(_window.Select(NumOps.FromDouble).ToArray()));
+
+    // Preserve support for numeric types outside the FFT module's float/double implementations.
+    private (Tensor<T> Cos, Tensor<T> Sin) Tables()
+    {
+        int bins = _fft / 2 + 1;
+        var cos = new Tensor<T>(new[] { bins, _fft });
+        var sin = new Tensor<T>(new[] { bins, _fft });
         for (int k = 0; k < bins; k++)
         {
-            // irfft: x[n] = (1/N)(X_0 + X_{N/2}(−1)^n + 2 Σ_k Re(X_k e^{2πikn/N})); the DC and Nyquist imaginary parts drop.
-            double weight = (k == 0 || (fftSize % 2 == 0 && k == fftSize / 2)) ? 1.0 / fftSize : 2.0 / fftSize;
-            bool realOnly = k == 0 || (fftSize % 2 == 0 && k == fftSize / 2);
-            for (int n = 0; n < fftSize; n++)
+            bool realOnly = k == 0 || (_fft % 2 == 0 && k == _fft / 2);
+            double weight = realOnly ? 1.0 / _fft : 2.0 / _fft;
+            for (int n = 0; n < _fft; n++)
             {
-                double a = 2 * Math.PI * k * n / fftSize;
-                cos[k, n] = NumOps.FromDouble(weight * Math.Cos(a) * framed[n]);
-                sin[k, n] = NumOps.FromDouble(realOnly ? 0.0 : -weight * Math.Sin(a) * framed[n]);
+                double a = 2 * Math.PI * k * n / _fft;
+                cos[k, n] = NumOps.FromDouble(weight * Math.Cos(a) * _window[n]);
+                sin[k, n] = NumOps.FromDouble(realOnly ? 0.0 : -weight * Math.Sin(a) * _window[n]);
             }
         }
-        return (framed, cos, sin);
+        return (cos, sin);
     }
 
-    /// <summary>The waveform <c>[(frames − 1) · hop]</c> (<c>[frames · hop]</c> with "same" padding) of a spectrum given
-    /// by its magnitude and phase <c>[1, bins, frames]</c>.</summary>
+    /// <summary>The normalized, overlap-added waveform of magnitude and phase [1, bins, frames].</summary>
     public Tensor<T> Forward(Tensor<T> magnitude, Tensor<T> phase)
     {
         int bins = magnitude.Shape[1], frames = magnitude.Shape[2];
-        var re = _engine.TensorTranspose(_engine.Reshape(_engine.TensorMultiply(magnitude, _engine.TensorSin(_engine.TensorAddScalar(phase, NumOps.FromDouble(Math.PI / 2)))), new[] { bins, frames }));   // [F, bins]
+        var re = _engine.TensorTranspose(_engine.Reshape(_engine.TensorMultiply(magnitude,
+            _engine.TensorSin(_engine.TensorAddScalar(phase, NumOps.FromDouble(Math.PI / 2)))), new[] { bins, frames }));
         var im = _engine.TensorTranspose(_engine.Reshape(_engine.TensorMultiply(magnitude, _engine.TensorSin(phase)), new[] { bins, frames }));
-        var framesTime = _engine.TensorAdd(_engine.TensorMatMul(re, _cos), _engine.TensorMatMul(im, _sin));                                       // [F, N]
-        var channels = _engine.Reshape(_engine.TensorTranspose(framesTime), new[] { 1, _fft, 1, frames });
-        var summed = _engine.ConvTranspose2D(channels, _overlap, new[] { 1, _hop }, new[] { 0, 0 }, new[] { 0, 0 });                              // [1, 1, 1, L]
-        int length = (frames - 1) * _hop + _fft;
-        var envelope = new Tensor<T>(new[] { 1, 1, 1, length });
+        Tensor<T> framesTime;
+        if (typeof(T) == typeof(float) || typeof(T) == typeof(double))
+        {
+            // IRFft supplies Hermitian expansion, normalization and the tape backward.
+            var packed = _engine.Reshape(_engine.TensorStack(new[] { re, im }, 2), new[] { frames, 2 * bins });
+            var time = typeof(T) == typeof(float)
+                ? (Tensor<T>)(object)AiDotNet.Tensors.LinearAlgebra.Fft.Fft.IRFft((Tensor<float>)(object)packed, _fft)
+                : (Tensor<T>)(object)AiDotNet.Tensors.LinearAlgebra.Fft.Fft.IRFft((Tensor<double>)(object)packed, _fft);
+            framesTime = _engine.TensorMultiply(time, _engine.TensorBroadcastTo(_windowTensor, time.Shape.ToArray()));
+        }
+        else
+        {
+            if (_cos is null || _sin is null) (_cos, _sin) = Tables();
+            framesTime = _engine.TensorAdd(_engine.TensorMatMul(re, _cos), _engine.TensorMatMul(im, _sin));
+        }
+        int length = checked((frames - 1) * _hop + _fft);
+        var indices = new Tensor<int>(new[] { checked(frames * _fft) });
+        for (int f = 0; f < frames; f++)
+            for (int n = 0; n < _fft; n++) indices[f * _fft + n] = f * _hop + n;
+        // Scatter the frame samples directly instead of convolving an N-by-N identity.
+        var summed = _engine.TensorIndexAdd(new Tensor<T>(new[] { length }), 0, indices,
+            _engine.Reshape(framesTime, new[] { indices.Length }));
+        var envelope = new Tensor<T>(new[] { length });
         var sums = new double[length];
         for (int f = 0; f < frames; f++)
             for (int n = 0; n < _fft; n++) sums[f * _hop + n] += _window[n] * _window[n];
@@ -428,9 +457,9 @@ internal sealed class InverseStft<T>
         {
             if (i >= start && i < start + outLength && sums[i] < 1e-11)
                 throw new InvalidOperationException("The window envelope vanishes inside the signal (NOLA fails for this window and hop).");
-            envelope[0, 0, 0, i] = NumOps.FromDouble(sums[i] > 1e-11 ? 1.0 / sums[i] : 0.0);
+            envelope[i] = NumOps.FromDouble(sums[i] > 1e-11 ? 1.0 / sums[i] : 0.0);
         }
-        var normalized = _engine.Reshape(_engine.TensorMultiply(summed, envelope), new[] { length });
+        var normalized = _engine.TensorMultiply(summed, envelope);
         return _engine.TensorSlice(normalized, new[] { start }, new[] { outLength });
     }
 }

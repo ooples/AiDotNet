@@ -5,6 +5,19 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class WhisperSpeechOptionContextTests
 {
+    [Theory]
+    [InlineData(-.1)]
+    [InlineData(1.0)]
+    [InlineData(1.8)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void InvalidCodebookDecayIsRejectedBeforeAllocatingNativeModules(double decay)
+    {
+        var options = WhisperSpeechFixture.Options();
+        options.VqCodebookDecay = decay;
+        Assert.Throws<ArgumentOutOfRangeException>(() => WhisperSpeechFixture.Tts<double>(options));
+    }
+
     [Fact]
     public void OptionsExposeTheConsumedStageControls()
     {
