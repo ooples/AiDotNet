@@ -96,6 +96,9 @@ public class GPTSoVITSOptions : ModelOptions
     /// <summary>The network <see cref="GPTSoVITS{T}"/>'s training updates.</summary>
     public GptSoVitsStage CurrentStage { get; set; } = GptSoVitsStage.TextToSemantic;
 
+    /// <summary>Divides GAN discriminator channel widths (1 retains the complete released architecture).</summary>
+    public int DiscriminatorWidthDivisor { get; set; } = 1;
+
     // ---------------------------------------------------------------- text
 
     /// <summary>How the target text's language is read (the interface's default: Chinese).</summary>

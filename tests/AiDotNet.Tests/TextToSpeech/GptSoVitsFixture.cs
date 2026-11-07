@@ -14,6 +14,31 @@ internal static class GptSoVitsFixture
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         var options = (GPTSoVITSOptions)model.GetOptions();
         model.SetTrainingMode(false);
+        if (option == "TextLanguage")
+        {
+            try
+            {
+                return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(
+                    model.TextToTokens("hello world").Select(value => ops.ToDouble(value)));
+            }
+            catch (InvalidOperationException error) when (error.Message.StartsWith(
+                "Reading mixed-language text needs fastText's lid.176.bin", StringComparison.Ordinal))
+            {
+                // English is self-contained; every other release language mode requires its real segmenter asset.
+                return -1;
+            }
+        }
+        if (option == "SynthesizerDropout")
+        {
+            var synthesizer = model.GetType().GetProperty("SoVits", flags)!.GetValue(model)!;
+            var quantized = (Tensor<T>)synthesizer.GetType().GetMethod("Dequantize")!.Invoke(synthesizer, new object[] { new[] { 1, 2, 3 } })!;
+            var reference = new Tensor<T>(new[] { 1, 1025, 8 });
+            for (int i = 0; i < reference.Length; i++) reference[i] = ops.FromDouble(0.3 * Math.Sin(i * 0.13));
+            var style = (Tensor<T>)synthesizer.GetType().GetMethod("Style")!.Invoke(synthesizer, new object?[] { reference, null, false, new Random(7) })!;
+            var (mean, logs) = ((Tensor<T>, Tensor<T>))synthesizer.GetType().GetMethod("Encode")!.Invoke(synthesizer,
+                new object[] { quantized, new[] { 1, 2, 3 }, style, 1.0, true, new Random(7) })!;
+            return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(mean.Concat(logs).Select(value => ops.ToDouble(value)));
+        }
         if (option is "VocoderUpsampleRates" or "VocoderUpsampleKernels" or "VocoderInitialChannels" or "VocoderResblockKernels")
         {
             var vocoder = model.GetType().GetField("_bigVgan", flags)!.GetValue(model)
@@ -38,7 +63,7 @@ internal static class GptSoVitsFixture
             var features = (Tensor<T>)model.GetType().GetMethod("SslFeatures", flags)!.Invoke(model, new object[] { audio })!;
             return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(features.Select(value => ops.ToDouble(value)));
         }
-        if (option is "SampleSteps" or "CfgRate")
+        if (option is "SampleSteps" or "CfgRate" or "DitDim" or "DitDepth" or "DitHeads" or "DitHeadDim" or "DitConvLayers" or "BridgeChannels")
         {
             var synthesizer = model.GetType().GetProperty("FlowSynthesizer", flags)!.GetValue(model)!;
             Tensor<T> Values(int[] shape)
@@ -69,12 +94,13 @@ internal static class GptSoVitsFixture
             options.UpdatesPerEpoch = 1;
             options.LearningRateDecay = 0.5;
         }
-        if (option is "TextLowLearningRate" or "SegmentSize" or "SynthesizerDropout" or "UpsampleRates" or "UpsampleKernels"
+        if (option is "TextLowLearningRate" or "SegmentSize" or "SynthesizerDropout" or "UpsampleRates" or "UpsampleKernels" or "DiscriminatorWidthDivisor"
             or "UpsampleInitialChannels" or "ResblockKernels" or "ResblockDilations")
         {
             options.Version = GptSoVitsVersion.V2;
             options.CurrentStage = GptSoVitsStage.SoVits;
             options.SegmentSize = 2560;
+            if (option == "SynthesizerDropout") options.SynthesizerDropout = 0.1;
             if (option == "UpsampleKernels") options.UpsampleKernels = new[] { 16, 16, 8, 2, 2 };
         }
         if (option == "CfgRate")
@@ -88,7 +114,7 @@ internal static class GptSoVitsFixture
 
     internal static GPTSoVITSOptions Options() => new()
     {
-        Version = GptSoVitsVersion.V3,
+        Version = GptSoVitsVersion.V3, DiscriminatorWidthDivisor = 16,
         HiddenDim = 16, NumHeads = 2, T2SLayers = 1, SemanticCodebookSize = 32,
         InterChannels = 8, SynthesizerHidden = 16, SynthesizerFilter = 32, SynthesizerHeads = 2, SynthesizerLayers = 2,
         StyleChannels = 16, MrteChannels = 16, StyleHidden = 16, UpsampleInitialChannels = 32,

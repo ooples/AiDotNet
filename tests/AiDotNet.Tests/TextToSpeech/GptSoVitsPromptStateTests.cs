@@ -9,6 +9,79 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class GptSoVitsPromptStateTests
 {
     [Theory]
+    [InlineData("DitDim")]
+    [InlineData("DitDepth")]
+    [InlineData("DitHeads")]
+    [InlineData("DitHeadDim")]
+    [InlineData("DitConvLayers")]
+    [InlineData("BridgeChannels")]
+    public void FlowArchitectureChangesActualNativeMelGeneration(string option)
+    {
+        var controlOptions = GptSoVitsFixture.Options();
+        var changedOptions = (GPTSoVITSOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(controlOptions);
+        var property = typeof(GPTSoVITSOptions).GetProperty(option)!;
+        property.SetValue(changedOptions, 2 * (int)property.GetValue(changedOptions)!);
+        var architecture = new NeuralNetworkArchitecture<float>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1) { RandomSeed = 1337 };
+        using var control = new GPTSoVITS<float>(architecture, controlOptions);
+        using var changed = new GPTSoVITS<float>(architecture, changedOptions);
+        var input = new Tensor<float>(new[] { 3 });
+        Assert.NotEqual(GptSoVitsFixture.Observe(control, input, option), GptSoVitsFixture.Observe(changed, input, option));
+    }
+
+    [Theory]
+    [InlineData(16)]
+    [InlineData(32)]
+    public void BoundedDiscriminatorsRunTheCompleteNativeGanTrainingStep(int divisor)
+    {
+        var options = GptSoVitsFixture.Options();
+        options.Version = GptSoVitsVersion.V2;
+        options.CurrentStage = GptSoVitsStage.SoVits;
+        options.DiscriminatorWidthDivisor = divisor;
+        options.SegmentSize = 2560;
+        using var model = new GPTSoVITS<float>(new NeuralNetworkArchitecture<float>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1) { RandomSeed = 1337 }, options);
+        var audio = new Tensor<float>(new[] { 12800 });
+        for (int i = 0; i < audio.Length; i++) audio[i] = (float)(0.3 * Math.Sin(i * 0.13) + 0.1 * Math.Cos(i * 0.037));
+        var before = model.GetParameters().ToArray();
+        var loss = model.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<float>
+        {
+            Tokens = new Tensor<float>(new[] { 3 }, new Vector<float>(new[] { 1f, 2f, 3f })), Audio = audio,
+        });
+        Assert.True(TtsPaperNumerics.IsFinite(loss));
+        Assert.False(before.SequenceEqual(model.GetParameters()));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void InvalidDiscriminatorDivisorsAreRejectedBeforeAllocation(int divisor)
+    {
+        var options = GptSoVitsFixture.Options();
+        options.DiscriminatorWidthDivisor = divisor;
+        Assert.Throws<ArgumentException>(() => new GPTSoVITS<float>(new NeuralNetworkArchitecture<float>(
+            InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options));
+    }
+
+    [Theory]
+    [InlineData("SynthesizerDropout")]
+    [InlineData("TextLanguage")]
+    public void NativeTaskContextExercisesTrainingDropoutAndFrontendDependencies(string option)
+    {
+        var controlOptions = GptSoVitsFixture.Options();
+        GptSoVitsFixture.PrepareOptions(controlOptions, option);
+        var changedOptions = (GPTSoVITSOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(controlOptions);
+        if (option == "SynthesizerDropout") changedOptions.SynthesizerDropout = 0.2;
+        else changedOptions.TextLanguage = AiDotNet.TextToSpeech.FrontEnd.GptSoVitsTextLanguage.Chinese;
+        var architecture = new NeuralNetworkArchitecture<float>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1) { RandomSeed = 1337 };
+        using var control = new GPTSoVITS<float>(architecture, controlOptions);
+        using var changed = new GPTSoVITS<float>(architecture, changedOptions);
+        var input = new Tensor<float>(new[] { 3 }, new Vector<float>(new[] { 1f, 2f, 3f }));
+        Assert.NotEqual(GptSoVitsFixture.Observe(control, input, option), GptSoVitsFixture.Observe(changed, input, option));
+    }
+
+    [Theory]
     [InlineData(320)]
     [InlineData(640)]
     public void PairedGanUpsamplingControlsActualDecodedWaveformLength(int hop)

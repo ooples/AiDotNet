@@ -152,6 +152,7 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>
         if (o.T2SAccumulation < 1) throw new ArgumentException("T2SAccumulation must be positive.");
         if (o.LoraRank < 0) throw new ArgumentException("LoraRank must be 0 (no LoRA) or positive.");
         if (o.Speed <= 0) throw new ArgumentException("Speed must be positive.");
+        if (o.DiscriminatorWidthDivisor <= 0) throw new ArgumentException("DiscriminatorWidthDivisor must be positive.", "options");
         var residualKernels = IsCfm ? o.VocoderResblockKernels : o.ResblockKernels;
         var residualDilations = IsCfm ? o.VocoderResblockDilations : o.ResblockDilations;
         if (residualKernels.Length == 0 || residualKernels.Length != residualDilations.Length
@@ -272,7 +273,7 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>
         {
             _sovits = new GptSoVitsSynthesizer<T>(Engine, _synthesizerLayers, synthesizer, random);
             var periods = IsV2Pro ? new[] { 2, 3, 5, 7, 11, 17, 23 } : new[] { 2, 3, 5, 7, 11 };
-            _discriminators = new HiFiGanDiscriminators<T>(Engine, periods, 1, true, 1, spectralFirstScale: false, vitsScale: true);
+            _discriminators = new HiFiGanDiscriminators<T>(Engine, periods, 1, true, o.DiscriminatorWidthDivisor, spectralFirstScale: false, vitsScale: true);
         }
         _hubert = new HubertNetwork<T>(Engine, _hubertLayers, HubertConfiguration());
         _bert = new BertNetwork<T>(Engine, _bertLayers, BertConfiguration());

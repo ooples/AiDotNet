@@ -773,3 +773,36 @@ for net10.0, net8.0 and net471 report only the already acknowledged GPTSoVITSOpt
 CP0007 base change; no new suppression was needed. New property declarations are
 registered in PublicAPI.Unshipped.txt. Remaining GAN-specific option probes and
 TextLanguage still need fresh native validation.
+
+The final five historical GPT-SoVITS contexts now pass with source GPTSoVITS and
+its owned options: SynthesizerDropout observes the real training-mode native
+encoder; SegmentSize observes native GAN cropping/loss; UpsampleKernels now has
+valid positive candidates after early geometry validation (16 to 18 rather than
+accepting an invalid odd kernel); TextLowLearningRate changes actual full GAN
+parameter updates; TextLanguage exercises the real frontend's English versus
+asset-requiring language modes. The language boundary test checks the precise
+missing-fastText requirement, not multilingual phonetic accuracy without assets.
+
+Full-width GAN training exceeded even a 4 GB heap. DiscriminatorWidthDivisor now
+exposes the native discriminator module's existing width scaling, defaulting to
+1 (the released architecture). The fixture uses 16 while retaining every period
+and scale discriminator, both optimizer steps and the complete adversarial,
+feature-matching, mel and KL objectives. Changed-source positive tests run the
+whole GAN step at divisors 16 and 32; zero/negative divisors fail before allocation.
+A separate native comparison proves default 1 preserves all 63,301,658 initial
+GAN discriminator parameters, bit for bit, across all 49 layers versus the older
+hosted v2ProPlus graph. The API surface remains additive for this new control.
+
+All 27 active probes now pass locally: the 26 retained historical knobs plus the
+new divisor. The other six historical failures correspond to three removed
+unused fields, the formerly overwritten sample-rate setter and the two documented
+coupled-hop/stride settings. DiT/bridge settings observe actual native mel
+sampling rather than relying on parent parameter snapshots: the source-linked
+hybrid assembly omitted those child-owned changes from its parent view. Six
+positive source tests independently verify the real mel changes. There are now
+20 permanent native GPT-SoVITS cases, all passing, alongside retained-default,
+574,474 full v3 parameter/train-loss parity, and full-width discriminator parity.
+The temporary generic console substitutes only public Shape.ToArray() for an
+inaccessible internal _shape read in a training-source copy; the native test
+project links unchanged production training source. All scoped compilations have
+zero warnings/errors. Latest-head hosted validation remains required.

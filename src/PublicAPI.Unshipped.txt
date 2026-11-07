@@ -1,4 +1,7 @@
 #nullable enable
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.DiscriminatorWidthDivisor.get -> int
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.DiscriminatorWidthDivisor.set -> void
+
 AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.SampleRate.get -> int
 AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.MelChannels.get -> int
 AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.MelChannels.set -> void
