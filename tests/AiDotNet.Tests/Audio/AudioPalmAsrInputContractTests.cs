@@ -16,6 +16,6 @@ public class AudioPalmAsrInputContractTests
         var transcript = model.Transcribe(recording, includeTimestamps: false);
         Assert.Equal(model.Core.DecodeText(ids), transcript.Text);
         Assert.Equal(0.25, transcript.DurationSeconds);
-        Assert.True(double.IsFinite(transcript.Confidence));
+        Assert.False(double.IsNaN(transcript.Confidence) || double.IsInfinity(transcript.Confidence));
     }
 }

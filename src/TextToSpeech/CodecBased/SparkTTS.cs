@@ -47,6 +47,7 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _discriminatorOptimizer;
     private readonly List<LayerBase<T>> _languageLayers = new();
     private bool _discriminatorTurn;
+    private bool _speakerEncoderInitialized;
     private int _codecTrainingSteps;
     private bool _useNativeMode;
     private bool _disposed;
@@ -240,6 +241,7 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if ((int)pitch < 0 || (int)pitch > 4 || (int)speed < 0 || (int)speed > 4)
             throw new ArgumentOutOfRangeException(nameof(pitch));
         Validation.Guard.NotNull(sample);
+        EnsureSpeakerEncoderInitialized(sample);
         var annotation = new ControlAnnotation(female, pitch, speed, MathPolyfill.Clamp(pitchMel, 0, 1000),
             MathPolyfill.Clamp(syllablesPerSecond, 0, 10));
         return TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(sample, annotation), _optimizer);
@@ -252,6 +254,7 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         RequirePipeline();
         if (_optimizer is null) throw new NotSupportedException("Native optimizer is unavailable.");
+        EnsureSpeakerEncoderInitialized(sample);
         if (_options.TrainingComponent == SparkTTSTrainingComponent.BiCodec)
         {
             EnsureCodecTraining();
@@ -303,6 +306,16 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
         // Deferring this until the first training step can reinitialize a frozen DenseLayer after checkpoint loading.
         EnsureLayerRandomSeedsWired();
         if (_options.TrainingComponent == SparkTTSTrainingComponent.BiCodec) EnsureCodecTraining();
+    }
+
+    private void EnsureSpeakerEncoderInitialized(TtsTrainingSample<T> sample)
+    {
+        if (_speakerEncoderInitialized) return;
+        var audio = sample.Audio ?? throw new ArgumentException("Spark-TTS training requires Audio.", nameof(sample));
+        // ECAPA's first convolution learns its mel input width on its first forward.
+        // Resolve that width before the training step captures parameter references.
+        using (new NoGradScope<T>()) _biCodec!.EncodeGlobal(audio);
+        _speakerEncoderInitialized = true;
     }
 
     private void EnsureCodecTraining()
@@ -461,6 +474,10 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     private static void ValidateOptions(SparkTTSOptions options)
     {
+        if (options.DiscriminatorBands is null || options.DiscriminatorBands.Length < 2
+            || options.DiscriminatorBands.Any(edge => double.IsNaN(edge) || double.IsInfinity(edge) || edge < 0 || edge > 1)
+            || options.DiscriminatorBands.Zip(options.DiscriminatorBands.Skip(1), (left, right) => left >= right).Any(invalid => invalid))
+            throw new ArgumentException("Discriminator bands must be strictly increasing finite edges in [0, 1].", nameof(options));
         if (options.SampleRate <= 0 || options.CodecFrameRate <= 0 || options.SampleRate % options.CodecFrameRate != 0)
             throw new ArgumentException("SampleRate must be a positive integer multiple of CodecFrameRate.", nameof(options));
         if (options.NumCodebooks != 1 || options.CodebookSize < 2 || options.GlobalCodebookSize < 2

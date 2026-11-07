@@ -496,3 +496,23 @@ acknowledgments, so no new suppression was needed. Ten stale baseline rows
 were removed: absent options and the verified sensitive HiddenDim/MaxTextLength.
 No no-op baselines were added. Full hosted compilation/package/shards remain
 required; these scoped comparisons are not a full-package proof.
+
+SparkTTS now gets option-specific control groups, replay of lazy speaker-encoder
+fitting, annotated mixed-objective training for the ten controllable-speech
+fields, BiCodec-stage probes for codec/discriminator losses and architecture,
+and continuous mixed XLSR features for Wav2VecHeads. Twenty-one valid-context
+probes pass against a2's hosted native models. Four stale baseline rows for
+SpeakerEmbeddingDim, MelChannels, LearningRate and WeightDecay were removed.
+
+A discriminator-band candidate previously reached a negative-width tensor slice
+only during training. Spark now rejects nonfinite, unordered and out-of-range
+band edges before construction. Four negative tests pass; a valid alternative
+band partition runs an actual finite BiCodec GAN training step. That regression
+also exposed a real fresh-model training bug: the shared training step collected
+ECAPA's lazy parameter references before its mel input width was known. Both
+ordinary and annotated training now resolve the speaker tokenizer once, without
+gradients, before capturing those references. Fresh-model codec training passes
+without fixture preparation. Scoped changed-source compilation passes with zero
+warnings/errors. AudioPaLM's finite-confidence assertion now also uses APIs
+available on net471. Sampling, frontend and paired Spark constraints still need
+additional work; no baseline was added for them.

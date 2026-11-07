@@ -29,7 +29,8 @@ internal static class OptionSensitivityFixtureSetup
             or AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>
             or AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>
             or AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>
-            or AiDotNet.TextToSpeech.MultiModal.SpiritLM<T>;
+            or AiDotNet.TextToSpeech.MultiModal.SpiritLM<T>
+            or AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>;
 
     internal static long ParameterCountBeforeFitting<T>(INeuralNetworkModel<T> network)
         => UsesFittedAssets(network) || network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T>
@@ -37,6 +38,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> ? "spark-" + option
             : network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> ? option switch
             {
                 "DefaultSpeakerId" => "e3-speaker-selection",
@@ -97,6 +99,9 @@ internal static class OptionSensitivityFixtureSetup
     internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> spark
+            && SparkNativeFixture.Observe(spark, option) is { } sparkObservation)
+            return sparkObservation;
         if (network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> spirit
             && SpiritLmFixture.Observe(spirit, option) is { } spiritObservation)
             return spiritObservation;
@@ -416,6 +421,13 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> spark && SparkNativeFixture.IsAnnotatedOption(option))
+        {
+            spark.TrainAnnotatedSample(new AiDotNet.TextToSpeech.TtsTrainingSample<T> { Tokens = input, Audio = SparkNativeFixture.Recording<T>() },
+                true, AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel.Moderate,
+                AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel.High, 2, 3);
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> spirit)
         {
             if (option is "VocoderLearningRate" or "VocoderLearningRateDecay" or "VocoderUpdatesPerEpoch")
@@ -481,6 +493,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions spark)
+            SparkNativeFixture.PrepareOptions(spark, option);
         if (options is AiDotNet.TextToSpeech.MultiModal.SpiritLMOptions spirit)
             SpiritLmFixture.PrepareOptions(spirit, option);
         if (options is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions guidanceMask && option == "GuidanceRescale")
@@ -704,6 +718,9 @@ internal static class OptionSensitivityFixtureSetup
     {
         switch (network)
         {
+            case AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> model:
+                SparkNativeFixture.Prepare(model);
+                break;
             case AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> model:
                 SpiritLmFixture.Prepare(model);
                 break;
