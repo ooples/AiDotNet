@@ -43,6 +43,7 @@ public class StyleTTS2Options : StyleTtsWaveformOptions
         TrimEndSamples = other.TrimEndSamples;
         FinalPhonemeExtraFrames = other.FinalPhonemeExtraFrames;
         SlmDiscriminatorChannels = other.SlmDiscriminatorChannels;
+        DiscriminatorWidthDivisor = other.DiscriminatorWidthDivisor;
         DiffusionStartStep = other.DiffusionStartStep;
         JointStartStep = other.JointStartStep;
         MelLossWeight = other.MelLossWeight;
@@ -126,6 +127,10 @@ public class StyleTTS2Options : StyleTtsWaveformOptions
 
     /// <summary>First width of the SLM discriminator head (64).</summary>
     public int SlmDiscriminatorChannels { get; set; } = 64;
+
+    /// <summary>Divisor for the wave period discriminators' channel widths. One preserves the released graph;
+    /// larger values retain every period and objective in smaller native models.</summary>
+    public int DiscriminatorWidthDivisor { get; set; } = 1;
 
     /// <summary>Joint-training updates before the style diffusion and the wave discriminators start (the reference's <c>diff_epoch</c>: 10 epochs for LibriTTS, 20 for LJSpeech, whose length depends on your data — set it for yours).</summary>
     public int DiffusionStartStep { get; set; }

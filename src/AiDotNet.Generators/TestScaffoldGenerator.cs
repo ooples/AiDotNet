@@ -6945,12 +6945,11 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "StyleTTS2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.StyleEmotion.", System.StringComparison.Ordinal))
             {
-                // StyleTTS 2's released model adds a 768-wide 12-layer PL-BERT, a 1024-wide decoder ending in a 512-channel
-                // HiFi-GAN with a 300x upsampling, full-width MPD/MRD discriminators and WavLM-base-plus; keep every module
-                // at a tiny width: StyleTTS's sizes, a 2-layer 16-wide PL-BERT, a 1-block style denoiser, a 16-channel
-                // generator upsampling 2x4 (an 8-sample hop, with a 64-point analysis FFT), a 3-state 8-wide WavLM, and
-                // 40 samples of loader padding instead of 5000. The aligner's objectives (and with them the
-                // discriminators and WavLM) start after 1000 updates, past every probe, as for StyleTTS.
+                // StyleTTS 2 keeps its released PL-BERT, style diffusion, waveform generator, all wave discriminators
+                // and frozen WavLM at CI scale. Period-discriminator widths are divided by 16; every period and
+                // spectrogram resolution remains. The option fixture supplies recordings long enough for real updates
+                // and selects joint training when a control belongs to the prosody/diffusion/fine-tuning stage.
+                // Ordinary pretraining still delays the aligner's objectives until update 1000.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
@@ -6963,7 +6962,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "BertHidden = 16, BertLayers = 2, BertHeads = 2, BertIntermediate = 32, BertEmbedding = 8, BertMaxPositions = 64, " +
                     "DiffusionLayers = 1, DiffusionHeads = 2, DiffusionHeadFeatures = 4, DiffusionMaxLength = 64, " +
                     "SlmHidden = 8, SlmLayers = 3, SlmHeads = 2, SlmIntermediate = 16, SlmConvChannels = 8, SlmPositionalConvKernel = 16, " +
-                    "SlmPositionalConvGroups = 2, SlmDiscriminatorChannels = 4 })";
+                    "SlmPositionalConvGroups = 2, SlmDiscriminatorChannels = 4, DiscriminatorWidthDivisor = 16, MaxTrainingFrames = 128 })";
             }
             else if (model.ClassName == "StyleTTSZS" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.StyleEmotion.", System.StringComparison.Ordinal))

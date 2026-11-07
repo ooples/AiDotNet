@@ -108,7 +108,10 @@ public partial class StyleTTS2<T>
     /// <inheritdoc />
     /// <remarks>The current stage's generator objective without its adversarial terms (which measure the discriminators
     /// as much as the generator), with dropout off and fixed draws, without updating any weight.</remarks>
-    public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample)
+    public override T EvaluateTrainingObjective(TtsTrainingSample<T> sample) => EvaluateTrainingObjective(sample, adversarialTerms: false);
+
+    // Includes the actual discriminator terms for component diagnostics while the public convergence objective stays stable.
+    internal T EvaluateTrainingObjective(TtsTrainingSample<T> sample, bool adversarialTerms)
     {
         ThrowIfDisposed();
         Validation.Guard.NotNull(sample);
@@ -126,10 +129,10 @@ public partial class StyleTTS2<T>
             if (_stage == StyleTts2TrainingStage.Pretraining)
             {
                 var prepared = PreparePretraining(ids, wave, mel, step, training: false) ?? throw new ArgumentException(tooShort, nameof(sample));
-                return PretrainingLoss(prepared, step, training: false, adversarialTerms: false)[0];
+                return PretrainingLoss(prepared, step, training: false, adversarialTerms: adversarialTerms)[0];
             }
             var joint = PrepareJoint(ids, wave, mel, ReferenceMelOf(sample, mel), step, evaluation: true) ?? throw new ArgumentException(tooShort, nameof(sample));
-            return JointLoss(joint, step, training: false, adversarialTerms: false)[0];
+            return JointLoss(joint, step, training: false, adversarialTerms: adversarialTerms)[0];
         }
         finally
         {

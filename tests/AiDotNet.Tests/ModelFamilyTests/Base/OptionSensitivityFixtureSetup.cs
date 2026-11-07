@@ -89,6 +89,8 @@ internal static class OptionSensitivityFixtureSetup
             : IsVocoderFrontendOption(option) && network is AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T>
                 or AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T> ? "vocoder-frontend"
             : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option == "MaximumAudioFrames" ? "voicebox-audio-chunk"
+            : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T>
+                ? IsStyleTts2JointOption(option) ? "styletts2-joint" : "styletts2-pretraining"
             : network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && option == "TopK" ? "cosy-top-k"
             : network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && IsCosyFlowOption(option) ? "cosy-flow"
             : network is AiDotNet.TextToSpeech.Classic.ForwardTacotron<T> ? option switch
@@ -111,6 +113,20 @@ internal static class OptionSensitivityFixtureSetup
     internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> styleProbe && IsStyleTts2JointOption(option))
+        {
+            var stage = styleProbe.CurrentStage;
+            try
+            {
+                styleProbe.CurrentStage = AiDotNet.TextToSpeech.StyleEmotion.StyleTts2TrainingStage.Joint;
+                var settings = (AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options)styleProbe.GetOptions();
+                var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+                var objective = styleProbe.EvaluateTrainingObjective(StyleTts2Fixture.Sample<T>(settings.HopSize), adversarialTerms: true);
+                return OptionSensitivityHarness.Combine(observe(network, input),
+                    OptionSensitivityHarness.Fingerprint(new[] { ops.ToDouble(objective) }));
+            }
+            finally { styleProbe.CurrentStage = stage; }
+        }
         if (network is AiDotNet.TextToSpeech.CodecBased.Zonos<T> zonos
             && ZonosFixture.Observe(zonos, input, option) is { } zonosObservation)
             return zonosObservation;
@@ -429,6 +445,13 @@ internal static class OptionSensitivityFixtureSetup
         or "TimeMaskProbability" or "TimeMaskLength" or "FrequencyMaskProbability" or "FrequencyMaskLength"
         or "Temperature" or "Negatives";
 
+    private static bool IsStyleTts2JointOption(string option) => option is
+        "DropoutRate" or "EmbeddingMaskProbability" or "FineTuneLearningRate" or "DurationCrossEntropyWeight"
+        or "LogSigmaMean" or "LogSigmaStd" or "DiffusionStartStep" or "BertWeightDecay" or "BertLearningRate"
+        or "DiffusionLossWeight" or "DurationLossWeight" or "JointStartStep" or "EstimateSigmaData"
+        or "BertBeta1" or "SlmSampleRate" or "GeneratorLossWeight" or "F0LossWeight"
+        or "NormLossWeight" or "StyleLossWeight" or "SlmLossWeight";
+
     private static bool IsCosyFlowOption(string option) => option is
         "TrainingCfgRate" or "FlowLoss" or "FlowAttentionDropoutRate" or "DropoutRate"
         or "DiTTrainingCfgRate" or "DiTSigmaMin";
@@ -462,6 +485,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptionTraining<T>(INeuralNetworkModel<T> network, string option)
     {
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> style && IsStyleTts2JointOption(option))
+            style.CurrentStage = AiDotNet.TextToSpeech.StyleEmotion.StyleTts2TrainingStage.Joint;
         if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosy && IsCosyFlowOption(option))
             cosy.CurrentStage = AiDotNet.TextToSpeech.CodecBased.CosyVoiceTrainingStage.Flow;
         if ((option != "CurrentStage" && !IsNaturalJointOption(option))
@@ -481,6 +506,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> style)
+        {
+            style.Train(StyleTts2Fixture.Sample<T>(((AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options)style.GetOptions()).HopSize));
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.CodecBased.Zonos<T> zonos && ZonosFixture.TryTrain(zonos, input, option))
             return true;
 

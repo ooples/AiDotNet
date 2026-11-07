@@ -21890,3 +21890,5 @@ AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.RmsEpsilon.get -> double
 AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.RmsEpsilon.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.RepetitionWindow.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.RepetitionWindow.set -> void
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.DiscriminatorWidthDivisor.get -> int
+AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options.DiscriminatorWidthDivisor.set -> void

@@ -128,6 +128,8 @@ public partial class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
         var o = _options;
         base.SampleRate = o.SampleRate;
         base.MelChannels = o.MelChannels;
+        if (o.DiscriminatorWidthDivisor <= 0) throw new ArgumentOutOfRangeException(nameof(o.DiscriminatorWidthDivisor));
+        if (!(o.BertBeta1 >= 0 && o.BertBeta1 < 1)) throw new ArgumentOutOfRangeException(nameof(o.BertBeta1), "Adam beta1 must be in [0, 1).");
         base.HopSize = o.HopSize;
         base.HiddenDim = o.HiddenDim;
         if (o.HiddenDim % 2 != 0) throw new ArgumentException("StyleTTS 2's BiLSTMs split the hidden width in half; use an even HiddenDim.");
