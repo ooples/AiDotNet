@@ -1,3 +1,6 @@
+using AiDotNet.Models.Options;
+using AiDotNet.Onnx;
+
 namespace AiDotNet.TextToSpeech.MultiModal;
 
 /// <summary>SpiritLM's two versions (Nguyen et al. 2024 §3).</summary>
@@ -74,7 +77,7 @@ public enum SpiritLmModality
 /// marked <c>[Text]</c>, speech <c>[Speech]</c>, and it can switch between them mid-sentence, so it can continue speech
 /// as speech or text, read text aloud, or transcribe.</para>
 /// </remarks>
-public class SpiritLMOptions : TtsModelOptions
+public class SpiritLMOptions : ModelOptions
 {
     /// <summary>Creates SpiritLM Base 7B.</summary>
     public SpiritLMOptions()
@@ -89,6 +92,27 @@ public class SpiritLMOptions : TtsModelOptions
         WeightDecay = 0.1;
         Seed = 42;
     }
+
+    /// <summary>The speech tokenizer's waveform sample rate.</summary>
+    public int SampleRate { get; set; } = 16000;
+    /// <summary>The LLaMA decoder's hidden width.</summary>
+    public int HiddenDim { get; set; } = 4096;
+    /// <summary>The LLaMA decoder's attention heads.</summary>
+    public int NumHeads { get; set; } = 32;
+    /// <summary>The joint text and speech token vocabulary size.</summary>
+    public int VocabSize { get; set; } = 32512;
+    /// <summary>The training and generation context limit in tokens.</summary>
+    public int MaxTextLength { get; set; } = 4096;
+    /// <summary>The SONAR Expressive training dropout.</summary>
+    public double DropoutRate { get; set; } = 0.0;
+    /// <summary>The language model's AdamW learning rate.</summary>
+    public double LearningRate { get; set; } = 3e-5;
+    /// <summary>The language model's AdamW weight decay.</summary>
+    public double WeightDecay { get; set; } = 0.1;
+    /// <summary>The exported ONNX graph path, when a graph is loaded.</summary>
+    public string? ModelPath { get; set; }
+    /// <summary>Settings for the exported ONNX graph runtime.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
 
     /// <summary>SpiritLM Expressive 7B: pitch and style tokens, a 32,768-row vocabulary, the expressive vocoder.</summary>
     public static SpiritLMOptions Expressive() => new()

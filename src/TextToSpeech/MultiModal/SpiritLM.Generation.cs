@@ -76,7 +76,7 @@ public partial class SpiritLM<T>
 
     /// <summary>
     /// Continues prompt ids by up to <paramref name="maxNewTokens"/> (and the context of
-    /// <see cref="TtsModelOptions.MaxTextLength"/>), until <c>&lt;/s&gt;</c>, with the forbidden ids at −∞ (transformers'
+    /// <see cref="SpiritLMOptions.MaxTextLength"/>), until <c>&lt;/s&gt;</c>, with the forbidden ids at −∞ (transformers'
     /// <c>bad_words_ids</c>) and transformers' sampling (temperature, top-k, top-p; greedy at temperature 0).
     /// </summary>
     internal List<int> GenerateIds(int[] prompt, HashSet<int> forbidden, int maxNewTokens, Random random)

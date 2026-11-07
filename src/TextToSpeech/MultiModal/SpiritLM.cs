@@ -129,7 +129,7 @@ public partial class SpiritLM<T> : TtsModelBase<T>
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path cannot be null or empty.", nameof(modelPath));
         if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
-        OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        OnnxModel = new OnnxModel<T>(_options.ModelPath!, _options.OnnxOptions);
         InitializeLayers();
     }
 

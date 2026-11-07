@@ -472,3 +472,27 @@ four/eight-frame budgets and a budget longer than the source. The complete
 changed-source stage passes with zero compilation warnings/errors. No SpiritLM
 production setting was removed in this batch; NumEncoderLayers still needs its
 separate ownership audit. Hosted current-head shards remain pending.
+
+SpiritLMOptions now owns the ten shared settings actually consumed by the
+native model, retaining all defaults. Removed the six unused inherited fields
+MelChannels, HopSize, FftSize, NumEncoderLayers, NumDecoderLayers and MaxMelLength.
+The concrete getter IL audit finds reads only for the retained fields; source
+construction uses Layers, separate HuBERT/Expressive/SpeechProp/SONAR depths and
+the vocoder's own configuration. The ONNX loader consumes recorded ModelPath.
+
+Changed-source Base (80,938 parameters) and Expressive (110,134) match the hosted
+model's complete initial and trained vectors and actual TrainText loss exactly.
+SpeechProp matches its 286,373-value common parent surface and its complete
+frozen EnCodec vector separately before/after the same training step; the scoped
+assembly omits the child vector from its parent flattening, as with AudioPaLM.
+Every retained default matches. Seven release-reference checks pass: HuBERT
+and quantizer, FCPE, pYAAPT, pitch VQ-VAE, both unit vocoders, style classifier
+and token strings. Three crop-alignment cases also pass.
+
+Twenty accessor declarations were registered. Scoped API comparisons on all
+three frameworks report the existing acknowledged copy-constructor removal
+(CP0002) and base change (CP0007); both already have exact SpiritLMOptions
+acknowledgments, so no new suppression was needed. Ten stale baseline rows
+were removed: absent options and the verified sensitive HiddenDim/MaxTextLength.
+No no-op baselines were added. Full hosted compilation/package/shards remain
+required; these scoped comparisons are not a full-package proof.
