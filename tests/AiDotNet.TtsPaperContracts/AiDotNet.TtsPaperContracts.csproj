@@ -21,6 +21,7 @@
     <Compile Include="../AiDotNet.Tests/Helpers/LicenseTestSupport.cs" Link="LicenseTestSupport.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/CosyVoice*Tests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/CosyVoice3Fixture.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/VallEXCloneFixture.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/S3TokenizerReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/CamPlusPlusReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/WhisperTiktokenReferenceTests.cs" />

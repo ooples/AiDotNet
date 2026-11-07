@@ -67,7 +67,7 @@ internal static class VallEXCloneFixture
             finally { for (int i = 0; i < weights.Length; i++) weights[i] = saved[i]; }
         }
         if (option is "MaxTextLength" or "UseCommunityPhoneTokenizer")
-            return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(
+            return TtsPaperNumerics.Fingerprint(
                 model.TextToTokens("hello world, this is a longer sentence").Select(value => ops.ToDouble(value)));
         if (option == "MinReferenceDurationSec" && model is VALLEXClone<T> clone)
         {
@@ -91,7 +91,7 @@ internal static class VallEXCloneFixture
             values.Add(codes.GetLength(0));
             values.AddRange(codes.Cast<int>().Select(code => (double)code));
         }
-        return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(values);
+        return TtsPaperNumerics.Fingerprint(values);
     }
 
     internal static VALLEXCloneOptions Options(string referenceText = "a prompt") => new()
