@@ -294,10 +294,14 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
                 for (int k = 0; k < numOutputs; k++)
                 {
                     _trees.Add(BuildHistTreeDense(grads[k], hess[k]));
-                    for (int i = 0; i < n; i++)
+                    int output = k;
+                    ForEachRowBlock(n, (from, to) =>
                     {
-                        predictions[i, k] += _learningRate * _sampleLeafValue[i];
-                    }
+                        for (int i = from; i < to; i++)
+                        {
+                            predictions[i, output] += _learningRate * _sampleLeafValue[i];
+                        }
+                    });
                 }
             }
         }
@@ -487,40 +491,46 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         if (NumClasses == 2)
         {
             // Binary cross-entropy gradients
-            for (int i = 0; i < n; i++)
+            ForEachRowBlock(n, (from, to) =>
             {
-                double target = targets[i] == 1 ? 1.0 : 0.0;
-                double pred = 1.0 / (1.0 + Math.Exp(-predictions[i, 0]));
-                gradients[i] = pred - target;
-                hessians[i] = pred * (1 - pred);
-                hessians[i] = Math.Max(hessians[i], 1e-7);
-            }
+                for (int i = from; i < to; i++)
+                {
+                    double target = targets[i] == 1 ? 1.0 : 0.0;
+                    double pred = 1.0 / (1.0 + Math.Exp(-predictions[i, 0]));
+                    gradients[i] = pred - target;
+                    hessians[i] = pred * (1 - pred);
+                    hessians[i] = Math.Max(hessians[i], 1e-7);
+                }
+            });
         }
         else
         {
             // Multiclass cross-entropy gradients
-            for (int i = 0; i < n; i++)
+            ForEachRowBlock(n, (from, to) =>
             {
-                // Softmax
-                double maxVal = double.MinValue;
-                for (int k = 0; k < NumClasses; k++)
+                for (int i = from; i < to; i++)
                 {
-                    maxVal = Math.Max(maxVal, predictions[i, k]);
+                    // Softmax
+                    double maxVal = double.MinValue;
+                    for (int k = 0; k < NumClasses; k++)
+                    {
+                        maxVal = Math.Max(maxVal, predictions[i, k]);
+                    }
+
+                    double sumExp = 0;
+                    for (int k = 0; k < NumClasses; k++)
+                    {
+                        sumExp += Math.Exp(predictions[i, k] - maxVal);
+                    }
+
+                    double pred = Math.Exp(predictions[i, classIdx] - maxVal) / sumExp;
+                    double target = targets[i] == classIdx ? 1.0 : 0.0;
+
+                    gradients[i] = pred - target;
+                    hessians[i] = pred * (1 - pred);
+                    hessians[i] = Math.Max(hessians[i], 1e-7);
                 }
-
-                double sumExp = 0;
-                for (int k = 0; k < NumClasses; k++)
-                {
-                    sumExp += Math.Exp(predictions[i, k] - maxVal);
-                }
-
-                double pred = Math.Exp(predictions[i, classIdx] - maxVal) / sumExp;
-                double target = targets[i] == classIdx ? 1.0 : 0.0;
-
-                gradients[i] = pred - target;
-                hessians[i] = pred * (1 - pred);
-                hessians[i] = Math.Max(hessians[i], 1e-7);
-            }
+            });
         }
 
         return (gradients, hessians);

@@ -23,19 +23,20 @@ namespace AiDotNet.Classification.Boosting;
 /// </para>
 /// <para>
 /// The tree grows one level at a time: the nodes of a level are split, and their children's histograms built, in
-/// parallel (<see cref="NJobs"/>). A large histogram is accumulated in fixed chunks of samples added together in chunk
-/// order, in parallel when it is the only one of its level. Every node's work is independent of the others and of the
-/// thread count, so the model is the same for any <see cref="NJobs"/>. Each leaf writes its value for its own samples,
+/// parallel (<see cref="NJobs"/>). Histograms are built in parallel by feature as well as by node, as LightGBM does:
+/// each task fills a block of features from all of a node's samples, so every cell sums its samples in their order,
+/// as one thread would. Every node's work is independent of the others and of the thread count, so the model is the
+/// same for any <see cref="NJobs"/>. Each leaf writes its value for its own samples,
 /// which replaces walking every tree again to update the predictions.
 /// </para>
 /// </remarks>
 public partial class HistGradientBoostingClassifier<T>
 {
-    /// <summary>Samples per histogram chunk; a node with more is accumulated chunk by chunk.</summary>
-    private const int HistogramChunkRows = 2048;
-
     /// <summary>Doubles per histogram bin: gradient sum, hessian sum, count.</summary>
     private const int BinStride = 3;
+
+    /// <summary>Rows per block of the per-row passes (gradients, prediction updates) run in parallel.</summary>
+    private const int RowBlockRows = 8192;
 
     /// <summary>
     /// Gets or sets the number of threads that build each tree: a positive count, or negative to count back from the
@@ -56,11 +57,14 @@ public partial class HistGradientBoostingClassifier<T>
     [Scratch]
     private int[] _featureBinOffsets = new int[0];
 
-    /// <summary>Sample indices; each node owns a contiguous range, partitioned in place for its children.</summary>
+    /// <summary>Sample indices of the current level; each node owns a contiguous range.</summary>
     [Scratch]
     private int[] _histSamples = new int[0];
 
-    /// <summary>Partition scratch: a node uses the same range here as in <see cref="_histSamples"/>.</summary>
+    /// <summary>
+    /// Sample indices of the next level: a split node partitions its range of <see cref="_histSamples"/> into the
+    /// same range here, and the two arrays swap once the level has split.
+    /// </summary>
     [Scratch]
     private int[] _histScratch = new int[0];
 
@@ -110,9 +114,6 @@ public partial class HistGradientBoostingClassifier<T>
         public double RightSumHess { get; set; }
         public GrowingNode? Left { get; set; }
         public GrowingNode? Right { get; set; }
-
-        /// <summary>Chunk scratch for building the smaller child's histogram.</summary>
-        public double[]? Partial { get; set; }
     }
 
     /// <summary>
@@ -145,12 +146,10 @@ public partial class HistGradientBoostingClassifier<T>
             }
         }
 
-        // Quantile boundaries over each feature's sorted values.
+        // Quantile boundaries over each feature's sorted values. Features are independent, so they run in parallel.
         var boundaries = new double[p][];
         var orders = new int[p][];
-        _featureBinOffsets = new int[p + 1];
-        int widest = 0;
-        for (int j = 0; j < p; j++)
+        ForEachFeature(p, j =>
         {
             var values = columns[j];
             var order = new int[n];
@@ -171,6 +170,12 @@ public partial class HistGradientBoostingClassifier<T>
             }
 
             boundaries[j] = [.. binBounds];
+        });
+
+        _featureBinOffsets = new int[p + 1];
+        int widest = 0;
+        for (int j = 0; j < p; j++)
+        {
             if (boundaries[j].Length >= ushort.MaxValue)
             {
                 throw new InvalidOperationException(
@@ -185,7 +190,7 @@ public partial class HistGradientBoostingClassifier<T>
         bool bytes = widest <= 256;
         _binBytes = bytes ? new byte[n * p] : new byte[0];
         _binShorts = bytes ? new ushort[0] : new ushort[n * p];
-        for (int j = 0; j < p; j++)
+        ForEachFeature(p, j =>
         {
             var values = columns[j];
             var order = orders[j];
@@ -199,7 +204,7 @@ public partial class HistGradientBoostingClassifier<T>
                 else
                     _binShorts[order[s] * p + j] = (ushort)bin;
             }
-        }
+        });
 
         _histSamples = new int[n];
         _histScratch = new int[n];
@@ -229,6 +234,33 @@ public partial class HistGradientBoostingClassifier<T>
         }
 
         return NJobs > 0 ? NJobs : Math.Max(1, Environment.ProcessorCount + 1 + NJobs);
+    }
+
+    /// <summary>Runs <paramref name="body"/> for every feature, in parallel when jobs allow.</summary>
+    private void ForEachFeature(int features, Action<int> body)
+    {
+        if (_histJobs > 1 && features > 1)
+            Parallel.For(0, features, new ParallelOptions { MaxDegreeOfParallelism = _histJobs }, body);
+        else
+            for (int j = 0; j < features; j++) body(j);
+    }
+
+    /// <summary>
+    /// Runs <paramref name="body"/> over fixed blocks <c>[from, to)</c> of the rows, in parallel when jobs allow. For
+    /// work that treats each row on its own, so the result does not depend on how the blocks were scheduled.
+    /// </summary>
+    private void ForEachRowBlock(int rows, Action<int, int> body)
+    {
+        int blocks = (rows + RowBlockRows - 1) / RowBlockRows;
+        if (_histJobs > 1 && blocks > 1)
+        {
+            Parallel.For(0, blocks, new ParallelOptions { MaxDegreeOfParallelism = _histJobs },
+                b => body(b * RowBlockRows, Math.Min(rows, (b + 1) * RowBlockRows)));
+        }
+        else
+        {
+            body(0, rows);
+        }
     }
 
     private int HistogramLength => _featureBinOffsets[NumFeatures] * BinStride;
@@ -273,14 +305,21 @@ public partial class HistGradientBoostingClassifier<T>
         root.SumHess = rootHess;
         if (NeedsHistogram(_histRows, 0))
         {
-            root.Histogram = RentHistogram();
-            AccumulateHistogramInParallel(root.Histogram, gradients, hessians, 0, _histRows);
+            var rootHistogram = RentHistogram();
+            root.Histogram = rootHistogram;
+            int blocks = FeatureBlocks(1);
+            ForEachTask(blocks, b =>
+            {
+                var (from, to) = FeatureRange(b, blocks);
+                AccumulateRows(rootHistogram, gradients, hessians, 0, _histRows, from, to);
+            });
         }
 
         var level = new List<GrowingNode> { root };
         while (level.Count > 0)
         {
             ForEachNode(level, node => SplitNode(node, gradients, hessians));
+            (_histSamples, _histScratch) = (_histScratch, _histSamples);
 
             // Children in tree order; the histograms they will need are rented here, on one thread.
             var next = new List<GrowingNode>();
@@ -319,7 +358,6 @@ public partial class HistGradientBoostingClassifier<T>
                         : (right, left, leftNeeds);
                     small.Histogram = RentHistogram();
                     if (largeNeeds) large.Histogram = RentHistogram();
-                    if (small.Count > HistogramChunkRows) node.Partial = RentHistogram();
                     split.Add(node);
                 }
                 else
@@ -329,21 +367,17 @@ public partial class HistGradientBoostingClassifier<T>
                 }
             }
 
-            if (split.Count == 1 && _histJobs > 1)
+            int splitBlocks = FeatureBlocks(split.Count);
+            ForEachTask(split.Count * splitBlocks, t =>
             {
-                BuildChildHistograms(split[0], gradients, hessians, parallelChunks: true);
-            }
-            else
-            {
-                ForEachNode(split, node => BuildChildHistograms(node, gradients, hessians, parallelChunks: false));
-            }
+                var (from, to) = FeatureRange(t % splitBlocks, splitBlocks);
+                BuildChildHistograms(split[t / splitBlocks], gradients, hessians, from, to);
+            });
 
             foreach (var node in split)
             {
                 ReturnHistogram(node.Histogram);
-                ReturnHistogram(node.Partial);
                 node.Histogram = null;
-                node.Partial = null;
             }
 
             // A child that cannot split does not keep the histogram its sibling's subtraction needed.
@@ -380,15 +414,17 @@ public partial class HistGradientBoostingClassifier<T>
 
         int bestFeature = -1;
         int bestBin = -1;
+        int bestLeftCount = 0;
         double bestGain = 0;
         for (int j = 0; j < NumFeatures; j++)
         {
-            var (gain, bin) = ScanFeature(histogram, j, count, sumGrad, sumHess);
+            var (gain, bin, leftCount) = ScanFeature(histogram, j, count, sumGrad, sumHess);
             if (gain > bestGain)
             {
                 bestGain = gain;
                 bestFeature = j;
                 bestBin = bin;
+                bestLeftCount = leftCount;
             }
         }
 
@@ -399,9 +435,9 @@ public partial class HistGradientBoostingClassifier<T>
         }
 
         if (_binBytes.Length > 0)
-            Partition(node, gradients, hessians, bestFeature, bestBin, new ReadOnlySpan<byte>(_binBytes));
+            Partition(node, gradients, hessians, bestFeature, bestBin, bestLeftCount, new ReadOnlySpan<byte>(_binBytes));
         else
-            Partition(node, gradients, hessians, bestFeature, bestBin, new ReadOnlySpan<ushort>(_binShorts));
+            Partition(node, gradients, hessians, bestFeature, bestBin, bestLeftCount, new ReadOnlySpan<ushort>(_binShorts));
 
         node.IsSplit = true;
         node.Tree.FeatureIndex = bestFeature;
@@ -409,18 +445,19 @@ public partial class HistGradientBoostingClassifier<T>
     }
 
     /// <summary>
-    /// Stable partition: the left child keeps samples in bins &lt;= <paramref name="bestBin"/>, in their original
-    /// order, and the right child the rest.
+    /// Stable partition into the next level's samples: the left child keeps samples in bins &lt;=
+    /// <paramref name="bestBin"/>, in their original order, and the right child the rest. The histogram already
+    /// counted the left side (<paramref name="leftCount"/>), so the right side's range is known from the start.
     /// </summary>
     private void Partition<TBin>(GrowingNode node, double[] gradients, double[] hessians, int bestFeature, int bestBin,
-        ReadOnlySpan<TBin> bins) where TBin : struct
+        int leftCount, ReadOnlySpan<TBin> bins) where TBin : struct
     {
         int start = node.Start;
         int count = node.Count;
         int features = NumFeatures;
         ref TBin column = ref Unsafe.Add(ref MemoryMarshal.GetReference(bins), bestFeature);
-        ref int samples = ref MemoryMarshal.GetReference(new Span<int>(_histSamples));
-        ref int scratch = ref MemoryMarshal.GetReference(new Span<int>(_histScratch));
+        ref int samples = ref MemoryMarshal.GetReference(new ReadOnlySpan<int>(_histSamples));
+        ref int next = ref MemoryMarshal.GetReference(new Span<int>(_histScratch));
         ref double grad = ref MemoryMarshal.GetReference(new ReadOnlySpan<double>(gradients));
         ref double hess = ref MemoryMarshal.GetReference(new ReadOnlySpan<double>(hessians));
         int leftTotal = 0;
@@ -433,19 +470,24 @@ public partial class HistGradientBoostingClassifier<T>
             int bin = typeof(TBin) == typeof(byte) ? Unsafe.As<TBin, byte>(ref raw) : Unsafe.As<TBin, ushort>(ref raw);
             if (bin <= bestBin)
             {
-                Unsafe.Add(ref samples, start + leftTotal++) = i;
+                Unsafe.Add(ref next, start + leftTotal++) = i;
                 leftGrad += Unsafe.Add(ref grad, i);
                 leftHess += Unsafe.Add(ref hess, i);
             }
             else
             {
-                Unsafe.Add(ref scratch, start + rightTotal++) = i;
+                Unsafe.Add(ref next, start + leftCount + rightTotal++) = i;
                 rightGrad += Unsafe.Add(ref grad, i);
                 rightHess += Unsafe.Add(ref hess, i);
             }
         }
 
-        Array.Copy(_histScratch, start, _histSamples, start + leftTotal, rightTotal);
+        if (leftTotal != leftCount)
+        {
+            throw new InvalidOperationException(
+                $"The histogram counted {leftCount} samples left of the split but {leftTotal} were partitioned there.");
+        }
+
         node.LeftCount = leftTotal;
         node.LeftSumGrad = leftGrad;
         node.LeftSumHess = leftHess;
@@ -462,10 +504,10 @@ public partial class HistGradientBoostingClassifier<T>
     }
 
     /// <summary>
-    /// The best split of one feature's bins: its gain (0 when no candidate improves on the parent) and the last bin
-    /// of its left side.
+    /// The best split of one feature's bins: its gain (0 when no candidate improves on the parent), the last bin of
+    /// its left side, and how many samples fall on that side.
     /// </summary>
-    private (double Gain, int Bin) ScanFeature(double[] histogram, int feature, int count, double sumGrad,
+    private (double Gain, int Bin, int LeftCount) ScanFeature(double[] histogram, int feature, int count, double sumGrad,
         double sumHess)
     {
         double lambda = _l2Regularization;
@@ -475,6 +517,7 @@ public partial class HistGradientBoostingClassifier<T>
         int numBins = _featureBinOffsets[feature + 1] - offset;
         double bestGain = 0;
         int bestBin = -1;
+        int bestLeftCount = 0;
         double leftGradSum = 0;
         double leftHessSum = 0;
         int leftCount = 0;
@@ -507,17 +550,19 @@ public partial class HistGradientBoostingClassifier<T>
             {
                 bestGain = gain;
                 bestBin = b;
+                bestLeftCount = leftCount;
             }
         }
 
-        return (bestGain, bestBin);
+        return (bestGain, bestBin, bestLeftCount);
     }
 
     /// <summary>
-    /// Accumulates the smaller child's histogram of a split node and, when the larger child may split too, derives
-    /// its histogram as the parent's minus the smaller one's.
+    /// Accumulates features <c>[featureFrom, featureTo)</c> of the smaller child's histogram of a split node and, when
+    /// the larger child may split too, derives the same features of its histogram as the parent's minus the smaller one's.
     /// </summary>
-    private void BuildChildHistograms(GrowingNode node, double[] gradients, double[] hessians, bool parallelChunks)
+    private void BuildChildHistograms(GrowingNode node, double[] gradients, double[] hessians, int featureFrom,
+        int featureTo)
     {
         var left = node.Left ?? throw new InvalidOperationException("A split node has no left child.");
         var right = node.Right ?? throw new InvalidOperationException("A split node has no right child.");
@@ -525,89 +570,50 @@ public partial class HistGradientBoostingClassifier<T>
         var (small, large) = left.Count <= right.Count ? (left, right) : (right, left);
         var smallHistogram = small.Histogram ?? throw new InvalidOperationException("The smaller child has no histogram.");
 
-        if (parallelChunks)
-            AccumulateHistogramInParallel(smallHistogram, gradients, hessians, small.Start, small.Count);
-        else
-            AccumulateHistogram(smallHistogram, node.Partial, gradients, hessians, small.Start, small.Count);
-
+        AccumulateRows(smallHistogram, gradients, hessians, small.Start, small.Count, featureFrom, featureTo);
         if (large.Histogram is { } largeHistogram)
         {
-            AddScaled(largeHistogram, parent, smallHistogram, -1.0);
+            int from = _featureBinOffsets[featureFrom] * BinStride;
+            int to = _featureBinOffsets[featureTo] * BinStride;
+            for (int k = from; k < to; k++) largeHistogram[k] = parent[k] - smallHistogram[k];
         }
     }
 
     /// <summary>
-    /// Accumulates the histogram of the samples in <c>[start, start + count)</c> one chunk after another: the first
-    /// chunk into <paramref name="histogram"/>, each later one into <paramref name="partial"/> and then added.
+    /// How many feature blocks each of <paramref name="nodes"/> nodes' histograms is split into, so a level has about
+    /// one task per thread: one block when there is a thread per node already, at most one per feature.
     /// </summary>
-    private void AccumulateHistogram(double[] histogram, double[]? partial, double[] gradients, double[] hessians,
-        int start, int count)
+    private int FeatureBlocks(int nodes) =>
+        _histJobs <= 1 || nodes <= 0 ? 1 : Math.Max(1, Math.Min(NumFeatures, (_histJobs + nodes - 1) / nodes));
+
+    /// <summary>The features <c>[from, to)</c> of block <paramref name="block"/> of <paramref name="blocks"/>.</summary>
+    private (int From, int To) FeatureRange(int block, int blocks) =>
+        (block * NumFeatures / blocks, (block + 1) * NumFeatures / blocks);
+
+    /// <summary>Runs <paramref name="task"/> for <c>[0, tasks)</c>, in parallel when there are several and jobs allow.</summary>
+    private void ForEachTask(int tasks, Action<int> task)
     {
-        AccumulateRows(histogram, gradients, hessians, start, Math.Min(count, HistogramChunkRows));
-        for (int chunkStart = start + HistogramChunkRows; chunkStart < start + count; chunkStart += HistogramChunkRows)
-        {
-            var scratch = partial ?? throw new InvalidOperationException("A chunked histogram needs a partial buffer.");
-            AccumulateRows(scratch, gradients, hessians, chunkStart, Math.Min(HistogramChunkRows, start + count - chunkStart));
-            AddScaled(histogram, histogram, scratch, 1.0);
-        }
-    }
-
-    /// <summary>
-    /// <see cref="AccumulateHistogram"/> with its chunks accumulated in parallel and then added in the same order, so
-    /// the sums are the same.
-    /// </summary>
-    private void AccumulateHistogramInParallel(double[] histogram, double[] gradients, double[] hessians, int start,
-        int count)
-    {
-        int chunks = (count + HistogramChunkRows - 1) / HistogramChunkRows;
-        if (chunks <= 1 || _histJobs <= 1)
-        {
-            var partial = chunks > 1 ? RentHistogram() : null;
-            AccumulateHistogram(histogram, partial, gradients, hessians, start, count);
-            ReturnHistogram(partial);
-            return;
-        }
-
-        var partials = new double[chunks - 1][];
-        for (int c = 0; c < partials.Length; c++) partials[c] = RentHistogram();
-        Parallel.For(0, chunks, new ParallelOptions { MaxDegreeOfParallelism = _histJobs }, c =>
-        {
-            int chunkStart = start + c * HistogramChunkRows;
-            AccumulateRows(c == 0 ? histogram : partials[c - 1], gradients, hessians, chunkStart,
-                Math.Min(HistogramChunkRows, start + count - chunkStart));
-        });
-
-        foreach (var partial in partials)
-        {
-            AddScaled(histogram, histogram, partial, 1.0);
-            ReturnHistogram(partial);
-        }
-    }
-
-    /// <summary><paramref name="target"/> = <paramref name="a"/> + <paramref name="sign"/> * <paramref name="b"/>, bin by bin.</summary>
-    private void AddScaled(double[] target, double[] a, double[] b, double sign)
-    {
-        int length = HistogramLength;
-        ref double t = ref MemoryMarshal.GetReference(new Span<double>(target, 0, length));
-        ref double x = ref MemoryMarshal.GetReference(new ReadOnlySpan<double>(a, 0, length));
-        ref double y = ref MemoryMarshal.GetReference(new ReadOnlySpan<double>(b, 0, length));
-        if (sign > 0)
-        {
-            for (int k = 0; k < length; k++) Unsafe.Add(ref t, k) = Unsafe.Add(ref x, k) + Unsafe.Add(ref y, k);
-        }
+        if (_histJobs > 1 && tasks > 1)
+            Parallel.For(0, tasks, new ParallelOptions { MaxDegreeOfParallelism = _histJobs }, task);
         else
-        {
-            for (int k = 0; k < length; k++) Unsafe.Add(ref t, k) = Unsafe.Add(ref x, k) - Unsafe.Add(ref y, k);
-        }
+            for (int t = 0; t < tasks; t++) task(t);
     }
 
-    private void AccumulateRows(double[] histogram, double[] gradients, double[] hessians, int start, int count)
+    /// <summary>
+    /// Fills features <c>[featureFrom, featureTo)</c> of <paramref name="histogram"/> from the samples in
+    /// <c>[start, start + count)</c>, in their order.
+    /// </summary>
+    private void AccumulateRows(double[] histogram, double[] gradients, double[] hessians, int start, int count,
+        int featureFrom, int featureTo)
     {
-        Array.Clear(histogram, 0, HistogramLength);
+        int cellsFrom = _featureBinOffsets[featureFrom] * BinStride;
+        Array.Clear(histogram, cellsFrom, _featureBinOffsets[featureTo] * BinStride - cellsFrom);
         if (_binBytes.Length > 0)
-            AccumulateRows(histogram, gradients, hessians, start, count, new ReadOnlySpan<byte>(_binBytes));
+            AccumulateRows(histogram, gradients, hessians, start, count, featureFrom, featureTo,
+                new ReadOnlySpan<byte>(_binBytes));
         else
-            AccumulateRows(histogram, gradients, hessians, start, count, new ReadOnlySpan<ushort>(_binShorts));
+            AccumulateRows(histogram, gradients, hessians, start, count, featureFrom, featureTo,
+                new ReadOnlySpan<ushort>(_binShorts));
     }
 
     /// <summary>
@@ -615,7 +621,7 @@ public partial class HistGradientBoostingClassifier<T>
     /// count, samples below the row count), and span bounds checks cost a third of the loop.
     /// </summary>
     private void AccumulateRows<TBin>(double[] histogram, double[] gradients, double[] hessians, int start, int count,
-        ReadOnlySpan<TBin> bins) where TBin : struct
+        int featureFrom, int featureTo, ReadOnlySpan<TBin> bins) where TBin : struct
     {
         int features = NumFeatures;
         ref double hist = ref MemoryMarshal.GetReference(new Span<double>(histogram));
@@ -630,7 +636,7 @@ public partial class HistGradientBoostingClassifier<T>
             double g = Unsafe.Add(ref grad, i);
             double h = Unsafe.Add(ref hess, i);
             ref TBin row = ref Unsafe.Add(ref bin0, i * features);
-            for (int j = 0; j < features; j++)
+            for (int j = featureFrom; j < featureTo; j++)
             {
                 TBin raw = Unsafe.Add(ref row, j);
                 int bin = typeof(TBin) == typeof(byte) ? Unsafe.As<TBin, byte>(ref raw) : Unsafe.As<TBin, ushort>(ref raw);
