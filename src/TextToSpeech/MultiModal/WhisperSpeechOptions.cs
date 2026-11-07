@@ -29,23 +29,32 @@ public enum WhisperSpeechTrainingStage
 /// <para><b>For Beginners:</b> WhisperSpeech turns text into "semantic tokens" (what Whisper hears), those into EnCodec
 /// audio tokens in a chosen voice, and the audio tokens into sound.</para>
 /// </remarks>
-public class WhisperSpeechOptions : TtsModelOptions
+public class WhisperSpeechOptions : AiDotNet.Models.Options.ModelOptions
 {
     /// <summary>Creates the release's default pipeline.</summary>
     public WhisperSpeechOptions()
     {
         SampleRate = 24000;
         HopSize = 320;
-        HiddenDim = 768;
-        NumHeads = 12;
-        VocabSize = 256;
         MaxTextLength = 550;
-        DropoutRate = 0.0;
-        LearningRate = 1.5e-3;
-        WeightDecay = 0.1;
         Seed = 42;
         Codec = CreateReleaseCodec();
     }
+
+    /// <summary>The audio rate, which must match the selected EnCodec configuration.</summary>
+    public int SampleRate { get; set; }
+
+    /// <summary>Samples per acoustic frame, equal to the product of the codec's strides.</summary>
+    public int HopSize { get; set; }
+
+    /// <summary>The T2S text context in UTF-8 bytes, including its start position.</summary>
+    public int MaxTextLength { get; set; }
+
+    /// <summary>The optional ONNX export path.</summary>
+    public string? ModelPath { get; set; }
+
+    /// <summary>Runtime configuration for an ONNX export.</summary>
+    public AiDotNet.Onnx.OnnxModelOptions OnnxOptions { get; set; } = new();
 
     /// <summary>EnCodec's 24 kHz model at 3 kbps (four codebooks), the acoustic tokens the release's S2A models.</summary>
     public static EnCodecOptions CreateReleaseCodec()

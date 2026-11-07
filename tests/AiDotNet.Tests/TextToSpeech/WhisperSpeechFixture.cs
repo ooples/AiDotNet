@@ -48,6 +48,71 @@ internal static class WhisperSpeechFixture
         return model;
     }
 
+    internal static void PrepareOptions(WhisperSpeechOptions options, string option)
+    {
+        if (option.StartsWith("Vq", StringComparison.Ordinal) || option is "WhisperHeads")
+            options.Stage = WhisperSpeechTrainingStage.SemanticTokenizer;
+        else if (option.StartsWith("S2A", StringComparison.Ordinal))
+            options.Stage = WhisperSpeechTrainingStage.SemanticToAcoustic;
+        if (option == "VqMaxGradientNorm") options.VqMaxGradientNorm = .001;
+        if (option == "S2AMaxGradientNorm") options.S2AMaxGradientNorm = .001;
+    }
+
+    internal static AiDotNet.TextToSpeech.TtsTrainingSample<T> Sample<T>()
+    {
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        return new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+        {
+            Tokens = new Tensor<T>(new[] { 6 }, new Vector<T>(System.Text.Encoding.UTF8.GetBytes("a tone")
+                .Select(value => ops.FromDouble(value)).ToArray())),
+            Audio = Tones<T>(.32),
+        };
+    }
+
+    internal static long? Observe<T>(WhisperSpeech<T> model, string option)
+    {
+        var options = (WhisperSpeechOptions)model.GetOptions();
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        if (option == "CharactersPerSecond")
+        {
+            var t2s = model.Core.TextToSemantic;
+            var input = t2s.TextIds("a tone").Input;
+            var logits = t2s.Decode(new[] { t2s.Configuration.PaddingToken, 1, 2 }, new[] { 0, 1, 2 },
+                t2s.Encode(input, WhisperSpeechCore<T>.LanguageId(options.Language)), t2s.Cps(options.CharactersPerSecond));
+            return AiDotNet.Tests.ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(logits.Select(ops.ToDouble));
+        }
+        if (option == "MaxTextLength")
+        {
+            try
+            {
+                var semantic = model.TextToSemanticTokens(new string('a', 32));
+                return AiDotNet.Tests.ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(semantic.Select(value => (double)value));
+            }
+            catch (ArgumentException ex) when (ex.Message.StartsWith("The text is longer than", StringComparison.Ordinal))
+            {
+                return long.MinValue;
+            }
+        }
+        if (option == "VocosBandwidthId")
+        {
+            // Fresh adaptive norms have identical rows. Use distinct learned norm rows so decoding
+            // observes the configured bandwidth rather than that initialization symmetry.
+            foreach (var table in model.Core.Vocos.Layers.OfType<AiDotNet.NeuralNetworks.Layers.TiedEmbeddingLayer<T>>()
+                .Where(table => !ReferenceEquals(table, model.Core.Vocos.Codebooks)))
+            {
+                var values = table.GetParameters();
+                for (int i = 0; i < values.Length; i++)
+                    values[i] = ops.FromDouble(1 + .1 * (i / options.VocosDim) + .01 * (i % options.VocosDim));
+                table.SetParameters(values);
+            }
+            var codes = new Tensor<T>(new[] { 4, 3 });
+            for (int i = 0; i < codes.Length; i++) codes[i] = ops.FromDouble(i % options.Codec.CodebookSize);
+            return AiDotNet.Tests.ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(model.DecodeFromTokens(codes).Select(ops.ToDouble));
+        }
+        return null;
+    }
+
     /// <summary>A recording: two tones at <see cref="SampleRate"/>.</summary>
     public static Tensor<T> Tones<T>(double seconds, double pitch = 220)
     {

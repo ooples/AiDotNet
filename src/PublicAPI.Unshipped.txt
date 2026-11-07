@@ -21924,3 +21924,13 @@ AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MaxTextLength.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.MaxTextLength.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.HopSize.get -> int
 AiDotNet.TextToSpeech.StyleEmotion.StyleTtsBaseOptions.HopSize.set -> void
+AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.SampleRate.get -> int
+AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.SampleRate.set -> void
+AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.HopSize.get -> int
+AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.HopSize.set -> void
+AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.MaxTextLength.get -> int
+AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.MaxTextLength.set -> void
+AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.ModelPath.get -> string?
+AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.ModelPath.set -> void
+AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.OnnxOptions.get -> AiDotNet.Onnx.OnnxModelOptions!
+AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions.OnnxOptions.set -> void
