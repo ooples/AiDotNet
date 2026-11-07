@@ -40,6 +40,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T> && IsGooglePretrainingOption(option) ? "google-best-rq-masking"
             : network is AiDotNet.SpeechRecognition.Foundation.BESTRQ<T> && IsGooglePretrainingOption(option) ? "best-rq-masking"
             : network is AiDotNet.Audio.Generation.AudioLM<T> && option is "SemanticCropSeconds" or "CoarseCropSeconds" or "FineCropSeconds" ? "audiolm-stage-crop"
+            : network is AiDotNet.Audio.Generation.AudioLM<T> && option is "SemanticTemperature" or "CoarseTemperature" or "FineTemperature" or "Seed" ? "audiolm-code-sampling"
             : network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> && IsFishScheduleOption(option) ? "fish-training-schedule"
             : network is AiDotNet.Audio.Effects.DAC<T> && option == "QuantizerDropout" ? "dac-quantizer-dropout"
             : network is AiDotNet.PointCloud.Models.DGCNN<T> && option is "DropoutRate" or "UseDropout" ? "dgcnn-dropout"
@@ -87,6 +88,15 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fish && option == "ConstrainToSemanticTokens")
             return ObserveFishFrames(fish, input);
         long fingerprint = observe(network, ObservationInput(network, input, option));
+        if (network is AiDotNet.Audio.Generation.AudioLM<T> sampledAudioLm && option is "SemanticTemperature" or "CoarseTemperature" or "FineTemperature" or "Seed")
+        {
+            var settings = (AiDotNet.Audio.Generation.AudioLMOptions)sampledAudioLm.GetOptions();
+            // Observe generated tokens before frozen codec decoding: an unfitted codec can
+            // reconstruct different sampled codes as the same waveform.
+            var codes = sampledAudioLm.ContinueCodes(new int[settings.NumCodebooks, 0], Array.Empty<int>(), 0.16);
+            return OptionSensitivityHarness.Combine(fingerprint,
+                OptionSensitivityHarness.Fingerprint(codes.Cast<int>().Select(code => (double)code)));
+        }
         if (network is AiDotNet.SpeechRecognition.CTCVariants.CIFDecoder<T> cif && option == "TailThreshold")
         {
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();

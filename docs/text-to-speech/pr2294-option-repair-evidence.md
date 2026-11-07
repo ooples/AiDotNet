@@ -343,3 +343,8 @@ DAC QuantizerDropout now uses four quantizers in both control and candidate.
 With only one quantizer, U[1,N] always returns one and cannot exercise dropout.
 The compiled probe now passes for probability 1 -> 0.5 through real training;
 the scoped build has zero warnings/errors.
+
+AudioLM generation probes now observe actual ContinueCodes output before
+frozen codec decoding. SemanticTemperature, CoarseTemperature, FineTemperature
+and Seed all pass through that public generation path in the compiled harness.
+The scoped build has zero warnings/errors; no exemptions were added.
