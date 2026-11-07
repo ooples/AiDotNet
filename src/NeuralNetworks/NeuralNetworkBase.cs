@@ -14229,7 +14229,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Tensor<T> target,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeForward,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeLoss,
-        bool clipCustomObjective = false)
+        bool clipCustomObjective = false,
+        IReadOnlyList<Func<Tensor<T>>>? objectiveTerms = null)
     {
         var probe = TapeReachabilityProbe<T>.Current;
         var hooks = new Training.TapeTrainingStepper<T>.EagerStepHooks
@@ -14267,7 +14268,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             target,
             recomputeForward,
             recomputeLoss,
-            hooks);
+            hooks, objectiveTerms);
         LastLoss = lossValue;
         return lossValue;
     }
@@ -14315,6 +14316,47 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             PublishParameterGradients(grads);
         }
     }
+
+    /// <summary>Trains the sum of independently recomputable loss terms, retaining one term's graph at a time.</summary>
+    /// <remarks>All terms read the same pre-update parameters. Their gradients are summed before clipping,
+    /// regularization, publication and one optimizer/scheduler update. Terms must replay fixed random draws.</remarks>
+    protected T TrainWithSummedCustomObjectives(
+        Tensor<T> input, Tensor<T> expected, IReadOnlyList<Func<Tensor<T>>> objectives,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
+    {
+        Guard.NotNull(input);
+        Guard.NotNull(expected);
+        Guard.NotNull(objectives);
+        if (objectives.Count == 0) throw new ArgumentException("Provide at least one loss term.", nameof(objectives));
+        using var trainSentinel = AcquireTrainSentinel();
+        SetTrainingMode(true);
+        try
+        {
+            var terms = objectives.Select(term => (Func<Tensor<T>>)(() =>
+            {
+                EnsureLayerRandomSeedsWired();
+                var value = term();
+                if (value is null || value.Length != 1
+                    || double.IsNaN(NumOps.ToDouble(value[0])) || double.IsInfinity(NumOps.ToDouble(value[0])))
+                    throw new InvalidOperationException("A custom training objective must return a finite scalar loss.");
+                return value;
+            })).ToArray();
+            Tensor<T> Sum()
+            {
+                var total = terms[0]();
+                for (int i = 1; i < terms.Length; i++) total = Engine.TensorAdd(total, terms[i]());
+                return total;
+            }
+            using var stepArena = AiDotNet.Tensors.Helpers.TensorArena.Create();
+            return StepOnSharedTape(Sum, optimizer ?? GetOrCreateBaseOptimizer(), input, expected,
+                (_, _) => Sum(), (value, _) => value, clipCustomObjective: true, objectiveTerms: terms);
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
 
     /// <summary>
     /// Trains an objective with a branched or multi-input forward without changing the public

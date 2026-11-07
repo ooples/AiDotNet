@@ -1,5 +1,14 @@
 # PR 2294 option repair evidence
 
+## Crash recovery: summed discriminator objectives (2026-11-07)
+
+The recovered change evaluates independent StyleTTS-ZS discriminator terms on separate tapes, sums their gradients, then publishes, regularizes, clips and updates once. Every term uses the same pre-update parameters and fixed random draws. Generator training remains a single objective. The new shared-step regression compares three consecutive summed and combined steps, with and without clipping, including diagnostic-only sources, disconnected parameters and exactly one publication/regularization/pre-update callback per step. Optimizer callbacks run under `NoGradScope`, matching the production optimizer.
+
+The rebuilt scoped CPU harness passes both summed-step cases and SpeechT5's 256/512-hop, rejected-unpaired-hop and contextual `MaxGradientNorm` checks. A bounded native StyleTTS-ZS step before the TMA boundary produces finite loss 52.95476085119624, one update and zero skipped samples; peak working set is 1,812,287,488 bytes. These scoped checks compile the changed training sources against a hosted core with a local base-method adapter; they do not validate the complete rebuilt library.
+
+Limits remain explicit: the TMA-active native smoke run exhausts a 3 GiB managed heap cap. The full local net10.0 compile, with analyzers/documentation/optimization disabled, was stopped when the compiler reached roughly 7 GiB working set and available virtual memory fell below 1.6 GiB; it reports MSB6006 and is not a passing build. Full-library integration, analyzer/API declarations, generated option probes and hosted validation remain pending. The summed-step regression is included in the hosted focused TTS project as well as the main test suite. SpeechT5 and WhisperSpeech's paired codec/vocoder geometry exemptions retain their direct native context tests.
+
+
 ## Ownership
 
 The consumer audit scans 252,235 method bodies with zero unresolved consumers. The old

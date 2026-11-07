@@ -460,11 +460,15 @@ internal sealed class TapeTrainingStepper<T>
         Tensor<T> target,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeForward,
         Func<Tensor<T>, Tensor<T>, Tensor<T>> recomputeLoss,
-        EagerStepHooks? hooks = null)
+        EagerStepHooks? hooks = null,
+        IReadOnlyList<Func<Tensor<T>>>? objectiveTerms = null)
     {
         Guard.NotNull(objective);
         Guard.NotNull(parameterProvider);
         Guard.NotNull(update);
+        if (objectiveTerms is not null)
+            return SummedTapeObjective<T>.Step(objectiveTerms, parameterProvider, update,
+                input, target, recomputeForward, recomputeLoss, hooks);
         using var tape = new GradientTape<T>();
         var loss = objective();
         if (loss is null)

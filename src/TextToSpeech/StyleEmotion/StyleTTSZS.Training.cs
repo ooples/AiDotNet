@@ -84,7 +84,18 @@ public partial class StyleTTSZS<T>
         // The discriminators see the generator's outputs from this step's draws, before its update.
         (Tensor<T> Wave, Tensor<T> Durations, Tensor<T> Prosody, Tensor<T> Style)? fake;
         using (new NoGradScope<T>()) fake = GeneratorPass(prepared, training: true, outputsOnly: true).Fakes;
-        RunStep(sample.Tokens, DiscriminatorModules, discriminator: true, () => DiscriminatorLoss(prepared, fake!.Value));
+        var discriminatorTerms = new List<Func<Tensor<T>>>
+        {
+            () => DiscriminatorLoss(prepared, fake!.Value, "duration"),
+            () => DiscriminatorLoss(prepared, fake!.Value, "prosody"),
+        };
+        if (TmaActive)
+        {
+            discriminatorTerms.Add(() => DiscriminatorLoss(prepared, fake!.Value, "wave"));
+            discriminatorTerms.Add(() => DiscriminatorLoss(prepared, fake!.Value, "waveform"));
+        }
+        RunStep(sample.Tokens, DiscriminatorModules, discriminator: true,
+            () => DiscriminatorLoss(prepared, fake!.Value), discriminatorTerms);
         var modules = new List<string>(GeneratorModules);
         if (TmaActive) modules.AddRange(new[] { "text_aligner", "pitch_extractor" });
         var loss = RunStep(sample.Tokens, modules, discriminator: false, () => GeneratorPass(prepared, training: true).Loss!);
@@ -449,7 +460,8 @@ public partial class StyleTTSZS<T>
 
     /// <summary>The discriminators' objective: least-squares on the multi-period, multi-resolution and multimodal
     /// waveform discriminators (once the adversarial terms start) and the two multimodal prosody discriminators.</summary>
-    private Tensor<T> DiscriminatorLoss(Step p, (Tensor<T> Wave, Tensor<T> Durations, Tensor<T> Prosody, Tensor<T> Style) fake)
+    private Tensor<T> DiscriminatorLoss(Step p, (Tensor<T> Wave, Tensor<T> Durations, Tensor<T> Prosody, Tensor<T> Style) fake,
+        string? component = null)
     {
         var o = _options;
         var random = Fork(p.Seed, 1);
@@ -472,9 +484,12 @@ public partial class StyleTTSZS<T>
         }
         Tensor<T> LeastSquares(Tensor<T> real, Tensor<T> generated) => Engine.TensorAdd(OneMinusSquared(real), Mean(Engine.TensorMultiply(generated, generated)));
         var terms = new List<Tensor<T>>();
-        if (TmaActive)
+        if (TmaActive && component is null or "wave")
         {
             terms.Add(Losses.Discriminator(WaveDiscriminators.Forward(p.Wave), WaveDiscriminators.Forward(fake.Wave), relativistic: false));
+        }
+        if (TmaActive && component is null or "waveform")
+        {
             Tensor<T> realRows, fakeRows, conditions;
             using (new NoGradScope<T>())
             {
@@ -491,10 +506,12 @@ public partial class StyleTTSZS<T>
         var realProsody = Engine.TensorConcatenate(new[] { Engine.Reshape(p.Pitch, new[] { frames, 1 }), Engine.Reshape(p.Energy, new[] { frames, 1 }) }, 1);
         var styleCondition = Engine.TensorConcatenate(new[] { fake.Style, e }, 0);
         var frameCondition = Engine.TensorConcatenate(new[] { fake.Style, frameText }, 0);
-        terms.Add(LeastSquares(DurationDiscriminator.Forward(durationTarget, styleCondition, true, Fork(p.Seed, 9)).Score,
-            DurationDiscriminator.Forward(fake.Durations, styleCondition, true, Fork(p.Seed, 9)).Score));
-        terms.Add(LeastSquares(ProsodyDiscriminator.Forward(realProsody, frameCondition, true, Fork(p.Seed, 10)).Score,
-            ProsodyDiscriminator.Forward(fake.Prosody, frameCondition, true, Fork(p.Seed, 10)).Score));
+        if (component is null or "duration")
+            terms.Add(LeastSquares(DurationDiscriminator.Forward(durationTarget, styleCondition, true, Fork(p.Seed, 9)).Score,
+                DurationDiscriminator.Forward(fake.Durations, styleCondition, true, Fork(p.Seed, 9)).Score));
+        if (component is null or "prosody")
+            terms.Add(LeastSquares(ProsodyDiscriminator.Forward(realProsody, frameCondition, true, Fork(p.Seed, 10)).Score,
+                ProsodyDiscriminator.Forward(fake.Prosody, frameCondition, true, Fork(p.Seed, 10)).Score));
         return terms.Aggregate((a, b) => Engine.TensorAdd(a, b));
     }
 
@@ -560,7 +577,8 @@ public partial class StyleTTSZS<T>
         return optimizer;
     }
 
-    private T RunStep(Tensor<T> tokens, IEnumerable<string> modules, bool discriminator, Func<Tensor<T>> objective)
+    private T RunStep(Tensor<T> tokens, IEnumerable<string> modules, bool discriminator, Func<Tensor<T>> objective,
+        IReadOnlyList<Func<Tensor<T>>>? objectiveTerms = null)
     {
         if (_generatorOptimizer is null || _discriminatorOptimizer is null || _optimizerStage != CurrentStage)
         {
@@ -571,12 +589,17 @@ public partial class StyleTTSZS<T>
         _steppedModules = new HashSet<string>(modules);
         try
         {
-            return TrainWithCustomObjective(tokens, tokens, (_, _) =>
+            Tensor<T> Execute(Func<Tensor<T>> term)
             {
                 // WavLM and the speaker network are frozen and read in evaluation mode.
                 foreach (var layer in Module("wavlm").Concat(Module("speaker"))) layer.SetTrainingMode(false);
-                return objective();
-            }, discriminator ? _discriminatorOptimizer : _generatorOptimizer);
+                return term();
+            }
+            var optimizer = discriminator ? _discriminatorOptimizer : _generatorOptimizer;
+            return objectiveTerms is null
+                ? TrainWithCustomObjective(tokens, tokens, (_, _) => Execute(objective), optimizer)
+                : TrainWithSummedCustomObjectives(tokens, tokens,
+                    objectiveTerms.Select(term => (Func<Tensor<T>>)(() => Execute(term))).ToArray(), optimizer);
         }
         finally
         {

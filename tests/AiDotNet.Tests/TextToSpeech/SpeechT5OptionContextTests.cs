@@ -30,6 +30,7 @@ public class SpeechT5OptionContextTests
     [InlineData("MaxLengthRatio")]
     [InlineData("MaxTextLength")]
     [InlineData("MaxMelLength")]
+    [InlineData("MaxGradientNorm")]
     public void NativeTaskContextExercisesTheConfiguredControl(string option)
     {
         var probe = new OptionSensitivityProbe<SpeechT5<double>>(

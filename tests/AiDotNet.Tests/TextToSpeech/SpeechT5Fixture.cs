@@ -38,6 +38,7 @@ internal static class SpeechT5Fixture
     {
         if (option is "StopCriterion" or "MaxLengthRatio") options.StopThreshold = .75;
         if (option == "MaxMelLength") options.MaxMelLength = 8;
+        if (option == "MaxGradientNorm") options.MaxGradientNorm = .001;
         if (!IsPretraining(option)) return;
         options.CurrentStage = SpeechT5Stage.Pretraining;
         // Exercise warmup and decay within the same bounded native training run.

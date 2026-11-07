@@ -42,9 +42,11 @@ public class WhisperSpeechOptions : AiDotNet.Models.Options.ModelOptions
     }
 
     /// <summary>The audio rate, which must match the selected EnCodec configuration.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("SampleRate, HopSize and the EnCodec geometry must change together. WhisperSpeechOptionContextTests executes native encoding/Vocos decoding at 24 kHz and 16 kHz and rejects unpaired changes.")]
     public int SampleRate { get; set; }
 
     /// <summary>Samples per acoustic frame, equal to the product of the codec's strides.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("HopSize must equal the paired codec stride product. WhisperSpeechOptionContextTests executes native codec/Vocos geometries at 2560 and 1280 samples per frame and rejects unpaired changes.")]
     public int HopSize { get; set; }
 
     /// <summary>The T2S text context in UTF-8 bytes, including its start position.</summary>
