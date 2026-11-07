@@ -8,7 +8,6 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <remarks>
 /// <para><b>For Beginners:</b> These options configure the CodecTts model. Default values follow the original paper settings.</para>
 /// </remarks>
-[DimensionDivisibility(nameof(TextEncoderDim), nameof(NumHeads))]
 [DimensionDivisibility(nameof(LLMDim), nameof(NumHeads))]
 public class CodecTtsOptions : TtsModelOptions
 {
@@ -29,7 +28,6 @@ public class CodecTtsOptions : TtsModelOptions
         CodecFrameRate = other.CodecFrameRate;
         LLMDim = other.LLMDim;
         NumLLMLayers = other.NumLLMLayers;
-        TextEncoderDim = other.TextEncoderDim;
         SpeakerEmbeddingDim = other.SpeakerEmbeddingDim;
         MaxCodecFrames = other.MaxCodecFrames;
         LanguageModelName = other.LanguageModelName;
@@ -49,9 +47,6 @@ public class CodecTtsOptions : TtsModelOptions
 
     /// <summary>Gets or sets the number of LLM decoder layers.</summary>
     public int NumLLMLayers { get; set; } = 12;
-
-    /// <summary>Gets or sets the text encoder dimension.</summary>
-    public int TextEncoderDim { get; set; } = 512;
 
     /// <summary>Gets or sets the speaker embedding dimension (for multi-speaker or cloning).</summary>
     public int SpeakerEmbeddingDim { get; set; } = 256;

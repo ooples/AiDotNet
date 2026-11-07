@@ -33,7 +33,6 @@ internal static class XTTSv2Fixture
         options.StopAudioToken = 17;
         options.TextVocabularySize = 32;
         options.LLMDim = 32;
-        options.TextEncoderDim = 32;
         options.NumLLMLayers = 1;
         options.NumHeads = 4;
         options.ConditioningBlocks = 1;

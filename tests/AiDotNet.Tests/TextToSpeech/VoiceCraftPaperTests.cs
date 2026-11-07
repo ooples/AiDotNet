@@ -107,7 +107,6 @@ public class VoiceCraftPaperTests
         {
             TextPhonemizer = RecordedPhones,
             LLMDim = 16,
-            TextEncoderDim = 16,
             FeedForwardDim = 32,
             NumLLMLayers = 2,
             NumHeads = 4,

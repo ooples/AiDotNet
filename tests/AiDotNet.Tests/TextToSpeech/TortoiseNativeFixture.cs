@@ -15,7 +15,7 @@ internal static class TortoiseNativeFixture
         FftSize = 32, AutoregressiveFftSize = 32, HopSize = 8, AutoregressiveHopSize = 8,
         ConditioningSamples = 64, DiffusionConditioningSamples = 64, VocabSize = 256, MaxTextLength = 128,
         TextStartToken = 255, TextStopToken = 0, CodebookSize = 8, SpeechStartToken = 8, SpeechStopToken = 9,
-        LLMDim = 8, TextEncoderDim = 8, NumLLMLayers = 1, NumEncoderLayers = 1, NumHeads = 2,
+        LLMDim = 8, NumLLMLayers = 1, NumEncoderLayers = 1, NumHeads = 2,
         AutoregressiveFeedForwardDim = 16, MaxCodecFrames = 32, MaximumAutoregressiveTokens = 4,
         NumAutoregressiveSamples = 2, MinimumAutoregressiveTokens = 1,
         ClvpDim = 8, ClvpLayers = 1, ClvpHeads = 2, ClvpTextLength = 128, ClvpSpeechLength = 64,

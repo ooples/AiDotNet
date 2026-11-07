@@ -34,7 +34,6 @@ public class TortoiseTTSOptions : CodecTtsOptions
         FftSize = 1024;
         VocabSize = 256;
         MaxTextLength = 402;
-        TextEncoderDim = 1024;
         LLMDim = 1024;
         NumLLMLayers = 30;
         NumHeads = 16;

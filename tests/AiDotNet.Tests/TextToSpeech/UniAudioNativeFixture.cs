@@ -13,7 +13,7 @@ internal static class UniAudioNativeFixture
         SampleRate = 320, UseReleasedTextFrontend = false, HopSize = 32, CodecFrameRate = 10, MelChannels = 8,
         NumCodebooks = 3, CodebookSize = 8, CodecTotalQuantizers = 3, CodecFilters = 2, CodecDimension = 6,
         CodecRatios = new[] { 4, 2, 2, 2 }, CodecKMeansIterations = 0, CodecDeadCodeThreshold = 0,
-        LLMDim = 12, TextEncoderDim = 12, NumHeads = 3, NumEncoderLayers = 1, NumLLMLayers = 1,
+        LLMDim = 12, NumHeads = 3, NumEncoderLayers = 1, NumLLMLayers = 1,
         GlobalFeedForwardDim = 24, LocalFeedForwardDim = 24, JointVocabularySize = 192, VocabSize = 192,
         AudioTokenOffset = 32, PhoneTokenOffset = 80, PhoneVocabularySize = 80,
         MaxTextLength = 128, MaxContextPatches = 256, MaxCodecFrames = 64, PromptSeconds = .1,

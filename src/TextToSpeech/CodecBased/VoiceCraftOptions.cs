@@ -22,7 +22,6 @@ public class VoiceCraftOptions : CodecTtsOptions
         NumCodebooks = 4;
         CodebookSize = 2048;
         LLMDim = 2048;
-        TextEncoderDim = 2048;
         NumLLMLayers = 16;
         NumHeads = 16;
         FeedForwardDim = 8192;
@@ -146,7 +145,6 @@ public class VoiceCraftOptions : CodecTtsOptions
     public static VoiceCraftOptions Official330M() => new()
     {
         LLMDim = 1024,
-        TextEncoderDim = 1024,
         FeedForwardDim = 4096,
         NumLLMLayers = 24,
         NumHeads = 16,

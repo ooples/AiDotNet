@@ -40,7 +40,6 @@ public class SeedTTSOptions : CodecTtsOptions
         CodebookSize = 1024;
         CodecFrameRate = 50;
         LLMDim = 256;
-        TextEncoderDim = 256;
         NumLLMLayers = 4;
         NumHeads = 4;
         NumEncoderLayers = 4;

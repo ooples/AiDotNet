@@ -13,7 +13,6 @@ public class XTTSv2PaperTests
     internal static XTTSv2Options SmallOptions() => new()
     {
         LLMDim = 16,
-        TextEncoderDim = 16,
         NumLLMLayers = 1,
         NumHeads = 4,
         ConditioningBlocks = 1,
@@ -61,7 +60,6 @@ public class XTTSv2PaperTests
         return new XTTSv2CloneOptions
         {
             LLMDim = source.LLMDim,
-            TextEncoderDim = source.TextEncoderDim,
             NumLLMLayers = source.NumLLMLayers,
             NumHeads = source.NumHeads,
             ConditioningBlocks = source.ConditioningBlocks,

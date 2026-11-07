@@ -25,7 +25,6 @@ public class XTTSv2Options : CodecTtsOptions
         NumCodebooks = 1;
         CodebookSize = 1024;
         CodecFrameRate = 22;
-        TextEncoderDim = 1024;
         NumEncoderLayers = 0;
         LLMDim = 1024;
         NumLLMLayers = 30;

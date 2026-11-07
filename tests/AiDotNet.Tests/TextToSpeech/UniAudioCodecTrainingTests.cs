@@ -36,7 +36,7 @@ public sealed class UniAudioCodecTrainingTests
         NumCodebooks = 3, CodebookSize = 8, CodecTotalQuantizers = 3,
         CodecFilters = 2, CodecDimension = 6, CodecRatios = [4, 2, 2, 2],
         CodecKMeansIterations = 0, CodecDeadCodeThreshold = 0,
-        LLMDim = 12, TextEncoderDim = 12, NumHeads = 3, NumEncoderLayers = 1, NumLLMLayers = 1,
+        LLMDim = 12, NumHeads = 3, NumEncoderLayers = 1, NumLLMLayers = 1,
         GlobalFeedForwardDim = 24, LocalFeedForwardDim = 24, JointVocabularySize = 160, VocabSize = 160,
         AudioTokenOffset = 32, PhoneTokenOffset = 57, PhoneVocabularySize = 80,
         MaxTextLength = 8, MaxContextPatches = 64, MaxCodecFrames = 64, PromptSeconds = .1,

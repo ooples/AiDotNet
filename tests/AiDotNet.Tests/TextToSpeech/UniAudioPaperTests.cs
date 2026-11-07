@@ -39,7 +39,6 @@ public class UniAudioPaperTests
         CodecKMeansIterations = 0,
         CodecDeadCodeThreshold = 0,
         LLMDim = 12,
-        TextEncoderDim = 12,
         NumHeads = 3,
         NumEncoderLayers = 1,
         NumLLMLayers = 1,

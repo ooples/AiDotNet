@@ -10275,7 +10275,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 4, outputSize: 16) { RandomSeed = 1337 }, " +
-                    "new AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions { TextEncoderDim = 32, LLMDim = 32, VocabSize = 256, " +
+                    "new AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions { LLMDim = 32, VocabSize = 256, " +
                     "NumEncoderLayers = 1, NumLLMLayers = 1, NumHeads = 2, NumCodebooks = 1, " +
                     "CodebookSize = 16, MaxTextLength = 128, MaxCodecFrames = 16, DropoutRate = 0.0 })";
             }
@@ -11090,7 +11090,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.TextGeneration, " +
                     "inputSize: 4, outputSize: 16), " +
-                    "new AiDotNet.TextToSpeech.VoiceCloning.SeedTTSCloneOptions { TextEncoderDim = 32, " +
+                    "new AiDotNet.TextToSpeech.VoiceCloning.SeedTTSCloneOptions { " +
                     "LLMDim = 32, SpeakerEmbeddingDim = 32, NumEncoderLayers = 1, NumLLMLayers = 1, " +
                     "NumHeads = 2, NumCodebooks = 1, CodebookSize = 16, MaxTextLength = 8, " +
                     "MaxCodecFrames = 8, DropoutRate = 0.0 })";

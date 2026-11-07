@@ -143,7 +143,6 @@ public class TortoiseTTSPaperTests
             SpeechStartToken = 8,
             SpeechStopToken = 9,
             LLMDim = 8,
-            TextEncoderDim = 8,
             NumLLMLayers = 1,
             NumEncoderLayers = 1,
             NumHeads = 2,

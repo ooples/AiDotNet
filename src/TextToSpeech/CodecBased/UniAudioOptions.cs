@@ -17,7 +17,6 @@ public class UniAudioOptions : CodecTtsOptions
         NumCodebooks = 3;
         CodebookSize = 1024;
         CodecFrameRate = 50;
-        TextEncoderDim = 1536;
         LLMDim = 1536;
         NumEncoderLayers = 24;
         NumLLMLayers = 8;

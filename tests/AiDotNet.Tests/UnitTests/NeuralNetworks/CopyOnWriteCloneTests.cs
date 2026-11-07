@@ -222,7 +222,6 @@ public class CopyOnWriteCloneTests
         var options = new XTTSv2CloneOptions
         {
             VocabSize = 32,
-            TextEncoderDim = 8,
             LLMDim = 8,
             NumEncoderLayers = 0,
             NumLLMLayers = 1,
