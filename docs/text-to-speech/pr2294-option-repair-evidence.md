@@ -320,3 +320,15 @@ warmup (one for the warmup probe), bringing the schedule into the fixture's
 training horizon. TrainingSteps, CosineDecay, FinalLearningRateRatio and
 WarmupSteps all change actual post-training parameters/outputs in the compiled
 probe. The scoped build completes with zero warnings/errors.
+
+Hosted 7cee slices 0/7 exposed ContextNet's public transcription passing rank-2
+features to rank-3 convolution blocks. Transcribe now packs [time,mel] into
+[1,mel,time] and removes the batch axis from the [1,time,vocabulary] logits
+before CTC. Both constructors now configure the frontend with NumMels instead
+of silently using its 128-bin default. A changed-source regression independently
+packs features, runs the real encoder, computes greedy CTC and compares the
+public transcript. It also verifies 1.25-second input remains untrimmed with
+MaxAudioLengthSeconds=1 and that metadata reports 1: this existing field is
+explicitly informational, serialized metadata, now explained to the option
+harness. The changed-source stage and all previous stage checks pass with
+zero build warnings/errors.
