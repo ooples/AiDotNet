@@ -348,3 +348,13 @@ AudioLM generation probes now observe actual ContinueCodes output before
 frozen codec decoding. SemanticTemperature, CoarseTemperature, FineTemperature
 and Seed all pass through that public generation path in the compiled harness.
 The scoped build has zero warnings/errors; no exemptions were added.
+
+MaskGCT sampling probes now observe the actual semantic and acoustic code
+generation methods before waveform decoding, with 32 target frames and the
+top-one filter disabled. TextToSemanticSteps, TextToSemanticTemperature,
+SemanticToAcousticTemperature and SamplingSeed pass using valid candidates.
+Temperature perturbations now exclude negative values and include zero.
+All 57 focused perturbation/constraint regressions pass. GuidanceRescale still
+fails the original observation and remains unresolved; probing both semantic
+and acoustic tokens with active guidance did not distinguish it at test scale.
+No baseline or exemption was added for that unresolved case.

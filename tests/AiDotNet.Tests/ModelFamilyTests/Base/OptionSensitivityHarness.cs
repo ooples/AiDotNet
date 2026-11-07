@@ -794,6 +794,9 @@ public static class OptionSensitivityHarness
         if (IsNumeric(underlying))
         {
             IEnumerable<object> candidates = NumericCandidates(underlying, current);
+            if (option?.EndsWith("Temperature", StringComparison.Ordinal) == true)
+                candidates = candidates.Concat(new[] { Convert.ChangeType(0, underlying) })
+                    .Where(value => Convert.ToDouble(value) >= 0 && !Equals(value, current)).Distinct();
             if (option is "Beta1" or "Beta2" or "AdamBeta1" or "AdamBeta2")
                 candidates = candidates.Where(value => Convert.ToDouble(value) >= 0 && Convert.ToDouble(value) < 1);
             if (option is "TeacherMomentumStart" or "TeacherMomentumEnd" || option?.EndsWith("Probability", StringComparison.Ordinal) == true)

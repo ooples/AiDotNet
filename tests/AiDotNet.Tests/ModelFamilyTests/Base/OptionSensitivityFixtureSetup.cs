@@ -9,6 +9,9 @@ internal static class OptionSensitivityFixtureSetup
     private static bool IsGooglePretrainingOption(string option) => option is
         "MaskNoiseStd" or "MaskLength" or "MaskProbability" or "CodeDim" or "StackedFrames";
 
+    private static bool IsMaskGctSamplingOption(string option) => option is
+        "TextToSemanticSteps" or "TextToSemanticTemperature" or "SemanticToAcousticTemperature" or "SamplingSeed";
+
     private static bool IsFishScheduleOption(string option) => option is
         "TrainingSteps" or "CosineDecay" or "FinalLearningRateRatio" or "WarmupSteps";
 
@@ -43,6 +46,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.Audio.Generation.AudioLM<T> && option is "SemanticTemperature" or "CoarseTemperature" or "FineTemperature" or "Seed" ? "audiolm-code-sampling"
             : network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> && IsFishScheduleOption(option) ? "fish-training-schedule"
             : network is AiDotNet.Audio.Effects.DAC<T> && option == "QuantizerDropout" ? "dac-quantizer-dropout"
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && IsMaskGctSamplingOption(option) ? "maskgct-token-sampling"
             : network is AiDotNet.PointCloud.Models.DGCNN<T> && option is "DropoutRate" or "UseDropout" ? "dgcnn-dropout"
             : network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds" ? "cam-audio-frontend"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
@@ -88,6 +92,25 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fish && option == "ConstrainToSemanticTokens")
             return ObserveFishFrames(fish, input);
         long fingerprint = observe(network, ObservationInput(network, input, option));
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> mask && IsMaskGctSamplingOption(option))
+        {
+            var settings = (AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions)mask.GetOptions();
+            var random = new Random(settings.SamplingSeed);
+            Func<int, double[]> uniforms = count => Enumerable.Range(0, count).Select(_ => random.NextDouble()).ToArray();
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var semantic = (int[])mask.GetType().GetMethod("Generate", flags)!.Invoke(mask,
+                new object[] { new[] { 1, 2 }, new[] { 3, 4 }, new[] { 0, 1 }, 32, uniforms })!;
+            fingerprint = OptionSensitivityHarness.Combine(fingerprint,
+                OptionSensitivityHarness.Fingerprint(semantic.Select(code => (double)code)));
+            if (option == "SemanticToAcousticTemperature")
+            {
+                var codes = (int[,])mask.GetType().GetMethod("Acoustic", flags)!.Invoke(mask,
+                    new object[] { semantic, new int[2, settings.NumQuantizers], uniforms })!;
+                fingerprint = OptionSensitivityHarness.Combine(fingerprint,
+                    OptionSensitivityHarness.Fingerprint(codes.Cast<int>().Select(code => (double)code)));
+            }
+            return fingerprint;
+        }
         if (network is AiDotNet.Audio.Generation.AudioLM<T> sampledAudioLm && option is "SemanticTemperature" or "CoarseTemperature" or "FineTemperature" or "Seed")
         {
             var settings = (AiDotNet.Audio.Generation.AudioLMOptions)sampledAudioLm.GetOptions();
@@ -375,6 +398,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions mask && IsMaskGctSamplingOption(option))
+        {
+            mask.FilterThreshold = 0; // A top-one filter removes every temperature/sampling distinction.
+            mask.Guidance = 2.5;
+        }
         if (options is AiDotNet.Audio.Effects.DACOptions dac && option == "QuantizerDropout")
             dac.NumQuantizers = 4; // With a single quantizer, every dropout draw still selects one.
         if (options is AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions fish && IsFishScheduleOption(option))

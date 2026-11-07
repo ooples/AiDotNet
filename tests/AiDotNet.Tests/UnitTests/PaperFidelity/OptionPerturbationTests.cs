@@ -8,6 +8,18 @@ namespace AiDotNet.Tests.UnitTests.PaperFidelity;
 public class OptionPerturbationTests
 {
     [Theory]
+    [InlineData("Temperature")]
+    [InlineData("TextToSemanticTemperature")]
+    [InlineData("SemanticToAcousticTemperature")]
+    public void TemperaturesIncludeZeroAndExcludeNegativeValues(string option)
+    {
+        var candidates = OptionSensitivityHarness.Perturbations(typeof(double), 0.9, option).Cast<double>().ToArray();
+        Assert.Contains(0, candidates);
+        Assert.All(candidates, value => Assert.True(value >= 0));
+        Assert.DoesNotContain(0.9, candidates);
+    }
+
+    [Theory]
     [InlineData("HiftUpsampleRates")]
     [InlineData("VocoderUpsampleRates")]
     public void EqualUpsamplingRatesCanChangeWhilePreservingTheWaveformHop(string option)
