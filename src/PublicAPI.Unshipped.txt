@@ -21831,3 +21831,5 @@ AiDotNet.TextToSpeech.CodecBased.CosyVoiceOptions.TextEncoderDim.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceOptions.TextEncoderDim.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceOptions.NumEncoderLayers.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceOptions.NumEncoderLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.TokenMelRatio.get -> int
+AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options.TokenMelRatio.set -> void

@@ -903,3 +903,7 @@ The remaining vocoder option now observes the real VocoderTargets crop, mel/pitc
 A new optional-frontend contract test first failed because Chatterbox never called InitializeReleasedFrontends. Both constructors now initialize the configured original ONNX frontends. A small explicit contract graph verifies the same two-second recording is rejected with MaxReferenceSeconds=1 and executes ONNX Runtime with MaxReferenceSeconds=2; it is not a released tokenizer fidelity fixture. Local execution required copying matching ONNX Runtime 1.31.1 native DLL beside the scoped executable: Windows otherwise found system ORT1.17.1, which lacks managed API31. Chatterbox's released-reference and native training/codec/vocoder checks still pass after initialization wiring.
 
 All 27 historical Chatterbox option failures have local evidence: 14 active observations, six removed irrelevant options, six paired/fixed codec-vocoder constraints and the optional-frontend duration contract. This is not a claim that current-head hosted shards are green.
+
+### CosyVoice3 paired DiT geometry
+
+Three valid DiTDim/DiTHeads/DiTHeadDim geometries (16/2/8, 32/2/16 and 32/4/8) pass actual native flow training-loss evaluation and inference, with finite outputs and six mel frames for three speech tokens. Independent invalid changes to each width and to the released fixed TokenMelRatio are rejected by the actual model constructor. Constraint metadata now points to these permanent positive and negative tests.

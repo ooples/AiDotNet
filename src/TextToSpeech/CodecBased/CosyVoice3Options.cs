@@ -4,6 +4,10 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <remarks>The defaults reproduce the released Qwen2 LM, causal DiT flow and 24 kHz CausalHiFT.</remarks>
 public class CosyVoice3Options : CosyVoice2Options
 {
+    /// <summary>The released DiT flow produces exactly two mel frames per speech token.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The released CosyVoice3 flow fixes TokenMelRatio at two. CosyVoice3OptionContextTests verifies three-token native training/inference produces six mel frames and rejects other ratios.")]
+    public new int TokenMelRatio { get => base.TokenMelRatio; set => base.TokenMelRatio = value; }
+
     /// <summary>Initializes a new instance with default values.</summary>
     public CosyVoice3Options()
     {
@@ -48,12 +52,15 @@ public class CosyVoice3Options : CosyVoice2Options
     /// <summary>Gets or sets the pre lookahead channels.</summary>
     public int PreLookaheadChannels { get; set; }
     /// <summary>Gets or sets the feature width of the diffusion transformer.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("DiTDim must equal DiTHeads times DiTHeadDim. CosyVoice3OptionContextTests runs native DiT training and inference at three valid paired geometries and rejects isolated changes.")]
     public int DiTDim { get; set; }
     /// <summary>Gets or sets the diffusion transformer depth.</summary>
     public int DiTDepth { get; set; }
     /// <summary>Gets or sets the number of attention heads in the diffusion transformer.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("DiTDim must equal DiTHeads times DiTHeadDim. CosyVoice3OptionContextTests runs native DiT training and inference at three valid paired geometries and rejects isolated changes.")]
     public int DiTHeads { get; set; }
     /// <summary>Gets or sets the feature width of the diffusion transformer head.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("DiTDim must equal DiTHeads times DiTHeadDim. CosyVoice3OptionContextTests runs native DiT training and inference at three valid paired geometries and rejects isolated changes.")]
     public int DiTHeadDim { get; set; }
     /// <summary>Gets or sets the diffusion transformer feed forward multiplier.</summary>
     public int DiTFeedForwardMultiplier { get; set; }
