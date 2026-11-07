@@ -10,6 +10,67 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class ChatterboxOptionContextTests
 {
+    [Fact]
+    public void OptionalOnnxFrontendEnforcesItsConfiguredReferenceLimit()
+    {
+        string path = Path.Combine(Path.GetTempPath(), "chatter-frontend-contract-" + Guid.NewGuid().ToString("N") + ".onnx");
+        try
+        {
+            // A contract graph returns the feature length to prove that accepted input reaches ONNX Runtime.
+            // This graph tests frontend plumbing and duration validation, not released tokenizer fidelity.
+            var builder = new AiDotNet.Onnx.OnnxGraphBuilder(new AiDotNet.Onnx.OnnxExportOptions());
+            builder.AddFloatInput("features", new[] { 1, 128, -1 });
+            builder.AddFloatInput("length", new[] { 1 });
+            var node = new AiDotNet.Onnx.Protobuf.NodeProto { OpType = "Identity" };
+            node.Input.Add("length"); node.Output.Add("tokens"); builder.AddNode(node);
+            builder.AddFloatOutput("tokens", new[] { 1 });
+            using (var stream = File.Create(path)) builder.WriteTo(stream);
+            var options = ChatterboxFixture.Options();
+            options.SpeechTokenizerPath = path;
+            options.MaxReferenceSeconds = 1;
+            using var limited = Create(options);
+            using var extended = Create(new ChatterboxOptions(options) { MaxReferenceSeconds = 2 });
+            var recording = ChatterboxFixture.Recording<double>(2);
+            var error = Assert.Throws<ArgumentException>(() => limited.EncodeToTokens(recording));
+            Assert.Contains("at most 1 seconds", error.Message);
+            var tokens = extended.EncodeToTokens(recording);
+            Assert.Single(tokens);
+            Assert.True(tokens[0] > 0);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(4)]
+    public void PairedHiftRatesAndHopControlNativeWaveformLength(int rate)
+    {
+        var options = ChatterboxFixture.Options();
+        options.HiftUpsampleRates = new[] { rate };
+        options.HiftUpsampleKernels = new[] { 2 * rate };
+        options.HopSize = 4 * rate;
+        using var model = Create(options);
+        var mel = new Tensor<double>(new[] { 1, options.MelChannels, 4 });
+        Assert.Equal(4 * options.HopSize, model.Vocoder!.Forward(mel, new Random(7)).Length);
+    }
+
+    [Theory]
+    [InlineData(32)]
+    [InlineData(64)]
+    public void VocoderSegmentControlsNativeTrainingTargetsAndDecodedLength(int segment)
+    {
+        var options = ChatterboxFixture.Options();
+        options.VocoderSegmentLength = segment;
+        using var model = Create(options);
+        var targets = model.VocoderTargets(new TtsTrainingSample<double>
+        {
+            Tokens = new Tensor<double>(new[] { 1 }), Audio = ChatterboxFixture.Recording<double>(),
+        }, new Random(7));
+        Assert.Equal(segment, targets.Audio.Length);
+        Assert.Equal(targets.Mel.Shape[2], targets.Pitch.Length);
+        Assert.Equal(targets.Mel.Shape[2] * options.HopSize, model.Vocoder!.Forward(targets.Mel, new Random(7)).Length);
+    }
+
     [Theory]
     [InlineData(64, 1)]
     [InlineData(128, 2)]

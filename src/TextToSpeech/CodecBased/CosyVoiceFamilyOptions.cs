@@ -109,6 +109,7 @@ public abstract class CosyVoiceFamilyOptions : ModelOptions
     }
 
     /// <summary>Maximum prompt duration accepted by the released frontend (30 seconds).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("This limit applies when the optional released ONNX speech frontend is configured. ChatterboxOptionContextTests loads a contract graph, verifies rejection at a one-second limit and executes the same two-second input at a two-second limit; native fixtures without the graph do not exercise this boundary.")]
     public int MaxReferenceSeconds { get; set; } = 30;
 
     /// <summary>Optional original frozen speech-tokenizer ONNX graph; release loading sets this path.</summary>
@@ -166,6 +167,7 @@ public abstract class CosyVoiceFamilyOptions : ModelOptions
     public int HiftHarmonics { get; set; } = 8;
 
     /// <summary>HiFT's upsampling rates; their product times the iSTFT hop of 4 is <c>HopSize</c>.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("HiFT upsampling rates must be paired with HopSize and per-stage kernels. CosyVoiceOptionConstraintTests and ChatterboxOptionContextTests verify native waveform lengths for valid pairs; unpaired hop geometry is rejected.")]
     public int[] HiftUpsampleRates { get; set; } = { 8, 8 };
 
     /// <summary>HiFT's transposed-convolution kernels, one per upsampling stage.</summary>

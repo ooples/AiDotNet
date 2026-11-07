@@ -52,6 +52,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         Validate();
         LoadConfiguredTokenizer();
         Initialize();
+        InitializeReleasedFrontends();
         InitializeVoiceEncoder();
     }
 
@@ -66,6 +67,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         Validate();
         LoadConfiguredTokenizer();
         Initialize();
+        InitializeReleasedFrontends();
         InitializeVoiceEncoder();
         _t3Optimizer = optimizer ?? CreateComponentOptimizer("language model", _options.WarmupSteps);
     }

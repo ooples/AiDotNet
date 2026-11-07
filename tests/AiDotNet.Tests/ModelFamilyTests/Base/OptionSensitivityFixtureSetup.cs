@@ -257,6 +257,16 @@ internal static class OptionSensitivityFixtureSetup
             return OptionSensitivityHarness.Fingerprint(chunked.FlowModel!.Encode(Enumerable.Range(0, 12).ToArray(),
                 training: false, new Random(1337), streaming: true)
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> vocoder && option == "VocoderSegmentLength")
+        {
+            var targets = vocoder.VocoderTargets(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+            {
+                Tokens = input, Audio = ChatterboxFixture.Recording<T>(),
+            }, new Random(1337));
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            return OptionSensitivityHarness.Combine(OptionSensitivityHarness.Fingerprint(targets.Audio.Select(ops.ToDouble)),
+                OptionSensitivityHarness.Fingerprint(vocoder.Vocoder!.Forward(targets.Mel, new Random(1337)).Select(ops.ToDouble)));
+        }
         if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosySampler && cosySampler.GetOptions() is AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions && option is "RepetitionWindow" or "RepetitionRatio")
         {
             const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
