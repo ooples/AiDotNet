@@ -20,6 +20,24 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class MaskGctReferenceTests
 {
+    [Fact]
+    public void GuidanceRescaleChangesTheActualGenerationStepBeforeSampling()
+    {
+        var model = new MaskGctTextToSemantic<double>(new CpuEngine(), new List<LayerBase<double>>(),
+            new MaskGctTransformerConfiguration { Hidden = 16, Heads = 2, Layers = 1 }, 8, 16, new Random(1337));
+        var phones = new[] { 1, 2, 3, 4 };
+        var prompt = new[] { 0, 1 };
+        var sequence = new[] { 1, 2, 3, 4, 5, 6 };
+        var masked = new[] { true, false, true, false, true, false };
+        var plain = model.GuidedLogits(phones, prompt, sequence, masked, 0.37,
+            new MaskGctDecoding { Guidance = 2.5, GuidanceRescale = 0 });
+        var rescaled = model.GuidedLogits(phones, prompt, sequence, masked, 0.37,
+            new MaskGctDecoding { Guidance = 2.5, GuidanceRescale = 0.75 });
+        Assert.Equal(plain.Shape, rescaled.Shape);
+        Assert.True(plain.Zip(rescaled, (left, right) => Math.Abs(left - right)).Max() > 1e-12);
+        Assert.All(rescaled, value => Assert.True(double.IsFinite(value)));
+    }
+
     private static JsonElement Load(string name)
     {
         string relative = Path.Combine("TextToSpeech", "ReferenceData", name);

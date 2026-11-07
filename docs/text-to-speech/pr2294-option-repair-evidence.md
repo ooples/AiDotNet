@@ -375,3 +375,14 @@ TargetLength; DurationSteps, DurationGuidance and DurationHeads are observed
 in the predictor's continuous per-phone output before frame rounding. All
 four compiled probes pass, with no baseline/exemption additions; scoped build
 has zero warnings/errors.
+
+MaskGCT SemanticToAcousticHeads now observes the actual first-acoustic-layer
+TrainingLogits on nonconstant tokens/masks and selects that training stage.
+Its compiled probe passes for 2 -> 1 heads. GuidanceRescale is observed before
+discrete sampling: the unchanged generation-step math was extracted into
+GuidedLogits, and Generate calls that same method. A changed-source test proves
+rescaling changes its logits by more than 1e-12. Both release-reference T2S and
+S2A forwards and iterative token sequences still pass after the extraction.
+The harness reads the rebuilt model's private Decoding configuration and calls
+that actual step; its end-to-end probe awaits a hosted core containing the new
+internal method. Guidance rescale candidates are constrained to [0,1].

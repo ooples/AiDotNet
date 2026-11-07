@@ -222,21 +222,24 @@ internal sealed class MaskGctTextToSemantic<T>
     /// <summary>The release's <c>reverse_diffusion</c>: decodes <paramref name="length"/> semantic tokens after the
     /// prompt, the unconditional pass for guidance seeing neither the phones nor the prompt.</summary>
     public int[] Generate(IReadOnlyList<int> phones, IReadOnlyList<int> prompt, int length, MaskGctDecoding decoding, Func<int, double[]> uniforms)
+        => MaskGctSampling.Decode(length, SemanticCodes, decoding,
+            (seq, mask, t) => MaskGctSampling.Matrix(GuidedLogits(phones, prompt, seq, mask, t, decoding)), uniforms);
+
+    /// <summary>The actual guided logits for one reverse-diffusion step, before discrete sampling.</summary>
+    internal Tensor<T> GuidedLogits(IReadOnlyList<int> phones, IReadOnlyList<int> prompt, IReadOnlyList<int> sequence,
+        IReadOnlyList<bool> masked, double t, MaskGctDecoding decoding)
     {
-        return MaskGctSampling.Decode(length, SemanticCodes, decoding, (seq, mask, t) =>
+        var target = Masked(sequence, masked);
+        var x = prompt.Count == 0 ? target : _engine.TensorConcatenate(new[] { Semantic.Forward(MaskGctSampling.Ids<T>(prompt)), target }, 0);
+        var phoneEmbedding = Phone.Forward(MaskGctSampling.Ids<T>(phones));
+        var embeds = Backbone.Forward(x, t, phoneEmbedding);
+        embeds = _engine.TensorSlice(embeds, new[] { prompt.Count, 0 }, new[] { sequence.Count, embeds.Shape[1] });
+        if (decoding.Guidance > 0)
         {
-            var target = Masked(seq, mask);
-            var x = prompt.Count == 0 ? target : _engine.TensorConcatenate(new[] { Semantic.Forward(MaskGctSampling.Ids<T>(prompt)), target }, 0);
-            var phoneEmbedding = Phone.Forward(MaskGctSampling.Ids<T>(phones));
-            var embeds = Backbone.Forward(x, t, phoneEmbedding);
-            embeds = _engine.TensorSlice(embeds, new[] { prompt.Count, 0 }, new[] { length, embeds.Shape[1] });
-            if (decoding.Guidance > 0)
-            {
-                var unconditional = Backbone.Forward(target, t, null);
-                embeds = MaskGctSampling.Guide(_engine, embeds, unconditional, decoding.Guidance, decoding.GuidanceRescale);
-            }
-            return MaskGctSampling.Matrix(Head.Forward(embeds));
-        }, uniforms);
+            var unconditional = Backbone.Forward(target, t, null);
+            embeds = MaskGctSampling.Guide(_engine, embeds, unconditional, decoding.Guidance, decoding.GuidanceRescale);
+        }
+        return Head.Forward(embeds);
     }
 
     /// <summary>Loads Amphion's <c>MaskGCT_T2S</c> state dict.</summary>

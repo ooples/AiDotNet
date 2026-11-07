@@ -51,6 +51,8 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.Audio.Effects.DAC<T> && option == "QuantizerDropout" ? "dac-quantizer-dropout"
             : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && IsMaskGctSamplingOption(option) ? "maskgct-token-sampling"
             : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && IsMaskGctDurationOption(option) ? "maskgct-duration-predictor"
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && option == "SemanticToAcousticHeads" ? "maskgct-acoustic-heads"
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && option == "GuidanceRescale" ? "maskgct-guided-logits"
             : network is AiDotNet.PointCloud.Models.DGCNN<T> && option is "DropoutRate" or "UseDropout" ? "dgcnn-dropout"
             : network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds" ? "cam-audio-frontend"
             : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
@@ -93,6 +95,34 @@ internal static class OptionSensitivityFixtureSetup
     internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> guidanceMask && option == "GuidanceRescale")
+        {
+            guidanceMask.SetTrainingMode(false);
+            var settings = (AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions)guidanceMask.GetOptions();
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var module = guidanceMask.GetType().GetProperty("TextToSemantic", flags)!.GetValue(guidanceMask)!;
+            var decoding = guidanceMask.GetType().GetMethod("Decoding", flags)!.Invoke(guidanceMask,
+                new object[] { settings.TextToSemanticTemperature })!;
+            var logits = (Tensor<T>)module.GetType().GetMethod("GuidedLogits", flags)!.Invoke(module,
+                new object[] { new[] { 1, 2, 3, 4 }, new[] { 0, 1 }, new[] { 1, 2, 3, 4, 5, 6 },
+                    new[] { true, false, true, false, true, false }, 0.37, decoding })!;
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            return OptionSensitivityHarness.Fingerprint(logits.Select(value => ops.ToDouble(value)));
+        }
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> acousticMask && option == "SemanticToAcousticHeads")
+        {
+            acousticMask.SetTrainingMode(false);
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var first = acousticMask.GetType().GetProperty("FirstLayerModel", flags)!.GetValue(acousticMask)!;
+            var semantic = Enumerable.Range(0, 8).Select(i => i % 4).ToArray();
+            var codes = new int[8, 1];
+            for (int i = 0; i < 8; i++) codes[i, 0] = i % 4;
+            var masked = Enumerable.Range(0, 8).Select(i => i >= 2 && i % 2 == 0).ToArray();
+            var logits = (Tensor<T>)first.GetType().GetMethod("TrainingLogits")!.Invoke(first,
+                new object[] { semantic, codes, 0, 2, masked, 0.37 })!;
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            return OptionSensitivityHarness.Fingerprint(logits.Select(value => ops.ToDouble(value)));
+        }
         if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fish && option == "ConstrainToSemanticTokens")
             return ObserveFishFrames(fish, input);
         if (network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> durationMask && IsMaskGctDurationOption(option))
@@ -424,6 +454,10 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions guidanceMask && option == "GuidanceRescale")
+            guidanceMask.Guidance = 2.5;
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions acousticMask && option == "SemanticToAcousticHeads")
+            acousticMask.CurrentStage = AiDotNet.TextToSpeech.FlowDiffusion.MaskGctStage.FirstAcousticLayer;
         if (options is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions durationMask && IsMaskGctDurationOption(option))
         {
             durationMask.TargetDurationSeconds = null;
