@@ -614,3 +614,14 @@ CP0007 base change, so no new acknowledgment was needed. Seven obsolete or
 constrained baseline rows were removed. The ONNX loader reads recorded ModelPath.
 Compilation and native parity/constraints pass; full hosted package/shards
 remain required. Four FireRed decoding/text-splitting observers still need work.
+
+FireRed's four remaining decoding/text contexts now observe the actual native
+acoustic token generator, semantic GPT candidates and text splitter. Acoustic
+sampling temperature/top-k and ReleaseTextSplit pass. The semantic-token mask
+needed a control with unrestricted top-k/top-p, temperature one and repetition
+penalty one so the start-token exclusion is reachable; its actual GPT candidate
+sequences then differ too. All four probes pass, with option-specific controls.
+The current source fixture/helper compile cleanly and native full-vector parity,
+retained defaults and coupled-geometry tests remain green. All 36 historical
+FireRed failures now have local repairs/evidence; current-head hosted shards
+still need to validate the complete change.

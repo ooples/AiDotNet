@@ -100,6 +100,9 @@ internal static class OptionSensitivityFixtureSetup
     internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.FireRedTTS<T> fireRed
+            && FireRedTtsFixture.Observe(fireRed, option) is { } fireRedObservation)
+            return fireRedObservation;
         if (network is AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> spark
             && SparkNativeFixture.Observe(spark, option) is { } sparkObservation)
             return sparkObservation;

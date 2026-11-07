@@ -20,6 +20,13 @@ internal static class FireRedTtsFixture
 {
     internal static void PrepareOptions(FireRedTTSOptions options, string option)
     {
+        if (option == "ConstrainToSemanticTokens")
+        {
+            options.TopK = 0;
+            options.TopP = 1;
+            options.Temperature = 1;
+            options.RepetitionPenalty = 1;
+        }
         if (option is "FlowDropout" or "TrainingCfgRate" or "FlowWarmupSteps")
             options.Stage = FireRedTtsStage.FlowDecoder;
         if (option is "AcousticLmHeads" or "AcousticLmDropout" or "AcousticLmWarmupSteps" or "Lookahead")
@@ -40,6 +47,43 @@ internal static class FireRedTtsFixture
             options.DualDecodingDecayEnd = 2;
             options.DualDecodingFinalWeight = 0.1;
         }
+    }
+
+    internal static long? Observe<T>(FireRedTTS<T> model, string option)
+    {
+        if (option == "ReleaseTextSplit")
+        {
+            var pieces = model.SplitText("This first sentence deliberately contains more than thirty characters. This final sentence also contains more than thirty characters.");
+            return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(
+                pieces.SelectMany(piece => new[] { (double)piece.Length }.Concat(piece.Select(c => (double)c))));
+        }
+        if (option is not ("AcousticTemperature" or "AcousticTopK" or "ConstrainToSemanticTokens")) return null;
+        model.SetTrainingMode(false);
+        using var scope = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        var options = (FireRedTTSOptions)model.GetOptions();
+        var ops = MathHelper.GetNumericOperations<T>();
+        var speaker = new Tensor<T>(new[] { options.SpeakerDim });
+        for (int i = 0; i < speaker.Length; i++) speaker[i] = ops.FromDouble(0.2 * Math.Sin(i * 0.17));
+        var values = new System.Collections.Generic.List<double>();
+        for (int seed = 0; seed < 8; seed++)
+        {
+            var random = new Random(unchecked(options.SamplingSeed + seed));
+            if (option == "ConstrainToSemanticTokens")
+            {
+                foreach (var candidate in model.Gpt.Generate(model.Gpt.Prefix(speaker), new[] { 1, 2, 3 }, null, model.Decoding(), random))
+                {
+                    values.Add(candidate.Length);
+                    values.AddRange(candidate.Select(code => (double)code));
+                }
+            }
+            else
+            {
+                var codes = model.AcousticLm.Generate(new[] { 1, 2, 3 }, speaker,
+                    logits => FireRedTTS<T>.SampleTopK(logits, options.AcousticTopK, options.AcousticTemperature, random));
+                values.AddRange(codes.Cast<int>().Select(code => (double)code));
+            }
+        }
+        return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(values);
     }
 
     internal static FireRedTTSOptions Options() => new()
