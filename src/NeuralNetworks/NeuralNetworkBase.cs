@@ -8064,10 +8064,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// <c>[rows, vocabulary]</c> output, on the tape or anywhere else. Only for the plain layer chain: no weight
     /// streaming, no gradient checkpointing, no composite objective, and a model that does not override
     /// <see cref="ForwardForTraining"/> (its forward may not be a layer chain). Null = use the full forward.
+    /// The readout must also be initialized. The compiled step runs the forward to initialize every layer before it
+    /// collects the parameters it trains, and a lazy head reached only inside the loss misses that forward: MobileNetV2
+    /// then predicted differently from its own clone after training. The full forward runs until the head is initialized.
     /// </summary>
     private IFusedReadoutLossLayer<T>? FusedReadoutForTraining()
     {
         if (Layers.Count < 2 || Layers[^1] is not IFusedReadoutLossLayer<T> head) return null;
+        if (Layers[^1] is Layers.LayerBase<T> { IsInitialized: false }) return null;
         if (_weightLifetimeConfigured || GradientCheckpointingSegmentSize > 0
             || (_memoryManager is not null && _memoryManager.IsCheckpointingEnabled) || this is ICompositeLoss<T>)
             return null;
