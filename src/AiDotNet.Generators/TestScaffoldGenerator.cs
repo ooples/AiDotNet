@@ -10938,6 +10938,12 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "CodebookSize = 64, Filters = 4, Ratios = [8, 5, 4, 4, 4], Dimension = 8, ResidualKernelSizes = [3, 1], " +
                     "TargetBandwidthKbps = 0.16875 } })";
             }
+            else if (model.ClassName == "VALLEXClone" && model.TypeParameterCount == 1
+                     && typeName.StartsWith("AiDotNet.TextToSpeech.VoiceCloning.", System.StringComparison.Ordinal))
+            {
+                // Use the same native AR/NAR and codec configuration as the facade paper tests.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.VallEXCloneFixture.Create<double>()";
+            }
             else if (model.ClassName == "VALLE2" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.TextToSpeech.CodecBased.", System.StringComparison.Ordinal))
             {

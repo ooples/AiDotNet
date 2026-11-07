@@ -625,3 +625,19 @@ The current source fixture/helper compile cleanly and native full-vector parity,
 retained defaults and coupled-geometry tests remain green. All 36 historical
 FireRed failures now have local repairs/evidence; current-head hosted shards
 still need to validate the complete change.
+
+All 33 historical VALLEXClone failures were OutOfMemoryException during the
+generated fixture's default foundation-scale construction. The generator now
+uses VallEXCloneFixture, sharing exactly the existing facade paper tests'
+16-wide bilingual AR/NAR, three 64-way EnCodec streams at 75 Hz and short
+reference enrollment. The production default architecture is unchanged.
+Actual scaffold emission selects this factory, and the generator builds.
+
+The shared factory has 113,168 parameters. Nine native facade paper checks
+pass: canonical graph parity, transcript requirement, actual variable-length
+codec speaker representation, cross-lingual AR/NAR inference, both native
+training stages, inherited checkpoint loader and deep copy of codec/facade
+settings. The paper tests now reuse the same options rather than duplicating
+them. Hosted generated invariants and newly exposed option outcomes still
+need verification; this establishes that the native factory runs without the
+foundation-model allocation.
