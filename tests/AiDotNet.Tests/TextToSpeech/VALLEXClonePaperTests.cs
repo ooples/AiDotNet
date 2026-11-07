@@ -12,6 +12,19 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// <summary>Regression tests for the voice-cloning facade over the native VALL-E X graph.</summary>
 public class VALLEXClonePaperTests
 {
+    [Theory]
+    [InlineData(17, 2)]
+    [InlineData(16, 3)]
+    [InlineData(16, 0)]
+    [InlineData(0, 2)]
+    public void InvalidTransformerWidthsAreRejectedBeforeInference(int width, int heads)
+    {
+        var options = Tiny();
+        options.HiddenDim = width;
+        options.NumHeads = heads;
+        Assert.Throws<ArgumentException>(() => Create(options));
+    }
+
     private static VALLEXCloneOptions Tiny(string referenceText = "a prompt") => VallEXCloneFixture.Options(referenceText);
 
     private static NeuralNetworkArchitecture<double> Architecture() =>

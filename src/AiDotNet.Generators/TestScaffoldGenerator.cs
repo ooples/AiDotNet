@@ -16418,7 +16418,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                         ("ScaledInput_ShouldChangeOutput", false, "random"),
                     }, "((AiDotNet.TextToSpeech.TtsModelBase<double>)network).TextToTokens");
                 }
-                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLE2" or "SoundStorm" or "SPEARTTS" or "ChatTTS" or "ParlerTTS" or "CosyVoice" or "CosyVoice2" or "Chatterbox")
+                else if (model.ClassName is "Pheme" or "VALLE" or "VALLEX" or "VALLEXClone" or "VALLE2" or "SoundStorm" or "SPEARTTS" or "ChatTTS" or "ParlerTTS" or "CosyVoice" or "CosyVoice2" or "Chatterbox")
                 {
                     // Pheme, VALL-E and SPEAR-TTS read phoneme ids (SoundStorm text bytes, Parler-TTS T5 token ids) and train on codec tokens, one frame per target row (the TTS
                     // base synthesizes [16, codebooks] tokens from a [16, 1] target).

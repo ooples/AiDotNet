@@ -114,6 +114,9 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
 
     private void ConfigureBase()
     {
+        if (_options.HiddenDim <= 0 || _options.NumHeads <= 0 || _options.HiddenDim % _options.NumHeads != 0
+            || _options.FeedForwardDim <= 0 || _options.NumEncoderLayers <= 0 || _options.NumDecoderLayers <= 0)
+            throw new ArgumentException("VALL-E Transformer widths/depths must be positive and HiddenDim must divide into NumHeads.", "options");
         base.SampleRate = _options.SampleRate;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;

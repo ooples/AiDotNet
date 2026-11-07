@@ -641,3 +641,18 @@ settings. The paper tests now reuse the same options rather than duplicating
 them. Hosted generated invariants and newly exposed option outcomes still
 need verification; this establishes that the native factory runs without the
 foundation-model allocation.
+
+VALLEXClone also needs the canonical codec-TTS scaffold: framed phoneme input,
+16 codec frames as the target and teacher-forced text-sensitivity checks. It is
+now routed through the same template as VALLEX, rather than the generic mel
+input template. Actual scaffold emission verifies the factory and shapes.
+
+Native option probes exposed invalid Transformer widths being accepted by the
+public constructor and failing later during inference; the harness could then
+mistake rejection for useful sensitivity. VallEModelBase now rejects nonpositive
+widths/depths and incompatible hidden/head widths before network construction.
+Four changed-source negative cases plus the nine existing native facade paper
+checks pass. Valid graph behavior remains covered by the canonical graph,
+AR/NAR training and cross-lingual inference checks. Fresh generated option
+outcomes are being audited after the OOM fix; several previously unreachable
+controls still need stage/frontend/ownership work.
