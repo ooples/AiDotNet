@@ -52,7 +52,7 @@ public class WhisperSpeechOptionContextTests
         Assert.Equal(new[] { 4, 3 }, codes.Shape.ToArray());
         var wave = model.DecodeFromTokens(codes);
         Assert.Equal(3 * hop, wave.Length);
-        Assert.All(wave, value => Assert.True(double.IsFinite(value)));
+        Assert.All(wave, value => Assert.True(TtsPaperNumerics.IsFinite(value)));
         Assert.Contains(wave, value => value != 0);
     }
 

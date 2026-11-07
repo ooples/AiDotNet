@@ -55,7 +55,7 @@ public class StyleTtsZsOptionContextTests
         var style = new Tensor<double>(new[] { 1, width });
         var wave = model.DecoderNetwork.Forward(text, pitch, energy, style, false, new Random(7));
         Assert.Equal(6 * options.HopSize, wave.Length);
-        Assert.All(wave, value => Assert.True(double.IsFinite(value)));
+        Assert.All(wave, value => Assert.True(TtsPaperNumerics.IsFinite(value)));
         Assert.Contains(wave, value => Math.Abs(value) > 1e-12);
     }
 

@@ -46,7 +46,7 @@ internal static class StyleTtsZsFixture
         PrepareModel(model, option);
         var loss = model.Train(Sample<T>());
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        if (!double.IsFinite(ops.ToDouble(loss))) throw new InvalidOperationException("The native StyleTTS-ZS loss is not finite.");
+        if (!TtsPaperNumerics.IsFinite(ops.ToDouble(loss))) throw new InvalidOperationException("The native StyleTTS-ZS loss is not finite.");
         if (model.SkippedSamples != 0) throw new InvalidOperationException("The StyleTTS-ZS control recording was skipped.");
     }
 

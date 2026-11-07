@@ -31,8 +31,8 @@ public class IndexTts2OptionConstraintTests
             var output = estimator.Forward(new Tensor<double>(new[] { 3, 5 }),
                 new Tensor<double>(new[] { 3, 5 }), 0.37, new Tensor<double>(new[] { 6 }),
                 new Tensor<double>(new[] { 3, 8 }), false);
-            Assert.Equal(new[] { 3, 5 }, output.Shape);
-            Assert.All(output, value => Assert.True(double.IsFinite(value)));
+            Assert.Equal(new[] { 3, 5 }, output.Shape.ToArray());
+            Assert.All(output, value => Assert.True(TtsPaperNumerics.IsFinite(value)));
             return layers.Sum(layer => (long)layer.GetParameters().Length);
         }
         Assert.True(Run(32) > Run(16));

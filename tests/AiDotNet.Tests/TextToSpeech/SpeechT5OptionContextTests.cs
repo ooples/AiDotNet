@@ -40,7 +40,7 @@ public class SpeechT5OptionContextTests
             model =>
             {
                 for (int i = 0; i < OptionSensitivityFixtureSetup.TrainingSteps(model, option, 1); i++)
-                    Assert.True(double.IsFinite(model.Train(SpeechT5Fixture.Sample<double>(option))));
+                    Assert.True(TtsPaperNumerics.IsFinite(model.Train(SpeechT5Fixture.Sample<double>(option))));
             },
             prepareOptions: settings => SpeechT5Fixture.PrepareOptions((SpeechT5Options)settings, option),
             controlGroup: option);
@@ -63,7 +63,7 @@ public class SpeechT5OptionContextTests
         for (int i = 0; i < mel.Length; i++) mel[i] = .1 * Math.Sin(i * .17);
         var wave = model.Vocode(mel);
         Assert.Equal(3 * hop, wave.Length);
-        Assert.All(wave, value => Assert.True(double.IsFinite(value)));
+        Assert.All(wave, value => Assert.True(TtsPaperNumerics.IsFinite(value)));
         Assert.Contains(wave, value => value != 0);
     }
 

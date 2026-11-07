@@ -30,7 +30,9 @@ public class ContextNetTranscriptionTests
         int previous = -1;
         for (int frame = 0; frame < logits.Shape[1]; frame++)
         {
-            int token = Enumerable.Range(0, options.VocabSize).MaxBy(v => logits[0, frame, v]);
+            // The first index of the largest logit, as MaxBy would pick (MaxBy is not on net471).
+            int f = frame;
+            int token = Enumerable.Range(0, options.VocabSize).Aggregate((best, v) => logits[0, f, v] > logits[0, f, best] ? v : best);
             if (token != 0 && token != previous) expected.Append(options.Vocabulary[token]);
             previous = token;
         }
@@ -38,7 +40,7 @@ public class ContextNetTranscriptionTests
         Assert.Equal(expected.ToString(), result.Text);
         Assert.Equal(1.25, result.DurationSeconds);
         Assert.Equal(1, model.GetModelMetadata().AdditionalInfo["MaxAudioLengthSeconds"]);
-        Assert.True(double.IsFinite(result.Confidence));
+        Assert.True(TtsPaperNumerics.IsFinite(result.Confidence));
     }
 
     private sealed class Probe : ContextNet<double>

@@ -23,7 +23,7 @@ public class DacOptionConstraintTests
         for (int i = 0; i < audio.Length; i++) audio[i] = 0.4 * Math.Sin(i * 0.13);
         var reconstructed = model.Predict(audio);
         Assert.Equal(audio.Shape, reconstructed.Shape);
-        Assert.All(reconstructed, value => Assert.True(double.IsFinite(value)));
+        Assert.All(reconstructed, value => Assert.True(TtsPaperNumerics.IsFinite(value)));
     }
 
     [Theory]

@@ -54,7 +54,7 @@ public class MaskGctOptionConstraintTests
         model.SetTrainingMode(false);
         var waveform = model.DecodeFromTokens(new Tensor<double>(new[] { 4, 2 }));
         Assert.Equal(4 * hop, waveform.Length);
-        Assert.All(waveform, value => Assert.True(double.IsFinite(value)));
+        Assert.All(waveform, value => Assert.True(TtsPaperNumerics.IsFinite(value)));
     }
 
     private static NeuralNetworkArchitecture<double> Architecture() =>

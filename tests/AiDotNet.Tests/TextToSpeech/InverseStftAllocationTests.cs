@@ -6,6 +6,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class InverseStftAllocationTests
 {
+#if NET6_0_OR_GREATER // GC.GetTotalAllocatedBytes does not exist on .NET Framework (the compat build's net471)
     [Fact]
     public void WhisperSpeechTransformDoesNotAllocateQuadraticTables()
     {
@@ -17,6 +18,7 @@ public class InverseStftAllocationTests
         GC.KeepAlive(transform);
         Assert.True(allocated < 1024 * 1024, $"10,240-point construction allocated {allocated:N0} bytes.");
     }
+#endif
 
     [Theory]
     [InlineData(15, 3, false)]

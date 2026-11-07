@@ -35,7 +35,7 @@ public class MaskGctReferenceTests
             new MaskGctDecoding { Guidance = 2.5, GuidanceRescale = 0.75 });
         Assert.Equal(plain.Shape, rescaled.Shape);
         Assert.True(plain.Zip(rescaled, (left, right) => Math.Abs(left - right)).Max() > 1e-12);
-        Assert.All(rescaled, value => Assert.True(double.IsFinite(value)));
+        Assert.All(rescaled, value => Assert.True(TtsPaperNumerics.IsFinite(value)));
     }
 
     private static JsonElement Load(string name)
