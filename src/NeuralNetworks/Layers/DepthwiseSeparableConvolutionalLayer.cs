@@ -616,12 +616,10 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
         T depthwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_kernelSize * _kernelSize)));
         T pointwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_inputDepth)));
 
-        _depthwiseKernels = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_depthwiseKernels._shape, Vector<T>.CreateRandom(_depthwiseKernels.Length, -0.5, 0.5)),
-            depthwiseScale);
-        _pointwiseKernels = Engine.TensorMultiplyScalar(
-            new Tensor<T>(_pointwiseKernels._shape, Vector<T>.CreateRandom(_pointwiseKernels.Length, -0.5, 0.5)),
-            pointwiseScale);
+        for (int i = 0; i < _depthwiseKernels.Length; i++)
+            _depthwiseKernels[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), depthwiseScale);
+        for (int i = 0; i < _pointwiseKernels.Length; i++)
+            _pointwiseKernels[i] = NumOps.Multiply(NumOps.FromDouble(Random.NextDouble() - 0.5), pointwiseScale);
 
         _biases.Fill(NumOps.Zero);
     }

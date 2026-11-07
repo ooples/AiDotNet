@@ -1,6 +1,8 @@
 using AiDotNet.LearningRateSchedulers;
 using System.Collections.Concurrent;
 using AiDotNet.Attributes;
+using AiDotNet.Audio.Features;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
@@ -56,6 +58,12 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
+
+    // The native default topology; null in ONNX mode and when the caller supplied layers.
+    private CamPlusPlusEncoder<T>? _encoder;
+
+    // The Kaldi filterbank front end, built on first use.
+    private KaldiFbank<T>? _fbank;
 
     #endregion
 
@@ -223,23 +231,103 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
 
     #region NeuralNetworkBase
 
+    /// <remarks>
+    /// The default topology is 3D-Speaker's <c>CAMPPlus</c> (<see cref="CamPlusPlusEncoder{T}"/>): the FCM head, the
+    /// TDNN layer, three context-aware-masked D-TDNN blocks, statistics pooling and the embedding with its non-affine
+    /// BatchNorm. Its layers are published through <c>Layers</c>, so training, serialization and cloning walk the
+    /// instances the forward runs. A caller-supplied stack runs as the sequential chain it was written as.
+    /// </remarks>
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers);
-        else Layers.AddRange(LayerHelper<T>.CreateDefaultCAMPlusPlusLayers(
-            numMels: _options.NumMels, initialChannels: _options.InitialChannels,
-            growthRate: _options.GrowthRate, numBlocks: _options.NumBlocks,
-            bottleneckDim: _options.BottleneckDim, maskingDim: _options.MaskingDim,
-            poolingDim: _options.PoolingDim, embeddingDim: _options.EmbeddingDim,
-            dropoutRate: _options.DropoutRate));
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
+        {
+            Layers.AddRange(Architecture.Layers);
+            return;
+        }
+
+        var configuration = new CamPlusPlusConfiguration(_options.NumMels, _options.EmbeddingDim, _options.GrowthRate,
+            _options.BottleneckMultiplier, _options.InitialChannels);
+        var layers = new List<LayerBase<T>>();
+        _encoder = new CamPlusPlusEncoder<T>(Engine, layers, configuration,
+            AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? _options.Seed ?? 0));
+        Layers.AddRange(layers);
+        _encoder.SetTrainingMode(IsTrainingMode);
     }
+
+    /// <inheritdoc />
+    /// <remarks>The embedding BatchNorm is computed by the encoder, so it follows the mode too.</remarks>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        _encoder?.SetTrainingMode(isTraining);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The embedding's BatchNorm has no scale or shift in CAM++ (<c>affine=False</c>); the layer's are held at 1
+    /// and 0 by leaving them out of every training step.</remarks>
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
+    {
+        if (_encoder is null) return parameters;
+        var frozen = new HashSet<Tensor<T>>(_encoder.FrozenParameters, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        return parameters.Where(p => !frozen.Contains(p)).ToList();
+    }
+
+    /// <summary>
+    /// Loads a 3D-Speaker <c>CAMPPlus</c> state dict (as <c>speech_campplus_sv_zh-cn_16k-common</c> releases it), each
+    /// tensor read by name and shape.
+    /// </summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    {
+        Encoder.LoadTorchWeights(read);
+        InvalidateWeightCachesAfterSuccessfulWeightUpdate();
+    }
+
+    private CamPlusPlusEncoder<T> Encoder =>
+        _encoder ?? throw new InvalidOperationException("The CAM++ encoder exists only for the native default topology.");
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
+        return ForwardNative(input);
+    }
+
+    /// <inheritdoc/>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => ForwardNative(input);
+
+    /// <inheritdoc/>
+    /// <remarks>Every layer of the default topology is built at its final size, so there is nothing to resolve; the
+    /// base walk would instead run them as a chain, which they are not.</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+        if (_encoder is null) base.ResolveLazyLayerShapes();
+    }
+
+    /// <summary>
+    /// Runs filterbank frames <c>[T, NumMels]</c> (or <c>[B, T, NumMels]</c>) through the encoder to an embedding
+    /// <c>[EmbeddingDim]</c> (or <c>[B, EmbeddingDim]</c>).
+    /// </summary>
+    private Tensor<T> ForwardNative(Tensor<T> input)
+    {
+        if (_encoder is null)
+        {
+            var c = input;
+            foreach (var l in Layers) c = l.Forward(c);
+            return c;
+        }
+
+        // The encoder holds its layers directly; a restore that swapped one out would leave it running stale weights.
+        if (!_encoder.Runs(Layers))
+            throw new InvalidOperationException("CAM++'s layers are no longer the instances its encoder runs.");
+        if (input.Shape.Length == 2)
+        {
+            var embedding = _encoder.Forward(Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1] }));
+            return Engine.Reshape(embedding, new[] { _options.EmbeddingDim });
+        }
+        if (input.Shape.Length != 3)
+            throw new ArgumentException($"CAM++ takes filterbank frames [T, {_options.NumMels}] or [B, T, {_options.NumMels}].", nameof(input));
+        return _encoder.Forward(input);
     }
 
     /// <inheritdoc />
@@ -247,10 +335,20 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+
+    /// <summary>
+    /// CosyVoice's and 3D-Speaker's front end for a waveform <c>[samples]</c>: Kaldi filterbank energies
+    /// (<c>kaldi.fbank(num_mel_bins=80, dither=0)</c>, the Povey window) with each band's mean over the utterance
+    /// subtracted. Features (rank 2 or more) pass through.
+    /// </summary>
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
-        if (MfccExtractor is not null) return MfccExtractor.Extract(rawAudio);
-        return rawAudio;
+        if (rawAudio.Shape.Length != 1) return rawAudio;
+        _fbank ??= new KaldiFbank<T>(Engine, _options.SampleRate, _options.NumMels, WindowType.Povey,
+            _options.FrameLengthMilliseconds, _options.FrameShiftMilliseconds);
+        var features = _fbank.Forward(rawAudio);
+        var mean = Engine.ReduceMean(features, new[] { 0 }, true);
+        return Engine.TensorSubtract(features, Engine.TensorBroadcastTo(mean, features.Shape.ToArray()));
     }
 
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => NormalizeEmbedding(o);
@@ -261,7 +359,7 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
         {
             Name = _useNativeMode ? "CAM++-Native" : "CAM++-ONNX",
             Description = "CAM++ Context-Aware Masking Speaker Model (Wang et al., 2023)",
-            Complexity = _options.NumBlocks
+            Complexity = CamPlusPlusConfiguration.BlockShapes.Length
         };
         m.AdditionalInfo["EmbeddingDim"] = _options.EmbeddingDim.ToString();
         m.AdditionalInfo["InitialChannels"] = _options.InitialChannels.ToString();

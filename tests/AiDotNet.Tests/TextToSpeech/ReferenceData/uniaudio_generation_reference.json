@@ -1,0 +1,155 @@
+{
+  "code_revision": "c1146a8cecf84f1c2e877170d84998393b7e1e78",
+  "author_sha256": "92927716118b217891e041b95cdec20ccdb6c3a646ac4f218a458574a83375f3",
+  "scope": "Original greedy search controller, controlled logits; no trained-network replacement claim.",
+  "cases": [
+    {
+      "minimum_length": 0,
+      "prefix_patches": 9,
+      "minimum_ratio": 0.0,
+      "maximum_frames": 4,
+      "raw_tokens": [
+        7,
+        7,
+        7
+      ],
+      "codec_tokens": [],
+      "codec_frames": 0,
+      "local_calls": 3
+    },
+    {
+      "minimum_length": 1,
+      "prefix_patches": 9,
+      "minimum_ratio": 0.1111111111111111,
+      "maximum_frames": 4,
+      "raw_tokens": [
+        7,
+        7,
+        7
+      ],
+      "codec_tokens": [],
+      "codec_frames": 0,
+      "local_calls": 3
+    },
+    {
+      "minimum_length": 2,
+      "prefix_patches": 9,
+      "minimum_ratio": 0.2222222222222222,
+      "maximum_frames": 4,
+      "raw_tokens": [
+        8,
+        10,
+        12,
+        7,
+        7,
+        7
+      ],
+      "codec_tokens": [
+        8,
+        10,
+        12
+      ],
+      "codec_frames": 1,
+      "local_calls": 6
+    },
+    {
+      "minimum_length": 3,
+      "prefix_patches": 9,
+      "minimum_ratio": 0.3333333333333333,
+      "maximum_frames": 4,
+      "raw_tokens": [
+        8,
+        10,
+        12,
+        8,
+        10,
+        12,
+        7,
+        7,
+        7
+      ],
+      "codec_tokens": [
+        8,
+        10,
+        12,
+        8,
+        10,
+        12
+      ],
+      "codec_frames": 2,
+      "local_calls": 9
+    },
+    {
+      "minimum_length": 4,
+      "prefix_patches": 9,
+      "minimum_ratio": 0.4444444444444444,
+      "maximum_frames": 4,
+      "raw_tokens": [
+        8,
+        10,
+        12,
+        8,
+        10,
+        12,
+        8,
+        10,
+        12,
+        7,
+        7,
+        7
+      ],
+      "codec_tokens": [
+        8,
+        10,
+        12,
+        8,
+        10,
+        12,
+        8,
+        10,
+        12
+      ],
+      "codec_frames": 3,
+      "local_calls": 12
+    },
+    {
+      "minimum_length": 6,
+      "prefix_patches": 9,
+      "minimum_ratio": 0.6666666666666666,
+      "maximum_frames": 4,
+      "raw_tokens": [
+        8.0,
+        10.0,
+        12.0,
+        8.0,
+        10.0,
+        12.0,
+        8.0,
+        10.0,
+        12.0,
+        8.0,
+        10.0,
+        12.0,
+        7.0,
+        7.0,
+        7.0
+      ],
+      "codec_tokens": [
+        8.0,
+        10.0,
+        12.0,
+        8.0,
+        10.0,
+        12.0,
+        8.0,
+        10.0,
+        12.0,
+        8.0,
+        10.0,
+        12.0
+      ],
+      "codec_frames": 4,
+      "local_calls": 12
+    }
+  ]
+}

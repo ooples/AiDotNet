@@ -1,31 +1,24 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for the IART implicit resampling-based alignment transformer.
+/// Configuration options for IART, the implicit-resampling alignment recurrent video super-resolution transformer.
 /// </summary>
 /// <remarks>
 /// <para>
-/// IART (Kai et al., CVPR 2024 Highlight) uses implicit neural representations for alignment:
-/// - Implicit resampling: instead of warping features to discrete grid positions (which
-///   causes interpolation artifacts), IART uses a continuous implicit function to resample
-///   features at arbitrary sub-pixel positions with learned kernels
-/// - Alignment transformer: cross-attention between the reference frame and supporting
-///   frames, where the attention sampling positions are offset by flow-guided implicit
-///   coordinates rather than fixed grid positions
-/// - Multi-scale implicit alignment: alignment at multiple feature resolutions, from
-///   coarse structural alignment to fine texture-level resampling
-/// - Preserves high-frequency details that grid-based warping typically blurs
+/// Defaults follow Xu et al., CVPR 2024, and the authors' release (kai422/IART, archs/iart_arch.py,
+/// archs/implicit_alignment.py and options/IART_REDS_N16_600K.yml): 64-channel reconstruction,
+/// 120-channel embeddings, three RSTBs of six window-attention layers with 6 heads over 3x8x8 windows, MLP ratio 2,
+/// stochastic depth up to 0.1, an implicit warp with 6 heads and sine codes at temperature 0.01, 16-frame training
+/// sequences, Charbonnier loss (eps 1e-12 under the square root), Adam
+/// (0.9, 0.99) at 2e-4 with SPyNet at 0.125 times the rate and frozen for the first 5,000 iterations, cosine-annealed
+/// to 1e-7 over 600,000 iterations, and an exponential moving average of the weights (decay 0.999) for inference.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> When aligning video frames, most models "warp" one frame to match
-/// another using a grid. This can blur fine details because pixel positions don't perfectly
-/// line up. IART solves this by using a continuous function that can sample features at
-/// any position (not just grid points), preserving sharp edges and textures that other
-/// methods would smooth out.
+/// <b>For Beginners:</b> IART walks through a video forward and backward in time. To line up the previous frame with
+/// the current one, each pixel follows the motion and then learns how to blend the four pixels around where it lands.
 /// </para>
 /// </remarks>
 public class IARTOptions : NeuralNetworkOptions
@@ -47,49 +40,55 @@ public class IARTOptions : NeuralNetworkOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Variant = other.Variant;
-        NumFeatures = other.NumFeatures;
-        NumTransformerBlocks = other.NumTransformerBlocks;
-        ScaleFactor = other.ScaleFactor;
-        NumHeads = other.NumHeads;
-        NumScales = other.NumScales;
-        ImplicitDim = other.ImplicitDim;
-        NumResBlocks = other.NumResBlocks;
-        ModelPath = other.ModelPath;
-        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
         Seed = other.Seed;
-        EncoderLayerCount = other.EncoderLayerCount;
+        MidChannels = other.MidChannels;
+        EmbedDim = other.EmbedDim;
+        Depths = (int[])other.Depths.Clone();
+        NumHeads = other.NumHeads;
+        WindowSize = other.WindowSize;
+        MlpRatio = other.MlpRatio;
+        DropPathRate = other.DropPathRate;
+        PositionTemperature = other.PositionTemperature;
+        NumFrames = other.NumFrames;
+        ModelPath = other.ModelPath;
+        OnnxOptions = other.OnnxOptions;
+        LearningRate = other.LearningRate;
+        SpyNetLearningRateMultiplier = other.SpyNetLearningRateMultiplier;
+        FlowFreezeIterations = other.FlowFreezeIterations;
+        MinLearningRate = other.MinLearningRate;
+        CosineIterations = other.CosineIterations;
+        CharbonnierEpsilon = other.CharbonnierEpsilon;
+        EmaMomentum = other.EmaMomentum;
     }
 
     #region Architecture
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
+    /// <summary>Gets or sets the width of the reconstruction convolutions (64).</summary>
+    public int MidChannels { get; set; } = 64;
 
-    /// <summary>Gets or sets the number of feature channels.</summary>
-    public int NumFeatures { get; set; } = 64;
+    /// <summary>Gets or sets the embedding width of every alignment transformer (120).</summary>
+    public int EmbedDim { get; set; } = 120;
 
-    /// <summary>Gets or sets the number of alignment transformer blocks.</summary>
-    public int NumTransformerBlocks { get; set; } = 6;
+    /// <summary>Gets or sets the window-attention layers of each RSTB in an alignment transformer ([6, 6, 6]).</summary>
+    public int[] Depths { get; set; } = { 6, 6, 6 };
 
-    /// <summary>Gets or sets the spatial upscaling factor.</summary>
-    public int ScaleFactor { get; set; } = 4;
+    /// <summary>Gets or sets the window-attention heads (6).</summary>
+    public int NumHeads { get; set; } = 6;
 
-    /// <summary>Gets or sets the number of attention heads.</summary>
-    public int NumHeads { get; set; } = 8;
+    /// <summary>Gets or sets the spatial window size (8; windows are 3x8x8, the three aligned frames).</summary>
+    public int WindowSize { get; set; } = 8;
 
-    /// <summary>Gets or sets the number of implicit resampling scales.</summary>
-    /// <remarks>Multi-scale alignment from coarse to fine.</remarks>
-    public int NumScales { get; set; } = 3;
+    /// <summary>Gets or sets the MLP width as a multiple of the embedding (2).</summary>
+    public double MlpRatio { get; set; } = 2.0;
 
-    /// <summary>Gets or sets the dimension of the implicit coordinate embedding.</summary>
-    /// <remarks>Higher dimensions allow finer sub-pixel positioning.</remarks>
-    public int ImplicitDim { get; set; } = 32;
+    /// <summary>Gets or sets the largest stochastic-depth rate, reached by the last layer of each transformer (0.1).</summary>
+    public double DropPathRate { get; set; } = 0.1;
 
-    /// <summary>Gets or sets the number of residual blocks in reconstruction.</summary>
-    public int NumResBlocks { get; set; } = 20;
+    /// <summary>Gets or sets the temperature of the implicit warp's sine position codes (pe_temp = 0.01).</summary>
+    public double PositionTemperature { get; set; } = 0.01;
+
+    /// <summary>Gets or sets the frames of a training sequence (16, the REDS recipe).</summary>
+    public int NumFrames { get; set; } = 16;
 
     #endregion
 
@@ -105,11 +104,31 @@ public class IARTOptions : NeuralNetworkOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
+    /// <summary>Gets or sets Adam's starting learning rate (2e-4).</summary>
     public double LearningRate { get; set; } = 2e-4;
 
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
+    /// <summary>Gets or sets the multiplier of SPyNet's learning rate (0.125, i.e. 2.5e-5).</summary>
+    public double SpyNetLearningRateMultiplier { get; set; } = 0.125;
+
+    /// <summary>Gets or sets the iterations SPyNet stays frozen at the start of training (5,000).</summary>
+    public int FlowFreezeIterations { get; set; } = 5000;
+
+    /// <summary>Gets or sets the floor of the cosine schedule (1e-7).</summary>
+    public double MinLearningRate { get; set; } = 1e-7;
+
+    /// <summary>Gets or sets the iterations of the cosine schedule (600,000).</summary>
+    public int CosineIterations { get; set; } = 600000;
+
+    /// <summary>
+    /// Gets or sets the Charbonnier ε; BasicSR's loss is sqrt(d² + 1e-12), so ε = 1e-6.
+    /// </summary>
+    public double CharbonnierEpsilon { get; set; } = 1e-6;
+
+    /// <summary>
+    /// Gets or sets the momentum of the weights' moving average used for inference (0.001, ema_decay 0.999); null
+    /// disables it and inference uses the trained weights.
+    /// </summary>
+    public double? EmaMomentum { get; set; } = 0.001;
 
     #endregion
 }

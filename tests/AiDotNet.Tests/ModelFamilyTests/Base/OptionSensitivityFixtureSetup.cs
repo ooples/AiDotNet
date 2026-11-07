@@ -1,0 +1,925 @@
+using AiDotNet.Interfaces;
+using AiDotNet.Tests.TextToSpeech;
+
+namespace AiDotNet.Tests.ModelFamilyTests.Base;
+
+/// <summary>Replays the fitted assets installed by the generated fixture after configuration-only reconstruction.</summary>
+internal static class OptionSensitivityFixtureSetup
+{
+    private static bool IsGooglePretrainingOption(string option) => option is
+        "MaskNoiseStd" or "MaskLength" or "MaskProbability" or "CodeDim" or "StackedFrames";
+
+    private static bool IsMaskGctDurationOption(string option) => option is
+        "DurationMode" or "DurationSteps" or "DurationGuidance" or "DurationHeads";
+
+    private static bool IsMaskGctSamplingOption(string option) => option is
+        "TextToSemanticSteps" or "TextToSemanticTemperature" or "SemanticToAcousticTemperature" or "SamplingSeed";
+
+    private static bool IsFishScheduleOption(string option) => option is
+        "TrainingSteps" or "CosineDecay" or "FinalLearningRateRatio" or "WarmupSteps";
+
+    private sealed class RepetitionBoundaryRandom : Random
+    {
+        private int _draws;
+        public override double NextDouble() => _draws++ == 0 ? 0.1 : 0.99;
+    }
+
+    private sealed class NucleusBoundaryRandom : Random
+    {
+        public override double NextDouble() => 0.99;
+    }
+
+    internal static bool UsesFittedAssets<T>(INeuralNetworkModel<T> network)
+        => network is AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>
+            or AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>
+            or AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>
+            or AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>
+            or AiDotNet.TextToSpeech.MultiModal.SpiritLM<T>
+            or AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>;
+
+    internal static long ParameterCountBeforeFitting<T>(INeuralNetworkModel<T> network)
+        => UsesFittedAssets(network) || network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T>
+            ? network.GetParameters().Length : 0;
+
+    internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
+        => network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
+            : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> ? "stylezs-" + option
+            : network is AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T> ? "whisperspeech-" + option
+            : network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> ? "speecht5-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> ? "spark-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.FireRedTTS<T> ? "firered-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.VALLEX<T> ? "vallex-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.GPTSoVITS<T> ? "gptsovits-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.Zonos<T> ? "zonos-" + option
+
+
+
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> ? option switch
+            {
+                "DefaultSpeakerId" => "e3-speaker-selection",
+                "TrainingBetaEnd" => "e3-training-schedule",
+                "PaddingLossWeight" => "e3-padded-training",
+                "SilenceBlockSize" or "SilenceMagnitudeThreshold" => "e3-silence-trimming",
+                _ => string.Empty,
+            }
+            : network is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T> && IsGooglePretrainingOption(option) ? "google-best-rq-masking"
+            : network is AiDotNet.SpeechRecognition.Foundation.BESTRQ<T> && IsGooglePretrainingOption(option) ? "best-rq-masking"
+            : network is AiDotNet.Audio.Generation.AudioLM<T> && option is "SemanticCropSeconds" or "CoarseCropSeconds" or "FineCropSeconds" ? "audiolm-stage-crop"
+            : network is AiDotNet.Audio.Generation.AudioLM<T> && option is "SemanticTemperature" or "CoarseTemperature" or "FineTemperature" or "Seed" ? "audiolm-code-sampling"
+            : network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> && IsFishScheduleOption(option) ? "fish-training-schedule"
+            : network is AiDotNet.Audio.Effects.DAC<T> && option == "QuantizerDropout" ? "dac-quantizer-dropout"
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && IsMaskGctSamplingOption(option) ? "maskgct-token-sampling"
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && IsMaskGctDurationOption(option) ? "maskgct-duration-predictor"
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && option == "SemanticToAcousticHeads" ? "maskgct-acoustic-heads"
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && option == "GuidanceRescale" ? "maskgct-guided-logits"
+            : network is AiDotNet.PointCloud.Models.DGCNN<T> && option is "DropoutRate" or "UseDropout" ? "dgcnn-dropout"
+            : network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds" ? "cam-audio-frontend"
+            : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "RegionGroupNormGroups" ? "glamm-region-conversation"
+            : network is AiDotNet.VisionLanguage.Grounding.GLaMM<T> && option == "TokenizerPieces" ? "glamm-unloaded-tokenizer"
+            : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option is "EmotionGroupSizes" or "EmotionMode" ? "index-emotion-table"
+            : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option == "LatentFusionProbability" ? "index-latent-fusion"
+            : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && IsIndexFlowOption(option) ? "index-semantic-to-mel"
+            : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && option == "SpeakerAdversaryWeight" ? "index-emotion-adversary"
+            : network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> && IsIndexEmotionArchitecture(option) ? "index-text-emotion"
+            : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "MemoryKMeansIterations" ? "natural-memory-clustering"
+            : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && IsNaturalJointOption(option) ? "natural-joint"
+            : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "MaskRatio" ? "natural-phoneme-pretraining"
+            : network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames" ? "diffusion-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "InferenceNoiseSchedule" ? "diffusion-fast-sampling"
+            : network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option == "AdversarialWeight" ? "multi-band-adversarial"
+            : network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option == "SegmentSize" ? "multi-band-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option is "MelMean" or "MelScale" ? "vocoder-normalization"
+            : IsVocoderFrontendOption(option) && network is AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T>
+                or AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T> ? "vocoder-frontend"
+            : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option == "MaximumAudioFrames" ? "voicebox-audio-chunk"
+            : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T>
+                ? option == "DecoderType" ? "styletts2-decoder-switch"
+                : option == "IstftFftSize" ? "styletts2-istft"
+                : IsStyleTts2JointOption(option) ? "styletts2-joint" : "styletts2-pretraining"
+            : network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && option == "TopK" ? "cosy-top-k"
+            : network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && IsCosyFlowOption(option) ? "cosy-flow"
+            : network is AiDotNet.TextToSpeech.Classic.ForwardTacotron<T> ? option switch
+            {
+                "SecondStageLearningRate" or "SecondStageStartStep" => "forward-second-stage",
+                "GradientClipNorm" => "forward-clipping",
+                "PitchMinHz" => "forward-pitch-bound",
+                _ => string.Empty,
+            }
+            : network is AiDotNet.TextToSpeech.Latest.KaniTTSBase<T> ? KaniControlGroup(option)
+            : network is AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> && IsSpiralPretrainingOption(option)
+                ? "spiral-pretraining" : option switch
+                {
+                    "FrequencyMaskWidth" => "frequency-masking",
+                    "TimeMaskRatio" => "time-masking",
+                    "MaxAudioLengthSeconds" => "audio-crop",
+                    _ => string.Empty,
+                };
+
+    internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
+        Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
+    {
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> styleZs
+            && StyleTtsZsFixture.Observe(styleZs, option) is { } styleZsObservation)
+            return styleZsObservation;
+
+        if (network is AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T> whisperSpeech
+            && WhisperSpeechFixture.Observe(whisperSpeech, option) is { } whisperObservation)
+            return whisperObservation;
+
+        if (network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> speechT5
+            && SpeechT5Fixture.Observe(speechT5, option) is { } speechObservation)
+            return speechObservation;
+
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> styleProbe && IsStyleTts2JointOption(option))
+        {
+            var stage = styleProbe.CurrentStage;
+            try
+            {
+                styleProbe.CurrentStage = AiDotNet.TextToSpeech.StyleEmotion.StyleTts2TrainingStage.Joint;
+                var settings = (AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options)styleProbe.GetOptions();
+                var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+                var objective = styleProbe.EvaluateTrainingObjective(StyleTts2Fixture.Sample<T>(settings.HopSize), adversarialTerms: true);
+                return OptionSensitivityHarness.Combine(observe(network, input),
+                    OptionSensitivityHarness.Fingerprint(new[] { ops.ToDouble(objective) }));
+            }
+            finally { styleProbe.CurrentStage = stage; }
+        }
+        if (network is AiDotNet.TextToSpeech.CodecBased.Zonos<T> zonos
+            && ZonosFixture.Observe(zonos, input, option) is { } zonosObservation)
+            return zonosObservation;
+
+        if (network is AiDotNet.TextToSpeech.CodecBased.GPTSoVITS<T> gptSoVits)
+            return GptSoVitsFixture.Observe(gptSoVits, input, option);
+
+        if (network is AiDotNet.TextToSpeech.CodecBased.VALLEX<T> vallEX
+            && VallEXCloneFixture.Observe(vallEX, option) is { } vallEXObservation)
+            return vallEXObservation;
+
+        if (network is AiDotNet.TextToSpeech.CodecBased.FireRedTTS<T> fireRed
+            && FireRedTtsFixture.Observe(fireRed, option) is { } fireRedObservation)
+            return fireRedObservation;
+        if (network is AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> spark
+            && SparkNativeFixture.Observe(spark, option) is { } sparkObservation)
+            return sparkObservation;
+        if (network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> spirit
+            && SpiritLmFixture.Observe(spirit, option) is { } spiritObservation)
+            return spiritObservation;
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> guidanceMask && option == "GuidanceRescale")
+        {
+            guidanceMask.SetTrainingMode(false);
+            var settings = (AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions)guidanceMask.GetOptions();
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var module = guidanceMask.GetType().GetProperty("TextToSemantic", flags)!.GetValue(guidanceMask)!;
+            var decoding = guidanceMask.GetType().GetMethod("Decoding", flags)!.Invoke(guidanceMask,
+                new object[] { settings.TextToSemanticTemperature })!;
+            var logits = (Tensor<T>)module.GetType().GetMethod("GuidedLogits", flags)!.Invoke(module,
+                new object[] { new[] { 1, 2, 3, 4 }, new[] { 0, 1 }, new[] { 1, 2, 3, 4, 5, 6 },
+                    new[] { true, false, true, false, true, false }, 0.37, decoding })!;
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            return OptionSensitivityHarness.Fingerprint(logits.Select(value => ops.ToDouble(value)));
+        }
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> acousticMask && option == "SemanticToAcousticHeads")
+        {
+            acousticMask.SetTrainingMode(false);
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var first = acousticMask.GetType().GetProperty("FirstLayerModel", flags)!.GetValue(acousticMask)!;
+            var semantic = Enumerable.Range(0, 8).Select(i => i % 4).ToArray();
+            var codes = new int[8, 1];
+            for (int i = 0; i < 8; i++) codes[i, 0] = i % 4;
+            var masked = Enumerable.Range(0, 8).Select(i => i >= 2 && i % 2 == 0).ToArray();
+            var logits = (Tensor<T>)first.GetType().GetMethod("TrainingLogits")!.Invoke(first,
+                new object[] { semantic, codes, 0, 2, masked, 0.37 })!;
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            return OptionSensitivityHarness.Fingerprint(logits.Select(value => ops.ToDouble(value)));
+        }
+        if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fish && option == "ConstrainToSemanticTokens")
+            return ObserveFishFrames(fish, input);
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> durationMask && IsMaskGctDurationOption(option))
+        {
+            durationMask.SetTrainingMode(false);
+            var settings = (AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions)durationMask.GetOptions();
+            if (settings.TargetDurationSeconds is not null) throw new InvalidOperationException("Duration predictor probes require no fixed-duration override.");
+            var phones = Enumerable.Range(0, 8).Select(i => 1 + i % 4).ToArray();
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var random = new Random(settings.SamplingSeed);
+            int frames = (int)durationMask.GetType().GetMethod("TargetLength", flags)!.Invoke(durationMask,
+                new object[] { new[] { 1, 2 }, phones, 640, random })!;
+            long result = OptionSensitivityHarness.Fingerprint(new[] { (double)frames });
+            if (option != "DurationMode")
+            {
+                var predictor = durationMask.GetType().GetProperty("DurationPredictor", flags)!.GetValue(durationMask)!;
+                random = new Random(settings.SamplingSeed);
+                var noise = phones.Select(_ => Math.Sqrt(-2 * Math.Log(1 - random.NextDouble())) * Math.Cos(2 * Math.PI * random.NextDouble())).ToArray();
+                var durations = (double[])predictor.GetType().GetMethod("Generate")!.Invoke(predictor,
+                    new object[] { Array.Empty<int>(), Array.Empty<int>(), phones, settings.DurationSteps, settings.DurationGuidance, noise })!;
+                result = OptionSensitivityHarness.Combine(result, OptionSensitivityHarness.Fingerprint(durations));
+            }
+            return result;
+        }
+        long fingerprint = observe(network, ObservationInput(network, input, option));
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> mask && IsMaskGctSamplingOption(option))
+        {
+            var settings = (AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions)mask.GetOptions();
+            var random = new Random(settings.SamplingSeed);
+            Func<int, double[]> uniforms = count => Enumerable.Range(0, count).Select(_ => random.NextDouble()).ToArray();
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+            var semantic = (int[])mask.GetType().GetMethod("Generate", flags)!.Invoke(mask,
+                new object[] { new[] { 1, 2 }, new[] { 3, 4 }, new[] { 0, 1 }, 32, uniforms })!;
+            fingerprint = OptionSensitivityHarness.Combine(fingerprint,
+                OptionSensitivityHarness.Fingerprint(semantic.Select(code => (double)code)));
+            if (option == "SemanticToAcousticTemperature")
+            {
+                var codes = (int[,])mask.GetType().GetMethod("Acoustic", flags)!.Invoke(mask,
+                    new object[] { semantic, new int[2, settings.NumQuantizers], uniforms })!;
+                fingerprint = OptionSensitivityHarness.Combine(fingerprint,
+                    OptionSensitivityHarness.Fingerprint(codes.Cast<int>().Select(code => (double)code)));
+            }
+            return fingerprint;
+        }
+        if (network is AiDotNet.Audio.Generation.AudioLM<T> sampledAudioLm && option is "SemanticTemperature" or "CoarseTemperature" or "FineTemperature" or "Seed")
+        {
+            var settings = (AiDotNet.Audio.Generation.AudioLMOptions)sampledAudioLm.GetOptions();
+            // Observe generated tokens before frozen codec decoding: an unfitted codec can
+            // reconstruct different sampled codes as the same waveform.
+            var codes = sampledAudioLm.ContinueCodes(new int[settings.NumCodebooks, 0], Array.Empty<int>(), 0.16);
+            return OptionSensitivityHarness.Combine(fingerprint,
+                OptionSensitivityHarness.Fingerprint(codes.Cast<int>().Select(code => (double)code)));
+        }
+        if (network is AiDotNet.SpeechRecognition.CTCVariants.CIFDecoder<T> cif && option == "TailThreshold")
+        {
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            foreach (int samples in new[] { 1600, 3200, 6400, 16000 })
+            {
+                var waveform = new Tensor<T>(new[] { samples });
+                for (int i = 0; i < samples; i++) waveform[i] = ops.FromDouble(0.4 * Math.Sin(i * .13) + 0.2 * Math.Cos(i * .37));
+                string text = cif.Transcribe(waveform, includeTimestamps: false).Text;
+                fingerprint = OptionSensitivityHarness.Combine(fingerprint,
+                    OptionSensitivityHarness.Fingerprint(text.Select(character => (double)character)));
+            }
+            return fingerprint;
+        }
+        if (network is AiDotNet.Audio.Generation.AudioLM<T> audioLm && option is "SemanticCropSeconds" or "CoarseCropSeconds" or "FineCropSeconds")
+        {
+            var settings = (AiDotNet.Audio.Generation.AudioLMOptions)audioLm.GetOptions();
+            audioLm.CurrentStage = option switch
+            {
+                "SemanticCropSeconds" => AiDotNet.Audio.Generation.AudioLMStage.Semantic,
+                "FineCropSeconds" => AiDotNet.Audio.Generation.AudioLMStage.FineAcoustic,
+                _ => AiDotNet.Audio.Generation.AudioLMStage.CoarseAcoustic,
+            };
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var semantic = new Tensor<T>(new[] { 8 });
+            var codes = new Tensor<T>(new[] { 16, settings.NumCodebooks });
+            for (int i = 0; i < semantic.Length; i++) semantic[i] = ops.FromDouble(i % settings.SemanticCodes);
+            for (int frame = 0; frame < 16; frame++)
+                for (int q = 0; q < settings.NumCodebooks; q++) codes[frame, q] = ops.FromDouble((frame + q) % settings.CodebookSize);
+            double cropLoss = ops.ToDouble(audioLm.EvaluateTrainingObjective(semantic, codes));
+            return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(new[] { cropLoss }));
+        }
+        if (network is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T> google && IsGooglePretrainingOption(option))
+        {
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            double pretrainingLoss = ops.ToDouble(google.PretrainingLoss(input, new Random(1337)));
+            return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(new[] { pretrainingLoss }));
+        }
+        if (network is AiDotNet.SpeechRecognition.Foundation.BESTRQ<T> bestRq && IsGooglePretrainingOption(option))
+        {
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            double pretrainingLoss = ops.ToDouble(bestRq.PretrainingLoss(input, new Random(1337)));
+            return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(new[] { pretrainingLoss }));
+        }
+        if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> chatter && option == "VoiceEncoderPartialRate")
+            return OptionSensitivityHarness.Fingerprint(chatter.VoiceEncoderModel!.Embed(ChatterboxFixture.Recording<T>(2), 24000)
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> chunked && option == "StaticChunkSize")
+            return OptionSensitivityHarness.Fingerprint(chunked.FlowModel!.Encode(Enumerable.Range(0, 12).ToArray(),
+                training: false, new Random(1337), streaming: true)
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> vocoder && option == "VocoderSegmentLength")
+        {
+            var targets = vocoder.VocoderTargets(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+            {
+                Tokens = input, Audio = ChatterboxFixture.Recording<T>(),
+            }, new Random(1337));
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            return OptionSensitivityHarness.Combine(OptionSensitivityHarness.Fingerprint(targets.Audio.Select(ops.ToDouble)),
+                OptionSensitivityHarness.Fingerprint((vocoder is AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T> causal
+                    ? causal.CausalVocoder : vocoder.Vocoder)!.Forward(targets.Mel, new Random(1337)).Select(ops.ToDouble)));
+        }
+        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T> dit
+            && option is "DiTTrainingCfgRate" or "DiTSigmaMin")
+        {
+            var settings = (AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options)dit.GetOptions();
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var mel = new Tensor<T>(new[] { 1, settings.MelChannels, 6 });
+            for (int i = 0; i < mel.Length; i++) mel[i] = ops.FromDouble(0.2 * Math.Sin(i * 0.17));
+            var speaker = new Tensor<T>(new[] { settings.SpeakerEmbeddingDim }); speaker[0] = ops.One;
+            var ditLoss = dit.DiTFlowModel!.TrainingLoss(new[] { 1, 2, 3 }, mel, speaker, false, new Random(1337));
+            return OptionSensitivityHarness.Fingerprint(ditLoss.Select(ops.ToDouble));
+        }
+        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosySampler
+            && cosySampler.GetOptions() is AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions
+                or AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options
+            && option is "TopP" or "TopK" or "RepetitionWindow" or "RepetitionRatio")
+        {
+            const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
+                | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+            object? languageModel = null;
+            for (var type = network.GetType(); type is not null && languageModel is null; type = type.BaseType)
+                languageModel = type.GetProperty("LanguageModel", flags)?.GetValue(network);
+            var configuration = languageModel!.GetType().GetProperty("Configuration", flags)!.GetValue(languageModel)!;
+            object Setting(string name) => configuration.GetType().GetProperty(name)!.GetValue(configuration)!;
+            var sampler = languageModel.GetType().Assembly.GetType("AiDotNet.TextToSpeech.CodecBased.CosyVoiceLm`1")!.MakeGenericType(typeof(T));
+            var method = sampler.GetMethods(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
+                .Single(candidate => candidate.Name == "SampleRepetitionAware" && candidate.GetParameters().Length == 8);
+            // One recent repeat is exactly the default 10 * .1 boundary. A second draw
+            // chooses the other token, exposing whether the real configured sampler resampled.
+            int token = (int)method.Invoke(null, new object[] { new[] { Math.Log(.6), Math.Log(.4) },
+                option is "TopP" or "TopK" ? Array.Empty<int>() : new[] { 0 },
+                Setting("TopP"), Setting("TopK"), Setting("RepetitionWindow"),
+                Setting("RepetitionRatio"), option is "TopP" or "TopK" ? new NucleusBoundaryRandom() : new RepetitionBoundaryRandom(),
+                configuration.GetType().GetProperty("ExcludeRepeatedTokenOnFallback")?.GetValue(configuration) ?? true })!;
+            return OptionSensitivityHarness.Combine(fingerprint, token);
+        }
+        if (network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> emotionIndex && option is "EmotionGroupSizes" or "EmotionMode")
+        {
+            var settings = (AiDotNet.TextToSpeech.Latest.IndexTTS2Options)emotionIndex.GetOptions();
+            int rows = settings.EmotionGroupSizes!.Sum();
+            // Nonconstant rows distinguish group boundaries, means and nearest-speaker selection.
+            var emotions = Enumerable.Range(0, rows).Select(r =>
+                Enumerable.Range(0, settings.HiddenDim).Select(k => (r + 1) * 0.1 + k * 0.01).ToArray()).ToArray();
+            var speakers = Enumerable.Range(0, rows).Select(r =>
+                Enumerable.Range(0, settings.StyleDim).Select(k => k == 0 ? 1.0 : (r + 1) * 0.1).ToArray()).ToArray();
+            emotionIndex.LoadEmotionTable(emotions, speakers);
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var style = new Tensor<T>(new[] { 1, settings.StyleDim });
+            style[0] = ops.FromDouble(1);
+            var weights = new double[settings.EmotionLabels.Length];
+            weights[0] = 1;
+            var mixed = (Tensor<T>)typeof(AiDotNet.TextToSpeech.Latest.IndexTTS2<T>).GetMethod("EmotionTableMix",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+                .Invoke(emotionIndex, new object[] { weights, style, new Random(1337) })!;
+            return OptionSensitivityHarness.Combine(fingerprint,
+                OptionSensitivityHarness.Fingerprint(mixed.Select(value => ops.ToDouble(value))));
+        }
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> e3 && option is "SilenceBlockSize" or "SilenceMagnitudeThreshold")
+        {
+            var waveform = new Tensor<T>(new[] { 16 });
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < 9; i++) waveform[i] = ops.FromDouble(0.075);
+            var trimmed = (Tensor<T>)typeof(AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T>).GetMethod("TrimTrailingSilence",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(e3, new object[] { waveform })!;
+            return OptionSensitivityHarness.Combine(fingerprint,
+                OptionSensitivityHarness.Fingerprint(trimmed.Select(value => ops.ToDouble(value))));
+        }
+        if (network is not AiDotNet.VisionLanguage.Grounding.GLaMM<T> glamm || option != "RegionGroupNormGroups")
+            return fingerprint;
+        // Predict encodes the whole image; only a conversation naming a box runs the region encoder.
+        var sample = new AiDotNet.VisionLanguage.Grounding.GlammSample<T>(input,
+            new[] { new AiDotNet.VisionLanguage.Grounding.GlammTurn("Describe <bbox>.", "A region.") },
+            new[] { new[] { 0.1, 0.1, 0.8, 0.8 } });
+        double loss = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble(glamm.EvaluateConversationLoss(sample));
+        return OptionSensitivityHarness.Combine(fingerprint, OptionSensitivityHarness.Fingerprint(new[] { loss }));
+    }
+
+    private static long ObserveFishFrames<T>(AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> model, Tensor<T> input)
+    {
+        model.SetTrainingMode(false);
+        // Observe the actual generated frame rows before codec decoding: an untrained unconstrained
+        // model can emit non-speech frames that a waveform decoder correctly refuses to interpret.
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        var type = typeof(AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T>);
+        var format = type.GetProperty("Format", flags)!.GetValue(model)!;
+        var transformer = type.GetProperty("Transformer", flags)!.GetValue(model)!;
+        var options = (AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions)model.GetOptions();
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var ids = Enumerable.Range(0, input.Length).Select(i => (int)ops.ToDouble(input[i])).ToArray();
+        var prompt = (int[,])format.GetType().GetMethod("Segment", new[] { typeof(int[]), typeof(int[,]) })!
+            .Invoke(format, new object?[] { ids, null })!;
+        var generator = type.Assembly.GetType("AiDotNet.TextToSpeech.CodecBased.FishSpeechGenerator`1")!.MakeGenericType(typeof(T));
+        var frames = (int[,])generator.GetMethod("Generate", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static)!
+            .Invoke(null, new object[] { AiDotNet.Tensors.Engines.AiDotNetEngine.Current, transformer, format, prompt,
+                4, options.Temperature, options.TopP, options.RepetitionPenalty,
+                new Random(options.SamplingSeed), options.ConstrainToSemanticTokens })!;
+        return OptionSensitivityHarness.Combine(
+            OptionSensitivityHarness.Fingerprint(frames.Cast<int>().Select(value => (double)value)),
+            OptionSensitivityHarness.Fingerprint(model.GetParameters().Select(value => ops.ToDouble(value))));
+    }
+
+    internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
+    {
+        if (network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> cam && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds")
+        {
+            var settings = (AiDotNet.Audio.Speaker.CAMPlusPlusOptions)cam.GetOptions();
+            var camWaveform = new Tensor<T>(new[] { settings.SampleRate });
+            var frontendOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < camWaveform.Length; i++)
+                camWaveform[i] = frontendOps.FromDouble(0.4 * Math.Sin(i * 0.13) + 0.2 * Math.Cos(i * 0.37));
+            return (Tensor<T>)typeof(AiDotNet.Audio.Speaker.CAMPlusPlus<T>).GetMethod("PreprocessAudio",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(cam, new object[] { camWaveform })!;
+        }
+        if (network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> index && IsIndexEmotionArchitecture(option))
+            index.DetectEmotion("I feel happy."); // The text-to-emotion model is built lazily by its public entry point.
+        if (IsVocoderFrontendOption(option) && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> native
+            && native.GetOptions() is AiDotNet.TextToSpeech.Vocoders.VocoderOptions vocoder
+            && network is AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T> or AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>)
+        {
+            var recording = VocoderRecording<T>(vocoder);
+            return network is AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T> segment
+                ? segment.ComputeMel(recording) : ((AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>)network).ComputeMel(recording);
+        }
+        if (option == "MaximumAudioFrames" && network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && input.Length > 0)
+        {
+            // Keep synthesis below the smallest valid budget; training retains the longer utterance
+            // so its real phone-aligned chunking path can respond to that budget.
+            var phone = new Tensor<T>(new[] { 1 });
+            phone[0] = input[0];
+            return phone;
+        }
+        if (option != "MaxAudioLengthSeconds" || input.Length == 0
+            || network.GetType().Namespace?.StartsWith("AiDotNet.SpeechRecognition", StringComparison.Ordinal) != true)
+            return input;
+        var options = network.GetType().GetMethod("GetOptions", Type.EmptyTypes)?.Invoke(network, null);
+        if (options?.GetType().GetProperty("SampleRate")?.GetValue(options) is not int sampleRate || sampleRate < 1)
+            return input;
+        var preprocess = network.GetType().GetMethod("PreprocessAudio", System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic,
+            binder: null, types: new[] { typeof(Tensor<T>) }, modifiers: null);
+        if (preprocess is null) return input;
+        // Exercise the same clipping front end as Transcribe, beyond the one-second control limit.
+        network.SetTrainingMode(false);
+        var waveform = new Tensor<T>(new[] { checked(2 * sampleRate) });
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < waveform.Length; i++)
+            waveform[i] = i < sampleRate ? input[i % input.Length] : ops.Negate(input[i % input.Length]);
+        return (Tensor<T>)(preprocess.Invoke(network, new object[] { waveform })
+            ?? throw new InvalidOperationException("The audio front end returned no input."));
+    }
+
+    private static bool IsSpiralPretrainingOption(string option) => option is
+        "TeacherMomentumStart" or "TeacherMomentumEnd" or "PretrainingSteps" or "MaxTeacherPaddingUnits"
+        or "TimeMaskProbability" or "TimeMaskLength" or "FrequencyMaskProbability" or "FrequencyMaskLength"
+        or "Temperature" or "Negatives";
+
+    private static bool IsStyleTts2JointOption(string option) => option is
+        "DropoutRate" or "EmbeddingMaskProbability" or "FineTuneLearningRate" or "DurationCrossEntropyWeight"
+        or "LogSigmaMean" or "LogSigmaStd" or "DiffusionStartStep" or "BertWeightDecay" or "BertLearningRate"
+        or "DiffusionLossWeight" or "DurationLossWeight" or "JointStartStep" or "EstimateSigmaData"
+        or "BertBeta1" or "SlmSampleRate" or "GeneratorLossWeight" or "F0LossWeight"
+        or "NormLossWeight" or "StyleLossWeight" or "SlmLossWeight";
+
+    private static bool IsCosyFlowOption(string option) => option is
+        "TrainingCfgRate" or "FlowLoss" or "FlowAttentionDropoutRate" or "DropoutRate"
+        or "DiTTrainingCfgRate" or "DiTSigmaMin";
+
+    private static bool IsNaturalJointOption(string option) => option is
+        "MemoryKMeansIterations" or "MemoryHeads" or "DurationLossAfterWarmup" or "ForwardKlWeight";
+
+    private static bool IsIndexEmotionArchitecture(string option) => option is
+        "EmotionHidden" or "EmotionLayers" or "EmotionHeads" or "EmotionKeyValueHeads" or "EmotionHeadDim"
+        or "EmotionIntermediate" or "EmotionVocabulary" or "EmotionLoraRank";
+
+    private static bool IsIndexFlowOption(string option) => option is
+        "LatentFusionProbability" or "ClassDropout" or "WavenetDropout";
+
+    private static bool IsVocoderFrontendOption(string option) => option is
+        "MelMinFrequency" or "MelMaxFrequency" or "WindowSize" or "MelMean" or "MelScale" or "EnergyMin";
+
+    private static Tensor<T> VocoderRecording<T>(AiDotNet.TextToSpeech.Vocoders.VocoderOptions options)
+    {
+        var recording = new Tensor<T>(new[] { Math.Max(2 * options.FftSize, 8 * options.HopSize) });
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < recording.Length; i++)
+            recording[i] = ops.FromDouble(0.4 * Math.Sin(i * 0.13) + 0.2 * Math.Cos(i * 0.37));
+        return recording;
+    }
+
+    internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
+        => network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "BertBeta1"
+            ? Math.Max(2, steps)
+            : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> && option == "TmaStartStep"
+            ? Math.Max(2, steps)
+            : network is AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> && IsSpiralPretrainingOption(option)
+            || network is AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T>
+            || network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> && SpeechT5Fixture.IsPretraining(option)
+            || network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> && option == "TrainingBetaEnd"
+            ? Math.Max(3, steps) : steps;
+
+    internal static void PrepareOptionTraining<T>(INeuralNetworkModel<T> network, string option)
+    {
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> style && IsStyleTts2JointOption(option))
+            style.CurrentStage = AiDotNet.TextToSpeech.StyleEmotion.StyleTts2TrainingStage.Joint;
+        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosy && IsCosyFlowOption(option))
+            cosy.CurrentStage = AiDotNet.TextToSpeech.CodecBased.CosyVoiceTrainingStage.Flow;
+        if ((option != "CurrentStage" && !IsNaturalJointOption(option))
+            || network is not AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> natural
+            || natural.GetOptions() is not AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions options
+            || options.CurrentStage != AiDotNet.TextToSpeech.CodecBased.NaturalSpeechStage.Joint) return;
+        // Joint training has a documented warm-up prerequisite: cluster posterior frames into the bank.
+        int frames = option == "MemoryKMeansIterations" ? Math.Max(8 * options.MemorySize, 128) : Math.Max(options.MemorySize, 32);
+        int samples = checked(frames * options.HopSize);
+        var recording = new Tensor<T>(new[] { samples });
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < samples; i++)
+            recording[i] = ops.FromDouble(0.4 * Math.Sin(2 * Math.PI * 180 * i / options.SampleRate)
+                + 0.2 * Math.Sin(2 * Math.PI * 470 * i / options.SampleRate));
+        natural.InitializeMemoryBank(new[] { recording });
+    }
+
+    internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
+    {
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> styleZs)
+        {
+            StyleTtsZsFixture.Train(styleZs, option);
+            return true;
+        }
+
+        if (network is AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T> whisperSpeech)
+        {
+            whisperSpeech.Train(WhisperSpeechFixture.Sample<T>());
+            return true;
+        }
+
+        if (network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> speechT5)
+        {
+            speechT5.Train(SpeechT5Fixture.Sample<T>(option));
+            return true;
+        }
+
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> style)
+        {
+            style.Train(StyleTts2Fixture.Sample<T>(((AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options)style.GetOptions()).HopSize));
+            return true;
+        }
+        if (network is AiDotNet.TextToSpeech.CodecBased.Zonos<T> zonos && ZonosFixture.TryTrain(zonos, input, option))
+            return true;
+
+        if (network is AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> spark && SparkNativeFixture.IsAnnotatedOption(option))
+        {
+            spark.TrainAnnotatedSample(new AiDotNet.TextToSpeech.TtsTrainingSample<T> { Tokens = input, Audio = SparkNativeFixture.Recording<T>() },
+                true, AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel.Moderate,
+                AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel.High, 2, 3);
+            return true;
+        }
+        if (network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> spirit)
+        {
+            if (option is "VocoderLearningRate" or "VocoderLearningRateDecay" or "VocoderUpdatesPerEpoch")
+            {
+                spirit.TrainPitchQuantizer(SpiritLmFixture.Tones<T>(1.0));
+                return true;
+            }
+            if (option == "DropoutRate")
+            {
+                int width = ((AiDotNet.TextToSpeech.MultiModal.SpiritLMOptions)spirit.GetOptions()).SonarWidth;
+                var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+                var semantic = new Tensor<T>(new[] { width });
+                for (int i = 0; i < width; i++) semantic[i] = ops.FromDouble(Math.Sin(i * 0.37));
+                spirit.TrainSonarExpressive(SpiritLmFixture.Tones<T>(0.25), semantic, true);
+                return true;
+            }
+            if (option == "SpeechPropLearningRate")
+            {
+                spirit.TrainSpeechPropStyle(SpiritLmFixture.Tones<T>(0.25), 1);
+                return true;
+            }
+        }
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> e3 && option == "PaddingLossWeight"
+            && e3.GetOptions() is AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions e3Options)
+        {
+            var recording = new Tensor<T>(new[] { Math.Max(1, e3Options.TrainingWaveformSamples / 2) });
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < recording.Length; i++) recording[i] = ops.FromDouble(0.4 * Math.Sin(i * 0.13));
+            e3.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T> { Tokens = input, Text = "test", Audio = recording });
+            return true;
+        }
+        if ((network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames"
+                || network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option == "SegmentSize")
+            && network is AiDotNet.TextToSpeech.TtsModelBase<T> vocoder
+            && vocoder.GetOptions() is AiDotNet.TextToSpeech.Vocoders.VocoderOptions options)
+        {
+            vocoder.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+            {
+                Tokens = input,
+                Audio = VocoderRecording<T>(options),
+            });
+            return true;
+        }
+        if (network is not AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> spiral || !IsSpiralPretrainingOption(option))
+            return false;
+        spiral.Pretrain(input);
+        return true;
+    }
+
+    private static string KaniControlGroup(string option) => option switch
+    {
+        "LoraRank" or "LoraAlpha" or "LoraDropout" or "LoraTargets" or "RankStabilizedLora" => "lora",
+        "TopK" or "TopP" or "SamplingSeed" => "sampling",
+        "WarmupRatio" => "warmup-ratio",
+        "WarmupSteps" => "warmup-steps",
+        "TrainingSteps" => "cosine",
+        "RopeAlphaMin" or "RopeAlphaMax" or "RopeAlphaLearningRateRatio" => "learnable-rope",
+        "AudioStep" => "frame-positions",
+        "LenientSpeechSpans" or "StreamingChunkFrames" or "StreamingLookbackFrames" => "streaming",
+        "MaxReferenceSeconds" => "reference-crop",
+        _ => string.Empty,
+    };
+
+    internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
+    {
+        if (options is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions styleZs)
+            StyleTtsZsFixture.PrepareOptions(styleZs, option);
+
+        if (options is AiDotNet.TextToSpeech.MultiModal.WhisperSpeechOptions whisperSpeech)
+            WhisperSpeechFixture.PrepareOptions(whisperSpeech, option);
+
+        if (options is AiDotNet.TextToSpeech.MultiModal.SpeechT5Options speechT5)
+            SpeechT5Fixture.PrepareOptions(speechT5, option);
+
+        if (options is AiDotNet.TextToSpeech.CodecBased.ZonosOptions zonos)
+            ZonosFixture.PrepareOptions(zonos, option);
+
+        if (options is AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions gptSoVits)
+            GptSoVitsFixture.PrepareOptions(gptSoVits, option);
+
+        if (options is AiDotNet.TextToSpeech.CodecBased.VALLEXOptions vallEX)
+            VallEXCloneFixture.PrepareOptions(vallEX, option);
+
+        if (options is AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions fireRed)
+            FireRedTtsFixture.PrepareOptions(fireRed, option);
+        if (options is AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions spark)
+            SparkNativeFixture.PrepareOptions(spark, option);
+        if (options is AiDotNet.TextToSpeech.MultiModal.SpiritLMOptions spirit)
+            SpiritLmFixture.PrepareOptions(spirit, option);
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions guidanceMask && option == "GuidanceRescale")
+            guidanceMask.Guidance = 2.5;
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions acousticMask && option == "SemanticToAcousticHeads")
+            acousticMask.CurrentStage = AiDotNet.TextToSpeech.FlowDiffusion.MaskGctStage.FirstAcousticLayer;
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions durationMask && IsMaskGctDurationOption(option))
+        {
+            durationMask.TargetDurationSeconds = null;
+            durationMask.DurationMode = AiDotNet.TextToSpeech.FlowDiffusion.MaskGctDurationMode.Predictor;
+            durationMask.DurationSteps = 2;
+            durationMask.CurrentStage = AiDotNet.TextToSpeech.FlowDiffusion.MaskGctStage.Duration;
+        }
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions mask && IsMaskGctSamplingOption(option))
+        {
+            mask.FilterThreshold = 0; // A top-one filter removes every temperature/sampling distinction.
+            mask.Guidance = 2.5;
+        }
+        if (options is AiDotNet.Audio.Effects.DACOptions dac && option == "QuantizerDropout")
+            dac.NumQuantizers = 4; // With a single quantizer, every dropout draw still selects one.
+        if (options is AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions fish && IsFishScheduleOption(option))
+        {
+            fish.WarmupSteps = option == "WarmupSteps" ? 1 : 0;
+            fish.TrainingSteps = 4;
+            fish.CosineDecay = true;
+            fish.FinalLearningRateRatio = 0.5;
+        }
+        if (options is AiDotNet.Audio.Generation.AudioLMOptions audioLm && option is "SemanticCropSeconds" or "CoarseCropSeconds" or "FineCropSeconds")
+        {
+            audioLm.SemanticCropSeconds = 0.08;
+            audioLm.CoarseCropSeconds = 0.08;
+            audioLm.FineCropSeconds = 0.08;
+        }
+        if (options is AiDotNet.SpeechRecognition.Foundation.BESTRQOptions bestRq && IsGooglePretrainingOption(option))
+        {
+            bestRq.MaskProbability = 0.5;
+            bestRq.MaskLength = 1;
+        }
+        if (options is AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2Options google && IsGooglePretrainingOption(option))
+        {
+            google.MaskProbability = 0.5;
+            google.MaskLength = 1;
+        }
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions e3)
+        {
+            if (option == "DefaultSpeakerId") e3.SpeakerCount = 2;
+            if (option == "TrainingBetaEnd") e3.NumDiffusionSteps = 4;
+            if (option is "SilenceBlockSize" or "SilenceMagnitudeThreshold")
+            {
+                e3.SilenceBlockSize = 4;
+                e3.SilenceMagnitudeThreshold = 0.05;
+            }
+        }
+        if (options is AiDotNet.Models.Options.DGCNNOptions dgcnn && option is "DropoutRate" or "UseDropout")
+        {
+            dgcnn.UseDropout = true;
+            dgcnn.DropoutRate = 0.5;
+        }
+        if (options is AiDotNet.VisionLanguage.Grounding.GLaMMOptions glamm && option == "TokenizerPieces")
+        {
+            glamm.TokenizerModel = null;
+            glamm.TokenizerPath = null; // Vocabulary sizing applies before a tokenizer asset is supplied.
+        }
+        if (options is AiDotNet.TextToSpeech.Latest.IndexTTS2Options stagedIndex)
+        {
+            if (option is "EmotionGroupSizes" or "EmotionMode")
+            {
+                stagedIndex.EmotionGroupSizes = Enumerable.Repeat(2, stagedIndex.EmotionLabels.Length).ToArray();
+                stagedIndex.EmotionMode = AiDotNet.TextToSpeech.Latest.IndexTts2EmotionMode.Paper;
+            }
+            if (IsIndexFlowOption(option))
+            {
+                stagedIndex.CurrentStage = AiDotNet.TextToSpeech.Latest.IndexTts2Stage.SemanticToMel;
+                stagedIndex.ClassDropout = option == "LatentFusionProbability" ? 0 : 0.5;
+            }
+            if (option == "SpeakerAdversaryWeight")
+            {
+                stagedIndex.CurrentStage = AiDotNet.TextToSpeech.Latest.IndexTts2Stage.Emotion;
+                stagedIndex.SpeakerCount = 2; // One class has identically zero cross-entropy.
+            }
+        }
+        if (options is AiDotNet.TextToSpeech.Latest.IndexTTS2Options index && IsIndexEmotionArchitecture(option))
+        {
+            index.EmotionHidden = 16;
+            index.EmotionLayers = 1;
+            index.EmotionHeads = 2;
+            index.EmotionKeyValueHeads = 1;
+            index.EmotionHeadDim = 8;
+            index.EmotionIntermediate = 32;
+            index.EmotionLoraRank = 2;
+            index.EmotionMaxTokens = 1;
+        }
+        if (options is AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions natural)
+        {
+            if (IsNaturalJointOption(option)) natural.CurrentStage = AiDotNet.TextToSpeech.CodecBased.NaturalSpeechStage.Joint;
+            if (option == "MaskRatio")
+            {
+                natural.CurrentStage = AiDotNet.TextToSpeech.CodecBased.NaturalSpeechStage.PhonemePretraining;
+                natural.MaskRatio = 0.5;
+            }
+        }
+        if (options is AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions diffusion)
+        {
+            if (option == "CropFrames") diffusion.CropFrames = 2;
+            if (option == "InferenceNoiseSchedule") diffusion.UseFastSampling = true;
+        }
+        if (options is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGANOptions gan)
+        {
+            if (option == "AdversarialWeight") gan.PretrainingSteps = 0;
+            if (option == "SegmentSize") gan.SegmentSize = checked(2 * gan.HopSize);
+        }
+        if (options is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGANOptions multiBand && option is "MelMean" or "MelScale")
+        {
+            multiBand.MelMean = new double[multiBand.MelChannels];
+            multiBand.MelScale = Enumerable.Repeat(1.0, multiBand.MelChannels).ToArray();
+        }
+        if (options is AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions voicebox && option == "MaximumAudioFrames")
+            voicebox.MaximumPhoneDuration = 1;
+        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions cosy && IsCosyFlowOption(option))
+            cosy.TrainingCfgRate = 0.5;
+        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options dit && option == "DiTTrainingCfgRate")
+            dit.DiTTrainingCfgRate = 0.5;
+        if (options is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options styleDecoder)
+        {
+            if (option == "DecoderType")
+            {
+                styleDecoder.IstftHopSize = 1;
+                styleDecoder.IstftFftSize = 4;
+            }
+            if (option == "IstftFftSize")
+            {
+                styleDecoder.DecoderType = AiDotNet.TextToSpeech.StyleEmotion.StyleTts2DecoderType.IstftNet;
+                styleDecoder.HopSize = styleDecoder.UpsampleRates.Aggregate(1, (a, b) => a * b) * styleDecoder.IstftHopSize;
+            }
+        }
+        if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chatter && option == "VoiceEncoderPartialRate")
+            chatter.VoiceEncoderPartialFrames = 160;
+        if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chunked && option == "StaticChunkSize")
+            chunked.StaticChunkSize = 2;
+        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions sampling && option == "TopK")
+        {
+            sampling.TopK = 2;
+            sampling.TopP = 1;
+        }
+        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options sampling3 && option == "TopK")
+        {
+            sampling3.TopK = 2;
+            sampling3.TopP = 1;
+        }
+        if (options is AiDotNet.TextToSpeech.Classic.ForwardTacotronOptions forward)
+        {
+            if (option is "SecondStageLearningRate" or "SecondStageStartStep")
+                forward.SecondStageStartStep = 1;
+            if (option == "GradientClipNorm") forward.GradientClipNorm = 1e-8;
+            // Synthetic supervision spans 100–200 Hz; cross its voiced/unvoiced boundary.
+            if (option == "PitchMinHz") forward.PitchMinHz = 125;
+        }
+        string? dependency = option switch
+        {
+            "FrequencyMaskWidth" => "FrequencyMasks",
+            "TimeMaskRatio" => "TimeMasks",
+            "MaxAudioLengthSeconds" => "MaxAudioLengthSeconds",
+            _ => null,
+        };
+        if (dependency is not null)
+        {
+            var property = options.GetType().GetProperty(dependency);
+            if (property?.PropertyType == typeof(int) && property.CanWrite) property.SetValue(options, 1);
+        }
+        if (options is AiDotNet.SpeechRecognition.Foundation.SPIRALOptions spiral && IsSpiralPretrainingOption(option))
+        {
+            spiral.PretrainingSteps = 4; // The third student step observes the teacher's changing EMA schedule.
+            spiral.TeacherMomentumStart = 0.5;
+            spiral.MaxTeacherPaddingUnits = 1; // The tiny fixture caps larger values to the same padding limit.
+        }
+        if (options is AiDotNet.TextToSpeech.Latest.KaniTTSOptions kani)
+        {
+            switch (KaniControlGroup(option))
+            {
+                case "lora":
+                    kani.UseLora = true;
+                    break;
+                case "sampling":
+                    kani.Temperature = 2;
+                    kani.LenientSpeechSpans = true;
+                    kani.StreamingChunkFrames = 1;
+                    kani.StreamingLookbackFrames = 0;
+                    break;
+                case "warmup-ratio":
+                    kani.TrainingSteps = 20;
+                    kani.WarmupSteps = 0;
+                    break;
+                case "warmup-steps":
+                    kani.TrainingSteps = 20;
+                    kani.WarmupSteps = 2;
+                    break;
+                case "cosine":
+                    kani.TrainingSteps = 20;
+                    kani.WarmupSteps = 0;
+                    kani.WarmupRatio = 0;
+                    break;
+                case "learnable-rope":
+                    kani.LearnableRope = true;
+                    kani.UseLora = false;
+                    break;
+                case "frame-positions":
+                    kani.FrameLevelPositions = true;
+                    break;
+                case "streaming":
+                    kani.LenientSpeechSpans = true;
+                    kani.StreamingChunkFrames = 1;
+                    kani.StreamingLookbackFrames = 0;
+                    break;
+                case "reference-crop":
+                    if (kani is AiDotNet.TextToSpeech.Latest.KaniTTS2Options kani2) kani2.MaxReferenceSeconds = 0.5;
+                    break;
+            }
+        }
+        if (options is not AiDotNet.TextToSpeech.TtsModelOptions) return;
+        // Cross an epoch boundary within the probe's two training steps.
+        var perEpoch = options.GetType().GetProperty("UpdatesPerEpoch");
+        if (perEpoch is not null && perEpoch.CanWrite
+            && (perEpoch.PropertyType == typeof(int) || Nullable.GetUnderlyingType(perEpoch.PropertyType) == typeof(int)))
+            perEpoch.SetValue(options, 1);
+    }
+
+    internal static void UseConfiguredOptimizer<T>(INeuralNetworkModel<T> network)
+    {
+        if (network is not AiDotNet.TextToSpeech.TtsModelBase<T>
+            and not AiDotNet.Audio.Codecs.NeuralAudioCodecBase<T>) return;
+        // The generated fixtures inject constant-rate optimizers for convergence invariants.
+        // Reconstruct option probes without that override so the paper optimizer reads its settings.
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly;
+        for (var type = network.GetType(); type is not null; type = type.BaseType)
+        {
+            foreach (var field in type.GetFields(flags))
+                if (field.Name is "_suppliedOptimizer" or "_optimizer" or "_vocoderBaseOptimizer"
+                    && field.FieldType.IsInterface && field.FieldType.Name.StartsWith("IGradientBasedOptimizer", StringComparison.Ordinal))
+                    field.SetValue(network, null);
+        }
+    }
+
+    internal static void Prepare<T>(INeuralNetworkModel<T> network)
+    {
+        if (network is AiDotNet.TextToSpeech.CodecBased.GPTSoVITS<T> gptSoVits)
+            GptSoVitsFixture.Prepare(gptSoVits);
+
+        switch (network)
+        {
+            case AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> model:
+                SparkNativeFixture.Prepare(model);
+                break;
+            case AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> model:
+                SpiritLmFixture.Prepare(model);
+                break;
+            case AiDotNet.TextToSpeech.Latest.KaniTTS<T> model:
+                KaniTTSFixture.Prepare(model);
+                break;
+            case AiDotNet.TextToSpeech.Latest.KaniTTS2<T> model:
+                KaniTTSFixture.Prepare(model);
+                break;
+            case AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T> model:
+                MetaVoiceNativeFixture.Prepare(model);
+                break;
+            case AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T> model:
+                AudioPaLMFixture.Prepare(model);
+                break;
+            case AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> model:
+                AudioPaLMFixture.Prepare(model);
+                break;
+        }
+    }
+}

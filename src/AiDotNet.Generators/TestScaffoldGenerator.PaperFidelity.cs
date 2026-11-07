@@ -284,6 +284,13 @@ public partial class TestScaffoldGenerator
         sb.AppendLine("    public async System.Threading.Tasks.Task Options_EachShouldChangeObservableBehaviour(string option)");
         sb.AppendLine("    {");
         sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+        // SkippableTheory does not honor InlineData.Skip for individual data rows.
+        // Enforce the same declared reason before invoking the expensive model probe.
+        foreach (var optionCase in model.OptionSensitivityCases.Where(c => c.SkipReason is not null))
+        {
+            sb.Append("        Xunit.Skip.If(option == \"").Append(optionCase.Property)
+                .Append("\", \"").Append(EscapeString(optionCase.SkipReason!)).AppendLine("\");");
+        }
         sb.AppendLine("        AssertOptionChangesObservableBehaviour(option);");
         sb.AppendLine("    }");
     }

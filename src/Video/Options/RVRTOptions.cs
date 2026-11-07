@@ -1,29 +1,24 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for the RVRT recurrent video restoration transformer.
+/// Configuration options for RVRT, the recurrent video restoration transformer with guided deformable attention.
 /// </summary>
 /// <remarks>
 /// <para>
-/// RVRT (Liang et al., NeurIPS 2022) combines recurrent processing with transformers:
-/// - Recurrent frame grouping: processes video in overlapping clips of ClipSize frames,
-///   with hidden states propagated between clips for long-range temporal modeling
-/// - Guided deformable attention (GDA): attention offsets are guided by optical flow,
-///   combining the efficiency of deformable attention with explicit motion information
-/// - Multi-scale temporal fusion: features from different temporal scales are fused
-///   through a hierarchical structure
-/// - Applicable to multiple tasks: SR, deblurring, and denoising in one architecture
+/// Defaults follow Liang et al., NeurIPS 2022, and the authors' release (JingyunLiang/RVRT network_rvrt.py and KAIR
+/// options/rvrt/001_train_rvrt_videosr_bi_reds_30frames.json): 144-channel embeddings, 6 attention heads, 2x8x8 windows,
+/// RSTB groups of depth 2 ([1, 2, 1] blocks for extraction, each propagation pass and reconstruction), guided deformable
+/// attention with 12 groups and 12 heads over 3x3 windows and offset residues up to 10 pixels, two-frame clips, 30-frame
+/// training sequences, Charbonnier loss (eps 1e-9 under the square root), and Adam (0.9, 0.99) at 4e-4 with SPyNet at
+/// 0.25 times the rate and frozen for the first 30,000 iterations, cosine-annealed to 1e-7 over 600,000 iterations.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> RVRT processes video in small groups of frames at a time,
-/// passing information forward like a memory. Within each group, it uses "guided
-/// deformable attention" -- the model knows where to look in neighboring frames because
-/// optical flow tells it where objects moved. This makes it both fast (small groups)
-/// and accurate (guided by motion).
+/// <b>For Beginners:</b> RVRT splits a video into pairs of frames and walks through them backward and forward in time,
+/// carrying what it learned from earlier pairs. To line up a pair with the previous one it follows the estimated
+/// motion and then looks around each moved point for the best-matching detail.
 /// </para>
 /// </remarks>
 public class RVRTOptions : NeuralNetworkOptions
@@ -45,53 +40,66 @@ public class RVRTOptions : NeuralNetworkOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Variant = other.Variant;
-        NumFeatures = other.NumFeatures;
-        NumBlocks = other.NumBlocks;
-        ScaleFactor = other.ScaleFactor;
-        ClipSize = other.ClipSize;
-        NumFrameGroups = other.NumFrameGroups;
+        Seed = other.Seed;
+        EmbedDim = other.EmbedDim;
         NumHeads = other.NumHeads;
-        NumSamplingPoints = other.NumSamplingPoints;
         WindowSize = other.WindowSize;
+        Depth = other.Depth;
+        ExtractionBlocks = other.ExtractionBlocks;
+        PropagationBlocks = other.PropagationBlocks;
+        ReconstructionBlocks = other.ReconstructionBlocks;
+        MlpRatio = other.MlpRatio;
+        DeformableGroups = other.DeformableGroups;
+        AttentionHeads = other.AttentionHeads;
+        MaxResidueMagnitude = other.MaxResidueMagnitude;
+        NumFrames = other.NumFrames;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
         LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
+        SpyNetLearningRateMultiplier = other.SpyNetLearningRateMultiplier;
+        FlowFreezeIterations = other.FlowFreezeIterations;
+        MinLearningRate = other.MinLearningRate;
+        CosineIterations = other.CosineIterations;
+        CharbonnierEpsilon = other.CharbonnierEpsilon;
     }
 
     #region Architecture
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
+    /// <summary>Gets or sets the embedding width of every stage (144).</summary>
+    public int EmbedDim { get; set; } = 144;
 
-    /// <summary>Gets or sets the number of feature channels.</summary>
-    /// <remarks>The paper uses 96 for small, 120 for base, 180 for large variant.</remarks>
-    public int NumFeatures { get; set; } = 120;
-
-    /// <summary>Gets or sets the number of transformer blocks per stage.</summary>
-    public int NumBlocks { get; set; } = 4;
-
-    /// <summary>Gets or sets the spatial upscaling factor.</summary>
-    public int ScaleFactor { get; set; } = 4;
-
-    /// <summary>Gets or sets the number of frames per recurrent clip.</summary>
-    /// <remarks>Frames are grouped into clips of this size for recurrent processing.
-    /// The paper uses 2 for small, 4 for base, 6 for large.</remarks>
-    public int ClipSize { get; set; } = 4;
-
-    /// <summary>Gets or sets the number of recurrent frame groups for temporal propagation.</summary>
-    public int NumFrameGroups { get; set; } = 2;
-
-    /// <summary>Gets or sets the number of attention heads for guided deformable attention.</summary>
+    /// <summary>Gets or sets the window-attention heads (6).</summary>
     public int NumHeads { get; set; } = 6;
 
-    /// <summary>Gets or sets the number of sampling points per deformable attention head.</summary>
-    /// <remarks>More points increases accuracy but also computation cost.</remarks>
-    public int NumSamplingPoints { get; set; } = 4;
-
-    /// <summary>Gets or sets the spatial window size for local attention.</summary>
+    /// <summary>Gets or sets the spatial window size (8; windows are 2x8x8 in propagation, 1x8x8 elsewhere).</summary>
     public int WindowSize { get; set; } = 8;
+
+    /// <summary>Gets or sets the Swin layers per residual block (2).</summary>
+    public int Depth { get; set; } = 2;
+
+    /// <summary>Gets or sets the residual Swin blocks of the feature extractor (1).</summary>
+    public int ExtractionBlocks { get; set; } = 1;
+
+    /// <summary>Gets or sets the residual Swin blocks of each propagation pass (2).</summary>
+    public int PropagationBlocks { get; set; } = 2;
+
+    /// <summary>Gets or sets the residual Swin blocks of the reconstruction (1).</summary>
+    public int ReconstructionBlocks { get; set; } = 1;
+
+    /// <summary>Gets or sets the MLP width as a multiple of the embedding (2).</summary>
+    public double MlpRatio { get; set; } = 2.0;
+
+    /// <summary>Gets or sets the deformable offset groups of the guided deformable attention (12).</summary>
+    public int DeformableGroups { get; set; } = 12;
+
+    /// <summary>Gets or sets the heads of the guided deformable attention (12).</summary>
+    public int AttentionHeads { get; set; } = 12;
+
+    /// <summary>Gets or sets the largest offset residue on top of the flow, in pixels (10).</summary>
+    public double MaxResidueMagnitude { get; set; } = 10;
+
+    /// <summary>Gets or sets the frames of a training sequence (30, the REDS recipe; a multiple of the clip size 2).</summary>
+    public int NumFrames { get; set; } = 30;
 
     #endregion
 
@@ -107,11 +115,25 @@ public class RVRTOptions : NeuralNetworkOptions
 
     #region Training
 
-    /// <summary>Gets or sets the learning rate.</summary>
+    /// <summary>Gets or sets Adam's starting learning rate (4e-4).</summary>
     public double LearningRate { get; set; } = 4e-4;
 
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
+    /// <summary>Gets or sets the multiplier of SPyNet's learning rate (0.25, i.e. 1e-4).</summary>
+    public double SpyNetLearningRateMultiplier { get; set; } = 0.25;
+
+    /// <summary>Gets or sets the iterations SPyNet stays frozen at the start of training (30,000).</summary>
+    public int FlowFreezeIterations { get; set; } = 30000;
+
+    /// <summary>Gets or sets the floor of the cosine schedule (1e-7).</summary>
+    public double MinLearningRate { get; set; } = 1e-7;
+
+    /// <summary>Gets or sets the iterations of the cosine schedule (600,000).</summary>
+    public int CosineIterations { get; set; } = 600000;
+
+    /// <summary>
+    /// Gets or sets the Charbonnier ε; KAIR's loss is sqrt(d² + 1e-9), so ε = sqrt(1e-9).
+    /// </summary>
+    public double CharbonnierEpsilon { get; set; } = 3.1622776601683795e-5;
 
     #endregion
 }

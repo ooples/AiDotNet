@@ -1,32 +1,24 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for M2M many-to-many splatting frame interpolation.
+/// Configuration options for <see cref="AiDotNet.Video.FrameInterpolation.M2M{T}"/>, many-to-many splatting for video
+/// frame interpolation (Hu, Niklaus, Sclaroff and Saenko, CVPR 2022).
 /// </summary>
 /// <remarks>
 /// <para>
-/// M2M (Hu et al., CVPR 2022) uses many-to-many splatting for efficient interpolation:
-/// - Many-to-many splatting: instead of the standard one-to-one backward warping (each target
-///   pixel samples from one source pixel), M2M allows multiple source pixels to contribute to
-///   multiple target pixels simultaneously using forward splatting with learned weights
-/// - Multiple bidirectional flows: estimates K flow field pairs (forward and backward) at each
-///   pyramid level, capturing multiple motion hypotheses for occluded regions and motion
-///   boundaries where a single flow is ambiguous
-/// - Splatting confidence: each splatted pixel carries a learned confidence weight, and the
-///   final pixel value is a confidence-weighted sum of all contributions, naturally handling
-///   occlusions and disocclusions
-/// - Multi-scale pipeline: coarse-to-fine architecture where splatting is performed at each
-///   scale, and residual corrections are added at each level
+/// The defaults are the release's M2M-PWC (feinanshan/M2M_VFI: Train/vfi/model/m2m.py, pwcnet.py, configs/vimeo90k.yml):
+/// PWC-Net flows at a quarter of the input size, a Motion Refinement Network of base width 16 that predicts four flows
+/// per pixel each way, and a rank-16 attention cube. Training follows the release: AdamW at 1e-4 with a weight decay of
+/// 1e-4, a 2,000-step linear warmup and cosine decay to zero over 900,000 steps, gradient norm clipped to 1, the flow
+/// estimator held at a learning rate of zero, on the Charbonnier plus ternary census loss.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> Standard interpolation "pulls" each pixel from one location in the
-/// source frame. M2M instead "pushes" pixels from the source to potentially multiple locations
-/// in the target, which better handles cases where objects overlap or appear/disappear between
-/// frames.
+/// <b>For Beginners:</b> M2M estimates rough motion once, then refines it into several motion guesses for every pixel.
+/// Each pixel is pushed forward along all of its guesses to the in-between time, and where several pixels land on the
+/// same spot they are blended by how reliable each one is. There is no heavy synthesis network, so it is fast.
 /// </para>
 /// </remarks>
 public class M2MOptions : NeuralNetworkOptions
@@ -48,39 +40,75 @@ public class M2MOptions : NeuralNetworkOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Variant = other.Variant;
-        NumFeatures = other.NumFeatures;
-        NumFlowHypotheses = other.NumFlowHypotheses;
-        NumPyramidLevels = other.NumPyramidLevels;
-        NumRefineBlocks = other.NumRefineBlocks;
-        SplattingRadius = other.SplattingRadius;
+        Seed = other.Seed;
+        BaseChannels = other.BaseChannels;
+        NumBranches = other.NumBranches;
+        CubeRank = other.CubeRank;
+        Ratio = other.Ratio;
+        FlowChannels = other.FlowChannels;
+        FlowDecoderChannels = (int[])other.FlowDecoderChannels.Clone();
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        WarmupSteps = other.WarmupSteps;
+        TotalSteps = other.TotalSteps;
+        MaxGradientNorm = other.MaxGradientNorm;
+        FlowLearningRateMultiplier = other.FlowLearningRateMultiplier;
+        CharbonnierWeight = other.CharbonnierWeight;
+        TernaryWeight = other.TernaryWeight;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
-        LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
     }
 
     #region Architecture
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
+    /// <summary>Gets or sets the Motion Refinement Network's base width c (16); its widths run from c to 16c.</summary>
+    public int BaseChannels { get; set; } = 16;
 
-    /// <summary>Gets or sets the number of feature channels.</summary>
-    public int NumFeatures { get; set; } = 64;
+    /// <summary>Gets or sets the flows predicted per pixel in each direction (branch, 4).</summary>
+    public int NumBranches { get; set; } = 4;
 
-    /// <summary>Gets or sets the number of flow hypotheses per pixel (K).</summary>
-    /// <remarks>Multiple flows per pixel handle occlusion boundaries and ambiguous motion.</remarks>
-    public int NumFlowHypotheses { get; set; } = 4;
+    /// <summary>Gets or sets the rank of the channel-height-width attention cube at 1/16 size (16).</summary>
+    public int CubeRank { get; set; } = 16;
 
-    /// <summary>Gets or sets the number of pyramid levels for multi-scale splatting.</summary>
-    public int NumPyramidLevels { get; set; } = 4;
+    /// <summary>Gets or sets the reduction, a power of two of at least 2, at which PWC-Net estimates the coarse flows (ratio, 4).</summary>
+    public int Ratio { get; set; } = 4;
 
-    /// <summary>Gets or sets the number of refinement blocks at each scale level.</summary>
-    public int NumRefineBlocks { get; set; } = 2;
+    /// <summary>Gets or sets PWC-Net's feature width at every pyramid level (32).</summary>
+    public int FlowChannels { get; set; } = 32;
 
-    /// <summary>Gets or sets the splatting radius in pixels.</summary>
-    /// <remarks>Controls how far a source pixel can contribute in the target frame.</remarks>
-    public int SplattingRadius { get; set; } = 2;
+    /// <summary>Gets or sets the widths of each PWC-Net decoder's five hidden convolutions (128, 128, 96, 64, 32).</summary>
+    public int[] FlowDecoderChannels { get; set; } = { 128, 128, 96, 64, 32 };
+
+    #endregion
+
+    #region Training
+
+    /// <summary>Gets or sets AdamW's peak learning rate (lr0, 1e-4).</summary>
+    public double LearningRate { get; set; } = 1e-4;
+
+    /// <summary>Gets or sets AdamW's decoupled weight decay (wd, 1e-4).</summary>
+    public double WeightDecay { get; set; } = 1e-4;
+
+    /// <summary>Gets or sets the steps over which the learning rate rises linearly from zero (warmup_steps, 2,000).</summary>
+    public int WarmupSteps { get; set; } = 2000;
+
+    /// <summary>Gets or sets the step at which the cosine decay reaches zero (max_iter, 900,000).</summary>
+    public int TotalSteps { get; set; } = 900000;
+
+    /// <summary>Gets or sets the gradient norm clip (1).</summary>
+    public double MaxGradientNorm { get; set; } = 1.0;
+
+    /// <summary>
+    /// Gets or sets the flow estimator's learning rate as a multiple of the network's (0: the release loads a pretrained
+    /// PWC-Net and holds it fixed). Set it above zero to train the flow estimator from scratch.
+    /// </summary>
+    public double FlowLearningRateMultiplier { get; set; } = 0.0;
+
+    /// <summary>Gets or sets the weight of the Charbonnier loss (1).</summary>
+    public double CharbonnierWeight { get; set; } = 1.0;
+
+    /// <summary>Gets or sets the weight of the ternary census loss (1).</summary>
+    public double TernaryWeight { get; set; } = 1.0;
 
     #endregion
 
@@ -91,16 +119,6 @@ public class M2MOptions : NeuralNetworkOptions
 
     /// <summary>Gets or sets the ONNX runtime options.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-
-    #endregion
-
-    #region Training
-
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 2e-4;
-
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
 
     #endregion
 }

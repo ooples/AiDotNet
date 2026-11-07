@@ -1,32 +1,21 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for the IFRNet intermediate feature refine network.
+/// Configuration options for <see cref="AiDotNet.Video.FrameInterpolation.IFRNet{T}"/>, the intermediate feature refine
+/// network for efficient frame interpolation (Kong et al., CVPR 2022).
 /// </summary>
 /// <remarks>
 /// <para>
-/// IFRNet (Kong et al., CVPR 2022) uses coarse-to-fine intermediate feature refinement:
-/// - Encoder-decoder with skip connections: shared encoder extracts multi-scale features
-///   from both input frames, decoder progressively refines the interpolation result from
-///   coarsest to finest scale
-/// - Intermediate feature refinement (IFR): at each decoder level, instead of refining the
-///   optical flow, IFRNet directly refines the intermediate features of the target frame,
-///   avoiding error accumulation from flow estimation
-/// - Coarse-to-fine architecture: 3-level pyramid where each level operates at half the
-///   resolution of the next, with learned upsampling between levels
-/// - Task-oriented flow: optical flow is used only as an initial guide for feature warping,
-///   then discarded in favor of direct feature refinement
+/// The defaults are IFRNet's (ltkong218/IFRNet, models/IFRNet.py); <see cref="Large"/> and <see cref="Small"/> return
+/// IFRNet-L's and IFRNet-S's. Training follows train_vimeo90k.py.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> Most frame interpolation methods first estimate motion (optical flow),
-/// then use it to warp frames. If the flow is wrong, the result is wrong. IFRNet takes a
-/// different approach: it starts with a rough flow estimate, uses it to get initial features,
-/// then directly refines those features to produce the final frame. This is more forgiving
-/// of flow errors and produces sharper results.
+/// <b>For Beginners:</b> IFRNet encodes both frames into a four-level pyramid, then decodes from the coarsest level up,
+/// each decoder refining the two motions from the in-between frame and a feature of the in-between frame itself; the
+/// last one also predicts how to blend the two warped frames and a correction.
 /// </para>
 /// </remarks>
 public class IFRNetOptions : NeuralNetworkOptions
@@ -48,35 +37,63 @@ public class IFRNetOptions : NeuralNetworkOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Variant = other.Variant;
-        NumFeatures = other.NumFeatures;
-        NumRefineBlocks = other.NumRefineBlocks;
-        NumPyramidLevels = other.NumPyramidLevels;
-        UseTaskOrientedFlow = other.UseTaskOrientedFlow;
+        Seed = other.Seed;
+        EncoderChannels = (int[])other.EncoderChannels.Clone();
+        SideChannels = other.SideChannels;
+        FirstKernelSize = other.FirstKernelSize;
+        LearningRate = other.LearningRate;
+        MinLearningRate = other.MinLearningRate;
+        TotalIterations = other.TotalIterations;
+        WeightDecay = other.WeightDecay;
+        GeometryWeight = other.GeometryWeight;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
-        LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
     }
+
+    /// <summary>IFRNet-L (models/IFRNet_L.py): wider, with a 7x7 first convolution.</summary>
+    public static IFRNetOptions Large() => new()
+    {
+        EncoderChannels = new[] { 64, 96, 144, 192 },
+        SideChannels = 64,
+        FirstKernelSize = 7,
+    };
+
+    /// <summary>IFRNet-S (models/IFRNet_S.py).</summary>
+    public static IFRNetOptions Small() => new()
+    {
+        EncoderChannels = new[] { 24, 36, 54, 72 },
+        SideChannels = 24,
+    };
 
     #region Architecture
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
+    /// <summary>Gets or sets the encoder pyramid's four widths, 1/2 to 1/16 size (32, 48, 72, 96).</summary>
+    public int[] EncoderChannels { get; set; } = { 32, 48, 72, 96 };
 
-    /// <summary>Gets or sets the number of feature channels at the finest level.</summary>
-    public int NumFeatures { get; set; } = 64;
+    /// <summary>Gets or sets the decoders' ResBlock side channels (32).</summary>
+    public int SideChannels { get; set; } = 32;
 
-    /// <summary>Gets or sets the number of refinement blocks per decoder level.</summary>
-    /// <remarks>More blocks allow finer detail recovery. Paper uses 4 per level.</remarks>
-    public int NumRefineBlocks { get; set; } = 4;
+    /// <summary>Gets or sets the encoder's first convolution kernel (3; IFRNet-L uses 7).</summary>
+    public int FirstKernelSize { get; set; } = 3;
 
-    /// <summary>Gets or sets the number of pyramid levels.</summary>
-    /// <remarks>3 levels = 1x, 1/2x, 1/4x resolution. Higher is better for large motion.</remarks>
-    public int NumPyramidLevels { get; set; } = 3;
+    #endregion
 
-    /// <summary>Gets or sets whether to use task-oriented flow initialization.</summary>
-    public bool UseTaskOrientedFlow { get; set; } = true;
+    #region Training
+
+    /// <summary>Gets or sets AdamW's initial learning rate (1e-4).</summary>
+    public double LearningRate { get; set; } = 1e-4;
+
+    /// <summary>Gets or sets the rate the cosine schedule ends at (1e-5).</summary>
+    public double MinLearningRate { get; set; } = 1e-5;
+
+    /// <summary>Gets or sets the cosine schedule's length: 300 epochs of Vimeo90K's 51,312 triplets at batch 24.</summary>
+    public int TotalIterations { get; set; } = 300 * (51312 / 24);
+
+    /// <summary>Gets or sets AdamW's weight decay (0).</summary>
+    public double WeightDecay { get; set; }
+
+    /// <summary>Gets or sets the weight of the geometry consistency loss on the refined intermediate features (0.01).</summary>
+    public double GeometryWeight { get; set; } = 0.01;
 
     #endregion
 
@@ -87,16 +104,6 @@ public class IFRNetOptions : NeuralNetworkOptions
 
     /// <summary>Gets or sets the ONNX runtime options.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-
-    #endregion
-
-    #region Training
-
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 2e-4;
-
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
 
     #endregion
 }

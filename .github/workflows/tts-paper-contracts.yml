@@ -1,0 +1,67 @@
+name: TTS paper contracts
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/tts-paper-contracts.yml'
+      - 'src/TextToSpeech/**'
+      - 'src/Audio/**'
+      - 'src/NeuralNetworks/Layers/**'
+      - 'src/Tokenization/**'
+      - 'tests/AiDotNet.Tests/TextToSpeech/**'
+      - 'tests/AiDotNet.TtsPaperContracts/**'
+      - 'tools/TtsCheckpointAudit/review-filter.txt'
+  workflow_dispatch:
+    inputs:
+      family:
+        description: Native paper/reference contracts to run
+        type: choice
+        options: [CosyVoice, VALLE, SPEARTTS, AdversarialReview, All]
+        default: All
+permissions:
+  contents: read
+concurrency:
+  group: tts-paper-contracts-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  contracts:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      DOTNET_PROCESSOR_COUNT: '1'
+      DOTNET_GCConserveMemory: '9'
+      DOTNET_gcServer: '0'
+      AIDOTNET_DISABLE_GPU: '1'
+      TTS_FAMILY: ${{ inputs.family || 'All' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build the focused contract assembly
+        shell: pwsh
+        env:
+          DOTNET_GCHeapHardLimit: '0x180000000'
+        run: |
+          dotnet build tests/AiDotNet.TtsPaperContracts/AiDotNet.TtsPaperContracts.csproj `
+            -c Release -m:1 -p:UseSharedCompilation=false -p:Nullable=annotations `
+            -p:RunAnalyzers=false -p:GenerateDocumentationFile=false -p:DebugType=None -p:Optimize=false
+      - name: Run the native paper and reference checks
+        shell: pwsh
+        run: |
+          $reviewFilter = (Get-Content tools/TtsCheckpointAudit/review-filter.txt -Raw).Trim()
+          $filter = if ($env:TTS_FAMILY -eq 'All') {
+            "$reviewFilter|FullyQualifiedName~AiDotNet.Tests.TextToSpeech"
+          } elseif ($env:TTS_FAMILY -eq 'AdversarialReview') {
+            $reviewFilter
+          } else {
+            "FullyQualifiedName~$env:TTS_FAMILY"
+          }
+          dotnet test tests/AiDotNet.TtsPaperContracts/AiDotNet.TtsPaperContracts.csproj `
+            -c Release --no-build --no-restore `
+            --filter $filter --logger trx --results-directory TestResults/tts-paper-contracts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: tts-paper-contracts
+          path: TestResults/tts-paper-contracts
+          retention-days: 7

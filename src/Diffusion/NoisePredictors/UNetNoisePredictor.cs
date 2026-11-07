@@ -848,7 +848,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
     // (per the facade contract: users only touch AiModelBuilder / AiModelResult).
     // ConsistencyModelPerfDiag reads this via the InternalsVisibleTo grant on
     // src/AiDotNet.csproj for that assembly.
-    internal static System.Collections.Concurrent.ConcurrentQueue<(string section, double ms)>? ForwardProfilingSink;
+    internal static System.Collections.Concurrent.ConcurrentQueue<(string section, double ms)>? ForwardProfilingSink = null;
 
     /// <summary>
     /// Forward pass for inference (no skip storage needed).

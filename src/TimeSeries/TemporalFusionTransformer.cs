@@ -436,8 +436,9 @@ public partial class TemporalFusionTransformer<T> : TimeSeriesModelBase<T>
     // ── Prediction ──────────────────────────────────────────────────────────────────
     public override Vector<T> Predict(Matrix<T> input)
     {
-        if (TryPredictFromTimeIndexCalibration(input, _trainingSeries, out var calibrated))
-            return calibrated;
+        // A one-column time index: the model's own forecasts (in-sample one-step, or past the training series).
+        if (TryForecastTimeIndex(input, _trainingSeries, _options.LookbackWindow, PredictSingle, out var forecasts))
+            return forecasts;
 
         int n = input.Rows;
         int lookback = _options.LookbackWindow;

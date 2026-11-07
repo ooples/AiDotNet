@@ -39,24 +39,32 @@ public class TRPOOptions<T> : ReinforcementLearningOptions<T>
     public int ActionSize { get; init; } = 1;
     /// <summary>Whether the action space is continuous rather than discrete.</summary>
     public bool IsContinuous { get; init; } = false;
-    /// <summary>Learning rate of the value network.</summary>
+    /// <summary>Adam learning rate of the value baseline. Default: 0.001.</summary>
     public T ValueLearningRate { get; init; }
-    /// <summary>Lambda of generalized advantage estimation, trading bias against variance.</summary>
+
+    /// <summary>GAE lambda of the advantage estimate. Default: 1, the paper's discounted return minus the baseline
+    /// (single path, section 5.1).</summary>
     public T GaeLambda { get; init; }
 
-    // TRPO-specific parameters
-    /// <summary>Maximum KL divergence between the old and new policies: the size of the trust region.</summary>
-    public T MaxKL { get; init; }  // Maximum KL divergence (trust region size)
-    /// <summary>Damping added to the Fisher-vector product for numerical stability of conjugate gradient.</summary>
-    public double Damping { get; init; } = 0.1;  // Damping coefficient for conjugate gradient
-    /// <summary>Number of conjugate-gradient iterations used to compute the natural-gradient direction.</summary>
+    /// <summary>The trust region δ, the largest mean KL divergence of a step. Default: 0.01, used "for all
+    /// experiments" (section 8).</summary>
+    public T MaxKL { get; init; }
+
+    /// <summary>Damping added to the Fisher-vector products of the conjugate gradient solve. Default: 0.1 (the
+    /// authors' implementation).</summary>
+    public double Damping { get; init; } = 0.1;
+
+    /// <summary>Conjugate gradient iterations of the search direction (appendix C). Default: 10.</summary>
     public int ConjugateGradientIterations { get; init; } = 10;
-    /// <summary>Maximum number of backtracking steps of the line search.</summary>
+
+    /// <summary>Backtracking steps of the line search. Default: 10.</summary>
     public int LineSearchSteps { get; init; } = 10;
-    /// <summary>Minimum ratio of actual to expected improvement for the line search to accept a step.</summary>
+
+    /// <summary>The smallest accepted fraction of the surrogate's linearly predicted improvement. Default: 0.1.</summary>
     public double LineSearchAcceptRatio { get; init; } = 0.1;
-    /// <summary>Factor by which the backtracking line search shrinks the step each time it rejects one.</summary>
-    public double LineSearchBacktrackCoeff { get; init; } = 0.8;
+
+    /// <summary>The line search's exponential shrink factor (appendix C). Default: 0.5.</summary>
+    public double LineSearchBacktrackCoeff { get; init; } = 0.5;
 
     /// <summary>Number of environment steps collected before each policy update.</summary>
     public int StepsPerUpdate { get; init; } = 2048;
@@ -64,9 +72,12 @@ public class TRPOOptions<T> : ReinforcementLearningOptions<T>
     public int ValueIterations { get; init; } = 5;
     /// <summary>Loss function used to train the value network.</summary>
     public ILossFunction<T> ValueLossFunction { get; init; } = new MeanSquaredErrorLoss<T>();
-    /// <summary>Hidden layer sizes of the policy network.</summary>
-    public List<int> PolicyHiddenLayers { get; init; } = new List<int> { 64, 64 };
-    /// <summary>Hidden layer sizes of the value network.</summary>
+    /// <summary>Hidden layer widths of the policy (tanh). Default: one layer of 30 units, the swimmer policy of
+    /// figure 3 (the hopper and walker used 50, table 2).</summary>
+    public List<int> PolicyHiddenLayers { get; init; } = new List<int> { 30 };
+
+    /// <summary>Hidden layer widths of the value baseline (tanh). Default: { 64, 64 }; the paper does not describe its
+    /// baseline.</summary>
     public List<int> ValueHiddenLayers { get; init; } = new List<int> { 64, 64 };
 
     /// <summary>Creates options with the default values.</summary>
@@ -74,7 +85,7 @@ public class TRPOOptions<T> : ReinforcementLearningOptions<T>
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         ValueLearningRate = numOps.FromDouble(0.001);
-        GaeLambda = numOps.FromDouble(0.95);
+        GaeLambda = numOps.FromDouble(1.0);
         MaxKL = numOps.FromDouble(0.01);
     }
 }

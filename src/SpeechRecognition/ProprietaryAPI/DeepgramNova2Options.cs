@@ -1,11 +1,14 @@
+using AiDotNet.Audio.Foundations;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.ProprietaryAPI;
 
-/// <summary>Options for Deepgram Nova-2: fastest real-time ASR API.</summary>
+/// <summary>Options for the Deepgram Nova-2 stand-in, a Transformer encoder with a CTC layer (Deepgram has disclosed only a Transformer-based end-to-end model).</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the DeepgramNova2 model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para>See <see cref="DeepgramNova2{T}"/> for which defaults the vendor or paper discloses and which the stand-in infers.</para>
+/// <para><b>For Beginners:</b> These options set the size of the encoder and decoder, the feature front end and the training
+/// augmentation.</para>
 /// </remarks>
 public class DeepgramNova2Options : ModelOptions
 {
@@ -22,40 +25,75 @@ public class DeepgramNova2Options : ModelOptions
 
         SampleRate = other.SampleRate;
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        NumMels = other.NumMels;
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
-        NumMels = other.NumMels;
+        FeedForwardMultiplier = other.FeedForwardMultiplier;
+        FrequencyMasks = other.FrequencyMasks;
+        FrequencyMaskWidth = other.FrequencyMaskWidth;
+        TimeMasks = other.TimeMasks;
+        TimeMaskRatio = other.TimeMaskRatio;
         VocabSize = other.VocabSize;
-        MaxTextLength = other.MaxTextLength;
+        Vocabulary = (string[])other.Vocabulary.Clone();
+        Language = other.Language;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
-        Language = other.Language;
+        Seed = other.Seed;
     }
 
-    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
+    /// <summary>Audio sample rate in Hz.</summary>
     public int SampleRate { get; set; } = 16000;
-    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
+
+    /// <summary>Longest audio a transcription covers, in seconds; longer input is truncated.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
-    /// <summary>Gets or sets the hidden width of the encoder.</summary>
-    public int EncoderDim { get; set; } = 256;
-    /// <summary>Gets or sets the number of encoder layers.</summary>
-    public int NumEncoderLayers { get; set; } = 4;
-    /// <summary>Gets or sets the number of heads in each attention layer.</summary>
-    public int NumAttentionHeads { get; set; } = 4;
-    /// <summary>Gets or sets the number of mel filterbank channels in the input features.</summary>
+
+    /// <summary>Log-mel bins (80 over 25 ms windows with a 10 ms stride).</summary>
     public int NumMels { get; set; } = 80;
-    /// <summary>Gets or sets the number of output tokens the model predicts over.</summary>
-    public int VocabSize { get; set; } = 5000;
-    /// <summary>Gets or sets the most tokens decoded for one utterance.</summary>
-    public int MaxTextLength { get; set; } = 512;
-    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
-    public string? ModelPath { get; set; }
-    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
-    public OnnxModelOptions OnnxOptions { get; set; } = new();
-    /// <summary>Gets or sets the dropout probability of the native layers during training.</summary>
-    public double DropoutRate { get; set; } = 0.1;
-    /// <summary>Gets or sets the language code (for example "en") reported for a transcript when none is passed or detected.</summary>
+
+    /// <summary>Transformer width (the base Transformer: 512).</summary>
+    public int EncoderDim { get; set; } = 512;
+
+    /// <summary>Transformer encoder layers (12).</summary>
+    public int NumEncoderLayers { get; set; } = 12;
+
+    /// <summary>Attention heads per layer (8).</summary>
+    public int NumAttentionHeads { get; set; } = 8;
+
+    /// <summary>Feed-forward expansion (2,048 units at width 512).</summary>
+    public int FeedForwardMultiplier { get; set; } = 4;
+
+    /// <summary>SpecAugment frequency masks (Park et al. 2019; Gulati et al. 2020, section 3.1: 2).</summary>
+    public int FrequencyMasks { get; set; } = 2;
+
+    /// <summary>Largest frequency mask, in mel bins (F = 27).</summary>
+    public int FrequencyMaskWidth { get; set; } = 27;
+
+    /// <summary>SpecAugment time masks (10).</summary>
+    public int TimeMasks { get; set; } = 10;
+
+    /// <summary>Largest time mask as a fraction of the utterance (pS = 0.05).</summary>
+    public double TimeMaskRatio { get; set; } = 0.05;
+
+    /// <summary>Output vocabulary size, blank (token 0) included.</summary>
+    public int VocabSize { get; set; } = 34;
+
+    /// <summary>The text of each token; tokens past the list decode as Unicode code points, and tokens in angle brackets decode to nothing.</summary>
+    public string[] Vocabulary { get; set; } = { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
+
+    /// <summary>Language reported for transcriptions.</summary>
     public string Language { get; set; } = "en";
+
+    /// <summary>Path to an exported ONNX model, when one is used.</summary>
+    public string? ModelPath { get; set; }
+
+    /// <summary>ONNX runtime options.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    internal ConformerAsrConfiguration ToConfiguration() => new()
+    {
+        SampleRate = SampleRate, NumMels = NumMels, EncoderDim = EncoderDim, NumEncoderLayers = NumEncoderLayers, NumAttentionHeads = NumAttentionHeads,
+        Block = ConformerAsrBlock.Transformer, RopeTheta = 0, FeedForwardMultiplier = FeedForwardMultiplier,
+        FrequencyMasks = FrequencyMasks, FrequencyMaskWidth = FrequencyMaskWidth, TimeMasks = TimeMasks, TimeMaskRatio = TimeMaskRatio, VocabSize = VocabSize,
+    };
 }

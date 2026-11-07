@@ -1,8 +1,6 @@
 using AiDotNet.Attributes;
-using AiDotNet.ActivationFunctions;
 using AiDotNet.Audio;
 using AiDotNet.Enums;
-using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -10,65 +8,57 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.SpeechRecognition.Specialized;
 
 /// <summary>
-/// Medical-conversation ASR: an end-to-end recognizer for doctor-patient dialogue, offering both
-/// arms of the paper's comparison — Listen-Attend-Spell and CTC.
+/// Medical-conversation ASR: Chiu et al. 2018's end-to-end recognizers for doctor-patient dialogue, offering both arms of
+/// the paper's comparison, Listen-Attend-Spell and CTC.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// Chiu, Tripathi, Chou, Co, Jaitly, Jaunzeikare, Kannan, Nguyen, Sak, Sankar, Tansuwan, Wan, Wu and
-/// Zhang, "Speech recognition for medical conversations" (Interspeech 2018, arXiv:1711.07274). The
-/// paper is a COMPARISON, not a single architecture: "We explored both CTC and LAS systems for
-/// building speech recognition models."
+/// Chiu, Tripathi, Chou, Co, Jaitly, Jaunzeikare, Kannan, Nguyen, Sak, Sankar, Tansuwan, Wan, Wu and Zhang, "Speech
+/// recognition for medical conversations" (Interspeech 2018, arXiv:1711.07274). The paper is a COMPARISON: "We explored
+/// both CTC and LAS systems for building speech recognition models."
 /// </para>
 /// <para>
-/// Its conclusion sets the default here: "The LAS was more resilient to noisy data and CTC required
-/// more data clean up." Spontaneous doctor-patient conversation is precisely the noisy condition
-/// where that mattered, so <see cref="MedicalAsrDecoderType.ListenAttendSpell"/> is the default and
-/// CTC is available as the paper's other arm rather than as a lesser fallback.
+/// Both arms read 80 filterbank channels up to 3800 Hz from 25 ms frames every 10 ms, stacked three at a time with a
+/// stride of three (240 values every 30 ms, section 4).
 /// </para>
-/// <para>
-/// <b>Two properties carry the method and are implemented rather than described.</b>
-/// </para>
-/// <list type="number">
-/// <item><description><b>Both decoders exist and are selectable.</b> A CTC-only class cannot express
-/// the paper's finding, because the finding IS the difference between the two. The previous revision
-/// of this class had only a CTC head and described "clinical dictation" — a different task from the
-/// conversations the paper studies.</description></item>
-/// <item><description><b>LAS listens pyramidally.</b> Each reduction concatenates adjacent time
-/// steps and halves the sequence, so the speller attends over a short summary rather than every
-/// acoustic frame of a consultation. That reduction is what makes attention tractable over
-/// conversation-length audio; without it "LAS" is just an attention decoder.</description></item>
+/// <list type="bullet">
+/// <item><description><b>LAS</b> (the default, section 4.2 and 5.2): six bidirectional LSTM layers of 768 units per
+/// direction, a multi-headed attention, and three unidirectional 768-unit LSTM layers predicting graphemes, trained with
+/// scheduled sampling ramped linearly to 30%. Its conclusion sets the default: "The LAS was more resilient to noisy data
+/// and CTC required more data clean up."</description></item>
+/// <item><description><b>CTC</b> (section 4.1 and 5.1): a stack of LSTM layers under a softmax over 8K context-dependent
+/// phones and the blank: five bidirectional layers of 350 units per direction (<see cref="MedicalASROptions.ForCtc"/>),
+/// or five unidirectional 700-unit layers with an output delay of ten steps.</description></item>
 /// </list>
 /// <para>
-/// <b>For Beginners:</b> Two ways to turn sound into text. One (CTC) labels each slice of audio
-/// independently and is fast but needs clean recordings. The other (LAS) first compresses the audio
-/// into a shorter summary, then writes the sentence out while looking back at that summary, which
-/// copes better when people talk over each other or trail off — as they do in real consultations.
-/// This model gives you both, and defaults to the one the paper found more robust.
+/// <b>For Beginners:</b> Two ways to turn sound into text. One (CTC) labels each slice of audio and is fast but needs
+/// clean recordings. The other (LAS) reads the whole recording first, then writes the sentence letter by letter while
+/// looking back at the audio, which copes better when people talk over each other or trail off, as they do in real
+/// consultations. This model gives you both, and defaults to the one the paper found more robust.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
-///     taskType: NeuralNetworkTaskType.MultiClassClassification,
-///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 5000);
+///     taskType: NeuralNetworkTaskType.SequenceToSequence,
+///     inputSize: 16000, outputSize: 128);
 ///
 /// // Defaults to LAS, the paper's more noise-resilient arm.
 /// var las = new MedicalASR&lt;double&gt;(architecture);
 ///
-/// // The paper's other arm.
-/// var ctc = new MedicalASR&lt;double&gt;(architecture,
-///     new MedicalASROptions { DecoderType = MedicalAsrDecoderType.Ctc });
+/// // The paper's bidirectional CTC model.
+/// var ctc = new MedicalASR&lt;double&gt;(architecture, MedicalASROptions.ForCtc());
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
-[ModelCategory(ModelCategory.Transformer)]
+[ModelCategory(ModelCategory.RecurrentNetwork)]
 [ModelTask(ModelTask.SpeechRecognition)]
 [ModelComplexity(ModelComplexity.Medium)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
@@ -78,269 +68,298 @@ namespace AiDotNet.SpeechRecognition.Specialized;
     Authors = "Chung-Cheng Chiu, Anshuman Tripathi, Katherine Chou, Chris Co, Navdeep Jaitly, " +
               "Diana Jaunzeikare, Anjuli Kannan, Patrick Nguyen, Hasim Sak, Ananth Sankar, " +
               "Justin Tansuwan, Nathan Wan, Yonghui Wu, Xuedong Zhang")]
-public partial class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class MedicalASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
-    private readonly MedicalASROptions _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    /// <inheritdoc />
+    protected override int OutputFeatureWidth => _options.VocabSize;
 
-    // Views into Layers. Under LAS the list holds two sub-graphs - listener then speller - which
-    // read in sequence but with a pyramidal reduction BETWEEN them, so a plain sequential walk of
-    // Layers would skip the reduction entirely.
-    private readonly List<ILayer<T>> _listenerLayers = new();
-    private readonly List<ILayer<T>> _spellerLayers = new();
+    private readonly MedicalASROptions _options;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+    // The paper network on the native path; null in ONNX mode or with custom layers.
+    private MedicalAsrNetwork<T>? _network;
+    private Random _random;
+    private int _trainingSteps;
+    internal MedicalAsrNetwork<T>? Network => _network;
 
     /// <summary>Gets which arm of the paper's comparison this instance is built as.</summary>
     public MedicalAsrDecoderType DecoderType => _options.DecoderType;
 
-    /// <summary>
-    /// Gets the factor by which the LAS listener reduces the time axis, 2^PyramidalReductions.
-    /// One for CTC, whose frame-synchronous head needs the full resolution.
-    /// </summary>
-    public int TimeReductionFactor =>
-        _options.DecoderType == MedicalAsrDecoderType.ListenAttendSpell
-            ? 1 << Math.Max(0, _options.PyramidalReductions)
-            : 1;
+    /// <summary>Gets how many 10 ms frames one encoder step covers (the frame stacking stride).</summary>
+    public int TimeReductionFactor => Math.Max(1, _options.StackedFrames);
+
+    /// <summary>Gets the probability with which the next training step feeds the LAS decoder its own previous prediction:
+    /// a linear ramp from 0 to <see cref="MedicalASROptions.ScheduledSamplingProbability"/>, then constant.</summary>
+    public double CurrentSamplingProbability =>
+        _options.ScheduledSamplingRampSteps <= 0 ? _options.ScheduledSamplingProbability
+            : _options.ScheduledSamplingProbability * Math.Min(1.0, _trainingSteps / (double)_options.ScheduledSamplingRampSteps);
+
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedLanguages { get; }
+
+    /// <inheritdoc />
     public bool SupportsStreaming => false;
+
+    /// <inheritdoc />
     public bool SupportsWordTimestamps => false;
 
-    public MedicalASR(NeuralNetworkArchitecture<T> architecture, string modelPath, MedicalASROptions? options = null) : base(architecture) { _options = options ?? new MedicalASROptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public MedicalASR(NeuralNetworkArchitecture<T> architecture, MedicalASROptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new MedicalASROptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    /// <summary>Creates a MedicalASR model that runs a pretrained ONNX export.</summary>
+    public MedicalASR(NeuralNetworkArchitecture<T> architecture, string modelPath, MedicalASROptions? options = null) : base(architecture)
+    {
+        _options = options ?? new MedicalASROptions();
+        Options = _options;
+        _useNativeMode = false;
+        _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
+        base.SampleRate = _options.SampleRate;
+        base.NumMels = 0;
+        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath;
+        OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        SupportedLanguages = new[] { _options.Language };
+        InitializeLayersCore();
+    }
 
-    /// <summary>
-    /// Transcribes medical speech using domain-specialized Conformer encoder.
-    /// The model is fine-tuned on clinical speech with medical terminology coverage.
-    /// CTC head with domain LM rescoring produces medical transcriptions.
-    /// </summary>
+    /// <summary>Creates a trainable MedicalASR model (LAS by default).</summary>
+    public MedicalASR(NeuralNetworkArchitecture<T> architecture, MedicalASROptions? options = null,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new MedicalASROptions();
+        Options = _options;
+        _useNativeMode = true;
+        _optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
+        base.SampleRate = _options.SampleRate;
+        base.NumMels = 0;
+        SupportedLanguages = new[] { _options.Language };
+        InitializeLayersCore();
+    }
+
+    /// <inheritdoc />
+    protected override void InitializeLayers() => InitializeLayersCore();
+
+    private void InitializeLayersCore()
+    {
+        if (!_useNativeMode) return;
+        _network = null;
+        Layers.Clear();
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        // The paper's networks (section 4). They used to be Conformer templates, with LAS a pair of dense layers over an
+        // averaged "pyramid" trained by mean squared error.
+        var layers = new List<NeuralNetworks.Layers.LayerBase<T>>();
+        _network = new MedicalAsrNetwork<T>(Engine, layers, _options.ToConfiguration());
+        _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
+        _trainingSteps = 0;
+        Layers.AddRange(layers);
+    }
+
+    // The recognizer reads the raw waveform, truncated to the longest window a transcription covers.
+    /// <inheritdoc />
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        if (_network is null) return rawAudio;
+        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
+        var waveform = new Tensor<T>(new[] { length });
+        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
+        return waveform;
+    }
+
+    private MedicalAsrNetwork<T> RequireNetwork() =>
+        _network ?? throw new NotSupportedException("This operation runs on the native paper network.");
+
+    /// <inheritdoc />
     public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
-        var features = PreprocessAudio(audio);
-        Tensor<T> logits;
-
-        if (IsOnnxMode && OnnxEncoder is not null)
+        if (ResolveReturnTimestamps(includeTimestamps)) throw new NotSupportedException("Word-level timestamps are not supported for MedicalASR.");
+        List<int> tokens;
+        if (_network is not null && _options.DecoderType == MedicalAsrDecoderType.ListenAttendSpell)
         {
-            logits = OnnxEncoder.Run(features);
+            using var _ = new NoGradScope<T>();
+            tokens = _network.Greedy(_network.Encode(_network.Features(PreprocessAudio(audio))), _options.MaxTextLength).Tokens;
         }
         else
         {
-            logits = RecognizeForward(features);
+            var logits = PredictCore(audio);
+            tokens = Audio.Foundations.ConformerAsrNetwork<T>.GreedyCtc(Engine.Reshape(logits, new[] { logits.Length / logits.Shape[^1], logits.Shape[^1] }));
         }
-
-        var (tokens, confidence) = CTCGreedyDecodeWithConfidence(logits);
-        var text = TokensToText(tokens);
-        double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
-
         return new TranscriptionResult<T>
         {
-            Text = text,
-            Language = language ?? _options.Language,
-            Confidence = NumOps.FromDouble(confidence),
-            DurationSeconds = duration,
-            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(text, duration, tokens, confidence) : Array.Empty<TranscriptionSegment<T>>()
+            Text = Text(tokens), Language = language ?? _options.Language, Confidence = NumOps.FromDouble(tokens.Count > 0 ? 1.0 : 0.0),
+            DurationSeconds = audio.Length / (double)SampleRate, Segments = Array.Empty<TranscriptionSegment<T>>(),
         };
     }
 
-    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = RecognizeForward(features); } var (tokens, _) = CTCGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
-    public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("MedicalASR does not support streaming.");
+    // LAS graphemes are code points; CTC units are written by their inventory names (or indices), space-separated.
+    private string Text(List<int> tokens)
+    {
+        if (_options.DecoderType == MedicalAsrDecoderType.Ctc || _network is null)
+            return string.Join(" ", tokens.Select(t => t < _options.PhoneInventory.Length ? _options.PhoneInventory[t] : t.ToString(System.Globalization.CultureInfo.InvariantCulture)));
+        var sb = new System.Text.StringBuilder();
+        foreach (int t in tokens) if (t > 0 && t <= 0x10FFFF && (t < 0xD800 || t > 0xDFFF)) sb.Append(char.ConvertFromUtf32(t));
+        return sb.ToString().Trim();
+    }
 
     /// <inheritdoc />
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode) return;
-        Layers.Clear();
-        _listenerLayers.Clear();
-        _spellerLayers.Clear();
+    public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null,
+        CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
 
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-        {
-            Layers.AddRange(Architecture.Layers);
-            _listenerLayers.AddRange(Layers);
-            return;
-        }
-
-        var identity = (IActivationFunction<T>)new IdentityActivation<T>();
-
-        if (_options.DecoderType == MedicalAsrDecoderType.Ctc)
-        {
-            // The paper's CTC arm: a frame-synchronous head straight onto the encoder - no decoder
-            // state and no time reduction.
-            var ctcStack = LayerHelper<T>.CreateDefaultConformerLayers(
-                encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers,
-                numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels,
-                vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate).ToList();
-            Layers.AddRange(ctcStack);
-            _listenerLayers.AddRange(ctcStack);
-            return;
-        }
-
-        // The paper's LAS arm. "Listen": encode, then reduce the time axis pyramidally.
-        var listener = LayerHelper<T>.CreateDefaultConformerLayers(
-            encoderDim: _options.EncoderDim, numLayers: _options.NumEncoderLayers,
-            numAttentionHeads: _options.NumAttentionHeads, numMels: _options.NumMels,
-            vocabSize: _options.EncoderDim, dropoutRate: _options.DropoutRate).ToList();
-        Layers.AddRange(listener);
-        _listenerLayers.AddRange(listener);
-
-        // "Attend and spell": a decoder over the reduced summary.
-        for (int i = 0; i < Math.Max(1, _options.NumDecoderLayers); i++)
-        {
-            var layer = new FullyConnectedLayer<T>(
-                i == 0 ? _options.EncoderDim : _options.DecoderDim, _options.DecoderDim, identity);
-            Layers.Add(layer);
-            _spellerLayers.Add(layer);
-        }
-        var projection = new FullyConnectedLayer<T>(_options.DecoderDim, _options.VocabSize, identity);
-        Layers.Add(projection);
-        _spellerLayers.Add(projection);
-    }
-
-    /// <summary>
-    /// The pyramidal reduction between listener and speller: halve the sequence length, once per
-    /// configured reduction.
-    /// </summary>
-    /// <remarks>
-    /// This is what makes attention tractable over conversation-length audio, and it is what
-    /// distinguishes a LAS "listener" from an ordinary encoder. Adjacent frames are AVERAGED rather
-    /// than concatenated, which halves the length without widening the feature axis - so the
-    /// speller's input width stays the encoder width and the reduction can be applied repeatedly.
-    /// </remarks>
-    internal Tensor<T> PyramidalReduce(Tensor<T> encoded)
-    {
-        if (_options.DecoderType != MedicalAsrDecoderType.ListenAttendSpell) return encoded;
-
-        var current = encoded;
-        for (int r = 0; r < Math.Max(0, _options.PyramidalReductions); r++)
-        {
-            if (current.Rank < 2 || current.Shape[0] < 2) break;
-            int frames = current.Shape[0];
-            int width = current.Length / frames;
-            int reduced = frames / 2;
-            if (reduced < 1) break;
-
-            var next = new Tensor<T>([reduced, width]);
-            for (int t = 0; t < reduced; t++)
-            {
-                for (int w = 0; w < width; w++)
-                {
-                    double a = NumOps.ToDouble(current[(2 * t) * width + w]);
-                    double b = NumOps.ToDouble(current[(2 * t + 1) * width + w]);
-                    next[t * width + w] = NumOps.FromDouble(0.5 * (a + b));
-                }
-            }
-            current = next;
-        }
-        return current;
-    }
-
-    /// <summary>Listener forward: the shared encoder.</summary>
-    internal Tensor<T> ListenForward(Tensor<T> features)
-    {
-        var current = features;
-        foreach (var layer in _listenerLayers) current = layer.Forward(current);
-        return current;
-    }
-
-    /// <summary>Speller forward, over the pyramidally reduced summary.</summary>
-    internal Tensor<T> SpellForward(Tensor<T> reduced)
-    {
-        if (_spellerLayers.Count == 0) return reduced;
-        var current = reduced;
-        for (int i = 0; i < _spellerLayers.Count - 1; i++)
-        {
-            current = Engine.ReLU(_spellerLayers[i].Forward(current));
-        }
-        return _spellerLayers[^1].Forward(current);
-    }
-
-    /// <summary>The full recognition graph for whichever arm is configured.</summary>
-    internal Tensor<T> RecognizeForward(Tensor<T> features)
-    {
-        var encoded = ListenForward(features);
-        return _spellerLayers.Count == 0 ? encoded : SpellForward(PyramidalReduce(encoded));
-    }
     /// <inheritdoc />
-    protected override Tensor<T> PredictCore(Tensor<T> input)
+    public string DetectLanguage(Tensor<T> audio) { ThrowIfDisposed(); return _options.Language; }
+
+    /// <summary>The paper's recognizers are monolingual (English medical conversations): the configured language with
+    /// probability 1.</summary>
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio)
     {
         ThrowIfDisposed();
+        return new Dictionary<string, T> { [_options.Language] = NumOps.One };
+    }
+
+    /// <inheritdoc />
+    public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) =>
+        throw new NotSupportedException("MedicalASR does not support streaming.");
+
+    // Per waveform row: CTC logits [steps, V], or LAS greedy-decoding logits [MaxTextLength, V].
+    private Tensor<T> Logits(Tensor<T> input)
+    {
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
-        return RecognizeForward(input);
-    }
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Overridden so the tape path follows the configured arm. Walking Layers sequentially would run
-    /// the speller straight off the listener and skip the pyramidal reduction between them.
-    /// </remarks>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input) => RecognizeForward(input);
-
-    /// <inheritdoc />
-    /// <remarks>
-    /// Overridden for the same reason: under LAS the listener and speller are separated by a
-    /// reduction that a sequential walk of Layers does not perform.
-    /// </remarks>
-    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
-    {
-        if (_listenerLayers.Count == 0) return base.GetNamedLayerActivations(input);
-
-        var activations = new Dictionary<string, Tensor<T>>();
-        var encoded = ListenForward(input);
-        activations["Listener"] = encoded.Clone();
-        if (_spellerLayers.Count > 0)
+        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+        var rows = Rows(input);
+        var outputs = new Tensor<T>[rows.Length];
+        for (int r = 0; r < rows.Length; r++)
         {
-            var reduced = PyramidalReduce(encoded);
-            activations["PyramidalSummary"] = reduced.Clone();
-            activations["Speller"] = SpellForward(reduced).Clone();
+            var encoded = _network.Encode(_network.Features(rows[r]));
+            outputs[r] = _options.DecoderType == MedicalAsrDecoderType.Ctc ? _network.CtcLogits(encoded) : _network.Greedy(encoded, _options.MaxTextLength).Logits;
         }
-        return activations;
+        return input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
     }
+
+    private Tensor<T>[] Rows(Tensor<T> input)
+    {
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
+        var flat = Engine.Reshape(input, new[] { rows, samples });
+        var result = new Tensor<T>[rows];
+        for (int r = 0; r < rows; r++)
+            result[r] = PreprocessAudio(Engine.Reshape(Engine.TensorSlice(flat, new[] { r, 0 }, new[] { 1, samples }), new[] { samples }));
+        return result;
+    }
+
     /// <inheritdoc />
-    /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
-    /// write on every parameter surface, so the guard is stated once here instead of being
-    /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input); }
+
+    /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input);
+
+    // The transcript a training target names: unit ids [length], or one distribution per row [n, V] read as the most likely
+    // unit per row (for CTC, repeats merged and blanks removed; for LAS, up to the first boundary).
+    private int[] Labels(Tensor<T> target)
+    {
+        int v = _options.VocabSize, width = target.Rank >= 2 ? target.Shape[^1] : 0;
+        if (width == v)
+        {
+            var frames = Engine.Reshape(target, new[] { target.Length / width, width });
+            if (_options.DecoderType == MedicalAsrDecoderType.Ctc) return Audio.Foundations.ConformerAsrNetwork<T>.GreedyCtc(frames).ToArray();
+            var labels = new List<int>();
+            for (int i = 0; i < frames.Shape[0]; i++)
+            {
+                int best = 0;
+                for (int k = 1; k < v; k++) if (NumOps.GreaterThan(frames[i, k], frames[i, best])) best = k;
+                if (best == MedicalAsrNetwork<T>.Boundary) break;
+                labels.Add(best);
+            }
+            return labels.ToArray();
+        }
+        var ids = new int[target.Length];
+        var span = target.Data.Span;
+        for (int i = 0; i < ids.Length; i++)
+        {
+            double value = Math.Round(NumOps.ToDouble(span[i]));
+            if (value <= 0 || value >= v) throw new ArgumentException($"Unit {value} is the blank or boundary, or outside the {v}-unit inventory.", nameof(target));
+            ids[i] = (int)value;
+        }
+        return ids;
+    }
+
+    private (Tensor<T> Waveform, int[] Labels)[] Batch(Tensor<T> input, Tensor<T> target)
+    {
+        var rows = Rows(input);
+        int perRow = target.Length / rows.Length, width = target.Rank >= 2 ? target.Shape[^1] : 0;
+        bool distributions = width == _options.VocabSize;
+        var batch = new (Tensor<T>, int[])[rows.Length];
+        for (int r = 0; r < rows.Length; r++)
+        {
+            var row = rows.Length == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows.Length, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                distributions ? new[] { perRow / width, width } : new[] { perRow });
+            batch[r] = (rows[r], Labels(row));
+        }
+        return batch;
+    }
+
+    /// <summary>One step of the paper's training: CTC, or LAS cross-entropy with scheduled sampling.</summary>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
+    {
+        var network = _network;
+        if (network is null) return false;
+        var batch = Batch(input, target);
+        double sampling = CurrentSamplingProbability;
+        TrainWithCustomLoss(input, _ =>
+        {
+            Tensor<T>? total = null;
+            foreach (var (waveform, labels) in batch)
+            {
+                var loss = network.Loss(network.Features(waveform), labels, sampling, _random);
+                total = total is null ? loss : Engine.TensorAdd(total, loss);
+            }
+            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / batch.Length));
+        }, _optimizer);
+        _trainingSteps++;
+        return true;
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var network = RequireNetwork();
+        using var _ = new NoGradScope<T>();
+        var batch = Batch(input, target);
+        double total = 0;
+        foreach (var (waveform, labels) in batch) total += NumOps.ToDouble(network.Loss(network.Features(waveform), labels)[0]);
+        return NumOps.FromDouble(total / batch.Length);
+    }
+
+    /// <inheritdoc />
     protected override bool SupportsParameterMutation => _useNativeMode;
+
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "MedicalASR-Native" : "MedicalASR-ONNX", Description = "Medical ASR: clinical speech recognition (2024)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
-
-
-    /// <summary>
-    /// Rebinds the listener/speller views into <c>Layers</c> from the current layer instances.
-    /// </summary>
-    /// <remarks>
-    /// Required after deserialization. The base deserializer replaces every entry of <c>Layers</c>
-    /// with a fresh instance, so these views would otherwise still reference the discarded
-    /// constructor-initialized weights — the clone then predicts from untrained layers while
-    /// reporting the trained parameter vector, which is exactly what
-    /// Clone_ShouldProduceIdenticalOutput caught here.
-    /// </remarks>
-    private void RebindSubNetworkViews()
+    /// <inheritdoc />
+    public override ModelMetadata<T> GetModelMetadata() => new()
     {
-        _listenerLayers.Clear();
-        _spellerLayers.Clear();
-        if (!_useNativeMode || Layers.Count == 0) return;
+        Name = _useNativeMode ? "MedicalASR-Native" : "MedicalASR-ONNX",
+        Description = _options.DecoderType == MedicalAsrDecoderType.Ctc
+            ? "LSTM CTC recognizer for medical conversations (Chiu et al. 2018)"
+            : "Bidirectional LSTM Listen-Attend-Spell recognizer for medical conversations (Chiu et al. 2018)",
+        FeatureCount = _options.NumMels,
+        Complexity = _options.NumEncoderLayers,
+        AdditionalInfo = BaseAudioMetadataInfo()
+    };
 
-        if (_options.DecoderType == MedicalAsrDecoderType.Ctc
-            || (Architecture.Layers is not null && Architecture.Layers.Count > 0))
-        {
-            _listenerLayers.AddRange(Layers);
-            return;
-        }
-
-        int spellerCount = Math.Max(1, _options.NumDecoderLayers) + 1;
-        int listenerCount = Layers.Count - spellerCount;
-        if (listenerCount <= 0) { _listenerLayers.AddRange(Layers); return; }
-
-        for (int i = 0; i < listenerCount; i++) _listenerLayers.Add(Layers[i]);
-        for (int i = listenerCount; i < Layers.Count; i++) _spellerLayers.Add(Layers[i]);
+    private void ThrowIfDisposed()
+    {
+        if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MedicalASR<T>));
     }
 
-    private (List<int> tokens, double confidence) CTCGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, List<int> tokens, double confidence) { if (string.IsNullOrWhiteSpace(text) || tokens.Count == 0) return Array.Empty<TranscriptionSegment<T>>(); double timePerToken = duration / tokens.Count; var segments = new List<TranscriptionSegment<T>>(); var sb = new System.Text.StringBuilder(); double segStart = 0; for (int i = 0; i < tokens.Count; i++) { if (tokens[i] > 0 && tokens[i] <= char.MaxValue) sb.Append((char)tokens[i]); if ((tokens[i] == ' ' || i == tokens.Count - 1) && sb.Length > 0) { segments.Add(new TranscriptionSegment<T> { Text = sb.ToString().Trim(), StartTime = segStart, EndTime = (i + 1) * timePerToken, Confidence = NumOps.FromDouble(confidence) }); sb.Clear(); segStart = (i + 1) * timePerToken; } } if (segments.Count == 0) segments.Add(new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) }); return segments; }
-    private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
-    private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MedicalASR<T>)); }
-    protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
+    /// <inheritdoc />
+    protected override void Dispose(bool disposing)
+    {
+        if (_disposed) return;
+        if (disposing) OnnxEncoder?.Dispose();
+        _disposed = true;
+        base.Dispose(disposing);
+    }
 }

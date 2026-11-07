@@ -271,7 +271,8 @@ public abstract class ReinforcementLearningTestBase<T>
         // action-width: ValidateTransitionShape rejects a mis-sized action just as it does a state.
         var target = new Vector<T>(EffectiveActionDim);
         for (int i = 0; i < target.Length; i++) target[i] = ToT(0.5);
-        model.Train(state, target);
+        // An agent the single-transition adapter cannot train (QMIX consumes joint transitions) acts untrained.
+        if (TrainsViaSingleTransitionAdapter) model.Train(state, target);
 
         var action = model.Predict(state);
         Assert.True(action.Length > 0, "RL agent produced empty action.");
@@ -304,7 +305,7 @@ public abstract class ReinforcementLearningTestBase<T>
     /// different action" invariant does not apply by the algorithm's design:
     /// non-contextual k-armed bandits (UCB / ε-greedy / Thompson / gradient —
     /// they pick by arm statistics, not state); tabular DP returning the default
-    /// action for unobserved states (Policy/ModifiedPolicy Iteration, Sutton &
+    /// action for unobserved states (Policy/ModifiedPolicy Iteration, Sutton &amp;
     /// Barto 2018 §4.3); actor-critic policy-gradient methods whose untrained
     /// policy is ~uniform and whose on-policy trajectory update the single-
     /// transition supervised adapter cannot drive (A2C / PPO / TRPO); on-policy
@@ -392,7 +393,7 @@ public abstract class ReinforcementLearningTestBase<T>
     /// learning rule needs an input this harness does not provide. The parameter-change
     /// invariant then does not apply by the algorithm's design. Examples:
     /// multi-agent QMIX (Train consumes a joint observation across all agents, not a
-    /// single agent's state) and TRPO (Sutton & Barto 2018 §13; Schulman et al. 2015 —
+    /// single agent's state) and TRPO (Sutton &amp; Barto 2018 §13; Schulman et al. 2015 —
     /// its KL-constrained trust-region step is computed over whole on-policy trajectories
     /// with advantages, so a stream of isolated terminal transitions yields ~zero update).
     /// </summary>
@@ -1127,7 +1128,7 @@ public abstract class ReinforcementLearningTestBase<T>
         using var model = CreateModel();
         var state = CreateRandomState(rng);
         var target = new Vector<T>(EffectiveActionDim);
-        model.Train(state, target);
+        if (TrainsViaSingleTransitionAdapter) model.Train(state, target);
         Assert.NotNull(model.GetModelMetadata());
     }
 
@@ -1172,7 +1173,7 @@ public abstract class ReinforcementLearningTestBase<T>
             $"disagrees with ParameterCount ({parameterizable.ParameterCount}). Callers pair these " +
             "by length, so a mismatch means a saved parameter vector restores into the wrong slots.");
 
-        model.Train(CreateRandomState(rng), new Vector<T>(EffectiveActionDim));
+        if (TrainsViaSingleTransitionAdapter) model.Train(CreateRandomState(rng), new Vector<T>(EffectiveActionDim));
 
         Assert.True(parameterizable.GetParameters().Length > 0,
             "After training, the agent should expose the parameters it learned.");

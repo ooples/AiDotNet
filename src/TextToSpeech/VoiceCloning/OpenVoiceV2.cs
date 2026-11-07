@@ -43,6 +43,32 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCloner<T>
 {
     private readonly OpenVoiceV2Options _options;
+    private OpenVoiceNative<T>? _native;
+    private ITtsModel<T>? _baseSynthesizer;
+
+    /// <summary>The separate native MeloTTS base voice used by the V2 release.</summary>
+    public ITtsModel<T> BaseSynthesizer
+    {
+        get => _baseSynthesizer ??= new EndToEnd.MeloTTS<T>(Architecture);
+        set => _baseSynthesizer = value ?? throw new ArgumentNullException(nameof(value));
+    }
+
+    /// <summary>Loads the original V2 converter checkpoint, including its reference encoder.</summary>
+    public void LoadConverterCheckpoint(string path)
+    {
+        ThrowIfDisposed();
+        if (_native is null) throw new InvalidOperationException("A native converter is required.");
+        _native.LoadCheckpoint(path);
+    }
+
+    /// <summary>Converts mono 22050 Hz source audio using source and target speaker embeddings.</summary>
+    public Tensor<T> ConvertVoice(Tensor<T> audio, Tensor<T> sourceEmbedding, Tensor<T> targetEmbedding,
+        double tau = .3, Tensor<T>? noise = null)
+    {
+        ThrowIfDisposed();
+        if (_native is null) throw new InvalidOperationException("A native converter is required.");
+        return _native.Convert(audio, sourceEmbedding, targetEmbedding, tau, noise);
+    }
 
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
@@ -84,6 +110,7 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         // Honor the model's paper-derived optimizer options rather than AdamW's generic defaults.
         // The helper also keeps the released no-clipping policy consistent with the MeloTTS path.
         _optimizer = optimizer ?? CreatePaperOptimizer();
+        _usesDefaultOptimizer = optimizer is null;
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
@@ -94,139 +121,58 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
     int ITtsModel<T>.SampleRate => _options.SampleRate;
     public int MaxTextLength => _options.MaxTextLength;
     public new int HiddenDim => _options.HiddenDim;
-    public int NumFlowSteps => 0;
+    public int NumFlowSteps => 4;
 
     /// <summary>
     /// Synthesizes speech from text.
     /// Per MyShell (2024): VITS-based base TTS + enhanced tone color converter for instant cloning.
     /// </summary>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        // Run preprocessed text through learned layers for feature extraction
-        var features = input;
-        foreach (var l in Layers)
-            features = l.Forward(features);
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int mF = textLen * 4;
-        double[] baseMel = new double[mF];
-        double p = 0;
-        for (int f = 0; f < mF; f++)
-        {
-            int t = Math.Min(f * textLen / mF, textLen - 1);
-            baseMel[f] = Math.Tanh(
-                (text[t] % 128) / 128.0 * 0.55 + p * 0.3 + Math.Sin(f * 0.09) * 0.1
-            );
-            p = baseMel[f];
-        }
-        double[] conv = new double[mF];
-        for (int f = 0; f < mF; f++)
-            conv[f] = baseMel[f] * 0.9 + Math.Sin(f * 0.02) * 0.08;
-        int waveLen = mF * _options.HopSize;
-        var waveform = new Tensor<T>([waveLen]);
-        for (int i = 0; i < waveLen; i++)
-        {
-            int fr = Math.Min(i / Math.Max(1, _options.HopSize), mF - 1);
-            waveform[i] = NumOps.FromDouble(conv[fr] * Math.Sin(i * 0.007) * 0.87);
-        }
-        return waveform;
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(PreprocessText(text));
+        var synthesizer = BaseSynthesizer;
+        return OpenVoiceNative<T>.Resample(synthesizer.Synthesize(text), synthesizer.SampleRate);
     }
 
     public double MinReferenceDuration => 3.0;
-    public int SpeakerEmbeddingDim => 256;
+    public int SpeakerEmbeddingDim => _options.SpeakerEmbeddingDim;
 
     public Tensor<T> SynthesizeWithVoice(string text, Tensor<T> referenceAudio)
     {
-        var embedding = ExtractSpeakerEmbedding(referenceAudio);
+        ThrowIfDisposed();
         var baseAudio = Synthesize(text);
-        int embDim = embedding.Length;
-        for (int i = 0; i < baseAudio.Length; i++)
-        {
-            double s = NumOps.ToDouble(baseAudio[i]);
-            int d = i % embDim;
-            double spk = NumOps.ToDouble(embedding[d]);
-            double gain = 1.0 + spk * 0.3;
-            double pitch = spk * 0.1;
-            baseAudio[i] = NumOps.FromDouble(
-                Math.Tanh(s * gain + Math.Sin(i * 0.001 + pitch) * 0.05)
-            );
-        }
-        return baseAudio;
+        return ConvertVoice(baseAudio, ExtractSpeakerEmbedding(baseAudio), ExtractSpeakerEmbedding(referenceAudio));
     }
 
     public Tensor<T> ExtractSpeakerEmbedding(Tensor<T> referenceAudio)
     {
-        int embDim = SpeakerEmbeddingDim;
-        var emb = new Tensor<T>([embDim]);
-        int hopLen = Math.Max(1, _options.HopSize);
-        int numFrames = Math.Max(1, referenceAudio.Length / hopLen);
-        for (int d = 0; d < embDim; d++)
-        {
-            double acc = 0;
-            for (int f = 0; f < numFrames; f++)
-            {
-                int idx = Math.Min(f * hopLen + d % hopLen, referenceAudio.Length - 1);
-                double val = NumOps.ToDouble(referenceAudio[idx]);
-                acc += Math.Tanh(val * Math.Sin((d + 1.0) * (f + 1.0) * 0.001) * 0.5);
-            }
-            emb[d] = NumOps.FromDouble(acc / numFrames);
-        }
-        double norm = 0;
-        for (int d = 0; d < embDim; d++)
-        {
-            double v = NumOps.ToDouble(emb[d]);
-            norm += v * v;
-        }
-        norm = Math.Sqrt(norm);
-        if (norm > 1e-8)
-            for (int d = 0; d < embDim; d++)
-                emb[d] = NumOps.FromDouble(NumOps.ToDouble(emb[d]) / norm);
-        return emb;
-    }
-
-    protected override Tensor<T> PreprocessText(string text)
-    {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
+        ThrowIfDisposed();
+        if (_native is null) throw new InvalidOperationException("A native reference encoder is required.");
+        return _native.Embedding(referenceAudio);
     }
 
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            // OpenVoice V2 is VITS-based: a 1-D conv encoder + invertible normalizing flow + HiFi-GAN
-            // decoder (Qin et al. 2023, §Approach), NOT a transformer stack. See
-            // LayerHelper.CreateDefaultOpenVoiceV2Layers. specChannels matches the model's MelChannels.
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultOpenVoiceV2Layers(
-                    specChannels: base.MelChannels,
-                    hiddenDim: _options.DecoderDim,
-                    numFlowBlocks: _options.NumEncoderLayers
-                )
-            );
+        if (!_useNativeMode) return;
+        if (_options.SampleRate != 22050 || _options.HopSize != 256)
+            throw new ArgumentException("The released OpenVoice converter uses 22050 Hz audio and hop size 256.");
+        _native = new OpenVoiceNative<T>(Engine, _options.FftSize, _options.HopSize,
+            _options.HiddenDim, _options.DecoderDim, _options.SpeakerEmbeddingDim, true);
+        Layers.AddRange(_native.Layers);
+        if (_options.Training.IncludeTrainingComponents) EnsurePaperTraining();
     }
+
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (_native is null) throw new InvalidOperationException("A native converter is required.");
+        var speaker = _native.Embedding(input);
+        return _native.Convert(input, speaker, speaker, tau: 0);
     }
 
     /// <inheritdoc />

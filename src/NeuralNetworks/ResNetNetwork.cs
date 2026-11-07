@@ -77,7 +77,6 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <summary>
     /// The loss function used to calculate the error between predicted and expected outputs.
     /// </summary>
-    private readonly ILossFunction<T> _lossFunction;
 
     /// <summary>
     /// The optimization algorithm used to update the network's parameters during training.
@@ -174,7 +173,6 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         _optimizer = optimizer
             ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
-        _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossForGeneratedLogitsHead(architecture);
 
         InitializeLayers();
     }
@@ -243,18 +241,23 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         return new ResNetNetwork<T>(architecture, config);
     }
 
+    /// <summary>The convolutional trunk, shared with the detection backbone.</summary>
+    internal ResNetTrunk<T> Trunk => _trunk ?? throw new InvalidOperationException("The network is not initialized.");
+
+    /// <summary>The fully connected classifier over the pooled C5 features, when the configuration includes one.</summary>
+    internal DenseLayer<T>? Classifier { get; private set; }
+
+    private ResNetTrunk<T>? _trunk;
+
     /// <summary>
-    /// Initializes the layers of the ResNet network based on the configuration.
+    /// Builds the network: the shared ResNet trunk (stem, then the four stages conv2_x to conv5_x), global average
+    /// pooling, and the fully connected classifier, initialized as torchvision initializes them.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// This method either uses custom layers provided in the architecture or creates
-    /// the standard ResNet layers based on the configuration.
-    /// </para>
-    /// <para>
     /// <b>For Beginners:</b> This method builds the ResNet network layer by layer:
     /// <list type="number">
-    /// <item>Initial 7x7 convolution with stride 2</item>
+    /// <item>Initial 7x7 convolution with stride 2, BatchNorm and ReLU</item>
     /// <item>Max pooling 3x3 with stride 2</item>
     /// <item>Four stages of residual blocks (conv2_x through conv5_x)</item>
     /// <item>Global average pooling</item>
@@ -264,127 +267,53 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// </remarks>
     protected sealed override void InitializeLayers()
     {
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        {
-            // Use the layers provided by the user
-            Layers.AddRange(Architecture.Layers);
-            ValidateCustomLayers(Layers);
-        }
-        else
-        {
-            // Use ResNet-specific layer configuration
-            Layers.AddRange(CreateResNetLayers());
-        }
-    }
-
-    /// <summary>
-    /// Creates the ResNet layers based on the configuration.
-    /// </summary>
-    private IEnumerable<ILayer<T>> CreateResNetLayers()
-    {
-        var layers = new List<ILayer<T>>();
+        if (Architecture.Layers is { Count: > 0 })
+            throw new NotSupportedException(
+                $"{nameof(ResNetNetwork<T>)} builds the paper's network from its {nameof(ResNetConfiguration)}; custom layers are not supported.");
         var config = _configuration;
-
-        // currentHeight/Width/Channels tracking removed — lazy layers
-        // (#1209) infer all spatial + channel dims from input.Shape on
-        // first Forward, so the running tally was never read after the
-        // 5-line drop in #1209's earlier pass. Re-add it only if a
-        // future stage genuinely needs to size something at construction
-        // time (which lazy ctors deliberately removed the need for).
-
-        // Stage 0: Initial convolution (conv1)
-        // 7x7 conv, 64, stride 2
-        layers.Add(new ConvolutionalLayer<T>(
-            outputDepth: 64,
-            kernelSize: 7,
-            stride: 2,
-            padding: 3,
-            activationFunction: new ActivationFunctions.IdentityActivation<T>()));
-
-        // Batch normalization after conv1
-        layers.Add(new BatchNormalizationLayer<T>());
-
-        // ReLU activation
-        layers.Add(new ActivationLayer<T>(
-            activationFunction: new ActivationFunctions.ReLUActivation<T>()));
-
-        // Max pooling: 3x3 pool, stride 2
-        layers.Add(new MaxPoolingLayer<T>(
-            poolSize: 3,
-            stride: 2));
-
-        // Get block configuration for this variant
-        int[] blockCounts = config.BlockCounts;
-        int[] baseChannels = config.BaseChannels;
-        int expansion = config.Expansion;
-
-        // Stage 1-4: Residual blocks. BasicBlock / BottleneckBlock are lazy
-        // on input channels (#1209) — they read in-channel count from the
-        // forward tensor. The local `inChannels` running tally is no longer
-        // needed since the lazy ctors don't accept an inChannels arg.
-        for (int stageIdx = 0; stageIdx < 4; stageIdx++)
-        {
-            int stageBaseChannels = baseChannels[stageIdx];
-            int numBlocks = blockCounts[stageIdx];
-            int stride = stageIdx == 0 ? 1 : 2; // First stage has stride 1, others have stride 2
-
-            // First block of stage may downsample
-            if (config.UsesBottleneck)
-            {
-                layers.Add(new BottleneckBlock<T>(
-                    baseChannels: stageBaseChannels,
-                    stride: stride,
-                    zeroInitResidual: config.ZeroInitResidual));
-            }
-            else
-            {
-                layers.Add(new BasicBlock<T>(
-                    outChannels: stageBaseChannels * expansion,
-                    stride: stride,
-                    zeroInitResidual: config.ZeroInitResidual));
-            }
-
-            // Remaining blocks in stage (stride 1, no channel change)
-            for (int blockIdx = 1; blockIdx < numBlocks; blockIdx++)
-            {
-                if (config.UsesBottleneck)
-                {
-                    layers.Add(new BottleneckBlock<T>(
-                    baseChannels: stageBaseChannels,
-                    stride: 1,
-                    zeroInitResidual: config.ZeroInitResidual));
-                }
-                else
-                {
-                    layers.Add(new BasicBlock<T>(
-                    outChannels: stageBaseChannels * expansion,
-                    stride: 1,
-                    zeroInitResidual: config.ZeroInitResidual));
-                }
-            }
-        }
-
-        // Global average pooling
-        int finalChannels = baseChannels[3] * expansion; // 512 for BasicBlock, 2048 for Bottleneck
-        layers.Add(AdaptiveAveragePoolingLayer<T>.GlobalPool());
-
-        // Flatten for FC layer
-        layers.Add(new FlattenLayer<T>());
-
-        // Fully connected classifier
-        // The head emits raw logits, as torchvision's ResNet does: the default loss is the with-logits form
-        // (NeuralNetworkHelper.GetDefaultLogitsLossFunction), which applies the softmax or sigmoid itself. A softmax
-        // here under a with-logits loss applied it twice, and training barely moved.
+        var layers = new List<LayerBase<T>>();
+        _trunk = new ResNetTrunk<T>(Engine, layers, config.Trunk);
+        var random = Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.Seed ?? 42);
+        _trunk.InitializeLikeReference(random);
         if (config.IncludeClassifier)
         {
-            layers.Add(new DenseLayer<T>(
-                outputSize: config.NumClasses,
-                activationFunction: new ActivationFunctions.IdentityActivation<T>()));
+            Classifier = new DenseLayer<T>(config.NumClasses, activationFunction: new ActivationFunctions.IdentityActivation<T>());
+            layers.Add(Classifier);
+            // nn.Linear's default: U(±1/√in) for the weight and the bias.
+            int inputs = config.Trunk.OutputChannels[3];
+            double bound = 1.0 / Math.Sqrt(inputs);
+            var w = new double[config.NumClasses * inputs];
+            var b = new double[config.NumClasses];
+            for (int i = 0; i < w.Length; i++) w[i] = (2 * random.NextDouble() - 1) * bound;
+            for (int i = 0; i < b.Length; i++) b[i] = (2 * random.NextDouble() - 1) * bound;
+            TextToSpeech.CodecBased.TorchParameters.Linear(Engine, Classifier, inputs, config.NumClasses, w, b);
         }
-
-        return layers;
+        Layers.AddRange(layers);
     }
 
+    /// <summary>Loads a torchvision ResNet state dict (the trunk, then <c>fc.weight</c> and <c>fc.bias</c>).</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    {
+        Trunk.LoadTorchWeights(read);
+        if (Classifier is null) return;
+        int inputs = _configuration.Trunk.OutputChannels[3], classes = _configuration.NumClasses;
+        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, Classifier, inputs, classes,
+            read("fc.weight", new[] { classes, inputs }), read("fc.bias", new[] { classes }));
+    }
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
+
+    /// <inheritdoc />
+    /// <remarks>Every layer is sized and initialized at construction (each convolution knows its input channels), and
+    /// <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain: a projection shortcut reads its block's input, not the
+    /// layer before it. Walking the list as a chain would give those convolutions the wrong input depth.</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
+
+    /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
     /// <summary>
     /// Performs a forward pass through the ResNet network with the given input tensor.
     /// </summary>
@@ -407,8 +336,6 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// </remarks>
     public Tensor<T> Forward(Tensor<T> input)
     {
-
-
         var expectedShape = Architecture.GetInputShape();
 
         // Validate input shape - accept both 3D [C,H,W] and 4D [B,C,H,W]
@@ -443,11 +370,10 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
                 $"Shape mismatch in ResNetNetwork during forward pass: Expected 3D [C,H,W] or 4D [B,C,H,W] input, but got rank {input.Rank}.");
         }
 
-        Tensor<T> output = processedInput;
-        foreach (var layer in Layers)
-        {
-            output = layer.Forward(output);
-        }
+        // The C5 map, globally average-pooled to [B, C], then the classifier.
+        var c5 = Trunk.Forward(processedInput)[3];
+        var output = Engine.ReduceMean(c5, new[] { 2, 3 }, false);
+        if (Classifier is not null) output = Classifier.Forward(output);
 
         // Remove batch dimension if we added it
         if (addedBatch && output.Rank == 2 && output.Shape[0] == 1)
@@ -470,7 +396,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// Routes inference through <see cref="NeuralNetworkBase{T}.PredictCompiled"/> so the
     /// forward pass gets traced and replayed by <c>CompiledModelHost</c> after warmup —
     /// matching PyTorch's <c>torch.compile</c> default. The eager forward is
-    /// <see cref="Forward"/>, which retains the GPU-resident optimization path.
+    /// <see cref="Forward"/>.
     /// </summary>
     protected override Tensor<T> PredictEager(Tensor<T> input) => Forward(input);
 
@@ -503,22 +429,6 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         var (batchedInput, batchedTarget) = EnsureBatchForCnnTraining(input, target);
         return (batchedInput, batchedTarget);
     }
-    /// <summary>
-    /// Applies parameter updates using the optimizer.
-    /// </summary>
-    private void ApplyParameterUpdates()
-    {
-        _optimizer.UpdateParameters(Layers);
-    }
-
-    /// <summary>
-    /// Calculates the gradient of the loss with respect to the network's output.
-    /// </summary>
-    private Vector<T> CalculateOutputGradient(Tensor<T> prediction, Tensor<T> expectedOutput)
-    {
-        return _lossFunction.ComputeGradient(prediction.ToVector(), expectedOutput.ToVector());
-    }
-
     /// <summary>
     /// Gets the total number of trainable parameters in the network.
     /// </summary>

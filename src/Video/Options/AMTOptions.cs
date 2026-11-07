@@ -1,30 +1,21 @@
-using AiDotNet.Enums;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.Video.Options;
 
 /// <summary>
-/// Configuration options for the AMT all-pairs multi-field transforms model.
+/// Configuration options for <see cref="AiDotNet.Video.FrameInterpolation.AMT{T}"/>, all-pairs multi-field transforms
+/// for frame interpolation (Li et al., CVPR 2023).
 /// </summary>
 /// <remarks>
 /// <para>
-/// AMT (Li et al., CVPR 2023) uses correlation-based all-pairs transforms:
-/// - All-pairs correlation: computes dense 4D cost volume between every pixel pair across
-///   two frames at multiple scales, providing exhaustive motion correspondence information
-/// - Multi-field transforms: instead of a single flow field, predicts multiple (K) candidate
-///   flow fields per pixel, each capturing a plausible motion hypothesis, which are then
-///   merged via learned soft selection weights
-/// - Iterative refinement: coarse-to-fine correlation lookup with GRU-based iterative
-///   updates that progressively refine the multi-field estimates
-/// - Efficient correlation: uses separable 1D correlation (H then W) instead of full 2D
-///   correlation to reduce the quartic cost to quadratic
+/// The defaults are AMT-S, the release's default configuration (MCG-NKU/AMT, networks/AMT-S.py, cfgs/AMT-S.yaml);
+/// <see cref="AmtL"/> returns AMT-L's. Training follows trainers/base_trainer.py.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> AMT tries every possible match between pixels in two frames
-/// (all-pairs). For each pixel, instead of guessing a single motion direction, it proposes
-/// several candidates and lets the network pick the best one. This handles tricky cases
-/// like objects moving in front of each other or disappearing behind things.
+/// <b>For Beginners:</b> AMT compares every pixel of one frame with every pixel of the other to find where things
+/// moved, predicts several candidate motions per pixel, and blends the frames moved along each into the in-between
+/// frame.
 /// </para>
 /// </remarks>
 public class AMTOptions : NeuralNetworkOptions
@@ -46,39 +37,112 @@ public class AMTOptions : NeuralNetworkOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        Variant = other.Variant;
-        NumFeatures = other.NumFeatures;
+        Seed = other.Seed;
+        Channels = (int[])other.Channels.Clone();
+        SkipChannels = other.SkipChannels;
         NumFlowFields = other.NumFlowFields;
-        NumRefinementIters = other.NumRefinementIters;
         NumCorrelationLevels = other.NumCorrelationLevels;
         CorrelationRadius = other.CorrelationRadius;
+        FeatureEncoderWidths = (int[])other.FeatureEncoderWidths.Clone();
+        FeatureDim = other.FeatureDim;
+        LargeEncoders = other.LargeEncoders;
+        UpdateHiddenDim = other.UpdateHiddenDim;
+        UpdateFlowDim = other.UpdateFlowDim;
+        UpdateCorrelationDim = other.UpdateCorrelationDim;
+        UpdateSecondCorrelationDim = other.UpdateSecondCorrelationDim;
+        UpdateFusionDim = other.UpdateFusionDim;
+        CombineKernelSize = other.CombineKernelSize;
+        LearningRate = other.LearningRate;
+        MinLearningRate = other.MinLearningRate;
+        TotalIterations = other.TotalIterations;
+        WeightDecay = other.WeightDecay;
+        TernaryWeight = other.TernaryWeight;
         ModelPath = other.ModelPath;
         OnnxOptions = other.OnnxOptions;
-        LearningRate = other.LearningRate;
-        DropoutRate = other.DropoutRate;
     }
+
+    /// <summary>AMT-L (networks/AMT-L.py, cfgs/AMT-L.yaml): wider, five flow fields, residual encoders.</summary>
+    public static AMTOptions AmtL() => new()
+    {
+        Channels = new[] { 48, 64, 72, 128 },
+        SkipChannels = 48,
+        NumFlowFields = 5,
+        FeatureEncoderWidths = new[] { 64, 72, 128 },
+        FeatureDim = 128,
+        LargeEncoders = true,
+        UpdateHiddenDim = 128,
+        UpdateFlowDim = 48,
+        UpdateCorrelationDim = 256,
+        UpdateSecondCorrelationDim = 160,
+        UpdateFusionDim = 124,
+        CombineKernelSize = 7,
+    };
 
     #region Architecture
 
-    /// <summary>Gets or sets the model variant.</summary>
-    public VideoModelVariant Variant { get; set; } = VideoModelVariant.Base;
+    /// <summary>Gets or sets the context encoder's four widths, 1/2 to 1/16 size (20, 32, 44, 56).</summary>
+    public int[] Channels { get; set; } = { 20, 32, 44, 56 };
 
-    /// <summary>Gets or sets the number of feature channels.</summary>
-    public int NumFeatures { get; set; } = 64;
+    /// <summary>Gets or sets the ResBlocks' side channels (20).</summary>
+    public int SkipChannels { get; set; } = 20;
 
-    /// <summary>Gets or sets the number of candidate flow fields per pixel.</summary>
-    /// <remarks>The paper uses K=5 candidate fields in the base model.</remarks>
-    public int NumFlowFields { get; set; } = 5;
+    /// <summary>Gets or sets the number of flow fields per pixel at full size (3).</summary>
+    public int NumFlowFields { get; set; } = 3;
 
-    /// <summary>Gets or sets the number of GRU refinement iterations.</summary>
-    /// <remarks>More iterations improve accuracy at the cost of compute. Paper uses 6.</remarks>
-    public int NumRefinementIters { get; set; } = 6;
-
-    /// <summary>Gets or sets the number of correlation pyramid levels.</summary>
+    /// <summary>Gets or sets the correlation pyramid's levels (4).</summary>
     public int NumCorrelationLevels { get; set; } = 4;
 
-    /// <summary>Gets or sets the correlation search radius at each level.</summary>
-    public int CorrelationRadius { get; set; } = 4;
+    /// <summary>Gets or sets the correlation lookup radius (3).</summary>
+    public int CorrelationRadius { get; set; } = 3;
+
+    /// <summary>Gets or sets the correlation feature encoder's three widths (32, 64, 96).</summary>
+    public int[] FeatureEncoderWidths { get; set; } = { 32, 64, 96 };
+
+    /// <summary>Gets or sets the correlation features' width (84).</summary>
+    public int FeatureDim { get; set; } = 84;
+
+    /// <summary>
+    /// Gets or sets whether the encoders are AMT-L's: residual (not bottleneck) feature-encoder blocks and a 7x7 first
+    /// context convolution (false).
+    /// </summary>
+    public bool LargeEncoders { get; set; }
+
+    /// <summary>Gets or sets the update blocks' hidden width (76).</summary>
+    public int UpdateHiddenDim { get; set; } = 76;
+
+    /// <summary>Gets or sets the update blocks' flow-feature width (20).</summary>
+    public int UpdateFlowDim { get; set; } = 20;
+
+    /// <summary>Gets or sets the update blocks' correlation-feature width (64).</summary>
+    public int UpdateCorrelationDim { get; set; } = 64;
+
+    /// <summary>Gets or sets the width of the second correlation convolution, 0 for none (AMT-S's SmallUpdateBlock).</summary>
+    public int UpdateSecondCorrelationDim { get; set; }
+
+    /// <summary>Gets or sets the update blocks' fused motion-feature width (68).</summary>
+    public int UpdateFusionDim { get; set; } = 68;
+
+    /// <summary>Gets or sets the kernel of the flow-combination convolutions (3).</summary>
+    public int CombineKernelSize { get; set; } = 3;
+
+    #endregion
+
+    #region Training
+
+    /// <summary>Gets or sets AdamW's initial learning rate (2e-4).</summary>
+    public double LearningRate { get; set; } = 2e-4;
+
+    /// <summary>Gets or sets the rate the cosine schedule ends at (2e-5).</summary>
+    public double MinLearningRate { get; set; } = 2e-5;
+
+    /// <summary>Gets or sets the cosine schedule's length: 300 epochs of Vimeo90K's 51,312 triplets at batch 24.</summary>
+    public int TotalIterations { get; set; } = 641400;
+
+    /// <summary>Gets or sets AdamW's weight decay (0).</summary>
+    public double WeightDecay { get; set; }
+
+    /// <summary>Gets or sets the ternary (census) loss's weight against the Charbonnier term (1).</summary>
+    public double TernaryWeight { get; set; } = 1.0;
 
     #endregion
 
@@ -89,16 +153,6 @@ public class AMTOptions : NeuralNetworkOptions
 
     /// <summary>Gets or sets the ONNX runtime options.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-
-    #endregion
-
-    #region Training
-
-    /// <summary>Gets or sets the learning rate.</summary>
-    public double LearningRate { get; set; } = 2e-4;
-
-    /// <summary>Gets or sets the dropout rate.</summary>
-    public double DropoutRate { get; set; } = 0.0;
 
     #endregion
 }

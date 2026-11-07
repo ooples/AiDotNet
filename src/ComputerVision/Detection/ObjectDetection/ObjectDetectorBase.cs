@@ -242,6 +242,21 @@ public abstract partial class ObjectDetectorBase<T> : VisionTaskModelBase<T>
     protected abstract List<Tensor<T>> Forward(Tensor<T> input);
 
     /// <summary>
+    /// The indices of <see cref="Forward"/> outputs that are data rather than predictions, such as the
+    /// boxes a two-stage detector's head received. <see cref="Predict"/> carries them for post-processing,
+    /// but no gradient reaches them, so the raw training step takes them out of its loss. Empty by default.
+    /// </summary>
+    protected virtual IReadOnlyCollection<int> DataOutputIndices => Array.Empty<int>();
+
+    /// <summary>The concatenated outputs of <see cref="Predict"/>, with <see cref="DataOutputIndices"/> out of the loss.</summary>
+    protected override Tensor<T> TrainingForward(Tensor<T> input)
+    {
+        if (DataOutputIndices.Count == 0) return Predict(input);
+        NoteResolvedInput(input);
+        return CvTensorOps<T>.ConcatenateTrainableOutputs(Forward(input), DataOutputIndices, RawStepTarget);
+    }
+
+    /// <summary>
     /// Post-processes raw network outputs into detections.
     /// </summary>
     /// <param name="outputs">Raw network outputs.</param>

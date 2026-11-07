@@ -25,13 +25,14 @@ internal static class SyntheticTextImages
     /// Draws <paramref name="text"/> into image <paramref name="batchIndex"/> of <paramref name="image"/> with
     /// its top-left at (<paramref name="left"/>, <paramref name="top"/>). Each font pixel becomes a
     /// <paramref name="scale"/> x <paramref name="scale"/> block, and glyphs sit on a pitch of six font pixels.
-    /// Every channel is set to one.
+    /// Every channel is set to <paramref name="intensity"/>: 1 for models that take images in [0, 1], 255 for the text
+    /// detectors, whose pixel domain is [0, 255] (they divide by 255 in preprocessing).
     /// </summary>
     /// <returns>The word's box, from the first glyph's top-left to the last glyph's bottom-right.</returns>
     public static (double Left, double Top, double Right, double Bottom) Draw<T>(Tensor<T> image, int batchIndex,
-        string text, int left, int top, int scale)
+        string text, int left, int top, int scale, double intensity = 1.0)
     {
-        var one = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().One;
+        var one = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().FromDouble(intensity);
         int pitch = (GlyphWidth + 1) * scale;
         for (int glyph = 0; glyph < text.Length; glyph++)
         {

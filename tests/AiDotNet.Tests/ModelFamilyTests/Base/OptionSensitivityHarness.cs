@@ -69,13 +69,19 @@ public sealed class OptionSensitivityProbe<TModel> where TModel : class
     /// instance after its constructor (a graph model's synthetic adjacency) is not part of the clone plan, so the
     /// rebuild would otherwise drop it.
     /// </param>
+    /// <param name="parameterCount">Optional parameter count measured before fitting/loading fixture assets.</param>
+    /// <param name="parameterShapes">Optional ordered parameter tensor shapes before loading fixture assets.</param>
+    /// <param name="controlGroup">Configuration context used to keep prepared control measurements separate.</param>
     public OptionSensitivityProbe(
         Func<TModel> create,
         Func<TModel, long> observe,
         Action<TModel>? train,
         Action<ModelOptions>? prepareOptions = null,
         Func<TModel, IReadOnlyList<KeyValuePair<string, long>>>? describe = null,
-        Action<TModel>? prepareModel = null)
+        Action<TModel>? prepareModel = null,
+        Func<TModel, long>? parameterCount = null,
+        Func<TModel, IReadOnlyList<int[]>>? parameterShapes = null,
+        string? controlGroup = null)
     {
         Create = create ?? throw new ArgumentNullException(nameof(create));
         Observe = observe ?? throw new ArgumentNullException(nameof(observe));
@@ -83,6 +89,9 @@ public sealed class OptionSensitivityProbe<TModel> where TModel : class
         PrepareOptions = prepareOptions;
         Describe = describe;
         PrepareModel = prepareModel;
+        ParameterCount = parameterCount;
+        ParameterShapes = parameterShapes;
+        ControlGroup = controlGroup ?? string.Empty;
     }
 
     /// <summary>The fixture's factory.</summary>
@@ -102,6 +111,18 @@ public sealed class OptionSensitivityProbe<TModel> where TModel : class
 
     /// <summary>The fixture's post-construction wiring, re-applied to each rebuilt model.</summary>
     public Action<TModel>? PrepareModel { get; }
+
+    /// <summary>Parameter count before the fixture loads fitted assets, or null for families without parameters.</summary>
+    public Func<TModel, long>? ParameterCount { get; }
+
+    /// <summary>Ordered parameter tensor shapes before the fixture loads fitted assets.</summary>
+    public Func<TModel, IReadOnlyList<int[]>>? ParameterShapes { get; }
+
+    /// <summary>The prepared configuration context of the cached control.</summary>
+    public string ControlGroup { get; }
+
+
+
 }
 
 /// <summary>The result of measuring one option on one model.</summary>
@@ -167,7 +188,7 @@ public static class OptionSensitivityHarness
     /// <summary>The most enum values one option is perturbed to; matches the largest numeric candidate set.</summary>
     internal const int MaxEnumCandidates = 6;
 
-    private static readonly ConcurrentDictionary<Type, Lazy<ControlFingerprint>> s_controls = new();
+    private static readonly ConcurrentDictionary<(Type Fixture, string Group), Lazy<ControlFingerprint>> s_controls = new();
 
     /// <summary>
     /// Measures <paramref name="option"/> on the fixture's model and enforces the verdict against the
@@ -261,7 +282,9 @@ public static class OptionSensitivityHarness
 
             declaredOptions = declared;
             property = FindWritableProperty(held.GetType(), option);
-            fixtureValue = property?.GetValue(held);
+            var prepared = (ModelOptions)CloneEngine.CopyConfiguration(held);
+            probe.PrepareOptions?.Invoke(prepared);
+            fixtureValue = property?.GetValue(prepared);
         }
         finally
         {
@@ -274,7 +297,7 @@ public static class OptionSensitivityHarness
                 $"{declaredOptions.Name} has no public writable property '{option}'.");
         }
 
-        var control = s_controls.GetOrAdd(fixtureType,
+        var control = s_controls.GetOrAdd((fixtureType, probe.ControlGroup),
             _ => new Lazy<ControlFingerprint>(() => MeasureControl(probe, declaredOptions))).Value;
         if (control.Failure is not null)
         {
@@ -285,7 +308,7 @@ public static class OptionSensitivityHarness
         var rejected = new List<string>();
         var notHeld = new List<string>();
         var measured = new List<string>();
-        foreach (var candidate in Perturbations(property.PropertyType, fixtureValue))
+        foreach (var candidate in Perturbations(property.PropertyType, fixtureValue, option))
         {
             TModel? perturbed;
             // What the options property reads back after the set: a setter may clamp or normalise the candidate.
@@ -296,7 +319,18 @@ public static class OptionSensitivityHarness
                 {
                     property.SetValue(options, candidate);
                     applied = property.GetValue(options);
-                });
+                }, expectedParameterCount: control.ParameterCount,
+                    expectedParameterShapesFingerprint: control.ParameterShapesFingerprint);
+            }
+            catch (ParameterCountChangedException change)
+            {
+                return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Sensitive,
+                    $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} changes the parameter count from {change.Previous} to {change.Current} before fixture fitting or execution.");
+            }
+            catch (ParameterShapesChangedException)
+            {
+                return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Sensitive,
+                    $"{option} {Describe(fixtureValue)} -> {Describe(candidate)} changes the ordered parameter tensor shapes before fixture fitting or execution.");
             }
             catch (Exception ex) when (IsConstructionRejection(ex))
             {
@@ -341,7 +375,8 @@ public static class OptionSensitivityHarness
                 {
                     return new OptionSensitivityReport(modelKey, option, OptionSensitivityOutcome.Sensitive,
                         $"with {option} = {Describe(candidate)} the model rejects the fixture input "
-                        + $"({Unwrap(ex).GetType().Name}), so the option changes its input contract.");
+                        + $"({Unwrap(ex).GetType().Name}), so the option changes its "
+                        + (Unwrap(ex) is AiDotNet.TextToSpeech.Latest.KaniSpeechSpanException ? "generated speech contract." : "input contract."));
                 }
 
                 if (untrained != control.Untrained)
@@ -457,6 +492,8 @@ public static class OptionSensitivityHarness
 
     private sealed class ControlFingerprint
     {
+        public long? ParameterCount { get; set; }
+        public long? ParameterShapesFingerprint { get; set; }
         public long Untrained { get; set; }
         public long? Trained { get; set; }
         public string? Failure { get; set; }
@@ -468,80 +505,110 @@ public static class OptionSensitivityHarness
     private static ControlFingerprint MeasureControl<TModel>(OptionSensitivityProbe<TModel> probe, Type declaredOptions)
         where TModel : class
     {
+        var first = MeasureControlBuild(probe, declaredOptions, classifyConstruction: true, train: true);
+        if (first.Failure is not null) return first;
+        var second = MeasureControlBuild(probe, declaredOptions, classifyConstruction: false,
+            train: first.TrainingFailure is null);
+        if (first.Untrained != second.Untrained || first.ParameterCount != second.ParameterCount
+            || first.ParameterShapesFingerprint != second.ParameterShapesFingerprint)
+        {
+            first.Failure = "Two identical, identically seeded builds already differ before training, so no difference can be attributed to an option."
+                + DescribeControlReplay(probe, declaredOptions, train: false);
+            first.FailureOutcome = OptionSensitivityOutcome.NonDeterministic;
+        }
+        else if (first.TrainingFailure is null && second.TrainingFailure is not null)
+        {
+            first.TrainingFailure = second.TrainingFailure;
+            first.Trained = null;
+        }
+        else if (first.TrainingFailure is null && first.Trained != second.Trained)
+        {
+            first.Failure = "Two identical, identically seeded builds diverge during the fixed training steps, so a training-time difference cannot be attributed to an option."
+                + DescribeControlReplay(probe, declaredOptions, train: true);
+            first.FailureOutcome = OptionSensitivityOutcome.NonDeterministic;
+        }
+        return first;
+    }
+
+    // Return scalars only so a complete model and its optimizer state can be collected before
+    // constructing the next independent control. Both controls still execute every observation.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static ControlFingerprint MeasureControlBuild<TModel>(OptionSensitivityProbe<TModel> probe,
+        Type declaredOptions, bool classifyConstruction, bool train) where TModel : class
+    {
         var result = new ControlFingerprint();
-        TModel first;
-        TModel second;
+        TModel model;
         try
         {
-            first = Rebuild(probe, declaredOptions, mutate: null);
+            model = Rebuild(probe, declaredOptions, mutate: null,
+                recordParameterCount: count => result.ParameterCount = count,
+                recordParameterShapesFingerprint: hash => result.ParameterShapesFingerprint = hash);
         }
-        catch (Exception ex) when (IsConstructionRejection(ex))
+        catch (Exception ex) when (classifyConstruction && IsConstructionRejection(ex))
         {
             result.Failure = $"The unperturbed model could not be rebuilt through its clone plan ({Unwrap(ex).GetType().Name}: "
                 + $"{Unwrap(ex).Message}), so no perturbed copy can reach it either.";
             result.FailureOutcome = OptionSensitivityOutcome.OptionsNotRouted;
             return result;
         }
-
         try
         {
-            second = Rebuild(probe, declaredOptions, mutate: null);
-        }
-        catch
-        {
-            (first as IDisposable)?.Dispose();
-            throw;
-        }
-
-        try
-        {
-            long a = Seeded(() => probe.Observe(first));
-            long b = Seeded(() => probe.Observe(second));
-            if (a != b)
-            {
-                result.Failure = "Two identical, identically seeded builds already differ before training, so no difference can be "
-                    + "attributed to an option." + DescribeDifference(probe, first, second);
-                result.FailureOutcome = OptionSensitivityOutcome.NonDeterministic;
-                return result;
-            }
-
-            result.Untrained = a;
-            if (probe.Train is null) return result;
-
+            result.Untrained = Seeded(() => probe.Observe(model));
+            if (!train || probe.Train is null) return result;
             try
             {
-                Seeded(() => probe.Train(first));
-                Seeded(() => probe.Train(second));
+                Seeded(() => probe.Train(model));
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // The fixture's model cannot take the generic training step; only the untrained
-                // comparison is available, and an option equal there is reported as insensitive with
-                // that limitation -- and the exception that imposed it -- stated.
                 result.TrainingFailure = $"{Unwrap(ex).GetType().Name}: {Unwrap(ex).Message}";
                 return result;
             }
-
-            long trainedA = Seeded(() => probe.Observe(first));
-            long trainedB = Seeded(() => probe.Observe(second));
-            if (trainedA != trainedB)
-            {
-                result.Failure = "Two identical, identically seeded builds diverge during the fixed training steps, so a "
-                    + "training-time difference cannot be attributed to an option." + DescribeDifference(probe, first, second);
-                result.FailureOutcome = OptionSensitivityOutcome.NonDeterministic;
-                return result;
-            }
-
-            result.Trained = trainedA;
+            result.Trained = Seeded(() => probe.Observe(model));
             return result;
         }
         finally
         {
-            (first as IDisposable)?.Dispose();
-            (second as IDisposable)?.Dispose();
+            (model as IDisposable)?.Dispose();
         }
     }
 
+    private static string DescribeControlReplay<TModel>(OptionSensitivityProbe<TModel> probe,
+        Type declaredOptions, bool train) where TModel : class
+    {
+        if (probe.Describe is null) return string.Empty;
+        try
+        {
+            var a = DescribeControlBuild(probe, declaredOptions, train);
+            var b = DescribeControlBuild(probe, declaredOptions, train);
+            return " Diagnostic replay:" + DescribeDifference(a, b);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return string.Empty;
+        }
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static IReadOnlyList<KeyValuePair<string, long>> DescribeControlBuild<TModel>(
+        OptionSensitivityProbe<TModel> probe, Type declaredOptions, bool train) where TModel : class
+    {
+        var model = Rebuild(probe, declaredOptions, mutate: null);
+        try
+        {
+            Seeded(() => probe.Observe(model));
+            if (train && probe.Train is not null)
+            {
+                Seeded(() => probe.Train(model));
+                Seeded(() => probe.Observe(model));
+            }
+            return probe.Describe!(model).ToArray();
+        }
+        finally
+        {
+            (model as IDisposable)?.Dispose();
+        }
+    }
     /// <summary>
     /// Names the parts of the observation on which two builds disagree (at most five), or an empty string when the
     /// probe has no breakdown or the breakdown itself throws.
@@ -552,8 +619,17 @@ public static class OptionSensitivityHarness
         if (probe.Describe is null) return string.Empty;
         try
         {
-            var a = probe.Describe(first);
-            var b = probe.Describe(second);
+            return DescribeDifference(probe.Describe(first), probe.Describe(second));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string DescribeDifference(IReadOnlyList<KeyValuePair<string, long>> a,
+        IReadOnlyList<KeyValuePair<string, long>> b)
+    {
             if (a.Count != b.Count)
                 return $" The builds have different structures ({a.Count} against {b.Count} observed parts).";
             var differing = new List<string>();
@@ -563,18 +639,37 @@ public static class OptionSensitivityHarness
             string shown = string.Join(", ", differing.Take(5));
             string more = differing.Count > 5 ? $" and {differing.Count - 5} more" : string.Empty;
             return $" Differing: {shown}{more} ({differing.Count} of {a.Count} parts).";
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
+    }
+
+    private sealed class ParameterShapesChangedException : Exception { }
+
+    private static IEnumerable<double> ParameterShapeValues(IReadOnlyList<int[]> shapes)
+    {
+        foreach (var shape in shapes)
         {
-            return string.Empty;
+            yield return shape.Length;
+            foreach (int dimension in shape) yield return dimension;
         }
+    }
+
+    private sealed class ParameterCountChangedException : Exception
+    {
+        internal ParameterCountChangedException(long previous, long current)
+        {
+            Previous = previous;
+            Current = current;
+        }
+        internal long Previous { get; }
+        internal long Current { get; }
     }
 
     /// <summary>
     /// Builds the fixture's model, swaps its options for an independent (optionally perturbed) copy,
     /// and reconstructs it through the clone plan under the fixed initialisation seed.
     /// </summary>
-    private static TModel Rebuild<TModel>(OptionSensitivityProbe<TModel> probe, Type declaredOptions, Action<ModelOptions>? mutate)
+    private static TModel Rebuild<TModel>(OptionSensitivityProbe<TModel> probe, Type declaredOptions, Action<ModelOptions>? mutate,
+        long? expectedParameterCount = null, Action<long>? recordParameterCount = null,
+        long? expectedParameterShapesFingerprint = null, Action<long>? recordParameterShapesFingerprint = null)
         where TModel : class
     {
         var shell = Seeded(probe.Create);
@@ -588,8 +683,30 @@ public static class OptionSensitivityHarness
             mutate?.Invoke(copy);
             ReplaceReferences(shell, held, copy);
             var rebuilt = Seeded(() => (TModel)CloneEngine.CopyConfiguration(shell));
-            Seeded(() => probe.PrepareModel?.Invoke(rebuilt));
-            return rebuilt;
+            try
+            {
+                if (probe.ParameterCount is not null)
+                {
+                    long count = Seeded(() => probe.ParameterCount(rebuilt));
+                    recordParameterCount?.Invoke(count);
+                    if (expectedParameterCount.HasValue && expectedParameterCount.Value != count)
+                        throw new ParameterCountChangedException(expectedParameterCount.Value, count);
+                }
+                if (probe.ParameterShapes is not null)
+                {
+                    long hash = Seeded(() => Fingerprint(ParameterShapeValues(probe.ParameterShapes(rebuilt))));
+                    recordParameterShapesFingerprint?.Invoke(hash);
+                    if (expectedParameterShapesFingerprint.HasValue && expectedParameterShapesFingerprint.Value != hash)
+                        throw new ParameterShapesChangedException();
+                }
+                Seeded(() => probe.PrepareModel?.Invoke(rebuilt));
+                return rebuilt;
+            }
+            catch
+            {
+                (rebuilt as IDisposable)?.Dispose();
+                throw;
+            }
         }
         finally
         {
@@ -673,7 +790,7 @@ public static class OptionSensitivityHarness
     }
 
     /// <summary>Candidate valid different values, most preferred first.</summary>
-    internal static IEnumerable<object?> Perturbations(Type propertyType, object? current)
+    internal static IEnumerable<object?> Perturbations(Type propertyType, object? current, string? option = null)
     {
         var underlying = Nullable.GetUnderlyingType(propertyType) ?? propertyType;
 
@@ -706,7 +823,36 @@ public static class OptionSensitivityHarness
 
         if (IsNumeric(underlying))
         {
-            foreach (var candidate in NumericCandidates(underlying, current))
+            IEnumerable<object> candidates = NumericCandidates(underlying, current);
+            if (option?.EndsWith("Temperature", StringComparison.Ordinal) == true)
+                candidates = candidates.Concat(new[] { Convert.ChangeType(0, underlying) })
+                    .Where(value => Convert.ToDouble(value) >= 0 && !Equals(value, current)).Distinct();
+            if (option is "Beta1" or "Beta2" or "AdamBeta1" or "AdamBeta2")
+                candidates = candidates.Where(value => Convert.ToDouble(value) >= 0 && Convert.ToDouble(value) < 1);
+            if (option is "TeacherMomentumStart" or "TeacherMomentumEnd" or "GuidanceRescale" or "VocoderLearningRateDecay" || option?.EndsWith("Probability", StringComparison.Ordinal) == true || option?.EndsWith("EmaDecay", StringComparison.Ordinal) == true)
+                candidates = candidates.Where(value => Convert.ToDouble(value) >= 0 && Convert.ToDouble(value) <= 1);
+            if (option == "TopP")
+                candidates = candidates.Where(value => Convert.ToDouble(value) > 0 && Convert.ToDouble(value) <= 1);
+            if (option == "FilterThreshold")
+                candidates = candidates.Where(value => Convert.ToDouble(value) >= 0 && Convert.ToDouble(value) < 1);
+            if (option == "RepetitionPenalty")
+                candidates = candidates.Where(value => Convert.ToDouble(value) > 0 && Convert.ToDouble(value) < 2);
+            if (option == "NumMels" && current is int)
+                candidates = candidates.Concat(new object[] { 80, 128 }).Where(value => !Equals(value, current)).Distinct();
+            if (option?.EndsWith("HeadDim", StringComparison.Ordinal) == true
+                && current is int headDim && headDim > 0 && headDim <= int.MaxValue / 2)
+                // Rotary embeddings need even head widths: prefer a valid structural change before +/-1.
+                candidates = new object[] { headDim * 2 }.Concat(candidates).Distinct();
+            if (option?.EndsWith("SampleRate", StringComparison.Ordinal) == true && current is int rate && rate > 0)
+            {
+                // A one-Hz change can make a polyphase resampler's ratio coprime and allocate gigabytes.
+                // Simple ratios test the same setting first; retain the fine-grained candidates as fallbacks.
+                var preferred = new List<object>();
+                if (rate <= int.MaxValue / 2) preferred.Add(rate * 2);
+                if (rate > 1 && rate % 2 == 0) preferred.Add(rate / 2);
+                candidates = preferred.Concat(candidates).Distinct();
+            }
+            foreach (var candidate in candidates)
                 yield return candidate;
             yield break;
         }
@@ -722,11 +868,31 @@ public static class OptionSensitivityHarness
         if (element is not null && current is IEnumerable sequence)
         {
             var items = sequence.Cast<object?>().ToList();
+            if (option?.EndsWith("UpsampleRates", StringComparison.Ordinal) == true && element == typeof(int) && items.Count > 1)
+            {
+                // Equal rates cannot be reordered. Transfer a factor between two stages so the
+                // product (and the coupled waveform hop) stays fixed while stage geometry changes.
+                for (int from = 0; from < items.Count; from++)
+                    for (int to = 0; to < items.Count; to++)
+                        if (from != to && items[from] is int source && items[to] is int destination
+                            && source > 1 && source % 2 == 0 && destination > 0 && destination <= int.MaxValue / 2)
+                        {
+                            var redistributed = new List<object?>(items);
+                            redistributed[from] = source / 2;
+                            redistributed[to] = destination * 2;
+                            yield return BuildList(propertyType, element, redistributed);
+                        }
+            }
             // Stage arrays often require an exact length. Change one scalar element at a time
             // as well as the length, without sharing mutable containers with the fixture.
             var scalar = Nullable.GetUnderlyingType(element) ?? element;
             if (IsNumeric(scalar) || scalar == typeof(bool) || scalar.IsEnum)
             {
+                // Reordering stage rates preserves their product and length, unlike changing one rate alone.
+                var reversed = items.AsEnumerable().Reverse().ToList();
+                if (items.Count > 1 && !items.SequenceEqual(reversed))
+                    yield return BuildList(propertyType, element, reversed);
+
                 for (int index = 0; index < items.Count; index++)
                 {
                     foreach (var value in Perturbations(element, items[index]))
@@ -753,8 +919,8 @@ public static class OptionSensitivityHarness
         var raw = current is null
             ? new[] { 1.0, 2.0 }
             : integral
-                ? new[] { value + 1, value - 1, value * 2 }
-                : new[] { value * 2, value / 2, value + 0.1, value - 0.1, value + 1, value - 1 };
+                ? new[] { value + 1, value - 1, value + 2, value - 2, value / 2, 1.0, value * 2 }
+                : new[] { value * 2, value / 2, value + 0.1, value - 0.1, value + 1, value + 2, 1.0, value - 1 };
 
         var seen = new HashSet<double>();
         foreach (double candidate in raw)
@@ -849,7 +1015,8 @@ public static class OptionSensitivityHarness
     private static bool IsInputContractRejection(Exception ex)
     {
         var inner = Unwrap(ex);
-        return inner is ArgumentException or NotSupportedException or AiDotNet.Exceptions.TensorShapeMismatchException;
+        return inner is ArgumentException or NotSupportedException or AiDotNet.Exceptions.TensorShapeMismatchException
+            or AiDotNet.TextToSpeech.Latest.KaniSpeechSpanException;
     }
 
     private static bool IsConstructionRejection(Exception ex)

@@ -44,9 +44,9 @@ public class EndToEndTtsOptions : TtsModelOptions
     /// <summary>Gets or sets the filter channels for the text encoder.</summary>
     public int FilterChannels { get; set; } = 768;
 
-    /// <summary>Gets or sets the encoder hidden dimension (defaults to HiddenDim).</summary>
-    public int EncoderDim { get; set; } = 192;
+    /// <summary>Gets or sets the shared encoder/decoder width through <see cref="TtsModelOptions.HiddenDim"/>.</summary>
+    public int EncoderDim { get => HiddenDim; set => HiddenDim = value; }
 
-    /// <summary>Gets or sets the decoder hidden dimension (defaults to HiddenDim).</summary>
-    public int DecoderDim { get; set; } = 192;
+    /// <summary>Gets or sets the shared encoder/decoder width through <see cref="TtsModelOptions.HiddenDim"/>.</summary>
+    public int DecoderDim { get => HiddenDim; set => HiddenDim = value; }
 }

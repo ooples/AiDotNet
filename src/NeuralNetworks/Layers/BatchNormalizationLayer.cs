@@ -352,6 +352,11 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
     /// that inference uses for the CURRENT weights. After a short run the momentum average still carries statistics of
     /// earlier weights, so an eval-mode comparison of weights (the training-behaviour invariants) needs statistics
     /// that match them.
+    /// <para>The variance stored is the batch's own (biased) variance, the one the batch was normalized with, so an
+    /// evaluation forward of that batch reproduces the training forward exactly. The momentum update instead stores
+    /// the unbiased m/(m−1) estimate, as PyTorch's running_var does, because there it estimates the population variance
+    /// across batches; for a recalibration that compares weights on a fixed batch the correction only perturbs the
+    /// function (Non-Attentive Tacotron's 8-token fixture: an eval loss of 50 against 14 before training).</para>
     /// </remarks>
     internal bool OverwriteRunningStatistics { get; set; }
 
@@ -383,11 +388,15 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
 
     internal override Dictionary<string, string> GetMetadata()
     {
-        return new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["Epsilon"] = NumOps.ToDouble(_epsilon).ToString("R", System.Globalization.CultureInfo.InvariantCulture),
-            ["Momentum"] = NumOps.ToDouble(_momentum).ToString("R", System.Globalization.CultureInfo.InvariantCulture)
-        };
+        // base writes the generated construction state (numFeatures among it). Without it a restored layer
+        // came back lazy, its construction state differed from the model's sized one, and deserialization
+        // replaced the model's layer instead of restoring into it.
+        var metadata = base.GetMetadata();
+        metadata["Epsilon"] = NumOps.ToDouble(_epsilon).ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        metadata["Momentum"] = NumOps.ToDouble(_momentum).ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        // A declared layout is configuration: a restored layer left at Infer reads [B, C, T] differently.
+        metadata["Layout"] = Layout.ToString();
+        return metadata;
     }
 
     /// <inheritdoc />
@@ -853,6 +862,15 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             input = Engine.Reshape(input, [leadingBatch, featureSize]);
             restoreInputShape = true;
         }
+        else if (channelsFirstDeclared && input.Rank == 3)
+        {
+            // A declared [B, C, T] sequence normalizes per channel over batch and time, as nn.BatchNorm1d does. Viewed
+            // as [B, C, T, 1] it takes the NCHW path; Engine.BatchNorm given the rank-3 tensor itself reduces the
+            // wrong axes in training.
+            preFlattenShape = input._shape;
+            input = Engine.Reshape(input, [input.Shape[0], input.Shape[1], input.Shape[2], 1]);
+            restoreInputShape = true;
+        }
         else if (!channelsLastDeclared && input.Rank > 4 && input.Shape[1] == featureSize)
         {
             // Volumetric channels-first input, [N, C, D, H, W] and up. The engine's batch normalization takes at most
@@ -954,6 +972,10 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
             // mutations for compiled-plan replay; NoGradScope only suppresses tape
             // recording. Without this boundary the batch-variance EMA can be retained
             // as differentiable state and corrupted when the training tape is released.
+            // A forward that is not a training step (the fused session's lazy-shape pass, its replay and zero-gradient
+            // checks) normalizes as training does but must not advance the statistics: the step that follows would
+            // see one extra EMA update (running variance off by (1 − momentum)·momentumⁿ after n steps).
+            if (!AiDotNet.Training.CompiledStepRandom<T>.InNonStepForward)
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             {
                 // Recalibration (see OverwriteRunningStatistics) replaces the statistics outright: momentum 0.
@@ -963,7 +985,11 @@ public partial class BatchNormalizationLayer<T> : LayerBase<T>, ILayerSerializat
                 var scaledBatchMean = Engine.TensorMultiplyScalar(batchMean, oneMinusMomentum);
                 Engine.TensorAddInPlace(_runningMean, scaledBatchMean);
                 Engine.TensorMultiplyScalarInPlace(_runningVariance, momentum);
-                var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, oneMinusMomentum);
+                // The batch normalizes with its biased variance, but the inference statistic is the unbiased
+                // estimate m/(m-1)·σ²_B over the m values per feature (Ioffe & Szegedy 2015, Algorithm 2; PyTorch's
+                // running_var).
+                T unbiased = OverwriteRunningStatistics ? NumOps.One : NumOps.FromDouble(valuesPerFeature / (valuesPerFeature - 1.0));
+                var scaledBatchVar = Engine.TensorMultiplyScalar(batchVariance, NumOps.Multiply(oneMinusMomentum, unbiased));
                 Engine.TensorAddInPlace(_runningVariance, scaledBatchVar);
             }
 

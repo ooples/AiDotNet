@@ -12,12 +12,14 @@ public class OpenVoiceOptions : EndToEndTtsOptions
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public OpenVoiceOptions(OpenVoiceOptions other)
+        : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
         SpeakerEmbeddingDim = other.SpeakerEmbeddingDim;
         NumToneColorLayers = other.NumToneColorLayers;
+        Training = new OpenVoiceTrainingOptions(other.Training);
     }
 
     /// <summary>Initializes a new instance with default values.</summary>
@@ -33,4 +35,6 @@ public class OpenVoiceOptions : EndToEndTtsOptions
     public int SpeakerEmbeddingDim { get; set; } = 256;
     /// <summary>Gets or sets the number of layers in the tone-color converter.</summary>
     public int NumToneColorLayers { get; set; } = 3;
+    /// <summary>Auxiliary IPA prior, waveform reconstruction and adversarial training configuration.</summary>
+    public OpenVoiceTrainingOptions Training { get; set; } = new();
 }

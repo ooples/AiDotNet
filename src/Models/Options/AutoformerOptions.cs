@@ -10,7 +10,7 @@ namespace AiDotNet.Models.Options;
 /// for long-term time series forecasting. Key innovations include:
 /// - Series Decomposition Block: Progressive trend-seasonal separation at each layer
 /// - Auto-Correlation Mechanism: Efficient O(L log L) sub-series aggregation replacing self-attention
-/// - Moving Average Kernel: Learnable trend extraction from time series
+/// - Moving Average Kernel: the window of the moving average that extracts the trend
 /// </para>
 /// <para><b>For Beginners:</b> Autoformer is designed to capture both the trend (long-term direction)
 /// and seasonality (repeating patterns) in time series data. Unlike Informer which focuses on attention
@@ -34,7 +34,7 @@ namespace AiDotNet.Models.Options;
 public class AutoformerOptions<T> : TimeSeriesRegressionOptions<T>
 {
     /// <summary>
-    /// Creates a new instance with default values.
+    /// Creates a new instance with the reference's defaults.
     /// </summary>
     public AutoformerOptions() { }
 
@@ -49,21 +49,24 @@ public class AutoformerOptions<T> : TimeSeriesRegressionOptions<T>
         // changes deterministic initialization.
         Seed = other.Seed;
         LookbackWindow = other.LookbackWindow;
+        _labelLength = other._labelLength;
         ForecastHorizon = other.ForecastHorizon;
         EmbeddingDim = other.EmbeddingDim;
+        FeedForwardDim = other.FeedForwardDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumDecoderLayers = other.NumDecoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
         MovingAverageKernel = other.MovingAverageKernel;
+        AutoCorrelationFactor = other.AutoCorrelationFactor;
+        UseGelu = other.UseGelu;
         DropoutRate = other.DropoutRate;
         LearningRate = other.LearningRate;
         Epochs = other.Epochs;
         BatchSize = other.BatchSize;
-        AutoCorrelationFactor = other.AutoCorrelationFactor;
     }
 
     /// <summary>
-    /// Gets or sets the lookback window (encoder input length).
+    /// Gets or sets the lookback window, the encoder input length (seq_len; the reference's default 96).
     /// </summary>
     /// <remarks>
     /// <para><b>For Beginners:</b> How far back in time the model looks to make predictions.
@@ -73,90 +76,84 @@ public class AutoformerOptions<T> : TimeSeriesRegressionOptions<T>
     public int LookbackWindow { get; set; } = 96;
 
     /// <summary>
-    /// Gets or sets the forecast horizon (decoder output length).
+    /// Gets or sets the start-token length: the last steps of the input's seasonal and trend parts that open the
+    /// decoder (label_len). Unless set, half of <see cref="LookbackWindow"/>: the reference's 48 for its 96-step
+    /// window, and a valid start for any shorter window.
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How far ahead the model predicts.
-    /// A value of 24 with hourly data means predicting the next day.
-    /// </para>
-    /// </remarks>
-    public int ForecastHorizon { get; set; } = 24;
+    public int LabelLength
+    {
+        get => _labelLength ?? LookbackWindow / 2;
+        set => _labelLength = value;
+    }
+
+    private int? _labelLength;
 
     /// <summary>
-    /// Gets or sets the embedding dimension (model width).
+    /// Gets or sets the forecast horizon (pred_len, 96).
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The internal representation size of the model.
-    /// Larger values can capture more complex patterns but require more computation.
-    /// 512 is a good balance for most time series.
-    /// </para>
-    /// </remarks>
+    public int ForecastHorizon { get; set; } = 96;
+
+    /// <summary>
+    /// Gets or sets the model width (d_model, 512).
+    /// </summary>
     public int EmbeddingDim { get; set; } = 512;
 
     /// <summary>
-    /// Gets or sets the number of encoder layers.
+    /// Gets or sets the feed-forward width (d_ff, 2048).
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> How many times the model processes the input.
-    /// More layers can capture more complex patterns but risk overfitting.
-    /// </para>
-    /// </remarks>
+    public int FeedForwardDim { get; set; } = 2048;
+
+    /// <summary>
+    /// Gets or sets the number of encoder layers (e_layers, 2).
+    /// </summary>
     public int NumEncoderLayers { get; set; } = 2;
 
     /// <summary>
-    /// Gets or sets the number of decoder layers.
+    /// Gets or sets the number of decoder layers (d_layers, 1).
     /// </summary>
     public int NumDecoderLayers { get; set; } = 1;
 
     /// <summary>
-    /// Gets or sets the number of attention heads in auto-correlation.
+    /// Gets or sets the number of heads of the Auto-Correlation projections (n_heads, 8).
     /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Number of parallel pattern-detection mechanisms.
-    /// More heads can capture different types of patterns simultaneously.
-    /// </para>
-    /// </remarks>
     public int NumAttentionHeads { get; set; } = 8;
 
     /// <summary>
-    /// Gets or sets the kernel size for moving average in series decomposition.
+    /// Gets or sets the moving-average window of the series decomposition, an odd number (moving_avg, 25).
     /// </summary>
     /// <remarks>
-    /// <para><b>For Beginners:</b> The window size for separating trend from seasonality.
-    /// Larger values capture longer-term trends. Should be odd for symmetric smoothing.
-    /// A value of 25 works well for daily patterns in hourly data.
-    /// </para>
+    /// <para><b>For Beginners:</b> The trend at each step is the average of this many neighbouring steps; what is
+    /// left over is the seasonal part.</para>
     /// </remarks>
     public int MovingAverageKernel { get; set; } = 25;
 
     /// <summary>
-    /// Gets or sets the dropout rate for regularization.
+    /// Gets or sets the Auto-Correlation factor c: the ⌊c·ln L⌋ strongest lags are aggregated (factor, 1).
+    /// </summary>
+    public int AutoCorrelationFactor { get; set; } = 1;
+
+    /// <summary>
+    /// Gets or sets whether the feed-forward activation is GELU (activation 'gelu'; false: ReLU).
+    /// </summary>
+    public bool UseGelu { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets the dropout rate (dropout, 0.05).
     /// </summary>
     public double DropoutRate { get; set; } = 0.05;
 
     /// <summary>
-    /// Gets or sets the learning rate for optimization.
+    /// Gets or sets the initial learning rate of Adam (learning_rate, 1e-4), halved after every epoch (lradj 'type1').
     /// </summary>
     public double LearningRate { get; set; } = 0.0001;
 
     /// <summary>
-    /// Gets or sets the number of training epochs.
+    /// Gets or sets the number of training epochs (train_epochs, 10).
     /// </summary>
-    public int Epochs { get; set; } = 100;
+    public int Epochs { get; set; } = 10;
 
     /// <summary>
-    /// Gets or sets the batch size for training.
+    /// Gets or sets the batch size (batch_size, 32).
     /// </summary>
     public int BatchSize { get; set; } = 32;
-
-    /// <summary>
-    /// Gets or sets the auto-correlation aggregation factor (c in the paper).
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Controls how many top correlations to consider.
-    /// The formula is: top_k = c * log(L) where L is sequence length.
-    /// A factor of 3 provides good accuracy/efficiency tradeoff.
-    /// </para>
-    /// </remarks>
-    public int AutoCorrelationFactor { get; set; } = 3;
 }

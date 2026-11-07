@@ -396,7 +396,8 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         [LayerState] int feedForwardDim,
         [LayerState] int sequenceLength = 512,
         IActivationFunction<T>? ffnActivation = null,
-        [LayerState] bool causal = false)
+        [LayerState] double dropoutRate = 0.0,
+        [LayerState] bool causal = true)
         : base(new[] { -1, -1, -1 }, new[] { -1, -1, -1 })
     {
         if (numHeads <= 0)
@@ -409,6 +410,9 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _feedForwardDim = feedForwardDim;
         _sequenceLength = sequenceLength;
         _lazyFfnActivation = ffnActivation;
+        if (dropoutRate < 0 || dropoutRate >= 1)
+            throw new ArgumentOutOfRangeException(nameof(dropoutRate), "dropoutRate must be in [0, 1).");
+        _dropoutRate = dropoutRate;
         _causal = causal;
 
 
@@ -424,19 +428,23 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>FFN activation captured by the lazy ctor for later sublayer construction.</summary>
     private IActivationFunction<T>? _lazyFfnActivation;
 
-    /// <summary>Whether the self-attention is masked so position i sees only positions up to i.</summary>
+    /// <summary>Dropout on each sublayer's output before its residual add (Vaswani et al. 2017, §5.4); 0 disables it.</summary>
+    private readonly double _dropoutRate;
+    private DropoutLayer<T>? _selfDropout;
+    private DropoutLayer<T>? _crossDropout;
+    private DropoutLayer<T>? _ffnDropout;
+
+    /// <summary>Dropout probability on each sublayer output.</summary>
+    public double DropoutRate => _dropoutRate;
+
+    /// <summary>Whether the self-attention is masked so position i sees only positions ≤ i.</summary>
+    /// <remarks>True for an autoregressive decoder (Vaswani et al. 2017, §3.1). A block that attends among a set of
+    /// learned queries is bidirectional and passes false: DETR's object queries (Carion et al. 2020, §3.2) and BLIP-2's
+    /// Q-Former queries (Li et al. 2023, §3.1).</remarks>
     private readonly bool _causal;
 
-    /// <summary>
-    /// Whether the self-attention is causal: position i attends only to positions up to i.
-    /// </summary>
-    /// <remarks>
-    /// An autoregressive decoder is causal (Vaswani et al. 2017, §3.1), so a token cannot see the tokens it is trained
-    /// to predict. A block that reads a whole sequence at once is bidirectional: BLIP's image-grounded text encoder is
-    /// bidirectional and its image-grounded text decoder is causal, with the same block structure (Li et al. 2022,
-    /// §3.1).
-    /// </remarks>
-    internal bool IsCausal => _causal;
+    /// <summary>Whether the self-attention is causal.</summary>
+    public bool IsCausal => _causal;
 
     /// <summary>
     /// Resolves <see cref="_embeddingSize"/> from <c>input.Shape[^1]</c>.
@@ -519,6 +527,15 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 RegisterSubLayer(_feedForward);
                 RegisterSubLayer(_feedForwardProjection);
                 RegisterSubLayer(_norm3);
+                if (_dropoutRate > 0)
+                {
+                    _selfDropout = new DropoutLayer<T>(_dropoutRate);
+                    _crossDropout = new DropoutLayer<T>(_dropoutRate);
+                    _ffnDropout = new DropoutLayer<T>(_dropoutRate);
+                    RegisterSubLayer(_selfDropout);
+                    RegisterSubLayer(_crossDropout);
+                    RegisterSubLayer(_ffnDropout);
+                }
 
                 // Lazy children are created after the model-construction seed scope has ended, and
                 // compiled first-forward execution may occur on another thread. Derive their seeds from
@@ -666,12 +683,14 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
 
         var selfAttentionOutput = _selfAttention.Forward(input);
+        if (_selfDropout is not null) selfAttentionOutput = _selfDropout.Forward(selfAttentionOutput);
 
         // residual1 = input + selfAttentionOutput
         var residual1 = Engine.TensorAdd(input, selfAttentionOutput);
         var normalized1 = _norm1.Forward(residual1);
 
         var crossAttentionOutput = _crossAttention.Forward(normalized1, encoderOutput);
+        if (_crossDropout is not null) crossAttentionOutput = _crossDropout.Forward(crossAttentionOutput);
 
         // residual2 = normalized1 + crossAttentionOutput
         var residual2 = Engine.TensorAdd(normalized1, crossAttentionOutput);
@@ -679,6 +698,7 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
 
         var feedForwardHidden = _feedForward.Forward(normalized2);
         var feedForwardOutput = _feedForwardProjection.Forward(feedForwardHidden);
+        if (_ffnDropout is not null) feedForwardOutput = _ffnDropout.Forward(feedForwardOutput);
 
         // residual3 = normalized2 + feedForwardOutput
         var residual3 = Engine.TensorAdd(normalized2, feedForwardOutput);
@@ -1004,6 +1024,8 @@ public partial class TransformerDecoderLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         metadata["NumHeads"] = _numHeads.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["FeedForwardDim"] = _feedForwardDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["SequenceLength"] = _sequenceLength.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        metadata["DropoutRate"] = _dropoutRate.ToString("R", System.Globalization.CultureInfo.InvariantCulture);
+        metadata["Causal"] = _causal ? "true" : "false";
 
         // Persist the FFN activation type so DeserializationHelper can
         // re-instantiate it via TryCreateActivationInstance. Without this,

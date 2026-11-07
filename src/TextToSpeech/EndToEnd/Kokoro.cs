@@ -2,8 +2,10 @@ using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Models;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
 using AiDotNet.TextToSpeech.Interfaces;
@@ -21,11 +23,11 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// parameters (compared to billions in larger models). It is inspired by StyleTTS2's architecture and uses
 /// several clever techniques to achieve quality speech from a compact model:
 /// (1) A BERT-style phoneme encoder processes text into hidden states,
-/// (2) A style encoder predicts voice characteristics directly from text (no reference audio needed),
+/// (2) A released voice bank supplies acoustic and prosodic style vectors,
 /// (3) A duration predictor determines how long each sound should last,
 /// (4) An ISTFTNet decoder converts features into audio by predicting STFT magnitude and phase
 /// and applying inverse STFT, which is faster than traditional waveform generation.
-/// It supports 9 languages and runs in real-time on CPU.</para>
+/// The neural graph reads phonemes; text frontend and voice-bank selection are configured separately.</para>
 /// <example>
 /// <code>
 /// // Create a Kokoro model for lightweight high-quality TTS
@@ -33,7 +35,7 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.Regression,
-///     inputHeight: 200, inputWidth: 1, inputDepth: 1, outputSize: 80);
+///     inputSize: 200, outputSize: 80);
 ///
 /// // ONNX inference mode with pre-trained model
 /// var model = new Kokoro&lt;double&gt;(architecture, "kokoro.onnx");
@@ -52,6 +54,13 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
 {
     private readonly KokoroOptions _options;
+    private KokoroCore<T>? _native;
+    private Tensor<T>? _voiceBank;
+    private Dictionary<char, int>? _vocabulary;
+
+    /// <summary>Text frontend for raw text, normally the official Misaki phonemizer.
+    /// SynthesizePhonemes accepts the released model's phoneme input directly; the approximate native frontend requires an explicit option.</summary>
+    public Func<string, string>? TextPhonemizer { get; set; }
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
     private bool _useNativeMode;
     private bool _disposed;
@@ -137,122 +146,45 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <remarks>
     /// <para>Architecture (Hexgrad, 2024):</para>
     /// <para>(1) Phoneme encoder: BERT-style text encoder produces phoneme hidden states.</para>
-    /// <para>(2) Style encoder: predicts style tokens from text (no reference audio needed).</para>
+    /// <para>(2) Voice bank: supplies acoustic and prosodic style vectors for the sentence length.</para>
     /// <para>(3) Duration predictor: style-conditioned duration prediction for each phoneme.</para>
     /// <para>(4) Decoder: style-conditioned acoustic decoder produces STFT features.</para>
     /// <para>(5) ISTFTNet vocoder: predicts STFT magnitude and phase, then applies inverse STFT to produce the waveform.</para>
     /// <para><b>For Beginners:</b> This method converts text into speech in five steps. First, it encodes
-    /// the text into a sequence of phoneme representations. Then it predicts a "style" (voice characteristics)
-    /// directly from the text. A duration predictor determines how long each sound lasts. The decoder
+    /// the text into a sequence of phoneme representations. A loaded voice supplies the style.
+    /// A duration predictor determines how long each sound lasts. The decoder
     /// generates frequency-domain features (magnitude and phase), and finally the ISTFTNet converts
     /// these back to a time-domain audio waveform using the inverse Short-Time Fourier Transform.</para>
     /// </remarks>
-    public Tensor<T> Synthesize(string text)
+    public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
-        var input = PreprocessText(text);
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-
-        int textLen = Math.Min(text.Length, _options.MaxTextLength);
-        int hiddenDim = _options.HiddenDim;
-        int styleDim = _options.StyleDim;
-
-        // (1) Phoneme encoder
-        double[] textHidden = new double[textLen * hiddenDim];
-        for (int t = 0; t < textLen; t++)
-        for (int d = 0; d < hiddenDim; d++)
-        {
-            double charEmb = (text[t] % 128) / 128.0 - 0.5;
-            double posEnc = Math.Sin((t + 1.0) / Math.Pow(10000, 2.0 * d / hiddenDim));
-            textHidden[t * hiddenDim + d] = charEmb * 0.5 + posEnc * 0.3;
-        }
-
-        // (2) Style encoder: text -> style token (no reference audio needed)
-        double[] styleToken = new double[styleDim];
-        for (int d = 0; d < styleDim; d++)
-        {
-            double avg = 0;
-            for (int t = 0; t < textLen; t++)
-                avg += textHidden[t * hiddenDim + d % hiddenDim];
-            avg /= textLen;
-            styleToken[d] = Math.Tanh(avg * 0.5);
-        }
-
-        // (3) Style-conditioned duration predictor
-        int[] durations = new int[textLen];
-        for (int t = 0; t < textLen; t++)
-        {
-            double durLogit = 0;
-            for (int d = 0; d < hiddenDim; d++)
-                durLogit += textHidden[t * hiddenDim + d] * 0.008;
-            durLogit += styleToken[t % styleDim] * 0.3;
-            durations[t] = Math.Max(1, (int)(Math.Exp(durLogit + 1.5) * 2));
-        }
-
-        int totalFrames = 0;
-        for (int t = 0; t < textLen; t++)
-            totalFrames += durations[t];
-
-        // (4) Style-conditioned decoder -> STFT features
-        int stftFrames = totalFrames;
-        double[] magnitude = new double[stftFrames];
-        double[] phase = new double[stftFrames];
-        int fi = 0;
-        for (int t = 0; t < textLen; t++)
-        for (int r = 0; r < durations[t]; r++)
-        {
-            if (fi >= stftFrames)
-                break;
-            double h = 0;
-            for (int d = 0; d < hiddenDim; d++)
-                h += textHidden[t * hiddenDim + d];
-            h /= hiddenDim;
-            double styleMod = styleToken[fi % styleDim] * 0.4;
-            magnitude[fi] = Math.Exp(h * 0.5 + styleMod + 0.5);
-            phase[fi] = Math.Atan2(Math.Sin(fi * 0.3 + h), Math.Cos(fi * 0.3 + styleMod));
-            fi++;
-        }
-
-        // (5) ISTFTNet: inverse STFT -> waveform
-        int waveLen = totalFrames * _options.HopSize;
-        var waveform = new Tensor<T>([waveLen]);
-        int hopOut = waveLen > 0 && stftFrames > 0 ? waveLen / stftFrames : 1;
-        for (int f = 0; f < stftFrames; f++)
-        {
-            int center = f * hopOut;
-            for (int n = -hopOut; n < hopOut; n++)
-            {
-                int idx = center + n;
-                if (idx >= 0 && idx < waveLen)
-                {
-                    double window =
-                        0.5 * (1.0 - Math.Cos(2.0 * Math.PI * (n + hopOut) / (2 * hopOut)));
-                    double sample = magnitude[f] * Math.Cos(phase[f] + n * 0.1) * window * 0.3;
-                    waveform[idx] = NumOps.FromDouble(NumOps.ToDouble(waveform[idx]) + sample);
-                }
-            }
-        }
-
-        // Normalize
-        double maxVal = 0;
-        for (int i = 0; i < waveLen; i++)
-            maxVal = Math.Max(maxVal, Math.Abs(NumOps.ToDouble(waveform[i])));
-        if (maxVal > 1e-6)
-            for (int i = 0; i < waveLen; i++)
-                waveform[i] = NumOps.FromDouble(NumOps.ToDouble(waveform[i]) / maxVal);
-
-        return waveform;
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(PreprocessText(text));
+        if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("Text is required.", nameof(text));
+        string phonemes = PhonemizeText(text);
+        return SynthesizePhonemes(phonemes, SelectVoiceStyle(phonemes.Length), _options.Speed);
     }
+
+    private string PhonemizeText(string text)
+    {
+        if (TextPhonemizer is null && !_options.UseNativeEnglishFallback)
+            throw new InvalidOperationException("Supply the official Kokoro text frontend through TextPhonemizer or call SynthesizePhonemes. UseNativeEnglishFallback explicitly selects the approximate native English frontend.");
+        return TextPhonemizer is null
+            ? string.Concat(FrontEnd.EnglishG2P.Default.Phonemize(text)
+                .Select(symbol => symbol == FrontEnd.EnglishG2P.WordSeparator ? " " : symbol))
+            : TextPhonemizer(text);
+    }
+
+    /// <inheritdoc />
+    public override LayerInputDomain GetInputDomain(int[]? inputShape) =>
+        _native is null ? base.GetInputDomain(inputShape) : LayerInputDomain.Indices(178);
 
     /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
-        int len = Math.Min(text.Length, _options.MaxTextLength);
-        var t = new Tensor<T>([len]);
-        for (int i = 0; i < len; i++)
-            t[i] = NumOps.FromDouble(text[i] / 128.0);
-        return t;
+        if (_native is null) return base.PreprocessText(text);
+        var ids = EncodePhonemes(PhonemizeText(text));
+        return new Tensor<T>(new[] { ids.Length }, new Vector<T>(ids.Select(id => NumOps.FromDouble(id))));
     }
 
     /// <inheritdoc />
@@ -261,38 +193,30 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// <inheritdoc />
     protected override void InitializeLayers()
     {
-        if (!_useNativeMode)
-            return;
-        if (Architecture.Layers is not null && Architecture.Layers.Count > 0)
-            Layers.AddRange(Architecture.Layers);
-        else
-            Layers.AddRange(
-                LayerHelper<T>.CreateDefaultVITSLayers(
-                    _options.HiddenDim,
-                    _options.InterChannels,
-                    _options.FilterChannels,
-                    _options.NumEncoderLayers,
-                    _options.NumFlowSteps,
-                    _options.NumDecoderLayers,
-                    _options.NumHeads,
-                    _options.DropoutRate,
-                    inputFeatures: _options.MelChannels
-                )
-            );
+        if (!_useNativeMode) return;
+        if (_options.HiddenDim != 512 || _options.StyleDim != 128 || _options.VocabSize != 178 || _options.SampleRate != 24000)
+            throw new ArgumentException("The Kokoro-82M preset requires hidden 512, style 128, vocabulary 178 and 24000 Hz.");
+        _native = new KokoroCore<T>(Engine);
+        Layers.AddRange(_native.Layers);
     }
 
     /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
-        if (IsOnnxMode && OnnxModel is not null)
-            return OnnxModel.Run(input);
-        SetTrainingMode(false);
-        var c = input;
-        foreach (var l in Layers)
-            c = l.Forward(c);
-        return c;
+        if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        if (_native is null) throw new InvalidOperationException("Native Kokoro is required.");
+        var ids = input.ToArray().Select(value => checked((int)NumOps.ToDouble(value))).ToArray();
+        _native.SynthesisSeed = _options.SynthesisSeed;
+        return _native.Forward(ids, SelectVoiceStyle(Math.Max(1, ids.Length - 2)), _options.Speed).Audio;
     }
+
+    /// <inheritdoc />
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => PredictCore(input);
+
+    /// <inheritdoc />
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer() =>
+        _optimizer ?? base.GetOrCreateBaseOptimizer();
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

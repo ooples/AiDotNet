@@ -1,0 +1,40 @@
+using AiDotNet.NeuralNetworks.Layers;
+
+namespace AiDotNet.Audio.Codecs;
+
+/// <summary>Loads original AudioCraft/EnCodec SEANet names without a flattened parameter-vector conversion.</summary>
+internal static class SeanetTorchWeights
+{
+    internal static void Load<T>(Func<string, int[], double[]> read, SeanetEncoder<T> encoder, SeanetDecoder<T> decoder,
+        ResidualVectorQuantizerLayer<T> quantizer, int quantizers, int codes, int dimension, string prefix = "", string sequentialName = "model")
+    {
+        void Conv(string name, NormedConv1DLayer<T> conv, bool transposed)
+        {
+            string p = prefix + name + (transposed ? ".convtr.convtr" : ".conv.conv");
+            var shape = conv.TorchWeightShape;
+            conv.LoadTorchWeights(read(p + ".weight_v", shape), read(p + ".weight_g", new[] { shape[0], 1, 1 }),
+                read(p + ".bias", new[] { conv.OutputChannels }));
+        }
+        void Lstm(string name, SeanetLstm<T> lstm)
+        {
+            for (int i = 0; i < lstm.ForwardCells.Count; i++)
+            {
+                var cell = lstm.ForwardCells[i]; string p = prefix + name + ".lstm.";
+                cell.LoadTorchWeights(read(p + "weight_ih_l" + i, new[] { 4 * cell.HiddenSize, cell.InputSize }),
+                    read(p + "weight_hh_l" + i, new[] { 4 * cell.HiddenSize, cell.HiddenSize }),
+                    read(p + "bias_ih_l" + i, new[] { 4 * cell.HiddenSize }), read(p + "bias_hh_l" + i, new[] { 4 * cell.HiddenSize }));
+            }
+        }
+        foreach (var (name, conv) in encoder.NamedConvolutions("encoder." + sequentialName)) Conv(name, conv.Conv, false);
+        if (encoder.NamedLstm("encoder." + sequentialName) is { } e) Lstm(e.Name, e.Lstm);
+        foreach (var (name, conv) in decoder.NamedConvolutions("decoder." + sequentialName)) Conv(name, conv.Conv, false);
+        foreach (var (name, conv) in decoder.NamedTransposedConvolutions("decoder." + sequentialName)) Conv(name, conv.Conv, true);
+        if (decoder.NamedLstm("decoder." + sequentialName) is { } d) Lstm(d.Name, d.Lstm);
+        for (int q = 0; q < quantizers; q++)
+        {
+            string p = prefix + $"quantizer.vq.layers.{q}._codebook.";
+            quantizer.LoadCodebook(q, read(p + "embed", new[] { codes, dimension }), read(p + "embed_avg", new[] { codes, dimension }),
+                read(p + "cluster_size", new[] { codes }), read(p + "inited", new[] { 1 })[0] != 0);
+        }
+    }
+}

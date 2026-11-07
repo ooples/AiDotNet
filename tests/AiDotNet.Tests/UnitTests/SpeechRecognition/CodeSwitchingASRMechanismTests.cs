@@ -33,7 +33,6 @@ public class CodeSwitchingASRMechanismTests
         {
             EncoderDim = 16,
             NumEncoderLayers = 1,
-            NumAttentionHeads = 2,
             NumMels = 8,
             DecoderDim = 16,
             NumDecoderLayers = 1,

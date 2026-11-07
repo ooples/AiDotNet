@@ -1,61 +1,39 @@
-﻿using AiDotNet.LearningRateSchedulers;
-using System.IO;
-using AiDotNet.Attributes;
+﻿using AiDotNet.Attributes;
+using AiDotNet.ComputerVision.Segmentation.Foundation;
 using AiDotNet.Enums;
-using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.LearningRateSchedulers;
 using AiDotNet.LossFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
-using Microsoft.ML.OnnxRuntime;
-using OnnxTensors = Microsoft.ML.OnnxRuntime.Tensors;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.ComputerVision.Segmentation.Video;
 
 /// <summary>
-/// EfficientTAM: Efficient Track Anything Model for edge video segmentation.
+/// EfficientTAM (Efficient Track Anything): SAM 2's promptable video tracking on a lightweight plain ViT, for devices.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations (e.g., float, double).</typeparam>
 /// <remarks>
 /// <para>
-/// <b>For Beginners:</b> Edge-device video segmentation. Mobile video object tracking.
-///
-/// Common use cases:
-/// - Edge-device video segmentation
-/// - Mobile video object tracking
-/// - Real-time interactive video editing
-/// - Low-latency video analytics
+/// <b>For Beginners:</b> Give EfficientTAM the masks of the objects to follow in the first frame, then feed it the next
+/// frames one at a time: it returns every object's mask in each, remembering what the objects looked like.
 /// </para>
 /// <para>
-/// <b>Technical Details:</b>
-/// - Lightweight encoder replacing SAM2 heavy backbone
-/// - Efficient memory mechanism for temporal propagation
-/// - Designed for mobile and edge deployment
-/// - Compatible with SAM2 prompt interface
+/// EfficientTAM (Xiong et al. 2024; the official yformer/EfficientTAM code) replaces SAM 2's hierarchical Hiera encoder with
+/// a plain ViT-Tiny or ViT-Small (16×16 patches, 14×14 windows with four global blocks, a single-scale neck, and so no
+/// high-resolution skips in the mask decoder), and its "/2" models replace the memory cross-attention with an efficient
+/// one that pools each memory frame's keys and values over 2×2 windows. Everything else is SAM 2's network and tracker
+/// (<see cref="Foundation.SAM21{T}"/>, verified against the official code), and the streaming API tracks each object as
+/// the official video predictor does with its prompt on the first frame. Training follows the paper (see
+/// <see cref="EfficientTAMOptions"/>). Released checkpoints load with <see cref="LoadPretrainedWeights"/> (the official
+/// state dict saved as safetensors).
 /// </para>
 /// <para>
-/// <b>Reference:</b> Xiong et al., "Efficient Track Anything", arXiv:2411.18933 (2024).
-/// The image encoder is a plain, non-hierarchical ViT (ViT-Tiny/-Small, 16x16 patches) that
-/// replaces SAM 2's hierarchical Hiera — the model's core efficiency contribution.
+/// <b>Reference:</b> Xiong et al., "Efficient Track Anything", arXiv 2024.
 /// </para>
 /// </remarks>
-/// <example>
-/// <code>
-/// // Create an EfficientTAM model for lightweight edge-device video segmentation
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
-///     inputType: InputType.ThreeDimensional,
-///     taskType: NeuralNetworkTaskType.BinaryClassification,
-///     inputHeight: 480, inputWidth: 480, inputDepth: 3, outputSize: 1);
-/// var model = new EfficientTAM&lt;double&gt;(architecture);
-/// // Every tunable is now set through the options object; these are the defaults:
-/// var custom = new EfficientTAM&lt;double&gt;(architecture,
-///     options: new EfficientTAMOptions { NumClasses = 1, DropRate = 0, ModelSize = EfficientTAMModelSize.Tiny });
-///
-/// // Or load a pre-trained ONNX model for mobile video tracking
-/// var onnxModel = new EfficientTAM&lt;double&gt;(architecture, "efficienttam.onnx");
-/// </code>
-/// </example>
 [ModelDomain(ModelDomain.Vision)]
 [ModelDomain(ModelDomain.Video)]
 [ModelCategory(ModelCategory.NeuralNetwork)]
@@ -64,366 +42,277 @@ namespace AiDotNet.ComputerVision.Segmentation.Video;
 [ModelComplexity(ModelComplexity.Low)]
 [ModelInput(typeof(Tensor<>), typeof(Tensor<>))]
 [ResearchPaper("Efficient Track Anything", "https://arxiv.org/abs/2411.18933", Year = 2024, Authors = "Yunyang Xiong, Chong Zhou, Xiaoyu Xiang, Lemeng Wu, Chenchen Zhu, Zechun Liu, Saksham Suri, Balakrishnan Varadarajan, Ramya Akula, Forrest Iandola, Raghuraman Krishnamoorthi, Bilge Soran, Vikas Chandra")]
-[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 4e-4, Beta1 = 0.9, Beta2 = 0.999,
-                ReferenceBatchSize = 256, WarmupSteps = 1000,
-                Schedule = LearningRateSchedulerType.Noam,
-                Source = "Xiong et al. 2024, Sec. 4: AdamW with momentum beta1 0.9 and beta2 0.999, a "
-                        + "global batch size of 256 and an initial learning rate of 4e-4, decayed by a "
-                        + "reciprocal square root schedule with a 1k iteration linear warmup. The 5k "
-                        + "iteration linear cooldown that follows is not declared, as the attribute has "
-                        + "no term for a trailing ramp-down. Routing is handled by "
-                        + "SegmentationModelBase.CreateDefaultOptimizer, which consults "
-                        + "PaperOptimizerFactory itself, so no call is inserted here.")]
-public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>
+[PaperOptimizer(OptimizerKind.AdamW, Beta1 = 0.9, Beta2 = 0.999, WeightDecay = 0.1, ReferenceBatchSize = 256, WarmupSteps = 15000,
+                Schedule = LearningRateSchedulerType.CosineAnnealing, Phase = TrainingPhase.FineTuning,
+                Source = "Xiong et al. 2024, full training: AdamW (0.9, 0.999), batch 256, 6e-5 for the image encoder and 3e-4 for "
+                        + "the other components with layer-wise decay 0.8, a cosine schedule after a 15k-iteration linear warmup, "
+                        + "weight decay 0.1, no drop path, 300k steps. The model builds this optimizer itself (Sam2Optimizer): no "
+                        + "single rate is declared because the rates differ per parameter.")]
+public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>, ITrainingObjectiveProvider<T>
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Downsamples by 16, not the family's 32 - measured: [1,3,64,64] returns [1,C,4,4].
-    /// </remarks>
-    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
-        => SpatialStrideContract(inputRank, 16);
-
     private readonly EfficientTAMOptions _options;
-    protected override double DefaultLearningRate => _options.LearningRate;
-    protected override double DefaultWeightDecay => _options.WeightDecay;
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _userOptimizer;
+    private Sam2Runtime<T>? _runtime;
 
-    #region Fields
-    // Only EfficientTAM's OWN configuration lives here. _height, _width, _channels, _numClasses,
-    // _useNativeMode, _onnxModelPath, _onnxSession, _optimizer, _disposed and _encoderLayerEnd all
-    // come from VideoSegmentationBase -> SegmentationModelBase.
-    private readonly EfficientTAMModelSize _modelSize;
-    // Paper-faithful plain-ViT image-encoder config (Xiong et al. 2024, arXiv 2411.18933):
-    // ViT-Tiny/-Small with a 16x16 patch embed + pre-norm transformer blocks.
-    private readonly int _embedDim;
-    private readonly int _numEncoderLayers;
-    private readonly int _numHeads;
-    private readonly int _patchSize;
-    private readonly int _decoderDim;
-    private readonly double _dropRate;
-    #endregion
+    // Streaming state: a tracker per object, the frames' size, and corrections for the next frame.
+    [Scratch]
+    private readonly Dictionary<int, Sam2VideoTracker<T>> _trackers = new();
+    [Scratch]
+    private readonly Dictionary<int, Tensor<T>> _corrections = new();
+    [Scratch]
+    private int _frameHeight, _frameWidth;
 
-    #region Properties
-    // SupportsTraining, NumClasses, MaxTrackedObjects and SupportsStreaming are all inherited:
-    // SegmentationModelBase supplies the first two, and VideoSegmentationBase supplies the tracking
-    // limit (64, passed to its constructor below) and the streaming flag, which already defaults
-    // to true - exactly what the explicit interface implementations used to return.
-    internal bool UseNativeMode => _useNativeMode;
-    internal EfficientTAMModelSize ModelSize => _modelSize;
-    #endregion
+    public override IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => SpatialStrideContract(inputRank, 1);
 
-    #region Constructors
-    /// <summary>
-    /// Initializes EfficientTAM in native (trainable) mode.
-    /// </summary>
-    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
-    /// <param name="optimizer">Gradient-based optimizer (default: AdamW).</param>
-    /// <param name="lossFunction">Loss function (default: CrossEntropyLoss).</param>
-    /// <param name="options">Optional model options.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Creates a trainable EfficientTAM model.
-    /// </para>
-    /// </remarks>
+    private Sam2Runtime<T> Runtime => _runtime ?? throw new InvalidOperationException("The network is not initialized.");
+
+    /// <summary>The network.</summary>
+    internal Sam2Network<T> Network => Runtime.Network;
+
+    internal EfficientTAMModelSize ModelSize => _options.ModelSize;
+
+    /// <summary>Creates a trainable EfficientTAM.</summary>
+    /// <param name="architecture">The frames' size (the encoder's square size is the larger side unless
+    /// <see cref="EfficientTAMOptions.ImageSize"/> sets it; 1024 for the released models) and 3 channels.</param>
+    /// <param name="optimizer">The optimizer (default: the paper's AdamW recipe).</param>
+    /// <param name="lossFunction">Reported by the base; training minimizes the paper's losses.</param>
+    /// <param name="options">Model options.</param>
     public EfficientTAM(NeuralNetworkArchitecture<T> architecture,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         ILossFunction<T>? lossFunction = null,
         EfficientTAMOptions? options = null)
-        // Single-class mask (numClasses == 1): regress the raw mask logit against the target with MSE.
-        // NOTE ON LOSS CHOICE: softmax CrossEntropyWithLogitsLoss is DEGENERATE for one class
-        // (log_softmax over a single logit is identically 0 -> zero gradient). BinaryCrossEntropy-
-        // WithLogitsLoss trains, but it drives logits toward +-inf, which AMPLIFIES a tiny CPU-vs-GPU
-        // forward numerical difference in the plain-ViT encoder (patch-embed + attention + LayerNorm)
-        // into a full training divergence on the CPU engine (loss climbs, logits explode) while the
-        // GPU stays stable — see the tracked Tensors numerical-parity issue. MSE keeps logits bounded
-        // (~[0,1]) so that numerical difference never amplifies: the ViT trains stably on BOTH engines
-        // (verified CPU and GPU converge to ~identical loss). Multi-class masks keep softmax CE.
-        // The loss selection above is preserved verbatim - the base would otherwise substitute plain
-        // CrossEntropyWithLogitsLoss, which is exactly the degenerate single-class choice this comment
-        // rules out. `optimizer` is passed straight through INCLUDING null; the base's
-        // CreateDefaultOptimizer() builds the same `new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this)`
-        // this used to inline, but lazily - the one thing a base-constructor argument cannot do.
-        : base(architecture, optimizer, lossFunction ?? ((options ??= new EfficientTAMOptions()).NumClasses <= 1
-            ? new MeanSquaredErrorLoss<T>()
-            : new CrossEntropyWithLogitsLoss<T>()), (options ??= new EfficientTAMOptions()).NumClasses, maxTrackedObjects: 64)
+        : base(architecture, optimizer, lossFunction ?? new BinaryCrossEntropyWithLogitsLoss<T>(), (options ??= new EfficientTAMOptions()).NumClasses, maxTrackedObjects: 64)
     {
-        _options = options; Options = _options;
-        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
-        (_embedDim, _numEncoderLayers, _numHeads, _patchSize, _decoderDim) = GetModelConfig(_options.ModelSize);
+        _options = options;
+        _options.Validate();
+        Options = _options;
+        _height = architecture.InputHeight > 0 ? architecture.InputHeight : 1024;
+        _width = architecture.InputWidth > 0 ? architecture.InputWidth : 1024;
+        if (_channels != 3) throw new ArgumentException("EfficientTAM segments RGB frames (3 channels).", nameof(architecture));
+        _userOptimizer = optimizer;
         InitializeLayers();
     }
 
-    /// <summary>
-    /// Initializes EfficientTAM in ONNX (inference-only) mode.
-    /// </summary>
-    /// <param name="architecture">Neural network architecture defining input dimensions.</param>
-    /// <param name="onnxModelPath">Path to the pre-trained ONNX model file.</param>
-    /// <param name="options">Optional model options.</param>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Loads a pre-trained EfficientTAM from ONNX for inference.
-    /// </para>
-    /// </remarks>
-    /// <exception cref="ArgumentException">Thrown if the ONNX model path is null or empty.</exception>
-    /// <exception cref="FileNotFoundException">Thrown if the ONNX model file is not found.</exception>
-    /// <exception cref="InvalidOperationException">Thrown if the ONNX runtime fails to load the model.</exception>
-    public EfficientTAM(NeuralNetworkArchitecture<T> architecture,
-        string onnxModelPath,
-        EfficientTAMOptions? options = null)
-        : base(architecture, onnxModelPath, (options ??= new EfficientTAMOptions()).NumClasses, maxTrackedObjects: 64)
+    /// <summary>The network configuration: the size's ViT with the option overrides, SAM 2's (2.0) video modules.</summary>
+    internal static Sam2Configuration BuildConfiguration(EfficientTAMOptions o, int side)
     {
-        _options = options; Options = _options;
-        _modelSize = _options.ModelSize; _dropRate = _options.DropRate;
-        (_embedDim, _numEncoderLayers, _numHeads, _patchSize, _decoderDim) = GetModelConfig(_options.ModelSize);
-        InitializeLayers();
-    }
-    #endregion
-
-    #region Public Methods
-    /// <summary>
-    /// Runs a forward pass to produce segmentation logits.
-    /// </summary>
-    /// <param name="input">The input tensor [C, H, W] or [B, C, H, W].</param>
-    /// <returns>Segmentation logits tensor.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Pass an image to get a per-pixel class prediction map.
-    /// </para>
-    /// </remarks>
-    protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
-
-    /// <summary>
-    /// Routes the training forward through the SAME <see cref="Forward"/> the inference path uses,
-    /// so training adds the leading batch dim (the encoder's ConvolutionalLayers expect rank-4
-    /// [B,C,H,W]) and runs the encoder→decoder chain identically. The base
-    /// <see cref="NeuralNetworkBase{T}.ForwardForTraining"/> fed the raw rank-3 [C,H,W] test input
-    /// straight to the layers, so the forward it recorded on the tape did not match the trained
-    /// architecture and no gradient reached the parameters ("No parameters changed after
-    /// training"). The batch reshape is tape-safe (Engine.Reshape), so the gradient flows end to
-    /// end.
-    /// </summary>
-    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
-
-    #endregion
-
-    #region Private Methods
-    // Paper (Xiong et al. 2024, arXiv 2411.18933): EfficientTAM's image encoder is a plain,
-    // non-hierarchical ViT — ViT-Tiny (embed 192, depth 12, 3 heads) or ViT-Small (embed 384,
-    // depth 12, 6 heads) with 16x16 patches — replacing SAM 2's hierarchical Hiera. Returns
-    // (embedDim, numEncoderLayers, numHeads, patchSize, decoderDim).
-    private static (int EmbedDim, int NumLayers, int NumHeads, int PatchSize, int DecoderDim) GetModelConfig(EfficientTAMModelSize modelSize) => modelSize switch
-    {
-        EfficientTAMModelSize.Tiny => (192, 12, 3, 16, 256),   // ViT-Tiny
-        EfficientTAMModelSize.Small => (384, 12, 6, 16, 256),  // ViT-Small
-        _ => (192, 12, 3, 16, 256)
-    };
-
-    protected override Tensor<T> Forward(Tensor<T> input)
-    {
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        int batch = input.Shape[0], h = input.Shape[2], w = input.Shape[3];
-        // ViT encoder: image [B, C, H, W] -> patch tokens [B, (H/P)*(W/P), embedDim].
-        var tokens = input;
-        for (int i = 0; i < _encoderLayerEnd; i++) tokens = Layers[i].Forward(tokens);
-        // Reshape the token sequence back to a spatial feature map so the conv mask decoder can
-        // run: [B, gh*gw, D] -> [B, gh, gw, D] -> [B, D, gh, gw]. Engine.Reshape/TensorPermute
-        // keep this on the autodiff tape so gradients flow through to the ViT encoder.
-        int gh = h / _patchSize, gw = w / _patchSize, d = tokens.Shape[tokens.Rank - 1];
-        var grid = Engine.Reshape(tokens, new[] { batch, gh, gw, d });
-        var features = Engine.TensorPermute(grid, new[] { 0, 3, 1, 2 });
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) features = Layers[i].Forward(features);
-        if (!hasBatch) features = RemoveBatchDimension(features); return features;
-    }
-
-    /// <summary>
-    /// Captures per-layer activations. Overrides the base flat walk because EfficientTAM's forward is
-    /// NOT a straight <c>Layers</c> chain: the plain-ViT encoder emits token sequences [B, N, embedDim]
-    /// that must be reshaped back to a spatial map [B, embedDim, H/P, W/P] before the conv mask decoder.
-    /// The base walk feeds the raw token tensor to the first decoder conv and throws "Expected input
-    /// depth {embedDim}, but got {N}". Mirror <see cref="Forward"/> so the boundary reshape is applied.
-    /// </summary>
-    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input)
-    {
-        if (!_useNativeMode) return base.GetNamedLayerActivations(input);
-        var activations = new Dictionary<string, Tensor<T>>();
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        int batch = input.Shape[0], h = input.Shape[2], w = input.Shape[3];
-        var current = input;
-        for (int i = 0; i < _encoderLayerEnd; i++) { current = Layers[i].Forward(current); activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone(); }
-        int gh = h / _patchSize, gw = w / _patchSize, d = current.Shape[current.Rank - 1];
-        current = Engine.TensorPermute(Engine.Reshape(current, new[] { batch, gh, gw, d }), new[] { 0, 3, 1, 2 });
-        for (int i = _encoderLayerEnd; i < Layers.Count; i++) { current = Layers[i].Forward(current); activations[$"Layer_{i}_{Layers[i].GetType().Name}"] = current.Clone(); }
-        return activations;
-    }
-
-    protected override Tensor<T> PredictOnnx(Tensor<T> input)
-    {
-        if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");
-        bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
-        var inputData = new float[input.Length];
-        for (int i = 0; i < input.Length; i++) inputData[i] = Convert.ToSingle(input.Data.Span[i]);
-        var onnxInput = new OnnxTensors.DenseTensor<float>(inputData, input._shape);
-        string inputName = _onnxSession.InputMetadata.Keys.FirstOrDefault() ?? "images";
-        var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor(inputName, onnxInput) };
-        using var results = _onnxSession.Run(inputs);
-        var outputTensor = results.First().AsTensor<float>();
-        var outputData = new T[outputTensor.Length];
-        for (int i = 0; i < outputTensor.Length; i++) outputData[i] = NumOps.FromDouble(outputTensor.GetValue(i));
-        var result = new Tensor<T>(outputTensor.Dimensions.ToArray(), new Vector<T>(outputData));
-        if (!hasBatch) result = RemoveBatchDimension(result); return result;
-    }
-
-    // Tape-safe add/remove of the leading batch dim: Engine.Reshape records the reshape on the
-    // autodiff tape, so gradients flow through it. The prior raw `new Tensor<T>(...)` +
-    // Data.Span.CopyTo SEVERED the tape — any training path that funnels through Forward would get
-    // zero gradient upstream of the reshape.
-    //
-    // These DELIBERATELY shadow (`new`) the inherited SegmentationModelBase helpers, which are the
-    // copy-based versions described above. Inheriting them would reintroduce exactly that bug.
-    private new Tensor<T> AddBatchDimension(Tensor<T> tensor)
-        => Engine.Reshape(tensor, new[] { 1, tensor.Shape[0], tensor.Shape[1], tensor.Shape[2] });
-
-    private new Tensor<T> RemoveBatchDimension(Tensor<T> tensor)
-    {
-        int[] s = new int[tensor.Shape.Length - 1];
-        for (int i = 0; i < s.Length; i++) s[i] = tensor.Shape[i + 1];
-        return Engine.Reshape(tensor, s);
-    }
-    #endregion
-
-    #region Abstract Implementation
-    /// <summary>
-    /// Initializes the encoder and decoder layers.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> In native mode, builds the neural network layers.
-    /// In ONNX mode, no layers are created.
-    /// </para>
-    /// </remarks>
-    protected override void InitializeLayers()
-    {
-        if (!_useNativeMode) { ClearLayers(); return; }
-        if (Architecture.Layers != null && Architecture.Layers.Count > 0)
-        { Layers.AddRange(Architecture.Layers); _encoderLayerEnd = Architecture.Layers.Count / 2; }
-        else
+        bool small = o.ModelSize == EfficientTAMModelSize.Small;
+        var preset = Sam2Configuration.Vit(small);
+        int imageSize = o.ImageSize ?? side;
+        if (imageSize <= 0 || imageSize % 16 != 0)
+            throw new ArgumentException($"EfficientTAM's encoder size must be a positive multiple of 16 pixels; got {imageSize}. Set EfficientTAMOptions.ImageSize.");
+        return preset with
         {
-            // Full default stack via the segmentation golden-pattern helper: the paper-faithful plain-ViT
-            // image encoder (Xiong et al. 2024, arXiv 2411.18933 — patch-embed + N pre-norm RESIDUAL
-            // transformer blocks, EfficientTAM's core Hiera-free contribution) followed by the lightweight
-            // conv mask decoder. The residual skips are load-bearing (a non-residual flat ViT exploded to a
-            // 2800x loss; the earlier hierarchical Conv-BN-ReLU CNN diverged and dead-ReLU'd constant input
-            // to zero). The encoder is the first _numEncoderLayers + 1 layers (patch-embed + N blocks);
-            // Forward reshapes that token grid back to a spatial [B, embedDim, H/P, W/P] map before the
-            // conv decoder emits per-pixel class logits.
-            Layers.AddRange(LayerHelper<T>.CreateDefaultEfficientTAMLayers(
-                _patchSize, _embedDim, _numEncoderLayers, _numHeads, _decoderDim, _numClasses, _height, _width));
-            _encoderLayerEnd = _numEncoderLayers + 1;
-        }
-    }
-
-    // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
-    // exactly the same enumeration, so this said nothing the base does not already say.
-    /// <summary>
-    /// Collects metadata describing this model's configuration.
-    /// </summary>
-    /// <returns>Model metadata.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Returns a summary for saving or display.
-    /// </para>
-    /// </remarks>
-    public override ModelMetadata<T> GetModelMetadata() => new()
-    {
-        AdditionalInfo = new Dictionary<string, object> { { "ModelName", "EfficientTAM" }, { "InputHeight", _height }, { "InputWidth", _width }, { "NumClasses", _numClasses }, { "ModelSize", _modelSize.ToString() }, { "UseNativeMode", _useNativeMode }, { "NumLayers", Layers.Count } },
-        ModelDataProvider = () => SerializeForMetadata()
-    };
-
-    #endregion
-
-    #region IVideoSegmentation Implementation
-    // Tracking memory that is genuinely EfficientTAM's own. The frame counter, the tracked-id list,
-    // the initialized flag and the object-count validation now live on VideoSegmentationBase, which
-    // wraps each of these Internal hooks.
-    [Scratch]
-    private Tensor<T>? _trackingFeatures;
-    [Scratch]
-    private Tensor<T>? _trackingMasks;
-    private int[]? _trackedIds;
-    [Scratch]
-    private readonly Dictionary<int, Tensor<T>> _corrections = [];
-
-    /// <inheritdoc/>
-    protected override void InitializeTrackingInternal(Tensor<T> frame, Tensor<T> masks, int[] objectIds)
-    {
-        _trackingFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
-        _trackingMasks = masks;
-        _trackedIds = objectIds;
-        _corrections.Clear();
-    }
-
-    /// <inheritdoc/>
-    protected override VideoSegmentationResult<T> PropagateToFrameInternal(Tensor<T> frame, int frameIndex)
-    {
-        var currentFeatures = Common.SegmentationTensorOps.EnsureUnbatched(Predict(frame));
-        int h = currentFeatures.Shape[1], w = currentFeatures.Shape[2];
-        var ids = _trackedIds ?? [1];
-        int numObj = ids.Length;
-        Tensor<T> masks;
-        if (_trackingFeatures != null && _trackingMasks != null && _trackingMasks.Rank == 3)
-        {
-            var affinity = Common.SegmentationTensorOps.PixelAffinity(_trackingFeatures, currentFeatures);
-            masks = Common.SegmentationTensorOps.WarpMasksByAffinity(_trackingMasks, affinity);
-        }
-        else
-        {
-            masks = new Tensor<T>([numObj, h, w]);
-        }
-        foreach (var kvp in _corrections)
-        {
-            int idx = Array.IndexOf(ids, kvp.Key);
-            if (idx >= 0)
+            ImageSize = imageSize,
+            EmbedDims = new[] { o.VitEmbeddingDimension ?? preset.EmbedDims[0] },
+            VitDepth = o.VitDepth ?? preset.VitDepth,
+            VitHeads = o.VitHeadCount ?? preset.VitHeads,
+            VitWindow = o.VitWindowSize ?? preset.VitWindow,
+            VitGlobalBlocks = o.VitGlobalAttentionBlockIndexes ?? preset.VitGlobalBlocks,
+            Dim = o.ModelDimension ?? 256,
+            DecoderHeads = o.DecoderHeadCount ?? 8,
+            DecoderMlp = o.MaskDecoderMlpDimension ?? 2048,
+            DropPath = o.DropPath ?? 0.0,
+            Memory = new Sam2MemoryConfiguration
             {
-                int mH = Math.Min(kvp.Value.Shape[0], h), mW = Math.Min(kvp.Value.Shape[1], w);
-                for (int y = 0; y < mH; y++)
-                    for (int x = 0; x < mW; x++)
-                        masks[idx, y, x] = kvp.Value[y, x];
-            }
-        }
-        _corrections.Clear();
-        var confidences = new double[numObj];
-        var isVisible = new bool[numObj];
-        for (int obj = 0; obj < numObj; obj++)
-        {
-            int area = 0; double confSum = 0;
-            for (int y = 0; y < h; y++)
-                for (int x = 0; x < w; x++)
-                {
-                    double v = NumOps.ToDouble(masks[obj, y, x]);
-                    if (v >= 0.5) { area++; confSum += v; }
-                }
-            confidences[obj] = area > 0 ? confSum / area : 0.0;
-            isVisible[obj] = area >= 4;
-        }
-        _trackingFeatures = currentFeatures;
-        _trackingMasks = masks;
-        return new VideoSegmentationResult<T>
-        {
-            Masks = masks, ObjectIds = ids, Confidences = confidences,
-            FrameIndex = frameIndex, IsVisible = isVisible
+                MaskMemories = o.MemoryBankSize,
+                MemoryDim = o.MemoryDimension ?? 64,
+                AttentionLayers = o.MemoryAttentionLayerCount ?? 4,
+                AttentionFeedForward = o.MemoryAttentionFeedForwardDimension ?? 2048,
+                FuserHidden = o.MemoryFuserDimension ?? 1024,
+                CrossAttention = o.MemoryCrossAttention,
+            },
         };
     }
 
+    protected override void InitializeLayers()
+    {
+        if (_options is null || _runtime is not null) return;
+        if (!_useNativeMode) { ClearLayers(); return; }
+        if (Architecture.Layers is { Count: > 0 })
+            throw new NotSupportedException("EfficientTAM builds the paper's network; custom layers are not supported.");
+        _runtime = new Sam2Runtime<T>(Engine, _options, BuildConfiguration(_options, Math.Max(_height, _width)), sizeIndex: 0,
+            new Sam2TrainingSettings(), _userOptimizer);
+        Layers.AddRange(_runtime.Layers);
+        _encoderLayerEnd = _runtime.Layers.Count;
+    }
+
+    /// <summary>Loads a checkpoint saved as safetensors: the official state dict (keys such as
+    /// <c>image_encoder.trunk.blocks.0.attn.qkv.weight</c>) or its Hugging Face-style renaming.</summary>
+    public void LoadPretrainedWeights(string path) => Network.LoadSafetensors(path);
+
+    /// <summary>Loads a state dict in Hugging Face-style names.</summary>
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
+
     /// <inheritdoc/>
+    public override void SetTrainingMode(bool isTraining)
+    {
+        base.SetTrainingMode(isTraining);
+        if (_runtime is not null) _runtime.Network.Training = isTraining;
+    }
+
+    // ------------------------------------------------------------------ streaming tracking
+
+    /// <summary>The probabilities <c>[H, W]</c> of an object's mask <c>[H, W]</c> (or <c>[1, H, W]</c>) at the frames' size,
+    /// as a mask prompt.</summary>
+    private Sam2Prompt<T> MaskPrompt(Tensor<T> mask) => Runtime.MaskPrompt(Engine.Reshape(mask, new[] { _frameHeight, _frameWidth }), _frameHeight, _frameWidth);
+
+    /// <summary>Starts tracking the objects whose masks <c>[N, H, W]</c> are given on a frame <c>[3, H, W]</c> (values in 0..1):
+    /// each is a mask prompt on frame 0 of its own tracker.</summary>
+    protected override void InitializeTrackingInternal(Tensor<T> frame, Tensor<T> masks, int[] objectIds)
+    {
+        var batched = Sam2Runtime<T>.Frame(frame, nameof(frame));
+        _frameHeight = batched.Shape[2];
+        _frameWidth = batched.Shape[3];
+        int count = objectIds.Length, plane = _frameHeight * _frameWidth;
+        if (masks.Length != count * plane) throw new ArgumentException($"Give one {_frameHeight}x{_frameWidth} mask per object ({count}).", nameof(masks));
+        _trackers.Clear();
+        _corrections.Clear();
+        using var _ = new NoGradScope<T>();
+        var features = Runtime.EncodeVideoFrame(batched);
+        var flat = Engine.Reshape(masks, new[] { count, plane });
+        for (int i = 0; i < count; i++)
+        {
+            var tracker = Runtime.StreamingTracker();
+            var mask = Engine.Reshape(Engine.TensorSlice(flat, new[] { i, 0 }, new[] { 1, plane }), new[] { _frameHeight, _frameWidth });
+            tracker.TrackFrame(0, prompted: true, features, MaskPrompt(mask));
+            _trackers[objectIds[i]] = tracker;
+        }
+    }
+
+    /// <summary>Tracks every object into the next frame <c>[3, H, W]</c>; an object given a correction is prompted with that
+    /// mask on this frame.</summary>
+    protected override VideoSegmentationResult<T> PropagateToFrameInternal(Tensor<T> frame, int frameIndex)
+    {
+        var batched = Sam2Runtime<T>.Frame(frame, nameof(frame));
+        if (batched.Shape[2] != _frameHeight || batched.Shape[3] != _frameWidth)
+            throw new ArgumentException($"Every frame must be {_frameHeight}x{_frameWidth}.", nameof(frame));
+        using var _ = new NoGradScope<T>();
+        var features = Runtime.EncodeVideoFrame(batched);
+        var ids = _trackers.Keys.ToArray();
+        var masks = new Tensor<T>[ids.Length];
+        var confidences = new double[ids.Length];
+        var visible = new bool[ids.Length];
+        for (int i = 0; i < ids.Length; i++)
+        {
+            Sam2Prompt<T>? prompt = _corrections.TryGetValue(ids[i], out var correction) ? MaskPrompt(correction) : null;
+            var output = _trackers[ids[i]].TrackFrame(frameIndex, prompt is not null, features, prompt);
+            masks[i] = Runtime.VideoProbabilities(output, _frameHeight, _frameWidth);
+            confidences[i] = 1.0 / (1.0 + Math.Exp(-output.ObjectScore));
+            visible[i] = output.ObjectScore > 0;
+        }
+        _corrections.Clear();
+        return new VideoSegmentationResult<T>
+        {
+            Masks = Engine.TensorStack(masks, 0), ObjectIds = ids, Confidences = confidences, FrameIndex = frameIndex, IsVisible = visible,
+        };
+    }
+
+    /// <summary>Corrects an object with its mask <c>[H, W]</c> on the next frame, which becomes one of its prompted frames.</summary>
     public override void AddCorrection(int objectId, Tensor<T> correctionMask)
     {
+        if (!_trackers.ContainsKey(objectId)) throw new ArgumentException($"Object {objectId} is not tracked.", nameof(objectId));
         _corrections[objectId] = correctionMask;
     }
 
-    /// <inheritdoc/>
     protected override void ResetTrackingInternal()
     {
-        _trackingFeatures = null; _trackingMasks = null; _trackedIds = null;
+        _trackers.Clear();
         _corrections.Clear();
     }
-    #endregion
+
+    // ------------------------------------------------------------------ the tensor contract and training
+
+    /// <summary>The single-mask logits <c>[B, 1, H, W]</c> (or <c>[1, H, W]</c>) of frames with no prompt: the image predictor's
+    /// decoder on the model's empty prompt, resized to each frame.</summary>
+    protected override Tensor<T> Forward(Tensor<T> input)
+    {
+        bool hasBatch = input.Rank == 4;
+        if (!hasBatch) input = AddBatchDimension(input);
+        int b = input.Shape[0], h = input.Shape[2], w = input.Shape[3];
+        var outputs = new Tensor<T>[b];
+        for (int i = 0; i < b; i++)
+        {
+            var frame = Engine.TensorSlice(input, new[] { i, 0, 0, 0 }, new[] { 1, input.Shape[1], h, w });
+            var (low, _, _) = Runtime.DecodeImage(Runtime.EncodeImage(frame), null, null, null, multimask: false);
+            outputs[i] = SpatialResampling.Resize(Engine, low, h, w);
+        }
+        var logits = b == 1 ? outputs[0] : Engine.TensorConcatenate(outputs, 0);
+        return hasBatch ? logits : RemoveBatchDimension(logits);
+    }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => Forward(input);
+
+    private IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> Images(Tensor<T> input, Tensor<T> target)
+    {
+        if (input.Rank == 3) return new[] { (input, target) };
+        if (input.Rank != 4) throw new ArgumentException("EfficientTAM trains on frames [C, H, W] or [B, C, H, W].", nameof(input));
+        int b = input.Shape[0], c = input.Shape[1], h = input.Shape[2], w = input.Shape[3];
+        if (target.Length != b * h * w) throw new ArgumentException($"The target is one {h}x{w} mask per frame ({b}).", nameof(target));
+        var flat = Engine.Reshape(target, new[] { b, h * w });
+        return Enumerable.Range(0, b).Select(i => (
+            Engine.Reshape(Engine.TensorSlice(input, new[] { i, 0, 0, 0 }, new[] { 1, c, h, w }), new[] { c, h, w }),
+            Engine.Reshape(Engine.TensorSlice(flat, new[] { i, 0 }, new[] { 1, h * w }), new[] { h, w }))).ToList();
+    }
+
+    /// <summary>One training step on images <c>[C, H, W]</c> or <c>[B, C, H, W]</c> and their masks (each a one-frame
+    /// example); videos train through <see cref="TrainOnVideo"/>.</summary>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
+    {
+        Step(Images(input, expectedOutput));
+        return true;
+    }
+
+    /// <summary>One step of the video training on one object: frames <c>[F, 3, H, W]</c> and their masks <c>[F, H, W]</c>.</summary>
+    public void TrainOnVideo(Tensor<T> video, Tensor<T> masks)
+    {
+        if (video.Rank != 4) throw new ArgumentException("A video is [F, 3, H, W].", nameof(video));
+        Step(new[] { (video, masks) });
+    }
+
+    private void Step(IReadOnlyList<(Tensor<T> Input, Tensor<T> Target)> examples)
+    {
+        SetTrainingMode(true);
+        try
+        {
+            LastLoss = Runtime.Train(examples, gradients => PublishParameterGradients(gradients));
+        }
+        finally
+        {
+            SetTrainingMode(false);
+        }
+    }
+
+    /// <summary>EfficientTAM trains on a supervised objective: its losses against an object's masks.</summary>
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    /// <inheritdoc/>
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <summary>The training objective estimated with common random numbers (fixed draws).</summary>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target) => Runtime.Evaluate(Images(input, target));
+
+    /// <inheritdoc />
+    /// <remarks>Every layer is sized at construction and <see cref="NeuralNetworkBase{T}.Layers"/> is not a chain.</remarks>
+    protected override void ResolveLazyLayerShapes()
+    {
+    }
+
+    /// <inheritdoc />
+    public override Dictionary<string, Tensor<T>> GetNamedLayerActivations(Tensor<T> input) => ObservedLayerActivations(input);
+
+    public override ModelMetadata<T> GetModelMetadata() => new()
+    {
+        AdditionalInfo = new Dictionary<string, object>
+        {
+            { "ModelName", "EfficientTAM" },
+            { "InputHeight", _height },
+            { "InputWidth", _width },
+            { "ImageSize", Network.Configuration.ImageSize },
+            { "ModelSize", _options.ModelSize.ToString() },
+            { "MemoryCrossAttention", _options.MemoryCrossAttention.ToString() },
+            { "NumLayers", Layers.Count },
+        },
+        ModelDataProvider = () => SerializeForMetadata()
+    };
 }

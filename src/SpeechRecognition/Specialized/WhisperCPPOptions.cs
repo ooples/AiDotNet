@@ -1,11 +1,14 @@
+using AiDotNet.Audio.Whisper;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.Specialized;
 
-/// <summary>Options for Whisper.cpp: optimized C++ inference for Whisper models.</summary>
+/// <summary>Options for whisper.cpp, built on openai-whisper's network.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the WhisperCPP model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para>The defaults are whisper.cpp: 6 encoder and 6 decoder layers, width 512, 8 heads, 80 mel bins and 51865 tokens.</para>
+/// <para><b>For Beginners:</b> These options set the size of the Whisper encoder and decoder, the language and how
+/// transcription decodes.</para>
 /// </remarks>
 public class WhisperCPPOptions : ModelOptions
 {
@@ -20,42 +23,66 @@ public class WhisperCPPOptions : ModelOptions
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
-        SampleRate = other.SampleRate;
-        MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
+        NumMels = other.NumMels;
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
+        DecoderDim = other.DecoderDim;
+        NumDecoderLayers = other.NumDecoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
-        NumMels = other.NumMels;
         VocabSize = other.VocabSize;
         MaxTextLength = other.MaxTextLength;
+        Language = other.Language;
+        WordTimestamps = other.WordTimestamps;
+        Temperatures = (double[])other.Temperatures.Clone();
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
-        Language = other.Language;
     }
 
-    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
-    public int SampleRate { get; set; } = 16000;
-    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
-    public int MaxAudioLengthSeconds { get; set; } = 30;
-    /// <summary>Gets or sets the hidden width of the encoder.</summary>
-    public int EncoderDim { get; set; } = 512;
-    /// <summary>Gets or sets the number of encoder layers.</summary>
-    public int NumEncoderLayers { get; set; } = 12;
-    /// <summary>Gets or sets the number of heads in each attention layer.</summary>
-    public int NumAttentionHeads { get; set; } = 8;
-    /// <summary>Gets or sets the number of mel filterbank channels in the input features.</summary>
+    /// <summary>Log-mel bins of the input window (80 up to large-v2, 128 from large-v3 on).</summary>
     public int NumMels { get; set; } = 80;
-    /// <summary>Gets or sets the number of output tokens the model predicts over.</summary>
+
+    /// <summary>Encoder width (<c>n_audio_state</c>).</summary>
+    public int EncoderDim { get; set; } = 512;
+
+    /// <summary>Encoder blocks (<c>n_audio_layer</c>).</summary>
+    public int NumEncoderLayers { get; set; } = 6;
+
+    /// <summary>Decoder width (<c>n_text_state</c>).</summary>
+    public int DecoderDim { get; set; } = 512;
+
+    /// <summary>Decoder blocks (<c>n_text_layer</c>).</summary>
+    public int NumDecoderLayers { get; set; } = 6;
+
+    /// <summary>Attention heads of every encoder and decoder block (<c>n_audio_head</c> = <c>n_text_head</c>).</summary>
+    public int NumAttentionHeads { get; set; } = 8;
+
+    /// <summary>Token vocabulary (<c>n_vocab</c>): 51,865 for the multilingual models up to large-v2, 51,866 from large-v3 on.</summary>
     public int VocabSize { get; set; } = 51865;
-    /// <summary>Gets or sets the most tokens decoded for one utterance.</summary>
-    public int MaxTextLength { get; set; } = 512;
-    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
+
+    /// <summary>Decoder positions (<c>n_text_ctx</c>: 448).</summary>
+    public int MaxTextLength { get; set; } = 448;
+
+    /// <summary>Language code of the audio; null detects it from the first 30 seconds.</summary>
+    public string? Language { get; set; } = null;
+
+    /// <summary>Whether transcription times every word (openai-whisper's <c>word_timestamps</c>).</summary>
+    public bool WordTimestamps { get; set; } = false;
+
+    /// <summary>Decoding temperatures tried in turn when a window's decoding fails the compression or log-probability
+    /// checks (openai-whisper's default: 0 to 1 in steps of 0.2).</summary>
+    public double[] Temperatures { get; set; } = { 0.0, 0.2, 0.4, 0.6, 0.8, 1.0 };
+
+    /// <summary>Path to an exported ONNX model, when one is used.</summary>
     public string? ModelPath { get; set; }
-    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
+
+    /// <summary>ONNX runtime options.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-    /// <summary>Gets or sets the dropout probability of the native layers during training.</summary>
-    public double DropoutRate { get; set; } = 0.1;
-    /// <summary>Gets or sets the language code (for example "en") reported for a transcript when none is passed or detected.</summary>
-    public string Language { get; set; } = "en";
+
+    // openai-whisper's ModelDimensions for these options: 30-second windows of 1500 encoder positions.
+    internal WhisperDimensions ToDimensions()
+    {
+        if (EncoderDim != DecoderDim) throw new NotSupportedException("openai-whisper's network ties the encoder and decoder widths.");
+        return new WhisperDimensions(NumMels, 1500, EncoderDim, NumAttentionHeads, NumEncoderLayers, VocabSize, MaxTextLength, DecoderDim,
+            NumAttentionHeads, NumDecoderLayers);
+    }
 }

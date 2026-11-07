@@ -1,11 +1,14 @@
+using AiDotNet.Audio.Foundations;
 using AiDotNet.Models.Options;
 using AiDotNet.Onnx;
 
 namespace AiDotNet.SpeechRecognition.Streaming;
 
-/// <summary>Options for Moonshine: efficient real-time streaming ASR.</summary>
+/// <summary>Options for Moonshine Tiny.</summary>
 /// <remarks>
-/// <para><b>For Beginners:</b> These options configure the Moonshine model. Default values follow the original paper's recommended settings for optimal speech recognition accuracy.</para>
+/// <para>The defaults are Moonshine Tiny of Table 1: width 288, 6 encoder and 6 decoder layers, 8 heads.</para>
+/// <para><b>For Beginners:</b> These options set the size of the encoder and decoder, the feature front end and
+/// the training augmentation.</para>
 /// </remarks>
 public class MoonshineOptions : ModelOptions
 {
@@ -25,37 +28,91 @@ public class MoonshineOptions : ModelOptions
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
         NumAttentionHeads = other.NumAttentionHeads;
-        NumMels = other.NumMels;
-        VocabSize = other.VocabSize;
+        FeedForwardMultiplier = other.FeedForwardMultiplier;
+        RopeTheta = other.RopeTheta;
+        NumDecoderLayers = other.NumDecoderLayers;
+        StartToken = other.StartToken;
+        EndToken = other.EndToken;
         MaxTextLength = other.MaxTextLength;
+        FrequencyMasks = other.FrequencyMasks;
+        FrequencyMaskWidth = other.FrequencyMaskWidth;
+        TimeMasks = other.TimeMasks;
+        TimeMaskRatio = other.TimeMaskRatio;
+        VocabSize = other.VocabSize;
+        Vocabulary = (string[])other.Vocabulary.Clone();
+        Language = other.Language;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
-        Language = other.Language;
     }
 
-    /// <summary>Gets or sets the sample rate, in Hz, that input audio is expected at.</summary>
+    /// <summary>Audio sample rate in Hz.</summary>
     public int SampleRate { get; set; } = 16000;
-    /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
+
+    /// <summary>Longest audio a transcription covers, in seconds; longer input is truncated.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
-    /// <summary>Gets or sets the hidden width of the encoder.</summary>
+
+
+    /// <summary>Conformer width.</summary>
     public int EncoderDim { get; set; } = 288;
-    /// <summary>Gets or sets the number of encoder layers.</summary>
+
+    /// <summary>Conformer blocks.</summary>
     public int NumEncoderLayers { get; set; } = 6;
-    /// <summary>Gets or sets the number of heads in each attention layer.</summary>
+
+    /// <summary>Attention heads per block.</summary>
     public int NumAttentionHeads { get; set; } = 8;
-    /// <summary>Gets or sets the number of mel filterbank channels in the input features.</summary>
-    public int NumMels { get; set; } = 80;
-    /// <summary>Gets or sets the number of output tokens the model predicts over.</summary>
-    public int VocabSize { get; set; } = 5000;
-    /// <summary>Gets or sets the most tokens decoded for one utterance.</summary>
-    public int MaxTextLength { get; set; } = 512;
-    /// <summary>Gets or sets the path of the pretrained ONNX model. The ONNX constructor sets it from its modelPath argument; setting it here does not load a model.</summary>
-    public string? ModelPath { get; set; }
-    /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
-    public OnnxModelOptions OnnxOptions { get; set; } = new();
-    /// <summary>Gets or sets the dropout probability of the native layers during training.</summary>
-    public double DropoutRate { get; set; } = 0.1;
-    /// <summary>Gets or sets the language code (for example "en") reported for a transcript when none is passed or detected.</summary>
+
+    /// <summary>Expansion of each feed-forward network (4x the width).</summary>
+    public int FeedForwardMultiplier { get; set; } = 4;
+
+
+    /// <summary>Rotary base of every encoder and decoder self-attention (section 3.1: rotary position embeddings).</summary>
+    public double RopeTheta { get; set; } = 10000.0;
+
+    /// <summary>Decoder layers (Table 1).</summary>
+    public int NumDecoderLayers { get; set; } = 6;
+
+    /// <summary>The token that starts the decoder's input (Llama's beginning of sequence: 1).</summary>
+    public int StartToken { get; set; } = 1;
+
+    /// <summary>The token that ends a transcript (Llama's end of sequence: 2).</summary>
+    public int EndToken { get; set; } = 2;
+
+    /// <summary>Most tokens a transcription decodes.</summary>
+    public int MaxTextLength { get; set; } = 194;
+
+    /// <summary>SpecAugment frequency masks; Moonshine reads the waveform and trains without them.</summary>
+    public int FrequencyMasks { get; set; } = 0;
+
+    /// <summary>Largest frequency mask, in mel bins (section 3.1: F = 27).</summary>
+    public int FrequencyMaskWidth { get; set; } = 27;
+
+    /// <summary>SpecAugment time masks; none for Moonshine.</summary>
+    public int TimeMasks { get; set; } = 0;
+
+    /// <summary>Largest time mask as a fraction of the utterance (section 3.1: pS = 0.05).</summary>
+    public double TimeMaskRatio { get; set; } = 0.05;
+
+    /// <summary>Output vocabulary (section 3.1: 32,000 BPE tokens plus 768 special tokens).</summary>
+    public int VocabSize { get; set; } = 32768;
+
+    /// <summary>The text of each token; tokens past the list decode as Unicode code points, and tokens in angle brackets
+    /// decode to nothing.</summary>
+    public string[] Vocabulary { get; set; } = { "<blank>", "<pad>", "<s>", "</s>", "<unk>", "|", "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z", "'", " " };
+
+    /// <summary>Language reported for transcriptions.</summary>
     public string Language { get; set; } = "en";
+
+    /// <summary>Path to an exported ONNX model, when one is used.</summary>
+    public string? ModelPath { get; set; }
+
+    /// <summary>ONNX runtime options.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    internal ConformerAsrConfiguration ToConfiguration() => new()
+    {
+        SampleRate = SampleRate, EncoderDim = EncoderDim, NumEncoderLayers = NumEncoderLayers,
+        NumAttentionHeads = NumAttentionHeads, FeedForwardMultiplier = FeedForwardMultiplier, RopeTheta = RopeTheta,
+        Block = ConformerAsrBlock.Transformer, Decoder = ConformerAsrDecoder.Attention, Subsampling = ConformerAsrSubsampling.RawWaveformStem, EncoderFeedForward = ConformerAsrFeedForward.Gelu, DecoderFeedForward = ConformerAsrFeedForward.SwiGlu, DecoderRotary = true, AttentionDecoderLayers = NumDecoderLayers, AttentionDecoderFeedForward = 4 * EncoderDim, DecoderStartToken = StartToken, DecoderEndToken = EndToken, CtcWeight = 0, LabelSmoothing = 0, FrequencyMasks = FrequencyMasks, FrequencyMaskWidth = FrequencyMaskWidth, TimeMasks = TimeMasks, TimeMaskRatio = TimeMaskRatio,
+        VocabSize = VocabSize,
+    };
 }

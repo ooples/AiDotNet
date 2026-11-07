@@ -318,7 +318,8 @@ internal sealed class DinoDetectionTransformer<T> : CvParameterModule<T>
                 for (int l = 0; l < _numLevels; l++)
                     for (int c = 0; c < 4; c++)
                         referenceBoxes[(((q * _numLevels) + l) * 4) + c] = _numOps.FromDouble(referenceSigmoid[(q * 4) + c]);
-            var sineQuery = DetrEmbeddings.BoxSineEmbedding(referenceSigmoid, batch * total);
+            // d/2 per coordinate, so 4 x d/2 = 2d matches _refPointHead's input at any hidden width (128 at d=256).
+            var sineQuery = DetrEmbeddings.BoxSineEmbedding(referenceSigmoid, batch * total, _d / 2);
             var queryPosition = _refPointHead.Forward(new Tensor<T>(sineQuery.Select(v => _numOps.FromDouble(v)).ToArray(), new[] { batch, total, 2 * _d }));
 
             output = _decoder[i].Forward(output, queryPosition, new Tensor<T>(referenceBoxes, new[] { batch, total, _numLevels, 4 }),

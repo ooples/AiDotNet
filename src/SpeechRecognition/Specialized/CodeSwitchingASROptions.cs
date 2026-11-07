@@ -38,18 +38,23 @@ public class CodeSwitchingASROptions : ModelOptions
         MaxAudioLengthSeconds = other.MaxAudioLengthSeconds;
         EncoderDim = other.EncoderDim;
         NumEncoderLayers = other.NumEncoderLayers;
-        NumAttentionHeads = other.NumAttentionHeads;
+        EncoderProjection = other.EncoderProjection;
+        AttentionDim = other.AttentionDim;
+        AttentionConvChannels = other.AttentionConvChannels;
+        AttentionConvFilters = other.AttentionConvFilters;
         NumMels = other.NumMels;
+        Seed = other.Seed;
         _explicitVocabSize = other._explicitVocabSize;
         MaxTextLength = other.MaxTextLength;
         ModelPath = other.ModelPath;
         OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
-        DropoutRate = other.DropoutRate;
         Language = other.Language;
         CtcWeight = other.CtcWeight;
         LidWeight = other.LidWeight;
         DecoderDim = other.DecoderDim;
         NumDecoderLayers = other.NumDecoderLayers;
+        Vocabulary = (string[])other.Vocabulary.Clone();
+        DropoutRate = other.DropoutRate;
         EnglishBpeVocabSize = other.EnglishBpeVocabSize;
         MandarinCharVocabSize = other.MandarinCharVocabSize;
         SharedLidAttention = other.SharedLidAttention;
@@ -97,13 +102,30 @@ public class CodeSwitchingASROptions : ModelOptions
     /// <value>Defaults to true (<c>LID_shared</c>).</value>
     public bool SharedLidAttention { get; set; } = true;
 
-    /// <summary>Gets or sets the attention decoder's hidden width.</summary>
-    /// <value>Defaults to 320 (the paper's value).</value>
+    /// <summary>Gets or sets the LSTM units of the one-layer attention decoder (and of the LID decoder).</summary>
+    /// <value>Defaults to 320 (section 4.3).</value>
     public int DecoderDim { get; set; } = 320;
 
-    /// <summary>Gets or sets the number of attention decoder layers.</summary>
-    /// <value>Defaults to 1 (the paper's value).</value>
+    /// <summary>Gets or sets the stacked LSTM layers of the attention decoder.</summary>
+    /// <value>Defaults to 1 (section 4.3).</value>
     public int NumDecoderLayers { get; set; } = 1;
+
+    /// <summary>Gets or sets the dropout on encoder layer outputs and decoder embeddings during training (ESPnet's
+    /// <c>dropout-rate</c>).</summary>
+    /// <value>Defaults to 0, ESPnet's default; the paper does not state it.</value>
+    public double DropoutRate { get; set; } = 0.0;
+
+    /// <summary>Gets or sets the width of the location-aware attention (ESPnet's <c>adim</c>).</summary>
+    /// <value>Defaults to 320, ESPnet's default; the paper does not state it.</value>
+    public int AttentionDim { get; set; } = 320;
+
+    /// <summary>Gets or sets the channels of the attention's location convolution (ESPnet's <c>aconv_chans</c>).</summary>
+    /// <value>Defaults to 10, ESPnet's default.</value>
+    public int AttentionConvChannels { get; set; } = 10;
+
+    /// <summary>Gets or sets the half-width of the location convolution's kernel (ESPnet's <c>aconv_filts</c>).</summary>
+    /// <value>Defaults to 100, ESPnet's default (a 201-wide kernel).</value>
+    public int AttentionConvFilters { get; set; } = 100;
 
     /// <summary>
     /// Gets or sets the number of English BPE subword units.
@@ -130,17 +152,19 @@ public class CodeSwitchingASROptions : ModelOptions
     /// <summary>Gets or sets the longest clip, in seconds, of the reference configuration. It is informational: input is neither trimmed nor rejected by length.</summary>
     public int MaxAudioLengthSeconds { get; set; } = 30;
 
-    /// <summary>Gets or sets the encoder's hidden width.</summary>
-    /// <value>Defaults to 320 (the paper's BLSTM width).</value>
+    /// <summary>Gets or sets the LSTM units per direction of each encoder BLSTM layer.</summary>
+    /// <value>Defaults to 320 (section 4.3).</value>
     public int EncoderDim { get; set; } = 320;
 
-    /// <summary>Gets or sets the number of encoder layers.</summary>
-    /// <value>Defaults to 6 (the paper's BLSTM depth).</value>
+    /// <summary>Gets or sets the number of encoder BLSTM layers.</summary>
+    /// <value>Defaults to 6 (section 4.3).</value>
     public int NumEncoderLayers { get; set; } = 6;
 
-    /// <summary>Gets or sets the number of heads in each attention layer.</summary>
-    public int NumAttentionHeads { get; set; } = 8;
-    /// <summary>Gets or sets the number of mel filterbank channels in the input features.</summary>
+    /// <summary>Gets or sets the width the encoder output is projected to (ESPnet's <c>eprojs</c>).</summary>
+    /// <value>Defaults to 320, ESPnet's default.</value>
+    public int EncoderProjection { get; set; } = 320;
+
+    /// <summary>Gets or sets the log-mel bins of the input features.</summary>
     public int NumMels { get; set; } = 80;
 
     private int? _explicitVocabSize;
@@ -183,8 +207,20 @@ public class CodeSwitchingASROptions : ModelOptions
     public string? ModelPath { get; set; }
     /// <summary>Gets or sets the ONNX Runtime settings used when the model is loaded from an ONNX file.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-    /// <summary>Gets or sets the dropout probability of the native layers during training.</summary>
-    public double DropoutRate { get; set; } = 0.1;
-    /// <summary>Gets or sets the language code (for example "en") reported for a transcript when none is passed or detected.</summary>
+    /// <summary>Gets or sets the language code used for speech processing. Defaults to <c>"en"</c>.</summary>
     public string Language { get; set; } = "en";
+
+    /// <summary>Gets or sets the text of each token id (Mandarin characters, then English BPE units); ids past the list
+    /// decode as Unicode code points.</summary>
+    public string[] Vocabulary { get; set; } = Array.Empty<string>();
+
+    // The network adds the boundary token after the inventory.
+    internal CodeSwitchingAsrConfiguration ToConfiguration() => new()
+    {
+        SampleRate = SampleRate, NumMels = NumMels, EncoderUnits = EncoderDim, EncoderLayers = NumEncoderLayers,
+        EncoderProjection = EncoderProjection, DecoderUnits = DecoderDim, DecoderLayers = NumDecoderLayers, DropoutRate = DropoutRate,
+        AttentionDim = AttentionDim,
+        AttentionConvChannels = AttentionConvChannels, AttentionConvFilters = AttentionConvFilters, VocabSize = VocabSize + 1,
+        EnglishTokenOffset = 1 + MandarinTokenCount, CtcWeight = CtcWeight, LidWeight = LidWeight, SharedLidAttention = SharedLidAttention,
+    };
 }

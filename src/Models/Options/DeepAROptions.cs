@@ -47,7 +47,6 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
-
         // Seed is declared on ModelOptions rather than in this file, so a copy constructor
         // written from the local declarations alone misses it. Losing it on a clone silently
         // changes deterministic initialization.
@@ -62,15 +61,16 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
         BatchSize = other.BatchSize;
         NumSamples = other.NumSamples;
         LikelihoodType = other.LikelihoodType;
-        StudentTDegreesOfFreedom = other.StudentTDegreesOfFreedom;
         CovariateSize = other.CovariateSize;
         EmbeddingDimension = other.EmbeddingDimension;
+        ScaleHandling = other.ScaleHandling;
+        UseAgeFeature = other.UseAgeFeature;
     }
 
     /// <summary>
-    /// Gets or sets the lookback window size (context length).
+    /// Gets or sets the conditioning range t₀: the number of past steps that set the scale and the state before a
+    /// forecast (the paper's encoder length, which it sets per dataset: 8 to 168).
     /// </summary>
-    /// <value>The lookback window, defaulting to 30.</value>
     /// <remarks>
     /// <para><b>For Beginners:</b> How many past time steps the model looks at before
     /// making a prediction. For daily data, 30 would mean looking at the past month.
@@ -79,130 +79,72 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
     public int LookbackWindow { get; set; } = 30;
 
     /// <summary>
-    /// Gets or sets the forecast horizon (prediction length).
+    /// Gets or sets the prediction range, the number of steps forecast by ancestral sampling (the paper's decoder
+    /// length, 8 to 52 per dataset).
     /// </summary>
-    /// <value>The forecast horizon, defaulting to 7.</value>
     public int ForecastHorizon { get; set; } = 7;
 
     /// <summary>
-    /// Gets or sets the hidden state size of the LSTM layers.
+    /// Gets or sets the number of cells per LSTM layer (the paper's Table 3: 40, or 120 on the large datasets).
     /// </summary>
-    /// <value>The hidden size, defaulting to 40.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> The capacity of the model's memory. Larger values
-    /// allow the model to remember more complex patterns but require more training data.
-    /// </para>
-    /// </remarks>
     public int HiddenSize { get; set; } = 40;
 
     /// <summary>
-    /// Gets or sets the number of LSTM layers.
+    /// Gets or sets the number of LSTM layers (Table 3: 3).
     /// </summary>
-    /// <value>The number of layers, defaulting to 3, the value DeepAR (Salinas et al. 2020) table 3
-    /// reports for every dataset in the paper alongside 40 LSTM nodes, batch size 64 and learning rate 1e-3.</value>
     public int NumLayers { get; set; } = 3;
 
     /// <summary>
-    /// Gets or sets the dropout rate for regularization.
+    /// Gets or sets the dropout between LSTM layers (the paper is silent; GluonTS's default 0.1).
     /// </summary>
-    /// <value>The dropout rate, defaulting to 0.1.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Dropout helps prevent overfitting by randomly
-    /// ignoring some neurons during training. A value of 0.1 means 10% are ignored.
-    /// </para>
-    /// </remarks>
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>
-    /// Gets or sets the learning rate for training.
+    /// Gets or sets the Adam learning rate (Table 3: 1e-3).
     /// </summary>
-    /// <value>The learning rate, defaulting to 0.001.</value>
     public double LearningRate { get; set; } = 0.001;
 
     /// <summary>
-    /// Gets or sets the number of training epochs.
+    /// Gets or sets the number of training epochs over all windows.
     /// </summary>
-    /// <value>The number of epochs, defaulting to 100.</value>
     public int Epochs { get; set; } = 100;
 
     /// <summary>
-    /// Gets or sets the batch size for training.
+    /// Gets or sets the batch size (Table 3: 64).
     /// </summary>
-    /// <value>The batch size, defaulting to 64, the value DeepAR (Salinas et al. 2020) table 3 reports for every dataset.</value>
     public int BatchSize { get; set; } = 64;
 
     /// <summary>
-    /// Gets or sets the number of samples to draw for probabilistic forecasts.
+    /// Gets or sets the number of ancestral sample paths a forecast draws (the paper's appendix: 200).
     /// </summary>
-    /// <value>The number of samples, defaulting to 100.</value>
     /// <remarks>
-    /// <para><b>For Beginners:</b> DeepAR generates multiple possible futures (samples)
-    /// to create prediction intervals. More samples give more accurate probability
-    /// estimates but take longer to compute. 100 is a good balance.
-    /// </para>
+    /// <para><b>For Beginners:</b> The model forecasts by simulating many possible futures; the point forecast is
+    /// their median and the spread gives the prediction intervals.</para>
     /// </remarks>
-    public int NumSamples { get; set; } = 100;
+    public int NumSamples { get; set; } = 200;
 
     /// <summary>
-    /// Gets or sets the likelihood distribution type.
+    /// Gets or sets the likelihood: "Gaussian" (real-valued data) or "NegativeBinomial" (counts), the paper's two, or
+    /// "StudentT" (heavy tails; the GluonTS reference's default, its degrees of freedom learned).
     /// </summary>
-    /// <value>The likelihood type, defaulting to "Gaussian".</value>
     /// <remarks>
-    /// <para>
-    /// Supported values: "Gaussian", "StudentT", "NegativeBinomial"
-    /// - Gaussian: For continuous data that can be negative (e.g., temperature, stock returns)
-    /// - StudentT: For continuous data with heavy tails (outliers)
-    /// - NegativeBinomial: For count data (e.g., number of sales, website visits)
-    /// </para>
-    /// <para><b>For Beginners:</b> This determines what kind of randomness the model assumes
-    /// in your data. Choose based on your data type:
-    /// - Gaussian (Normal): Most common, works for temperatures, prices, etc.
-    /// - StudentT: When you have occasional extreme outliers
-    /// - NegativeBinomial: When counting things (must be non-negative integers)
-    /// </para>
+    /// <para><b>For Beginners:</b> This determines what kind of randomness the model assumes in your data: Gaussian
+    /// for temperatures or prices, negative binomial when counting things, Student-t when occasional extreme
+    /// values occur.</para>
     /// </remarks>
     public string LikelihoodType { get; set; } = "Gaussian";
 
     /// <summary>
-    /// Gets or sets the fixed degrees-of-freedom ν for the Student-t likelihood head.
+    /// Gets or sets the number of covariates per step (the time-series model reads them from the input matrix; the
+    /// paper standardizes every covariate).
     /// </summary>
-    /// <value>The degrees of freedom, defaulting to 4.0.</value>
-    /// <remarks>
-    /// <para>
-    /// Only used when <see cref="LikelihoodType"/> is "StudentT". Lower ν means heavier tails (more
-    /// probability on extreme moves); ν must exceed 2 for a finite variance. ν≈4 is a strong default for
-    /// financial returns. The value is fixed (not learned) so the likelihood stays differentiable in
-    /// (mean, scale) without needing a differentiable log-Gamma.
-    /// </para>
-    /// <para><b>For Beginners:</b> Controls how "fat" the tails of the predicted distribution are — how much
-    /// room the model leaves for rare, large surprises. Smaller = expects bigger surprises more often.
-    /// </para>
-    /// </remarks>
-    public double StudentTDegreesOfFreedom { get; set; } = 4.0;
-
-    /// <summary>
-    /// Gets or sets the number of covariates (external features).
-    /// </summary>
-    /// <value>The covariate size, defaulting to 0.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Covariates are additional features that might influence
-    /// your forecast, like holidays, promotions, weather, etc. Set this to the number
-    /// of such features you want to include.
-    /// </para>
-    /// </remarks>
     public int CovariateSize { get; set; } = 0;
 
     /// <summary>
-    /// Gets or sets the embedding dimension for categorical features.
+    /// Gets or sets the size of the learned item embedding when several series are modelled together (§3.4: a
+    /// categorical item feature with a learned embedding; Table 3: 20 on the larger datasets).
     /// </summary>
-    /// <value>The embedding dimension, defaulting to 10.</value>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> If you have categorical features (like store ID,
-    /// product category), embeddings convert them into numerical representations
-    /// that the model can understand. This sets how many dimensions to use.
-    /// </para>
-    /// </remarks>
-    public int EmbeddingDimension { get; set; } = 10;
+    public int EmbeddingDimension { get; set; } = 20;
 
     /// <summary>
     /// Gets or sets how the conditioning range is rescaled before the recurrent trunk sees it.
@@ -222,4 +164,20 @@ public class DeepAROptions<T> : TimeSeriesRegressionOptions<T>
     /// </para>
     /// </remarks>
     public DeepARScaleHandling ScaleHandling { get; set; } = DeepARScaleHandling.PaperMean;
+
+    /// <summary>
+    /// Gets or sets whether the time-series model adds the paper's "age" covariate, the distance to the series' first
+    /// observation, standardized (§3.4: used in all experiments).
+    /// </summary>
+    public bool UseAgeFeature { get; set; } = true;
+
+    /// <summary>The likelihood named by <see cref="LikelihoodType"/>.</summary>
+    /// <exception cref="ArgumentException">For any other name.</exception>
+    public AiDotNet.TimeSeries.DeepARLikelihood ResolveLikelihood()
+    {
+        if (Enum.TryParse<AiDotNet.TimeSeries.DeepARLikelihood>(LikelihoodType?.Trim(), ignoreCase: true, out var likelihood)
+            && Enum.IsDefined(typeof(AiDotNet.TimeSeries.DeepARLikelihood), likelihood))
+            return likelihood;
+        throw new ArgumentException($"Unknown DeepAR likelihood \"{LikelihoodType}\"; use Gaussian, NegativeBinomial or StudentT.");
+    }
 }

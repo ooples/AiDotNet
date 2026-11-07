@@ -2,6 +2,7 @@ using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Enums;
 using AiDotNet.Attributes;
 using AiDotNet.Audio;
+using AiDotNet.Audio.Foundations;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LinearAlgebra;
@@ -13,33 +14,27 @@ using AiDotNet.Optimizers;
 namespace AiDotNet.SpeechRecognition.NeMo;
 
 /// <summary>
-/// Parakeet-RNNT: NVIDIA NeMo's 1.1B parameter Conformer with RNN-Transducer decoder.
+/// Parakeet-RNNT: NVIDIA NeMo's Fast Conformer (Rekesh et al. 2023) with an RNN-T decoder.
 /// </summary>
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
-/// <para><b>References:</b>
-/// <list type="bullet"><item>Model: "Parakeet-RNNT" (NVIDIA NeMo, 2024)</item></list></para>
-/// <para><b>For Beginners:</b> Parakeet-RNNT pairs the same 24-layer Fast Conformer encoder as Parakeet-CTC with an RNN-Transducer decoder instead of CTC. The RNN-T decoder consists of a prediction network (LSTM) that models text history and a joint network that combines encode...</para>
+/// <para><b>For Beginners:</b> Parakeet-RNNT turns 16 kHz audio into an 80-band log-mel spectrogram, shortens it 8x with
+/// depthwise-separable convolutions, and encodes it with Conformer blocks, each mixing self-attention (long-range context) with a convolution
+/// (local patterns). A small LSTM remembers the words written so far and a joint network combines it with each audio frame to pick the next token or "nothing yet".</para>
 /// <para>
-/// Parakeet-RNNT pairs the same 24-layer Fast Conformer encoder as Parakeet-CTC with an
-/// RNN-Transducer decoder instead of CTC. The RNN-T decoder consists of a prediction network
-/// (LSTM) that models text history and a joint network that combines encoder and prediction
-/// outputs. This enables streaming-capable inference and generally better accuracy than CTC
-/// alone since the decoder can model label dependencies. The joint network produces per-frame,
-/// per-label logits for the RNN-T loss function.
+/// Fast Conformer replaces the Conformer front end with 8x depthwise-separable convolution subsampling of 256 channels and narrows the depthwise kernel to 9 (section 3.1). The defaults are parakeet-rnnt-0.6b: 24 blocks, width 1024, 8 heads, a 1024-token vocabulary, and a 640-unit single-layer LSTM prediction network with a 640-wide joint network. SpecAugment masks the features in training (section 3.1). The RNN-T decoder (Graves 2012) trains with the transducer loss and decodes greedily, at most ten labels per frame. The paper's blocks use relative
+/// positional encoding; these use rotary position encoding, the relative scheme
+/// <see cref="AiDotNet.NeuralNetworks.Layers.ConformerBlockLayer{T}"/> provides.
 /// </para>
 /// </remarks>
 /// <example>
 /// <code>
-/// // Create a Parakeet-RNNT model with RNN-Transducer for streaming ASR
-/// var architecture = new NeuralNetworkArchitecture&lt;double&gt;(
+/// var architecture = new NeuralNetworkArchitecture&lt;float&gt;(
 ///     inputType: InputType.OneDimensional,
 ///     taskType: NeuralNetworkTaskType.SpeechRecognition,
-///     inputHeight: 16000, inputWidth: 1, inputDepth: 1, outputSize: 1024);
-/// var model = new ParakeetRNNT&lt;double&gt;(architecture);
-///
-/// // Or load a pre-trained ONNX model for streaming transducer ASR
-/// var onnxModel = new ParakeetRNNT&lt;double&gt;(architecture, "parakeetrnnt.onnx");
+///     inputSize: 16000, outputSize: 34);
+/// var model = new ParakeetRNNT&lt;float&gt;(architecture);
+/// var text = model.Transcribe(waveform).Text;
 /// </code>
 /// </example>
 [ModelDomain(ModelDomain.Audio)]
@@ -53,97 +48,215 @@ namespace AiDotNet.SpeechRecognition.NeMo;
                 ReferenceBatchSize = 2048,
                 LearningRate = 0.0025,
                 Source = "Rekesh et al. 2023, Sec. 4.1: Fast Conformer models were trained using cosine scheduler with a 15k linear warmup, AdamW, global batch size 2048 across 32 GPUs. Peak learning rate 0.0025 for RNNT.")]
-public partial class ParakeetRNNT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
+public partial class ParakeetRNNT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>, ITrainingObjectiveProvider<T>
 {
     /// <inheritdoc />
-    /// <remarks>
-    /// Traced through the graph, not read off a name: InitializeLayers builds
-    /// <c>LayerHelper.CreateDefaultConformerTransducerLayers(..., vocabSize: _options.VocabSize)</c>.
-    /// The stack is emitted as one flat sequence and its LAST layer is the joint network's output
-    /// projection <c>DenseLayer&lt;T&gt;(vocabSize)</c>; PredictionDim and JointDim size the two layers
-    /// before it, so neither is the exposed width. PostprocessOutput is the identity.
-    /// </remarks>
+    /// <remarks>The output vocabulary, blank (0) included.</remarks>
     protected override int OutputFeatureWidth => _options.VocabSize;
 
     private readonly ParakeetRNNTOptions _options;
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer; private bool _useNativeMode; private bool _disposed;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private bool _useNativeMode;
+    private bool _disposed;
+    // The paper network on the native path; null in ONNX mode or with custom layers.
+    private ConformerAsrNetwork<T>? _network;
+    private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
+    internal ConformerAsrNetwork<T>? Network => _network;
     public IReadOnlyList<string> SupportedLanguages { get; }
-    public bool SupportsStreaming => true;
+    public bool SupportsStreaming => false;
     public bool SupportsWordTimestamps => false;
 
-    public ParakeetRNNT(NeuralNetworkArchitecture<T> architecture, string modelPath, ParakeetRNNTOptions? options = null) : base(architecture) { _options = options ?? new ParakeetRNNTOptions(); Options = _options; _useNativeMode = false; base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath)); if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath); _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions); SupportedLanguages = new[] { "en" }; InitializeLayers(); }
-    public ParakeetRNNT(NeuralNetworkArchitecture<T> architecture, ParakeetRNNTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture) { _options = options ?? new ParakeetRNNTOptions(); Options = _options; _useNativeMode = true; _optimizer = optimizer
-        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-        ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this); base.SampleRate = _options.SampleRate; base.NumMels = _options.NumMels; SupportedLanguages = new[] { "en" }; InitializeLayers(); }
+    public ParakeetRNNT(NeuralNetworkArchitecture<T> architecture, string modelPath, ParakeetRNNTOptions? options = null) : base(architecture)
+    {
+        _options = options ?? new ParakeetRNNTOptions(); Options = _options; _useNativeMode = false;
+        base.SampleRate = _options.SampleRate; base.NumMels = 0;
+        if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
+        if (!File.Exists(modelPath)) throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+        _options.ModelPath = modelPath; OnnxEncoder = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+        SupportedLanguages = new[] { _options.Language }; InitializeLayersCore();
+    }
 
-    /// <summary>
-    /// Transcribes audio using Fast Conformer encoder + RNN-Transducer decoder.
-    /// Per NVIDIA (2024): the encoder produces frame-level representations, the prediction
-    /// network (LSTM) models text context, and the joint network combines both via an additive
-    /// operation followed by tanh and linear projection. Greedy decoding steps through encoder
-    /// frames and emits tokens when the joint network produces non-blank labels.
-    /// </summary>
+    public ParakeetRNNT(NeuralNetworkArchitecture<T> architecture, ParakeetRNNTOptions? options = null, IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null) : base(architecture)
+    {
+        _options = options ?? new ParakeetRNNTOptions(); Options = _options; _useNativeMode = true;
+        _optimizer = optimizer
+        ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this) ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        base.SampleRate = _options.SampleRate; base.NumMels = 0;
+        SupportedLanguages = new[] { _options.Language }; InitializeLayersCore();
+    }
+
+    /// <summary>Transcribes audio: the encoder and the transducer with greedy decoding.</summary>
     public TranscriptionResult<T> Transcribe(Tensor<T> audio, string? language = null, bool? includeTimestamps = null)
     {
         ThrowIfDisposed();
-        var features = PreprocessAudio(audio);
-        Tensor<T> logits;
-
-        if (IsOnnxMode && OnnxEncoder is not null)
-        {
-            logits = OnnxEncoder.Run(features);
-        }
+        if (ResolveReturnTimestamps(includeTimestamps)) throw new NotSupportedException("Word-level timestamps are not supported for ParakeetRNNT.");
+        var waveform = PreprocessAudio(audio);
+        List<int> tokens;
+        if (_network is null) tokens = ConformerAsrNetwork<T>.GreedyCtc(Logits(waveform, training: false));
         else
         {
-            logits = features;
-            foreach (var l in Layers) logits = l.Forward(logits);
+            using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+            var encoded = _network.Encode(_network.Features(Samples(waveform, 0, waveform.Length)), training: false);
+            tokens = _network.GreedyTransducer(encoded);
         }
-
-        var (tokens, confidence) = TransducerGreedyDecodeWithConfidence(logits);
-        var text = TokensToText(tokens);
-        double duration = audio.Length > 0 ? (double)audio.Shape[0] / SampleRate : 0;
-
         return new TranscriptionResult<T>
         {
-            Text = text,
-            Language = language ?? _options.Language,
-            Confidence = NumOps.FromDouble(confidence),
-            DurationSeconds = duration,
-            Segments = ResolveReturnTimestamps(includeTimestamps) ? ExtractSegments(text, duration, confidence) : Array.Empty<TranscriptionSegment<T>>()
+            Text = Text(tokens), Language = language ?? _options.Language, Confidence = NumOps.FromDouble(tokens.Count > 0 ? 1.0 : 0.0),
+            DurationSeconds = audio.Length / (double)SampleRate, Segments = Array.Empty<TranscriptionSegment<T>>(),
         };
     }
 
     public Task<TranscriptionResult<T>> TranscribeAsync(Tensor<T> audio, string? language = null, bool? includeTimestamps = null, CancellationToken cancellationToken = default) => Task.Run(() => Transcribe(audio, language, includeTimestamps), cancellationToken);
-    public string DetectLanguage(Tensor<T> audio) { var features = PreprocessAudio(audio); Tensor<T> logits; if (IsOnnxMode && OnnxEncoder is not null) logits = OnnxEncoder.Run(features); else { logits = features; foreach (var l in Layers) logits = l.Forward(logits); } var (tokens, _) = TransducerGreedyDecodeWithConfidence(logits); return ClassifyLanguageFromTokens(tokens); }
-    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) { var detected = DetectLanguage(audio); var result = new Dictionary<string, T>(); double primaryProb = 0.85; double otherProb = SupportedLanguages.Count > 1 ? (1.0 - primaryProb) / (SupportedLanguages.Count - 1) : 0.0; foreach (var lang in SupportedLanguages) result[lang] = NumOps.FromDouble(lang == detected ? primaryProb : otherProb); return result; }
-    public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => new RNNTStreamingSession(this, language ?? _options.Language);
+    public string DetectLanguage(Tensor<T> audio) => _options.Language;
+    public IReadOnlyDictionary<string, T> DetectLanguageProbabilities(Tensor<T> audio) => new Dictionary<string, T> { [_options.Language] = NumOps.One };
 
-    protected override void InitializeLayers() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultConformerTransducerLayers(encoderDim: _options.EncoderDim, predictionDim: _options.PredictionDim, jointDim: _options.JointDim, numEncoderLayers: _options.NumEncoderLayers, numAttentionHeads: _options.NumAttentionHeads, feedForwardExpansionFactor: _options.FeedForwardDim / _options.EncoderDim, numMels: _options.NumMels, vocabSize: _options.VocabSize, dropoutRate: _options.DropoutRate)); }
-    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+    public IStreamingTranscriptionSession<T> StartStreamingSession(string? language = null) => throw new NotSupportedException("ParakeetRNNT does not support streaming.");
+
+    // Each token is its vocabulary entry; tokens past the vocabulary list decode as Unicode code points.
+    private string Text(List<int> tokens)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (int t in tokens)
+        {
+            if (t < _options.Vocabulary.Length) { string s = _options.Vocabulary[t]; sb.Append(s == "|" ? " " : s.StartsWith("<", StringComparison.Ordinal) ? string.Empty : s); }
+            else if (t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t));
+        }
+        return sb.ToString().Trim();
+    }
+
+    protected override void InitializeLayers() => InitializeLayersCore();
+
+    private void InitializeLayersCore()
+    {
+        if (!_useNativeMode) return;
+        _network = null;
+        if (Architecture.Layers is not null && Architecture.Layers.Count > 0) { Layers.AddRange(Architecture.Layers); return; }
+        // The paper network (see the class remarks). It used to be a generic template.
+        var layers = new List<LayerBase<T>>();
+        _network = new ConformerAsrNetwork<T>(Engine, layers, _options.ToConfiguration());
+        _random = Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 1);
+        Layers.AddRange(layers);
+    }
+
+    // The recognizer reads the raw waveform, truncated to the longest window a transcription covers.
+    protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
+    {
+        if (_network is null) return base.PreprocessAudio(rawAudio);
+        int length = Math.Min(rawAudio.Length, SampleRate * _options.MaxAudioLengthSeconds);
+        var waveform = new Tensor<T>(new[] { length });
+        rawAudio.Data.Span.Slice(0, length).CopyTo(waveform.Data.Span);
+        return waveform;
+    }
+
+    private double[] Samples(Tensor<T> waveform, int offset, int count)
+    {
+        var samples = new double[count];
+        var span = waveform.Data.Span;
+        for (int i = 0; i < count; i++) samples[i] = NumOps.ToDouble(span[offset + i]);
+        return samples;
+    }
+
+    // Per-frame log-probabilities [frames, vocabulary] of the joint network before any label is emitted, for a waveform [S], or [batch, frames, vocabulary] for [batch, S].
+    private Tensor<T> Logits(Tensor<T> input, bool training)
+    {
+        if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
+        if (_network is null) { var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows;
+        var outputs = new Tensor<T>[rows];
+        for (int r = 0; r < rows; r++) outputs[r] = FrameLogits(_network.Encode(_network.Features(Samples(input, r * samples, samples)), training));
+        return rows == 1 && input.Rank == 1 ? outputs[0] : Engine.TensorStack(outputs, 0);
+    }
+
+    private Tensor<T> FrameLogits(Tensor<T> encoded)
+    {
+        var network = _network ?? throw new InvalidOperationException("No native network.");
+        var joint = network.Joint(encoded, network.Predict(Array.Empty<int>()));
+        return Engine.Reshape(joint, new[] { encoded.Shape[0], _options.VocabSize });
+    }
+
+    protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); return Logits(input, training: false); }
+
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => _network is null ? base.ForwardForTraining(input) : Logits(input, training: true);
+
+    // The labels a training target names: label ids [length], or one distribution per encoder frame [frames, vocabulary]
+    // read as a CTC alignment (the most likely symbol per frame, repeats merged, blanks removed).
+    private int[] Labels(Tensor<T> target)
+    {
+        if (target.Rank >= 2 && target.Shape[^1] == _options.VocabSize)
+        {
+            var frames = Engine.Reshape(target, new[] { target.Length / _options.VocabSize, _options.VocabSize });
+            return ConformerAsrNetwork<T>.GreedyCtc(frames).ToArray();
+        }
+        var labels = new int[target.Length];
+        var span = target.Data.Span;
+        for (int i = 0; i < labels.Length; i++)
+        {
+            double value = Math.Round(NumOps.ToDouble(span[i]));
+            if (value <= 0 || value >= _options.VocabSize) throw new ArgumentException($"Label {value} is the blank or outside the vocabulary.", nameof(target));
+            labels[i] = (int)value;
+        }
+        return labels;
+    }
+
+    /// <inheritdoc />
+    /// <remarks>The transducer loss (Graves 2012) of the target labels over SpecAugmented features (Gulati et al. 2020, section 3.1).</remarks>
+    protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
+    {
+        var network = _network;
+        if (network is null) return false;
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
+        var labels = new int[rows][];
+        for (int r = 0; r < rows; r++)
+        {
+            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
+            labels[r] = Labels(row);
+        }
+        TrainWithCustomLoss(input, _ =>
+        {
+            Tensor<T>? total = null;
+            for (int r = 0; r < rows; r++)
+            {
+                var encoded = network.Encode(network.SpecAugment(network.Features(Samples(input, r * samples, samples)), _random), training: true);
+                var loss = network.TransducerLoss(encoded, labels[r]);
+                total = total is null ? loss : Engine.TensorAdd(total, loss);
+            }
+            return Engine.TensorMultiplyScalar(total ?? throw new ArgumentException("No audio.", nameof(input)), NumOps.FromDouble(1.0 / rows));
+        }, _optimizer);
+        return true;
+    }
+
+    TrainingObjectiveKind ITrainingObjectiveProvider<T>.TrainingObjectiveKind => TrainingObjectiveKind.Supervised;
+
+    Tensor<T> ITrainingObjectiveProvider<T>.ResolveTrainingTarget(Tensor<T> input, Tensor<T> proposedTarget) => proposedTarget;
+
+    /// <inheritdoc />
+    /// <remarks>The objective <see cref="TryApplyLearningRule"/> minimizes (the transducer loss), on unaugmented features in inference
+    /// mode, averaged over the batch.</remarks>
+    T ITrainingObjectiveProvider<T>.EvaluateTrainingObjective(Tensor<T> input, Tensor<T> target)
+    {
+        var network = _network ?? throw new NotSupportedException("The objective is defined on the native network.");
+        using var _ = new Tensors.Engines.Autodiff.NoGradScope<T>();
+        int rows = input.Rank == 1 ? 1 : input.Shape[0], samples = input.Length / rows, perRow = target.Length / rows;
+        double total = 0;
+        for (int r = 0; r < rows; r++)
+        {
+            var row = rows == 1 ? target : Engine.Reshape(Engine.TensorSlice(Engine.Reshape(target, new[] { rows, perRow }), new[] { r, 0 }, new[] { 1, perRow }),
+                target.Rank >= 3 ? target.Shape.ToArray().Skip(1).ToArray() : new[] { perRow });
+            var features = network.Features(Samples(input, r * samples, samples));
+            total += NumOps.ToDouble(network.TransducerLoss(network.Encode(features, training: false), Labels(row))[0]);
+        }
+        return NumOps.FromDouble(total / rows);
+    }
+
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
-    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "ParakeetRNNT-Native" : "ParakeetRNNT-ONNX", Description = "Parakeet-RNNT: 1.1B Fast Conformer + RNN-T decoder (NVIDIA NeMo, 2024)", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
+    public override ModelMetadata<T> GetModelMetadata() => new() { Name = _useNativeMode ? "ParakeetRNNT-Native" : "ParakeetRNNT-ONNX", Description = "Parakeet-RNNT: NVIDIA NeMo's Fast Conformer (Rekesh et al. 2023) with an RNN-T decoder", FeatureCount = _options.NumMels, Complexity = _options.NumEncoderLayers, AdditionalInfo = BaseAudioMetadataInfo() };
 
-
-
-    private (List<int> tokens, double confidence) TransducerGreedyDecodeWithConfidence(Tensor<T> logits) { var tokens = new List<int>(); double totalConf = 0; int confCount = 0; int prevToken = -1; int numFrames = logits.Rank >= 2 ? logits.Shape[0] : 1; int vocabSize = logits.Rank >= 2 ? logits.Shape[^1] : logits.Shape[0]; for (int t = 0; t < numFrames && tokens.Count < _options.MaxTextLength; t++) { int maxIdx = 0; double maxVal = double.NegativeInfinity; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); if (val > maxVal) { maxVal = val; maxIdx = v; } } double sumExp = 0; for (int v = 0; v < vocabSize; v++) { double val = logits.Rank >= 2 ? NumOps.ToDouble(logits[t, v]) : NumOps.ToDouble(logits[v]); sumExp += Math.Exp(val - maxVal); } double frameConf = 1.0 / sumExp; if (maxIdx != prevToken && maxIdx > 0) { tokens.Add(maxIdx); totalConf += frameConf; confCount++; } prevToken = maxIdx; } return (tokens, confCount > 0 ? totalConf / confCount : 0.0); }
-    private static string TokensToText(List<int> tokens) { var sb = new System.Text.StringBuilder(); foreach (var t in tokens) { if (t > 0 && t <= char.MaxValue) sb.Append((char)t); else if (t > char.MaxValue && t <= 0x10FFFF) sb.Append(char.ConvertFromUtf32(t)); } return sb.ToString().Trim(); }
-    private IReadOnlyList<TranscriptionSegment<T>> ExtractSegments(string text, double duration, double confidence) { if (string.IsNullOrWhiteSpace(text)) return Array.Empty<TranscriptionSegment<T>>(); return new[] { new TranscriptionSegment<T> { Text = text, StartTime = 0.0, EndTime = duration, Confidence = NumOps.FromDouble(confidence) } }; }
-    private string ClassifyLanguageFromTokens(List<int> tokens) { if (tokens.Count == 0) return _options.Language; int cjkCount = 0, latinCount = 0; foreach (var t in tokens) { if (t >= 0x4E00 && t <= 0x9FFF) cjkCount++; else if (t >= 0x41 && t <= 0x7A) latinCount++; } if (cjkCount > latinCount && SupportedLanguages.Contains("zh")) return "zh"; return _options.Language; }
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(ParakeetRNNT<T>)); }
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
-
-    private sealed class RNNTStreamingSession : IStreamingTranscriptionSession<T>
-    {
-        private readonly ParakeetRNNT<T> _model; private readonly string _language; private readonly List<Tensor<T>> _chunks = new(); private bool _disposed;
-        public RNNTStreamingSession(ParakeetRNNT<T> model, string language) { _model = model; _language = language; }
-        public void FeedAudio(Tensor<T> audioChunk) { if (_disposed) throw new ObjectDisposedException(nameof(RNNTStreamingSession)); _chunks.Add(audioChunk); }
-        public TranscriptionResult<T> GetPartialResult() { if (_disposed) throw new ObjectDisposedException(nameof(RNNTStreamingSession)); if (_chunks.Count == 0) return new TranscriptionResult<T> { Language = _language }; int totalLen = 0; foreach (var c in _chunks) totalLen += c.Length; var combined = new Tensor<T>(new[] { totalLen }); int offset = 0; foreach (var c in _chunks) { for (int i = 0; i < c.Length; i++) combined[offset + i] = c[i]; offset += c.Length; } return _model.Transcribe(combined, _language); }
-        public TranscriptionResult<T> Finalize() { if (_disposed) throw new ObjectDisposedException(nameof(RNNTStreamingSession)); var result = GetPartialResult(); _disposed = true; return result; }
-        public void Dispose() { _disposed = true; }
-    }
 }

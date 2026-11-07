@@ -1,139 +1,122 @@
 namespace AiDotNet.Models.Options;
 
 /// <summary>
-/// Configuration options for PATE-GAN, a differentially private GAN that uses the
-/// Private Aggregation of Teacher Ensembles (PATE) framework for privacy-preserving
-/// synthetic data generation.
+/// Configuration options for PATE-GAN (Jordon, Yoon and van der Schaar, ICLR 2019), a GAN whose discriminator is a
+/// student trained on generated samples labelled by a noisy vote of teachers, each of which sees only one disjoint
+/// partition of the data.
 /// </summary>
 /// <typeparam name="T">The numeric type.</typeparam>
 /// <remarks>
 /// <para>
-/// PATE-GAN achieves differential privacy through a teacher-student framework:
-/// - <b>Teacher ensemble</b>: Multiple discriminators, each trained on a disjoint partition of the data
-/// - <b>Noisy aggregation</b>: Teacher votes are aggregated with Laplace noise
-/// - <b>Student discriminator</b>: Learns from noisy teacher labels, never sees real data directly
-/// - <b>Generator</b>: Trained against the student discriminator
+/// Defaults follow the paper's appendix ("Hyper-parameter optimization"): depth-3 generator and student with
+/// <c>d</c> and <c>d/2</c> hidden units (<c>d</c> the encoded row width), depth-1 teachers, ReLU hidden layers and
+/// sigmoid outputs, batch size 64, n_T = n_S = 5, Adam with learning rate 1e-4. The privacy budget (ε = 1,
+/// δ = 1e-5), the noise size λ = 1 and k = 10 teachers are the defaults of the authors' released code; the paper
+/// selects k by cross-validation from {N/10, N/50, ..., N/10000}.
 /// </para>
 /// <para>
-/// <b>For Beginners:</b> PATE-GAN provides privacy by never showing the full dataset to any
-/// single component:
-///
-/// 1. Split real data into N groups, give each to a "teacher"
-/// 2. Teachers vote on whether generated data looks real or fake
-/// 3. Add random noise to the vote tally (for privacy)
-/// 4. A "student" learns from the noisy votes, not the real data
-/// 5. Generator tries to fool the student
-///
-/// Because the student never sees real data, and the votes are noisy,
-/// no individual's data can be extracted from the generated output.
-///
-/// Example:
+/// <b>For Beginners:</b> PATE-GAN never lets one network see all the real data. Each "teacher" sees a small slice;
+/// a "student" learns only from the teachers' noisy votes about generated rows; the generator learns only from the
+/// student. Training stops once the privacy budget ε is spent.
 /// <code>
-/// var options = new PATEGANOptions&lt;double&gt;
-/// {
-///     NumTeachers = 10,        // 10 teacher discriminators
-///     LaplaceScale = 0.1,      // Noise for privacy
-///     Epochs = 300
-/// };
-/// var pategan = new PATEGANGenerator&lt;double&gt;(options);
+/// var options = new PATEGANOptions&lt;double&gt; { Epsilon = 1.0, NumTeachers = 10 };
+/// var pategan = new PATEGANGenerator&lt;double&gt;(architecture, options);
+/// pategan.Fit(data, columns);
 /// </code>
-/// </para>
-/// <para>
-/// Reference: "PATE-GAN: Generating Synthetic Data with Differential Privacy Guarantees"
-/// (Jordon et al., ICLR 2019)
 /// </para>
 /// </remarks>
 public class PATEGANOptions<T> : SyntheticDataGeneratorOptions<T>
 {
     /// <summary>
-    /// Gets or sets the number of teacher discriminators in the ensemble.
+    /// Gets or sets the number k of teachers, each trained on one of k disjoint partitions of the data.
     /// </summary>
-    /// <value>Number of teachers, defaulting to 10.</value>
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> More teachers = better privacy (each sees less data)
-    /// but requires more data overall. Should divide the dataset evenly.
-    /// Typical range: 5-50.
-    /// </para>
+    /// <para><b>For Beginners:</b> More teachers make each vote count for less, so the noise matters less and the
+    /// privacy guarantee is tighter, but each teacher then learns from fewer rows.</para>
     /// </remarks>
+    /// <value>Defaults to 10, the authors' released code.</value>
     public int NumTeachers { get; set; } = 10;
 
     /// <summary>
-    /// Gets or sets the Laplace noise scale for the noisy aggregation mechanism.
+    /// Gets or sets the scale λ of the Laplace noise added to each vote count (Eq. 4).
     /// </summary>
-    /// <value>The noise scale, defaulting to 0.1.</value>
     /// <remarks>
-    /// <para>
-    /// <b>For Beginners:</b> Controls the privacy-utility tradeoff:
-    /// - Higher values = more privacy but noisier labels for the student
-    /// - Lower values = less privacy but better student learning
-    /// The privacy guarantee (epsilon) is inversely proportional to this scale.
-    /// </para>
+    /// <para>A single noisy vote is (1/λ, 0)-differentially private (section 3), so larger noise spends less of the
+    /// budget per query.</para>
     /// </remarks>
-    public double LaplaceScale { get; set; } = 0.1;
+    /// <value>Defaults to 1.0, the authors' released code.</value>
+    public double LaplaceScale { get; set; } = 1.0;
 
     /// <summary>
-    /// Gets or sets the dimension of the random noise vector for the generator.
+    /// Gets or sets the privacy budget ε; training stops once the moments accountant's ε̂ reaches it (Algorithm 1).
     /// </summary>
-    /// <value>The embedding dimension, defaulting to 128.</value>
-    public int EmbeddingDimension { get; set; } = 128;
+    /// <value>Defaults to 1.0.</value>
+    public double Epsilon { get; set; } = 1.0;
 
     /// <summary>
-    /// Gets or sets the hidden layer sizes for the generator network.
+    /// Gets or sets δ of the (ε, δ) guarantee.
     /// </summary>
-    /// <value>Array of layer dimensions. Defaults to [256, 256].</value>
-    public int[] GeneratorDimensions { get; set; } = [256, 256];
+    /// <value>Defaults to 1e-5, the value fixed throughout the paper's experiments.</value>
+    public double Delta { get; set; } = 1e-5;
 
     /// <summary>
-    /// Gets or sets the hidden layer sizes for each teacher discriminator.
+    /// Gets or sets the number L of moments the accountant tracks (Algorithm 1, line 2).
     /// </summary>
-    /// <value>Array of layer dimensions. Defaults to [256, 256].</value>
-    public int[] TeacherDimensions { get; set; } = [256, 256];
+    /// <value>Defaults to 20, the authors' released code.</value>
+    public int MomentOrders { get; set; } = 20;
 
     /// <summary>
-    /// Gets or sets the hidden layer sizes for the student discriminator.
+    /// Gets or sets the width of the generator's noise z ~ Unif([0, 1]^n); null uses the encoded row width d, as the
+    /// paper does (section 4.2.2 relies on G([0, 1]^d) covering [0, 1]^d).
     /// </summary>
-    /// <value>Array of layer dimensions. Defaults to [256, 256].</value>
-    public int[] StudentDimensions { get; set; } = [256, 256];
+    /// <value>Defaults to null.</value>
+    public int? EmbeddingDimension { get; set; }
 
     /// <summary>
-    /// Gets or sets the training batch size.
+    /// Gets or sets the generator's hidden widths; null uses the paper's [d, d/2].
     /// </summary>
-    /// <value>The batch size, defaulting to 64.</value>
+    /// <value>Defaults to null.</value>
+    public int[]? GeneratorDimensions { get; set; }
+
+    /// <summary>
+    /// Gets or sets the teachers' hidden widths; empty is the paper's depth-1 teacher (a logistic regression).
+    /// </summary>
+    /// <value>Defaults to an empty array.</value>
+    public int[] TeacherDimensions { get; set; } = [];
+
+    /// <summary>
+    /// Gets or sets the student's hidden widths; null uses the paper's [d, d/2].
+    /// </summary>
+    /// <value>Defaults to null.</value>
+    public int[]? StudentDimensions { get; set; }
+
+    /// <summary>
+    /// Gets or sets the mini-batch size n for the teachers, the student and the generator.
+    /// </summary>
+    /// <value>Defaults to 64 (paper appendix).</value>
     public int BatchSize { get; set; } = 64;
 
     /// <summary>
-    /// Gets or sets the number of training epochs.
+    /// Gets or sets the maximum number of generator iterations; training also stops when ε is spent.
     /// </summary>
-    /// <value>Number of epochs, defaulting to 300.</value>
-    public int Epochs { get; set; } = 300;
+    /// <value>Defaults to 10000, the authors' released code's iteration cap.</value>
+    public int Epochs { get; set; } = 10000;
 
     /// <summary>
-    /// Gets or sets the learning rate.
+    /// Gets or sets the Adam learning rate of every network.
     /// </summary>
-    /// <value>The learning rate, defaulting to 1e-4.</value>
+    /// <value>Defaults to 1e-4 (paper appendix).</value>
     public double LearningRate { get; set; } = 1e-4;
 
     /// <summary>
-    /// Gets or sets the number of VGM modes for continuous column transformation.
+    /// Gets or sets the number n_T of teacher updates per generator iteration.
     /// </summary>
-    /// <value>Number of modes, defaulting to 10.</value>
-    public int VGMModes { get; set; } = 10;
+    /// <value>Defaults to 5 (paper appendix).</value>
+    public int TeacherSteps { get; set; } = 5;
 
     /// <summary>
-    /// Gets or sets the number of student discriminator training steps per teacher query.
+    /// Gets or sets the number n_S of student updates per generator iteration.
     /// </summary>
-    /// <value>Number of student steps, defaulting to 5.</value>
+    /// <value>Defaults to 5 (paper appendix).</value>
     public int StudentSteps { get; set; } = 5;
-
-    /// <summary>
-    /// Gets or sets the dropout rate for the student discriminator hidden layers.
-    /// </summary>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> Dropout randomly deactivates neurons during student training,
-    /// preventing the student from memorizing the noisy teacher labels and forcing it to learn
-    /// generalizable features of real vs. fake data.</para>
-    /// </remarks>
-    /// <value>Dropout probability, defaulting to 0.25.</value>
-    public double StudentDropout { get; set; } = 0.25;
 }

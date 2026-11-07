@@ -214,8 +214,8 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// the kernel shape collapses from [OutputDepth, InputDepth, K, K] to
     /// [OutputDepth, 1, K, K]. This is the MobileNet/EfficientNet inverted-residual
     /// depthwise stage — running it as a dense conv (the old default) did InputDepth×
-    /// more FLOPs than necessary (#639). Only 1 and InputDepth are supported; other
-    /// group counts throw (general grouped conv is not wired to a kernel yet).
+    /// more FLOPs than necessary (#639). Any other group count that divides both depths
+    /// is a general grouped convolution, run as one convolution per group.
     /// </summary>
     public int Groups { get; private set; } = 1;
 
@@ -711,14 +711,15 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
         IActivationFunction<T>? activationFunction = null,
         IInitializationStrategy<T>? initializationStrategy = null,
         IActivationFunction<T>? nonlinearityForInit = null,
-        int groups = 1)
+        int groups = 1,
+        BiasMode biasMode = BiasMode.Auto)
     {
         if (inputDepth <= 0)
             throw new ArgumentOutOfRangeException(nameof(inputDepth), "inputDepth must be positive.");
 
         var layer = new ConvolutionalLayer<T>(
             outputDepth, kernelSize, stride, padding, activationFunction,
-            initializationStrategy, nonlinearityForInit, groups);
+            initializationStrategy, nonlinearityForInit, groups, biasMode);
 
         // Pin the channel axis only. The spatial axes stay deferred: a convolution's parameters do
         // not depend on height or width, and pinning them would reject the variable-resolution
@@ -1091,13 +1092,10 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // weights drifted). RentPinned survives Reset and degrades to a
             // plain heap Tensor<T> with no active arena; the one-time zero-fill
             // is overwritten by InitializeWeights() below.
-            // Only standard (Groups==1) and depthwise (Groups==InputDepth) are wired.
-            if (Groups != 1 && Groups != InputDepth)
-                throw new NotSupportedException(
-                    $"ConvolutionalLayer supports Groups=1 (dense) or Groups=InputDepth (depthwise), " +
-                    $"got Groups={Groups} with InputDepth={InputDepth}. General grouped convolution is not implemented.");
             if (InputDepth % Groups != 0)
                 throw new ArgumentException($"InputDepth ({InputDepth}) must be divisible by Groups ({Groups}).");
+            if (OutputDepth % Groups != 0)
+                throw new ArgumentException($"OutputDepth ({OutputDepth}) must be divisible by Groups ({Groups}).");
             // Depthwise collapses the kernel's in-channel dim to InputDepth/Groups (== 1 for depthwise).
             int[] kShape = [OutputDepth, KernelInChannels, KernelSize, KernelSize];
             int[] bShape = [OutputDepth];
@@ -1434,6 +1432,22 @@ public partial class ConvolutionalLayer<T> : LayerBase<T>, IShapeContract
             // flows automatically in both eager and compiled-plan training.
             var dw = Engine.DepthwiseConv2D(input4D, _kernels, new[] { Stride, Stride }, new[] { Padding, Padding });
             result = ApplyActivation(UseBias ? AddChannelBias(dw) : dw);
+        }
+        else if (Groups > 1)
+        {
+            // General grouped convolution (torch.nn.Conv2d groups): group g convolves input channels
+            // [g*In/G, (g+1)*In/G) with kernels [g*Out/G, (g+1)*Out/G), whose in-channel dim is In/G. Narrow,
+            // Conv2D and concatenation are all tape operations, so the backward follows from the forward.
+            int inPerGroup = InputDepth / Groups, outPerGroup = OutputDepth / Groups;
+            var parts = new Tensor<T>[Groups];
+            for (int g = 0; g < Groups; g++)
+            {
+                var groupInput = Engine.TensorNarrow(input4D, 1, g * inPerGroup, inPerGroup);
+                var groupKernels = Engine.TensorNarrow(_kernels, 0, g * outPerGroup, outPerGroup);
+                parts[g] = Engine.Conv2D(groupInput, groupKernels, Stride, Padding, dilation: 1);
+            }
+            var grouped = Engine.TensorConcatenate(parts, 1);
+            result = ApplyActivation(UseBias ? AddChannelBias(grouped) : grouped);
         }
         // ONE COMPUTATION, WHATEVER THE MODE.
         //

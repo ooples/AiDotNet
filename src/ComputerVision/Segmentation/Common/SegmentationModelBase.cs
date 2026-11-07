@@ -535,9 +535,8 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
         int h = tensor.Shape[1];
         int w = tensor.Shape[2];
 
-        var result = new Tensor<T>([1, c, h, w]);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        // Engine.Reshape rather than a copy through Data: it records on the gradient tape and accepts a strided view.
+        return Engine.Reshape(tensor, [1, c, h, w]);
     }
 
     /// <summary>
@@ -553,9 +552,9 @@ public abstract partial class SegmentationModelBase<T> : NeuralNetworkBase<T>, I
             newShape[i] = tensor.Shape[i + 1];
         }
 
-        var result = new Tensor<T>(newShape);
-        tensor.Data.Span.CopyTo(result.Data.Span);
-        return result;
+        // Engine.Reshape rather than a copy through Data: it records on the gradient tape and accepts a strided view
+        // (a permuted or resampled output).
+        return Engine.Reshape(tensor, newShape);
     }
 
     #endregion

@@ -180,6 +180,9 @@ public abstract partial class AudioNeuralNetworkBase<T> : NeuralNetworkBase<T>, 
     /// </remarks>
     protected readonly List<ILayer<T>> TextEncoderLayers = new List<ILayer<T>>();
 
+    /// <summary>The text tower, read-only, for tests that compare two models' layers.</summary>
+    internal IReadOnlyList<ILayer<T>> TextEncoderLayersReadOnly => TextEncoderLayers;
+
     /// <summary>
     /// Surfaces <see cref="TextEncoderLayers"/> to the parameter walk for every audio model that
     /// owns a text tower.
