@@ -265,6 +265,11 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// </summary>
     private static T SampleLoss(IFullModel<T, TInput, TOutput> model, ILossFunction<T> lossFunction, TInput x, TOutput y)
     {
+        // Only the host scalar leaves this method. On a GPU engine Predict keeps its output on the device and the loss
+        // adds more device results ([rows, vocabulary] for an LM head: 805 MB at 4096 x 49152). Without a scope they
+        // were freed only when a garbage collection finalized them, and small managed wrappers rarely trigger one:
+        // 16 validation batches filled a 12 GB device and every later training step waited on buffer frees.
+        using var scope = Tensors.Engines.TensorScope.Begin();
         var prediction = model.Predict(x);
         if (prediction is Tensor<T> predicted && y is Tensor<T> target)
         {
