@@ -40,6 +40,8 @@ internal static class OptionSensitivityFixtureSetup
         => network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> ? "spark-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.FireRedTTS<T> ? "firered-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.VALLEX<T> ? "vallex-" + option
+
             : network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> ? option switch
             {
                 "DefaultSpeakerId" => "e3-speaker-selection",
@@ -100,6 +102,10 @@ internal static class OptionSensitivityFixtureSetup
     internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.VALLEX<T> vallEX
+            && VallEXCloneFixture.Observe(vallEX, option) is { } vallEXObservation)
+            return vallEXObservation;
+
         if (network is AiDotNet.TextToSpeech.CodecBased.FireRedTTS<T> fireRed
             && FireRedTtsFixture.Observe(fireRed, option) is { } fireRedObservation)
             return fireRedObservation;
@@ -497,6 +503,9 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.VALLEXOptions vallEX)
+            VallEXCloneFixture.PrepareOptions(vallEX, option);
+
         if (options is AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions fireRed)
             FireRedTtsFixture.PrepareOptions(fireRed, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions spark)

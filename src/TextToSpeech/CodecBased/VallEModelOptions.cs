@@ -31,16 +31,20 @@ public abstract class VallEModelOptions : ModelOptions
     }
 
     /// <summary>The waveform sample rate, matching the codec.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("SampleRate must match Codec.SampleRate; paired native codec tests cover 16/24 kHz encoding and decoding.")]
     public int SampleRate { get; set; } = 24000;
     /// <summary>The samples per codec frame, matching the codec strides.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("HopSize must equal the product of Codec.Ratios; paired native codec tests verify decoded lengths at hops 160/320.")]
     public int HopSize { get; set; } = 320;
     /// <summary>The hidden width of both Transformers.</summary>
     public int HiddenDim { get; set; } = 1024;
     /// <summary>The attention heads of both Transformers.</summary>
     public int NumHeads { get; set; } = 16;
     /// <summary>The NAR Transformer depth, equal to the AR depth.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("NumEncoderLayers must equal NumDecoderLayers; paired depth 1/2 tests train both native AR and NAR objectives.")]
     public int NumEncoderLayers { get; set; } = 12;
     /// <summary>The AR Transformer depth, equal to the NAR depth.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("NumDecoderLayers must equal NumEncoderLayers; paired depth 1/2 tests train both native AR and NAR objectives.")]
     public int NumDecoderLayers { get; set; } = 12;
     /// <summary>The Transformer training dropout.</summary>
     public double DropoutRate { get; set; } = 0.1;
@@ -68,8 +72,10 @@ public abstract class VallEModelOptions : ModelOptions
     [AiDotNet.Attributes.NotScaled("holds every phoneme id of the model's inventory (93 to 105)")]
     public int TextTokens { get; set; } = 512;
     /// <summary>The codec codebooks modeled by AR and NAR together.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("NumCodebooks must match the codec bandwidth and quantizer count; paired native codec tests encode/decode two and three codebooks.")]
     public int NumCodebooks { get; set; } = 8;
     /// <summary>The codes per codebook, matching the codec.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("CodebookSize must equal Codec.CodebookSize; paired native codec tests encode/decode vocabularies of 64/128 codes.")]
     [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]
     public int CodebookSize { get; set; } = 1024;
     /// <summary>The linear warmup duration in updates.</summary>

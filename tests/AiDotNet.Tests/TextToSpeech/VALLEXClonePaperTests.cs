@@ -13,6 +13,57 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class VALLEXClonePaperTests
 {
     [Theory]
+    [InlineData("MaxTextLength")]
+    [InlineData("UseCommunityPhoneTokenizer")]
+    [InlineData("SynthesisLanguage")]
+    [InlineData("MinReferenceDurationSec")]
+    [InlineData("StopOnMostLikelyEndToken")]
+    public void TaskObserversExerciseActualFrontendLanguageAndEnrollmentBoundaries(string option)
+    {
+        var options = Tiny();
+        VallEXCloneFixture.PrepareOptions(options, option);
+        var changedOptions = new VALLEXCloneOptions(options);
+        switch (option)
+        {
+            case "MaxTextLength": changedOptions.MaxTextLength++; break;
+            case "UseCommunityPhoneTokenizer": changedOptions.UseCommunityPhoneTokenizer = true; break;
+            case "SynthesisLanguage": changedOptions.SynthesisLanguage = VallEXLanguage.Mandarin; break;
+            case "MinReferenceDurationSec": changedOptions.MinReferenceDurationSec = 0.02; break;
+            case "StopOnMostLikelyEndToken": changedOptions.StopOnMostLikelyEndToken = false; break;
+        }
+        using var control = Create(options);
+        using var changed = Create(changedOptions);
+        var before = control.GetParameters().ToArray();
+        var observed = VallEXCloneFixture.Observe(control, option);
+        Assert.NotNull(observed);
+        Assert.NotEqual(observed, VallEXCloneFixture.Observe(changed, option));
+        Assert.Equal(before, control.GetParameters().ToArray());
+    }
+
+    [Theory]
+    [InlineData(16000, 160, 2, 64)]
+    [InlineData(24000, 320, 3, 128)]
+    public void PairedCodecGeometryRunsActualEncodingAndDecoding(int rate, int hop, int codebooks, int vocabulary)
+    {
+        var options = Tiny();
+        options.SampleRate = options.Codec.SampleRate = rate;
+        options.HopSize = hop;
+        options.Codec.Ratios = hop == 160 ? new[] { 4, 5, 4, 2 } : new[] { 8, 5, 4, 2 };
+        options.NumCodebooks = options.Codec.NumQuantizers = codebooks;
+        options.CodebookSize = options.Codec.CodebookSize = vocabulary;
+        double bandwidth = (double)rate / hop * codebooks * Math.Log(vocabulary, 2) / 1000;
+        options.Codec.TargetBandwidthKbps = bandwidth;
+        options.Codec.TargetBandwidths = new[] { bandwidth };
+        using var model = Create(options);
+        var tokens = model.EncodeToTokens(Tone(2 * hop));
+        Assert.Equal(codebooks, tokens.Shape[1]);
+        Assert.All(tokens.ToArray(), value => Assert.InRange(value, 0, vocabulary - 1));
+        var audio = model.DecodeFromTokens(tokens);
+        Assert.Equal(tokens.Shape[0] * hop, audio.Length);
+        Assert.All(audio.ToArray(), value => Assert.True(TtsPaperNumerics.IsFinite(value)));
+    }
+
+    [Theory]
     [InlineData(1)]
     [InlineData(2)]
     public void PairedTransformerDepthsRunBothNativeObjectives(int depth)

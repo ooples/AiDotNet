@@ -695,3 +695,21 @@ types. The newly introduced protected base signatures and moved declarations
 are updated in PublicAPI.Unshipped.txt. Removed baseline rows correspond only
 to properties absent from the new public configuration; retained behavioral
 probes still need their real task contexts.
+
+Five VALL-E X/Clone task contexts now pass actual generated sensitivity probes
+against the hosted 703 core: MaxTextLength truncation (4 to 5), native community
+phone tokenization, SynthesisLanguage in community mode with a three-language
+table, minimum enrollment acceptance at 320 samples, and EOS stopping. The EOS
+fixture temporarily fits the actual bias-free AR head so EOS is most likely
+while a controlled native sampling draw selects a real code; it verifies that
+boundary and restores every head weight in finally. It observes native ArGenerate,
+including its actual early-end exception, rather than computing an option-derived
+answer. Per-option control groups prevent sharing incompatible observations.
+
+All five contexts also pass changed-source tests; each proves observation leaves
+the original parameter vector unchanged. Positive paired codec tests run actual
+encoding/decoding at rates 16/24 kHz, hops 160/320, quantizer counts 2/3 and
+vocabularies 64/128, verifying code bounds, finite audio and decoded sample count.
+Together with paired-depth tests these justify constrained-property annotations;
+they do not remove any consumed setting. The complete changed-source facade run
+now covers 25 native cases and the four-family retained-default comparison.
