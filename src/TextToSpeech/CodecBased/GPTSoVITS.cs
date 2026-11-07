@@ -133,7 +133,6 @@ public partial class GPTSoVITS<T> : TtsModelBase<T>
     {
         var o = _options;
         // The output rate is the version's: SoVITS's 32 kHz, v3's 24 kHz BigVGAN, v4 and V5's 48 kHz vocoder.
-        o.SampleRate = IsCfm ? (o.Version == GptSoVitsVersion.V3 ? 24000 : 48000) : 32000;
         base.SampleRate = o.SampleRate;
         base.MelChannels = IsCfm ? 100 : o.MelChannels;
         base.HopSize = o.HopSize;

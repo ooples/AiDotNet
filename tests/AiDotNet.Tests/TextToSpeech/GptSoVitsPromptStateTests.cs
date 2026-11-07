@@ -21,7 +21,7 @@ public class GptSoVitsPromptStateTests
         options.UpsampleKernels = options.UpsampleRates.Select(rate => 2 * rate + rate % 2).ToArray();
         using var model = new GPTSoVITS<float>(new NeuralNetworkArchitecture<float>(InputType.OneDimensional,
             NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1) { RandomSeed = 1337 }, options);
-        var reference = new Tensor<float>(new[] { 1, options.FftSize / 2 + 1, 8 });
+        var reference = new Tensor<float>(new[] { 1, model.SynthesizerConfiguration().SpecChannels, 8 });
         for (int i = 0; i < reference.Length; i++) reference[i] = (float)(0.2 * Math.Sin(i * 0.13));
         var audio = model.SoVits.Decode(new[] { 1, 2, 3 }, new[] { 1, 2, 3 }, new[] { reference }, null,
             0, 1, shape => new Tensor<float>(shape));

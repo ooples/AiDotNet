@@ -16,7 +16,7 @@ public partial class GPTSoVITS<T>
     private Random? _trainingRandom;
 
     /// <inheritdoc />
-    /// <remarks>GPT-SoVITS trains on recordings: the recording at <see cref="TtsModelOptions.SampleRate"/>
+    /// <remarks>GPT-SoVITS trains on recordings: the recording at <see cref="GPTSoVITSOptions.SampleRate"/>
     /// (<see cref="TtsTrainingSample{T}.Audio"/>) and its transcript (<see cref="TtsTrainingSample{T}.Text"/>, in
     /// <see cref="GPTSoVITSOptions.TextLanguage"/>; without it, <see cref="TtsTrainingSample{T}.Tokens"/> are the phone
     /// ids, read with zero BERT features).</remarks>

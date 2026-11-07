@@ -751,3 +751,25 @@ GAN/CFM residual kernels are rejected before inference. The eight permanent
 native cases pass with zero compilation warnings/errors. All 574,474 initial
 and trained parameters and semantic losses still exactly match the old hosted
 model under the same valid v3 configuration.
+
+GPT-SoVITS shared-option ownership is now explicit. Source and compiled IL show
+no consumers for FftSize, NumEncoderLayers, NumDecoderLayers, VocabSize,
+MaxMelLength, DropoutRate or LearningRate. Native FFT/spec geometry is the
+release's fixed 2048/1025; native depths are T2SLayers, SynthesizerLayers and
+DitDepth; phone vocabularies come from the version's symbol table; semantic-GPT
+embedding/layer dropout follows its own release configuration; native optimizers
+read T2SLearningRate and SynthesizerLearningRate. All seven obsolete inherited
+properties are removed. The retained nine shared properties have their original
+defaults. SampleRate is now derived from Version rather than accepting a setter
+that ConfigureBase immediately overwrote; default behavior and all output rates
+are unchanged. HopSize/UpsampleRates remain real constrained controls, supported
+by the positive native paired-geometry tests rather than removed.
+
+Every retained default matches hosted options, and the complete 574,474 initial
+and trained v3 parameter vectors plus semantic losses still match exactly after
+the ownership change. The eight native persistence/geometry/kernel cases pass.
+The scoped API surface builds without warnings. SDK release-0.234.0 comparisons
+for net10.0, net8.0 and net471 report only the already acknowledged GPTSoVITSOptions
+CP0007 base change; no new suppression was needed. New property declarations are
+registered in PublicAPI.Unshipped.txt. Remaining GAN-specific option probes and
+TextLanguage still need fresh native validation.

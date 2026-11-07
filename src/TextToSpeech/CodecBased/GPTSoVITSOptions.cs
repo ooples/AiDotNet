@@ -1,4 +1,6 @@
 using AiDotNet.TextToSpeech.FrontEnd;
+using AiDotNet.Models.Options;
+using AiDotNet.Onnx;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
@@ -53,22 +55,40 @@ public enum GptSoVitsStage
 /// for the text, and a second network turns them into speech in the reference voice. Pick a <see cref="Version"/> to
 /// match the weights you load; the rest can usually stay as it is.</para>
 /// </remarks>
-public class GPTSoVITSOptions : TtsModelOptions
+public class GPTSoVITSOptions : ModelOptions
 {
     /// <summary>Creates v2ProPlus's configuration.</summary>
     public GPTSoVITSOptions()
     {
-        SampleRate = 32000;
-        MelChannels = 128;
-        HopSize = 640;
-        FftSize = 2048;
-        HiddenDim = 512;
-        NumHeads = 16;
-        MaxTextLength = 1000;
-        DropoutRate = 0.0;
-        LearningRate = 0.01;
-        WeightDecay = 0.01;
     }
+
+    /// <summary>The release's output rate: 32 kHz for GAN versions, 24 kHz for v3, 48 kHz for v4/V5.</summary>
+    public int SampleRate => Version >= GptSoVitsVersion.V3 ? (Version == GptSoVitsVersion.V3 ? 24000 : 48000) : 32000;
+
+    /// <summary>The GAN objective's mel bands (128 in the release).</summary>
+    public int MelChannels { get; set; } = 128;
+
+    /// <summary>The GAN's samples per generated latent frame (640).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("HopSize must match the product of UpsampleRates and divide SegmentSize; paired native GAN decoding tests verify the complete stride/kernel/hop configurations.")]
+    public int HopSize { get; set; } = 640;
+
+    /// <summary>The semantic GPT's width (512).</summary>
+    public int HiddenDim { get; set; } = 512;
+
+    /// <summary>The semantic GPT's attention heads (16).</summary>
+    public int NumHeads { get; set; } = 16;
+
+    /// <summary>The input length advertised to TTS clients (1000).</summary>
+    public int MaxTextLength { get; set; } = 1000;
+
+    /// <summary>The exported ONNX graph path, when used.</summary>
+    public string? ModelPath { get; set; }
+
+    /// <summary>Settings for the ONNX graph runtime.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+
+    /// <summary>The native s2 AdamW weight decay (0.01).</summary>
+    public double WeightDecay { get; set; } = 0.01;
 
     /// <summary>The release followed (v2ProPlus).</summary>
     public GptSoVitsVersion Version { get; set; } = GptSoVitsVersion.V2ProPlus;
@@ -98,8 +118,8 @@ public class GPTSoVITSOptions : TtsModelOptions
 
     // ---------------------------------------------------------------- text-to-semantic (s1)
 
-    /// <summary>The GPT's layers (24); its width is <see cref="TtsModelOptions.HiddenDim"/> (512) and its heads
-    /// <see cref="TtsModelOptions.NumHeads"/> (16).</summary>
+    /// <summary>The GPT's layers (24); its width is <see cref="HiddenDim"/> (512) and its heads
+    /// <see cref="NumHeads"/> (16).</summary>
     public int T2SLayers { get; set; } = 24;
 
     /// <summary>Top-k of semantic sampling (the interface's 15).</summary>
@@ -150,6 +170,7 @@ public class GPTSoVITSOptions : TtsModelOptions
     public double? SynthesizerDropout { get; set; }
 
     /// <summary>The GAN generator's upsampling rates (10, 8, 2, 2, 2: 640 samples per frame).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("UpsampleRates must multiply to HopSize and pair with UpsampleKernels; positive native decoding tests exercise two complete GAN geometries.")]
     public int[] UpsampleRates { get; set; } = { 10, 8, 2, 2, 2 };
 
     /// <summary>The GAN generator's transposed-convolution kernels (by version: 16, 16, 8, 2, 2; 20, 16, 8, 2, 2 for

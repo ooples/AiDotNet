@@ -1,4 +1,22 @@
 #nullable enable
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.SampleRate.get -> int
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.MelChannels.get -> int
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.MelChannels.set -> void
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.HopSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.HopSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.HiddenDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.HiddenDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.NumHeads.get -> int
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.NumHeads.set -> void
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.MaxTextLength.get -> int
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.MaxTextLength.set -> void
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.ModelPath.get -> string?
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.ModelPath.set -> void
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.OnnxOptions.get -> AiDotNet.Onnx.OnnxModelOptions!
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.OnnxOptions.set -> void
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.WeightDecay.get -> double
+AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.WeightDecay.set -> void
+
 override AiDotNet.TextToSpeech.CodecBased.GPTSoVITS<T>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
 
 AiDotNet.TextToSpeech.CodecBased.VallEModelOptions
