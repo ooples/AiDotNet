@@ -78,7 +78,7 @@ internal static class LocalObjectiveGradientComputer<T>
             using var tape = new GradientTape<T>();
             IEngine engine = AiDotNetEngine.Current;
 
-            var hiddenOut = new Tensor<T>[layers.Count];
+            var hiddenOut = new Tensor<T>?[layers.Count];
             var current = input;
             for (int i = 0; i < readoutStart; i++)
             {
@@ -100,7 +100,12 @@ internal static class LocalObjectiveGradientComputer<T>
             var prediction = Readout(current);
             var alignedTarget = alignTarget(prediction, target);
             Tensor<T> LossFn(Tensor<T> p, Tensor<T> t) => ReduceToScalar(engine, loss.ComputeTapeLoss(p, t));
-            var step = new LocalObjectiveStep<T>(input, alignedTarget, engine, Readout, LossFn, hiddenIdx.Count);
+            // A single-layer readout that fuses itself with the loss (an LM head + cross-entropy) serves every hidden
+            // layer's readout loss without putting a [rows, vocabulary] tensor on the tape per layer.
+            var fusedReadout = readoutCount == 1 ? layers[readoutStart] as IFusedReadoutLossLayer<T> : null;
+            Tensor<T> ReadoutLossFn(Tensor<T> h, Tensor<T> t) =>
+                fusedReadout?.TryComputeFusedLoss(h, t, loss) is { } fused ? ReduceToScalar(engine, fused) : LossFn(Readout(h), t);
+            var step = new LocalObjectiveStep<T>(input, alignedTarget, engine, Readout, LossFn, hiddenIdx.Count, ReadoutLossFn);
 
             var defaultLoss = LossFn(prediction, alignedTarget);
             var outputObjective = rule.BuildOutputObjective(step, prediction, defaultLoss) ?? defaultLoss;
@@ -110,7 +115,8 @@ internal static class LocalObjectiveGradientComputer<T>
             for (int k = 0; k < hiddenIdx.Count; k++)
             {
                 int i = hiddenIdx[k];
-                var local = rule.BuildLocalObjective(new LocalObjectiveContext<T>(step, k, i, layers[i], hiddenOut[i]!));
+                var local = rule.BuildLocalObjective(new LocalObjectiveContext<T>(step, k, i, layers[i],
+                    hiddenOut[i] ?? throw new InvalidOperationException($"Hidden layer {i} produced no output.")));
                 if (local is null) continue;
                 combined = engine.TensorAdd(combined, ReduceToScalar(engine, local));
                 locals++;
