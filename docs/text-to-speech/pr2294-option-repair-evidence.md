@@ -883,3 +883,9 @@ TopP, TopK, RepetitionWindow and RepetitionRatio are consumed by the native Cosy
 VoiceEncoderPartialRate was saturated by the tiny fixture's four-frame windows. The option probe now uses the released 160-frame partial size and observes the actual voice embedding for a two-second reference. The permanent regression verifies different rates change embeddings while initialization remains equal. The reference get_frame_step formula was checked against resemble-ai/chatterbox src/chatterbox/models/voice_encoder/voice_encoder.py (blob d986f17fd6afab59364863b5e92fd56eec21236b); no production formula was changed.
 
 Three permanent flow counterfactuals also pass: TrainingCfgRate, FlowLoss and FlowAttentionDropoutRate each change finite native losses and updated flow weights.
+
+### Hosted build blockers and Chatterbox codec contracts
+
+Pinned run 42343819680 failed compilation before running shards: VALLE2Options had a stale inherited NumCodebooks cref; ADNOPT001 reported three ModelPath properties with writes but no reads. The cref now names VallEModelOptions. The VALL-E/GPT-SoVITS/Zonos ONNX constructors now pass the stored validated ModelPath into the ONNX runtime, keeping their explicit path behavior.
+
+Chatterbox exposes S3-v2 cardinality and paired rotary-width contracts explicitly. Permanent tests pass native reference encoding at state/head geometries 64/1 and 128/2 and reject isolated codebook cardinality, state or head changes. The guarded source build passes with zero warnings/errors.

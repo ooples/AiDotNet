@@ -21791,3 +21791,9 @@ override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.CreateComponentOptimiz
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.CosyVoiceAutoregressiveOptions() -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions.CosyVoiceAutoregressiveOptions(AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions! other) -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.CodebookSize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.CodebookSize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerState.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerState.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerHeads.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerHeads.set -> void

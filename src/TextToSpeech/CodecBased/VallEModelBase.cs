@@ -68,7 +68,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options.ModelPath = modelPath;
-        OnnxModel = new AiDotNet.Onnx.OnnxModel<T>(modelPath, _options.OnnxOptions);
+        OnnxModel = new AiDotNet.Onnx.OnnxModel<T>(_options.ModelPath, _options.OnnxOptions);
         InitializeLayers();
     }
 

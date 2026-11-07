@@ -10,6 +10,37 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class ChatterboxOptionContextTests
 {
+    [Theory]
+    [InlineData(64, 1)]
+    [InlineData(128, 2)]
+    public void PairedS3WidthsEncodeTheNativeReference(int state, int heads)
+    {
+        var options = ChatterboxFixture.Options();
+        options.SpeechTokenizerState = state;
+        options.SpeechTokenizerHeads = heads;
+        using var model = Create(options);
+        var tokens = model.EncodeToTokens(ChatterboxFixture.Recording<double>());
+        Assert.True(tokens.Length > 0);
+        foreach (double token in tokens) Assert.InRange(token, 0, 6560);
+    }
+
+    [Theory]
+    [InlineData("CodebookSize")]
+    [InlineData("SpeechTokenizerState")]
+    [InlineData("SpeechTokenizerHeads")]
+    public void UnpairedS3GeometryIsRejected(string option)
+    {
+        var options = ChatterboxFixture.Options();
+        switch (option)
+        {
+            case "CodebookSize": options.CodebookSize = 6562; break;
+            case "SpeechTokenizerState": options.SpeechTokenizerState = 128; break;
+            case "SpeechTokenizerHeads": options.SpeechTokenizerHeads = 2; break;
+            default: throw new ArgumentOutOfRangeException(nameof(option));
+        }
+        Assert.Throws<ArgumentException>(() => Create(options));
+    }
+
     private static Chatterbox<double> Create(ChatterboxOptions options) => new(new NeuralNetworkArchitecture<double>(
         InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1) { RandomSeed = 7 }, options);
 

@@ -65,7 +65,7 @@ public class VALLE2Options : VallEModelOptions
     public int MaxCodePositions { get; set; } = 4096;
 
     /// <summary>Width of the Vocos decoder's backbone (384, charactr/vocos-encodec-24khz). Its bandwidth classes are 2, 4,
-    /// 8 and 16 codebooks (1.5–12 kbps), so <see cref="VALLEOptions.NumCodebooks"/> must be one of them.</summary>
+    /// 8 and 16 codebooks (1.5–12 kbps), so <see cref="VallEModelOptions.NumCodebooks"/> must be one of them.</summary>
     public int DecoderDim { get; set; } = 384;
 
     /// <summary>The Vocos decoder's ConvNeXt intermediate width (1152).</summary>
