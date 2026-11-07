@@ -415,3 +415,7 @@ valid hops 480 and 320 decode four frames into exactly 1920 and 1280 finite
 waveform samples. Unpaired changes are rejected. Both settings are retained
 with explicit constrained-option explanations, backed by five changed-source
 checks; no no-op baselines were added.
+
+The MaskGCT ONNX loader now reads its recorded ModelPath when opening the
+graph, keeping the newly owned asset option connected to the load path; scoped
+changed-source compilation passes with zero warnings/errors.
