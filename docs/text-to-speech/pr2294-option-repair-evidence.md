@@ -533,3 +533,30 @@ all 48,994 initial/trained parameters and the actual LM loss/update match the
 hosted native model exactly. Changed-source modules and model compile with zero
 warnings/errors, and the fresh-model GAN regression remains green. This retains
 the paper model's default random draws while making the shared setting useful.
+
+SparkTTSOptions now owns its consumed settings instead of inheriting unused
+shared TTS/codec controls. Removed eight unused fields: FftSize, HiddenDim,
+NumEncoderLayers, NumDecoderLayers, MaxMelLength, DropoutRate, TextEncoderDim,
+LanguageModelName. Concrete IL reads and source construction confirm the paper
+uses Qwen's LLMDim/NumLLMLayers and the separate XLSR/BiCodec/Perceiver/waveform
+configuration. The consumed mel hop/channels, speaker width and attention heads
+remain; CodebookSize's NotScaled contract and LLMDim/head divisibility remain.
+All retained defaults and all 48,994 native initial/trained parameters and
+training losses match the hosted model exactly after this ownership change.
+
+Five constrained settings remain explicit, with explanations and positive native
+tests: one semantic stream; SampleRate/CodecFrameRate paired with waveform
+strides/kernels; FsqLevels paired with GlobalCodebookSize. Three valid waveform
+geometries decode two fixed frames into exactly 320, 640 and 160 finite samples.
+Both FSQ vocabularies (8 and 16) produce valid global tokens and decode actual
+semantic/global tokens to finite waveforms. Five unpaired configurations are
+rejected. The single semantic stream is a rank-one token tensor, verified at
+runtime. No constrained setting was deleted or recorded as a no-op baseline.
+
+Thirty-four public accessor declarations are registered. Scoped ApiCompat
+reports only CP0007 for SparkTTSOptions on each framework, with three exact
+acknowledgments added. Six more obsolete/constrained baseline rows were removed.
+The ONNX loader consumes recorded ModelPath. Source compilation passes with
+zero warnings/errors; native paired geometry/FSQ, seed, fresh GAN training and
+complete parameter/training parity checks pass. Full hosted package/shard
+validation is still required.

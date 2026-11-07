@@ -8,6 +8,65 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class SparkOptionConstraintTests
 {
+    [Theory]
+    [InlineData(1600, 10, 2, 320)]
+    [InlineData(3200, 10, 4, 640)]
+    [InlineData(1600, 20, 1, 160)]
+    public void PairedWaveformGeometryControlsActualDecodedSampleCount(int sampleRate, int frameRate, int lastRate, int expected)
+    {
+        var options = SparkTTSPaperTests.SmallOptions();
+        options.SampleRate = sampleRate;
+        options.CodecFrameRate = frameRate;
+        options.WaveDecoderRates[3] = lastRate;
+        options.WaveDecoderKernels[3] = lastRate * 2;
+        using var model = new SparkTTS<double>(new NeuralNetworkArchitecture<double>(inputFeatures: 4, outputSize: 320), options);
+        var global = model.EncodeGlobalTokens(SparkNativeFixture.Recording<double>());
+        var semantic = new Tensor<double>(new[] { 2, 1 }, new Vector<double>(new[] { 1.0, 2.0 }));
+        var waveform = model.DecodeFromTokens(semantic, global);
+        Assert.Equal(expected, waveform.Length);
+        Assert.All(waveform, value => Assert.False(double.IsNaN(value) || double.IsInfinity(value)));
+    }
+
+    [Theory]
+    [InlineData(3, 8)]
+    [InlineData(4, 16)]
+    public void PairedFsqLevelsAndVocabularyEncodeAndDecodeRealSpeakerTokens(int dimensions, int vocabulary)
+    {
+        var options = SparkTTSPaperTests.SmallOptions();
+        options.FsqLevels = Enumerable.Repeat(2, dimensions).ToArray();
+        options.GlobalCodebookSize = vocabulary;
+        using var model = new SparkTTS<double>(new NeuralNetworkArchitecture<double>(inputFeatures: 4, outputSize: 320), options);
+        var global = model.EncodeGlobalTokens(SparkNativeFixture.Recording<double>());
+        Assert.Equal(options.GlobalTokenCount, global.Length);
+        Assert.All(global, code => Assert.InRange(code, 0, vocabulary - 1));
+        var semantic = model.EncodeToTokens(SparkNativeFixture.Recording<double>());
+        Assert.Equal(1, semantic.Rank);
+        Assert.Equal(1, model.CodecTokenCodebooks);
+        var waveform = model.DecodeFromTokens(semantic, global);
+        Assert.NotEmpty(waveform);
+        Assert.All(waveform, value => Assert.False(double.IsNaN(value) || double.IsInfinity(value)));
+    }
+
+    [Theory]
+    [InlineData("NumCodebooks")]
+    [InlineData("SampleRate")]
+    [InlineData("CodecFrameRate")]
+    [InlineData("FsqLevels")]
+    [InlineData("GlobalCodebookSize")]
+    public void UnpairedCodecChangesAreRejected(string option)
+    {
+        var options = SparkTTSPaperTests.SmallOptions();
+        switch (option)
+        {
+            case "NumCodebooks": options.NumCodebooks = 2; break;
+            case "SampleRate": options.SampleRate *= 2; break;
+            case "CodecFrameRate": options.CodecFrameRate *= 2; break;
+            case "FsqLevels": options.FsqLevels = new[] { 2, 2, 2 }; break;
+            case "GlobalCodebookSize": options.GlobalCodebookSize = 8; break;
+        }
+        Assert.Throws<ArgumentException>(() => new SparkTTS<double>(new NeuralNetworkArchitecture<double>(inputFeatures: 4, outputSize: 320), options));
+    }
+
     [Fact]
     public void ExplicitInitializationSeedIsRepeatableAndIndependentOfSamplingSeed()
     {

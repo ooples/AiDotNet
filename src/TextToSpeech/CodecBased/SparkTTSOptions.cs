@@ -1,3 +1,7 @@
+using AiDotNet.Attributes;
+using AiDotNet.Models.Options;
+using AiDotNet.Onnx;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 /// <summary>The independently trainable stages of Spark-TTS.</summary>
@@ -31,7 +35,8 @@ public enum SparkTTSControlLevel
 /// 14 query heads and 2 key/value heads; BiCodec emits one 8,192-way semantic stream at 50 Hz and
 /// represents a speaker with 32 finite-scalar-quantized 4^6-way global tokens.
 /// </remarks>
-public class SparkTTSOptions : CodecTtsOptions
+[DimensionDivisibility(nameof(LLMDim), nameof(NumHeads))]
+public class SparkTTSOptions : ModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
     public SparkTTSOptions()
@@ -48,10 +53,48 @@ public class SparkTTSOptions : CodecTtsOptions
         VocabSize = 166000;
         SpeakerEmbeddingDim = 1024;
         MaxCodecFrames = 3000;
-        LanguageModelName = "Qwen2.5-0.5B";
         LearningRate = 2e-4;
         WeightDecay = 0.01;
     }
+
+    /// <summary>The waveform sample rate, paired with the codec frame rate and waveform decoder strides.</summary>
+    [OptionBehaviourExempt("SampleRate must vary with CodecFrameRate and the product of WaveDecoderRates; paired native decode tests cover the valid geometries.")]
+    public int SampleRate { get; set; } = 16000;
+    /// <summary>The speaker tokenizer's mel frequency channels.</summary>
+    public int MelChannels { get; set; } = 128;
+    /// <summary>The speaker tokenizer's mel hop in samples.</summary>
+    public int HopSize { get; set; } = 320;
+    /// <summary>The Qwen query attention heads.</summary>
+    public int NumHeads { get; set; } = 14;
+    /// <summary>The joint text and added speech-token vocabulary size.</summary>
+    public int VocabSize { get; set; } = 166000;
+    /// <summary>The text input limit in tokens.</summary>
+    public int MaxTextLength { get; set; } = 512;
+    /// <summary>The exported ONNX graph path, when a graph is loaded.</summary>
+    public string? ModelPath { get; set; }
+    /// <summary>Settings for the exported ONNX graph runtime.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>The active training component's AdamW learning rate.</summary>
+    public double LearningRate { get; set; } = 2e-4;
+    /// <summary>The active training component's AdamW weight decay.</summary>
+    public double WeightDecay { get; set; } = 0.01;
+    /// <summary>The single semantic token stream emitted by BiCodec.</summary>
+    [OptionBehaviourExempt("Spark's factorized VQ emits exactly one semantic stream; native encoding and rejection tests cover this fixed architectural contract.")]
+    public int NumCodebooks { get; set; } = 1;
+    /// <summary>The semantic token vocabulary size.</summary>
+    [NotScaled("the codec's codes per codebook, which it must equal")]
+    public int CodebookSize { get; set; } = 8192;
+    /// <summary>The semantic codec frame rate in Hz.</summary>
+    [OptionBehaviourExempt("CodecFrameRate must vary with SampleRate and the product of WaveDecoderRates; paired native decode tests cover the valid geometries.")]
+    public int CodecFrameRate { get; set; } = 50;
+    /// <summary>The Qwen decoder hidden width.</summary>
+    public int LLMDim { get; set; } = 896;
+    /// <summary>The Qwen decoder depth.</summary>
+    public int NumLLMLayers { get; set; } = 24;
+    /// <summary>The speaker tokenizer's d-vector width.</summary>
+    public int SpeakerEmbeddingDim { get; set; } = 1024;
+    /// <summary>The semantic generation limit in codec frames.</summary>
+    public int MaxCodecFrames { get; set; } = 3000;
 
     // Qwen2.5-0.5B (LLM/config.json).
     /// <summary>Gets or sets the feature width of the language-model intermediate. Defaults to <c>4864</c>.</summary>
@@ -153,6 +196,7 @@ public class SparkTTSOptions : CodecTtsOptions
 
     // Global speaker tokenizer.
     /// <summary>Gets or sets the global codebook size. Defaults to <c>4096</c>.</summary>
+    [OptionBehaviourExempt("GlobalCodebookSize must equal the product of FsqLevels; paired native speaker-token encode/decode tests cover both vocabularies.")]
     public int GlobalCodebookSize { get; set; } = 4096;
     /// <summary>Gets or sets the global token count. Defaults to <c>32</c>.</summary>
     public int GlobalTokenCount { get; set; } = 32;
@@ -167,6 +211,7 @@ public class SparkTTSOptions : CodecTtsOptions
     /// <summary>Gets or sets the perceiver depth. Defaults to <c>2</c>.</summary>
     public int PerceiverDepth { get; set; } = 2;
     /// <summary>Gets or sets the finite scalar quantizer levels.</summary>
+    [OptionBehaviourExempt("FsqLevels must multiply to GlobalCodebookSize; paired native speaker-token encode/decode tests cover both vocabularies.")]
     public int[] FsqLevels { get; set; } = { 4, 4, 4, 4, 4, 4 };
 
     // DAC-style neural waveform generator. Product of the rates is 320 samples = 50 Hz at 16 kHz.
