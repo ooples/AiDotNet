@@ -76,7 +76,16 @@ public class FusedReadoutLossTests
         }
     }
 
-    private static (NeuralNetwork<double> net, FusableHead head) Build(int seed)
+    /// <summary>A model whose <c>ForwardForTraining</c> is overridden: its forward may not be the plain layer chain.</summary>
+    private sealed class CustomForwardNetwork : NeuralNetwork<double>
+    {
+        public CustomForwardNetwork(NeuralNetworkArchitecture<double> architecture)
+            : base(architecture, lossFunction: new CrossEntropyWithLogitsLoss<double>()) { }
+
+        public override Tensor<double> ForwardForTraining(Tensor<double> input) => base.ForwardForTraining(input);
+    }
+
+    private static (NeuralNetwork<double> net, FusableHead head) Build(int seed, bool customForward = false)
     {
         var head = new FusableHead(seed + 100);
         var layers = new List<ILayer<double>> { new FullyConnectedLayer<double>(Dim, Width, new TanhActivation<double>()) };
@@ -85,7 +94,8 @@ public class FusedReadoutLossTests
         var arch = new NeuralNetworkArchitecture<double>(inputType: InputType.OneDimensional,
             taskType: NeuralNetworkTaskType.MultiClassClassification, complexity: NetworkComplexity.Simple,
             inputSize: Dim, outputSize: Vocab, layers: layers) { RandomSeed = seed };
-        return (new NeuralNetwork<double>(arch), head);
+        return (customForward ? new CustomForwardNetwork(arch)
+            : new NeuralNetwork<double>(arch, lossFunction: new CrossEntropyWithLogitsLoss<double>()), head);
     }
 
     private static (Tensor<double> x, Tensor<double> ids) Data(int seed)
@@ -252,5 +262,51 @@ public class FusedReadoutLossTests
         }
         Assert.True(maxAbs > 0);
         Assert.True(maxDiff <= 1e-9 * Math.Max(1.0, maxAbs), $"fused vs decomposed gradient max diff {maxDiff:E3} (max |g| {maxAbs:E3})");
+    }
+
+    private static (Vector<double> after, int fusedCalls) TrainStep(bool fuse, bool customForward, Tensor<double> x,
+        Tensor<double> ids, Vector<double> init)
+    {
+        var (net, head) = Build(seed: 4, customForward);
+        net.SetParameters(init);
+        head.Fuse = fuse;
+        net.Train(x, ids);
+        return (net.GetParameters(), head.FusedCalls);
+    }
+
+    private static double MaxDiff(Vector<double> a, Vector<double> b)
+    {
+        Assert.Equal(a.Length, b.Length);
+        double d = 0;
+        for (int i = 0; i < a.Length; i++) d = Math.Max(d, Math.Abs(a[i] - b[i]));
+        return d;
+    }
+
+    [Fact]
+    public void BackPropagationStep_FusedReadoutLoss_MatchesDecomposedStep()
+    {
+        var (x, ids) = Data(seed: 10);
+        var init = Build(seed: 4).net.GetParameters();
+        var (decomposed, callsOff) = TrainStep(fuse: false, customForward: false, x, ids, init);
+        var (fused, callsOn) = TrainStep(fuse: true, customForward: false, x, ids, init);
+
+        Assert.Equal(0, callsOff);
+        Assert.True(callsOn >= 1, "the plain back-propagation step never asked the readout for its fused loss");
+        Assert.True(MaxDiff(init, decomposed) > 1e-6, "the step did not update the parameters");
+        double diff = MaxDiff(decomposed, fused);
+        Assert.True(diff <= 1e-9, $"fused vs decomposed step: max parameter diff {diff:E3}");
+    }
+
+    [Fact]
+    public void BackPropagationStep_OverriddenForwardForTraining_KeepsFullForward()
+    {
+        var (x, ids) = Data(seed: 11);
+        var init = Build(seed: 4).net.GetParameters();
+        var (custom, calls) = TrainStep(fuse: true, customForward: true, x, ids, init);
+        var (plain, _) = TrainStep(fuse: false, customForward: false, x, ids, init);
+
+        Assert.Equal(0, calls);
+        double diff = MaxDiff(plain, custom);
+        Assert.True(diff <= 1e-9, $"overridden-forward step vs plain decomposed step: max parameter diff {diff:E3}");
     }
 }
