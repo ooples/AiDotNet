@@ -60,18 +60,26 @@ public partial class DAC<T> : NeuralAudioCodecBase<T>
 
     /// <summary>Creates a DAC that runs an exported ONNX graph.</summary>
     public DAC(NeuralNetworkArchitecture<T> architecture, string modelPath, DACOptions? options = null)
-        : base(architecture, modelPath, options ?? new DACOptions())
+        : base(architecture, modelPath, ValidateOptions(options))
     {
     }
 
     /// <summary>Creates a trainable DAC.</summary>
     public DAC(NeuralNetworkArchitecture<T> architecture, DACOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, options ?? new DACOptions(), optimizer)
+        : base(architecture, ValidateOptions(options), optimizer)
     {
     }
 
     private DACOptions PaperOptions => (DACOptions)CodecSettings;
+
+    private static DACOptions ValidateOptions(DACOptions? options)
+    {
+        options ??= new DACOptions();
+        if (options.Channels != 1)
+            throw new ArgumentException("DAC's paper encoder and decoder operate on mono audio; Channels must be 1.", nameof(options.Channels));
+        return options;
+    }
 
     /// <inheritdoc />
     public override int HopLength => PaperOptions.EncoderRates.Aggregate(1, (a, b) => a * b);
@@ -81,7 +89,7 @@ public partial class DAC<T> : NeuralAudioCodecBase<T>
     /// <inheritdoc />
     protected override IResidualVectorQuantizer<T> CreateCodec(List<LayerBase<T>> layers)
     {
-        var o = PaperOptions;
+        var o = ValidateOptions(PaperOptions);
         _encoder = new DacEncoder<T>(Engine, o.EncoderDim, o.EncoderRates, Latent, layers);
         _quantizer = new FactorizedVectorQuantizerLayer<T>(Latent, o.NumQuantizers, o.CodebookSize, o.CodebookDim, o.CodebookLossesOnRawVectors);
         layers.Add(_quantizer);

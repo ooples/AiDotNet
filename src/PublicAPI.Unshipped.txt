@@ -1,4 +1,6 @@
 #nullable enable
+AiDotNet.Audio.Effects.DACOptions.Channels.get -> int
+AiDotNet.Audio.Effects.DACOptions.Channels.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.HopSize.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.HopSize.set -> void
 AiDotNet.TextToSpeech.Classic.FastSpeech2Options.DecoderDim.get -> int

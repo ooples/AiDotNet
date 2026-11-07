@@ -358,3 +358,13 @@ All 57 focused perturbation/constraint regressions pass. GuidanceRescale still
 fails the original observation and remains unresolved; probing both semantic
 and acoustic tokens with active guidance did not distinguish it at test scale.
 No baseline or exemption was added for that unresolved case.
+
+DAC Channels is a mono architecture constraint, not a free structural setting:
+DacEncoder's first convolution consumes one channel and DacDecoder's final
+convolution emits one (DacModules.cs). Both DAC constructors now reject channel
+counts other than one before base construction, and CreateCodec repeats the
+check for reconstruction/loading. The forwarding setting has an explicit
+constraint explanation and two API accessor declarations. Changed-source tests
+reject 0, 2 and -1, and a mono model still reconstructs finite 256-sample
+audio through the actual encoder, quantizer and decoder. All existing stage
+checks continue to pass; scoped build has zero warnings/errors.
