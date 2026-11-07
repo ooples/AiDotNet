@@ -22,6 +22,8 @@ public class SynthIdImageDecisionTests
     private static Tensor<float> Images(int seed, int count) =>
         StegaStampWatermarkerTests.Images(RandomHelper.CreateSeededRandom(seed), count);
 
+    private const double LogitTolerance = 1e-6;
+
     [Fact(Timeout = 120000)]
     public async System.Threading.Tasks.Task Decide_MatchesBruteForceConformalPValues_AndTheThreeStateRule()
     {
@@ -39,7 +41,9 @@ public class SynthIdImageDecisionTests
         for (int i = 0; i < probes.Shape[0]; i++)
         {
             var d = model.Decide(probes.Slice(i));
-            Assert.Equal(probeScores[i], d.DetectionLogit, 5);
+            // The batch and the single image round differently in float (1.5e-8 apart on CI); decimal-place
+            // rounding can split such a pair across a boundary, so compare within an absolute tolerance.
+            Assert.Equal(probeScores[i], d.DetectionLogit, LogitTolerance);
             double cleanP = (1.0 + cleanScores.Count(c => c >= d.DetectionLogit)) / (cleanScores.Length + 1.0);
             double markedP = (1.0 + markedScores.Count(m => m <= d.DetectionLogit)) / (markedScores.Length + 1.0);
             Assert.Equal(cleanP, d.CleanPValue, 12);
@@ -105,7 +109,7 @@ public class SynthIdImageDecisionTests
         restored.Deserialize(model.Serialize());
         Assert.True(restored.IsCalibrated);
         var again = restored.Decide(probe);
-        Assert.Equal(expected.DetectionLogit, again.DetectionLogit, 5);
+        Assert.Equal(expected.DetectionLogit, again.DetectionLogit, LogitTolerance);
         Assert.Equal(expected.CleanPValue, again.CleanPValue, 12);
         Assert.Equal(expected.WatermarkedPValue, again.WatermarkedPValue, 12);
     }
