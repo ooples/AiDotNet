@@ -110,6 +110,7 @@ internal sealed class FusedTrainingSession<T>
     private const int ChecksumTargetSamples = 1 << 16;
 
     private readonly object _owner;
+    private readonly object? _stateKey;
     private readonly Action? _onReset;
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _lastOptimizer;
     private bool _persistenceVerified;
@@ -126,11 +127,16 @@ internal sealed class FusedTrainingSession<T>
     /// <summary>Creates the fused lifecycle for one model.</summary>
     /// <param name="owner">The model; keys its compiled plan and optimizer moments.</param>
     /// <param name="onReset">Owner cleanup to run when a committed plan is dropped (caches, GPU transients).</param>
-    public FusedTrainingSession(object owner, Action? onReset = null)
+    /// <param name="stateKey">
+    /// The slot of the owner's compiled state this session trains, when the owner has several (one per training
+    /// objective that steps its own optimizer). Null uses the slot of the layer set, and a reset drops every slot.
+    /// </param>
+    public FusedTrainingSession(object owner, Action? onReset = null, object? stateKey = null)
     {
         Guard.NotNull(owner);
         _owner = owner;
         _onReset = onReset;
+        _stateKey = stateKey;
     }
 
     /// <summary>True once a fused step has trained the model; later steps must stay fused or fail loudly.</summary>
@@ -152,7 +158,8 @@ internal sealed class FusedTrainingSession<T>
         // Owner cleanup first: it may itself restart this session (a model's cache invalidation re-enables the
         // fused path for ordinary resets), and the state set below must win.
         _onReset?.Invoke();
-        CompiledTapeTrainingStep<T>.Invalidate(_owner);
+        if (_stateKey is null) CompiledTapeTrainingStep<T>.Invalidate(_owner);
+        else CompiledTapeTrainingStep<T>.Invalidate(_owner, _stateKey);
         IsDisabled = stickyDisable;
         IsCommitted = false;
         _persistenceVerified = false;
@@ -332,7 +339,8 @@ internal sealed class FusedTrainingSession<T>
                 trainableSelection: request.Selection,
                 owner: _owner,
                 l2Regularization: l2,
-                deferredLoss: deferredLoss);
+                deferredLoss: deferredLoss,
+                stateKey: _stateKey);
         }
         finally
         {

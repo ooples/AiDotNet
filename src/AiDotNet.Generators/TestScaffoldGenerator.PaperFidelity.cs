@@ -284,6 +284,14 @@ public partial class TestScaffoldGenerator
         sb.AppendLine("    public async System.Threading.Tasks.Task Options_EachShouldChangeObservableBehaviour(string option)");
         sb.AppendLine("    {");
         sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
+        // SkippableTheory rebuilds each data row as its own test case and drops the row's InlineData Skip, so the
+        // skipped cases also skip here; without this every ADNOPT001-baselined or exempt option ran.
+        foreach (var optionCase in model.OptionSensitivityCases.Where(c => c.SkipReason is not null))
+        {
+            sb.Append("        Xunit.Skip.If(option == \"").Append(optionCase.Property).Append("\", \"")
+                .Append(EscapeString(optionCase.SkipReason!)).AppendLine("\");");
+        }
+
         sb.AppendLine("        AssertOptionChangesObservableBehaviour(option);");
         sb.AppendLine("    }");
     }
@@ -358,8 +366,8 @@ public partial class TestScaffoldGenerator
             bool declares = false;
             for (INamedTypeSymbol? walk = type; walk is not null && !declares; walk = walk.BaseType)
             {
-                declares = walk.GetMembers().OfType<IPropertySymbol>().Any(p => p.GetAttributes().Any(a =>
-                    a.AttributeClass?.ToDisplayString() == OptionsFidelityAnalyzer.PaperDefaultAttributeName));
+                declares = OptionsFidelityAnalyzer.HasPaperDefault(walk.GetAttributes())
+                    || walk.GetMembers().OfType<IPropertySymbol>().Any(p => OptionsFidelityAnalyzer.HasPaperDefault(p.GetAttributes()));
             }
 
             if (declares) declaring.Add(type);

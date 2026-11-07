@@ -2,20 +2,20 @@ OptionsType	PropertyDocumented	SourceFile	Occurrences	Resolution	Detail
 ACGANOptions	LatentSize	src/NeuralNetworks/ACGAN.cs	1	architecture	input width of the generator architecture; GanOptions.LatentSize is not read by this model
 ACGANOptions	NumClasses	src/NeuralNetworks/ACGAN.cs	1	constructor	numClasses
 AutoencoderOptions	InputSize	src/NeuralNetworks/Autoencoder.cs	1	architecture	NeuralNetworkArchitecture input shape
-AutoencoderOptions	LatentSize	src/NeuralNetworks/Autoencoder.cs	1	implemented	AutoencoderOptions.LatentSize (bottleneck width; null derives max(input / 4, 4))
-BGEOptions	MaxSequenceLength	src/NeuralNetworks/BGE.cs	1	exists	
+AutoencoderOptions	LatentSize	src/NeuralNetworks/Autoencoder.cs	1	implemented	AutoencoderOptions.LatentSize (bottleneck width; null derives max(input / 4, 4)); model size: null derives the bottleneck from the input; the paper's MNIST 30-unit code is one architecture, left to #2090
+BGEOptions	MaxSequenceLength	src/NeuralNetworks/BGE.cs	1	exists	paper default not declared: the C-Pack paper states no maximum length
 BGEOptions	ModelSize	src/NeuralNetworks/BGE.cs	1	not-applicable	BGE sizes (small/base/large) differ only in EmbeddingDimension, NumLayers and NumHeads, which are options
-Blip2Options	ImageSize	src/NeuralNetworks/Blip2NeuralNetwork.cs	1	exists	
+Blip2Options	ImageSize	src/NeuralNetworks/Blip2NeuralNetwork.cs	1	exists	paper default declared ([PaperDefault], Sec. 3.4 (224))
 Blip2Options	MaxTextLength	src/NeuralNetworks/Blip2NeuralNetwork.cs	1	renamed	MaxSequenceLength
-BlipOptions	ImageSize	src/NeuralNetworks/BlipNeuralNetwork.cs	1	exists	
+BlipOptions	ImageSize	src/NeuralNetworks/BlipNeuralNetwork.cs	1	exists	paper default declared ([PaperDefault], Sec. 4.1 and App. A (384 fine-tuning))
 BlipOptions	MaxTextLength	src/NeuralNetworks/BlipNeuralNetwork.cs	1	renamed	MaxSequenceLength
 CQLOptions	ConservativeWeight	src/ReinforcementLearning/Agents/CQLAgent.cs	1	renamed	CQLAlpha
 CapsuleNetworkOptions	InputSize	src/NeuralNetworks/CapsuleNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 CapsuleNetworkOptions	NumCapsules	src/NeuralNetworks/CapsuleNetwork.cs	1	architecture	capsule layers in NeuralNetworkArchitecture.Layers; the default stack follows Sabour et al. 2017
 ClipOptions	EmbeddingDim	src/NeuralNetworks/ClipNeuralNetwork.cs	1	renamed	EmbeddingDimension
-ClipOptions	ImageSize	src/NeuralNetworks/ClipNeuralNetwork.cs	1	exists	
+ClipOptions	ImageSize	src/NeuralNetworks/ClipNeuralNetwork.cs	1	exists	paper default not declared: the paper trains at 224 and 336 (its CLIP results use the 336px ViT-L/14), so no single value
 ColBERTOptions	EmbeddingDim	src/NeuralNetworks/ColBERT.cs	1	renamed	EmbeddingDimension
-ColBERTOptions	MaxQueryLength	src/NeuralNetworks/ColBERT.cs	1	implemented	ColBERTOptions.MaxQueryLength = 32 with [MASK] query augmentation (Khattab & Zaharia 2020)
+ColBERTOptions	MaxQueryLength	src/NeuralNetworks/ColBERT.cs	1	implemented	ColBERTOptions.MaxQueryLength = 32 with [MASK] query augmentation (Khattab & Zaharia 2020); paper default declared ([PaperDefault], Sec. 4.1.2 (Nq = 32))
 ConditionalGANOptions	LatentSize	src/NeuralNetworks/ConditionalGAN.cs	1	architecture	input width of the generator architecture; GanOptions.LatentSize is not read by this model
 ConditionalGANOptions	NumClasses	src/NeuralNetworks/ConditionalGAN.cs	1	constructor	numConditionClasses
 ConvolutionalNeuralNetworkOptions	InputChannels	src/NeuralNetworks/ConvolutionalNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture.InputDepth
@@ -24,10 +24,10 @@ ConvolutionalNeuralNetworkOptions	InputWidth	src/NeuralNetworks/ConvolutionalNeu
 CycleGANOptions	ImageSize	src/NeuralNetworks/CycleGAN.cs	1	architecture	generator and discriminator architectures
 CycleGANOptions	NumResidualBlocks	src/NeuralNetworks/CycleGAN.cs	1	architecture	layers of the supplied generator architectures
 DCGANOptions	ImageSize	src/NeuralNetworks/DCGAN.cs	1	constructor	imageHeight, imageWidth
-DCGANOptions	LatentSize	src/NeuralNetworks/DCGAN.cs	1	exists	
-DeepBeliefNetworkOptions	HiddenLayers	src/NeuralNetworks/DeepBeliefNetwork.cs	1	implemented	DeepBeliefNetworkOptions.HiddenLayers = 500-500-2000 (Hinton, Osindero & Teh 2006)
+DCGANOptions	LatentSize	src/NeuralNetworks/DCGAN.cs	1	exists	paper default declared ([PaperDefault], Fig. 1 caption (100))
+DeepBeliefNetworkOptions	HiddenLayers	src/NeuralNetworks/DeepBeliefNetwork.cs	1	implemented	DeepBeliefNetworkOptions.HiddenLayers = 500-500-2000 (Hinton, Osindero & Teh 2006); model size: kept at its test-scale default; the paper value is #2090's
 DeepBeliefNetworkOptions	InputSize	src/NeuralNetworks/DeepBeliefNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
-DeepBoltzmannMachineOptions	HiddenLayers	src/NeuralNetworks/DeepBoltzmannMachine.cs	1	implemented	DeepBoltzmannMachineOptions.HiddenLayers (null derives two layers of min(500, 4 x input))
+DeepBoltzmannMachineOptions	HiddenLayers	src/NeuralNetworks/DeepBoltzmannMachine.cs	1	implemented	DeepBoltzmannMachineOptions.HiddenLayers (null derives two layers of min(500, 4 x input)); model size: kept at its test-scale default; the paper value is #2090's
 DeepBoltzmannMachineOptions	VisibleSize	src/NeuralNetworks/DeepBoltzmannMachine.cs	1	architecture	NeuralNetworkArchitecture input shape
 DeepQNetworkOptions	ActionSize	src/NeuralNetworks/DeepQNetwork.cs	1	architecture	NeuralNetworkArchitecture.OutputSize
 DeepQNetworkOptions	StateSize	src/NeuralNetworks/DeepQNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
@@ -44,71 +44,71 @@ EchoStateNetworkOptions	ReservoirSize	src/NeuralNetworks/EchoStateNetwork.cs	1	c
 ExtremeLearningMachineOptions	HiddenSize	src/NeuralNetworks/ExtremeLearningMachine.cs	1	constructor	hiddenLayerSize
 ExtremeLearningMachineOptions	InputSize	src/NeuralNetworks/ExtremeLearningMachine.cs	1	architecture	NeuralNetworkArchitecture input shape
 FalconMambaOptions	ModelDim	src/NeuralNetworks/FalconMambaLanguageModel.cs	1	renamed	ModelDimension
-FalconMambaOptions	NumLayers	src/NeuralNetworks/FalconMambaLanguageModel.cs	1	exists	
-FalconMambaOptions	VocabSize	src/NeuralNetworks/FalconMambaLanguageModel.cs	1	exists	
+FalconMambaOptions	NumLayers	src/NeuralNetworks/FalconMambaLanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+FalconMambaOptions	VocabSize	src/NeuralNetworks/FalconMambaLanguageModel.cs	1	exists	paper default declared ([PaperDefault], Table 1 (65024))
 FastTextOptions	EmbeddingDim	src/NeuralNetworks/FastText.cs	1	renamed	EmbeddingDimension
-FastTextOptions	MaxNgramLength	src/NeuralNetworks/FastText.cs	1	implemented	FastTextOptions.MaxNgramLength = 6 (Bojanowski et al. 2017); 0 turns subwords off
-FastTextOptions	MinNgramLength	src/NeuralNetworks/FastText.cs	1	implemented	FastTextOptions.MinNgramLength = 3 (Bojanowski et al. 2017)
-FeedForwardNeuralNetworkOptions	HiddenLayers	src/NeuralNetworks/FeedForwardNeuralNetwork.cs	1	implemented	FeedForwardNeuralNetworkOptions.HiddenLayers = 64-64
+FastTextOptions	MaxNgramLength	src/NeuralNetworks/FastText.cs	1	implemented	FastTextOptions.MaxNgramLength = 6 (Bojanowski et al. 2017); 0 turns subwords off; paper default declared ([PaperDefault], Sec. 3.2 (6))
+FastTextOptions	MinNgramLength	src/NeuralNetworks/FastText.cs	1	implemented	FastTextOptions.MinNgramLength = 3 (Bojanowski et al. 2017); paper default declared ([PaperDefault], Sec. 3.2 (3))
+FeedForwardNeuralNetworkOptions	HiddenLayers	src/NeuralNetworks/FeedForwardNeuralNetwork.cs	1	implemented	FeedForwardNeuralNetworkOptions.HiddenLayers = 64-64; model size: kept at its test-scale default; the paper value is #2090's
 FeedForwardNeuralNetworkOptions	InputSize	src/NeuralNetworks/FeedForwardNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 FinchOptions	ModelDim	src/NeuralNetworks/FinchLanguageModel.cs	1	renamed	ModelDimension
-FinchOptions	NumHeads	src/NeuralNetworks/FinchLanguageModel.cs	1	exists	
-FinchOptions	NumLayers	src/NeuralNetworks/FinchLanguageModel.cs	1	exists	
-FinchOptions	VocabSize	src/NeuralNetworks/FinchLanguageModel.cs	1	exists	
-FlamingoOptions	ImageSize	src/NeuralNetworks/FlamingoNeuralNetwork.cs	1	exists	
+FinchOptions	NumHeads	src/NeuralNetworks/FinchLanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+FinchOptions	NumLayers	src/NeuralNetworks/FinchLanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+FinchOptions	VocabSize	src/NeuralNetworks/FinchLanguageModel.cs	1	exists	paper default declared ([PaperDefault], Sec. 5 (65536))
+FlamingoOptions	ImageSize	src/NeuralNetworks/FlamingoNeuralNetwork.cs	1	exists	paper default not declared: 288 (encoder pre-training), 320 (Flamingo training) and 480 (fine-tuning), App. B
 FlamingoOptions	MaxTextLength	src/NeuralNetworks/FlamingoNeuralNetwork.cs	1	renamed	MaxSequenceLength
 GLAOptions	ModelDim	src/NeuralNetworks/GLALanguageModel.cs	1	renamed	ModelDimension
-GLAOptions	NumLayers	src/NeuralNetworks/GLALanguageModel.cs	1	exists	
-GLAOptions	VocabSize	src/NeuralNetworks/GLALanguageModel.cs	1	exists	
+GLAOptions	NumLayers	src/NeuralNetworks/GLALanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+GLAOptions	VocabSize	src/NeuralNetworks/GLALanguageModel.cs	1	exists	paper default not declared: the paper names the Mistral tokenizer without a size
 GatedDeltaNetOptions	ModelDim	src/NeuralNetworks/GatedDeltaNetLanguageModel.cs	1	renamed	ModelDimension
-GatedDeltaNetOptions	NumHeads	src/NeuralNetworks/GatedDeltaNetLanguageModel.cs	1	exists	
-GatedDeltaNetOptions	NumLayers	src/NeuralNetworks/GatedDeltaNetLanguageModel.cs	1	exists	
-GatedDeltaNetOptions	VocabSize	src/NeuralNetworks/GatedDeltaNetLanguageModel.cs	1	exists	
+GatedDeltaNetOptions	NumHeads	src/NeuralNetworks/GatedDeltaNetLanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+GatedDeltaNetOptions	NumLayers	src/NeuralNetworks/GatedDeltaNetLanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+GatedDeltaNetOptions	VocabSize	src/NeuralNetworks/GatedDeltaNetLanguageModel.cs	1	exists	paper default declared ([PaperDefault], Sec. 4 (32,000); the default was 50277)
 GenerativeAdversarialNetworkOptions	ImageSize	src/NeuralNetworks/GenerativeAdversarialNetwork.cs	1	architecture	generator and discriminator architectures
 GenerativeAdversarialNetworkOptions	LatentSize	src/NeuralNetworks/GenerativeAdversarialNetwork.cs	1	architecture	input width of the generator architecture
 GloVeOptions	EmbeddingDim	src/NeuralNetworks/GloVe.cs	1	renamed	EmbeddingDimension
-GloVeOptions	VocabSize	src/NeuralNetworks/GloVe.cs	1	exists	
-Gpt4VisionOptions	ImageSize	src/NeuralNetworks/Gpt4VisionNeuralNetwork.cs	1	exists	
+GloVeOptions	VocabSize	src/NeuralNetworks/GloVe.cs	1	exists	paper default not declared: the paper could not be fetched to verify (nlp.stanford.edu refused the connection)
+Gpt4VisionOptions	ImageSize	src/NeuralNetworks/Gpt4VisionNeuralNetwork.cs	1	exists	paper default not declared: the GPT-4 report gives no architecture details
 Gpt4VisionOptions	MaxTextLength	src/NeuralNetworks/Gpt4VisionNeuralNetwork.cs	1	renamed	MaxSequenceLength
 GradientBanditOptions	StepSize	src/ReinforcementLearning/Agents/GradientBanditAgent.cs	1	renamed	Alpha
-GraphAttentionNetworkOptions	HiddenSize	src/NeuralNetworks/GraphAttentionNetwork.cs	1	implemented	GraphAttentionNetworkOptions.HiddenSize = 64 (8 heads x 8 features, Velickovic et al. 2018)
+GraphAttentionNetworkOptions	HiddenSize	src/NeuralNetworks/GraphAttentionNetwork.cs	1	implemented	GraphAttentionNetworkOptions.HiddenSize = 64 (8 heads x 8 features, Velickovic et al. 2018); paper default declared ([PaperDefault], Sec. 3.3 (8 heads x 8 features = 64))
 GraphAttentionNetworkOptions	NodeFeatureSize	src/NeuralNetworks/GraphAttentionNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
-GraphAttentionNetworkOptions	NumHeads	src/NeuralNetworks/GraphAttentionNetwork.cs	1	exists	
+GraphAttentionNetworkOptions	NumHeads	src/NeuralNetworks/GraphAttentionNetwork.cs	1	exists	paper default declared ([PaperDefault], Sec. 3.3 (K = 8))
 GraphIsomorphismNetworkOptions	HiddenSize	src/NeuralNetworks/GraphIsomorphismNetwork.cs	1	renamed	MlpHiddenDim
 GraphIsomorphismNetworkOptions	NodeFeatureSize	src/NeuralNetworks/GraphIsomorphismNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
-GraphIsomorphismNetworkOptions	NumLayers	src/NeuralNetworks/GraphIsomorphismNetwork.cs	1	exists	
+GraphIsomorphismNetworkOptions	NumLayers	src/NeuralNetworks/GraphIsomorphismNetwork.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
 GriffinOptions	ModelDim	src/NeuralNetworks/GriffinLanguageModel.cs	1	renamed	ModelDimension
-GriffinOptions	NumLayers	src/NeuralNetworks/GriffinLanguageModel.cs	1	exists	
-GriffinOptions	VocabSize	src/NeuralNetworks/GriffinLanguageModel.cs	1	exists	
-HTMNetworkOptions	ColumnCount	src/NeuralNetworks/HTMNetwork.cs	1	exists	
+GriffinOptions	NumLayers	src/NeuralNetworks/GriffinLanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+GriffinOptions	VocabSize	src/NeuralNetworks/GriffinLanguageModel.cs	1	exists	paper default not declared: the paper states no language-model vocabulary size
+HTMNetworkOptions	ColumnCount	src/NeuralNetworks/HTMNetwork.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
 HTMNetworkOptions	InputSize	src/NeuralNetworks/HTMNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 HopeNetworkOptions	HiddenSize	src/NeuralNetworks/HopeNetwork.cs	1	renamed	HiddenDim
 HopeNetworkOptions	InputSize	src/NeuralNetworks/HopeNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 HopfieldNetworkOptions	MaxPatterns	src/NeuralNetworks/HopfieldNetwork.cs	1	not-applicable	capacity follows from the pattern size (about 0.138 N, Hopfield 1982); it is not a setting
 HopfieldNetworkOptions	PatternSize	src/NeuralNetworks/HopfieldNetwork.cs	1	constructor	size
-HyperbolicNeuralNetworkOptions	Curvature	src/NeuralNetworks/HyperbolicNeuralNetwork.cs	1	exists	
+HyperbolicNeuralNetworkOptions	Curvature	src/NeuralNetworks/HyperbolicNeuralNetwork.cs	1	exists	paper default declared ([PaperDefault], Sec. 4 (c = 1, curvature -1))
 HyperbolicNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/HyperbolicNeuralNetwork.cs	1	architecture	hidden widths of the architecture layers
 HyperbolicNeuralNetworkOptions	InputSize	src/NeuralNetworks/HyperbolicNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 ImageBindOptions	EmbeddingDim	src/NeuralNetworks/ImageBindNeuralNetwork.cs	1	renamed	EmbeddingDimension
-ImageBindOptions	ImageSize	src/NeuralNetworks/ImageBindNeuralNetwork.cs	1	exists	
+ImageBindOptions	ImageSize	src/NeuralNetworks/ImageBindNeuralNetwork.cs	1	exists	paper default not declared: 224px appears only in an augmentation table cell, not as the encoder resolution
 InfoGANOptions	LatentSize	src/NeuralNetworks/InfoGAN.cs	1	architecture	input width of the generator architecture; GanOptions.LatentSize is not read by this model
-InfoGANOptions	NumCategoricalCodes	src/NeuralNetworks/InfoGAN.cs	1	implemented	InfoGANOptions.NumCategoricalCodes = 1 of CategoricalCodeDimension = 10 (Chen et al. 2016)
-InfoGANOptions	NumContinuousCodes	src/NeuralNetworks/InfoGAN.cs	1	implemented	InfoGANOptions.NumContinuousCodes = 2 (Chen et al. 2016)
+InfoGANOptions	NumCategoricalCodes	src/NeuralNetworks/InfoGAN.cs	1	implemented	InfoGANOptions.NumCategoricalCodes = 1 of CategoricalCodeDimension = 10 (Chen et al. 2016); paper default not declared: the paper text could not be read to verify
+InfoGANOptions	NumContinuousCodes	src/NeuralNetworks/InfoGAN.cs	1	implemented	InfoGANOptions.NumContinuousCodes = 2 (Chen et al. 2016); paper default not declared: the paper text could not be read to verify
 InstructorEmbeddingOptions	EmbeddingDim	src/NeuralNetworks/InstructorEmbedding.cs	1	renamed	EmbeddingDimension
-InstructorEmbeddingOptions	MaxSequenceLength	src/NeuralNetworks/InstructorEmbedding.cs	1	exists	
+InstructorEmbeddingOptions	MaxSequenceLength	src/NeuralNetworks/InstructorEmbedding.cs	1	exists	paper default not declared: no maximum length found in the paper
 JambaOptions	ModelDim	src/NeuralNetworks/JambaLanguageModel.cs	1	renamed	ModelDimension
-JambaOptions	NumLayers	src/NeuralNetworks/JambaLanguageModel.cs	1	exists	
-JambaOptions	VocabSize	src/NeuralNetworks/JambaLanguageModel.cs	1	exists	
-LLaVAOptions	ImageSize	src/NeuralNetworks/LLaVANeuralNetwork.cs	1	exists	
+JambaOptions	NumLayers	src/NeuralNetworks/JambaLanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+JambaOptions	VocabSize	src/NeuralNetworks/JambaLanguageModel.cs	1	exists	paper default declared ([PaperDefault], Sec. 2 (64K))
+LLaVAOptions	ImageSize	src/NeuralNetworks/LLaVANeuralNetwork.cs	1	exists	paper default not declared: the paper names CLIP ViT-L/14 but states no resolution
 LLaVAOptions	MaxTextLength	src/NeuralNetworks/LLaVANeuralNetwork.cs	1	renamed	MaxSequenceLength
 LiquidStateMachineOptions	InputSize	src/NeuralNetworks/LiquidStateMachine.cs	1	architecture	NeuralNetworkArchitecture input shape
 LiquidStateMachineOptions	ReservoirSize	src/NeuralNetworks/LiquidStateMachine.cs	1	constructor	reservoirSize
 Mamba2Options	ModelDim	src/NeuralNetworks/Mamba2LanguageModel.cs	1	renamed	ModelDimension
-Mamba2Options	NumLayers	src/NeuralNetworks/Mamba2LanguageModel.cs	1	exists	
-Mamba2Options	VocabSize	src/NeuralNetworks/Mamba2LanguageModel.cs	1	not-applicable	this Mamba2 is a time-series regressor, not a language model; it has no vocabulary
+Mamba2Options	NumLayers	src/NeuralNetworks/Mamba2LanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+Mamba2Options	VocabSize	src/NeuralNetworks/Mamba2LanguageModel.cs	1	exists	the language model reads Mamba2Options.VocabSize (default 50277); paper default not declared yet (#2090)
 MambaOptions	ModelDim	src/NeuralNetworks/MambaLanguageModel.cs	1	renamed	ModelDimension
-MambaOptions	NumLayers	src/NeuralNetworks/MambaLanguageModel.cs	1	exists	
-MambaOptions	VocabSize	src/NeuralNetworks/MambaLanguageModel.cs	1	not-applicable	this Mamba is a time-series regressor, not a language model; it has no vocabulary
+MambaOptions	NumLayers	src/NeuralNetworks/MambaLanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+MambaOptions	VocabSize	src/NeuralNetworks/MambaLanguageModel.cs	1	exists	the language model reads MambaOptions.VocabSize (default 50277); paper default not declared yet (#2090)
 MambularOptions	ModelDim	src/NeuralNetworks/Tabular/MambularNetwork.cs	1	renamed	EmbeddingDimension
 MatryoshkaEmbeddingOptions	Dimensions	src/NeuralNetworks/MatryoshkaEmbedding.cs	1	renamed	NestedDimensions
 MatryoshkaEmbeddingOptions	EmbeddingDim	src/NeuralNetworks/MatryoshkaEmbedding.cs	1	renamed	EmbeddingDimension
@@ -123,7 +123,7 @@ MobileNetV3Options	Variant	src/NeuralNetworks/MobileNetV3Network.cs	1	constructo
 NEATOptions	InputSize	src/NeuralNetworks/NEAT.cs	1	architecture	NeuralNetworkArchitecture input shape
 NEATOptions	OutputSize	src/NeuralNetworks/NEAT.cs	1	architecture	NeuralNetworkArchitecture.OutputSize
 NEATOptions	PopulationSize	src/NeuralNetworks/NEAT.cs	1	constructor	populationSize
-NeuralNetworkOptions	HiddenLayers	src/NeuralNetworks/NeuralNetwork.cs	1	implemented	NeuralNetworkDefaultOptions.HiddenLayers (null sizes by NetworkComplexity)
+NeuralNetworkOptions	HiddenLayers	src/NeuralNetworks/NeuralNetwork.cs	1	implemented	NeuralNetworkDefaultOptions.HiddenLayers (null sizes by NetworkComplexity); model size: kept at its test-scale default; the paper value is #2090's
 NeuralNetworkOptions	InputSize	src/NeuralNetworks/NeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 NeuralTuringMachineOptions	InputSize	src/NeuralNetworks/NeuralTuringMachine.cs	1	architecture	NeuralNetworkArchitecture input shape
 NeuralTuringMachineOptions	MemorySize	src/NeuralNetworks/NeuralTuringMachine.cs	1	constructor	memorySize
@@ -133,42 +133,42 @@ OctonionNeuralNetworkOptions	InputSize	src/NeuralNetworks/OctonionNeuralNetwork.
 Pix2PixOptions	ImageSize	src/NeuralNetworks/Pix2Pix.cs	1	architecture	generator and discriminator architectures
 Pix2PixOptions	InputChannels	src/NeuralNetworks/Pix2Pix.cs	1	architecture	generator architecture input depth
 Pix2PixOptions	OutputChannels	src/NeuralNetworks/Pix2Pix.cs	1	architecture	generator architecture output depth
-QuantumNeuralNetworkOptions	NumLayers	src/NeuralNetworks/QuantumNeuralNetwork.cs	1	implemented	QuantumNeuralNetworkOptions.NumLayers = 2 quantum layers
+QuantumNeuralNetworkOptions	NumLayers	src/NeuralNetworks/QuantumNeuralNetwork.cs	1	implemented	QuantumNeuralNetworkOptions.NumLayers = 2 quantum layers; model size: kept at its test-scale default; the paper value is #2090's
 QuantumNeuralNetworkOptions	NumQubits	src/NeuralNetworks/QuantumNeuralNetwork.cs	1	constructor	numQubits
 RWKV7Options	ModelDim	src/NeuralNetworks/RWKV7LanguageModel.cs	1	renamed	ModelDimension
-RWKV7Options	NumLayers	src/NeuralNetworks/RWKV7LanguageModel.cs	1	exists	
-RWKV7Options	VocabSize	src/NeuralNetworks/RWKV7LanguageModel.cs	1	exists	
+RWKV7Options	NumLayers	src/NeuralNetworks/RWKV7LanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+RWKV7Options	VocabSize	src/NeuralNetworks/RWKV7LanguageModel.cs	1	exists	paper default not declared: the cited paper is RWKV-4 (V = 50277), while the default 65536 is the RWKV World tokenizer; the citation is #2090's to correct
 RadialBasisFunctionNetworkOptions	InputSize	src/NeuralNetworks/RadialBasisFunctionNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
-RadialBasisFunctionNetworkOptions	NumCenters	src/NeuralNetworks/RadialBasisFunctionNetwork.cs	1	implemented	RadialBasisFunctionNetworkOptions.NumCenters (null derives max(10, (input + output) / 2))
+RadialBasisFunctionNetworkOptions	NumCenters	src/NeuralNetworks/RadialBasisFunctionNetwork.cs	1	implemented	RadialBasisFunctionNetworkOptions.NumCenters (null derives max(10, (input + output) / 2)); model size: kept at its test-scale default; the paper value is #2090's
 RecurrentGemmaOptions	ModelDim	src/NeuralNetworks/RecurrentGemmaLanguageModel.cs	1	renamed	ModelDimension
-RecurrentGemmaOptions	NumLayers	src/NeuralNetworks/RecurrentGemmaLanguageModel.cs	1	exists	
-RecurrentGemmaOptions	VocabSize	src/NeuralNetworks/RecurrentGemmaLanguageModel.cs	1	exists	
-RecurrentNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/RecurrentNeuralNetwork.cs	1	implemented	RecurrentNeuralNetworkOptions.HiddenSize (null derives max(64, input, output))
+RecurrentGemmaOptions	NumLayers	src/NeuralNetworks/RecurrentGemmaLanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+RecurrentGemmaOptions	VocabSize	src/NeuralNetworks/RecurrentGemmaLanguageModel.cs	1	exists	paper default declared ([PaperDefault], Table 1 and Sec. 3.1 (256k))
+RecurrentNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/RecurrentNeuralNetwork.cs	1	implemented	RecurrentNeuralNetworkOptions.HiddenSize (null derives max(64, input, output)); model size: kept at its test-scale default; the paper value is #2090's
 RecurrentNeuralNetworkOptions	InputSize	src/NeuralNetworks/RecurrentNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
-RecurrentNeuralNetworkOptions	NumLayers	src/NeuralNetworks/RecurrentNeuralNetwork.cs	1	implemented	RecurrentNeuralNetworkOptions.NumLayers = 2
+RecurrentNeuralNetworkOptions	NumLayers	src/NeuralNetworks/RecurrentNeuralNetwork.cs	1	implemented	RecurrentNeuralNetworkOptions.NumLayers = 2; model size: kept at its test-scale default; the paper value is #2090's
 ResidualNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/ResidualNeuralNetwork.cs	1	not-applicable	the default stack has no single width: it doubles per stage from max(64, input) up to 512, as in He et al. 2016
 ResidualNeuralNetworkOptions	InputSize	src/NeuralNetworks/ResidualNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
-ResidualNeuralNetworkOptions	NumResidualBlocks	src/NeuralNetworks/ResidualNeuralNetwork.cs	1	implemented	ResidualNeuralNetworkOptions.NumResidualBlocks = 3
+ResidualNeuralNetworkOptions	NumResidualBlocks	src/NeuralNetworks/ResidualNeuralNetwork.cs	1	implemented	ResidualNeuralNetworkOptions.NumResidualBlocks = 3; model size: kept at its test-scale default; the paper value is #2090's
 RestrictedBoltzmannMachineOptions	HiddenSize	src/NeuralNetworks/RestrictedBoltzmannMachine.cs	1	constructor	hiddenSize
 RestrictedBoltzmannMachineOptions	VisibleSize	src/NeuralNetworks/RestrictedBoltzmannMachine.cs	1	constructor	visibleSize
 SARIMAOptions	DifferencingOrder	src/TimeSeries/SARIMAModel.cs	1	renamed	D
 SARIMAOptions	MAOrder	src/TimeSeries/SARIMAModel.cs	1	renamed	Q
 SGPTOptions	EmbeddingDim	src/NeuralNetworks/SGPT.cs	1	renamed	EmbeddingDimension
-SGPTOptions	MaxSequenceLength	src/NeuralNetworks/SGPT.cs	1	exists	
-SPLADEOptions	MaxSequenceLength	src/NeuralNetworks/SPLADE.cs	1	exists	
-SPLADEOptions	VocabSize	src/NeuralNetworks/SPLADE.cs	1	exists	
+SGPTOptions	MaxSequenceLength	src/NeuralNetworks/SGPT.cs	1	exists	paper default not declared: 75 (symmetric), 300 (asymmetric) or 2048 (cross-encoder) tokens (Sec. 4)
+SPLADEOptions	MaxSequenceLength	src/NeuralNetworks/SPLADE.cs	1	exists	paper default declared ([PaperDefault], Sec. 4 (256; the default was 512))
+SPLADEOptions	VocabSize	src/NeuralNetworks/SPLADE.cs	1	exists	paper default declared ([PaperDefault], Sec. 3.1 (30522))
 SambaOptions	ModelDim	src/NeuralNetworks/SambaLanguageModel.cs	1	renamed	ModelDimension
-SambaOptions	NumLayers	src/NeuralNetworks/SambaLanguageModel.cs	1	exists	
-SambaOptions	VocabSize	src/NeuralNetworks/SambaLanguageModel.cs	1	exists	
+SambaOptions	NumLayers	src/NeuralNetworks/SambaLanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+SambaOptions	VocabSize	src/NeuralNetworks/SambaLanguageModel.cs	1	exists	paper default not declared: the vocabulary differs per model size (32000, 50304, 32064; App. G)
 SiameseNetworkOptions	InputSize	src/NeuralNetworks/SiameseNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 SiameseNeuralNetworkOptions	EmbeddingSize	src/NeuralNetworks/SiameseNeuralNetwork.cs	1	renamed	EmbeddingDimension
 SiameseNeuralNetworkOptions	InputSize	src/NeuralNetworks/SiameseNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 SimCSEOptions	EmbeddingDim	src/NeuralNetworks/SimCSE.cs	1	renamed	EmbeddingDimension
-SimCSEOptions	MaxSequenceLength	src/NeuralNetworks/SimCSE.cs	1	exists	
+SimCSEOptions	MaxSequenceLength	src/NeuralNetworks/SimCSE.cs	1	exists	paper default not declared: no maximum length found in the paper
 SparseNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/SparseNeuralNetwork.cs	1	architecture	hidden widths of the architecture layers; with none the stack derives max(32, (input + output) / 2)
 SparseNeuralNetworkOptions	InputSize	src/NeuralNetworks/SparseNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
-SparseNeuralNetworkOptions	Sparsity	src/NeuralNetworks/SparseNeuralNetwork.cs	1	exists	
-SpikingNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/SpikingNeuralNetwork.cs	1	implemented	SpikingNeuralNetworkOptions.HiddenLayers = 128-64
+SparseNeuralNetworkOptions	Sparsity	src/NeuralNetworks/SparseNeuralNetwork.cs	1	exists	paper default not declared: the lottery-ticket paper prunes iteratively to many sparsities, not one value
+SpikingNeuralNetworkOptions	HiddenSize	src/NeuralNetworks/SpikingNeuralNetwork.cs	1	implemented	SpikingNeuralNetworkOptions.HiddenLayers = 128-64; model size: kept at its test-scale default; the paper value is #2090's
 SpikingNeuralNetworkOptions	InputSize	src/NeuralNetworks/SpikingNeuralNetwork.cs	1	architecture	NeuralNetworkArchitecture input shape
 SpikingNeuralNetworkOptions	TimeSteps	src/NeuralNetworks/SpikingNeuralNetwork.cs	1	renamed	SimulationSteps (the predict-time simulation loop); the default surrogate-gradient core unrolls its own 20 steps per forward
 SpiralNetOptions	HiddenSize	src/NeuralNetworks/SpiralNet.cs	1	renamed	ConvChannels
@@ -181,8 +181,8 @@ TabMOptions	HiddenSize	src/NeuralNetworks/Tabular/TabMNetwork.cs	1	renamed	Hidde
 TabMOptions	NumSubmodels	src/NeuralNetworks/Tabular/TabMNetwork.cs	1	renamed	NumEnsembleMembers
 TabROptions	HiddenSize	src/NeuralNetworks/Tabular/TabRNetwork.cs	1	renamed	EmbeddingDimension
 TransformerEmbeddingOptions	EmbeddingDim	src/NeuralNetworks/TransformerEmbeddingNetwork.cs	1	renamed	EmbeddingDimension
-TransformerEmbeddingOptions	NumHeads	src/NeuralNetworks/TransformerEmbeddingNetwork.cs	1	exists	
-TransformerEmbeddingOptions	NumLayers	src/NeuralNetworks/TransformerEmbeddingNetwork.cs	1	exists	
+TransformerEmbeddingOptions	NumHeads	src/NeuralNetworks/TransformerEmbeddingNetwork.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+TransformerEmbeddingOptions	NumLayers	src/NeuralNetworks/TransformerEmbeddingNetwork.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
 TransformerOptions	HiddenSize	src/NeuralNetworks/Transformer.cs	1	architecture	TransformerArchitecture.ModelDimension
 TransformerOptions	NumHeads	src/NeuralNetworks/Transformer.cs	1	architecture	TransformerArchitecture.NumHeads
 TransformerOptions	NumLayers	src/NeuralNetworks/Transformer.cs	1	architecture	TransformerArchitecture.NumEncoderLayers / NumDecoderLayers
@@ -193,11 +193,11 @@ VARMAModelOptions	MAOrder	src/TimeSeries/VARMAModel.cs	1	renamed	MaLag
 VariationalAutoencoderOptions	InputSize	src/NeuralNetworks/VariationalAutoencoder.cs	1	architecture	NeuralNetworkArchitecture input shape
 VariationalAutoencoderOptions	LatentSize	src/NeuralNetworks/VariationalAutoencoder.cs	1	constructor	latentSize
 VideoCLIPOptions	EmbeddingDim	src/NeuralNetworks/VideoCLIPNeuralNetwork.cs	1	renamed	EmbeddingDimension
-VideoCLIPOptions	ImageSize	src/NeuralNetworks/VideoCLIPNeuralNetwork.cs	1	exists	
-VideoCLIPOptions	NumFrames	src/NeuralNetworks/VideoCLIPNeuralNetwork.cs	1	exists	
+VideoCLIPOptions	ImageSize	src/NeuralNetworks/VideoCLIPNeuralNetwork.cs	1	exists	paper default not declared: the paper uses S3D features and states no image resolution
+VideoCLIPOptions	NumFrames	src/NeuralNetworks/VideoCLIPNeuralNetwork.cs	1	exists	paper default not declared: one S3D token per second of 30fps video, at most 32 tokens (Sec. 5.3), not a frame count
 VisionTransformerOptions	HiddenSize	src/NeuralNetworks/VisionTransformer.cs	1	renamed	HiddenDim
 VisionTransformerOptions	ImageSize	src/NeuralNetworks/VisionTransformer.cs	1	architecture	NeuralNetworkArchitecture.InputHeight and InputWidth
-VisionTransformerOptions	NumLayers	src/NeuralNetworks/VisionTransformer.cs	1	exists	
+VisionTransformerOptions	NumLayers	src/NeuralNetworks/VisionTransformer.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
 VisionTransformerOptions	PatchSize	src/NeuralNetworks/VisionTransformer.cs	1	constructor	patchSize
 VoxelCNNOptions	GridSize	src/NeuralNetworks/VoxelCNN.cs	1	renamed	VoxelResolution
 VoxelCNNOptions	InputChannels	src/NeuralNetworks/VoxelCNN.cs	1	architecture	NeuralNetworkArchitecture.InputDepth
@@ -205,11 +205,11 @@ VoxelCNNOptions	NumClasses	src/NeuralNetworks/VoxelCNN.cs	1	architecture	NeuralN
 WGANGPOptions	GradientPenaltyWeight	src/NeuralNetworks/WGANGP.cs	1	renamed	GradientPenaltyCoefficient
 WGANGPOptions	LatentSize	src/NeuralNetworks/WGANGP.cs	1	architecture	input width of the generator architecture; GanOptions.LatentSize is not read by this model
 WGANOptions	ClipValue	src/NeuralNetworks/WGAN.cs	1	renamed	WeightClipValue
-WGANOptions	CriticIterations	src/NeuralNetworks/WGAN.cs	1	exists	
+WGANOptions	CriticIterations	src/NeuralNetworks/WGAN.cs	1	exists	paper default declared ([PaperDefault], Algorithm 1 (n_critic = 5))
 WGANOptions	LatentSize	src/NeuralNetworks/WGAN.cs	1	architecture	input width of the generator architecture; GanOptions.LatentSize is not read by this model
 Word2VecOptions	EmbeddingDim	src/NeuralNetworks/Word2Vec.cs	1	renamed	EmbeddingDimension
-Word2VecOptions	VocabSize	src/NeuralNetworks/Word2Vec.cs	1	exists	
-Word2VecOptions	WindowSize	src/NeuralNetworks/Word2Vec.cs	1	exists	
+Word2VecOptions	VocabSize	src/NeuralNetworks/Word2Vec.cs	1	exists	paper default not declared: 1M, 30k or 82K words depending on the experiment (Sec. 4.2-4.3)
+Word2VecOptions	WindowSize	src/NeuralNetworks/Word2Vec.cs	1	exists	paper default not declared: CBOW uses 4 words each side, Skip-gram C = 10 (Sec. 3.1-3.2)
 XLSTMOptions	ModelDim	src/NeuralNetworks/XLSTMLanguageModel.cs	1	renamed	ModelDimension
-XLSTMOptions	NumLayers	src/NeuralNetworks/XLSTMLanguageModel.cs	1	exists	
-XLSTMOptions	VocabSize	src/NeuralNetworks/XLSTMLanguageModel.cs	1	exists	
+XLSTMOptions	NumLayers	src/NeuralNetworks/XLSTMLanguageModel.cs	1	exists	model size: kept at its test-scale default; the paper value is #2090's
+XLSTMOptions	VocabSize	src/NeuralNetworks/XLSTMLanguageModel.cs	1	exists	paper default not declared: no vocabulary size found in the paper

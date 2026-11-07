@@ -22,6 +22,10 @@ public class ConjugateGradientOptimizerOptions<T, TInput, TOutput> : GradientBas
     /// </summary>
     public ConjugateGradientOptimizerOptions()
     {
+        // A second-order or line-search method sizes its step from curvature (a Hessian, curvature pairs, a line
+        // search or a trust radius). Clipping the gradient breaks that: the Newton system and the s/y pairs then
+        // describe a different function. SciPy and torch.optim.LBFGS never clip; opt in explicitly if wanted.
+        EnableGradientClipping = false;
         MaxIterations = 1000;
 
         // Nonlinear conjugate gradient needs a far stricter curvature condition than a

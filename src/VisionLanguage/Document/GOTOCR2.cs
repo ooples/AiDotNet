@@ -374,6 +374,27 @@ public partial class GOTOCR2<T> : VisionLanguageModelBase<T>, IDocumentUnderstan
         return Engine.TensorSlice(logits, new[] { ids.Count - 1, 0 }, new[] { 1, _options.VocabSize });
     }
 
+    /// <summary>
+    /// The training-mode counterpart of <see cref="PredictCore"/>: next-token logits <c>[1, vocab]</c> at the end of
+    /// the OCR prompt for the preprocessed page.
+    /// </summary>
+    /// <remarks>
+    /// The base implementation walked <see cref="NeuralNetworkBase{T}.Layers"/> in sequence, handing the vision
+    /// encoder's continuous features to the Qwen decoder's token-index input ("requires token indices in [0, vocab)").
+    /// Without a decoder (or with an ONNX model) the layers are the whole network and the standard forward applies.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        if (IsOnnxMode || _decoder is null)
+            return base.ForwardForTraining(PrepareInputForTraining(input));
+
+        EnsureLayerRandomSeedsWired();
+        var (ids, imageStart) = Prompt(DefaultQuery);
+        var logits = _decoder.Forward(ids, ImageTokens(PreprocessImage(input)), imageStart);
+        return Engine.TensorSlice(logits, new[] { ids.Count - 1, 0 }, new[] { 1, _options.VocabSize });
+    }
+
     /// <inheritdoc/>
     /// <remarks>
     /// With its decoder, the model trains the OCR loss of the preprocessed page for the default query; without one, the

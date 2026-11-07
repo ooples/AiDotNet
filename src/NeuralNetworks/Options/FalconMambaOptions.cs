@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
@@ -5,6 +6,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the FalconMambaLanguageModel.
 /// </summary>
+[PaperDefault(nameof(VocabSize), 65024, Source = "Zuo et al. 2024, Table 1: vocab_size 65024 (the Falcon tokenizer, Sec. 3.2)")]
 public class FalconMambaOptions : SequenceModelOptions
 {
     /// <summary>

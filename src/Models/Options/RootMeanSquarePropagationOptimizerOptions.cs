@@ -142,4 +142,15 @@ public class RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> : Gra
     /// uncentered RMSProp behavior for existing callers.
     /// </remarks>
     public bool Centered { get; set; }
+
+    /// <summary>
+    /// The value every parameter's running mean of squared gradients starts at. 0 (the default) is PyTorch's
+    /// <c>torch.optim.RMSprop</c>; TensorFlow 1's <c>tf.train.RMSPropOptimizer</c> starts it at 1, so its first steps
+    /// are about <c>lr * g</c> rather than <c>lr * g / sqrt((1 - decay) * g^2)</c>. Must be zero or positive.
+    /// </summary>
+    /// <remarks>
+    /// The compiled (fused) training plan and streaming training start this state at zero, so a non-zero start
+    /// trains on the eager tape step.
+    /// </remarks>
+    public double InitialMeanSquare { get; set; }
 }

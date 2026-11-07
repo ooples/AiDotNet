@@ -991,6 +991,21 @@ public partial class WGANGP<T> : ImageGeneratorModelLayoutBase<T>
         return ShapeAsCriticInput(Generator.Predict(ShapeAsGeneratorInput(input)));
     }
 
+    /// <summary>
+    /// The generator's training forward, on the same noise-to-image path as <see cref="PredictCore"/>.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Layers"/> lists the generator and then the critic, two parallel subnetworks, so the base
+    /// implementation's sequential walk fed the generator's flat projection into the critic's first convolution
+    /// ("Expected input depth 1, but got 64") for any public input. The critic and generator steps of
+    /// <see cref="TrainStep"/> call each subnetwork's own forward and are unchanged.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        EnsureLayerRandomSeedsWired();
+        return ShapeAsCriticInput(Generator.ForwardForTraining(ShapeAsGeneratorInput(input)));
+    }
+
     /// <inheritdoc/>
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
