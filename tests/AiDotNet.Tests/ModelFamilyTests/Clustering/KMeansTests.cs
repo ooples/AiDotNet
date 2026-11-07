@@ -76,6 +76,36 @@ public class KMeansTests : ClusteringModelTestBase
         }
     }
 
+    /// <summary>
+    /// The labels a fit returns are those of the centers it returns: each training row's label is its nearest center,
+    /// so Predict on the training data reproduces Labels. A fit stopped by the center-shift tolerance (MaxIterations
+    /// and Tolerance loose enough that labels are still moving) must still relabel by the final centers.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Train_LabelsAreThoseOfTheReturnedCenters(bool genericMetric)
+    {
+        const int rows = 400, columns = 3;
+        var x = new Matrix<double>(rows, columns);
+        for (int i = 0; i < rows; i++)
+            for (int j = 0; j < columns; j++)
+                x[i, j] = ((i * 37 + j * 101 + i * j * 13) % 97) / 97.0;
+
+        var model = new KMeans<double>(new KMeansOptions<double>
+        {
+            NumClusters = 5, NumInitializations = 1, Seed = 2, MaxIterations = 3, Tolerance = 0.5,
+            DistanceMetric = genericMetric ? new SubclassedEuclidean() : null
+        });
+        model.Train(x, new Vector<double>(rows));
+
+        var labels = model.Labels ?? new Vector<double>(0);
+        var predicted = model.Predict(x);
+        Assert.Equal(rows, labels.Length);
+        for (int i = 0; i < rows; i++)
+            Assert.Equal(predicted[i], labels[i]);
+    }
+
     /// <summary>Euclidean distance under another type, which routes training through the generic metric path.</summary>
     private sealed class SubclassedEuclidean : EuclideanDistance<double>
     {

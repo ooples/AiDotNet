@@ -26,6 +26,13 @@ namespace AiDotNet.Clustering.Partitioning;
 /// 3. Update each center as the mean of its assigned points
 /// 4. Repeat steps 2-3 until convergence or max iterations
 /// </para>
+/// <para>
+/// Convergence follows scikit-learn's Lloyd iteration: it stops when an assignment leaves every label unchanged, or
+/// when the sum over clusters of each center's squared shift is at most
+/// <see cref="Clustering.Options.ClusteringOptions{T}.Tolerance"/> times the mean per-feature variance of the data (so
+/// the default 1e-4 means what it means in scikit-learn). Unless the labels were already unchanged, a final assignment
+/// makes the labels those of the returned centers. <see cref="NumIterations"/> counts the update steps run.
+/// </para>
 /// <para><b>For Beginners:</b> K-Means finds k groups in your data by:
 /// - Starting with k "center" points
 /// - Grouping data points by their closest center
@@ -209,7 +216,7 @@ public partial class KMeans<T> : ClusteringBase<T>
 
     /// <summary>
     /// <see cref="FitSingle"/> for Euclidean distance, on <paramref name="kernel"/>: the same initialization, the same
-    /// Lloyd iterations, empty-cluster handling and convergence test (largest center shift below the tolerance).
+    /// Lloyd iterations, empty-cluster handling and convergence test.
     /// </summary>
     private (Matrix<T> Centers, Vector<T> Labels, T Inertia, int Iterations) FitSingleEuclidean(
         Matrix<T> x, EuclideanKMeansKernel kernel)
@@ -224,15 +231,20 @@ public partial class KMeans<T> : ClusteringBase<T>
         };
 
         var labels = new int[kernel.Rows];
+        var previousLabels = new int[kernel.Rows];
+        for (int i = 0; i < previousLabels.Length; i++) previousLabels[i] = -1;
         var sums = new double[clusters * columns];
         var counts = new int[clusters];
-        double inertia = 0;
-        int iterations;
-        for (iterations = 0; iterations < _options.MaxIterations; iterations++)
+        double tolerance = AbsoluteTolerance(kernel.Data, kernel.Rows, columns);
+        bool unchanged = false;
+        int iterations = 0;
+        while (iterations < _options.MaxIterations)
         {
             kernel.Assign(centers, clusters, labels, sums, counts);
+            iterations++;
 
             var newCenters = new double[clusters * columns];
+            double shift = 0;
             for (int k = 0; k < clusters; k++)
             {
                 int offset = k * columns;
@@ -245,18 +257,26 @@ public partial class KMeans<T> : ClusteringBase<T>
                     // Empty cluster: keep its old center.
                     Array.Copy(centers, offset, newCenters, offset, columns);
                 }
+
+                shift += EuclideanKMeansKernel.SquaredDistance(centers, offset, newCenters, offset, columns);
             }
 
-            inertia = kernel.Inertia(newCenters, labels);
-
-            double maxShift = 0;
-            for (int k = 0; k < clusters; k++)
-                maxShift = Math.Max(maxShift, Math.Sqrt(
-                    EuclideanKMeansKernel.SquaredDistance(centers, k * columns, newCenters, k * columns, columns)));
-
             centers = newCenters;
-            if (maxShift < _options.Tolerance) break;
+            if (labels.AsSpan().SequenceEqual(previousLabels))
+            {
+                unchanged = true;
+                break;
+            }
+
+            if (shift <= tolerance) break;
+            Array.Copy(labels, previousLabels, labels.Length);
         }
+
+        // Label every row by the centers returned, unless the last assignment already did.
+        if (iterations > 0 && !unchanged)
+            kernel.Assign(centers, clusters, labels, null, null);
+
+        double inertia = iterations > 0 ? kernel.Inertia(centers, labels) : 0;
 
         var centerMatrix = new Matrix<T>(clusters, columns);
         for (int k = 0; k < clusters; k++)
@@ -311,37 +331,90 @@ public partial class KMeans<T> : ClusteringBase<T>
 
     private (Matrix<T> Centers, Vector<T> Labels, T Inertia, int Iterations) FitSingle(Matrix<T> x)
     {
-        // Initialize centers
         var centers = InitializeCenters(x);
+        var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        double tolerance = AbsoluteTolerance(ToDoubles(x), x.Rows, x.Columns);
 
         Vector<T> labels = new Vector<T>(x.Rows);
-        T inertia = NumOps.Zero;
+        Vector<T>? previousLabels = null;
+        bool unchanged = false;
         int iterations = 0;
-
-        for (iterations = 0; iterations < _options.MaxIterations; iterations++)
+        while (iterations < _options.MaxIterations)
         {
             // Assignment step: assign each point to nearest center
-            var newLabels = AssignLabels(x, centers);
+            labels = AssignLabels(x, centers);
+            iterations++;
 
-            // Update step: compute new centers
-            var (newCenters, newInertia) = UpdateCenters(x, newLabels, centers);
-
-            // Check for convergence
-            T centerShift = ComputeCenterShift(centers, newCenters);
-            if (NumOps.ToDouble(centerShift) < _options.Tolerance)
+            // Update step: compute new centers, and the sum of the centers' squared shifts
+            var (newCenters, _) = UpdateCenters(x, labels, centers);
+            double shift = 0;
+            for (int k = 0; k < _options.NumClusters; k++)
             {
-                centers = newCenters;
-                labels = newLabels;
-                inertia = newInertia;
-                break;
+                double distance = NumOps.ToDouble(distanceMetric.Compute(GetRow(centers, k), GetRow(newCenters, k)));
+                shift += distance * distance;
             }
 
             centers = newCenters;
-            labels = newLabels;
-            inertia = newInertia;
+            if (previousLabels is not null && SameLabels(labels, previousLabels))
+            {
+                unchanged = true;
+                break;
+            }
+
+            if (shift <= tolerance) break;
+            previousLabels = labels;
+        }
+
+        // Label every row by the centers returned, unless the last assignment already did.
+        if (iterations > 0 && !unchanged)
+            labels = AssignLabels(x, centers);
+
+        T inertia = NumOps.Zero;
+        if (iterations > 0)
+        {
+            for (int i = 0; i < x.Rows; i++)
+            {
+                T distance = distanceMetric.Compute(GetRow(x, i), GetRow(centers, (int)NumOps.ToDouble(labels[i])));
+                inertia = NumOps.Add(inertia, NumOps.Multiply(distance, distance));
+            }
         }
 
         return (centers, labels, inertia, iterations);
+    }
+
+    private bool SameLabels(Vector<T> a, Vector<T> b)
+    {
+        for (int i = 0; i < a.Length; i++)
+            if (NumOps.Compare(a[i], b[i]) != 0) return false;
+        return true;
+    }
+
+    /// <summary>
+    /// The convergence threshold on the summed squared center shift: the tolerance times the mean over features of
+    /// each feature's (population) variance, as scikit-learn's KMeans.
+    /// </summary>
+    private double AbsoluteTolerance(double[] rowMajor, int rows, int columns)
+    {
+        if (rows == 0 || columns == 0) return 0;
+
+        double totalVariance = 0;
+        for (int j = 0; j < columns; j++)
+        {
+            double mean = 0;
+            for (int i = 0; i < rows; i++) mean += rowMajor[i * columns + j];
+            mean /= rows;
+
+            double variance = 0;
+            for (int i = 0; i < rows; i++)
+            {
+                double d = rowMajor[i * columns + j] - mean;
+                variance += d * d;
+            }
+
+            totalVariance += variance / rows;
+        }
+
+        return _options.Tolerance * (totalVariance / columns);
     }
 
     private Matrix<T> InitializeCenters(Matrix<T> x)
@@ -529,26 +602,6 @@ public partial class KMeans<T> : ClusteringBase<T>
         return (newCenters, totalInertia);
     }
 
-    private T ComputeCenterShift(Matrix<T> oldCenters, Matrix<T> newCenters)
-    {
-        T maxShift = NumOps.Zero;
-        var distanceMetric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
-        for (int k = 0; k < _options.NumClusters; k++)
-        {
-            var oldCenter = GetRow(oldCenters, k);
-            var newCenter = GetRow(newCenters, k);
-            T shift = distanceMetric.Compute(oldCenter, newCenter);
-
-            if (NumOps.GreaterThan(shift, maxShift))
-            {
-                maxShift = shift;
-            }
-        }
-
-        return maxShift;
-    }
-
     private Matrix<T> ComputeDistancesToCenters(Matrix<T> x, Matrix<T> centers)
     {
         var distances = new Matrix<T>(x.Rows, _options.NumClusters);
@@ -591,9 +644,8 @@ public partial class KMeans<T> : ClusteringBase<T>
 
         for (int i = 0; i < x.Rows; i++)
         {
-            for (int j = 0; j < x.Columns; j++)
+            foreach (T value in x.GetRowReadOnlySpan(i))
             {
-                T value = x[i, j];
                 if (NumericalStabilityHelper.IsNaN(value) || NumericalStabilityHelper.IsInfinity(value))
                 {
                     throw new ArgumentException("Input data contains NaN or Infinity values.", nameof(x));

@@ -1,3 +1,6 @@
+using SimdVector = System.Numerics.Vector<double>;
+using System.Runtime.InteropServices;
+
 namespace AiDotNet.Clustering.Partitioning;
 
 /// <summary>
@@ -47,9 +50,26 @@ internal sealed class EuclideanKMeansKernel
     public void Assign(double[] centers, int clusters, int[] labels, double[]? sums, int[]? counts)
     {
         int columns = Columns;
-        var centerNorms = new double[clusters];
-        for (int k = 0; k < clusters; k++)
+
+        // Centers transposed to [column, cluster], the clusters padded to whole SIMD vectors: a row's dot products
+        // with every center then accumulate a vector of clusters per column. A padding cluster has an infinite norm,
+        // so it is never nearest.
+        int width = SimdVector.Count;
+        int vectors = (clusters + width - 1) / width;
+        int padded = vectors * width;
+        var centersByColumn = new double[columns * padded];
+        var centerNorms = new double[padded];
+        for (int k = 0; k < padded; k++)
+        {
+            if (k >= clusters)
+            {
+                centerNorms[k] = double.PositiveInfinity;
+                continue;
+            }
+
             centerNorms[k] = Dot(centers, k * columns, centers, k * columns, columns);
+            for (int j = 0; j < columns; j++) centersByColumn[j * padded + k] = centers[k * columns + j];
+        }
 
         bool accumulate = sums is not null && counts is not null;
         int blocks = BlockCount;
@@ -62,15 +82,21 @@ internal sealed class EuclideanKMeansKernel
             int end = Math.Min(start + BlockRows, Rows);
             var localSums = accumulate ? new double[clusters * columns] : null;
             var localCounts = accumulate ? new int[clusters] : null;
+            var dots = new double[padded];
+            var dotVectors = MemoryMarshal.Cast<double, SimdVector>(new Span<double>(dots));
+            var centerVectors = MemoryMarshal.Cast<double, SimdVector>(new ReadOnlySpan<double>(centersByColumn));
 
             for (int i = start; i < end; i++)
             {
                 int offset = i * columns;
+                RowDots(_x, offset, columns, centerVectors, vectors, dotVectors);
+
                 int best = 0;
                 double bestDistance = double.MaxValue;
+                double rowNorm = _rowNorms[i];
                 for (int k = 0; k < clusters; k++)
                 {
-                    double distance = _rowNorms[i] + centerNorms[k] - 2.0 * Dot(_x, offset, centers, k * columns, columns);
+                    double distance = rowNorm + centerNorms[k] - 2.0 * dots[k];
                     if (distance < bestDistance)
                     {
                         bestDistance = distance;
@@ -102,6 +128,46 @@ internal sealed class EuclideanKMeansKernel
                 var localCounts = blockCounts[block];
                 for (int m = 0; m < sums.Length; m++) sums[m] += localSums[m];
                 for (int k = 0; k < clusters; k++) counts[k] += localCounts[k];
+            }
+        }
+    }
+
+    /// <summary>
+    /// One row's dot products with every center: <paramref name="centerVectors"/> holds the centers by column, each
+    /// column <paramref name="vectors"/> SIMD vectors of clusters. Up to two vectors of clusters accumulate in
+    /// registers rather than through memory.
+    /// </summary>
+    private static void RowDots(double[] x, int offset, int columns, ReadOnlySpan<SimdVector> centerVectors,
+        int vectors, Span<SimdVector> dots)
+    {
+        if (vectors == 1)
+        {
+            var a0 = SimdVector.Zero;
+            for (int j = 0; j < columns; j++) a0 += new SimdVector(x[offset + j]) * centerVectors[j];
+            dots[0] = a0;
+        }
+        else if (vectors == 2)
+        {
+            var a0 = SimdVector.Zero;
+            var a1 = SimdVector.Zero;
+            for (int j = 0; j < columns; j++)
+            {
+                var value = new SimdVector(x[offset + j]);
+                a0 += value * centerVectors[2 * j];
+                a1 += value * centerVectors[2 * j + 1];
+            }
+
+            dots[0] = a0;
+            dots[1] = a1;
+        }
+        else
+        {
+            dots.Clear();
+            for (int j = 0; j < columns; j++)
+            {
+                var value = new SimdVector(x[offset + j]);
+                int at = j * vectors;
+                for (int v = 0; v < vectors; v++) dots[v] += value * centerVectors[at + v];
             }
         }
     }
