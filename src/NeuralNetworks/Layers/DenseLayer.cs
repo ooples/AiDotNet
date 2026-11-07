@@ -296,6 +296,8 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
     /// <summary>Fused readout losses this thread has computed; tests read it to see that the fused path ran.</summary>
     [ThreadStatic] internal static long FusedReadoutLossCount;
 
+    private static void CountFusedReadoutLoss() => FusedReadoutLossCount++;
+
     /// <summary>
     /// This layer as an LM head fused with <see cref="AiDotNet.LossFunctions.CrossEntropyWithLogitsLoss{T}"/>:
     /// <c>mean CE(input @ W + b, ids)</c> as one differentiable op that keeps no <c>[rows, outputSize]</c> logits on
@@ -331,13 +333,13 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         for (int r = 0; r < rows; r++)
         {
             double id = NumOps.ToDouble(target.GetFlat(r));
-            if (!(id >= 0 && id < outputSize) || id != Math.Floor(id)) return null;
+            if (!(id >= 0 && id < outputSize) || Math.Floor(id) < id) return null;
             ids.SetFlat(r, (int)id);
         }
 
         var hidden = input.Rank == 2 ? input : Engine.Reshape(input, new[] { rows, inputSize });
         var bias = UseBias ? _biases : new Tensor<T>(new[] { outputSize });
-        FusedReadoutLossCount++;
+        CountFusedReadoutLoss();
         return Engine.FusedLinearCrossEntropyWithLogits(hidden, _weights, bias, ids);
     }
 

@@ -123,19 +123,19 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
     /// <inheritdoc />
     public Tensor<T>? BuildLocalObjective(LocalObjectiveContext<T> context)
     {
-        // Exact configuration sentinel: with no regression and no task term there is no local objective, and the
-        // context is not read.
-        if (_hiddenWeight == 0 && _localTaskWeight == 0) return null;
+        // Exact configuration sentinel (both weights are validated non-negative, so <= 0 means exactly 0): with no
+        // regression and no task term there is no local objective, and the context is not read.
+        if (_hiddenWeight <= 0 && _localTaskWeight <= 0) return null;
         var s = context.Step;
         // The last hidden layer feeds the readout undetached, so the output loss already gives it task credit.
         Tensor<T>? task = null;
         if (_localTaskWeight > 0 && context.HiddenIndex != s.HiddenLayerCount - 1)
         {
             task = s.ReadoutLoss(context.Output, s.Target);
-            if (_localTaskWeight != 1.0) task = s.Engine.TensorMultiplyScalar(task, Ops.FromDouble(_localTaskWeight));
+            task = s.Engine.TensorMultiplyScalar(task, Ops.FromDouble(_localTaskWeight));
         }
         // Exact configuration sentinel: a small positive weight must still train the hidden layers.
-        if (_hiddenWeight == 0) return task;
+        if (_hiddenWeight <= 0) return task;
         var teacher = TeacherStates(s.Input);
         int lt = teacher.Count - 1, h = s.HiddenLayerCount;
         int j = h <= 1 ? lt : (int)Math.Round((double)context.HiddenIndex * lt / (h - 1));
@@ -150,8 +150,8 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
         var diff = s.Engine.TensorSubtract(s.Engine.TensorMatMul(output, p), target);
         var axes = Enumerable.Range(0, diff.Shape.Length).ToArray();
         var mse = s.Engine.ReduceMean(s.Engine.TensorSquare(diff), axes, keepDims: false);
-        // Skip scaling only for the exact identity coefficient.
-        var regression = _hiddenWeight == 1.0 ? mse : s.Engine.TensorMultiplyScalar(mse, Ops.FromDouble(_hiddenWeight));
+        // Scaling by an identity coefficient is exact, so every weight takes the same path.
+        var regression = s.Engine.TensorMultiplyScalar(mse, Ops.FromDouble(_hiddenWeight));
         return task is null ? regression : s.Engine.TensorAdd(task, regression);
     }
 

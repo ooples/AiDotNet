@@ -52,10 +52,19 @@ public sealed class ApiKeyService : IApiKeyService
             return null;
         }
 
-        if (StaticApiKeys.TryAuthenticate(_options, keyId, secretBytes, DateTimeOffset.UtcNow, out var staticResult))
+        bool acceptedByStatic = StaticApiKeys.TryAuthenticate(
+            _options, keyId, secretBytes, DateTimeOffset.UtcNow, out bool ownedByStatic, out var staticResult);
+        if (acceptedByStatic)
         {
             CryptographicOperations.ZeroMemory(secretBytes);
             return staticResult;
+        }
+
+        if (ownedByStatic)
+        {
+            // A static entry's refusal is final: the database must not get a second chance at its key id.
+            CryptographicOperations.ZeroMemory(secretBytes);
+            return null;
         }
 
         var entity = await _db.ApiKeys

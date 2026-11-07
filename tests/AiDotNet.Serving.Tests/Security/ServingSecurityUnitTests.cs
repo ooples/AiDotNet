@@ -92,6 +92,28 @@ public sealed class ServingSecurityUnitTests
         Assert.Equal(migrate, (await db.Database.GetAppliedMigrationsAsync()).Any());
     }
 
+    [Fact]
+    public async Task StaticEntry_RefusalIsFinal_EvenWhenTheDatabaseHoldsTheSameKeyId()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var db = new ServingDbContext(new DbContextOptionsBuilder<ServingDbContext>().UseSqlite(connection).Options);
+        await db.Database.EnsureCreatedAsync();
+        var security = new ServingSecurityOptions();
+        security.ApiKeys.Pbkdf2Iterations = 1_000;
+        var service = new ApiKeyService(db, NullLogger<ApiKeyService>.Instance, Options.Create(security));
+
+        var created = await service.CreateAsync(new ApiKeyCreateRequest { Name = "shadowed", Tier = SubscriptionTier.Free });
+        Assert.NotNull(await service.AuthenticateAsync(created.ApiKey));
+
+        // A revoked static entry that owns the same key id decides alone; the database row gets no second chance.
+        var (_, entry) = StaticApiKeys.Generate(ServingTier.Free, 1_000);
+        entry.Prefix = created.KeyId;
+        entry.Revoked = true;
+        security.ApiKeys.StaticApiKeys.Add(entry);
+        Assert.Null(await service.AuthenticateAsync(created.ApiKey));
+    }
+
     private static DefaultHttpContext ContextWith(Claim claim) =>
         new() { User = new ClaimsPrincipal(new ClaimsIdentity(new[] { claim }, "Bearer")) };
 

@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Security.Cryptography;
 using System.Text;
 using AiDotNet.Serving.Configuration;
@@ -92,18 +93,21 @@ public static class StaticApiKeys
     /// <param name="keyId">The key id parsed from the presented key.</param>
     /// <param name="secret">The decoded secret parsed from the presented key.</param>
     /// <param name="now">The current time, for the expiry check.</param>
-    /// <param name="result">The authenticated key, or <see langword="null"/> when the key is refused.</param>
-    /// <returns><see langword="true"/> when a static entry owns <paramref name="keyId"/>, whether or not it accepted
-    /// the key; <see langword="false"/> when no static entry has that id.</returns>
+    /// <param name="owned"><see langword="true"/> when a static entry owns <paramref name="keyId"/>, whether or not
+    /// it accepted the key; <see langword="false"/> when no static entry has that id.</param>
+    /// <param name="result">The authenticated key when the method returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when a static entry owns <paramref name="keyId"/> and accepted the key.</returns>
     internal static bool TryAuthenticate(
         ServingApiKeyOptions options,
         string keyId,
         byte[] secret,
         DateTimeOffset now,
-        out ApiKeyAuthenticationResult? result)
+        out bool owned,
+        [NotNullWhen(true)] out ApiKeyAuthenticationResult? result)
     {
         result = null;
         StaticApiKeyOptions? entry = options.StaticApiKeys.Find(e => string.Equals(e.Prefix, keyId, StringComparison.Ordinal));
+        owned = entry is not null;
         if (entry is null)
         {
             return false;
@@ -111,12 +115,12 @@ public static class StaticApiKeys
 
         if (entry.Revoked || (entry.ExpiresAt is DateTimeOffset expiresAt && expiresAt <= now))
         {
-            return true;
+            return false;
         }
 
         if (options.HmacSecrets.Count > 0 && !HmacIdMatches(options.HmacSecrets, entry))
         {
-            return true;
+            return false;
         }
 
         byte[] salt = Convert.FromBase64String(entry.Pbkdf2SaltBase64);
@@ -124,12 +128,13 @@ public static class StaticApiKeys
         byte[] computed = Hash(secret, salt, entry.Pbkdf2Iterations, expected.Length);
         bool ok = CryptographicOperations.FixedTimeEquals(expected, computed);
         CryptographicOperations.ZeroMemory(computed);
-        if (ok)
+        if (!ok)
         {
-            SubscriptionTier tier = ToSubscriptionTier(entry.Tier);
-            result = new ApiKeyAuthenticationResult(entry.Prefix, tier, ApiKeyService.DefaultScopesForTier(tier));
+            return false;
         }
 
+        SubscriptionTier tier = ToSubscriptionTier(entry.Tier);
+        result = new ApiKeyAuthenticationResult(entry.Prefix, tier, ApiKeyService.DefaultScopesForTier(tier));
         return true;
     }
 
