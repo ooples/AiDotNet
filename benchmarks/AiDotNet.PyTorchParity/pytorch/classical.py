@@ -74,6 +74,7 @@ def main() -> None:
     from sklearn.cluster import KMeans
     from sklearn.ensemble import HistGradientBoostingClassifier, RandomForestClassifier
     from sklearn.linear_model import LogisticRegression, Ridge
+    from threadpoolctl import threadpool_limits
 
     x_train, class_train, target_train = load(args.directory / "train.csv")
     x_test, class_test, target_test = load(args.directory / "test.csv")
@@ -86,20 +87,33 @@ def main() -> None:
         return float(1.0 - residual / np.sum((target_test - target_test.mean()) ** 2))
 
     classify = (lambda m: m.fit(x_train, class_train)), (lambda m: m.predict(x_test))
+
+    def one_thread(step: Callable[[object], object]) -> Callable[[object], object]:
+        """Runs a step with OpenMP / BLAS pools held to one thread (scikit-learn's HGB has no n_jobs)."""
+        def run(model: object) -> object:
+            with threadpool_limits(limits=1):
+                return step(model)
+        return run
+
+    def hgb(r: int) -> object:
+        # HistGradientBoostingClassifier(maxBins 256, maxDepth 6, 100 rounds, lr 0.1, minSamplesLeaf 20), depth-wise:
+        # sklearn's histogram GBM with the leaf limit lifted so depth binds.
+        return HistGradientBoostingClassifier(max_iter=100, learning_rate=0.1, max_depth=6, max_leaf_nodes=None,
+                                              min_samples_leaf=20, max_bins=255, early_stopping=False,
+                                              random_state=args.seed)
     rows = [
         # AiDotNet RandomForestClassifierOptions: 100 trees, unlimited depth, bootstrap, one job.
         timed_rows("random_forest", args.repeats,
                    lambda r: RandomForestClassifier(n_estimators=100, random_state=args.seed, n_jobs=1),
                    *classify, accuracy, "accuracy"),
-        # HistGradientBoostingClassifier(maxBins 256, maxDepth 6, 100 rounds, lr 0.1, minSamplesLeaf 20), depth-wise:
-        # sklearn's histogram GBM with the leaf limit lifted so depth binds, and XGBoost / LightGBM likewise.
-        timed_rows("hist_gradient_boosting", args.repeats,
-                   lambda r: HistGradientBoostingClassifier(max_iter=100, learning_rate=0.1, max_depth=6,
-                                                            max_leaf_nodes=None, min_samples_leaf=20, max_bins=255,
-                                                            early_stopping=False, random_state=args.seed),
+        timed_rows("random_forest_all_cores", args.repeats,
+                   lambda r: RandomForestClassifier(n_estimators=100, random_state=args.seed, n_jobs=-1),
                    *classify, accuracy, "accuracy"),
-        # AiDotNet LogisticRegressionOptions: gradient descent, 1000 iterations; sklearn's lbfgs is a different
-        # solver, so the row compares time to a fitted model, not iteration cost.
+        # Default threading on both sides (every processor), then one thread on both sides.
+        timed_rows("hist_gradient_boosting", args.repeats, hgb, *classify, accuracy, "accuracy"),
+        timed_rows("hist_gradient_boosting_1job", args.repeats, hgb,
+                   one_thread(classify[0]), one_thread(classify[1]), accuracy, "accuracy"),
+        # AiDotNet LogisticRegressionOptions: L-BFGS by default, as sklearn's lbfgs.
         timed_rows("logistic_regression", args.repeats,
                    lambda r: LogisticRegression(max_iter=1000),
                    *classify, accuracy, "accuracy"),
@@ -110,25 +124,28 @@ def main() -> None:
                    lambda m: m.fit(x_train), None, lambda m, _: m.inertia_, "inertia"),
     ]
 
-    try:
-        import xgboost
-        rows.append(timed_rows("hist_gradient_boosting:xgboost", args.repeats,
-                               lambda r: xgboost.XGBClassifier(n_estimators=100, learning_rate=0.1, max_depth=6,
-                                                               tree_method="hist", max_bin=256, n_jobs=1,
-                                                               random_state=args.seed),
-                               *classify, accuracy, "accuracy"))
-    except ImportError:
-        rows.append({"model": "hist_gradient_boosting:xgboost", "skipped": "xgboost is not installed"})
+    # XGBoost and LightGBM, depth-wise like the rows above: one thread, then every processor.
+    for suffix, jobs in (("_1job", 1), ("", -1)):
+        try:
+            import xgboost
+            rows.append(timed_rows(f"hist_gradient_boosting{suffix}:xgboost", args.repeats,
+                                   lambda r, jobs=jobs: xgboost.XGBClassifier(
+                                       n_estimators=100, learning_rate=0.1, max_depth=6, tree_method="hist",
+                                       max_bin=256, n_jobs=jobs, random_state=args.seed),
+                                   *classify, accuracy, "accuracy"))
+        except ImportError:
+            rows.append({"model": f"hist_gradient_boosting{suffix}:xgboost", "skipped": "xgboost is not installed"})
 
-    try:
-        import lightgbm
-        rows.append(timed_rows("hist_gradient_boosting:lightgbm", args.repeats,
-                               lambda r: lightgbm.LGBMClassifier(n_estimators=100, learning_rate=0.1, max_depth=6,
-                                                                 num_leaves=63, min_child_samples=20, max_bin=255,
-                                                                 n_jobs=1, random_state=args.seed, verbose=-1),
-                               *classify, accuracy, "accuracy"))
-    except ImportError:
-        rows.append({"model": "hist_gradient_boosting:lightgbm", "skipped": "lightgbm is not installed"})
+        try:
+            import lightgbm
+            rows.append(timed_rows(f"hist_gradient_boosting{suffix}:lightgbm", args.repeats,
+                                   lambda r, jobs=jobs: lightgbm.LGBMClassifier(
+                                       n_estimators=100, learning_rate=0.1, max_depth=6, num_leaves=63,
+                                       min_child_samples=20, max_bin=255, n_jobs=jobs, random_state=args.seed,
+                                       verbose=-1),
+                                   *classify, accuracy, "accuracy"))
+        except ImportError:
+            rows.append({"model": f"hist_gradient_boosting{suffix}:lightgbm", "skipped": "lightgbm is not installed"})
 
     import sklearn
     report = {

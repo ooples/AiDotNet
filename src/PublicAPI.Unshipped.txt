@@ -985,3 +985,5 @@ AiDotNet.NeuralNetworks.GraphNeuralNetwork<T>.SetAdjacencyMatrix(AiDotNet.Tensor
 AiDotNet.Models.Options.LogisticRegressionOptions<T>.Solver.get -> AiDotNet.Interfaces.IFunctionOptimizer<T>?
 AiDotNet.Models.Options.LogisticRegressionOptions<T>.Solver.set -> void
 AiDotNet.Regression.LogisticRegression<T>.CreateGradientDescentSolver() -> AiDotNet.Interfaces.IFunctionOptimizer<T>!
+AiDotNet.Classification.Boosting.HistGradientBoostingClassifier<T>.NJobs.get -> int
+AiDotNet.Classification.Boosting.HistGradientBoostingClassifier<T>.NJobs.set -> void

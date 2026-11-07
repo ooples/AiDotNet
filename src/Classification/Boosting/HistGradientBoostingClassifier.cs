@@ -254,11 +254,9 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         int n = x.Rows;
         _trees.Clear();
 
-        // Step 1: Compute bin boundaries for each feature
-        _binBoundaries = ComputeBinBoundaries(x);
-
-        // Step 2: Bin the features (column-major, HistGradientBoostingClassifier.HistBuilder.cs)
-        PrepareHistBuilder(x, _binBoundaries);
+        // Steps 1-2: Compute each feature's bin boundaries and bin the features
+        // (HistGradientBoostingClassifier.HistBuilder.cs)
+        _binBoundaries = PrepareHistBuilder(x);
         var targets = new int[n];
         for (int i = 0; i < n; i++) targets[i] = GetClassIndexFromLabel(y[i]);
 
@@ -388,57 +386,6 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         }
 
         return predictions;
-    }
-
-    /// <summary>
-    /// Computes histogram bin boundaries for each feature.
-    /// </summary>
-    /// <param name="x">Feature matrix.</param>
-    /// <returns>Array of bin boundaries for each feature.</returns>
-    /// <remarks>
-    /// <para><b>For Beginners:</b> This finds evenly-spaced quantile boundaries for each feature.
-    /// For example, with 256 bins, we find the values that divide the data into 256 equal parts.</para>
-    /// </remarks>
-    private double[][] ComputeBinBoundaries(Matrix<T> x)
-    {
-        int p = x.Columns;
-        var boundaries = new double[p][];
-
-        for (int j = 0; j < p; j++)
-        {
-            // Collect unique values with validation
-            var values = new List<double>();
-            for (int i = 0; i < x.Rows; i++)
-            {
-                double val = NumOps.ToDouble(x[i, j]);
-                if (double.IsNaN(val) || double.IsInfinity(val))
-                {
-                    throw new ArgumentException(
-                        $"Missing/NaN/Infinity values are not supported. Found at row {i}, feature {j}. Please impute before training.",
-                        nameof(x));
-                }
-                values.Add(val);
-            }
-            values.Sort();
-
-            // Compute quantile boundaries
-            int numBins = Math.Min(_maxBins, values.Count);
-            var binBounds = new List<double>();
-
-            for (int b = 1; b < numBins; b++)
-            {
-                int idx = (int)((double)b / numBins * values.Count);
-                idx = Math.Min(idx, values.Count - 1);
-                if (binBounds.Count == 0 || values[idx] > binBounds[^1])
-                {
-                    binBounds.Add(values[idx]);
-                }
-            }
-
-            boundaries[j] = [.. binBounds];
-        }
-
-        return boundaries;
     }
 
     /// <summary>

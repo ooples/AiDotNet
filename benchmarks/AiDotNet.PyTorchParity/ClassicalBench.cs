@@ -36,9 +36,18 @@ internal static class ClassicalBench
         {
             ("random_forest", () => Classifier("random_forest", train, test, repeats,
                 () => new RandomForestClassifier<double>(new RandomForestClassifierOptions<double> { NEstimators = 100, Seed = seed }))),
+            ("random_forest_all_cores", () => Classifier("random_forest_all_cores", train, test, repeats,
+                () => new RandomForestClassifier<double>(new RandomForestClassifierOptions<double>
+                {
+                    NEstimators = 100, Seed = seed, NJobs = -1
+                }))),
+            // Default threading (every processor), as scikit-learn's HistGradientBoostingClassifier.
             ("hist_gradient_boosting", () => Classifier("hist_gradient_boosting", train, test, repeats,
                 () => new HistGradientBoostingClassifier<double>(maxBins: 256, maxDepth: 6, nEstimators: 100,
                     learningRate: 0.1, minSamplesLeaf: 20, seed: seed))),
+            ("hist_gradient_boosting_1job", () => Classifier("hist_gradient_boosting_1job", train, test, repeats,
+                () => new HistGradientBoostingClassifier<double>(maxBins: 256, maxDepth: 6, nEstimators: 100,
+                    learningRate: 0.1, minSamplesLeaf: 20, seed: seed) { NJobs = 1 })),
             ("logistic_regression", () => Regressor("logistic_regression", train, test, repeats, classify: true,
                 () => new LogisticRegression<double>(new LogisticRegressionOptions<double>()))),
             ("ridge", () => Regressor("ridge", train, test, repeats, classify: false,
