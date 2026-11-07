@@ -1,4 +1,6 @@
 #nullable enable
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.TextEncoderDim.get -> int
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.TextEncoderDim.set -> void
 AiDotNet.TextToSpeech.CodecBased.ZonosOptions.SampleRate.get -> int
 AiDotNet.TextToSpeech.CodecBased.ZonosOptions.SampleRate.set -> void
 AiDotNet.TextToSpeech.CodecBased.ZonosOptions.HiddenDim.get -> int
