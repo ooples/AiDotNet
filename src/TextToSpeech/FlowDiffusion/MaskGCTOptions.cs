@@ -1,3 +1,6 @@
+using AiDotNet.Models.Options;
+using AiDotNet.Onnx;
+
 namespace AiDotNet.TextToSpeech.FlowDiffusion;
 
 /// <summary>Which of MaskGCT's networks <see cref="MaskGCT{T}"/> trains.</summary>
@@ -40,7 +43,7 @@ public enum MaskGctDurationMode
 /// <para><b>For Beginners:</b> MaskGCT clones a voice from a short recording and its transcript: these settings size its
 /// networks and control how many refinement passes it makes; the defaults reproduce the released model.</para>
 /// </remarks>
-public class MaskGCTOptions : TtsModelOptions
+public class MaskGCTOptions : ModelOptions
 {
     /// <summary>Creates the released configuration.</summary>
     public MaskGCTOptions()
@@ -50,8 +53,26 @@ public class MaskGCTOptions : TtsModelOptions
         HiddenDim = 1024;
         VocabSize = 1024;
         LearningRate = 1e-4;
-        DropoutRate = 0.0;
     }
+
+    /// <summary>The acoustic codec's waveform sample rate (24 kHz).</summary>
+    public int SampleRate { get; set; } = 24000;
+    /// <summary>Samples per acoustic frame; must match the codec encoder strides.</summary>
+    public int HopSize { get; set; } = 480;
+    /// <summary>The semantic-to-acoustic transformer width.</summary>
+    public int HiddenDim { get; set; } = 1024;
+    /// <summary>The phone vocabulary used by the text and duration models.</summary>
+    public int VocabSize { get; set; } = 1024;
+    /// <summary>The maximum input phone sequence length.</summary>
+    public int MaxTextLength { get; set; } = 512;
+    /// <summary>The exported ONNX graph path, when a graph is loaded.</summary>
+    public string? ModelPath { get; set; }
+    /// <summary>Settings for the exported ONNX graph runtime.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+    /// <summary>The peak learning rate of the warmup/inverse-square-root schedule.</summary>
+    public double LearningRate { get; set; } = 1e-4;
+    /// <summary>The AdamW weight decay.</summary>
+    public double WeightDecay { get; set; } = 0.01;
 
     // ---------------------------------------------------------------- text
 
@@ -145,7 +166,7 @@ public class MaskGCTOptions : TtsModelOptions
     /// <summary>The text-to-semantic model's attention heads (16).</summary>
     public int TextToSemanticHeads { get; set; } = 16;
 
-    /// <summary>The semantic-to-acoustic models' layers (16; their width is <see cref="TtsModelOptions.HiddenDim"/>).</summary>
+    /// <summary>The semantic-to-acoustic models' layers (16; their width is <see cref="HiddenDim"/>).</summary>
     public int SemanticToAcousticLayers { get; set; } = 16;
 
     /// <summary>The semantic-to-acoustic models' attention heads (16).</summary>

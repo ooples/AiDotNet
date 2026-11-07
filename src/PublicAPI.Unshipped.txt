@@ -1,4 +1,22 @@
 #nullable enable
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.HiddenDim.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.HiddenDim.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.HopSize.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.HopSize.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.LearningRate.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.LearningRate.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.MaxTextLength.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.MaxTextLength.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.ModelPath.get -> string?
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.ModelPath.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.OnnxOptions.get -> AiDotNet.Onnx.OnnxModelOptions!
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.OnnxOptions.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.SampleRate.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.SampleRate.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.VocabSize.get -> int
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.VocabSize.set -> void
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.WeightDecay.get -> double
+AiDotNet.TextToSpeech.FlowDiffusion.MaskGCTOptions.WeightDecay.set -> void
 AiDotNet.Audio.Effects.DACOptions.Channels.get -> int
 AiDotNet.Audio.Effects.DACOptions.Channels.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.HopSize.get -> int

@@ -386,3 +386,23 @@ S2A forwards and iterative token sequences still pass after the extraction.
 The harness reads the rebuilt model's private Decoding configuration and calls
 that actual step; its end-to-end probe awaits a hosted core containing the new
 internal method. Guidance rescale candidates are constrained to [0,1].
+
+MaskGCTOptions now derives directly from ModelOptions and owns the nine
+formerly inherited settings that its native/ONNX paths actually reference.
+Removed seven legacy no-ops: MelChannels, FftSize, NumEncoderLayers,
+NumDecoderLayers, NumHeads, MaxMelLength and DropoutRate. Its separate T2S,
+S2A, semantic-encoder and duration heads/layers remain. The upstream config at
+open-mmlab/Amphion@26f6883110181f1dbfe95c70a7c7dbaf4de5f42a explicitly
+configures those separate networks and Vocos FFT 1920/hop 480; it does not
+use the removed shared settings. The pinned reference forwards/token tests pass.
+
+A source-linked full MaskGCT model with 180698 parameters was compared with
+the hosted pre-migration model: every retained default, every initial parameter,
+the duration objective, one real training update and every resulting parameter
+and evaluation loss match exactly. Re-run via MaskParity.Run in the scoped
+Stage project; tiny options saved in pr2294-maskgct-tiny-options.json. This is
+runtime proof, separate from the API surface stub. Four stale no-op baseline
+entries were removed. All 18 new accessor declarations are registered, and SDK
+ApiCompat finds exactly CP0007 for MaskGCTOptions on net10.0/net471/net8.0;
+three exact base-type acknowledgments were added. Full package validation
+remains a hosted check.
