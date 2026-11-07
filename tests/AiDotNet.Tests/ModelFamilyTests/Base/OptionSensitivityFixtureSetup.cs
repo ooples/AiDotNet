@@ -24,6 +24,11 @@ internal static class OptionSensitivityFixtureSetup
         public override double NextDouble() => _draws++ == 0 ? 0.1 : 0.99;
     }
 
+    private sealed class NucleusBoundaryRandom : Random
+    {
+        public override double NextDouble() => 0.99;
+    }
+
     internal static bool UsesFittedAssets<T>(INeuralNetworkModel<T> network)
         => network is AiDotNet.TextToSpeech.Latest.KaniTTSBase<T>
             or AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T>
@@ -257,7 +262,7 @@ internal static class OptionSensitivityFixtureSetup
             return OptionSensitivityHarness.Fingerprint(chunked.FlowModel!.Encode(Enumerable.Range(0, 12).ToArray(),
                 training: false, new Random(1337), streaming: true)
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
-        if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> vocoder && option == "VocoderSegmentLength")
+        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> vocoder && option == "VocoderSegmentLength")
         {
             var targets = vocoder.VocoderTargets(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
             {
@@ -265,12 +270,24 @@ internal static class OptionSensitivityFixtureSetup
             }, new Random(1337));
             var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
             return OptionSensitivityHarness.Combine(OptionSensitivityHarness.Fingerprint(targets.Audio.Select(ops.ToDouble)),
-                OptionSensitivityHarness.Fingerprint(vocoder.Vocoder!.Forward(targets.Mel, new Random(1337)).Select(ops.ToDouble)));
+                OptionSensitivityHarness.Fingerprint((vocoder is AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T> causal
+                    ? causal.CausalVocoder : vocoder.Vocoder)!.Forward(targets.Mel, new Random(1337)).Select(ops.ToDouble)));
+        }
+        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T> dit
+            && option is "DiTTrainingCfgRate" or "DiTSigmaMin")
+        {
+            var settings = (AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options)dit.GetOptions();
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var mel = new Tensor<T>(new[] { 1, settings.MelChannels, 6 });
+            for (int i = 0; i < mel.Length; i++) mel[i] = ops.FromDouble(0.2 * Math.Sin(i * 0.17));
+            var speaker = new Tensor<T>(new[] { settings.SpeakerEmbeddingDim }); speaker[0] = ops.One;
+            var ditLoss = dit.DiTFlowModel!.TrainingLoss(new[] { 1, 2, 3 }, mel, speaker, false, new Random(1337));
+            return OptionSensitivityHarness.Fingerprint(ditLoss.Select(ops.ToDouble));
         }
         if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosySampler
             && cosySampler.GetOptions() is AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions
                 or AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options
-            && option is "RepetitionWindow" or "RepetitionRatio")
+            && option is "TopP" or "TopK" or "RepetitionWindow" or "RepetitionRatio")
         {
             const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
                 | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
@@ -279,14 +296,15 @@ internal static class OptionSensitivityFixtureSetup
                 languageModel = type.GetProperty("LanguageModel", flags)?.GetValue(network);
             var configuration = languageModel!.GetType().GetProperty("Configuration", flags)!.GetValue(languageModel)!;
             object Setting(string name) => configuration.GetType().GetProperty(name)!.GetValue(configuration)!;
-            var sampler = network.GetType().Assembly.GetType("AiDotNet.TextToSpeech.CodecBased.CosyVoiceLm`1")!.MakeGenericType(typeof(T));
+            var sampler = languageModel.GetType().Assembly.GetType("AiDotNet.TextToSpeech.CodecBased.CosyVoiceLm`1")!.MakeGenericType(typeof(T));
             var method = sampler.GetMethods(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
                 .Single(candidate => candidate.Name == "SampleRepetitionAware" && candidate.GetParameters().Length == 8);
             // One recent repeat is exactly the default 10 * .1 boundary. A second draw
             // chooses the other token, exposing whether the real configured sampler resampled.
             int token = (int)method.Invoke(null, new object[] { new[] { Math.Log(.6), Math.Log(.4) },
-                new[] { 0 }, Setting("TopP"), Setting("TopK"), Setting("RepetitionWindow"),
-                Setting("RepetitionRatio"), new RepetitionBoundaryRandom(),
+                option is "TopP" or "TopK" ? Array.Empty<int>() : new[] { 0 },
+                Setting("TopP"), Setting("TopK"), Setting("RepetitionWindow"),
+                Setting("RepetitionRatio"), option is "TopP" or "TopK" ? new NucleusBoundaryRandom() : new RepetitionBoundaryRandom(),
                 configuration.GetType().GetProperty("ExcludeRepeatedTokenOnFallback")?.GetValue(configuration) ?? true })!;
             return OptionSensitivityHarness.Combine(fingerprint, token);
         }
@@ -412,7 +430,8 @@ internal static class OptionSensitivityFixtureSetup
         or "Temperature" or "Negatives";
 
     private static bool IsCosyFlowOption(string option) => option is
-        "TrainingCfgRate" or "FlowLoss" or "FlowAttentionDropoutRate" or "DropoutRate";
+        "TrainingCfgRate" or "FlowLoss" or "FlowAttentionDropoutRate" or "DropoutRate"
+        or "DiTTrainingCfgRate" or "DiTSigmaMin";
 
     private static bool IsNaturalJointOption(string option) => option is
         "MemoryKMeansIterations" or "MemoryHeads" or "DurationLossAfterWarmup" or "ForwardKlWeight";
@@ -670,6 +689,8 @@ internal static class OptionSensitivityFixtureSetup
             voicebox.MaximumPhoneDuration = 1;
         if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceConformerOptions cosy && IsCosyFlowOption(option))
             cosy.TrainingCfgRate = 0.5;
+        if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoice3Options dit && option == "DiTTrainingCfgRate")
+            dit.DiTTrainingCfgRate = 0.5;
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chatter && option == "VoiceEncoderPartialRate")
             chatter.VoiceEncoderPartialFrames = 160;
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chunked && option == "StaticChunkSize")
