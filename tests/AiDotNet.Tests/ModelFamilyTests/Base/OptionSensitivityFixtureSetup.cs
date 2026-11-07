@@ -43,6 +43,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
+            : network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> ? "speecht5-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> ? "spark-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.FireRedTTS<T> ? "firered-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.VALLEX<T> ? "vallex-" + option
@@ -115,6 +116,10 @@ internal static class OptionSensitivityFixtureSetup
     internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> speechT5
+            && SpeechT5Fixture.Observe(speechT5, option) is { } speechObservation)
+            return speechObservation;
+
         if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> styleProbe && IsStyleTts2JointOption(option))
         {
             var stage = styleProbe.CurrentStage;
@@ -484,6 +489,7 @@ internal static class OptionSensitivityFixtureSetup
         => network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "BertBeta1"
             ? Math.Max(2, steps)
             : network is AiDotNet.SpeechRecognition.Foundation.SPIRAL<T> && IsSpiralPretrainingOption(option)
+            || network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> && SpeechT5Fixture.IsPretraining(option)
             || network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> && option == "TrainingBetaEnd"
             ? Math.Max(3, steps) : steps;
 
@@ -510,6 +516,12 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> speechT5)
+        {
+            speechT5.Train(SpeechT5Fixture.Sample<T>(option));
+            return true;
+        }
+
         if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> style)
         {
             style.Train(StyleTts2Fixture.Sample<T>(((AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options)style.GetOptions()).HopSize));
@@ -590,6 +602,9 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.MultiModal.SpeechT5Options speechT5)
+            SpeechT5Fixture.PrepareOptions(speechT5, option);
+
         if (options is AiDotNet.TextToSpeech.CodecBased.ZonosOptions zonos)
             ZonosFixture.PrepareOptions(zonos, option);
 
