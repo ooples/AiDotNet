@@ -6222,20 +6222,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             }
             else if (model.ClassName == "Zonos" && model.TypeParameterCount == 1)
             {
-                // Zonos-v0.1 is a 2048-wide, 26-layer Transformer (or a 46-layer Mamba2 hybrid) over DAC's nine 1024-code
-                // codebooks with seven prefix conditioners; keep every component (the conditioners, guidance, the delay
-                // pattern and the end-of-audio countdown) with the transformer at width 32 and two layers, a 16 kHz DAC of
-                // 8-sample frames that keeps the nine 1024-code codebooks, and at most 24 generated frames.
-                // ZonosReferenceTests covers the hybrid.
-                constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
-                    "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
-                    "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
-                    "inputSize: 1, outputSize: 1), " +
-                    "new AiDotNet.TextToSpeech.CodecBased.ZonosOptions { HiddenDim = 32, Layers = 2, Heads = 4, KeyValueHeads = 2, " +
-                    "AttentionIntermediate = 128, RotaryDim = 8, MaxNewTokens = 24, SampleRate = 16000, HopSize = 8, " +
-                    "Codec = new AiDotNet.Audio.Effects.DACOptions { SampleRate = 16000, EncoderDim = 4, EncoderRates = [2, 4], " +
-                    "DecoderDim = 16, DecoderRates = [4, 2], NumQuantizers = 9, CodebookSize = 1024, CodebookDim = 2, " +
-                    "TargetBandwidthKbps = 180.0 } })";
+                // Keep the complete transformer/DAC graph; option contexts also exercise the native hybrid.
+                constructorExpr = "AiDotNet.Tests.TextToSpeech.ZonosFixture.Create<double>()";
             }
             else if (model.ClassName == "Florence2" && model.TypeParameterCount == 1)
             {

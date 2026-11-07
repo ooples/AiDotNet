@@ -1,4 +1,6 @@
 using AiDotNet.Audio.Effects;
+using AiDotNet.Models.Options;
+using AiDotNet.Onnx;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
@@ -26,21 +28,35 @@ public enum ZonosBackbone
 /// <para><b>For Beginners:</b> These settings size Zonos, pick its backbone, control how it samples, set the default
 /// speaking style, and set how it trains; the defaults reproduce the released transformer model.</para>
 /// </remarks>
-public class ZonosOptions : TtsModelOptions
+public class ZonosOptions : ModelOptions
 {
     /// <summary>Creates the Zonos-v0.1-transformer configuration.</summary>
     public ZonosOptions()
     {
-        SampleRate = 44100;
-        HopSize = 512;
-        HiddenDim = 2048;
-        VocabSize = 189;
-        MaxTextLength = 2048;
-        LearningRate = 5e-5;
-        WeightDecay = 0.0;
-        DropoutRate = 0.0;
         Codec = new DACOptions();
     }
+
+    /// <summary>The waveform sample rate, matching the DAC configuration (44100).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("SampleRate must equal Codec.SampleRate and agree with the codec bandwidth; paired native encode/decode tests cover complete configurations.")]
+    public int SampleRate { get; set; } = 44100;
+
+    /// <summary>The backbone and conditioning width (2048).</summary>
+    public int HiddenDim { get; set; } = 2048;
+
+    /// <summary>The input length advertised to TTS clients (2048).</summary>
+    public int MaxTextLength { get; set; } = 2048;
+
+    /// <summary>The native AdamW learning rate (5e-5).</summary>
+    public double LearningRate { get; set; } = 5e-5;
+
+    /// <summary>The native AdamW weight decay (0).</summary>
+    public double WeightDecay { get; set; }
+
+    /// <summary>The exported ONNX graph path, when used.</summary>
+    public string? ModelPath { get; set; }
+
+    /// <summary>Settings for the ONNX graph runtime.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
 
     /// <summary>The Zonos-v0.1-hybrid configuration.</summary>
     public static ZonosOptions Hybrid() => new()
@@ -53,6 +69,13 @@ public class ZonosOptions : TtsModelOptions
     public ZonosOptions(ZonosOptions other)
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
+        SampleRate = other.SampleRate;
+        HiddenDim = other.HiddenDim;
+        MaxTextLength = other.MaxTextLength;
+        LearningRate = other.LearningRate;
+        WeightDecay = other.WeightDecay;
+        ModelPath = other.ModelPath;
+        OnnxOptions = new OnnxModelOptions(other.OnnxOptions);
         Backbone = other.Backbone;
         Layers = other.Layers;
         AttentionLayers = other.AttentionLayers is null ? null : (int[])other.AttentionLayers.Clone();
@@ -159,12 +182,15 @@ public class ZonosOptions : TtsModelOptions
     public List<ZonosConditioner> Conditioners { get; set; } = ZonosConditioner.Transformer.ToList();
 
     /// <summary>DAC codebooks (9).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Codebooks must match Codec.NumQuantizers and its bandwidth; paired native encode/decode tests cover two and three codebooks.")]
     public int Codebooks { get; set; } = 9;
 
     /// <summary>The end-of-audio token (1024).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("EndToken is the first token after the real DAC vocabulary; paired native codec/vocabulary tests cover both legal sentinel layouts.")]
     public int EndToken { get; set; } = 1024;
 
     /// <summary>The mask token of the delay pattern (1025).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("MaskToken is the token after EndToken, beyond the real DAC vocabulary; paired native codec/vocabulary tests cover both legal sentinel layouts.")]
     public int MaskToken { get; set; } = 1025;
 
     /// <summary>The most frames generated (2580: 30 seconds).</summary>

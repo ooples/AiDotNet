@@ -119,6 +119,8 @@ public partial class Zonos<T> : TtsModelBase<T>, ICodecTts<T>
     private void ConfigureBase()
     {
         var o = _options;
+        if (o.Codebooks <= 0 || o.EndToken != o.Codec.CodebookSize || o.MaskToken != o.Codec.CodebookSize + 1)
+            throw new ArgumentException("Zonos requires positive codebooks and distinct end/mask tokens immediately after the DAC vocabulary.", "options");
         if (o.Codec is null) throw new ArgumentException("Zonos needs its codec's options.", nameof(o.Codec));
         if (o.EndToken != o.Codec.CodebookSize || o.MaskToken != o.Codec.CodebookSize + 1)
             throw new ArgumentException($"Zonos's end and mask tokens follow the codec's {o.Codec.CodebookSize} codes.");

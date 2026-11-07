@@ -1,4 +1,19 @@
 #nullable enable
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.SampleRate.get -> int
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.SampleRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.HiddenDim.get -> int
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.HiddenDim.set -> void
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.MaxTextLength.get -> int
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.MaxTextLength.set -> void
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.LearningRate.get -> double
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.LearningRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.WeightDecay.get -> double
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.WeightDecay.set -> void
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.ModelPath.get -> string?
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.ModelPath.set -> void
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.OnnxOptions.get -> AiDotNet.Onnx.OnnxModelOptions!
+AiDotNet.TextToSpeech.CodecBased.ZonosOptions.OnnxOptions.set -> void
+
 AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.DiscriminatorWidthDivisor.get -> int
 AiDotNet.TextToSpeech.CodecBased.GPTSoVITSOptions.DiscriminatorWidthDivisor.set -> void
 

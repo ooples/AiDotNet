@@ -83,7 +83,7 @@ public class ZonosReferenceTests
             AttentionIntermediate = 128, RotaryDim = 8, RotaryInterleaved = !hybrid, StateDim = 8, MambaHeadDim = 8, Expand = 2,
             // The reference scans in chunks of 4; the SSD algorithm's chunking changes only the order of the arithmetic.
             ChunkSize = 3, Conditioners = (hybrid ? ZonosConditioner.Hybrid : ZonosConditioner.Transformer).ToList(),
-            Backbone = hybrid ? ZonosBackbone.Hybrid : ZonosBackbone.Transformer, Temperature = 0, SampleRate = 16000, HopSize = 8,
+            Backbone = hybrid ? ZonosBackbone.Hybrid : ZonosBackbone.Transformer, Temperature = 0, SampleRate = 16000,
             Codec = new AiDotNet.Audio.Effects.DACOptions
             {
                 SampleRate = 16000, EncoderDim = 4, EncoderRates = [2, 4], DecoderDim = 16, DecoderRates = [4, 2], NumQuantizers = 9,

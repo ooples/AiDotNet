@@ -830,3 +830,41 @@ any established source-before/source-after comparison, so it is not labeled a
 regression or used as proof of parameter loss. Newer hosted metadata or the pinned
 release reference tests are needed for that comparison. Remaining 25 historical
 Zonos probes and the wider shard inventory remain unfinished.
+
+All 28 historical Zonos failures are now locally addressed. Twenty active probes
+pass after the ownership change: the earlier 19 native contexts plus HiddenDim.
+Hybrid-only Mamba settings use real hybrid layers; quality targets use the actual
+hybrid conditioning prefix; repetition/unified-sampler knobs observe native
+SampleFrame with controlled logits and history. ChunkSize observes the actual
+continuous backbone output before code selection hides floating-point differences.
+ConditionerDropout trains with an optional language label, and MaxGradNorm trains
+at a clipping boundary. Every option has its own control group. The actual scaffold
+emitter confirms the shared bounded transformer/DAC factory.
+
+The other eight historical cases are four unused inherited properties and four
+coupled codec contracts. Source and compiled getter audit prove nine inherited
+settings unused overall: NumHeads (the real property is Heads), encoder/decoder
+depths (the real property is Layers), VocabSize (the phone table fixes it),
+DropoutRate (conditioner dropout is separate), MelChannels, FftSize, MaxMelLength,
+and nominal HopSize (the model derives its real hop from DAC strides). These are
+removed; all seven consumed shared properties and their defaults are retained.
+The existing reference fixture stops assigning the unused nominal hop.
+
+Positive native tests pair 8/16 kHz, two/three codebooks and 32/64-code vocabularies
+with the real codec bandwidth and end/mask sentinels. They encode, verify code
+bounds, decode finite correctly sized waveforms, and train the actual delayed-code
+objective with changed parameters. Negative unpaired sample-rate/codebook/end/mask
+changes are rejected. Sentinel locations are now validated before inference rather
+than allowing real DAC codes to collide with them. These positive tests justify
+four constrained-option annotations, preserving the actual settings.
+
+Every retained default, including complete nested codec/ONNX values, matches the
+hosted option defaults after order-independent JSON comparison. PublicAPI's 14 new
+accessors are registered; SDK comparisons against release 0.234.0 on net10.0,
+net8.0 and net471 report only the existing ZonosOptions CP0007 acknowledgment.
+Twenty permanent native option cases pass with zero native compilation warnings.
+Both pinned release backbones match their conditioning, guided logits, generated
+codes and training losses; released speaker, number-normalization and kanjize
+references pass too. This supplies actual reference behavior independently of the
+unresolved old-artifact initialization-comparison limitation. Current-head hosted
+build/shards and all remaining model groups are still required.
