@@ -37,8 +37,7 @@ public class CosyVoice3OptionContextTests
         options.TopP = 0.8;
         using var control = CosyVoice3Fixture.Create(options);
         using var changed = CosyVoice3Fixture.Create(new CosyVoice3Options(options) { TopP = 0.4 });
-        long Observe(CosyVoice3<double> model) => ModelFamilyTests.Base.OptionSensitivityFixtureSetup.Observe(
-            model, new Tensor<double>(new[] { 1 }), "TopP", (_, _) => 0);
+        long Observe(CosyVoice3<double> model) => CosyVoice3Fixture.ObserveTopP(model);
         Assert.NotEqual(Observe(control), Observe(changed));
     }
 
@@ -48,7 +47,7 @@ public class CosyVoice3OptionContextTests
         string path = Path.Combine(Path.GetTempPath(), "cosy3-frontend-contract-" + Guid.NewGuid().ToString("N") + ".onnx");
         try
         {
-            ChatterboxOptionContextTests.WriteFrontendContractGraph(path);
+            ChatterboxFixture.WriteFrontendContractGraph(path);
             var options = CosyVoice3Fixture.Options();
             options.SpeechTokenizerPath = path;
             options.MaxReferenceSeconds = 1;

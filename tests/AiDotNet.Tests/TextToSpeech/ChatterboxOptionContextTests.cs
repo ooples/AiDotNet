@@ -18,7 +18,7 @@ public class ChatterboxOptionContextTests
         {
             // A contract graph returns the feature length to prove that accepted input reaches ONNX Runtime.
             // This graph tests frontend plumbing and duration validation, not released tokenizer fidelity.
-            WriteFrontendContractGraph(path);
+            ChatterboxFixture.WriteFrontendContractGraph(path);
             var options = ChatterboxFixture.Options();
             options.SpeechTokenizerPath = path;
             options.MaxReferenceSeconds = 1;
@@ -32,18 +32,6 @@ public class ChatterboxOptionContextTests
             Assert.True(tokens[0] > 0);
         }
         finally { File.Delete(path); }
-    }
-
-    internal static void WriteFrontendContractGraph(string path)
-    {
-        var builder = new AiDotNet.Onnx.OnnxGraphBuilder(new AiDotNet.Onnx.OnnxExportOptions());
-        builder.AddFloatInput("features", new[] { 1, 128, -1 });
-        builder.AddFloatInput("length", new[] { 1 });
-        var node = new AiDotNet.Onnx.Protobuf.NodeProto { OpType = "Identity" };
-        node.Input.Add("length"); node.Output.Add("tokens"); builder.AddNode(node);
-        builder.AddFloatOutput("tokens", new[] { 1 });
-        using var stream = File.Create(path);
-        builder.WriteTo(stream);
     }
 
     [Theory]

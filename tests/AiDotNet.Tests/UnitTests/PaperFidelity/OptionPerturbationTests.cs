@@ -7,6 +7,37 @@ namespace AiDotNet.Tests.UnitTests.PaperFidelity;
 
 public class OptionPerturbationTests
 {
+    public sealed class SequentialTrainingModel : IDisposable
+    {
+        private readonly DepthOptions _options;
+        private bool _trained;
+        public static int LiveTrained { get; private set; }
+        public SequentialTrainingModel(DepthOptions options) => _options = options;
+        public long Output => _trained ? _options.Depth : 0;
+        public void Train()
+        {
+            if (LiveTrained != 0) throw new InvalidOperationException("A trained control is still retained.");
+            _trained = true;
+            LiveTrained++;
+        }
+        public void Dispose()
+        {
+            if (!_trained) return;
+            _trained = false;
+            LiveTrained--;
+        }
+    }
+
+    [Fact]
+    public void IndependentControlsReleaseTrainingStateBeforeBuildingTheNextModel()
+    {
+        var probe = new OptionSensitivityProbe<SequentialTrainingModel>(
+            () => new(new DepthOptions()), model => model.Output, model => model.Train());
+        var result = OptionSensitivityHarness.Measure(typeof(SequentialTrainingModel), "Depth", probe);
+        Assert.Equal(OptionSensitivityOutcome.Sensitive, result.Outcome);
+        Assert.Equal(0, SequentialTrainingModel.LiveTrained);
+    }
+
     [Theory]
     [InlineData("Temperature")]
     [InlineData("TextToSemanticTemperature")]

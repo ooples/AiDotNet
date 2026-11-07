@@ -11,6 +11,18 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// <summary>A small instance of every released Chatterbox component for invariant and paper tests.</summary>
 internal static class ChatterboxFixture
 {
+    internal static void WriteFrontendContractGraph(string path)
+    {
+        var builder = new AiDotNet.Onnx.OnnxGraphBuilder(new AiDotNet.Onnx.OnnxExportOptions());
+        builder.AddFloatInput("features", new[] { 1, 128, -1 });
+        builder.AddFloatInput("length", new[] { 1 });
+        var node = new AiDotNet.Onnx.Protobuf.NodeProto { OpType = "Identity" };
+        node.Input.Add("length"); node.Output.Add("tokens"); builder.AddNode(node);
+        builder.AddFloatOutput("tokens", new[] { 1 });
+        using var stream = File.Create(path);
+        builder.WriteTo(stream);
+    }
+
     private static readonly Lazy<string> Tokenizer = new(CreateTokenizer);
 
     internal static ChatterboxOptions Options() => new()

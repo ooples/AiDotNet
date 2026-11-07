@@ -7,6 +7,30 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// <summary>A bounded complete native Qwen2/DiT/CausalHiFT/CAM++ model with the release's tokenizer vocabulary.</summary>
 internal static class CosyVoice3Fixture
 {
+    private sealed class NucleusBoundaryRandom : Random
+    {
+        public override double NextDouble() => .99;
+    }
+
+    internal static int ObserveTopP(CosyVoice3<double> model)
+    {
+        const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
+            | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic;
+        object? languageModel = null;
+        for (var type = model.GetType(); type is not null && languageModel is null; type = type.BaseType)
+            languageModel = type.GetProperty("LanguageModel", flags)?.GetValue(model);
+        var configuration = languageModel!.GetType().GetProperty("Configuration", flags)!.GetValue(languageModel)!;
+        object Setting(string name) => configuration.GetType().GetProperty(name)!.GetValue(configuration)!;
+        var sampler = languageModel.GetType().Assembly.GetType("AiDotNet.TextToSpeech.CodecBased.CosyVoiceLm`1")!
+            .MakeGenericType(typeof(double));
+        var method = sampler.GetMethods(System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic)
+            .Single(candidate => candidate.Name == "SampleRepetitionAware" && candidate.GetParameters().Length == 8);
+        return (int)method.Invoke(null, new object[] { new[] { Math.Log(.6), Math.Log(.4) }, Array.Empty<int>(),
+            Setting("TopP"), Setting("TopK"), Setting("RepetitionWindow"), Setting("RepetitionRatio"),
+            new NucleusBoundaryRandom(),
+            configuration.GetType().GetProperty("ExcludeRepeatedTokenOnFallback")?.GetValue(configuration) ?? true })!;
+    }
+
     internal static CosyVoice3Options Options() => new()
     {
         LLMDim = 16, NumLLMLayers = 1, NumHeads = 2, KeyValueHeads = 1, LmFeedForwardDim = 32,

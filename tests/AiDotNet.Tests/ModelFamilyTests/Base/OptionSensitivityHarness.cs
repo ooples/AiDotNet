@@ -505,84 +505,110 @@ public static class OptionSensitivityHarness
     private static ControlFingerprint MeasureControl<TModel>(OptionSensitivityProbe<TModel> probe, Type declaredOptions)
         where TModel : class
     {
+        var first = MeasureControlBuild(probe, declaredOptions, classifyConstruction: true, train: true);
+        if (first.Failure is not null) return first;
+        var second = MeasureControlBuild(probe, declaredOptions, classifyConstruction: false,
+            train: first.TrainingFailure is null);
+        if (first.Untrained != second.Untrained || first.ParameterCount != second.ParameterCount
+            || first.ParameterShapesFingerprint != second.ParameterShapesFingerprint)
+        {
+            first.Failure = "Two identical, identically seeded builds already differ before training, so no difference can be attributed to an option."
+                + DescribeControlReplay(probe, declaredOptions, train: false);
+            first.FailureOutcome = OptionSensitivityOutcome.NonDeterministic;
+        }
+        else if (first.TrainingFailure is null && second.TrainingFailure is not null)
+        {
+            first.TrainingFailure = second.TrainingFailure;
+            first.Trained = null;
+        }
+        else if (first.TrainingFailure is null && first.Trained != second.Trained)
+        {
+            first.Failure = "Two identical, identically seeded builds diverge during the fixed training steps, so a training-time difference cannot be attributed to an option."
+                + DescribeControlReplay(probe, declaredOptions, train: true);
+            first.FailureOutcome = OptionSensitivityOutcome.NonDeterministic;
+        }
+        return first;
+    }
+
+    // Return scalars only so a complete model and its optimizer state can be collected before
+    // constructing the next independent control. Both controls still execute every observation.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static ControlFingerprint MeasureControlBuild<TModel>(OptionSensitivityProbe<TModel> probe,
+        Type declaredOptions, bool classifyConstruction, bool train) where TModel : class
+    {
         var result = new ControlFingerprint();
-        TModel first;
-        TModel second;
-        long? secondParameterCount = null;
-        long? secondParameterShapesFingerprint = null;
+        TModel model;
         try
         {
-            first = Rebuild(probe, declaredOptions, mutate: null, recordParameterCount: count => result.ParameterCount = count,
+            model = Rebuild(probe, declaredOptions, mutate: null,
+                recordParameterCount: count => result.ParameterCount = count,
                 recordParameterShapesFingerprint: hash => result.ParameterShapesFingerprint = hash);
         }
-        catch (Exception ex) when (IsConstructionRejection(ex))
+        catch (Exception ex) when (classifyConstruction && IsConstructionRejection(ex))
         {
             result.Failure = $"The unperturbed model could not be rebuilt through its clone plan ({Unwrap(ex).GetType().Name}: "
                 + $"{Unwrap(ex).Message}), so no perturbed copy can reach it either.";
             result.FailureOutcome = OptionSensitivityOutcome.OptionsNotRouted;
             return result;
         }
-
         try
         {
-            second = Rebuild(probe, declaredOptions, mutate: null, recordParameterCount: count => secondParameterCount = count,
-                recordParameterShapesFingerprint: hash => secondParameterShapesFingerprint = hash);
-        }
-        catch
-        {
-            (first as IDisposable)?.Dispose();
-            throw;
-        }
-
-        try
-        {
-            long a = Seeded(() => probe.Observe(first));
-            long b = Seeded(() => probe.Observe(second));
-            if (a != b || result.ParameterCount != secondParameterCount || result.ParameterShapesFingerprint != secondParameterShapesFingerprint)
-            {
-                result.Failure = "Two identical, identically seeded builds already differ before training, so no difference can be "
-                    + "attributed to an option." + DescribeDifference(probe, first, second);
-                result.FailureOutcome = OptionSensitivityOutcome.NonDeterministic;
-                return result;
-            }
-
-            result.Untrained = a;
-            if (probe.Train is null) return result;
-
+            result.Untrained = Seeded(() => probe.Observe(model));
+            if (!train || probe.Train is null) return result;
             try
             {
-                Seeded(() => probe.Train(first));
-                Seeded(() => probe.Train(second));
+                Seeded(() => probe.Train(model));
             }
             catch (Exception ex) when (ex is not OutOfMemoryException)
             {
-                // The fixture's model cannot take the generic training step; only the untrained
-                // comparison is available, and an option equal there is reported as insensitive with
-                // that limitation -- and the exception that imposed it -- stated.
                 result.TrainingFailure = $"{Unwrap(ex).GetType().Name}: {Unwrap(ex).Message}";
                 return result;
             }
-
-            long trainedA = Seeded(() => probe.Observe(first));
-            long trainedB = Seeded(() => probe.Observe(second));
-            if (trainedA != trainedB)
-            {
-                result.Failure = "Two identical, identically seeded builds diverge during the fixed training steps, so a "
-                    + "training-time difference cannot be attributed to an option." + DescribeDifference(probe, first, second);
-                result.FailureOutcome = OptionSensitivityOutcome.NonDeterministic;
-                return result;
-            }
-
-            result.Trained = trainedA;
+            result.Trained = Seeded(() => probe.Observe(model));
             return result;
         }
         finally
         {
-            (first as IDisposable)?.Dispose();
-            (second as IDisposable)?.Dispose();
+            (model as IDisposable)?.Dispose();
         }
     }
 
+    private static string DescribeControlReplay<TModel>(OptionSensitivityProbe<TModel> probe,
+        Type declaredOptions, bool train) where TModel : class
+    {
+        if (probe.Describe is null) return string.Empty;
+        try
+        {
+            var a = DescribeControlBuild(probe, declaredOptions, train);
+            var b = DescribeControlBuild(probe, declaredOptions, train);
+            return " Diagnostic replay:" + DescribeDifference(a, b);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return string.Empty;
+        }
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static IReadOnlyList<KeyValuePair<string, long>> DescribeControlBuild<TModel>(
+        OptionSensitivityProbe<TModel> probe, Type declaredOptions, bool train) where TModel : class
+    {
+        var model = Rebuild(probe, declaredOptions, mutate: null);
+        try
+        {
+            Seeded(() => probe.Observe(model));
+            if (train && probe.Train is not null)
+            {
+                Seeded(() => probe.Train(model));
+                Seeded(() => probe.Observe(model));
+            }
+            return probe.Describe!(model).ToArray();
+        }
+        finally
+        {
+            (model as IDisposable)?.Dispose();
+        }
+    }
     /// <summary>
     /// Names the parts of the observation on which two builds disagree (at most five), or an empty string when the
     /// probe has no breakdown or the breakdown itself throws.
@@ -593,8 +619,17 @@ public static class OptionSensitivityHarness
         if (probe.Describe is null) return string.Empty;
         try
         {
-            var a = probe.Describe(first);
-            var b = probe.Describe(second);
+            return DescribeDifference(probe.Describe(first), probe.Describe(second));
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string DescribeDifference(IReadOnlyList<KeyValuePair<string, long>> a,
+        IReadOnlyList<KeyValuePair<string, long>> b)
+    {
             if (a.Count != b.Count)
                 return $" The builds have different structures ({a.Count} against {b.Count} observed parts).";
             var differing = new List<string>();
@@ -604,11 +639,6 @@ public static class OptionSensitivityHarness
             string shown = string.Join(", ", differing.Take(5));
             string more = differing.Count > 5 ? $" and {differing.Count - 5} more" : string.Empty;
             return $" Differing: {shown}{more} ({differing.Count} of {a.Count} parts).";
-        }
-        catch (Exception ex) when (ex is not OutOfMemoryException)
-        {
-            return string.Empty;
-        }
     }
 
     private sealed class ParameterShapesChangedException : Exception { }
