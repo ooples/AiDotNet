@@ -52,9 +52,9 @@ public sealed class ApiKeyService : IApiKeyService
             return null;
         }
 
-        bool acceptedByStatic = StaticApiKeys.TryAuthenticate(
-            _options, keyId, secretBytes, DateTimeOffset.UtcNow, out bool ownedByStatic, out var staticResult);
-        if (acceptedByStatic)
+        if (StaticApiKeys.TryAuthenticate(
+                _options, keyId, secretBytes, DateTimeOffset.UtcNow, out bool ownedByStatic, out var staticResult)
+            && staticResult is not null)
         {
             CryptographicOperations.ZeroMemory(secretBytes);
             return staticResult;

@@ -134,7 +134,8 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
             task = s.ReadoutLoss(context.Output, s.Target);
             task = s.Engine.TensorMultiplyScalar(task, Ops.FromDouble(_localTaskWeight));
         }
-        // Exact configuration sentinel: a small positive weight must still train the hidden layers.
+        // Exact configuration sentinel (<= 0 means exactly 0, as above): only a zero regression weight skips the
+        // teacher, so a small positive weight still trains the hidden layers.
         if (_hiddenWeight <= 0) return task;
         var teacher = TeacherStates(s.Input);
         int lt = teacher.Count - 1, h = s.HiddenLayerCount;
