@@ -575,3 +575,20 @@ focused perturbation/constraint suite passes 61 tests. The source fixture and
 helper compile with zero warnings/errors. FireRed's coupled dimensions, vocoder
 preset restoration and remaining observation contexts still need separate
 checks; no no-op baseline or option exemption was added in this batch.
+
+FireRed paired native tests now verify speaker/tokenizer/codec widths 32/64,
+HuBERT/SSL widths 16/32, and codebook/audio vocabulary pairs 4/18 and 8/66 by
+running the actual encoder, both tokenizer reconstructions, Mel codec decoder,
+product quantizer and GPT output head. Seven unpaired combinations are rejected.
+The tokenizer's reconstructed speaker mel is 80 bins; the flow/codec mel is 100.
+These distinct paper frontends were verified at runtime, not conflated.
+
+The 48 kHz paper vocoder preset had a real length bug: stride 3 with kernel 6
+adds one intermediate sample, propagated into eight extra waveform samples
+(two 10 ms frames produced 968 instead of 960). Its stride-3 kernel is now 7,
+matching the parity needed by the existing transposed-convolution padding.
+Both presets now produce exactly 480 (24 kHz) / 960 (48 kHz) finite samples for
+two mel frames. The released 24 kHz preset's complete 4,305,599 initial/trained
+parameters and native GPT losses match the hosted model exactly. Source model,
+options and training compile with zero warnings/errors. No option exemption or
+baseline change was needed for this production vocoder fix.

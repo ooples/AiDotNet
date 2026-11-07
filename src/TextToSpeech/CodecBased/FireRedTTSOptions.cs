@@ -40,7 +40,7 @@ public enum FireRedTtsVocoder
     Release24k,
 
     /// <summary>The paper's super-resolution vocoder (§3.3.3): 48 kHz, ×480. The paper gives no upsampling rates; these are
-    /// 5·4·3·2·2·2 with kernels twice the rate (11 for 5, as the release's first). No weights exist; it trains from scratch.</summary>
+    /// 5·4·3·2·2·2 with stride-compatible kernels. No weights exist; it trains from scratch.</summary>
     Paper48k,
 }
 
@@ -186,7 +186,7 @@ public class FireRedTTSOptions : TtsModelOptions
                 SampleRate = 48000;
                 HopSize = 1920;
                 VocoderUpsampleRates = new[] { 5, 4, 3, 2, 2, 2 };
-                VocoderUpsampleKernels = new[] { 11, 8, 6, 4, 4, 4 };
+                VocoderUpsampleKernels = new[] { 11, 8, 7, 4, 4, 4 };
             }
             else
             {
