@@ -19,6 +19,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.0.0](https://github.com/ooples/AiDotNet/compare/v0.235.0...v1.0.0) (2026-11-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* combine API, RL, documentation, and dependency repairs ([#2400](https://github.com/ooples/AiDotNet/issues/2400))
+* combine model options, inference, and adapted-model correctness fixes ([#2417](https://github.com/ooples/AiDotNet/issues/2417))
+
+### Features
+
+* combine model options, inference, and adapted-model correctness fixes ([#2417](https://github.com/ooples/AiDotNet/issues/2417)) ([3f0088b](https://github.com/ooples/AiDotNet/commit/3f0088bb61c62a71c5eaafb1de430ce75afa9be8))
+* **scaffold:** paper-fidelity checks (option sensitivity, toy tasks, paper tests, paper defaults) ([#2423](https://github.com/ooples/AiDotNet/issues/2423)) ([6035554](https://github.com/ooples/AiDotNet/commit/603555481f4950cd7a67b3205cb3944486f7893c))
+
+
+### Bug Fixes
+
+* activation-cache sweep 1/3 + keyed safety watermarks and honest classifiers ([#2413](https://github.com/ooples/AiDotNet/issues/2413)) ([8f3498b](https://github.com/ooples/AiDotNet/commit/8f3498b586d5492fc33f457d9af22882099bd809))
+* **cloning:** support object-valued constructor args in LayerFactoryRegistry.TryRead and harvest matching fields/properties for external layers ([#2438](https://github.com/ooples/AiDotNet/issues/2438)) ([495c7c0](https://github.com/ooples/AiDotNet/commit/495c7c0ddedeb25e03b52803f1bbf1cb70245c09))
+* combine API, RL, documentation, and dependency repairs ([#2400](https://github.com/ooples/AiDotNet/issues/2400)) ([1ec55a4](https://github.com/ooples/AiDotNet/commit/1ec55a4f485d54d1af9f910c5ffbe4f0096d6270))
+* docs wiki samples, cross-isa agreement, and gpu inference overhead ([#2389](https://github.com/ooples/AiDotNet/issues/2389), [#2388](https://github.com/ooples/AiDotNet/issues/2388), [#2382](https://github.com/ooples/AiDotNet/issues/2382), [#2385](https://github.com/ooples/AiDotNet/issues/2385), [#2384](https://github.com/ooples/AiDotNet/issues/2384)) ([#2442](https://github.com/ooples/AiDotNet/issues/2442)) ([7a6abf7](https://github.com/ooples/AiDotNet/commit/7a6abf78162ce5e7aaf5233d9e1ca1bdc337eaab))
+* **docs:** enforce XML documentation and restore package validation ([#2422](https://github.com/ooples/AiDotNet/issues/2422)) ([abd0e4b](https://github.com/ooples/AiDotNet/commit/abd0e4bd3efb81a9ba694eb029e93ec9cf8afbc9))
+* **layers:** drop the activation on transformer attention outputs ([#2421](https://github.com/ooples/AiDotNet/issues/2421)) ([d290c71](https://github.com/ooples/AiDotNet/commit/d290c71c371be82edfb3c447e3e0b0d6e1494416))
+* **loss:** support rank-matched compact class-index targets in CrossEntropyWithLogitsLoss.ComputeTapeLoss ([#2440](https://github.com/ooples/AiDotNet/issues/2440)) ([a94ac04](https://github.com/ooples/AiDotNet/commit/a94ac04c8a155c1f38760e7fbbf9e48d9f9afa75))
+* **metalearning:** step the configured meta and inner optimizers ([#2418](https://github.com/ooples/AiDotNet/issues/2418)) ([e13d68f](https://github.com/ooples/AiDotNet/commit/e13d68f5f6575ed64cae7527d83f10b6b6e9cdd0))
+* **rl:** implement the TRPO, CQL, MuZero and Rainbow options and wire every deep agent's learning rates (+4 combined) ([#2414](https://github.com/ooples/AiDotNet/issues/2414)) ([01386cd](https://github.com/ooples/AiDotNet/commit/01386cd1192cd08315d6f19539c9e5953beadace))
+* route activation caches through SaveForBackward (sweep 3/3) (+2 combined) ([#2412](https://github.com/ooples/AiDotNet/issues/2412)) ([ce3f01e](https://github.com/ooples/AiDotNet/commit/ce3f01e7e3a9bd38b4a0329cea4f684fd661b876))
+* **training:** complete streaming checkpoints and GPU optimizer steps ([#2436](https://github.com/ooples/AiDotNet/issues/2436)) ([6d4fe1f](https://github.com/ooples/AiDotNet/commit/6d4fe1f0bc975afab853d01d5bc62aec3da5d9fa))
+
+
+### Documentation
+
+* **options:** document every public member of src/models/options (a-4 options slice 1) (+1 combined) ([#2405](https://github.com/ooples/AiDotNet/issues/2405)) ([f884e9f](https://github.com/ooples/AiDotNet/commit/f884e9f6b02be8d361bc8bd98da6c5c371b79472))
+
 ## [0.235.0](https://github.com/ooples/AiDotNet/compare/v0.234.0...v0.235.0) (2026-10-29)
 
 
