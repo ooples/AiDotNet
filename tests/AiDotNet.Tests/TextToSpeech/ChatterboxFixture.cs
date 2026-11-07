@@ -92,6 +92,8 @@ internal static class ChatterboxFixture
         options.MaxTextLength = 128;
         options.MaxSpeechTokens = 256;
         options.MaxGeneratedSpeechTokens = 64;
+        // Match the previous invariant fixture's effective AdamW rate now that native training reads its options.
+        options.LearningRate = 0.001;
         return new Chatterbox<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional,
             NeuralNetworkTaskType.Generative, inputSize: 8, outputSize: 1024) { RandomSeed = 7 }, options);
     }

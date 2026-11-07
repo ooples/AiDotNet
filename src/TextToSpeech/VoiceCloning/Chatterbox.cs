@@ -68,7 +68,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         LoadConfiguredTokenizer();
         Initialize();
         InitializeVoiceEncoder();
-        _t3Optimizer = optimizer ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _t3Optimizer = optimizer ?? CreateComponentOptimizer("language model", _options.WarmupSteps);
     }
 
     /// <summary>
@@ -245,6 +245,34 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
 
     protected override void LoadLanguageModel(Func<string, int[], double[]> read) => T3.LoadTorchWeights(read);
 
+    /// <inheritdoc />
+    /// <remarks>The release provides inference checkpoints, not a training recipe. Native training uses configured
+    /// AdamW on the selected component only; this is a configurable training policy, not an attributed release optimizer.</remarks>
+    protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateComponentOptimizer(string component, int warmupSteps)
+    {
+        var layers = component switch
+        {
+            "language model" => LanguageModelLayers,
+            "flow" => FlowLayers,
+            "vocoder" => VocoderLayers,
+            "discriminator" => DiscriminatorLayers,
+            _ => throw new ArgumentOutOfRangeException(nameof(component)),
+        };
+        var options = new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate,
+            WeightDecay = _options.WeightDecay,
+            MaskParameters = Training.TapeTrainingStep<T>.CollectParameters(layers.Cast<ILayer<T>>().ToList(), -1).ToList(),
+            SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
+        };
+        if (warmupSteps > 0)
+            options.LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(
+                _options.LearningRate, warmupSteps, warmupSteps, 0.0,
+                AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Constant);
+        return new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
+    }
+
+
     protected override T TrainOnSample(TtsTrainingSample<T> sample)
     {
         if (CurrentStage != CosyVoiceTrainingStage.LanguageModel)
@@ -348,10 +376,20 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     private void InitializeVoiceEncoder()
     {
         if (!IsNative || !HasPaperLayers) return;
-        _voiceEncoder = new ChatterboxVoiceEncoder<T>(Engine, _voiceEncoderLayers, _options);
+        var scope = LayerInitializationSeedScope.CaptureScope();
+        try
+        {
+            if (_options.Seed is int seed) LayerInitializationSeedScope.ResetForModelConstruction(seed);
+            _voiceEncoder = new ChatterboxVoiceEncoder<T>(Engine, _voiceEncoderLayers, _options);
+        }
+        finally
+        {
+            if (_options.Seed.HasValue) LayerInitializationSeedScope.RestoreScope(scope);
+        }
         ComponentLayers.AddRange(_voiceEncoderLayers);
         foreach (var layer in _voiceEncoderLayers) layer.SetTrainingMode(false);
     }
+
 
     private TtsVoice<T> EnsurePreparedVoice()
     {

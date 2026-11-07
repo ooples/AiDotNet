@@ -1,0 +1,82 @@
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
+using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.TextToSpeech;
+using AiDotNet.TextToSpeech.CodecBased;
+using AiDotNet.TextToSpeech.VoiceCloning;
+using Xunit;
+
+namespace AiDotNet.Tests.TextToSpeech;
+
+public class ChatterboxOptionContextTests
+{
+    private static Chatterbox<double> Create(ChatterboxOptions options) => new(new NeuralNetworkArchitecture<double>(
+        InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1) { RandomSeed = 7 }, options);
+
+    private static TtsTrainingSample<double> Sample(Chatterbox<double> model)
+    {
+        var codes = new Tensor<double>(new[] { 8, 1 });
+        for (int i = 0; i < codes.Length; i++) codes[i] = i;
+        var mel = new Tensor<double>(new[] { 16, model.MelChannels });
+        for (int i = 0; i < mel.Length; i++) mel[i] = 0.3 * Math.Sin(i * 0.17);
+        return new TtsTrainingSample<double>
+        {
+            Tokens = new Tensor<double>(new[] { 3 }, new Vector<double>(new[] { 3.0, 4.0, 5.0 })),
+            CodecTokens = codes, Mel = mel, SpeakerReference = ChatterboxFixture.Recording<double>(),
+        };
+    }
+
+    private static IEnumerable<LayerBase<double>> VoiceLayers(Chatterbox<double> model) =>
+        (IEnumerable<LayerBase<double>>)model.GetType().GetField("_voiceEncoderLayers",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(model)!;
+
+    [Fact]
+    public void NativeFlowStageTrainsWithConfiguredAdamWAndPreservesOtherComponents()
+    {
+        using var model = Create(ChatterboxFixture.Options());
+        model.CurrentStage = CosyVoiceTrainingStage.Flow;
+        var sample = Sample(model);
+        // Resolve the frozen CAM++ frontend's lazy projection before comparing its parameter storage.
+        Assert.True(TtsPaperNumerics.IsFinite(model.EvaluateTrainingObjective(sample)));
+        var frozen = model.LanguageModelLayers.Concat(model.FrozenLayers).Concat(VoiceLayers(model)).ToArray();
+        var before = frozen.Select(layer => layer.GetParameters().ToArray()).ToArray();
+        var flowBefore = model.FlowLayers.SelectMany(layer => layer.GetParameters()).ToArray();
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(sample)));
+        Assert.False(flowBefore.SequenceEqual(model.FlowLayers.SelectMany(layer => layer.GetParameters())));
+        for (int i = 0; i < frozen.Length; i++) Assert.Equal(before[i], frozen[i].GetParameters().ToArray());
+    }
+
+    [Fact]
+    public void NativeT3WarmupAdvancesPerTrainingBatch()
+    {
+        var options = ChatterboxFixture.Options(); options.LearningRate = 0.001; options.WeightDecay = 0;
+        using var control = Create(options);
+        using var changed = Create(new ChatterboxOptions(options) { WarmupSteps = 4 });
+        control.Voice = control.CreateVoice(ChatterboxFixture.Recording<double>(), 24000);
+        changed.Voice = changed.CreateVoice(ChatterboxFixture.Recording<double>(), 24000);
+        Assert.Equal(control.GetParameters().ToArray(), changed.GetParameters().ToArray());
+        for (int step = 0; step < 2; step++)
+        {
+            var before = control.LanguageModelLayers.SelectMany(layer => layer.GetParameters()).ToArray();
+            Assert.True(TtsPaperNumerics.IsFinite(control.Train(Sample(control))));
+            Assert.True(TtsPaperNumerics.IsFinite(changed.Train(Sample(changed))));
+            Assert.False(before.SequenceEqual(control.LanguageModelLayers.SelectMany(layer => layer.GetParameters())), "The native T3 step must update its language-model parameters.");
+        }
+        Assert.False(control.LanguageModelLayers.SelectMany(layer => layer.GetParameters()).SequenceEqual(
+            changed.LanguageModelLayers.SelectMany(layer => layer.GetParameters())));
+    }
+
+    [Fact]
+    public void SharedSeedControlsNativeAndFrozenVoiceInitializationIndependentlyOfSampling()
+    {
+        var options = ChatterboxFixture.Options(); options.Seed = 11;
+        using var first = Create(options);
+        using var repeat = Create(new ChatterboxOptions(options) { SamplingSeed = 31 });
+        using var changed = Create(new ChatterboxOptions(options) { Seed = 12 });
+        Assert.Equal(first.GetParameters().ToArray(), repeat.GetParameters().ToArray());
+        Assert.False(first.GetParameters().SequenceEqual(changed.GetParameters()));
+        var voice = VoiceLayers(first).SelectMany(layer => layer.GetParameters()).ToArray();
+        Assert.Equal(voice, VoiceLayers(repeat).SelectMany(layer => layer.GetParameters()).ToArray());
+        Assert.False(voice.SequenceEqual(VoiceLayers(changed).SelectMany(layer => layer.GetParameters())));
+    }
+}

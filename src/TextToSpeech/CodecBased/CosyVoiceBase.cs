@@ -216,7 +216,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         }
 
         var o = Settings;
-        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.SamplingSeed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.Seed ?? Architecture.RandomSeed ?? o.SamplingSeed);
         BuildLanguageModel(_lmLayers, random);
         BuildFlow(_flowLayers, random);
         BuildVocoder(_hiftLayers, random);
@@ -673,10 +673,16 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         return result;
     }
 
+    /// <summary>Creates the optimizer declared for one native component; inference-only releases can supply a configured training rule.</summary>
+    /// <param name="component">The language model, flow, vocoder or discriminator component.</param>
+    /// <param name="warmupSteps">The number of warmup updates.</param>
+    protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateComponentOptimizer(string component, int warmupSteps) =>
+        PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, component, warmupSteps);
+
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? VocoderOptimizer(string component)
     {
         if (_suppliedOptimizer is not null) return _suppliedOptimizer;
-        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> Create() => PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, component)
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> Create() => CreateComponentOptimizer(component, 0)
             ?? throw new InvalidOperationException($"{GetType().Name} declares an optimizer for the {component}.");
         if (component == "discriminator") return _discriminatorOptimizer ??= Create();
         if (!_stageOptimizers.TryGetValue(CosyVoiceTrainingStage.Vocoder, out var optimizer))
@@ -787,7 +793,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         if (_suppliedOptimizer is not null) return _suppliedOptimizer;
         if (!_stageOptimizers.TryGetValue(CurrentStage, out var optimizer))
         {
-            optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+            optimizer = CreateComponentOptimizer(
                     CurrentStage == CosyVoiceTrainingStage.LanguageModel ? "language model" : "flow", Settings.WarmupSteps)
                 ?? throw new InvalidOperationException($"{GetType().Name} declares an optimizer for each stage.");
             _stageOptimizers[CurrentStage] = optimizer;

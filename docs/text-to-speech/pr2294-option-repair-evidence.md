@@ -868,3 +868,10 @@ codes and training losses; released speaker, number-normalization and kanjize
 references pass too. This supplies actual reference behavior independently of the
 unresolved old-artifact initialization-comparison limitation. Current-head hosted
 build/shards and all remaining model groups are still required.
+
+### Chatterbox native training and initialization
+
+Chatterbox has inference checkpoints but no declared released stage optimizer recipe. Its native flow stage previously threw before any update, while T3 silently used AdamW defaults. A component optimizer hook now retains declared CosyVoice recipes and gives Chatterbox configured AdamW with parameter masks and per-batch linear warmup from zero. This is an explicit training policy, not a claim about the release optimizer. The shared Seed now reaches CosyVoice initialization and Chatterbox's frozen voice encoder.
+
+Scoped source validation: ChatterboxOptionContextTests passed native flow updates with unchanged LM/frozen/voice weights, native T3 parameter updates with differing warmup trajectories, and repeatable backbone/voice initialization independent of SamplingSeed. The warmup issue was configuration (initial rate equalled peak rate), not a fused-scheduler defect. Full hosted validation remains pending.
+All four ChatterboxPaperTests also passed in the same source scope: released defaults, native component construction, punctuation/BPE, and bounded S3Gen versus full T3 reference conditioning.

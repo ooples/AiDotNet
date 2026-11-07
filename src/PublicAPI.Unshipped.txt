@@ -21778,3 +21778,5 @@ AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions.VocabSize.get -> int
 AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions.VocabSize.set -> void
 AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions.WeightDecay.get -> double
 AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions.WeightDecay.set -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.CreateComponentOptimizer(string! component, int warmupSteps) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.CreateComponentOptimizer(string! component, int warmupSteps) -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
