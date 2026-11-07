@@ -1,3 +1,7 @@
+using AiDotNet.Attributes;
+using AiDotNet.Models.Options;
+using AiDotNet.Onnx;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 /// <summary>Which of FireRedTTS's networks a training step updates.</summary>
@@ -63,7 +67,7 @@ public enum FireRedTtsEmotion
 /// <para><b>For Beginners:</b> the defaults build the released model; load its weights with
 /// <see cref="FireRedTTS{T}.LoadReferenceWeights"/>. Smaller values make a model to train from scratch.</para>
 /// </remarks>
-public class FireRedTTSOptions : TtsModelOptions
+public class FireRedTTSOptions : ModelOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
     public FireRedTTSOptions()
@@ -71,7 +75,6 @@ public class FireRedTTSOptions : TtsModelOptions
         SampleRate = 24000;
         MelChannels = 100;
         HopSize = 960;
-        FftSize = 1024;
         HiddenDim = 1024;
         NumHeads = 16;
         NumDecoderLayers = 30;
@@ -82,6 +85,35 @@ public class FireRedTTSOptions : TtsModelOptions
         WeightDecay = 0.01;
     }
 
+    /// <summary>The output waveform rate selected with the vocoder preset.</summary>
+    [OptionBehaviourExempt("The vocoder preset pairs SampleRate, HopSize and upsampling; native 24/48 kHz tests verify both complete configurations.")]
+    public int SampleRate { get; set; } = 24000;
+    /// <summary>The flow/codec mel channels; the tokenizer's speaker frontend separately uses 80 bins.</summary>
+    public int MelChannels { get; set; } = 100;
+    /// <summary>The output samples per 40 ms semantic token, paired with the vocoder preset.</summary>
+    [OptionBehaviourExempt("HopSize must match SampleRate and vocoder upsampling; native 24/48 kHz tests verify both complete configurations.")]
+    public int HopSize { get; set; } = 960;
+    /// <summary>The text-to-speech GPT hidden width.</summary>
+    public int HiddenDim { get; set; } = 1024;
+    /// <summary>The text-to-speech GPT attention heads.</summary>
+    public int NumHeads { get; set; } = 16;
+    /// <summary>The text-to-speech GPT depth.</summary>
+    public int NumDecoderLayers { get; set; } = 30;
+    /// <summary>The text vocabulary size.</summary>
+    public int VocabSize { get; set; } = 57341;
+    /// <summary>The input text limit below the GPT's position capacity.</summary>
+    public int MaxTextLength { get; set; } = 400;
+    /// <summary>The GPT training dropout.</summary>
+    public double DropoutRate { get; set; } = 0.1;
+    /// <summary>The text-to-speech GPT learning rate.</summary>
+    public double LearningRate { get; set; } = 5e-6;
+    /// <summary>The text-to-speech GPT weight decay.</summary>
+    public double WeightDecay { get; set; } = 0.01;
+    /// <summary>The exported ONNX graph path, when a graph is loaded.</summary>
+    public string? ModelPath { get; set; }
+    /// <summary>Settings for the exported ONNX graph runtime.</summary>
+    public OnnxModelOptions OnnxOptions { get; set; } = new();
+
     // ---------------------------------------------------------------- the language model
 
     /// <summary>The most text tokens the GPT's positions hold (<c>gpt_max_text_tokens</c>).</summary>
@@ -91,6 +123,7 @@ public class FireRedTTSOptions : TtsModelOptions
     public int MaxAudioTokens { get; set; } = 630;
 
     /// <summary>The audio vocabulary: the tokenizer's 16,384 tokens plus the start and stop tokens.</summary>
+    [OptionBehaviourExempt("AudioTokens must equal CodebookSize squared plus start/stop tokens; paired native quantizer and GPT-head tests cover both vocabularies.")]
     public int AudioTokens { get; set; } = 16386;
 
     /// <summary>The text start token (<c>[START]</c>).</summary>
@@ -118,11 +151,13 @@ public class FireRedTTSOptions : TtsModelOptions
     public int SpeakerRes2NetScale { get; set; } = 4;
 
     /// <summary>The speaker embedding's width (also the tokenizer's model width, whose decoder adds it).</summary>
+    [OptionBehaviourExempt("SpeakerDim, TokenizerDim and CodecDim must agree for the decoder additions; paired native reconstruction tests cover widths 32/64.")]
     public int SpeakerDim { get; set; } = 512;
 
     // ---------------------------------------------------------------- the flow-matching Mel decoder
 
     /// <summary>The speech tokenizer's codewords per sub-codebook (two sub-codebooks make 16,384 tokens).</summary>
+    [OptionBehaviourExempt("CodebookSize must vary with AudioTokens = CodebookSize squared plus two; paired native quantizer and GPT-head tests cover both vocabularies.")]
     public int CodebookSize { get; set; } = 128;
     /// <summary>Gets or sets the feature width of the codebook. Defaults to <c>128</c>.</summary>
     public int CodebookDim { get; set; } = 128;
@@ -173,8 +208,8 @@ public class FireRedTTSOptions : TtsModelOptions
 
     // ---------------------------------------------------------------- the vocoder
 
-    /// <summary>The vocoder: the release's 24 kHz or the paper's 48 kHz. Setting it also sets <see cref="TtsModelOptions.SampleRate"/>,
-    /// <see cref="TtsModelOptions.HopSize"/> and the upsampling.</summary>
+    /// <summary>The vocoder: the release's 24 kHz or the paper's 48 kHz. Setting it also sets <see cref="SampleRate"/>,
+    /// <see cref="HopSize"/> and the upsampling.</summary>
     public FireRedTtsVocoder Vocoder
     {
         get => _vocoder;
@@ -214,9 +249,11 @@ public class FireRedTTSOptions : TtsModelOptions
     // ---------------------------------------------------------------- the speech tokenizer
 
     /// <summary>The HuBERT features' width (chinese-HuBERT-large: 1024).</summary>
+    [OptionBehaviourExempt("SslDim must equal HubertDim; paired native HuBERT/tokenizer tests cover feature widths 16/32.")]
     public int SslDim { get; set; } = 1024;
 
     /// <summary>The tokenizer encoder's width (<c>n_model_size</c>).</summary>
+    [OptionBehaviourExempt("TokenizerDim must equal SpeakerDim and CodecDim; paired native reconstruction tests cover widths 32/64.")]
     public int TokenizerDim { get; set; } = 512;
     /// <summary>Gets or sets the convolution strides for the tokenizer downsample.</summary>
     public int[] TokenizerDownsampleStrides { get; set; } = { 1, 1, 1, 2 };
@@ -226,6 +263,7 @@ public class FireRedTTSOptions : TtsModelOptions
     /// <summary>Gets or sets the number of layers in the HuBERT. Defaults to <c>24</c>.</summary>
     public int HubertLayers { get; set; } = 24;
     /// <summary>Gets or sets the feature width of the HuBERT. Defaults to <c>1024</c>.</summary>
+    [OptionBehaviourExempt("HubertDim must equal SslDim; paired native HuBERT/tokenizer tests cover feature widths 16/32.")]
     public int HubertDim { get; set; } = 1024;
     /// <summary>Gets or sets the number of attention heads in the HuBERT. Defaults to <c>16</c>.</summary>
     public int HubertHeads { get; set; } = 16;
@@ -270,9 +308,11 @@ public class FireRedTTSOptions : TtsModelOptions
 
     /// <summary>The Mel codec's width (SoCodec's <c>n_model_size</c> at the speaker embedding's width, which its decoder
     /// adds).</summary>
+    [OptionBehaviourExempt("CodecDim must equal SpeakerDim and TokenizerDim; paired native reconstruction tests cover widths 32/64.")]
     public int CodecDim { get; set; } = 512;
 
     /// <summary>The codec's strides: the 10 ms mel to 20 ms frames.</summary>
+    [OptionBehaviourExempt("CodecStrides must multiply to two (10 ms mel to 20 ms codes); native codec tests cover both one- and two-stage factorizations.")]
     public int[] CodecStrides { get; set; } = { 2 };
 
     /// <summary>The streams (§3.3.2: four of 16,384 codewords, each two codebooks of <see cref="CodebookSize"/>).</summary>
@@ -374,7 +414,7 @@ public class FireRedTTSOptions : TtsModelOptions
     /// <summary>Gets or sets the weight of the audio loss. Defaults to <c>1.0</c>.</summary>
     public double AudioLossWeight { get; set; } = 1.0;
 
-    /// <summary>The GPT's AdamW (XTTS: 0.9, 0.96, 1e-8; rate <see cref="TtsModelOptions.LearningRate"/>, decay on weights).</summary>
+    /// <summary>The GPT's AdamW (XTTS: 0.9, 0.96, 1e-8; rate <see cref="LearningRate"/>, decay on weights).</summary>
     public double Beta1 { get; set; } = 0.9;
     /// <summary>Gets or sets the second-moment decay for the training optimizer. Defaults to <c>0.96</c>.</summary>
     public double Beta2 { get; set; } = 0.96;

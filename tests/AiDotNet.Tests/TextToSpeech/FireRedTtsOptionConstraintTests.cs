@@ -8,6 +8,22 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class FireRedTtsOptionConstraintTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ValidCodecStrideFactorizationsEncodeAndDecodeTheSameFrameGeometry(bool decomposed)
+    {
+        var options = FireRedTtsFixture.Options();
+        options.CodecStrides = decomposed ? new[] { 1, 2 } : new[] { 2 };
+        using var model = Create(options);
+        var codes = model.MelCodec.Tokenize(Signal(8, options.MelChannels));
+        Assert.Equal(4, codes.GetLength(0));
+        Assert.Equal(options.CodecStreams, codes.GetLength(1));
+        var mel = model.MelCodec.Detokenize(codes, Signal(options.SpeakerDim));
+        Assert.Equal(new[] { 8, options.MelChannels }, mel.Shape.ToArray());
+        Finite(mel);
+    }
+
     private static FireRedTTS<double> Create(FireRedTTSOptions options) =>
         new(new NeuralNetworkArchitecture<double>(inputFeatures: 1, outputSize: 1) { RandomSeed = 1337 }, options);
 
@@ -96,11 +112,21 @@ public class FireRedTtsOptionConstraintTests
     [InlineData("CodecDim")]
     [InlineData("SslDim")]
     [InlineData("HubertDim")]
+    [InlineData("SampleRate")]
+    [InlineData("HopSize")]
     public void UnpairedNativeWidthsAndVocabulariesAreRejected(string option)
     {
         var options = FireRedTtsFixture.Options();
         var property = typeof(FireRedTTSOptions).GetProperty(option)!;
         property.SetValue(options, (int)property.GetValue(options)! + 2);
+        Assert.Throws<ArgumentException>(() => Create(options));
+    }
+
+    [Fact]
+    public void InvalidCodecStrideProductIsRejected()
+    {
+        var options = FireRedTtsFixture.Options();
+        options.CodecStrides = new[] { 2, 2 };
         Assert.Throws<ArgumentException>(() => Create(options));
     }
 }

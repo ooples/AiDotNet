@@ -592,3 +592,25 @@ two mel frames. The released 24 kHz preset's complete 4,305,599 initial/trained
 parameters and native GPT losses match the hosted model exactly. Source model,
 options and training compile with zero warnings/errors. No option exemption or
 baseline change was needed for this production vocoder fix.
+
+FireRedTTSOptions now owns its thirteen consumed shared settings, removing
+unused FftSize, NumEncoderLayers and MaxMelLength. The concrete getter audit
+and construction show the distinct native FFT frontends and network depths;
+consumed GPT depth/dropout, mel channels, sample rate and hop remain. Every
+retained released-preset default and the complete 4,305,599 initial/trained
+parameters and native GPT losses still match the hosted model exactly.
+
+Model-specific coupled settings are retained with explicit constraints backed
+by native positive tests: speaker/tokenizer/codec widths, HuBERT/SSL widths,
+codebook/audio vocabularies, the vocoder presets and the Mel codec stride
+product. Both a single stride of two and a two-stage 1x2 codec encode eight mel
+frames to four code frames and decode back to eight finite mel frames. Nine
+isolated width/vocabulary/rate/hop changes and an invalid stride product are
+rejected. No inactive setting was marked as a test-scale exemption.
+
+Twenty-six accessor declarations are registered. Scoped API comparison on
+net10/net471/net8 reports only the existing acknowledged FireRedTTSOptions
+CP0007 base change, so no new acknowledgment was needed. Seven obsolete or
+constrained baseline rows were removed. The ONNX loader reads recorded ModelPath.
+Compilation and native parity/constraints pass; full hosted package/shards
+remain required. Four FireRed decoding/text-splitting observers still need work.
