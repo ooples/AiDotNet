@@ -73,6 +73,9 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
     private readonly WatermarkKey _key;
     private readonly BchCode? _bch;
     private readonly Random _trainingRandom;
+    // The reference trains the secret-only phase and the full loss with two Adam instances (train_secret_op and
+    // train_op), so the full loss starts with fresh moments.
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _secretOptimizer;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _criticOptimizer;
 
@@ -147,10 +150,39 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
         var encoded = Engine.TensorAdd(image, EncodeResidual(image, secret));
         DecodeLogits(encoded);
         CriticScore(encoded);
-        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate });
-        _criticOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.CriticLearningRate });
+        // TensorFlow 1's Adam (beta 0.9, 0.999, epsilon 1e-8), which the reference does not clip.
+        Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> EncoderDecoderOptions(bool trainsFirst)
+        {
+            var options = new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate,
+                EnableGradientClipping = false,
+            };
+            if (trainsFirst && _options.LearningRateWarmupSteps > 0)
+            {
+                options.LearningRateScheduler = new LearningRateSchedulers.LinearWarmupScheduler(
+                    _options.LearningRate, _options.LearningRateWarmupSteps);
+                options.SchedulerStepMode = LearningRateSchedulers.SchedulerStepMode.StepPerBatch;
+            }
+
+            return options;
+        }
+
+        _secretOptimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, EncoderDecoderOptions(trainsFirst: _options.NoImageLossSteps > 0));
+        _optimizer = new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, EncoderDecoderOptions(trainsFirst: _options.NoImageLossSteps == 0));
+        // tf.train.RMSPropOptimizer(1e-5): decay 0.9, epsilon 1e-10, the mean square starting at 1; the gradient
+        // clipped elementwise to +-0.25 (tf.clip_by_value) before the step.
+        _criticOptimizer = new RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>>(this,
+            new Models.Options.RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.CriticLearningRate,
+                Decay = 0.9,
+                Epsilon = 1e-10,
+                InitialMeanSquare = 1.0,
+                EnableGradientClipping = true,
+                GradientClippingMethod = Models.Options.GradientClippingMethod.ByValue,
+                MaxGradientValue = _options.CriticGradientClip,
+            });
     }
 
     /// <summary>
@@ -484,17 +516,7 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
             throw new ArgumentException($"Expected {b} x {_options.SecretBits} secret bits as the target.", nameof(target));
         var secrets = Engine.Reshape(target, new[] { b, _options.SecretBits });
         int step = _trainingStep++;
-
-        // Critic: WGAN on the current encoder's output, which is data here, so this step cannot reach the encoder.
-        var encodedNow = Engine.TensorAdd(images, EncodeResidual(images, secrets));
-        var critic = new Training.TrainingObjective<T>(new[] { images, encodedNow }, data =>
-            Engine.TensorSubtract(Engine.ReduceMean(CriticScore(data[0]), new[] { 0 }, keepDims: true),
-                Engine.ReduceMean(CriticScore(data[1]), new[] { 0 }, keepDims: true)))
-        {
-            Optimizer = _criticOptimizer,
-            Parameters = () => Training.TapeTrainingStep<T>.CollectParameters(_criticLayers),
-            AfterStep = ClipCriticWeights,
-        };
+        bool secretOnly = step < _options.NoImageLossSteps;
 
         var draw = DrawDistortions(b, s, step);
         var weights = LossWeights(step);
@@ -502,11 +524,24 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
             new[] { images, secrets, draw.Grid, draw.Blur, draw.Noise, draw.Contrast, draw.Shift, draw.Saturation, draw.Quantization, weights },
             data => EncoderDecoderLoss(data))
         {
-            Optimizer = _optimizer,
+            Optimizer = secretOnly ? _secretOptimizer : _optimizer,
             Parameters = () => Training.TapeTrainingStep<T>.CollectParameters(_encoderLayers.Concat(_decoderLayers)),
         };
+        if (secretOnly) return new[] { main };
 
-        return new[] { critic, main };
+        // Critic: WGAN on the encoder's output as that step left it, drawn when the critic steps (the reference runs
+        // train_dis_op after train_op on the same batch). The output is data here, so this step cannot reach the encoder.
+        var critic = new Training.TrainingObjective<T>(
+            () => new[] { images, Engine.TensorAdd(images, EncodeResidual(images, secrets)) },
+            data => Engine.TensorSubtract(Engine.ReduceMean(CriticScore(data[0]), new[] { 0 }, keepDims: true),
+                Engine.ReduceMean(CriticScore(data[1]), new[] { 0 }, keepDims: true)))
+        {
+            Optimizer = _criticOptimizer,
+            Parameters = () => Training.TapeTrainingStep<T>.CollectParameters(_criticLayers),
+            AfterStep = ClipCriticWeights,
+        };
+
+        return new[] { main, critic };
     }
 
     /// <summary>
@@ -522,7 +557,7 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
         var distorted = Distort(encoded, data[2], data[3], data[4], data[5], data[6], data[7], data[8]);
         var logits = DecodeLogits(distorted);
         var secretLoss = SecretLoss(logits, secrets);
-        var imageLoss = ResidualLoss(residual);
+        var imageLoss = ResidualLoss(residual, data[9]);
         var criticLoss = Engine.ReduceMean(CriticScore(encoded), new[] { 0 }, keepDims: false);
 
         var w = data[9];
@@ -540,8 +575,10 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
             new[] { 0, 1 }, keepDims: false);
     }
 
-    // Border-weighted L2 of the residual in YUV, averaged over pixels.
-    private protected Tensor<T> ResidualLoss(Tensor<T> residual)
+    // Border-weighted L2 of the residual in YUV, averaged over pixels: each channel's residual is scaled by
+    // 1 + gain * (1 - falloff) and then squared, as the reference's im_diff += im_diff * falloff_im. The gain is
+    // weights[3], so it changes step by step in a compiled plan.
+    private protected Tensor<T> ResidualLoss(Tensor<T> residual, Tensor<T> weights)
     {
         int b = residual.Shape[0], s = _options.ImageSize;
         Tensor<T> Channel(int c) => Engine.TensorSlice(residual, new[] { 0, c, 0, 0 }, new[] { b, 1, s, s });
@@ -550,12 +587,15 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
             Engine.TensorMultiplyScalar(Channel(1), NumOps.FromDouble(g))),
             Engine.TensorMultiplyScalar(Channel(2), NumOps.FromDouble(bl)));
         var yuv = new[] { Mix(0.299, 0.587, 0.114), Mix(-0.14713, -0.28886, 0.436), Mix(0.615, -0.51499, -0.10001) };
-        var mask = Engine.TensorBroadcastTo(EdgeWeights(), new[] { b, 1, s, s });
+        var gain = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorSlice(weights, new[] { 3 }, new[] { 1 }), new[] { 1, 1, 1, 1 }), new[] { b, 1, s, s });
+        var scale = Engine.TensorAddScalar(
+            Engine.TensorMultiply(Engine.TensorBroadcastTo(EdgeFalloff(), new[] { b, 1, s, s }), gain), NumOps.One);
         Tensor<T>? total = null;
         for (int c = 0; c < 3; c++)
         {
             var term = Engine.TensorMultiplyScalar(
-                Engine.ReduceMean(Engine.TensorMultiply(Engine.TensorSquare(yuv[c]), mask), new[] { 0, 1, 2, 3 }, keepDims: false),
+                Engine.ReduceMean(Engine.TensorSquare(Engine.TensorMultiply(yuv[c], scale)), new[] { 0, 1, 2, 3 }, keepDims: false),
                 NumOps.FromDouble(_options.YuvLossScales[c]));
             total = total is null ? term : Engine.TensorAdd(total, term);
         }
@@ -563,34 +603,45 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
         return total!;
     }
 
-    // 1 + gain * (1 - f), where f rises from 0 at the border to 1 a quarter of the way in (raised cosine).
-    private Tensor<T> EdgeWeights()
+    // 1 - falloff, the reference's border map: falloff starts at 1, and rows i and -i (then columns) for i below a
+    // quarter of the side are multiplied by (cos(4 pi i / s + pi) + 1) / 2, which rises from 0 at i = 0 to 1 at s / 4.
+    // Row -0 is row 0, so the last row's factor is the one for i = 1, as in the reference.
+    private Tensor<T> EdgeFalloff()
     {
         int s = _options.ImageSize;
-        double ramp = Math.Max(1.0, s / 4.0);
-        var weights = new Tensor<T>(new[] { 1, 1, s, s });
+        var falloff = new double[s, s];
         for (int y = 0; y < s; y++)
+            for (int x = 0; x < s; x++) falloff[y, x] = 1.0;
+        double Factor(int i) => (Math.Cos(4 * Math.PI * i / s + Math.PI) + 1) / 2;
+        int Wrap(int i) => i == 0 ? 0 : s - i;
+        for (int i = 0; i < s / 4; i++)
         {
-            for (int x = 0; x < s; x++)
-            {
-                double d = Math.Min(Math.Min(y, x), Math.Min(s - 1 - y, s - 1 - x));
-                double f = d >= ramp ? 1.0 : 0.5 - 0.5 * Math.Cos(Math.PI * d / ramp);
-                weights[0, 0, y, x] = NumOps.FromDouble(1.0 + _options.EdgeLossGain * (1.0 - f));
-            }
+            for (int x = 0; x < s; x++) { falloff[Wrap(i), x] *= Factor(i); falloff[i, x] *= Factor(i); }
         }
 
-        return weights;
+        for (int j = 0; j < s / 4; j++)
+        {
+            for (int y = 0; y < s; y++) { falloff[y, Wrap(j)] *= Factor(j); falloff[y, j] *= Factor(j); }
+        }
+
+        var map = new Tensor<T>(new[] { 1, 1, s, s });
+        for (int y = 0; y < s; y++)
+            for (int x = 0; x < s; x++) map[0, 0, y, x] = NumOps.FromDouble(1.0 - falloff[y, x]);
+        return map;
     }
 
+    // [secret, image, critic, edge gain]. The reference's ramps count from the start of training
+    // (min(scale * step / ramp, scale)); the image and critic terms are off during the secret-only phase, and the
+    // edge gain ramps in after its delay.
     private Tensor<T> LossWeights(int step)
     {
-        double imageRamp = Ramp(step - _options.NoImageLossSteps, _options.ImageLossRampSteps);
-        double criticRamp = Ramp(step - _options.NoImageLossSteps, _options.CriticLossRampSteps);
         bool imageOn = step >= _options.NoImageLossSteps;
-        var w = new Tensor<T>(new[] { 3 });
+        double edgeRamp = step > _options.EdgeLossDelaySteps ? Ramp(step - _options.EdgeLossDelaySteps, _options.EdgeLossRampSteps) : 0.0;
+        var w = new Tensor<T>(new[] { 4 });
         w[0] = NumOps.FromDouble(_options.SecretLossScale);
-        w[1] = NumOps.FromDouble(imageOn ? _options.ImageLossScale * imageRamp : 0.0);
-        w[2] = NumOps.FromDouble(imageOn ? _options.CriticLossScale * criticRamp : 0.0);
+        w[1] = NumOps.FromDouble(imageOn ? _options.ImageLossScale * Ramp(step, _options.ImageLossRampSteps) : 0.0);
+        w[2] = NumOps.FromDouble(imageOn ? _options.CriticLossScale * Ramp(step, _options.CriticLossRampSteps) : 0.0);
+        w[3] = NumOps.FromDouble(_options.EdgeLossGain * edgeRamp);
         return w;
     }
 

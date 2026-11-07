@@ -1024,10 +1024,10 @@ AiDotNet.Safety.Watermarking.StegaStampOptions.ImageLossRampSteps.get -> int
 AiDotNet.Safety.Watermarking.StegaStampOptions.ImageLossRampSteps.set -> void
 AiDotNet.Safety.Watermarking.StegaStampOptions.ImageLossScale.get -> double
 AiDotNet.Safety.Watermarking.StegaStampOptions.ImageLossScale.set -> void
-AiDotNet.Safety.Watermarking.StegaStampOptions.ImageSize.get -> int
-AiDotNet.Safety.Watermarking.StegaStampOptions.ImageSize.set -> void
 AiDotNet.Safety.Watermarking.StegaStampOptions.LearningRate.get -> double
 AiDotNet.Safety.Watermarking.StegaStampOptions.LearningRate.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.LearningRateWarmupSteps.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.LearningRateWarmupSteps.set -> void
 AiDotNet.Safety.Watermarking.StegaStampOptions.MinimumJpegQuality.get -> double
 AiDotNet.Safety.Watermarking.StegaStampOptions.MinimumJpegQuality.set -> void
 AiDotNet.Safety.Watermarking.StegaStampOptions.NoImageLossSteps.get -> int
@@ -1040,8 +1040,6 @@ AiDotNet.Safety.Watermarking.StegaStampOptions.PerspectiveRampSteps.get -> int
 AiDotNet.Safety.Watermarking.StegaStampOptions.PerspectiveRampSteps.set -> void
 AiDotNet.Safety.Watermarking.StegaStampOptions.SaturationMix.get -> double
 AiDotNet.Safety.Watermarking.StegaStampOptions.SaturationMix.set -> void
-AiDotNet.Safety.Watermarking.StegaStampOptions.SecretBits.get -> int
-AiDotNet.Safety.Watermarking.StegaStampOptions.SecretBits.set -> void
 AiDotNet.Safety.Watermarking.StegaStampOptions.SecretLossScale.get -> double
 AiDotNet.Safety.Watermarking.StegaStampOptions.SecretLossScale.set -> void
 AiDotNet.Safety.Watermarking.StegaStampOptions.StegaStampOptions() -> void
@@ -1115,5 +1113,19 @@ override AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.ModuleName.get 
 virtual AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Safety.Watermarking.WatermarkResult!
 virtual AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.ModuleName.get -> string!
 override AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+override AiDotNet.Safety.Watermarking.SynthIdImageOptions.ImageSize.get -> int
+override AiDotNet.Safety.Watermarking.SynthIdImageOptions.ImageSize.set -> void
+override AiDotNet.Safety.Watermarking.SynthIdImageOptions.SecretBits.get -> int
+override AiDotNet.Safety.Watermarking.SynthIdImageOptions.SecretBits.set -> void
+virtual AiDotNet.Safety.Watermarking.StegaStampOptions.ImageSize.get -> int
+virtual AiDotNet.Safety.Watermarking.StegaStampOptions.ImageSize.set -> void
+virtual AiDotNet.Safety.Watermarking.StegaStampOptions.SecretBits.get -> int
+virtual AiDotNet.Safety.Watermarking.StegaStampOptions.SecretBits.set -> void
 AiDotNet.Models.Options.RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>.InitialMeanSquare.get -> double
 AiDotNet.Models.Options.RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>.InitialMeanSquare.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.CriticGradientClip.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.CriticGradientClip.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossDelaySteps.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossDelaySteps.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossRampSteps.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossRampSteps.set -> void

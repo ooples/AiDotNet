@@ -1,3 +1,5 @@
+using AiDotNet.Attributes;
+
 namespace AiDotNet.Safety.Watermarking;
 
 /// <summary>
@@ -5,19 +7,26 @@ namespace AiDotNet.Safety.Watermarking;
 /// calibrated decision to the StegaStamp networks and distortions configured by <see cref="StegaStampOptions"/>.
 /// </summary>
 /// <remarks>
-/// The defaults follow what Gowal et al. (2025) state for SynthID-O: a 136-bit payload in 512 x 512 images, evaluated
-/// without error correction, with thresholds set for a 0.1% false positive rate. The paper does not publish its networks,
-/// losses or training schedule. Those come from <see cref="StegaStampOptions"/>.
+/// The defaults follow what Gowal et al. (2025, Sec. 8) state for SynthID-O: a 136-bit payload in 512 x 512 images,
+/// with thresholds set for a 0.1% false positive rate. The paper does not describe error correction, so all 136 bits are
+/// payload here. It does not publish its networks, losses or training schedule. Those come from
+/// <see cref="StegaStampOptions"/>.
 /// </remarks>
 public class SynthIdImageOptions : StegaStampOptions
 {
-    /// <summary>SynthID-O's stated sizes: 512 x 512 images and 136 payload bits, without error correction.</summary>
+    /// <summary>SynthID-O's stated sizes, 512 x 512 images and 136 payload bits, with no error correction.</summary>
     public SynthIdImageOptions()
     {
-        ImageSize = 512;
-        SecretBits = 136;
         UseErrorCorrection = false;
     }
+
+    /// <summary>Side of the square image the networks work at (SynthID-O: 512).</summary>
+    [PaperDefault(512, Source = "Sec. 8: SynthID-O can encode 136-bit payloads within 512 x 512 pixel images")]
+    public override int ImageSize { get; set; } = 512;
+
+    /// <summary>Payload bits the encoder hides (SynthID-O: 136).</summary>
+    [PaperDefault(136, Source = "Sec. 8: SynthID-O can encode 136-bit payloads within 512 x 512 pixel images")]
+    public override int SecretBits { get; set; } = 136;
 
     /// <summary>A copy of <paramref name="other"/>.</summary>
     public SynthIdImageOptions(SynthIdImageOptions other) : base(other)
@@ -47,6 +56,7 @@ public class SynthIdImageOptions : StegaStampOptions
     /// only when the clean-image p-value is at most alpha. This bounds the false positive rate on images exchangeable
     /// with the clean calibration set. The paper's experiments use 0.1%.
     /// </summary>
+    [PaperDefault(0.001, Source = "Sec. 8: unless stated otherwise, the models are calibrated to a 0.1% false positive rate")]
     public double FalsePositiveRate { get; set; } = 0.001;
 
     /// <inheritdoc />

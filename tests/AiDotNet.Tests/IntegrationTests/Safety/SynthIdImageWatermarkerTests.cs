@@ -80,8 +80,8 @@ public class SynthIdImageWatermarkerTests : WatermarkRoundTripTestBase<Tensor<fl
     private SynthIdImageWatermarker<float> Watermarker(string key) => _trained.Model.WithKey(key);
 
     /// <summary>
-    /// Smoke-scale bars. A 16-bit payload caps the soft z at sqrt(16) = 4, and 600 steps measured about 3.5 for the own
-    /// key, with and without the perturbation. The default 5.7 needs a longer-trained, larger payload.
+    /// Smoke-scale bars. A 16-bit payload caps the soft z at sqrt(16) = 4, so the default 5.7 needs a larger payload
+    /// (and a longer-trained model).
     /// </summary>
     protected override double OwnKeyMinimumZ => 2.5;
 

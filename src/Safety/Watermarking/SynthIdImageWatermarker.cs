@@ -321,7 +321,7 @@ public partial class SynthIdImageWatermarker<T> : StegaStampWatermarker<T>
         detection = Engine.TensorMultiply(detection, ramp);
 
         var secretLoss = SecretLoss(markedLogits, secrets);
-        var imageLoss = ResidualLoss(residual);
+        var imageLoss = ResidualLoss(residual, data[9]);
         var criticLoss = Engine.ReduceMean(CriticScore(encoded), new[] { 0 }, keepDims: false);
         var w = data[9];
         Tensor<T> Weighted(Tensor<T> loss, int index) =>
