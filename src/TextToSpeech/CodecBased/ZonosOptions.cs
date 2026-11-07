@@ -112,7 +112,8 @@ public class ZonosOptions : TtsModelOptions
     /// <summary>Layers (26; the hybrid has 46).</summary>
     public int Layers { get; set; } = 26;
 
-    /// <summary>The layers that attend; null: all of them (the transformer). The hybrid's are 0, 4, …, 44.</summary>
+    /// <summary>The layers that attend; null selects all layers for Transformer or every fourth layer for Hybrid.
+    /// An explicit list overrides either backbone's default pattern.</summary>
     public int[]? AttentionLayers { get; set; }
 
     /// <summary>Query heads (16).</summary>
@@ -259,7 +260,7 @@ public class ZonosOptions : TtsModelOptions
     /// <summary>The total optimizer steps the linear decay to 0 spans (0: a constant learning rate).</summary>
     public int TrainingSteps { get; set; }
 
-    /// <summary>The seed of sampling, of conditioner dropout, and of the native model's initialization when the
-    /// architecture has no seed (0).</summary>
+    /// <summary>The seed of sampling and conditioner dropout, and the initialization fallback when neither
+    /// the shared Seed nor the architecture specifies a seed (0).</summary>
     public int SamplingSeed { get; set; }
 }

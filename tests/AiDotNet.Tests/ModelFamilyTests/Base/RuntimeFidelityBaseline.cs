@@ -4265,7 +4265,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.CodecBased.Voicebox`1::WeightDecay", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.Zonos`1::CodecFrameRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.Zonos`1::FftSize", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.TextToSpeech.CodecBased.Zonos`1::HiddenDim", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.Zonos`1::HopSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.Zonos`1::MaxCodecFrames", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.Zonos`1::MaxMelLength", OptionSensitivityOutcome.Insensitive },

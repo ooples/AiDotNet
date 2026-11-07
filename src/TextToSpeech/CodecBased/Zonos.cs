@@ -176,7 +176,9 @@ public partial class Zonos<T> : TtsModelBase<T>, ICodecTts<T>
 
     internal ZonosConfiguration NetworkConfiguration() => new()
     {
-        Hidden = _options.HiddenDim, Layers = _options.Layers, AttentionLayers = _options.AttentionLayers, Heads = _options.Heads,
+        Hidden = _options.HiddenDim, Layers = _options.Layers,
+        AttentionLayers = _options.AttentionLayers ?? (_options.Backbone == ZonosBackbone.Hybrid
+            ? Enumerable.Range(0, _options.Layers).Where(layer => layer % 4 == 0).ToArray() : null), Heads = _options.Heads,
         KeyValueHeads = _options.KeyValueHeads, AttentionIntermediate = _options.AttentionIntermediate, MambaIntermediate = _options.MambaIntermediate,
         RotaryDim = _options.RotaryDim, RotaryInterleaved = _options.RotaryInterleaved, NormEpsilon = _options.NormEpsilon,
         StateDim = _options.StateDim, ConvWidth = _options.ConvWidth, Expand = _options.Expand, MambaHeadDim = _options.MambaHeadDim,
@@ -198,7 +200,7 @@ public partial class Zonos<T> : TtsModelBase<T>, ICodecTts<T>
             return;
         }
         var o = _options;
-        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.SamplingSeed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.Seed ?? Architecture.RandomSeed ?? o.SamplingSeed);
         _network = new ZonosNetwork<T>(Engine, _modelLayers, NetworkConfiguration());
         _conditioner = new ZonosPrefixConditioner<T>(Engine, _modelLayers, o.Conditioners, o.HiddenDim, random);
         InitializeLikeReference(random);
@@ -207,7 +209,7 @@ public partial class Zonos<T> : TtsModelBase<T>, ICodecTts<T>
         var codecOptions = (DACOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(o.Codec);
         codecOptions.IncludeDiscriminators = false;
         var codec = new DAC<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1)
-            { RandomSeed = Architecture.RandomSeed }, codecOptions);
+            { RandomSeed = o.Seed ?? Architecture.RandomSeed }, codecOptions);
         if (((IAudioCodec<T>)codec).SampleRate != o.SampleRate)
             throw new ArgumentException($"Zonos's {o.SampleRate} Hz audio must be its codec's ({((IAudioCodec<T>)codec).SampleRate} Hz).");
         if (codec.QuantizersForBandwidth(codecOptions.TargetBandwidthKbps) != o.Codebooks)

@@ -806,3 +806,27 @@ The temporary generic console substitutes only public Shape.ToArray() for an
 inaccessible internal _shape read in a training-source copy; the native test
 project links unchanged production training source. All scoped compilations have
 zero warnings/errors. Latest-head hosted validation remains required.
+
+Zonos fresh probes confirm a stale HiddenDim baseline (32 to 64 is sensitive),
+while Backbone, Seed, MaxGradNorm and ConditionerDropout remain insensitive in
+the old generic context. The first two are real production routing defects:
+NetworkConfiguration never consulted Backbone, so selecting Hybrid alone kept
+all attention layers; initialization ignored the shared Seed. Hybrid now selects
+attention every fourth layer when no explicit AttentionLayers is supplied, while
+an explicit list remains authoritative. Shared Seed now precedes architecture
+and sampling fallbacks for the native backbone and the frozen DAC initializer.
+
+Four changed-source native tests pass: implicit hybrid selection builds and trains
+an actual Mamba layer; explicit hybrid layout is retained; seeds repeat and change
+both backbone and codec independently of SamplingSeed; null shared Seed matches
+the architecture fallback in both vectors. The bounded fixture is used by these
+native tests; the generated Zonos factory has not yet changed. No consumed setting
+was removed. Source compilation has zero warnings/errors.
+
+The old d322 hosted binary is not yet a trustworthy Zonos initialization parity
+baseline: identical visible network configurations and the complete matching codec
+vector still produce different initial backbone values and losses. This predates
+any established source-before/source-after comparison, so it is not labeled a
+regression or used as proof of parameter loss. Newer hosted metadata or the pinned
+release reference tests are needed for that comparison. Remaining 25 historical
+Zonos probes and the wider shard inventory remain unfinished.
