@@ -516,3 +516,20 @@ without fixture preparation. Scoped changed-source compilation passes with zero
 warnings/errors. AudioPaLM's finite-confidence assertion now also uses APIs
 available on net471. Sampling, frontend and paired Spark constraints still need
 additional work; no baseline was added for them.
+
+Eleven additional Spark probes now pass through the actual generation loop,
+context-limit validation and continuous speaker coordinates before FSQ. Sampling
+uses fixed replayable seed sequences and preserves the configured GenerationSeed;
+six sampling cases were verified again with that configuration. WaveDecoderRates
+now observes actual codec-decoded samples; changing stage rates with the same
+product changes the native waveform. No mathematical setting was removed to
+make these probes pass. MaxCodecFrames/MaxTextLength stale rows were removed.
+
+The previously ignored shared Seed now controls Qwen and BiCodec initialization;
+GenerationSeed remains the sampling seed and the initialization fallback when
+Seed is null. A native regression verifies explicit initialization seeds repeat,
+change parameters and remain independent of the sampling seed. With Seed null,
+all 48,994 initial/trained parameters and the actual LM loss/update match the
+hosted native model exactly. Changed-source modules and model compile with zero
+warnings/errors, and the fresh-model GAN regression remains green. This retains
+the paper model's default random draws while making the shared setting useful.

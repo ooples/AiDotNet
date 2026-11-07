@@ -194,7 +194,8 @@ public class SparkTTSOptions : CodecTtsOptions
     public int TopK { get; set; } = 50;
     /// <summary>Gets or sets the cumulative probability threshold for nucleus sampling. Defaults to <c>0.95</c>.</summary>
     public double TopP { get; set; } = 0.95;
-    /// <summary>Gets or sets the random seed used during generation. Defaults to <c>2025</c>.</summary>
+    /// <summary>Gets or sets the random seed used during generation, also used for initialization when
+    /// <see cref="AiDotNet.Models.Options.ModelOptions.Seed"/> is null. Defaults to <c>2025</c>.</summary>
     public int GenerationSeed { get; set; } = 2025;
     /// <summary>Gets or sets the minimum generated codec frames. Defaults to <c>1</c>.</summary>
     public int MinimumGeneratedCodecFrames { get; set; } = 1;

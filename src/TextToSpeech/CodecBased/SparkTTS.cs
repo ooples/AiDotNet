@@ -298,7 +298,7 @@ public partial class SparkTTS<T> : TtsModelBase<T>, ICodecTts<T>
             Layers.AddRange(Architecture.Layers);
             return;
         }
-        var random = new Random(_options.GenerationSeed);
+        var random = new Random(_options.Seed ?? _options.GenerationSeed);
         _languageModel = new SparkTokenLanguageModel<T>(Engine, _languageLayers, _options);
         ComponentLayers.AddRange(_languageLayers);
         _biCodec = new SparkBiCodec<T>(Engine, ComponentLayers, _options, random);

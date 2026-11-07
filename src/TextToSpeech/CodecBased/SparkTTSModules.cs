@@ -40,7 +40,7 @@ internal sealed class SparkTokenLanguageModel<T>
             TieWordEmbeddings = options.TieWordEmbeddings,
             IncludeHead = true,
         });
-        Transformer.InitializeLikeReference(new Random(options.GenerationSeed));
+        Transformer.InitializeLikeReference(new Random(options.Seed ?? options.GenerationSeed));
     }
 
     public LlamaNetwork<T> Transformer { get; }
