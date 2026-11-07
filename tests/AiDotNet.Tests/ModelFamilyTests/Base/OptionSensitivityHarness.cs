@@ -799,7 +799,7 @@ public static class OptionSensitivityHarness
                     .Where(value => Convert.ToDouble(value) >= 0 && !Equals(value, current)).Distinct();
             if (option is "Beta1" or "Beta2" or "AdamBeta1" or "AdamBeta2")
                 candidates = candidates.Where(value => Convert.ToDouble(value) >= 0 && Convert.ToDouble(value) < 1);
-            if (option is "TeacherMomentumStart" or "TeacherMomentumEnd" or "GuidanceRescale" or "VocoderLearningRateDecay" || option?.EndsWith("Probability", StringComparison.Ordinal) == true)
+            if (option is "TeacherMomentumStart" or "TeacherMomentumEnd" or "GuidanceRescale" or "VocoderLearningRateDecay" || option?.EndsWith("Probability", StringComparison.Ordinal) == true || option?.EndsWith("EmaDecay", StringComparison.Ordinal) == true)
                 candidates = candidates.Where(value => Convert.ToDouble(value) >= 0 && Convert.ToDouble(value) <= 1);
             if (option == "TopP")
                 candidates = candidates.Where(value => Convert.ToDouble(value) > 0 && Convert.ToDouble(value) <= 1);

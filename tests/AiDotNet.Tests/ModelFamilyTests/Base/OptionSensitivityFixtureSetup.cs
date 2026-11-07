@@ -39,6 +39,7 @@ internal static class OptionSensitivityFixtureSetup
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> ? "spark-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.FireRedTTS<T> ? "firered-" + option
             : network is AiDotNet.TextToSpeech.FlowDiffusion.E3TTS<T> ? option switch
             {
                 "DefaultSpeakerId" => "e3-speaker-selection",
@@ -493,6 +494,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.FireRedTTSOptions fireRed)
+            FireRedTtsFixture.PrepareOptions(fireRed, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.SparkTTSOptions spark)
             SparkNativeFixture.PrepareOptions(spark, option);
         if (options is AiDotNet.TextToSpeech.MultiModal.SpiritLMOptions spirit)

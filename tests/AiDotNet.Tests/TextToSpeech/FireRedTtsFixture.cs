@@ -18,6 +18,30 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// temperature 0.1 and runs the flow for two steps.</remarks>
 internal static class FireRedTtsFixture
 {
+    internal static void PrepareOptions(FireRedTTSOptions options, string option)
+    {
+        if (option is "FlowDropout" or "TrainingCfgRate" or "FlowWarmupSteps")
+            options.Stage = FireRedTtsStage.FlowDecoder;
+        if (option is "AcousticLmHeads" or "AcousticLmDropout" or "AcousticLmWarmupSteps" or "Lookahead")
+            options.Stage = FireRedTtsStage.AcousticLanguageModel;
+        if (option is "CodecCommitmentWeight" or "CodecEmaDecay" or "CodecAdversarialWeight" or "CodecReconstructionWeight")
+            options.Stage = FireRedTtsStage.MelCodec;
+        if (option == "CodecAdversarialWeight")
+        {
+            options.DiscriminatorWindows = new[] { 8, 16, 32 };
+            options.DiscriminatorHidden = 8;
+        }
+        if (option is "VqLossWeight" or "MelLossWeight" or "SslLossWeight" or "CodebookEmaDecay" or "DeadCodeThreshold"
+            or "DualDecodingFinalWeight" or "DualDecodingDecayStart" or "DualDecodingDecayEnd" or "HubertHeads" or "HubertNormalizeWave")
+            options.Stage = FireRedTtsStage.SpeechTokenizer;
+        if (option is "DualDecodingFinalWeight" or "DualDecodingDecayStart" or "DualDecodingDecayEnd")
+        {
+            options.DualDecodingDecayStart = 0;
+            options.DualDecodingDecayEnd = 2;
+            options.DualDecodingFinalWeight = 0.1;
+        }
+    }
+
     internal static FireRedTTSOptions Options() => new()
     {
         HiddenDim = 16, NumHeads = 2, NumDecoderLayers = 1, MaxTextTokens = 64, MaxTextLength = 60, MaxAudioTokens = 40,

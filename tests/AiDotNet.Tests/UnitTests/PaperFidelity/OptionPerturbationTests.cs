@@ -52,6 +52,8 @@ public class OptionPerturbationTests
     [InlineData("TopP", 0.95, true, true)]
     [InlineData("GuidanceRescale", 0.75, false, true)]
     [InlineData("VocoderLearningRateDecay", 0.999, false, true)]
+    [InlineData("CodebookEmaDecay", 0.9, false, true)]
+    [InlineData("CodecEmaDecay", 0.99, false, true)]
     public void ProbabilityAndMomentCandidatesStayInTheirMathematicalDomain(string option, double current, bool strictLower, bool inclusiveUpper)
     {
         var candidates = OptionSensitivityHarness.Perturbations(typeof(double), current, option).Cast<double>().ToArray();

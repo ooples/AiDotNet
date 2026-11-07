@@ -560,3 +560,18 @@ The ONNX loader consumes recorded ModelPath. Source compilation passes with
 zero warnings/errors; native paired geometry/FSQ, seed, fresh GAN training and
 complete parameter/training parity checks pass. Full hosted package/shard
 validation is still required.
+
+FireRedTTS stage contexts now cover the real flow decoder, acoustic language
+model, Mel codec and speech-tokenizer training paths, with a separate control
+per option. The dual-decoder weight schedule is compressed to steps 0-2 on
+both control and candidate so actual training reaches its transition. Twenty
+of twenty-one stage probes pass immediately; CodecAdversarialWeight needed
+windows 8/16/32 and discriminator width 8 because the generated 0.4-second
+recording cannot fill the production 128-frame window. That actual adversarial
+training probe then passes too. No production architecture or default changed.
+
+EMA-decay perturbations remain in [0,1], with two regression rows added. The
+focused perturbation/constraint suite passes 61 tests. The source fixture and
+helper compile with zero warnings/errors. FireRed's coupled dimensions, vocoder
+preset restoration and remaining observation contexts still need separate
+checks; no no-op baseline or option exemption was added in this batch.
