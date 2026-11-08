@@ -39,6 +39,7 @@ public class BatchedTimeEmbeddingTests
     public void BatchedEmbedding_EqualsEachElementAtItsOwnTimestep(string name)
     {
         var (predictor, sampleShape) = Create(name);
+        if (name is "UNet" or "VideoUNet") Randomize(predictor);
         int[] timesteps = [3, 517, 999];
         int batch = timesteps.Length;
 
@@ -67,6 +68,19 @@ public class BatchedTimeEmbeddingTests
 
         Assert.True(worst <= 1e-9, $"{name}: batched-embedding prediction differs from per-element by {worst:G6}");
         Assert.True(predictor.SupportsBatchedTimeEmbedding, $"{name} matches but does not declare SupportsBatchedTimeEmbedding.");
+    }
+
+    /// <summary>
+    /// A U-Net starts with its output conv and every residual block's second conv at zero (Ho et al.), so untrained
+    /// it predicts zero at every timestep and the comparison above would hold vacuously. Random weights make the
+    /// timestep reach the output.
+    /// </summary>
+    private static void Randomize(NoisePredictorBase<double> predictor)
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
+        var parameters = predictor.GetParameters();
+        for (int i = 0; i < parameters.Length; i++) parameters[i] = rng.NextDouble() * 0.4 - 0.2;
+        predictor.SetParameters(parameters);
     }
 
     [Fact]

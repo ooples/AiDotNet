@@ -349,10 +349,13 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
             _timeEmbeddingDim, _timeEmbeddingDim, new ReLUActivation<T>());
         _timeEmbedMlp2 = LazyDense(
             _timeEmbeddingDim, _timeEmbeddingDim, new ReLUActivation<T>());
-        _outputConv = LazyConv2D(
-            _baseChannels * _channelMultipliers[0], _inputHeight, _inputHeight, _outputChannels,
+        // The output conv starts at zero, as in Ho et al. (init_scale=0.) and LDM (zero_module): an untrained
+        // predictor predicts zero noise instead of a random field, which is the MSE-optimal start.
+        _outputConv = ConvolutionalLayer<T>.WithInputDepth(
+            _baseChannels * _channelMultipliers[0], _outputChannels,
             kernelSize: 3, stride: 1, padding: 1,
-            activation: new IdentityActivation<T>());
+            activationFunction: new IdentityActivation<T>(),
+            initializationStrategy: InitializationStrategies<T>.Zero);
 
         // Priority 1: Use custom blocks passed directly
         if (customEncoderBlocks != null && customEncoderBlocks.Count > 0 &&
@@ -1210,7 +1213,8 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         return new DiffusionAttention<T>(
             channels: channels,
             numHeads: _numHeads,
-            spatialSize: spatialSize);
+            spatialSize: spatialSize,
+            residualGroupNorm: true);
     }
 
     private ILayer<T> CreateCrossAttentionBlock(int channels, int spatialSize)

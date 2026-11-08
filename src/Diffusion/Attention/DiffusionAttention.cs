@@ -24,9 +24,11 @@ namespace AiDotNet.Diffusion.Attention;
 /// - Sequence length = (512/8)^2 = 4096 tokens
 /// - Standard attention: 4096 x 4096 = 16 million attention weights!
 ///
-/// This class automatically uses Flash Attention for long sequences:
-/// - Under 256 tokens: Standard attention (faster for short sequences)
-/// - 256+ tokens: Flash Attention (memory-efficient, scales better)
+/// This layer uses Flash Attention, which computes exact attention without materializing that matrix.
+///
+/// With <c>residualGroupNorm</c> the layer is a whole U-Net attention block (Ho et al. 2020):
+/// GroupNorm, attention, then the input added back. Without it the layer is attention alone, for a caller
+/// that adds its own normalization and residual.
 ///
 /// Usage:
 /// ```csharp
@@ -69,6 +71,14 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     private readonly int _spatialSize;
 
     /// <summary>
+    /// The GroupNorm in front of the attention when the layer is a residual block; null when it is attention alone.
+    /// </summary>
+    /// <remarks>
+    /// Declared before the attention so the parameters keep the reference order: norm, then q, k, v, proj_out.
+    /// </remarks>
+    private readonly GroupNormalizationLayer<T>? _norm;
+
+    /// <summary>
     /// The attention every input runs through, at any sequence length.
     /// </summary>
     /// <remarks>
@@ -108,6 +118,9 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     /// <summary>Construction state: the 'useCausalMask' the layer was built with.</summary>
     private readonly bool _useCausalMask;
 
+    /// <summary>Construction state: the 'residualGroupNorm' the layer was built with.</summary>
+    private readonly bool _residualGroupNorm;
+
     /// <summary>
     /// Initializes a new diffusion attention layer.
     /// </summary>
@@ -115,6 +128,11 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     /// <param name="numHeads">Number of attention heads.</param>
     /// <param name="spatialSize">Spatial size (height = width) of input feature maps.</param>
     /// <param name="useCausalMask">Whether to use causal masking (default: false for images).</param>
+    /// <param name="residualGroupNorm">
+    /// Whether the layer is a whole residual attention block: GroupNorm(32) before the attention and the input
+    /// added to its output, with the output projection starting at zero so the block starts as the identity.
+    /// This is the U-Net attention block of Ho et al. (2020) and Stable Diffusion. Takes [B, C, H, W] input.
+    /// </param>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> Configuration tips:
@@ -128,12 +146,14 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
         int channels,
         int numHeads = 8,
         int spatialSize = 64,
-        bool useCausalMask = false)
+        bool useCausalMask = false,
+        bool residualGroupNorm = false)
         : base(
             CalculateInputShape(channels, spatialSize),
             CalculateOutputShape(channels, spatialSize))
     {
         _useCausalMask = useCausalMask;
+        _residualGroupNorm = residualGroupNorm;
         if (channels <= 0)
             throw new ArgumentOutOfRangeException(nameof(channels), "Channels must be positive.");
         if (numHeads <= 0)
@@ -165,6 +185,12 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
             embeddingDimension: channels,
             headCount: numHeads,
             config: _flashConfig);
+
+        if (residualGroupNorm)
+        {
+            _norm = new GroupNormalizationLayer<T>(NoisePredictors.DiffusionResBlock<T>.ComputeNumGroups(channels, 32), channels, 1e-5);
+            _flashAttention.ZeroInitializeOutputProjection = true;
+        }
     }
 
     private static int[] CalculateInputShape(int channels, int spatialSize)
@@ -195,6 +221,13 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
         int batchSize, sequenceLength, channels;
         Tensor<T> x;
 
+        if (_norm is not null && !isImageFormat)
+        {
+            throw new ArgumentException(
+                $"A residual GroupNorm attention block takes [batch, channels, height, width]; got rank {input.Shape.Length}.",
+                nameof(input));
+        }
+
         if (isImageFormat)
         {
             batchSize = input.Shape[0];
@@ -207,7 +240,8 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
             // through Engine so the gradient tape records the transformation —
             // direct Tensor<T>.Transpose / .Reshape bypass the tape and break
             // gradient flow through the attention block.
-            var permuted = Engine.TensorPermute(input, new[] { 0, 2, 3, 1 });
+            var normalized = _norm is not null ? _norm.Forward(input) : input;
+            var permuted = Engine.TensorPermute(normalized, new[] { 0, 2, 3, 1 });
             x = Engine.Reshape(permuted, new[] { batchSize, sequenceLength, channels });
         }
         else
@@ -229,7 +263,7 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
             output = Engine.TensorPermute(reshaped, new[] { 0, 3, 1, 2 });
         }
 
-        return output;
+        return _norm is not null ? Engine.TensorAdd(input, output) : output;
     }
 
     /// <summary>
@@ -241,6 +275,7 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
+        _norm?.SetTrainingMode(isTraining);
         _flashAttention.SetTrainingMode(isTraining);
     }
 
@@ -249,6 +284,7 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void UpdateParameters(T learningRate)
     {
+        _norm?.UpdateParameters(learningRate);
         _flashAttention.UpdateParameters(learningRate);
     }
 
@@ -257,6 +293,7 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
+        _norm?.ResetState();
         _flashAttention.ResetState();
     }
 

@@ -74,6 +74,13 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>, IShapeContract
 
     private bool _isInitialized;
 
+    /// <summary>
+    /// Whether the output projection starts at zero instead of Xavier-uniform. A block that adds this
+    /// layer's output to a residual sets it, so the block starts as the identity: Ho et al. zero the
+    /// attention block's proj_out (init_scale=0.).
+    /// </summary>
+    internal bool ZeroInitializeOutputProjection { get; set; }
+
     // Tracks the original input shape so ForwardGpu / Forward can reshape the
     // output back to the caller's rank before returning.
     private int[]? _originalInputShape;
@@ -275,18 +282,21 @@ public partial class FlashAttentionLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
-    /// Initializes projection weights using Xavier/Glorot initialization.
+    /// Initializes projection weights using Xavier/Glorot uniform initialization.
     /// </summary>
     private void InitializeParameters()
     {
         int rows = _queryWeights.Shape[0];
         int cols = _queryWeights.Shape[1];
-        T scale = NumOps.Sqrt(NumOps.FromDouble(2.0 / (rows + cols)));
+        // U(-a, a) with a = sqrt(6 / (fan_in + fan_out)). This multiplied U(-0.5, 0.5) by sqrt(2 / (fan_in +
+        // fan_out)), which is the Xavier standard deviation used as a half-width: weights 2*sqrt(3) times too small.
+        T scale = NumOps.FromDouble(2.0 * Math.Sqrt(6.0 / (rows + cols)));
 
         InitializeWeightTensor(_queryWeights, scale);
         InitializeWeightTensor(_keyWeights, scale);
         InitializeWeightTensor(_valueWeights, scale);
-        InitializeWeightTensor(_outputWeights, scale);
+        if (ZeroInitializeOutputProjection) _outputWeights.Fill(NumOps.Zero);
+        else InitializeWeightTensor(_outputWeights, scale);
 
         // Bias starts at zero. Write in-place so any existing tape references
         // (or already-registered parameter entries) keep the same tensor handle.
