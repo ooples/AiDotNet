@@ -85,7 +85,7 @@ AIDN098 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, 
 AIDN099 | AiDotNet.ParameterAutomation | Warning | TrainableParameterGenerator, [TrainableParameter] on a non-partial class does nothing
 AIDN046 | AiDotNet.TestCoverage | Warning | TestScaffoldGenerator, Layer cannot be scaffolded and produces no generated tests
 AIDN111 | AiDotNet.ModelMetadata | Info | UnusedArchitectureParameterAnalyzer, Layer factory ignores the architecture it was handed
-AIDN077 | AiDotNet.GoldenPattern | Warning | GoldenPatternValidationGenerator, Optimizer builds its own random generator instead of drawing from the seeded OptimizerBase.Random
+AIDN077 | AiDotNet.GoldenPattern | Warning | GoldenPatternAnalyzer, Optimizer builds its own random generator instead of drawing from the seeded OptimizerBase.Random
 AIDN100 | AiDotNet.ParameterAutomation | Error | ParameterUpdateInPlaceAnalyzer, Trainable parameter reassigned to an Engine result in UpdateParameters
 ADNCLONE001 | AiDotNet.ClonePlan | Warning | ClonePlanGenerator, Clone plan records a member name shadowed with an unrelated type
 AIDN101 | AiDotNet.Correctness | Warning | TapeDetachmentAnalyzer, Predict inside a custom-loss lambda detaches the gradient (ratchet closed: removed from WarningsNotAsErrors now that SACAgent, ConditionalGAN and WGAN are fixed, so a regression fails the build)

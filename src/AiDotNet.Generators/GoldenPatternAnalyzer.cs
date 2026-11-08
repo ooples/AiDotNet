@@ -4,11 +4,12 @@ using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace AiDotNet.Generators;
 
 /// <summary>
-/// Roslyn incremental generator that enforces the project's golden patterns at BUILD time,
+/// Roslyn analyzer that enforces the project's golden patterns at BUILD time,
 /// rather than relying on a reviewer to spot them in a diff.
 /// </summary>
 /// <remarks>
@@ -30,8 +31,8 @@ namespace AiDotNet.Generators;
 /// source only; test projects consume the library as a package reference and are unaffected.
 /// </para>
 /// </remarks>
-[Generator]
-public class GoldenPatternValidationGenerator : IIncrementalGenerator
+[DiagnosticAnalyzer(LanguageNames.CSharp)]
+public sealed class GoldenPatternAnalyzer : DiagnosticAnalyzer
 {
     private const string Category = "AiDotNet.GoldenPattern";
 
@@ -121,41 +122,93 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         description: "Every catch must call Logger.LogError/LogWarning with the exception so developers can " +
                      "diagnose it. An empty catch makes the failure invisible.");
 
-    public void Initialize(IncrementalGeneratorInitializationContext context)
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(
+        CopyConstructorMissesProperty, NullForgivingOperator, RawRandomConstruction, OptimizerOwnsRandomGenerator,
+        RegexWithoutTimeout, NotImplemented, ConsoleUsedForLogging, SwallowedException);
+
+    // Every rule that binds an invocation binds a method of one of these names, and an invocation's simple name is
+    // the method's own (an alias cannot rename a method); every rule that binds a creation names one of these types.
+    // Filtering on syntax first matters: as an incremental generator this bound every invocation and creation in
+    // the assembly (a few hundred thousand nodes; 117 s of the net471 compile) and cached an entry for each.
+    private static readonly HashSet<string> BoundMethodNames = new(System.StringComparer.Ordinal)
     {
-        var optionsFindings = context.SyntaxProvider.CreateSyntaxProvider(
-                predicate: static (node, _) => node is ClassDeclarationSyntax cds
-                    && (cds.Identifier.ValueText.EndsWith("Options", System.StringComparison.Ordinal)
-                        || cds.Identifier.ValueText.EndsWith("Config", System.StringComparison.Ordinal)),
-                transform: static (ctx, _) => AnalyzeOptionsCopyConstructor(ctx))
-            .Where(static f => f.Count > 0);
+        "WriteLine", "Write", "Match", "Matches", "IsMatch", "Replace", "Split", "CreateSecureRandom", "CreateSeededRandom",
+    };
 
-        var nodeFindings = context.SyntaxProvider.CreateSyntaxProvider(
-                predicate: static (node, _) => IsInterestingNode(node),
-                transform: static (ctx, _) => AnalyzeNode(ctx))
-            .Where(static f => f is not null);
+    private static readonly string[] BoundTypeNames = { "Random", "NotImplementedException", "Regex" };
 
-        context.RegisterSourceOutput(optionsFindings.Collect(), static (spc, batches) =>
+    public override void Initialize(AnalysisContext context)
+    {
+        // Source generators' output is not checked, as it was not when these rules ran as a generator (which sees
+        // only the hand-written trees); no hand-written file here is marked generated.
+        context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
+        context.EnableConcurrentExecution();
+        context.RegisterCompilationStartAction(start =>
         {
-            foreach (var batch in batches)
-                foreach (var f in batch)
-                    Report(spc, f);
-        });
-
-        context.RegisterSourceOutput(nodeFindings.Collect(), static (spc, findings) =>
-        {
-            foreach (var f in findings)
+            // A creation can name a bound type through a using alias (file, namespace or global), so the alias
+            // names join the filter. An alias's target cannot itself be an alias, so one pass finds them all.
+            var createdNames = new HashSet<string>(BoundTypeNames, System.StringComparer.Ordinal);
+            foreach (var tree in start.Compilation.SyntaxTrees)
             {
-                if (f is not null) Report(spc, f);
+                foreach (var directive in tree.GetRoot(start.CancellationToken)
+                             .DescendantNodes(n => n is CompilationUnitSyntax || n is BaseNamespaceDeclarationSyntax)
+                             .OfType<UsingDirectiveSyntax>())
+                {
+                    if (directive.Alias is not null && directive.Name is not null
+                        && System.Array.IndexOf(BoundTypeNames, RightmostName(directive.Name)) >= 0)
+                        createdNames.Add(directive.Alias.Name.Identifier.ValueText);
+                }
             }
+
+            start.RegisterSyntaxNodeAction(c => Report(c, new Finding(NullForgivingOperator, c.Node.GetLocation())),
+                SyntaxKind.SuppressNullableWarningExpression);
+            start.RegisterSyntaxNodeAction(c =>
+            {
+                var creation = (BaseObjectCreationExpressionSyntax)c.Node;
+                if (creation is ObjectCreationExpressionSyntax explicitCreation
+                    && RightmostName(explicitCreation.Type) is { } typeName && !createdNames.Contains(typeName)) return;
+                Report(c, AnalyzeObjectCreation(c.SemanticModel, creation));
+            }, SyntaxKind.ObjectCreationExpression, SyntaxKind.ImplicitObjectCreationExpression);
+            start.RegisterSyntaxNodeAction(c =>
+            {
+                var invocation = (InvocationExpressionSyntax)c.Node;
+                if (InvokedName(invocation.Expression) is { } methodName && !BoundMethodNames.Contains(methodName)) return;
+                Report(c, AnalyzeInvocation(c.SemanticModel, invocation));
+            }, SyntaxKind.InvocationExpression);
+            start.RegisterSyntaxNodeAction(c => Report(c, AnalyzeCatch((CatchClauseSyntax)c.Node)), SyntaxKind.CatchClause);
+            start.RegisterSyntaxNodeAction(c =>
+            {
+                foreach (var finding in AnalyzeOptionsCopyConstructor(c.SemanticModel, (ClassDeclarationSyntax)c.Node))
+                    Report(c, finding);
+            }, SyntaxKind.ClassDeclaration);
         });
     }
 
-    private static void Report(SourceProductionContext spc, Finding f) =>
-        spc.ReportDiagnostic(Diagnostic.Create(f.Descriptor, f.Location, f.Args));
+    /// <summary>The name a type reference ends in, or null for a form that has none (arrays, pointers, tuples).</summary>
+    private static string? RightmostName(TypeSyntax type) => type switch
+    {
+        SimpleNameSyntax simple => simple.Identifier.ValueText,
+        QualifiedNameSyntax qualified => qualified.Right.Identifier.ValueText,
+        AliasQualifiedNameSyntax aliased => aliased.Name.Identifier.ValueText,
+        _ => null,
+    };
 
-    /// <summary>A single rule violation, carried from the transform phase to the output phase.</summary>
-    internal sealed class Finding : System.IEquatable<Finding>
+    /// <summary>The method name an invocation spells, or null when its target is not a name (then it is bound).</summary>
+    private static string? InvokedName(ExpressionSyntax expression) => expression switch
+    {
+        SimpleNameSyntax simple => simple.Identifier.ValueText,
+        MemberAccessExpressionSyntax access => access.Name.Identifier.ValueText,
+        MemberBindingExpressionSyntax binding => binding.Name.Identifier.ValueText,
+        _ => null,
+    };
+
+    private static void Report(SyntaxNodeAnalysisContext context, Finding? f)
+    {
+        if (f is not null) context.ReportDiagnostic(Diagnostic.Create(f.Descriptor, f.Location, f.Args));
+    }
+
+    /// <summary>A single rule violation.</summary>
+    internal sealed class Finding
     {
         internal Finding(DiagnosticDescriptor descriptor, Location location, params string[] args)
         {
@@ -167,109 +220,7 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         internal DiagnosticDescriptor Descriptor { get; }
         internal Location Location { get; }
         internal string[] Args { get; }
-
-        // Value equality so incremental-pipeline values compare by content, not identity — otherwise
-        // every transform run yields reference-distinct Findings and Collect() treats any edit as
-        // changed input, re-reporting diagnostics that did not actually change.
-        public bool Equals(Finding? other)
-        {
-            if (other is null) return false;
-            if (Descriptor.Id != other.Descriptor.Id) return false;
-            if (!Location.Equals(other.Location)) return false;
-            if (Args.Length != other.Args.Length) return false;
-            for (int i = 0; i < Args.Length; i++)
-                if (!string.Equals(Args[i], other.Args[i], System.StringComparison.Ordinal)) return false;
-            return true;
-        }
-
-        public override bool Equals(object? obj) => Equals(obj as Finding);
-
-        public override int GetHashCode()
-        {
-            unchecked
-            {
-                int hash = Descriptor.Id.GetHashCode();
-                hash = (hash * 397) ^ Location.GetHashCode();
-                foreach (var arg in Args) hash = (hash * 397) ^ (arg?.GetHashCode() ?? 0);
-                return hash;
-            }
-        }
     }
-
-    /// <summary>
-    /// A readonly <see cref="ImmutableArray{T}"/> wrapper with structural equality. Incremental
-    /// pipeline values are compared with <see cref="EqualityComparer{T}.Default"/>, and
-    /// <c>ImmutableArray&lt;T&gt;.Equals</c> compares the underlying array by reference, so a bare
-    /// list/array cached value never compares equal across runs; this wrapper compares by content.
-    /// </summary>
-    internal readonly struct EquatableArray<T> : System.IEquatable<EquatableArray<T>>, IEnumerable<T>
-        where T : System.IEquatable<T>
-    {
-        private readonly ImmutableArray<T> _items;
-
-        internal EquatableArray(ImmutableArray<T> items) => _items = items;
-
-        internal int Count => _items.IsDefault ? 0 : _items.Length;
-
-        public bool Equals(EquatableArray<T> other)
-        {
-            var a = _items.IsDefault ? ImmutableArray<T>.Empty : _items;
-            var b = other._items.IsDefault ? ImmutableArray<T>.Empty : other._items;
-            if (a.Length != b.Length) return false;
-            for (int i = 0; i < a.Length; i++)
-                if (!a[i].Equals(b[i])) return false;
-            return true;
-        }
-
-        public override bool Equals(object? obj) => obj is EquatableArray<T> other && Equals(other);
-
-        public override int GetHashCode()
-        {
-            if (_items.IsDefault) return 0;
-            unchecked
-            {
-                int hash = 17;
-                foreach (var item in _items) hash = (hash * 397) ^ (item?.GetHashCode() ?? 0);
-                return hash;
-            }
-        }
-
-        public IEnumerator<T> GetEnumerator()
-        {
-            var items = _items.IsDefault ? ImmutableArray<T>.Empty : _items;
-            foreach (var item in items) yield return item;
-        }
-
-        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
-    }
-
-    private static bool IsInterestingNode(SyntaxNode node) =>
-        node is PostfixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.SuppressNullableWarningExpression }
-             or BaseObjectCreationExpressionSyntax
-             or InvocationExpressionSyntax
-             or CatchClauseSyntax;
-
-    private static Finding? AnalyzeNode(GeneratorSyntaxContext ctx)
-    {
-        switch (ctx.Node)
-        {
-            case PostfixUnaryExpressionSyntax postfix
-                when postfix.IsKind(SyntaxKind.SuppressNullableWarningExpression):
-                return new Finding(NullForgivingOperator, postfix.GetLocation());
-
-            case BaseObjectCreationExpressionSyntax creation:
-                return AnalyzeObjectCreation(ctx, creation);
-
-            case InvocationExpressionSyntax invocation:
-                return AnalyzeInvocation(ctx, invocation);
-
-            case CatchClauseSyntax catchClause:
-                return AnalyzeCatch(catchClause);
-        }
-
-        return null;
-    }
-
 
     /// <summary>
     /// Whether this node sits inside a type that inherits <c>AiDotNet.Optimizers.OptimizerBase</c>'s
@@ -287,14 +238,14 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
     /// generator and has nothing to draw from instead.
     /// </para>
     /// </remarks>
-    private static bool IsInsideOptimizer(GeneratorSyntaxContext ctx, SyntaxNode node)
+    private static bool IsInsideOptimizer(SemanticModel model, SyntaxNode node)
     {
         var declaration = node.FirstAncestorOrSelf<TypeDeclarationSyntax>();
         if (declaration is null) return false;
-        if (ctx.SemanticModel.GetDeclaredSymbol(declaration) is not INamedTypeSymbol type) return false;
+        if (model.GetDeclaredSymbol(declaration) is not INamedTypeSymbol type) return false;
 
         // Arity is part of the metadata name: OptimizerBase<T, TInput, TOutput>.
-        var optimizerBase = ctx.SemanticModel.Compilation
+        var optimizerBase = model.Compilation
             .GetTypeByMetadataName("AiDotNet.Optimizers.OptimizerBase`3");
         if (optimizerBase is null) return false;
 
@@ -307,16 +258,16 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static Finding? AnalyzeObjectCreation(GeneratorSyntaxContext ctx, BaseObjectCreationExpressionSyntax creation)
+    private static Finding? AnalyzeObjectCreation(SemanticModel model, BaseObjectCreationExpressionSyntax creation)
     {
-        var type = ctx.SemanticModel.GetSymbolInfo(creation).Symbol?.ContainingType
-                   ?? ctx.SemanticModel.GetTypeInfo(creation).Type as INamedTypeSymbol;
+        var type = model.GetSymbolInfo(creation).Symbol?.ContainingType
+                   ?? model.GetTypeInfo(creation).Type as INamedTypeSymbol;
         var name = type?.ToDisplayString();
 
         switch (name)
         {
             case "System.Random":
-                return IsInsideOptimizer(ctx, creation)
+                return IsInsideOptimizer(model, creation)
                     ? new Finding(OptimizerOwnsRandomGenerator, creation.GetLocation(), "new Random(...)")
                     : new Finding(RawRandomConstruction, creation.GetLocation());
 
@@ -330,16 +281,16 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
                     ? null
                     : new Finding(NotImplemented, creation.GetLocation(), EnclosingMemberName(creation));
 
-            case "System.Text.RegularExpressions.Regex" when !HasTimeSpanArgument(ctx, creation.ArgumentList):
+            case "System.Text.RegularExpressions.Regex" when !HasTimeSpanArgument(model, creation.ArgumentList):
                 return new Finding(RegexWithoutTimeout, creation.GetLocation(), "new Regex(...)");
         }
 
         return null;
     }
 
-    private static Finding? AnalyzeInvocation(GeneratorSyntaxContext ctx, InvocationExpressionSyntax invocation)
+    private static Finding? AnalyzeInvocation(SemanticModel model, InvocationExpressionSyntax invocation)
     {
-        if (ctx.SemanticModel.GetSymbolInfo(invocation).Symbol is not IMethodSymbol method)
+        if (model.GetSymbolInfo(invocation).Symbol is not IMethodSymbol method)
             return null;
 
         var owner = method.ContainingType?.ToDisplayString();
@@ -348,7 +299,7 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         // inherits a generator built from Options.Seed. Calling it there is how the seed gets lost.
         if (owner == "AiDotNet.Tensors.Helpers.RandomHelper"
             && (method.Name == "CreateSecureRandom" || method.Name == "CreateSeededRandom")
-            && IsInsideOptimizer(ctx, invocation))
+            && IsInsideOptimizer(model, invocation))
         {
             return new Finding(
                 OptimizerOwnsRandomGenerator, invocation.GetLocation(), $"RandomHelper.{method.Name}()");
@@ -367,7 +318,7 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         if (owner == "System.IO.TextWriter" &&
             (method.Name == "WriteLine" || method.Name == "Write") &&
             invocation.Expression is MemberAccessExpressionSyntax consoleWrite &&
-            ctx.SemanticModel.GetSymbolInfo(consoleWrite.Expression).Symbol is IPropertySymbol writer &&
+            model.GetSymbolInfo(consoleWrite.Expression).Symbol is IPropertySymbol writer &&
             writer.ContainingType?.ToDisplayString() == "System.Console" &&
             (writer.Name == "Error" || writer.Name == "Out"))
         {
@@ -377,7 +328,7 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         // Static Regex helpers take the timeout as their last parameter; without it the default is infinite.
         if (owner == "System.Text.RegularExpressions.Regex" && method.IsStatic &&
             method.Name is "Match" or "Matches" or "IsMatch" or "Replace" or "Split" &&
-            !HasTimeSpanArgument(ctx, invocation.ArgumentList))
+            !HasTimeSpanArgument(model, invocation.ArgumentList))
         {
             return new Finding(RegexWithoutTimeout, invocation.GetLocation(), $"Regex.{method.Name}(...)");
         }
@@ -437,13 +388,13 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
         return false;
     }
 
-    private static bool HasTimeSpanArgument(GeneratorSyntaxContext ctx, BaseArgumentListSyntax? arguments)
+    private static bool HasTimeSpanArgument(SemanticModel model, BaseArgumentListSyntax? arguments)
     {
         if (arguments is null) return false;
 
         foreach (var argument in arguments.Arguments)
         {
-            var type = ctx.SemanticModel.GetTypeInfo(argument.Expression).Type;
+            var type = model.GetTypeInfo(argument.Expression).Type;
             if (type?.ToDisplayString() == "System.TimeSpan")
                 return true;
         }
@@ -509,31 +460,30 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
     /// own copy constructor's responsibility, and flagging them here would report the same omission
     /// once per derived type.
     /// </remarks>
-    private static EquatableArray<Finding> AnalyzeOptionsCopyConstructor(GeneratorSyntaxContext ctx)
+    private static List<Finding> AnalyzeOptionsCopyConstructor(SemanticModel model, ClassDeclarationSyntax declaration)
     {
-        var declaration = (ClassDeclarationSyntax)ctx.Node;
+        var findings = new List<Finding>();
 
         var name = declaration.Identifier.ValueText;
         if (!name.EndsWith("Options", System.StringComparison.Ordinal) &&
             !name.EndsWith("Config", System.StringComparison.Ordinal))
-            return default;
+            return findings;
 
-        if (ctx.SemanticModel.GetDeclaredSymbol(declaration) is not INamedTypeSymbol symbol)
-            return default;
+        if (model.GetDeclaredSymbol(declaration) is not INamedTypeSymbol symbol)
+            return findings;
 
-        var copyConstructor = FindCopyConstructor(declaration, ctx, symbol);
+        var copyConstructor = FindCopyConstructor(declaration, model, symbol);
         if (copyConstructor is null)
-            return default;
+            return findings;
 
         // ': this(other)' hands the whole copy to another constructor on this same type, which is
         // then the one that gets checked. ': base(other)' only covers the BASE type's properties,
         // so it does not excuse this type from copying the properties it declares itself.
         if (copyConstructor.Initializer.IsKind(SyntaxKind.ThisConstructorInitializer))
-            return default;
+            return findings;
 
         var assigned = CollectAssignedMemberNames(copyConstructor);
 
-        var findings = new List<Finding>();
         foreach (var member in symbol.GetMembers().OfType<IPropertySymbol>())
         {
             if (member.IsStatic || member.IsIndexer || member.SetMethod is null) continue;
@@ -545,11 +495,11 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
             findings.Add(new Finding(CopyConstructorMissesProperty, location, name, member.Name));
         }
 
-        return new EquatableArray<Finding>(findings.ToImmutableArray());
+        return findings;
     }
 
     private static ConstructorDeclarationSyntax? FindCopyConstructor(
-        ClassDeclarationSyntax declaration, GeneratorSyntaxContext ctx, INamedTypeSymbol symbol)
+        ClassDeclarationSyntax declaration, SemanticModel model, INamedTypeSymbol symbol)
     {
         foreach (var constructor in declaration.Members.OfType<ConstructorDeclarationSyntax>())
         {
@@ -558,7 +508,7 @@ public class GoldenPatternValidationGenerator : IIncrementalGenerator
 
             var parameterType = parameters[0].Type is null
                 ? null
-                : ctx.SemanticModel.GetTypeInfo((parameters[0].Type ?? throw new System.InvalidOperationException("parameters[0].Type is null where it is required."))).Type;
+                : model.GetTypeInfo((parameters[0].Type ?? throw new System.InvalidOperationException("parameters[0].Type is null where it is required."))).Type;
 
             if (parameterType is null) continue;
 
