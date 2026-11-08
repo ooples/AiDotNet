@@ -1644,10 +1644,12 @@ shard:
   - name: Unassigned - 02
     project: tests/AiDotNet.Tests/AiDotNetTests.csproj
     framework: net10.0
-    # 139 classes, about 344 s of test time measured locally (before 4 small classes were added).
+    # 139 classes, about 344 s of test time measured locally (before 6 small classes were added).
     filter: >-
       Category!=GPU&Category!=Stress&Category!=Sweep&(
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.BatchNormalizationSingleImageTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.PublicTrainingForwardTests.|
+      FullyQualifiedName~AiDotNet.Tests.Generators.PaperDefaultClassLevelTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.Layers.BatchNormalizationLayoutAndRecalibrationTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.T5RelativeBiasAttentionBehaviourTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.TokenObjectivesTests.|

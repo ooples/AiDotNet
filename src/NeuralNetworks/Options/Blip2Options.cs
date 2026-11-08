@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
@@ -5,6 +6,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the Blip2NeuralNetwork.
 /// </summary>
+[PaperDefault(nameof(ImageSize), 224, Source = "Li et al. 2023, Sec. 3.4: images of size 224x224 in pre-training")]
 public class Blip2Options : VisionLanguageModelOptions
 {
     /// <summary>

@@ -165,13 +165,8 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     }
 
     /// <inheritdoc/>
-    /// <remarks>The tape step clips by global norm only (see <c>StepCore</c>).</remarks>
-    internal override double TapeStepGradientClipNorm =>
-        GradientOptions.EnableGradientClipping
-            && GradientOptions.GradientClippingMethod == AiDotNet.Models.Options.GradientClippingMethod.ByNorm
-            && GradientOptions.MaxGradientNorm > 0.0
-            ? GradientOptions.MaxGradientNorm
-            : 0.0;
+    /// <remarks>The global-norm clip shares its norm reduction with the anomaly guard (see <c>StepCore</c>).</remarks>
+    private protected override bool ClipsGradientsInStepCore => true;
 
     /// <inheritdoc/>
     protected override bool SupportsModelOwnStep => true;
@@ -821,6 +816,12 @@ public partial class AdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
     protected override void StepCore(TapeStepContext<T> context)
     {
         PrepareTapeState(context);
+
+        // A value clip needs no norm; it runs first, so the guard and the update see clamped gradients. This step
+        // used to clip only by norm and to ignore ByValue.
+        if (GradientOptions.EnableGradientClipping
+            && GradientOptions.GradientClippingMethod == AiDotNet.Models.Options.GradientClippingMethod.ByValue)
+            ApplyTapeValueGradientClipping(context, GradientOptions.MaxGradientValue);
 
         // PyTorch GradScaler-style anomaly guard runs BEFORE advancing the
         // step counter or any other state. Otherwise a skipped step would

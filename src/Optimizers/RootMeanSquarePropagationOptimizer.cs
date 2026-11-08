@@ -48,7 +48,8 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
     {
         config = default;
-        if (_options.UseAdaptiveLearningRate || _options.Centered)
+        // The fused kernel's mean-square state starts at zero.
+        if (_options.UseAdaptiveLearningRate || _options.Centered || _options.InitialMeanSquare > 0.0)
         {
             return false;
         }
@@ -248,7 +249,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _squaredGradient = new Vector<T>(InterfaceGuard.Parameterizable(currentSolution).GetParameters().Length);
+        _squaredGradient = NewMeanSquare(InterfaceGuard.Parameterizable(currentSolution).GetParameters().Length);
         _t = 0;
         InitializeAdaptiveParameters();
 
@@ -333,7 +334,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
             || (_options.Centered
                 && (_meanGradient.Length != parameters.Length || _velocity.Length != parameters.Length)))
         {
-            _squaredGradient = new Vector<T>(parameters.Length);
+            _squaredGradient = NewMeanSquare(parameters.Length);
             _meanGradient = _options.Centered ? new Vector<T>(parameters.Length) : Vector<T>.Empty();
             _velocity = _options.Centered ? new Vector<T>(parameters.Length) : Vector<T>.Empty();
         }
@@ -415,7 +416,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
             {
                 if (!_tapeSqGrad.TryGetValue(param, out var sqGradSp))
                 {
-                    sqGradSp = new Tensor<T>(param._shape);
+                    sqGradSp = NewTapeMeanSquare(param._shape, onDevice: false);
                     _tapeSqGrad[param] = sqGradSp;
                 }
 
@@ -433,7 +434,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
 
             if (!_tapeSqGrad.TryGetValue(param, out var sqGrad))
             {
-                sqGrad = CreateOptimizerStateTensor(param._shape, gpuRmsProp);
+                sqGrad = NewTapeMeanSquare(param._shape, gpuRmsProp);
                 _tapeSqGrad[param] = sqGrad;
             }
 
@@ -709,6 +710,33 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         return (Vector<T>)Engine.Add(updatedParameters, update);
     }
 
+    // A fresh running mean of squared gradients, at InitialMeanSquare.
+    private Vector<T> NewMeanSquare(int length)
+    {
+        ValidateInitialMeanSquare();
+        return _options.InitialMeanSquare > 0.0
+            ? Vector<T>.CreateDefault(length, NumOps.FromDouble(_options.InitialMeanSquare))
+            : new Vector<T>(length);
+    }
+
+    private Tensor<T> NewTapeMeanSquare(int[] shape, bool onDevice)
+    {
+        ValidateInitialMeanSquare();
+        var state = CreateOptimizerStateTensor(shape, onDevice);
+        if (_options.InitialMeanSquare > 0.0)
+            Engine.TensorCopy(Engine.TensorAddScalar(state, NumOps.FromDouble(_options.InitialMeanSquare)), state);
+        return state;
+    }
+
+    // The options' setter rejects these values too; this guards an options type that overrides or bypasses it.
+    private void ValidateInitialMeanSquare()
+    {
+        double v = _options.InitialMeanSquare;
+        if (double.IsNaN(v) || v < 0.0 || double.IsInfinity(v))
+            throw new ArgumentOutOfRangeException(nameof(_options.InitialMeanSquare), v,
+                "The initial mean of squared gradients must be finite and zero or positive.");
+    }
+
     #region GPU Optimizer Support
 
     /// <summary>
@@ -730,8 +758,11 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         if (_gpuStateInitialized && _gpuSquaredAvg != null)
             return;
 
-        var zeros = new float[parameterCount];
-        _gpuSquaredAvg = backend.AllocateBuffer(zeros);
+        ValidateInitialMeanSquare();
+        var initial = new float[parameterCount];
+        if (_options.InitialMeanSquare > 0.0)
+            for (int i = 0; i < initial.Length; i++) initial[i] = (float)_options.InitialMeanSquare;
+        _gpuSquaredAvg = backend.AllocateBuffer(initial);
 
         _gpuStateInitialized = true;
     }

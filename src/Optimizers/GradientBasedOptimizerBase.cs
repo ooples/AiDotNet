@@ -265,15 +265,48 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// The global-norm threshold this optimizer's own tape step clips gradients to, on top of whatever the network
     /// clips: 0 when its tape step does not clip, NaN when it clips in a form a compiled plan cannot reproduce
     /// (by value). The fused path must apply the same clip, or fused and eager training take different steps.
+    /// Read from the clipping options, which <see cref="Step"/> applies for every optimizer.
     /// </summary>
-    internal virtual double TapeStepGradientClipNorm => 0.0;
+    internal double TapeStepGradientClipNorm =>
+        !GradientOptions.EnableGradientClipping ? 0.0
+        : GradientOptions.GradientClippingMethod == GradientClippingMethod.ByNorm
+            ? Math.Max(GradientOptions.MaxGradientNorm, 0.0)
+        : GradientOptions.GradientClippingMethod == GradientClippingMethod.ByValue ? double.NaN
+        : 0.0;
 
     /// <summary>
     /// The per-element bound this optimizer's own tape step clamps gradients to when it clips by value (the case
     /// <see cref="TapeStepGradientClipNorm"/> reports as NaN), or 0 when it does not. Streaming training applies it
     /// gradient by gradient, since a clamp needs no global norm.
     /// </summary>
-    internal virtual double TapeStepGradientClipValue => 0.0;
+    internal double TapeStepGradientClipValue =>
+        GradientOptions.EnableGradientClipping
+            && GradientOptions.GradientClippingMethod == GradientClippingMethod.ByValue
+            ? GradientOptions.MaxGradientValue
+            : 0.0;
+
+    /// <summary>
+    /// True when <see cref="StepCore"/> applies the clipping options itself (Adam reduces the global norm once for
+    /// its clip and its anomaly guard). Otherwise <see cref="Step"/> clips before calling it.
+    /// </summary>
+    private protected virtual bool ClipsGradientsInStepCore => false;
+
+    // The clipping options on the tape step, as the vector path's ApplyGradientClipping applies them. Every
+    // optimizer's tape step used to ignore them except Adam's and AdamW's, so the same options trained clipped
+    // through Optimize and unclipped through Train.
+    private void ApplyConfiguredTapeGradientClipping(TapeStepContext<T> context)
+    {
+        if (!GradientOptions.EnableGradientClipping) return;
+        switch (GradientOptions.GradientClippingMethod)
+        {
+            case GradientClippingMethod.ByNorm:
+                ApplyTapeGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm);
+                break;
+            case GradientClippingMethod.ByValue:
+                ApplyTapeValueGradientClipping(context, GradientOptions.MaxGradientValue);
+                break;
+        }
+    }
 
     /// <summary>
     /// The active regularization applied during gradient updates. Set
@@ -3062,6 +3095,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         _stepNoGrad = new NoGradScope<T>();
         try
         {
+            if (!ClipsGradientsInStepCore) ApplyConfiguredTapeGradientClipping(context);
             StepCore(context);
             ApplyLearningRateGroups(learningRateGroups);
         }
@@ -3772,6 +3806,40 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         return list;
     }
 
+    /// <summary>
+    /// The tensors a clip must cover: every dense gradient, and the value rows of each sparse embedding gradient the
+    /// step has not yet densified. Rows that occur once are exactly the dense gradient's non-zero entries, so they
+    /// are clipped in place and the optimizer's sparse step still runs (a dense [vocab, dim] table is never built).
+    /// A parameter whose sparse rows repeat is densified first, since its gradient row is their sum.
+    /// </summary>
+    private static List<Tensor<T>> ClippableGradients(TapeStepContext<T> context)
+    {
+        var duplicated = new List<Tensor<T>>();
+        var sparseValues = new List<Tensor<T>>();
+        foreach (var param in context.Parameters)
+        {
+            if (!SparseEmbeddingOptimizerHelpers.HasUnprocessedSparseEmbeddingGrad(context, param)) continue;
+            var sparse = DifferentiableOps.GetSparseEmbeddingGradsFor(param);
+            if (sparse is null) continue;
+            if (SparseEmbeddingOptimizerHelpers.HasDuplicateRows(sparse))
+            {
+                duplicated.Add(param);
+                continue;
+            }
+
+            foreach (var contribution in sparse)
+                if (contribution.NumIndices > 0 && contribution.Values is { Length: > 0 } values) sparseValues.Add(values);
+        }
+
+        if (duplicated.Count > 0)
+            SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(duplicated, context.Gradients, AiDotNetEngine.Current);
+        var grads = new List<Tensor<T>>(context.Gradients.Count + sparseValues.Count);
+        foreach (var kvp in context.Gradients)
+            if (kvp.Value is { Length: > 0 } grad) grads.Add(grad);
+        grads.AddRange(sparseValues);
+        return grads;
+    }
+
     protected static void ApplyTapeGlobalNormGradientClipping(
         TapeStepContext<T> context, double maxNorm)
     {
@@ -3780,13 +3848,14 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // overwrites every gradient element with NaN, distorting the next
         // optimizer step instead of being a no-op.
         if (maxNorm <= 0.0 || double.IsNaN(maxNorm) || double.IsInfinity(maxNorm)) return;
-        SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(context.Parameters, context.Gradients, AiDotNetEngine.Current);
+        var grads = ClippableGradients(context);
 
         // GPU engine: clip_grad_norm_ on the device with no host read (PyTorch's foreach path). The host loops below
         // read every gradient through Data.Span, a download of each device-resident gradient per step. A non-finite
         // norm leaves the gradients unscaled on the device too.
-        if (DeviceTapeGradients(context) is { } deviceGrads)
+        if (typeof(T) == typeof(float) && AiDotNetEngine.Current is AiDotNet.Tensors.Engines.DirectGpuTensorEngine)
         {
+            var deviceGrads = grads.ConvertAll(g => (Tensor<float>)(object)g);
             using var deviceNorm = AiDotNet.Tensors.Engines.Gpu.GpuOptimizer.TryClipGradNorm(deviceGrads, maxNorm);
             if (deviceNorm is not null && deviceNorm.IsFinite) return;
         }
@@ -3796,10 +3865,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         bool hostFast = !AiDotNetEngine.Current.SupportsGpu;
 
         double globalNormSq = 0.0;
-        foreach (var kvp in context.Gradients)
+        foreach (var grad in grads)
         {
-            var grad = kvp.Value;
-            if (grad is null) continue;
             if (hostFast && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TrySumOfSquaresHost(grad, out double sq)) { globalNormSq += sq; continue; }
             var span = grad.Data.Span;
             for (int i = 0; i < span.Length; i++)
@@ -3815,10 +3882,8 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         // PyTorch's clip_grad_norm_ coefficient, the same one the network clip and the fused plan apply.
         double scale = maxNorm / (globalNorm + 1e-6);
-        foreach (var kvp in context.Gradients)
+        foreach (var grad in grads)
         {
-            var grad = kvp.Value;
-            if (grad is null) continue;
             if (hostFast && AiDotNet.Tensors.Engines.Compilation.FusedOptimizer.TryScaleHost(grad, scale)) continue;
             var span = grad.Data.Span;
             for (int i = 0; i < span.Length; i++)
@@ -3839,7 +3904,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         TapeStepContext<T> context, double maxValue)
     {
         if (maxValue <= 0.0 || double.IsNaN(maxValue) || double.IsInfinity(maxValue)) return;
-        SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(context.Parameters, context.Gradients, AiDotNetEngine.Current);
+        var grads = ClippableGradients(context);
         var numOps = MathHelper.GetNumericOperations<T>();
 
         // GPU engine: clamp on the device (clip_grad_value_), written back into each gradient tensor. The
@@ -3849,19 +3914,13 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             var engine = AiDotNetEngine.Current;
             T lo = numOps.FromDouble(-maxValue), hi = numOps.FromDouble(maxValue);
             using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-            foreach (var kvp in context.Gradients)
-            {
-                var grad = kvp.Value;
-                if (grad is null || grad.Length == 0) continue;
+            foreach (var grad in grads)
                 engine.TensorCopy(engine.TensorClamp(grad, lo, hi), grad);   // in place: callers hold the tensor
-            }
             return;
         }
 
-        foreach (var kvp in context.Gradients)
+        foreach (var grad in grads)
         {
-            var grad = kvp.Value;
-            if (grad is null) continue;
             var span = grad.Data.Span;
             for (int i = 0; i < span.Length; i++)
             {
