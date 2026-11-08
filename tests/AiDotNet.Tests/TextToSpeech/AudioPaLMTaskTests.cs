@@ -15,6 +15,56 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class AudioPaLMTaskTests
 {
+    [Fact(Timeout = 120000)]
+    public void AsrRampScheduleAdvancesDuringNativeTraining()
+    {
+        var options = AudioPaLMFixture.Options();
+        options.RampWarmupSteps = 2;
+        options.RampDecaySteps = 2;
+        options.RampPeakLearningRate = .01;
+        options.RampFinalLearningRate = .001;
+        using var model = new AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<double>(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(AiDotNet.Enums.InputType.OneDimensional,
+                AiDotNet.Enums.NeuralNetworkTaskType.SpeechRecognition, inputSize: 1, outputSize: 1), options);
+        AudioPaLMFixture.Prepare(model);
+        var optimizer = (AiDotNet.Interfaces.IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>)model.GetType()
+            .GetMethod("Optimizer", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(model, null)!;
+        var recording = AudioPaLMFixture.Tones<double>(.4);
+        var target = AiDotNet.TextToSpeech.Latest.IndexTtsOps.Ids<double>(model.TokenizeText("hello"));
+        var initial = model.GetParameters().ToArray();
+        model.Train(recording, target);
+        Assert.Equal(.01, optimizer.GetCurrentLearningRate(), 12);
+        model.Train(recording, target);
+        Assert.Equal(.01, optimizer.GetCurrentLearningRate(), 12);
+        model.Train(recording, target);
+        Assert.Equal(Math.Sqrt(.01 * .001), optimizer.GetCurrentLearningRate(), 12);
+        Assert.False(initial.SequenceEqual(model.GetParameters()));
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void OptionsSeedControlsNativeDecoderInitialization(bool tts)
+    {
+        var firstOptions = AudioPaLMFixture.Options();
+        firstOptions.Seed = 7;
+        var secondOptions = AudioPaLMFixture.Options();
+        secondOptions.Seed = 8;
+        AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double> Architecture() => new(
+            AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
+        using AiDotNet.NeuralNetworks.NeuralNetworkBase<double> first = tts
+            ? new AiDotNet.TextToSpeech.MultiModal.AudioPaLM<double>(Architecture(), firstOptions)
+            : new AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<double>(Architecture(), firstOptions);
+        using AiDotNet.NeuralNetworks.NeuralNetworkBase<double> again = tts
+            ? new AiDotNet.TextToSpeech.MultiModal.AudioPaLM<double>(Architecture(), firstOptions)
+            : new AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<double>(Architecture(), firstOptions);
+        using AiDotNet.NeuralNetworks.NeuralNetworkBase<double> second = tts
+            ? new AiDotNet.TextToSpeech.MultiModal.AudioPaLM<double>(Architecture(), secondOptions)
+            : new AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<double>(Architecture(), secondOptions);
+        Assert.Equal(first.GetParameters().ToArray(), again.GetParameters().ToArray());
+        Assert.False(first.GetParameters().SequenceEqual(second.GetParameters()));
+    }
+
     [Fact(Timeout = 300000)]
     public async Task TaskPrefix_IsStartTagThenInput()
     {

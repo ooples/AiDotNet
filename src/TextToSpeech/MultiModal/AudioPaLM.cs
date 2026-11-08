@@ -155,7 +155,7 @@ public partial class AudioPaLM<T> : TtsModelBase<T>
             AddUnsplitLayers(Architecture.Layers);
             return;
         }
-        _core = new AudioPalmCore<T>(Engine, _options, _decoderLayers, Architecture.RandomSeed ?? _options.TrainingSeed, withDetokenizer: true);
+        _core = new AudioPalmCore<T>(Engine, _options, _decoderLayers, Architecture.RandomSeed ?? _options.Seed ?? _options.TrainingSeed, withDetokenizer: true);
         AddUnsplitLayers(_decoderLayers.Cast<ILayer<T>>().ToList());
         // The speech tokenizer (its encoder and fitted codebook) and the detokenizer, so clones and saved models keep them.
         ComponentLayers.AddRange(_core.ComponentLayers());

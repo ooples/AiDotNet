@@ -66,7 +66,7 @@ public partial class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         Options = _options;
         AudioPalmCore<T>.Validate(_options);
         base.SampleRate = _options.SampleRate;
-        _core = new AudioPalmCore<T>(Engine, _options, _decoderLayers, architecture.RandomSeed ?? _options.TrainingSeed, withDetokenizer: false);
+        _core = new AudioPalmCore<T>(Engine, _options, _decoderLayers, architecture.RandomSeed ?? _options.Seed ?? _options.TrainingSeed, withDetokenizer: false);
         Layers.AddRange(_decoderLayers);
         // The speech tokenizer (its encoder and fitted codebook), so clones and saved models keep it; it does not train.
         Layers.AddRange(_core.ComponentLayers());
@@ -246,13 +246,27 @@ public partial class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         return parameters.Where(trained.Contains).ToList();
     }
 
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> Optimizer() => _optimizer ??=
-        PaperOptimizerFactory.VerifyHandBuilt(this, new AdafactorOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdafactorOptimizerOptions<T, Tensor<T>, Tensor<T>>
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> Optimizer()
+    {
+        if (_optimizer is not null) return _optimizer;
+        var o = _options;
+        var options = new AdafactorOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
-            InitialLearningRate = _options.LearningRate, UseRelativeStepSize = false, MultiplyByParameterScale = true, Factored = false,
-            Beta1 = _options.Beta1, EnableGradientClipping = _options.MaxGradientNorm > 0,
-            MaxGradientNorm = _options.MaxGradientNorm > 0 ? _options.MaxGradientNorm : 1.0,
-        }));
+            InitialLearningRate = o.LearningRate, UseRelativeStepSize = false, MultiplyByParameterScale = true, Factored = false,
+            Beta1 = o.Beta1, EnableGradientClipping = o.MaxGradientNorm > 0,
+            MaxGradientNorm = o.MaxGradientNorm > 0 ? o.MaxGradientNorm : 1.0,
+        };
+        if (o.RampWarmupSteps > 0 || o.RampDecaySteps > 0)
+        {
+            options.InitialLearningRate = 0;
+            options.LearningRateScheduler = new RampExponentialSchedule(o.RampPeakLearningRate, o.RampFinalLearningRate, o.RampWarmupSteps, o.RampDecaySteps);
+            options.SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch;
+            _optimizer = new AdafactorOptimizer<T, Tensor<T>, Tensor<T>>(this, options);
+        }
+        else
+            _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this, new AdafactorOptimizer<T, Tensor<T>, Tensor<T>>(this, options));
+        return _optimizer;
+    }
 
     /// <inheritdoc />
     protected override bool SupportsParameterMutation => true;
