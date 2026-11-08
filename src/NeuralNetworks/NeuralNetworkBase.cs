@@ -7097,6 +7097,36 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return true;
     }
 
+    // The layer types, in order, of the stack a model generated itself (RecordGeneratedLayerTypes).
+    private Type[]? _generatedLayerTypes;
+
+    /// <summary>
+    /// Records the current layers' types as the stack the model generated itself and has checked keeps no GPU result
+    /// between calls (<see cref="ReleasesInferenceIntermediates"/>). Call it when the layers are built.
+    /// </summary>
+    protected void RecordGeneratedLayerTypes()
+    {
+        var types = new Type[Layers.Count];
+        for (int i = 0; i < types.Length; i++) types[i] = Layers[i].GetType();
+        _generatedLayerTypes = types;
+    }
+
+    /// <summary>
+    /// True while the network holds layers of exactly the types <see cref="RecordGeneratedLayerTypes"/> recorded, in
+    /// order. A layer added, removed or swapped for another kind since then has not been checked; a deserialized or
+    /// cloned stack rebuilds the same types and still matches.
+    /// </summary>
+    protected bool LayersMatchTheGeneratedStack()
+    {
+        if (_generatedLayerTypes is not { } generated || Layers.Count != generated.Length) return false;
+        for (int i = 0; i < generated.Length; i++)
+        {
+            if (Layers[i].GetType() != generated[i]) return false;
+        }
+
+        return true;
+    }
+
     /// <summary>
     /// Whether this model sizes its layers from its options rather than from its architecture, so an architecture
     /// stating other sizes must be refused rather than ignored (#2147).

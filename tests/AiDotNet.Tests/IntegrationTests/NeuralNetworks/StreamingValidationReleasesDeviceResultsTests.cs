@@ -91,6 +91,53 @@ public class StreamingValidationReleasesDeviceResultsTests
     }
 
     /// <summary>
+    /// A caller's loss may keep a GPU result between calls (here a scale built on the device by its first call and read
+    /// by every later one). Validation must leave it alive: a scope around the loss, or the predict scope enclosing it,
+    /// would free it, and the next batch's loss would read a released buffer.
+    /// </summary>
+    [SkippableFact]
+    public void Validation_keeps_what_a_callers_loss_holds_between_calls()
+    {
+        using var gpu = new DirectGpuTensorEngine();
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+        var previous = AiDotNetEngine.Current;
+        AiDotNetEngine.Current = gpu;
+        try
+        {
+            var network = Network();
+            Assert.True(network.ReleasesPredictResults, "the predict scope must be open around the loss for this test to bite");
+            var loss = new CachedScaleLoss();
+            var (x, y) = Batch_();
+
+            float first = AiModelBuilder<float, Tensor<float>, Tensor<float>>.SampleLoss(network, loss, x, y);
+            for (int b = 0; b < Batches; b++)
+            {
+                // Other work allocates between batches, as training steps do, so a released scale buffer is reused.
+                using (TensorScope.Begin())
+                    gpu.TensorMultiply(x, x);
+                Assert.Equal(first, AiModelBuilder<float, Tensor<float>, Tensor<float>>.SampleLoss(network, loss, x, y));
+            }
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
+    /// <summary>Mean squared error times a scale of 1 it builds on the device from its first target and keeps.</summary>
+    private sealed class CachedScaleLoss : AiDotNet.LossFunctions.MeanSquaredErrorLoss<float>
+    {
+        private Tensor<float>? _scale;
+
+        public override Tensor<float> ComputeTapeLoss(Tensor<float> predicted, Tensor<float> target)
+        {
+            var engine = AiDotNetEngine.Current;
+            // 1 + 0 * target, computed on the device: every later call multiplies by it.
+            _scale ??= engine.TensorAddScalar(engine.TensorMultiplyScalar(target, 0f), 1f);
+            return base.ComputeTapeLoss(engine.TensorMultiply(predicted, _scale), target);
+        }
+    }
+
+    /// <summary>
     /// With ALiBi the attention weights are computed even in eval mode, and with the auxiliary loss on the layer keeps them
     /// for <see cref="MultiHeadAttentionLayer{T}.ComputeAuxiliaryLoss"/>, which reads them after the forward returned.
     /// Validation must leave them alive. Today that path computes the weights on the host, which no scope frees, so the
@@ -137,6 +184,8 @@ public class StreamingValidationReleasesDeviceResultsTests
     {
         Assert.True(Network().ReleasesPredictResults);
         Assert.False(Network(new CachedOffsetLayer(Inputs)).ReleasesPredictResults);
+        // A derived network may override Predict and keep a result: only the exact type opts in.
+        Assert.False(new DerivedNetwork(DenseArchitecture()).ReleasesPredictResults);
 
         var transformer = new Transformer<float>(new TransformerArchitecture<float>(
             InputType.OneDimensional, NeuralNetworkTaskType.SequenceClassification,
@@ -153,6 +202,21 @@ public class StreamingValidationReleasesDeviceResultsTests
         var alibi = new MultiHeadAttentionLayer<float>(Heads, HeadDimension);
         alibi.ConfigurePositionalEncoding(PositionalEncodingType.ALiBi);
         Assert.True(alibi.KeepsResultsBetweenCalls);
+        // A Q/K/V transform may keep a projection it was handed for a later call.
+        var steered = new MultiHeadAttentionLayer<float>(Heads, HeadDimension) { QkvTransform = new IdentityQkvTransform() };
+        Assert.True(steered.KeepsResultsBetweenCalls);
+    }
+
+    private sealed class DerivedNetwork : NeuralNetwork<float>
+    {
+        public DerivedNetwork(NeuralNetworkArchitecture<float> architecture) : base(architecture) { }
+    }
+
+    private sealed class IdentityQkvTransform : IQkvTransform<float>
+    {
+        public Tensor<float> TransformQuery(Tensor<float> query) => query;
+        public Tensor<float> TransformKey(Tensor<float> key) => key;
+        public Tensor<float> TransformValue(Tensor<float> value) => value;
     }
 
     private const int Sequence = 4, Heads = 4, HeadDimension = 8;
@@ -168,16 +232,18 @@ public class StreamingValidationReleasesDeviceResultsTests
         return (new NeuralNetwork<float>(architecture), attention);
     }
 
-    private static NeuralNetwork<float> Network(ILayer<float>? first = null)
+    private static NeuralNetwork<float> Network(ILayer<float>? first = null) => new(DenseArchitecture(first));
+
+    // A fresh architecture per model: a model takes its explicit layers by reference, so two cannot share one.
+    private static NeuralNetworkArchitecture<float> DenseArchitecture(ILayer<float>? first = null)
     {
         var layers = new List<ILayer<float>>();
         if (first is not null) layers.Add(first);
         layers.Add(new DenseLayer<float>(Hidden, (IActivationFunction<float>)new ReLUActivation<float>()));
         layers.Add(new DenseLayer<float>(Outputs, (IActivationFunction<float>?)null));
-        var architecture = new NeuralNetworkArchitecture<float>(
+        return new NeuralNetworkArchitecture<float>(
             inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
             inputSize: Inputs, outputSize: Outputs, layers: layers);
-        return new NeuralNetwork<float>(architecture);
     }
 
     private static (Tensor<float> X, Tensor<float> Y) Batch_()

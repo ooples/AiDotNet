@@ -1989,11 +1989,13 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// <summary>
     /// Its forward caches serve only the next backward and are rewritten by every forward, except when
     /// <see cref="UseAuxiliaryLoss"/> is on: <see cref="ComputeAuxiliaryLoss"/> reads the attention weights after the
-    /// forward that cached them. A RoPE or ALiBi sublayer keeps its own tables (ALiBi reuses its bias across calls), and a
-    /// derived layer may keep more; only this exact type without those has been checked.
+    /// forward that cached them. A RoPE or ALiBi sublayer keeps its own tables (ALiBi reuses its bias across calls), an
+    /// attached <see cref="QkvTransform"/> may keep a projection it was handed for a later call, and a derived layer may
+    /// keep more; only this exact type without those has been checked.
     /// </summary>
     internal override bool KeepsResultsBetweenCalls =>
-        GetType() != typeof(MultiHeadAttentionLayer<T>) || UseAuxiliaryLoss || _alibiLayer is not null || _ropeLayer is not null;
+        GetType() != typeof(MultiHeadAttentionLayer<T>) || UseAuxiliaryLoss || _alibiLayer is not null || _ropeLayer is not null
+        || QkvTransform is not null;
 
     public override void ResetState()
     {

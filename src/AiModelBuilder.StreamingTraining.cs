@@ -270,16 +270,24 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // were freed only when a garbage collection finalized them, and small managed wrappers rarely trigger one:
         // 16 validation batches filled a 12 GB device and every later training step waited on buffer frees.
         // A scope frees every GPU result created inside it, so Predict runs in one only for a model that keeps none of
-        // them for a later call; a generation cache or carried state would be freed under the model. The loss results
-        // belong to validation alone and are always freed.
+        // them for a later call; a generation cache or carried state would be freed under the model. The library's
+        // losses keep no device result between calls, so their results belong to validation alone and are freed. A
+        // caller's loss may cache one (a basis built on its first call), so it runs with every scope suspended: neither
+        // a loss scope nor the enclosing predict scope can free what it keeps.
         using var predictScope = model is NeuralNetworks.NeuralNetworkBase<T> { ReleasesPredictResults: true }
             ? Tensors.Engines.TensorScope.Begin()
             : null;
         var prediction = model.Predict(x);
         if (prediction is Tensor<T> predicted && y is Tensor<T> target)
         {
-            using var lossScope = Tensors.Engines.TensorScope.Begin();
-            return lossFunction.ComputeTapeLoss(predicted, target).Data.Span[0];
+            if (lossFunction.GetType().Assembly == typeof(ILossFunction<T>).Assembly)
+            {
+                using var lossScope = Tensors.Engines.TensorScope.Begin();
+                return lossFunction.ComputeTapeLoss(predicted, target).Data.Span[0];
+            }
+
+            using (Tensors.Engines.TensorScope.Suspend())
+                return lossFunction.ComputeTapeLoss(predicted, target).Data.Span[0];
         }
 
         return lossFunction.CalculateLoss(
