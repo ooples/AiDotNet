@@ -49,6 +49,8 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> ? "glmvoice-" + option
             : network is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T> && option is "DvaeFftSize" or "DvaeHopSize" or "DvaeWindowSize" ? "xtts-codec"
             : network is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T> && XttsOptionFixture.IsSamplerOption(option) ? "xtts-sampler"
+            : network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> ? "audiopalm-asr-" + option
+            : network is AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T> ? "audiopalm-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.SoundStorm<T> && (SoundStormOptionFixture.IsTrainingOption(option) || SoundStormOptionFixture.IsInferenceOption(option)) ? "soundstorm-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.Pheme<T> && (PhemeOptionFixture.IsTrainingOption(option) || PhemeOptionFixture.IsInferenceOption(option)) ? "pheme-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.MARS5TTS<T> ? "mars5-" + option
@@ -140,6 +142,10 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> audioPalm
+            && AudioPalmAsrOptionFixture.Observe(audioPalm, option) is { } audioPalmObservation)
+            return audioPalmObservation;
+
         if (network is AiDotNet.TextToSpeech.CodecBased.SoundStorm<T> soundStorm
             && SoundStormOptionFixture.Observe(soundStorm, option) is { } soundStormObservation)
             return soundStormObservation;
@@ -561,7 +567,9 @@ internal static class OptionSensitivityFixtureSetup
     }
 
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
-        => network is AiDotNet.Audio.MusicGen.MusicGenModel<T> && option is "WarmupSteps" or "TrainingSteps"
+        => network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> && option.StartsWith("Ramp", StringComparison.Ordinal)
+            ? Math.Max(4, steps)
+            : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> && option is "WarmupSteps" or "TrainingSteps"
             ? Math.Max(4, steps)
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "BertBeta1"
             ? Math.Max(2, steps)
@@ -596,6 +604,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> audioPalm && AudioPalmAsrOptionFixture.IsTrainingOption(option))
+        {
+            AudioPalmAsrOptionFixture.Train(audioPalm);
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.CodecBased.SoundStorm<T> soundStorm && SoundStormOptionFixture.IsTrainingOption(option))
         {
             SoundStormOptionFixture.Train(soundStorm, option);
@@ -728,6 +741,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions audioPalm)
+            AudioPalmAsrOptionFixture.PrepareOptions(audioPalm, option);
         if (options is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options xtts)
             XttsOptionFixture.PrepareOptions(xtts, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.SoundStormOptions soundStorm)

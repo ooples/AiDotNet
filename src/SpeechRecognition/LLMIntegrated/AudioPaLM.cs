@@ -64,7 +64,8 @@ public partial class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     {
         _options = options ?? new AudioPaLMOptions();
         Options = _options;
-        AudioPalmCore<T>.Validate(_options);
+        MaxGradNorm = NumOps.FromDouble(_options.MaxGradientNorm);
+        AudioPalmCore<T>.Validate(_options, withDetokenizer: false);
         base.SampleRate = _options.SampleRate;
         _core = new AudioPalmCore<T>(Engine, _options, _decoderLayers, architecture.RandomSeed ?? _options.Seed ?? _options.TrainingSeed, withDetokenizer: false);
         Layers.AddRange(_decoderLayers);

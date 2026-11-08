@@ -29,7 +29,7 @@ internal sealed class AudioPalmCore<T>
     {
         _engine = engine;
         _o = options;
-        Validate(options);
+        Validate(options, withDetokenizer);
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         Decoder = new PalmDecoder<T>(engine, decoderLayers, DecoderConfiguration(options), random);
         var architecture = new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1)
@@ -89,14 +89,15 @@ internal sealed class AudioPalmCore<T>
         }
     }
 
-    internal static void Validate(AudioPaLMOptions o)
+    internal static void Validate(AudioPaLMOptions o, bool withDetokenizer = true)
     {
         if (o.NumHeads % o.KeyValueHeads != 0) throw new ArgumentException("NumHeads must be a multiple of KeyValueHeads.");
         if (o.AudioTokens < 1) throw new ArgumentException("AudioTokens must be positive.");
         if (o.BeginId < 0 || o.BeginId >= o.VocabSize || o.EndId < 0 || o.EndId >= o.VocabSize)
             throw new ArgumentException("BeginId and EndId must be text tokens.");
-        if (o.VoicePromptSeconds <= 0) throw new ArgumentException("VoicePromptSeconds must be positive.");
         if (o.SampleRate != 16000) throw new ArgumentException("The speech tokenizers read 16 kHz audio.");
+        if (!withDetokenizer) return;
+        if (o.VoicePromptSeconds <= 0) throw new ArgumentException("VoicePromptSeconds must be positive.");
         int tokenRate = o.SpeechTokenizer == AudioPalmSpeechTokenizer.W2vBert ? 25 : 50;
         int detokenizerRate = o.Detokenizer == AudioPalmDetokenizer.SoundStorm ? o.SoundStorm.SemanticFrameRate : o.AudioLM.SemanticFrameRate;
         if (tokenRate != detokenizerRate)

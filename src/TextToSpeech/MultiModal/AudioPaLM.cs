@@ -112,6 +112,7 @@ public partial class AudioPaLM<T> : TtsModelBase<T>
 
     private void ConfigureBase()
     {
+        MaxGradNorm = Ops.FromDouble(_options.MaxGradientNorm);
         base.SampleRate = _options.SampleRate;
         base.HiddenDim = _options.HiddenDim;
         AudioPalmCore<T>.Validate(_options);

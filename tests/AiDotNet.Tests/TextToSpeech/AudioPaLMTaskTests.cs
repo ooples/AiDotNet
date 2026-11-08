@@ -16,6 +16,73 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class AudioPaLMTaskTests
 {
     [Fact(Timeout = 120000)]
+    public void AsrGradientNormControlsNativeClipping()
+    {
+        var firstOptions = AudioPaLMFixture.Options();
+        firstOptions.MaxGradientNorm = .001;
+        var secondOptions = AudioPaLMFixture.Options();
+        secondOptions.MaxGradientNorm = 0;
+        AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<double> Create(AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions options)
+        {
+            var model = new AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<double>(
+                new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(AiDotNet.Enums.InputType.OneDimensional,
+                    AiDotNet.Enums.NeuralNetworkTaskType.SpeechRecognition, inputSize: 1, outputSize: 1), options);
+            AudioPaLMFixture.Prepare(model);
+            return model;
+        }
+        using var first = Create(firstOptions);
+        using var second = Create(secondOptions);
+        Assert.Equal(.001, first.MaxGradNormValue);
+        Assert.Equal(0, second.MaxGradNormValue);
+        Assert.Equal(first.GetParameters().ToArray(), second.GetParameters().ToArray());
+        for (int step = 0; step < 4; step++)
+        {
+            AudioPalmAsrOptionFixture.Train(first);
+            AudioPalmAsrOptionFixture.Train(second);
+        }
+        Assert.False(first.GetParameters().SequenceEqual(second.GetParameters()));
+    }
+
+    [Fact(Timeout = 120000)]
+    public void AsrSamplingSeedChangesNativeTextAndPreservesState()
+    {
+        using var first = AudioPaLMFixture.Asr<double>();
+        using var second = AudioPaLMFixture.Asr<double>();
+        var options = (AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions)first.GetOptions();
+        var other = (AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions)second.GetOptions();
+        options.Temperature = other.Temperature = .9;
+        other.SamplingSeed++;
+        first.SetTrainingMode(true);
+        second.SetTrainingMode(true);
+        var parameters = first.GetParameters().ToArray();
+        Assert.NotEqual(AudioPalmAsrOptionFixture.Observe(first, "SamplingSeed"), AudioPalmAsrOptionFixture.Observe(second, "SamplingSeed"));
+        Assert.True(first.IsTrainingMode);
+        Assert.True(second.IsTrainingMode);
+        Assert.Equal(parameters, first.GetParameters().ToArray());
+        Assert.Equal(parameters, second.GetParameters().ToArray());
+    }
+
+    [Fact(Timeout = 120000)]
+    public void AsrDoesNotRequireSynthesisCodecGeometry()
+    {
+        var options = AudioPaLMFixture.Options();
+        options.AudioTokens = 4;
+        options.VoicePromptSeconds = 0;
+        using var model = new AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<double>(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(AiDotNet.Enums.InputType.OneDimensional,
+                AiDotNet.Enums.NeuralNetworkTaskType.SpeechRecognition, inputSize: 1, outputSize: 1), options);
+        AudioPaLMFixture.Prepare(model);
+        var tokens = model.Core.AudioTokensOf(AudioPaLMFixture.Tones<double>(.4));
+        Assert.NotEmpty(tokens);
+        Assert.All(tokens, token => Assert.InRange(token, 0, 3));
+        Assert.Null(model.Core.SoundStorm);
+        Assert.Null(model.Core.AudioLM);
+        Assert.Throws<ArgumentException>(() => new AiDotNet.TextToSpeech.MultiModal.AudioPaLM<double>(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(AiDotNet.Enums.InputType.OneDimensional,
+                AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options));
+    }
+
+    [Fact(Timeout = 120000)]
     public void AsrRampScheduleAdvancesDuringNativeTraining()
     {
         var options = AudioPaLMFixture.Options();
