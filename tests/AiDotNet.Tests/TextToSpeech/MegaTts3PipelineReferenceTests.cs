@@ -19,6 +19,70 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class MegaTts3PipelineReferenceTests
 {
+    [Theory]
+    [InlineData(.1)]
+    [InlineData(-.1)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void UnsupportedNetworkDropoutIsRejected(double dropout)
+    {
+        var options = TinyOptions();
+        Assert.Equal(0, options.DropoutRate);
+        Assert.Throws<ArgumentOutOfRangeException>(() => options.DropoutRate = dropout);
+    }
+
+    [Theory]
+    [InlineData(120)]
+    [InlineData(240)]
+    public void PairedWaveVaeGeometryControlsDecodedLength(int hop)
+    {
+        var options = TinyOptions();
+        options.SampleRate = hop * 100;
+        options.HopSize = hop;
+        options.VaeEncoderRatios = new[] { 8, 10, hop / 20 };
+        options.VaeGeneratorRatios = new[] { 5, 4, hop / 60, 3 };
+        using var model = new MegaTTS3<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
+        var latent = new Tensor<double>(new[] { 1, 3, options.LatentChannels });
+        for (int i = 0; i < latent.Length; i++) latent[i] = .2 * Math.Sin(i * .17);
+        var waveform = model.Vae.Decode(latent);
+        Assert.Equal(3 * 4 * hop, waveform.Length);
+        Assert.All(waveform, value => Assert.True(TtsPaperNumerics.IsFinite(value)));
+        options.HopSize++;
+        Assert.Throws<ArgumentException>(() => new MegaTTS3<double>(new NeuralNetworkArchitecture<double>(
+            InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options));
+    }
+
+    [Theory(Timeout = 180000)]
+    [InlineData("AlignerHeads")]
+    [InlineData("AlignerMaxTokens")]
+    [InlineData("G2pRopeTheta")]
+    [InlineData("ChineseChunkLimit")]
+    [InlineData("EnglishChunkBytes")]
+    [InlineData("TextDropProbability")]
+    [InlineData("NumHeads")]
+    [InlineData("NumEncoderLayers")]
+    [InlineData("NumDecoderLayers")]
+    [InlineData("VocabSize")]
+    public async Task NativeOptionContextExercisesTheConfiguredControl(string option)
+    {
+        await Task.Yield();
+        var probe = new ModelFamilyTests.Base.OptionSensitivityProbe<MegaTTS3<double>>(
+            () => MegaTts3Fixture.Create<double>(),
+            model => MegaTts3Fixture.Observe(model, option)
+                ?? ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(model.GetParameters().Concat(model.Synthesize("hello"))),
+            model => model.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<double>
+            {
+                Tokens = new Tensor<double>(new[] { 1 }),
+                Audio = model.Voice?.ReferenceAudio ?? throw new InvalidOperationException("Missing recording."),
+            }),
+            prepareOptions: settings => MegaTts3Fixture.PrepareOptions((MegaTTS3Options)settings, option),
+            prepareModel: model => MegaTts3Fixture.Prepare(model),
+            parameterCount: model => model.GetParameters().Length, controlGroup: option);
+        var report = ModelFamilyTests.Base.OptionSensitivityHarness.Measure(GetType(), option, probe);
+        Assert.Equal(ModelFamilyTests.Base.OptionSensitivityOutcome.Sensitive, report.Outcome);
+    }
+
     [Fact]
     public void RebuiltOptionProbeRestoresItsFittedAlignerAndReferenceVoice()
     {

@@ -1,4 +1,16 @@
 #nullable enable
+AiDotNet.TextToSpeech.Latest.MegaTTS3Options.DropoutRate.get -> double
+AiDotNet.TextToSpeech.Latest.MegaTTS3Options.DropoutRate.set -> void
+AiDotNet.TextToSpeech.Latest.MegaTTS3Options.HopSize.get -> int
+AiDotNet.TextToSpeech.Latest.MegaTTS3Options.HopSize.set -> void
+AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumEncoderLayers.get -> int
+AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumEncoderLayers.set -> void
+AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumDecoderLayers.get -> int
+AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumDecoderLayers.set -> void
+AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumHeads.get -> int
+AiDotNet.TextToSpeech.Latest.MegaTTS3Options.NumHeads.set -> void
+AiDotNet.TextToSpeech.Latest.MegaTTS3Options.VocabSize.get -> int
+AiDotNet.TextToSpeech.Latest.MegaTTS3Options.VocabSize.set -> void
 AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.TrainWithSummedCustomObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expected, System.Collections.Generic.IReadOnlyList<System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!>! objectives, AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? optimizer = null) -> T
 AiDotNet.TextToSpeech.MultiModal.SpeechT5Options.HopSize.get -> int
 AiDotNet.TextToSpeech.MultiModal.SpeechT5Options.HopSize.set -> void

@@ -114,6 +114,8 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, IEndToEndTts<T>
     private void ConfigureBase()
     {
         var o = _options;
+        if (o.DropoutRate != 0)
+            throw new ArgumentException("MegaTTS3's released networks do not use model dropout.", nameof(_options));
         if (o.VaeEncoderRatios.Aggregate(1, (a, b) => a * b) != o.HopSize * FrameMultiple / 2)
             throw new ArgumentException("The WaveVAE's frame (the product of its encoder ratios) must span four mel frames of HopSize samples.");
         base.SampleRate = o.SampleRate;

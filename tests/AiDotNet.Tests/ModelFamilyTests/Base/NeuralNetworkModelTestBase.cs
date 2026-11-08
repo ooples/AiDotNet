@@ -7784,7 +7784,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
 
         int steps = OptionSensitivityTrainingSteps;
         var probe = new OptionSensitivityProbe<INeuralNetworkModel<T>>(
-            CreateOptionSensitivityNetwork,
+            () => CreateOptionSensitivityNetwork(option),
             network => OptionSensitivityFixtureSetup.Observe(network, input, option, ObserveNetwork),
             network =>
             {
@@ -7810,9 +7810,10 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
     }
 
-    private INeuralNetworkModel<T> CreateOptionSensitivityNetwork()
+    private INeuralNetworkModel<T> CreateOptionSensitivityNetwork(string option)
     {
         var network = CreateNetwork();
+        OptionSensitivityFixtureSetup.PrepareConstruction(network, option);
         OptionSensitivityFixtureSetup.UseConfiguredOptimizer(network);
         return network;
     }

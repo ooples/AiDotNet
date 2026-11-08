@@ -20,6 +20,42 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 internal static class MegaTts3Fixture
 {
+    internal static void PrepareOptions(MegaTTS3Options options, string option)
+    {
+        if (option == "TextDropProbability") options.SpeakerDropProbability = 1;
+    }
+
+    internal static long? Observe<T>(MegaTTS3<T> model, string option)
+    {
+        var options = (MegaTTS3Options)model.GetOptions();
+        var ops = MathHelper.GetNumericOperations<T>();
+        long Values(Tensor<T> values) => ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(values.Select(ops.ToDouble));
+        if (option is "AlignerHeads" or "AlignerMaxTokens")
+        {
+            var audio = model.Voice?.ReferenceAudio ?? throw new InvalidOperationException("Missing aligner recording.");
+            var decoded = model.Aligner.Decode(model.Aligner.LogMel(audio.Select(ops.ToDouble).ToArray()));
+            return option == "AlignerHeads" ? Values(decoded.LastLogits)
+                : ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(decoded.Tokens.Select(id => (double)id));
+        }
+        if (option == "G2pRopeTheta")
+        {
+            var tokens = model.G2p.TextTokens("the quick brown fox jumps over the lazy dog");
+            var ids = new int[1, tokens.Length];
+            for (int i = 0; i < tokens.Length; i++) ids[0, i] = tokens[i];
+            return Values(model.G2p.Network.Forward(model.G2p.Network.Embed(ids), null, null, null, lastLogitsOnly: false).Logits
+                ?? throw new InvalidOperationException("Missing native g2p logits."));
+        }
+        if (option is "EnglishChunkBytes" or "ChineseChunkLimit")
+        {
+            var chunks = option == "EnglishChunkBytes"
+                ? MegaTts3Text.ChunkEnglish(string.Concat(Enumerable.Repeat("A longer sentence exercises the real chunk boundary. ", 20)), options.EnglishChunkBytes)
+                : MegaTts3Text.ChunkChinese(string.Concat(Enumerable.Repeat("你好世界，这是一个语音合成测试。", 30)), options.ChineseChunkLimit);
+            return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(chunks.SelectMany(chunk =>
+                new[] { (double)chunk.Length }.Concat(chunk.Select(character => (double)character))));
+        }
+        return null;
+    }
+
     private static JObject Load(string fileName)
     {
         string path = Path.Combine(AppContext.BaseDirectory, "TextToSpeech", "ReferenceData", fileName);

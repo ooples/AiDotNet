@@ -14,6 +14,22 @@ internal static class GptSoVitsFixture
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         var options = (GPTSoVITSOptions)model.GetOptions();
         model.SetTrainingMode(false);
+        if (option == "PromptLanguage")
+        {
+            var promptRecording = new Tensor<T>(new[] { 9600 });
+            for (int i = 0; i < promptRecording.Length; i++) promptRecording[i] = ops.FromDouble(.3 * Math.Sin(i * .13));
+            try
+            {
+                var voice = model.CreateVoice(promptRecording, model.SampleRate, "hello world");
+                var prompt = model.GetType().GetMethod("Prompt", flags)!.Invoke(model, new object[] { voice })!;
+                var phones = (int[])prompt.GetType().GetField("Phones")!.GetValue(prompt)!;
+                return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(phones.Select(phone => (double)phone));
+            }
+            catch (InvalidOperationException error) when (MissingLanguageAsset(error)) { return -1; }
+        }
+        if (option is "SamplingSeed" or "Temperature" or "TopK" or "TopP" or "RepetitionPenalty"
+            or "PauseSeconds" or "Speed" or "NoiseScale" or "MaxSeconds" or "SpeakerChannels" or "SpeakerBlocks")
+            return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(model.Synthesize("hello world").Select(ops.ToDouble));
         if (option == "TextLanguage")
         {
             try
@@ -95,6 +111,7 @@ internal static class GptSoVitsFixture
             options.LearningRateDecay = 0.5;
         }
         if (option is "TextLowLearningRate" or "SegmentSize" or "SynthesizerDropout" or "UpsampleRates" or "UpsampleKernels" or "DiscriminatorWidthDivisor"
+            or "MelLossWeight" or "KlLossWeight" or "NoiseScale"
             or "UpsampleInitialChannels" or "ResblockKernels" or "ResblockDilations")
         {
             options.Version = GptSoVitsVersion.V2;
@@ -102,6 +119,12 @@ internal static class GptSoVitsFixture
             options.SegmentSize = 2560;
             if (option == "SynthesizerDropout") options.SynthesizerDropout = 0.1;
             if (option == "UpsampleKernels") options.UpsampleKernels = new[] { 16, 16, 8, 2, 2 };
+        }
+        if (option is "SpeakerChannels" or "SpeakerBlocks" or "StyleChannels" or "MrteChannels")
+        {
+            options.Version = GptSoVitsVersion.V2Pro;
+            options.CurrentStage = GptSoVitsStage.SoVits;
+            options.SegmentSize = 2560;
         }
         if (option == "CfgRate")
         {
@@ -135,8 +158,16 @@ internal static class GptSoVitsFixture
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         var recording = new Tensor<T>(new[] { 9600 });
         for (int i = 0; i < recording.Length; i++) recording[i] = ops.FromDouble(0.3 * Math.Sin(i * 0.13) + 0.1 * Math.Cos(i * 0.037));
-        model.Voice = model.CreateVoice(recording, model.SampleRate, "hello world");
+        try { model.Voice = model.CreateVoice(recording, model.SampleRate, "hello world"); }
+        catch (InvalidOperationException error) when (MissingLanguageAsset(error)
+            && ((GPTSoVITSOptions)model.GetOptions()).PromptLanguage != GptSoVitsTextLanguage.English)
+        {
+            // The prompt-language observer executes CreateVoice and records this exact asset requirement.
+        }
     }
+
+    private static bool MissingLanguageAsset(InvalidOperationException error) => error.Message.StartsWith(
+        "Reading mixed-language text needs fastText's lid.176.bin", StringComparison.Ordinal);
 
     internal static GPTSoVITS<T> Create<T>()
     {

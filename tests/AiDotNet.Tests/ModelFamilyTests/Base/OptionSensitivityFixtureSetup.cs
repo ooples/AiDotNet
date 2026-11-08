@@ -42,7 +42,9 @@ internal static class OptionSensitivityFixtureSetup
         => network.GetParameters().Length;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
-        => network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
+        => option == nameof(AiDotNet.Models.Options.ModelOptions.Seed) ? "model-options-seed"
+            : network is AiDotNet.TextToSpeech.Latest.MegaTTS3<T> ? "mega-" + option
+            : network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> ? "stylezs-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T> ? "whisperspeech-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> ? "speecht5-" + option
@@ -118,6 +120,19 @@ internal static class OptionSensitivityFixtureSetup
     internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        var task = ObserveTask(network, input, option, observe);
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        return OptionSensitivityHarness.Combine(task,
+            OptionSensitivityHarness.Fingerprint(network.GetParameters().Select(ops.ToDouble)));
+    }
+
+    private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
+        Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
+    {
+        if (network is AiDotNet.TextToSpeech.Latest.MegaTTS3<T> mega
+            && MegaTts3Fixture.Observe(mega, option) is { } megaObservation)
+            return megaObservation;
+
         if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> styleZs
             && StyleTtsZsFixture.Observe(styleZs, option) is { } styleZsObservation)
             return styleZsObservation;
@@ -627,6 +642,9 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Latest.MegaTTS3Options mega)
+            MegaTts3Fixture.PrepareOptions(mega, option);
+
         if (options is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions styleZs)
             StyleTtsZsFixture.PrepareOptions(styleZs, option);
 
@@ -874,6 +892,16 @@ internal static class OptionSensitivityFixtureSetup
             && (perEpoch.PropertyType == typeof(int) || Nullable.GetUnderlyingType(perEpoch.PropertyType) == typeof(int)))
             perEpoch.SetValue(options, 1);
     }
+
+    internal static void PrepareConstruction<T>(INeuralNetworkModel<T> network, string option)
+    {
+        // An explicit architecture seed wins over ModelOptions.Seed. Release that fixture override
+        // on the shell so the rebuilt control and candidate can exercise the option's own seed.
+        if (option == nameof(AiDotNet.Models.Options.ModelOptions.Seed)
+            && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> neural)
+            neural.Architecture.RandomSeed = null;
+    }
+
 
     internal static void UseConfiguredOptimizer<T>(INeuralNetworkModel<T> network)
     {

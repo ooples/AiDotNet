@@ -9,13 +9,33 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class GptSoVitsPromptStateTests
 {
     [Fact]
+    public void SeedProbesReleaseTheFixtureArchitectureSeedBeforeReconstruction()
+    {
+        GPTSoVITS<double> Create()
+        {
+            var model = new GPTSoVITS<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+                NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1) { RandomSeed = 1337 }, GptSoVitsFixture.Options());
+            ModelFamilyTests.Base.OptionSensitivityFixtureSetup.PrepareConstruction(model, "Seed");
+            Assert.False(model.Architecture.HasExplicitRandomSeed);
+            return model;
+        }
+        var probe = new ModelFamilyTests.Base.OptionSensitivityProbe<GPTSoVITS<double>>(Create,
+            model => ModelFamilyTests.Base.OptionSensitivityFixtureSetup.Observe(model,
+                new Tensor<double>(new[] { 3 }), "Seed", (_, _) => 0), train: null,
+            controlGroup: "seed-construction-regression");
+        var report = ModelFamilyTests.Base.OptionSensitivityHarness.Measure(GetType(), "Seed", probe);
+        Assert.Equal(ModelFamilyTests.Base.OptionSensitivityOutcome.Sensitive, report.Outcome);
+    }
+
+    [Fact]
     public void OptionProbesMeasureArchitectureEvenWhenTheirTaskObserverIsConstant()
     {
         var probe = new ModelFamilyTests.Base.OptionSensitivityProbe<GPTSoVITS<double>>(
             () => new GPTSoVITS<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
                 NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), GptSoVitsFixture.Options()),
             _ => 0, train: null,
-            parameterCount: ModelFamilyTests.Base.OptionSensitivityFixtureSetup.ParameterCountBeforeFitting);
+            parameterCount: ModelFamilyTests.Base.OptionSensitivityFixtureSetup.ParameterCountBeforeFitting,
+            controlGroup: "architecture-count-regression");
         var report = ModelFamilyTests.Base.OptionSensitivityHarness.Measure(GetType(), "HiddenDim", probe);
         Assert.Equal(ModelFamilyTests.Base.OptionSensitivityOutcome.Sensitive, report.Outcome);
         Assert.Contains("parameter count", report.Detail);
