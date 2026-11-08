@@ -158,7 +158,7 @@ public class TreeRingWatermarkerPaperTests
         // sum also gives (0.393964). The 0.01 allowed is five times that gap.
         double scale = (k + 2 * lambda) / (k + lambda), nu = (k + lambda) * (k + lambda) / (k + 2 * lambda);
         double h = 2.0 / (9.0 * nu);
-        double approximate = -(Math.Cbrt(eta / (scale * nu)) - (1 - h)) / Math.Sqrt(h);
+        double approximate = -(Math.Pow(eta / (scale * nu), 1.0 / 3.0) - (1 - h)) / Math.Sqrt(h);
         Assert.True(Math.Abs(expected - approximate) <= ApproximationTolerance,
             $"eta = {eta:R}, k = {k}, lambda = {lambda:R}: the series gives z = {expected:R}, the approximation {approximate:R}.");
     }

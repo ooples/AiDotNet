@@ -61,7 +61,7 @@ public class PublicTrainingForwardTests
                     var own = TapeTrainingStep<float>.CollectParameters(new[] { network.Layers[i] }, structureVersion: -1);
                     if (own.Count == 0) continue;
                     bool reached = own.Any(t => gradients.TryGetValue(t, out var g) && g is not null
-                        && g.ToArray().Any(v => v != 0 && float.IsFinite(v)));
+                        && g.ToArray().Any(v => v != 0 && !float.IsNaN(v) && !float.IsInfinity(v)));
                     if (!reached) unreached.Add(i);
                 }
             }

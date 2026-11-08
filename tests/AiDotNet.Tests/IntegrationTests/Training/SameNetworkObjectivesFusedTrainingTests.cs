@@ -116,7 +116,7 @@ public class SameNetworkObjectivesFusedTrainingTests
         for (int step = 0; step < steps; step++)
         {
             _output.WriteLine($"step {step + 1}: mean |update| fused {f[step]:E4}, eager {e[step]:E4}");
-            Assert.True(e[step] > 0 && double.IsFinite(e[step]) && double.IsFinite(f[step]),
+            Assert.True(e[step] > 0 && !double.IsNaN(e[step]) && !double.IsInfinity(e[step]) && !double.IsNaN(f[step]) && !double.IsInfinity(f[step]),
                 $"step {step + 1}: the ratio needs a positive, finite eager update; fused {f[step]:E4}, eager {e[step]:E4}");
             Assert.True(Math.Abs(f[step] / e[step] - 1) <= RelativeTolerance,
                 $"step {step + 1}: the fused mean |update| is {f[step]:E4}, the eager {e[step]:E4}");
