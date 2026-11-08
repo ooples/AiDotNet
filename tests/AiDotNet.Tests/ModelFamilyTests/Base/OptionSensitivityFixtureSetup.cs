@@ -46,6 +46,10 @@ internal static class OptionSensitivityFixtureSetup
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => option == nameof(AiDotNet.Models.Options.ModelOptions.Seed) ? "model-options-seed"
             : network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> ? "kokoro-" + option
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T> && option is "TextPadId" or "NumHeads" ? "ditto-" + option
+
+            : network is AiDotNet.TextToSpeech.CodecBased.Bark<T> && BarkOptionFixture.Handles(option) ? "bark-" + option
+
             : network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> && option == "MaxLength" ? "vevo-autoregressive-budget"
 
             : network is AiDotNet.Finance.Forecasting.StateSpace.Hippo<T> && option == "TimescaleMax" ? "hippo-timescale-clamp"
@@ -155,6 +159,12 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T> ditto && option is "TextPadId" or "NumHeads")
+            return option == "NumHeads" ? DiTToOptionFixture.ObserveHeads(ditto) : DiTToOptionFixture.ObserveTextPadding(ditto);
+
+        if (network is AiDotNet.TextToSpeech.CodecBased.Bark<T> bark && BarkOptionFixture.Handles(option))
+            return BarkOptionFixture.Observe(bark, option);
+
         if (network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> vevo && option == "MaxLength")
             return VevoOptionFixture.Observe(vevo);
 
@@ -771,6 +781,9 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.BarkOptions bark && BarkOptionFixture.Handles(option))
+            BarkOptionFixture.PrepareOptions(bark, option);
+
         if (options is AiDotNet.TextToSpeech.CodecBased.VevoOptions vevo && option == "MaxLength")
             VevoOptionFixture.PrepareOptions(vevo);
 
@@ -1121,6 +1134,10 @@ internal static class OptionSensitivityFixtureSetup
             case AiDotNet.TextToSpeech.Latest.KaniTTS2<T> model:
                 KaniTTSFixture.Prepare(model);
                 break;
+            case AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> model:
+                KokoroNativeFixture.Prepare(model);
+                break;
+
             case AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T> model:
                 MetaVoiceNativeFixture.Prepare(model);
                 break;

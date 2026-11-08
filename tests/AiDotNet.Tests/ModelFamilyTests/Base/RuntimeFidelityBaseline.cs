@@ -3863,7 +3863,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.CodecBased.Bark`1::NumLLMLayers", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.Bark`1::NumberOfCoarseCodebooks", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.Bark`1::NumberOfFineCodebooksGiven", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.TextToSpeech.CodecBased.Bark`1::SampleRate", OptionSensitivityOutcome.OptionsNotRouted },
             { "AiDotNet.TextToSpeech.CodecBased.Bark`1::SemanticRateHz", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.Bark`1::SpeakerEmbeddingDim", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.CodecBased.Bark`1::TextEncodingOffset", OptionSensitivityOutcome.Insensitive },

@@ -14,6 +14,7 @@ public sealed class DiTToTTSPaperTests
     [InlineData("EncoderDim", 16)]
     [InlineData("DecoderDim", 16)]
     [InlineData("NumDecoderLayers", 2)]
+    [InlineData("NumEncoderLayers", 2)]
     public void SharedWidthAndDepthOptionsReachTheNativeTransformer(string option, int value)
     {
         using var control = Tiny();
@@ -23,6 +24,35 @@ public sealed class DiTToTTSPaperTests
             InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
         Assert.Equal(value, typeof(DiTToTTSOptions).GetProperty(option)!.GetValue(changed.GetOptions()));
         Assert.NotEqual(control.GetParameters().Length, changed.GetParameters().Length);
+    }
+
+    [Fact]
+    public void SharedAttentionHeadsReachTheDiffusionTransformer()
+    {
+        var options = TinyOptions();
+        options.NumHeads = 4;
+        Assert.Equal(4, options.DiTHeads);
+        var copy = new DiTToTTSOptions(options);
+        Assert.Equal(4, copy.DiTHeads);
+        copy.DiTHeads = 1;
+        Assert.Equal(1, copy.NumHeads);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    public void MelVaeUsesItsConfiguredDownsampleFactor(int factor)
+    {
+        var options = TinyOptions();
+        options.MelVaeDownsampleFactor = factor;
+        var vae = new DiTToMelVae<double>(AiDotNetEngine.Current,
+            new List<AiDotNet.NeuralNetworks.Layers.LayerBase<double>>(), options, new Random(7));
+        var mel = new Tensor<double>(new[] { 12, options.MelChannels });
+        var encoded = vae.Encode(mel);
+        Assert.Equal(12 / factor, encoded.Shape[0]);
+        Assert.Equal(12, vae.Decode(encoded, quantize: false).Shape[0]);
     }
 
     [Fact]

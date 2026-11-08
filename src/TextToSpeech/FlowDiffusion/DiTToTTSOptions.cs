@@ -81,7 +81,7 @@ public class DiTToTTSOptions : EndToEndTtsOptions
     /// <summary>Gets or sets the number of attention heads in the text. Defaults to <c>12</c>.</summary>
     public int TextHeads { get; set; } = 12;
     /// <summary>Gets or sets the number of layers in the text encoder. Defaults to <c>12</c>.</summary>
-    public int TextEncoderLayers { get; set; } = 12;
+    public int TextEncoderLayers { get => NumEncoderLayers; set => NumEncoderLayers = value; }
     /// <summary>Gets or sets the text vocabulary size. Defaults to <c>81</c>.</summary>
     public int TextVocabulary { get; set; } = 81;
     /// <summary>Gets or sets the token ID for text pad. Defaults to <c>1</c>.</summary>
@@ -109,7 +109,7 @@ public class DiTToTTSOptions : EndToEndTtsOptions
     /// <summary>Gets or sets the number of layers in the diffusion transformer. Defaults to <c>12</c>.</summary>
     public int DiTLayers { get => NumDecoderLayers; set => NumDecoderLayers = value; }
     /// <summary>Gets or sets the number of attention heads in the diffusion transformer. Defaults to <c>12</c>.</summary>
-    public int DiTHeads { get; set; } = 12;
+    public int DiTHeads { get => NumHeads; set => NumHeads = value; }
     /// <summary>Gets or sets the diffusion transformer feed forward multiplier. Defaults to <c>4</c>.</summary>
     public int DiTFeedForwardMultiplier { get; set; } = 4;
 

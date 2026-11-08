@@ -42,6 +42,7 @@ public class TtsModelOptions : ModelOptions
 
     /// <summary>Gets or sets the audio sample rate in Hz.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro's released ISTFTNet renderer is fixed at 24000 Hz; the native constructor rejects other rates.", ModelType = typeof(EndToEnd.Kokoro<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Bark's released EnCodec renderer operates at 24000 Hz; BarkOptions.Validate rejects every other sample rate.", ModelType = typeof(CodecBased.BarkModel<>))]
     public int SampleRate { get; set; } = 22050;
 
     /// <summary>Gets or sets the number of mel-spectrogram frequency channels.</summary>
@@ -84,6 +85,7 @@ public class TtsModelOptions : ModelOptions
     public int MaxMelLength { get; set; } = 2048;
 
     /// <summary>Gets or sets the dropout rate.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("DiTTo uses this inherited setting only in its frozen SpeechT5 encoder, which always runs in inference mode; its trainable diffusion transformer has no dropout.", ModelType = typeof(FlowDiffusion.DiTToTTS<>))]
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>Gets or sets the ONNX model path.</summary>

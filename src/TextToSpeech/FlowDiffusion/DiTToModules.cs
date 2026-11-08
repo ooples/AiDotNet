@@ -234,19 +234,29 @@ internal sealed class DiTToMelVae<T>
         Residual Block(int input, int output) => new(Conv(input, output, 3), Conv(output, output, 3), input == output ? null : Conv(input, output, 1));
 
         int[] widths = options.MelVaeMultipliers.Select(m => m * options.MelVaeChannels).ToArray();
+        if (options.MelVaeDownsampleFactor < 1 || widths.Length < 1 || widths.Any(width => width < 1)
+            || (widths.Length == 1 && options.MelVaeDownsampleFactor != 1))
+            throw new ArgumentException("The mel VAE needs positive widths and a positive downsample factor, with at least two widths for downsampling.", nameof(options));
+        var strides = new int[widths.Length - 1];
+        int remainingFactor = options.MelVaeDownsampleFactor;
+        for (int i = 0; i < strides.Length; i++)
+        {
+            strides[i] = i == strides.Length - 1 ? remainingFactor : remainingFactor % 2 == 0 ? 2 : 1;
+            remainingFactor /= strides[i];
+        }
         EncoderInput = Conv(options.MelChannels, widths[0], 7);
         int current = widths[0];
         for (int i = 0; i < widths.Length; i++)
         {
             EncoderBlocks.Add(Block(current, widths[i])); current = widths[i];
-            if (i + 1 < widths.Length) { EncoderDown.Add(Conv(current, widths[i + 1], 4, 2)); current = widths[i + 1]; }
+            if (i + 1 < widths.Length) { EncoderDown.Add(Conv(current, widths[i + 1], checked(2 * strides[i]), strides[i])); current = widths[i + 1]; }
         }
         ToLatent = Conv(current, options.LatentDim, 3);
         FromLatent = Conv(options.LatentDim, current, 3);
         for (int i = widths.Length - 1; i >= 0; i--)
         {
             DecoderBlocks.Add(Block(current, widths[i])); current = widths[i];
-            if (i > 0) { DecoderUp.Add(Conv(current, widths[i - 1], 4, 2, true)); current = widths[i - 1]; }
+            if (i > 0) { DecoderUp.Add(Conv(current, widths[i - 1], checked(2 * strides[i - 1]), strides[i - 1], true)); current = widths[i - 1]; }
         }
         DecoderOutput = Conv(current, options.MelChannels, 7);
         ConvNeXtDepthwise = new NormedConv1DLayer<T>(options.MelChannels, options.MelChannels, 7, 1, 1,
