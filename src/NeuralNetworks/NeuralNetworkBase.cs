@@ -7006,7 +7006,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // when a garbage collection finalizes them (ooples/AiDotNet.Tensors#1432); only the output survives.
         // Disposed in the finally below, before the collection there, which must see the intermediates already returned.
         // Not while a layer observer is recording: it keeps intermediate outputs to read after Predict returns.
+        // Not while a graph is being traced either: the trace's results are lazy nodes, and keeping the output reads its
+        // storage, which realizes it on the host and marks the trace as escaping the graph, so the plan is refused.
         var resultScope = ReleasesInferenceIntermediates && Graph.LayerForwardObserver<T>.Current is null
+                          && !Tensors.Engines.Compilation.GraphMode.IsActive
             ? TensorScope.Begin()
             : null;
         using var noGrad = new NoGradScope<T>();
