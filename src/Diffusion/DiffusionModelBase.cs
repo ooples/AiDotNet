@@ -1571,11 +1571,21 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         // the element count and destabilised plain SGD (Imagen2's Training_ShouldReducePredictionError rose
         // 0.317 -> 0.321 over 10 steps). The objective replays the same timesteps and noise when an optimizer
         // re-evaluates it (line search).
+        // A model that predicts from a timestep tensor runs the whole batch through one forward, each element at its
+        // own timestep; the int-array path runs one forward per element.
+        Tensor<T>? timestepTensor = null;
+        if (isBatched && CanPredictFromTimestepTensor)
+        {
+            timestepTensor = new Tensor<T>([timesteps.Length]);
+            for (int b = 0; b < timesteps.Length; b++) timestepTensor[b] = NumOps.FromDouble(timesteps[b]);
+        }
+
         Tensor<T>? noiseTensor = null;
         Tensor<T> NoisePredictionLoss()
         {
-            var predicted = PredictTrainingNoise(
-                noisySampleTensor, timesteps, isBatched, input, expectedOutput);
+            var predicted = timestepTensor is not null
+                ? PredictTrainingNoise(noisySampleTensor, timestepTensor, input, expectedOutput)
+                : PredictTrainingNoise(noisySampleTensor, timesteps, isBatched, input, expectedOutput);
             noiseTensor ??= new Tensor<T>(predicted._shape, noiseVector);
             var diff = Engine.TensorSubtract(predicted, noiseTensor);
             var sq = Engine.TensorMultiply(diff, diff);
