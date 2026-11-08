@@ -45,6 +45,13 @@ internal static class MegaTts3Fixture
         options.WarmupSteps = 0;
         var model = new MegaTTS3<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1),
             options);
+        Prepare(model);
+        return model;
+    }
+
+    internal static void Prepare<T>(MegaTTS3<T> model)
+    {
+        var (speaking, duration) = Data.Value;
         double[] Read(JObject state, string name) => state[name]?.Select(v => (double)v).ToArray()
             ?? throw new InvalidDataException($"The fixture has no tensor '{name}'.");
         var g2pState = (JObject)speaking["g2p_state"]!;
@@ -57,6 +64,5 @@ internal static class MegaTts3Fixture
         var voice = new T[12000];
         for (int i = 0; i < voice.Length; i++) voice[i] = ops.FromDouble(0.2 * (2 * random.NextDouble() - 1));
         model.Voice = new TtsVoice<T> { ReferenceAudio = new Tensor<T>(new[] { voice.Length }, new Vector<T>(voice)) };
-        return model;
     }
 }

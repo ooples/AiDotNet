@@ -19,6 +19,23 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class MegaTts3PipelineReferenceTests
 {
+    [Fact]
+    public void RebuiltOptionProbeRestoresItsFittedAlignerAndReferenceVoice()
+    {
+        using var original = MegaTts3Fixture.Create<double>();
+        var options = Newtonsoft.Json.JsonConvert.DeserializeObject<MegaTTS3Options>(
+            Newtonsoft.Json.JsonConvert.SerializeObject(original.GetOptions()));
+        using var rebuilt = new MegaTTS3<double>(new NeuralNetworkArchitecture<double>(
+            InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
+        MegaTts3Fixture.Prepare(rebuilt);
+        var recording = rebuilt.Voice?.ReferenceAudio ?? throw new InvalidOperationException("Missing reference voice.");
+        var expected = original.Aligner.Align(recording.ToArray());
+        var actual = rebuilt.Aligner.Align(recording.ToArray());
+        Assert.NotEmpty(actual.Phones);
+        Assert.Equal(expected.Phones, actual.Phones);
+        Assert.Equal(expected.FrameToPhone, actual.FrameToPhone);
+    }
+
     internal static MegaTTS3Options TinyOptions() => new()
     {
         HiddenDim = 16, DitLayers = 1, DitHeads = 2, LatentChannels = 4, LocalConditionDim = 8, ContextMaskDim = 4,

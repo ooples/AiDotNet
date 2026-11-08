@@ -35,11 +35,11 @@ internal static class OptionSensitivityFixtureSetup
             or AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>
             or AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>
             or AiDotNet.TextToSpeech.MultiModal.SpiritLM<T>
+            or AiDotNet.TextToSpeech.Latest.MegaTTS3<T>
             or AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>;
 
     internal static long ParameterCountBeforeFitting<T>(INeuralNetworkModel<T> network)
-        => UsesFittedAssets(network) || network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T>
-            ? network.GetParameters().Length : 0;
+        => network.GetParameters().Length;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
@@ -899,6 +899,9 @@ internal static class OptionSensitivityFixtureSetup
 
         switch (network)
         {
+            case AiDotNet.TextToSpeech.Latest.MegaTTS3<T> model:
+                MegaTts3Fixture.Prepare(model);
+                break;
             case AiDotNet.TextToSpeech.CodecBased.SparkTTS<T> model:
                 SparkNativeFixture.Prepare(model);
                 break;

@@ -8,6 +8,19 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class GptSoVitsPromptStateTests
 {
+    [Fact]
+    public void OptionProbesMeasureArchitectureEvenWhenTheirTaskObserverIsConstant()
+    {
+        var probe = new ModelFamilyTests.Base.OptionSensitivityProbe<GPTSoVITS<double>>(
+            () => new GPTSoVITS<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+                NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), GptSoVitsFixture.Options()),
+            _ => 0, train: null,
+            parameterCount: ModelFamilyTests.Base.OptionSensitivityFixtureSetup.ParameterCountBeforeFitting);
+        var report = ModelFamilyTests.Base.OptionSensitivityHarness.Measure(GetType(), "HiddenDim", probe);
+        Assert.Equal(ModelFamilyTests.Base.OptionSensitivityOutcome.Sensitive, report.Outcome);
+        Assert.Contains("parameter count", report.Detail);
+    }
+
     [Theory]
     [InlineData("DitDim")]
     [InlineData("DitDepth")]
