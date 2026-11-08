@@ -153,7 +153,7 @@ public class QuantumInspiredSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
         _featureScores = new double[p];
         for (int j = 0; j < p; j++)
         {
-            _featureScores[j] = selectionCounts[j] / (_populationSize * _nGenerations);
+            _featureScores[j] = selectionCounts[j] / ((double)_populationSize * _nGenerations);
             if (bestSolution[j])
                 _featureScores[j] += 1.0;
         }

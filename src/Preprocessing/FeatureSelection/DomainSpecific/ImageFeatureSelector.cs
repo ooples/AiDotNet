@@ -181,7 +181,7 @@ public class ImageFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>,
                 if (!selected.Contains(j))
                 {
                     var (x2, y2, _) = GetSpatialPosition(j);
-                    double distance = Math.Sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2));
+                    double distance = Math.Sqrt((double)(x1 - x2) * (x1 - x2) + (double)(y1 - y2) * (y1 - y2));
                     if (distance < 3) // Within 3 pixels
                     {
                         double penalty = Math.Exp(-distance / 2);

@@ -130,7 +130,7 @@ public class BayesianNetworkSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T
 
     private double ComputeMI(double[] x, double[] y, int n)
     {
-        int nBins = Math.Max(5, (int)Math.Sqrt(n / 5));
+        int nBins = Math.Max(5, (int)Math.Sqrt(n / 5.0));
 
         double xMin = x.Min(), xMax = x.Max();
         double yMin = y.Min(), yMax = y.Max();

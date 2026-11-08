@@ -153,8 +153,8 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         if (x <= 0) return 0;
         if (df <= 0) return 1;
 
-        double z = Math.Pow(x / df, 1.0 / 3) - (1 - 2.0 / (9 * df));
-        z /= Math.Sqrt(2.0 / (9 * df));
+        double z = Math.Pow(x / df, 1.0 / 3) - (1 - 2.0 / (9.0 * df));
+        z /= Math.Sqrt(2.0 / (9.0 * df));
 
         return NormalCDF(z);
     }

@@ -191,7 +191,7 @@ public class CFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatu
         if (pairs > 0) avgFFCorr /= pairs;
 
         // CFS merit function: k * avgFCCorr / sqrt(k + k*(k-1)*avgFFCorr)
-        double denom = Math.Sqrt(k + k * (k - 1) * avgFFCorr);
+        double denom = Math.Sqrt(k + (double)k * (k - 1) * avgFFCorr);
         return denom > 1e-10 ? k * avgFCCorr / denom : 0;
     }
 

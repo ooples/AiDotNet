@@ -172,7 +172,7 @@ public class FisherReliefHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
                 for (int j = 0; j < p; j++)
                 {
                     double diff = Math.Abs(NumOps.ToDouble(data[idx, j]) - NumOps.ToDouble(data[hit.Index, j]));
-                    scores[j] -= diff / (sampleSize * _nNeighbors);
+                    scores[j] -= diff / ((double)sampleSize * _nNeighbors);
                 }
             }
 
@@ -181,7 +181,7 @@ public class FisherReliefHybrid<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
                 for (int j = 0; j < p; j++)
                 {
                     double diff = Math.Abs(NumOps.ToDouble(data[idx, j]) - NumOps.ToDouble(data[miss.Index, j]));
-                    scores[j] += diff / (sampleSize * _nNeighbors);
+                    scores[j] += diff / ((double)sampleSize * _nNeighbors);
                 }
             }
         }

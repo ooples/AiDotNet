@@ -178,7 +178,7 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IVisualGroundingMode
         // Step 2: Pixel decoder - upsample to mask embedding space
         int maskGridSize = (int)Math.Sqrt(maskDim);
         if (maskGridSize < 4)
-            maskGridSize = (int)Math.Sqrt(visDim / 4);
+            maskGridSize = (int)Math.Sqrt(visDim / 4.0);
         if (maskGridSize < 4)
             maskGridSize = 4;
         int totalMaskPixels = maskGridSize * maskGridSize;

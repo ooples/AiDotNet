@@ -168,8 +168,8 @@ public class ChiSquaredSelection<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, 
         // Approximation using Wilson-Hilferty transformation
         if (df <= 0) return 1.0;
 
-        double z = Math.Pow(chiSquared / df, 1.0 / 3.0) - (1 - 2.0 / (9 * df));
-        z /= Math.Sqrt(2.0 / (9 * df));
+        double z = Math.Pow(chiSquared / df, 1.0 / 3.0) - (1 - 2.0 / (9.0 * df));
+        z /= Math.Sqrt(2.0 / (9.0 * df));
 
         // Standard normal CDF approximation
         return 1 - NormalCDF(z);

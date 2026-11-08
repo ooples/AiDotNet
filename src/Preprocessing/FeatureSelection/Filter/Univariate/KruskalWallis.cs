@@ -164,8 +164,8 @@ public class KruskalWallis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISuper
         // Simple approximation using normal distribution for large df
         if (df > 30)
         {
-            double z = Math.Pow(chiSquare / df, 1.0 / 3) - (1 - 2.0 / (9 * df));
-            z /= Math.Sqrt(2.0 / (9 * df));
+            double z = Math.Pow(chiSquare / df, 1.0 / 3) - (1 - 2.0 / (9.0 * df));
+            z /= Math.Sqrt(2.0 / (9.0 * df));
             return 0.5 * (1 - Erf(z / Math.Sqrt(2)));
         }
 

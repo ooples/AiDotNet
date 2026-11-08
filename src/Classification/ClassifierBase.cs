@@ -348,7 +348,7 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         {
             if (classCounts[i] > 0)
             {
-                weights[i] = nSamples / (NumClasses * classCounts[i]);
+                weights[i] = nSamples / ((double)NumClasses * classCounts[i]);
             }
             else
             {

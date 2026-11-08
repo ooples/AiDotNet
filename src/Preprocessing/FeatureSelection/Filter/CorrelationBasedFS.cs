@@ -161,7 +161,7 @@ public class CorrelationBasedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, I
                 double meanFf = countFf > 0 ? sumFf / countFf : 0;
 
                 int k = testSet.Count;
-                double denom = Math.Sqrt(k + k * (k - 1) * meanFf);
+                double denom = Math.Sqrt(k + (double)k * (k - 1) * meanFf);
                 double merit = denom > 1e-10 ? k * meanCf / denom : 0;
 
                 if (merit > bestMerit)

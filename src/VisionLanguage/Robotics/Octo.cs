@@ -251,7 +251,7 @@ public partial class Octo<T> : VisionLanguageModelBase<T>, IVisionLanguageAction
             {
                 double key = NumOps.ToDouble(backboneOut[d]);
                 // Readout query: each readout token attends to different features
-                double query = Math.Sin((r + 1) * d * Math.PI / dim);
+                double query = Math.Sin((r + 1.0) * d * Math.PI / dim);
                 double attn = Math.Exp(key * query / Math.Sqrt(dim));
                 attnSum += attn;
                 valSum += attn * key;

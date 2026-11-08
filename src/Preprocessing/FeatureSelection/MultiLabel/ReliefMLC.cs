@@ -142,7 +142,7 @@ public class ReliefMLC<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCoun
 
         // Normalize weights
         for (int j = 0; j < p; j++)
-            _featureWeights[j] /= m * _nNeighbors;
+            _featureWeights[j] /= (double)m * _nNeighbors;
 
         int nToSelect = Math.Min(_nFeaturesToSelect, p);
         _selectedIndices = _featureWeights

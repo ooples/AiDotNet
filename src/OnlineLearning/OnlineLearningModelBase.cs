@@ -330,7 +330,7 @@ public abstract partial class OnlineLearningModelBase<T> : IOnlineLearningModel<
             // than as the accidental int/int that a reviewer (and CodeQL) sees. Using
             // 10000.0 would silently turn this into a smooth exponential decay and
             // change every schedule that selects StepDecay.
-            LearningRateSchedule.StepDecay => InitialLearningRate * Math.Pow(0.5, (double)(SampleCount / 10000)),
+            LearningRateSchedule.StepDecay => InitialLearningRate * Math.Pow(0.5, Math.Floor(SampleCount / 10000.0)),
             _ => InitialLearningRate
         };
 

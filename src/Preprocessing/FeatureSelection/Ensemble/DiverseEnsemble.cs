@@ -319,7 +319,7 @@ public class DiverseEnsemble<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             for (int i1 = 0; i1 < sampleSize; i1++)
                 for (int i2 = 0; i2 < sampleSize; i2++)
                     dcov += dx[i1, i2] * dy[i1, i2];
-            dcov /= sampleSize * sampleSize;
+            dcov /= (double)sampleSize * sampleSize;
 
             scores[j] = Math.Sqrt(Math.Max(0, dcov));
         }

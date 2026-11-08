@@ -115,13 +115,13 @@ public class ClassWeightedFS<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
             switch (_weightingStrategy)
             {
                 case "balanced":
-                    weight = (double)n / (nClasses * kvp.Value);
+                    weight = (double)n / ((double)nClasses * kvp.Value);
                     break;
                 case "sqrt":
-                    weight = Math.Sqrt((double)n / (nClasses * kvp.Value));
+                    weight = Math.Sqrt((double)n / ((double)nClasses * kvp.Value));
                     break;
                 case "log":
-                    weight = Math.Log(1 + (double)n / (nClasses * kvp.Value));
+                    weight = Math.Log(1 + (double)n / ((double)nClasses * kvp.Value));
                     break;
                 default:
                     weight = 1.0;

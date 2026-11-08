@@ -141,8 +141,8 @@ public class FClassification<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISup
         // Approximation using normal distribution for large df
         if (df2 >= 30)
         {
-            double z = Math.Pow(fStatistic, 1.0 / 3.0) * (1 - 2.0 / (9 * df2)) - (1 - 2.0 / (9 * df1));
-            double se = Math.Sqrt(2.0 / (9 * df1) + 2.0 / (9 * df2));
+            double z = Math.Pow(fStatistic, 1.0 / 3.0) * (1 - 2.0 / (9.0 * df2)) - (1 - 2.0 / (9.0 * df1));
+            double se = Math.Sqrt(2.0 / (9.0 * df1) + 2.0 / (9.0 * df2));
             double standardZ = z / se;
 
             return 0.5 * (1 - Erf(standardZ / Math.Sqrt(2)));

@@ -223,7 +223,7 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
                 {
                     hitSum += Math.Abs(Xnorm[idx, f] - Xnorm[h, f]);
                 }
-                hitSum /= (m * k);
+                hitSum /= (double)m * k;
 
                 // Contribution from misses (different class - increase weight if different)
                 double missSum = 0;

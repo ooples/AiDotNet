@@ -164,7 +164,7 @@ public class FloatingSearch<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupe
                 redundancy += Math.Abs(correlationMatrix[i, j]);
 
         if (features.Length > 1)
-            redundancy /= (features.Length * (features.Length - 1) / 2.0);
+            redundancy /= ((double)features.Length * (features.Length - 1) / 2.0);
 
         return totalScore - 0.5 * redundancy;
     }

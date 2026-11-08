@@ -157,7 +157,7 @@ public class FTest<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFea
         // Very rough approximation using normal approximation for large df
         if (df1 >= 30 && df2 >= 30)
         {
-            double z = Math.Sqrt(2 * f) - Math.Sqrt(2 * df1 - 1);
+            double z = Math.Sqrt(2 * f) - Math.Sqrt(2.0 * df1 - 1);
             return 0.5 * (1 - Erf(z / Math.Sqrt(2)));
         }
 

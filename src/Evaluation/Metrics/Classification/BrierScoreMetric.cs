@@ -91,7 +91,7 @@ public class BrierScoreMetric<T> : IProbabilisticClassificationMetric<T>
                 sum += diff * diff;
             }
         }
-        return NumOps.FromDouble(sum / (n * numClasses));
+        return NumOps.FromDouble(sum / ((double)n * numClasses));
     }
 
     /// <inheritdoc />

@@ -147,7 +147,7 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
                     for (int j = 0; j < p; j++)
                     {
                         double diff = Diff(data, idx, missIdx, j, featureRanges[j]);
-                        _featureWeights[j] += classWeight * diff / (sampleCount * _nNeighbors);
+                        _featureWeights[j] += classWeight * diff / ((double)sampleCount * _nNeighbors);
                     }
                 }
             }
@@ -158,7 +158,7 @@ public class ReliefF<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedF
                 for (int j = 0; j < p; j++)
                 {
                     double diff = Diff(data, idx, hitIdx, j, featureRanges[j]);
-                    _featureWeights[j] -= diff / (sampleCount * _nNeighbors);
+                    _featureWeights[j] -= diff / ((double)sampleCount * _nNeighbors);
                 }
             }
         }

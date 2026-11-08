@@ -115,7 +115,7 @@ public class FractalDimensionSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
                         sumDiff += Math.Abs(data[idx1] - data[idx0]);
                 }
 
-                double normFactor = (n - 1.0) / (k * k * numSegments);
+                double normFactor = (n - 1.0) / ((double)k * k * numSegments);
                 double lm = sumDiff * normFactor;
                 lmValues.Add(lm);
             }

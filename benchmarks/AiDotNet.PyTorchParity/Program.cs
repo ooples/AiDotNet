@@ -391,7 +391,7 @@ internal sealed class BenchmarkRunner(BenchmarkOptions options)
                 Math.Round(BenchStats.Quantile(steadySorted, 0.5) * 1000d, 3),
                 Math.Round(BenchStats.Quantile(steadySorted, 0.25) * 1000d, 3),
                 Math.Round(BenchStats.Quantile(steadySorted, 0.75) * 1000d, 3),
-                Math.Round(options.InferenceIterations * batchSize / totalSteady, 3),
+                Math.Round((double)options.InferenceIterations * batchSize / totalSteady, 3),
                 Math.Round(peak, 3)));
         }
         return reports;
