@@ -7104,7 +7104,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// Records the current layers' types as the stack the model generated itself and has checked keeps no GPU result
     /// between calls (<see cref="ReleasesInferenceIntermediates"/>). Call it when the layers are built.
     /// </summary>
-    protected void RecordGeneratedLayerTypes()
+    private protected void RecordGeneratedLayerTypes()
     {
         var types = new Type[Layers.Count];
         for (int i = 0; i < types.Length; i++) types[i] = Layers[i].GetType();
@@ -7116,7 +7116,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// order. A layer added, removed or swapped for another kind since then has not been checked; a deserialized or
     /// cloned stack rebuilds the same types and still matches.
     /// </summary>
-    protected bool LayersMatchTheGeneratedStack()
+    private protected bool LayersMatchTheGeneratedStack()
     {
         if (_generatedLayerTypes is not { } generated || Layers.Count != generated.Length) return false;
         for (int i = 0; i < generated.Length; i++)
