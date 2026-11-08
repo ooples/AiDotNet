@@ -31,6 +31,21 @@ public enum SeedTTSTrainingComponent
 /// </remarks>
 public class SeedTTSOptions : CodecTtsOptions
 {
+    /// <summary>The causal token language model's depth, forwarded to <see cref="CodecTtsOptions.NumLLMLayers"/>.</summary>
+    public new int NumEncoderLayers { get => NumLLMLayers; set => NumLLMLayers = value; }
+
+    /// <summary>The native pipeline's single speech-token stream.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("This native Seed-TTS pipeline supports exactly one token stream; native tests reject other codebook counts and round-trip its single-stream codec.")]
+    public new int NumCodebooks { get => base.NumCodebooks; set => base.NumCodebooks = value; }
+
+    /// <summary>The waveform sample rate, paired with CodecFrameRate and CodecRates.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("SampleRate / CodecFrameRate must equal the CodecRates product; native tests reject unpaired values and round-trip paired sample rates and stride products.")]
+    public new int SampleRate { get => base.SampleRate; set => base.SampleRate = value; }
+
+    /// <summary>The speech-token frame rate, paired with SampleRate and CodecRates.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("SampleRate / CodecFrameRate must equal the CodecRates product; native tests reject unpaired values and round-trip paired sample rates and stride products.")]
+    public new int CodecFrameRate { get => base.CodecFrameRate; set => base.CodecFrameRate = value; }
+
     /// <summary>Creates the native reference configuration.</summary>
     public SeedTTSOptions()
     {

@@ -460,6 +460,8 @@ public partial class SeedTTS<T> : TtsModelBase<T>, ICodecTts<T>
 
     private static void ValidateOptions(SeedTTSOptions options)
     {
+        if ((double.IsNaN(options.DropoutRate) || double.IsInfinity(options.DropoutRate)) || options.DropoutRate is < 0 or >= 1)
+            throw new ArgumentOutOfRangeException(nameof(options.DropoutRate), "DropoutRate must be finite and lie in [0, 1).");
         if (options.SampleRate <= 0 || options.CodecFrameRate <= 0
             || options.SampleRate % options.CodecFrameRate != 0)
             throw new ArgumentException("SampleRate must be a positive integer multiple of CodecFrameRate.", nameof(options));

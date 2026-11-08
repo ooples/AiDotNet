@@ -47,6 +47,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
             : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> ? "musicgen-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> ? "glmvoice-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.SeedTTS<T> ? "seedtts-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T> ? "naturalspeech3-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T> ? "voicecraft-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.VALLE2<T> ? "valle2-" + option
@@ -134,6 +135,10 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.SeedTTS<T> seedTts
+            && SeedTtsOptionFixture.Observe(seedTts, option) is { } seedObservation)
+            return seedObservation;
+
         if (network is AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T> voiceCraft
             && VoiceCraftOptionFixture.Observe(voiceCraft, option) is { } voiceObservation)
             return voiceObservation;
@@ -567,6 +572,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.SeedTTS<T> seedTts)
+        {
+            SeedTtsOptionFixture.Train(seedTts);
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T> naturalSpeech && NaturalSpeech3OptionFixture.IsCodecOption(option))
         {
             NaturalSpeech3OptionFixture.Train(naturalSpeech);
@@ -679,6 +689,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions seedTts)
+            SeedTtsOptionFixture.PrepareOptions(seedTts, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options naturalSpeech)
             NaturalSpeech3OptionFixture.PrepareOptions(naturalSpeech, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions voiceCraft)

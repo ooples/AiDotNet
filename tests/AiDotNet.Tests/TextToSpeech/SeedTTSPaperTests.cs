@@ -19,6 +19,65 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class SeedTTSPaperTests
 {
     [Theory]
+    [InlineData("SampleRate", 1600)]
+    [InlineData("CodecFrameRate", 200)]
+    [InlineData("NumCodebooks", 2)]
+    public void UnpairedNativeCodecGeometryIsRejected(string property, int value)
+    {
+        var options = SmallOptions();
+        typeof(SeedTTSOptions).GetProperty(property)!.SetValue(options, value);
+        Assert.Throws<ArgumentException>(() => Create(options));
+    }
+
+    [Theory]
+    [InlineData(2, 100)]
+    [InlineData(4, 100)]
+    [InlineData(4, 200)]
+    public void PairedNativeCodecGeometryRoundTripsOneTokenStream(int finalStride, int frameRate)
+    {
+        var options = SmallOptions();
+        options.CodecRates = new[] { 2, 2, finalStride };
+        options.CodecFrameRate = frameRate;
+        options.SampleRate = frameRate * 4 * finalStride;
+        using var model = Create(options);
+        var codes = model.EncodeToTokens(Audio(3 * options.SamplesPerCodecFrame));
+        Assert.Equal(3, codes.Length);
+        Assert.Equal(1, model.NumCodebooks);
+        var audio = model.DecodeFromTokens(codes);
+        Assert.Equal(3 * options.SamplesPerCodecFrame, audio.Length);
+        Assert.All(audio.ToArray(), value => Assert.True(double.IsFinite(value)));
+    }
+
+    [Theory]
+    [InlineData(-.1)]
+    [InlineData(1)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void InvalidLanguageDropoutIsRejected(double value)
+    {
+        var options = SmallOptions();
+        options.DropoutRate = value;
+        Assert.Throws<ArgumentOutOfRangeException>(() => Create(options));
+    }
+
+    [Fact]
+    public void LanguageDropoutActsDuringTrainingAndPreservesEvaluation()
+    {
+        var options = SmallOptions();
+        options.DropoutRate = .5;
+        var layers = new List<LayerBase<double>>();
+        var language = new SeedTTSTokenLanguageModel<double>(AiDotNetEngine.Current, layers, options);
+        foreach (var layer in layers) layer.SetTrainingMode(false);
+        double Loss() => language.Loss(new[] { 3, 4, 5 }, new[] { 1, 2, 3 }).ToArray()[0];
+        double evaluation = Loss();
+        Assert.Equal(evaluation, Loss());
+        foreach (var layer in layers) layer.SetTrainingMode(true);
+        Assert.NotEqual(evaluation, Loss());
+        foreach (var layer in layers) layer.SetTrainingMode(false);
+        Assert.Equal(evaluation, Loss());
+    }
+
+    [Theory]
     [InlineData(SeedTTSTrainingComponent.TokenDiffusion)]
     [InlineData(SeedTTSTrainingComponent.TimbreSelfDistillation)]
     public void DiffusionTraining_UpdatesOnlyItsStageAndKeepsEvaluationRepeatable(SeedTTSTrainingComponent stage)

@@ -22013,3 +22013,11 @@ AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options.HopSize.get -> int
 AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options.HopSize.set -> void
 AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options.MelChannels.get -> int
 AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options.MelChannels.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.NumEncoderLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.NumEncoderLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.NumCodebooks.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.NumCodebooks.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.SampleRate.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.SampleRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.CodecFrameRate.get -> int
+AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.CodecFrameRate.set -> void

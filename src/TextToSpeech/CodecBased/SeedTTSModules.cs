@@ -90,6 +90,7 @@ internal sealed class SeedTTSTokenLanguageModel<T>
     private readonly IEngine _engine;
     private readonly SeedTTSOptions _options;
     private readonly LlamaNetwork<T> _transformer;
+    private readonly DropoutLayer<T> _inputDropout;
     private readonly int _speechBos;
     private readonly int _speechEos;
 
@@ -102,6 +103,7 @@ internal sealed class SeedTTSTokenLanguageModel<T>
         TextEmbedding = Own(layers, new TiedEmbeddingLayer<T>(options.VocabSize, options.LLMDim));
         SpeechEmbedding = Own(layers, new TiedEmbeddingLayer<T>(options.CodebookSize + 2, options.LLMDim));
         SpeechHead = Own(layers, new BiasFreeLinearLayer<T>(options.LLMDim, options.CodebookSize + 2));
+        _inputDropout = Own(layers, new DropoutLayer<T>(options.DropoutRate));
         _transformer = new LlamaNetwork<T>(engine, layers, new LlamaConfiguration
         {
             VocabSize = 0,
@@ -131,7 +133,7 @@ internal sealed class SeedTTSTokenLanguageModel<T>
         targets[^1] = _speechEos;
 
         var prepared = Prepare(text, promptSpeech, inputs);
-        var hidden = _transformer.Forward(prepared.Embeddings).Hidden;
+        var hidden = _transformer.Forward(_inputDropout.Forward(prepared.Embeddings)).Hidden;
         var speechHidden = _engine.TensorSlice(hidden, new[] { 0, prepared.SpeechStart, 0 },
             new[] { 1, inputs.Length, _options.LLMDim });
         return CrossEntropy(SpeechHead.Forward(speechHidden), targets);
