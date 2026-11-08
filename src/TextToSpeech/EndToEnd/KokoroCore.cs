@@ -22,17 +22,18 @@ internal sealed class KokoroCore<T>
     public IReadOnlyList<LayerBase<T>> Layers => _layers;
     internal int? SynthesisSeed { get; set; }
 
-    internal KokoroCore(IEngine engine, bool originalFloat32Buffers = true)
+    internal KokoroCore(IEngine engine, bool originalFloat32Buffers = true, KokoroOptions? options = null)
     {
+        options ??= new KokoroOptions();
         _engine = engine;
         _bert = new AlbertNetwork<T>(engine, _layers, new AlbertConfiguration
         {
-            VocabSize = 178, EmbeddingSize = 128, Hidden = 768, Layers = 12, Heads = 12,
-            Intermediate = 2048, MaxPositions = 512, Dropout = 0
+            VocabSize = 178, EmbeddingSize = 128, Hidden = 768, Layers = 12, Heads = options.NumHeads,
+            Intermediate = options.FilterChannels, MaxPositions = 512, Dropout = 0
         });
         _bertProjection = StyleTtsOps.Own(_layers, StyleTtsOps.Linear<T>(512));
-        _prosody = new StyleTtsProsodyPredictor<T>(engine, _layers, 128, 512, 3, .2, 50);
-        _text = new StyleTtsTextEncoder<T>(engine, _layers, 512, 5, 3, 178);
+        _prosody = new StyleTtsProsodyPredictor<T>(engine, _layers, 128, 512, options.NumDecoderLayers, options.DropoutRate, 50);
+        _text = new StyleTtsTextEncoder<T>(engine, _layers, 512, 5, options.NumEncoderLayers, 178);
         _decoder = new StyleTts2Decoder<T>(engine, _layers, StyleTts2DecoderType.IstftNet,
             512, 128, 1024, 64, new[] { 3, 7, 11 }, new[] { 10, 6 }, 512,
             new[] { new[] { 1, 3, 5 }, new[] { 1, 3, 5 }, new[] { 1, 3, 5 } }, new[] { 20, 12 }, 20, 5, 24000);
@@ -56,7 +57,7 @@ internal sealed class KokoroCore<T>
 
     public (Tensor<T> Audio, int[] Durations, Tensor<T> Bert, Tensor<T> Projected,
         Tensor<T> DurationLogits, Tensor<T> Pitch, Tensor<T> Energy, Tensor<T> Text) Forward(
-        IReadOnlyList<int> tokens, Tensor<T> referenceStyle, double speed = 1)
+        IReadOnlyList<int> tokens, Tensor<T> referenceStyle, double speed = 1, bool training = false)
     {
         if (tokens.Count == 0 || tokens.Count > 512 || tokens.Any(token => token < 0 || token >= 178))
             throw new ArgumentException("Kokoro accepts 1–512 phoneme IDs in [0,178).", nameof(tokens));
@@ -67,11 +68,11 @@ internal sealed class KokoroCore<T>
         var style = _engine.Reshape(referenceStyle, new[] { 1, 256 });
         var acoustic = _engine.TensorSlice(style, new[] { 0, 0 }, new[] { 1, 128 });
         var prosodic = _engine.TensorSlice(style, new[] { 0, 128 }, new[] { 1, 128 });
-        var bert = _bert.Encode(tokens, false, random);
+        var bert = _bert.Encode(tokens, training, random);
         var projected = _bertProjection.Forward(bert);
         var encoded = _prosody.EncodeText(_engine.Reshape(_engine.TensorTranspose(projected),
-            new[] { 1, 512, length }), prosodic, false, random);
-        var logits = _prosody.Durations(encoded, false, random);
+            new[] { 1, 512, length }), prosodic, training, random);
+        var logits = _prosody.Durations(encoded, training, random);
         var probabilities = _engine.Sigmoid(logits);
         var operations = MathHelper.GetNumericOperations<T>();
         var durations = new int[length];
@@ -88,13 +89,13 @@ internal sealed class KokoroCore<T>
             for (int i = 0; i < durations[token]; i++) alignment[token, frame++] = operations.One;
         var aligned = _engine.Reshape(_engine.TensorMatMul(_engine.TensorTranspose(encoded), alignment),
             new[] { 1, 640, frames });
-        var (pitch, energy) = _prosody.Prosody(aligned, prosodic, false, random);
+        var (pitch, energy) = _prosody.Prosody(aligned, prosodic, training, random);
         var ids = new Tensor<T>(new[] { length });
         for (int i = 0; i < length; i++) ids[i] = operations.FromDouble(tokens[i]);
-        var text = _text.Forward(ids, false, random);
+        var text = _text.Forward(ids, training, random);
         var asr = _engine.Reshape(_engine.TensorMatMul(_engine.Reshape(text, new[] { 512, length }), alignment),
             new[] { 1, 512, frames });
-        var audio = _decoder.Forward(asr, pitch, energy, acoustic, false, random);
+        var audio = _decoder.Forward(asr, pitch, energy, acoustic, training, random);
         return (audio, durations, bert, projected, logits, pitch, energy, text);
     }
 

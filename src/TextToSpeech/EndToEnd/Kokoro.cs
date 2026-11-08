@@ -161,6 +161,7 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(PreprocessText(text));
         if (string.IsNullOrWhiteSpace(text)) throw new ArgumentException("Text is required.", nameof(text));
+        if (text.Length > _options.MaxTextLength) throw new ArgumentException("Text exceeds MaxTextLength.", nameof(text));
         string phonemes = PhonemizeText(text);
         return SynthesizePhonemes(phonemes, SelectVoiceStyle(phonemes.Length), _options.Speed);
     }
@@ -196,7 +197,18 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (!_useNativeMode) return;
         if (_options.HiddenDim != 512 || _options.StyleDim != 128 || _options.VocabSize != 178 || _options.SampleRate != 24000)
             throw new ArgumentException("The Kokoro-82M preset requires hidden 512, style 128, vocabulary 178 and 24000 Hz.");
-        _native = new KokoroCore<T>(Engine);
+        if (_options.NumEncoderLayers < 1 || _options.NumDecoderLayers < 1 || _options.FilterChannels < 1
+            || _options.NumHeads < 1 || 768 % _options.NumHeads != 0 || _options.MaxTextLength < 1
+            || double.IsNaN(_options.DropoutRate) || _options.DropoutRate < 0 || _options.DropoutRate >= 1)
+            throw new ArgumentException("Kokoro needs positive depths, widths and text capacity, ALBERT heads dividing 768, and dropout in [0,1).");
+        var initialization = LayerInitializationSeedScope.CaptureScope();
+        try
+        {
+            int? seed = Architecture.HasExplicitRandomSeed ? Architecture.RandomSeed : _options.Seed ?? Architecture.RandomSeed;
+            if (seed.HasValue) LayerInitializationSeedScope.ResetForModelConstruction(seed.Value);
+            _native = new KokoroCore<T>(Engine, options: _options);
+        }
+        finally { LayerInitializationSeedScope.RestoreScope(initialization); }
         Layers.AddRange(_native.Layers);
     }
 
@@ -205,14 +217,21 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         ThrowIfDisposed();
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input);
+        return NativeForward(input, training: false);
+    }
+
+    private Tensor<T> NativeForward(Tensor<T> input, bool training)
+    {
+        ThrowIfDisposed();
         if (_native is null) throw new InvalidOperationException("Native Kokoro is required.");
+        if (input.Length > _options.MaxTextLength) throw new ArgumentException("Token input exceeds MaxTextLength.", nameof(input));
         var ids = input.ToArray().Select(value => checked((int)NumOps.ToDouble(value))).ToArray();
         _native.SynthesisSeed = _options.SynthesisSeed;
-        return _native.Forward(ids, SelectVoiceStyle(Math.Max(1, ids.Length - 2)), _options.Speed).Audio;
+        return _native.Forward(ids, SelectVoiceStyle(Math.Max(1, ids.Length - 2)), _options.Speed, training).Audio;
     }
 
     /// <inheritdoc />
-    public override Tensor<T> ForwardForTraining(Tensor<T> input) => PredictCore(input);
+    public override Tensor<T> ForwardForTraining(Tensor<T> input) => IsOnnxMode ? PredictCore(input) : NativeForward(input, training: true);
 
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer() =>

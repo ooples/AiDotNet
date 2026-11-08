@@ -41,18 +41,23 @@ public class TtsModelOptions : ModelOptions
     }
 
     /// <summary>Gets or sets the audio sample rate in Hz.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro's released ISTFTNet renderer is fixed at 24000 Hz; the native constructor rejects other rates.", ModelType = typeof(EndToEnd.Kokoro<>))]
     public int SampleRate { get; set; } = 22050;
 
     /// <summary>Gets or sets the number of mel-spectrogram frequency channels.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro predicts waveform spectra directly with ISTFTNet and has no mel-spectrogram representation.", ModelType = typeof(EndToEnd.Kokoro<>))]
     public int MelChannels { get; set; } = 80;
 
     /// <summary>Gets or sets the hop size for mel-spectrogram computation.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro has no mel frontend; its released ISTFTNet upsampling and inverse-STFT hop geometry are fixed by the decoder.", ModelType = typeof(EndToEnd.Kokoro<>))]
     public int HopSize { get; set; } = 256;
 
     /// <summary>Gets or sets the FFT window size.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro has no configurable analysis FFT; its released ISTFTNet synthesis transform has fixed decoder geometry.", ModelType = typeof(EndToEnd.Kokoro<>))]
     public int FftSize { get; set; } = 1024;
 
     /// <summary>Gets or sets the model hidden dimension.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro's released style and decoder interfaces require hidden width 512; the native constructor rejects other widths.", ModelType = typeof(EndToEnd.Kokoro<>))]
     public int HiddenDim { get; set; } = 256;
 
     /// <summary>Gets or sets the number of encoder layers.</summary>
@@ -65,12 +70,14 @@ public class TtsModelOptions : ModelOptions
     public int NumHeads { get; set; } = 8;
 
     /// <summary>Gets or sets the phoneme/text vocabulary size.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro uses the released 178-symbol phoneme vocabulary; the native constructor rejects other vocabulary sizes.", ModelType = typeof(EndToEnd.Kokoro<>))]
     public int VocabSize { get; set; } = 256;
 
     /// <summary>Gets or sets the maximum input text length.</summary>
     public int MaxTextLength { get; set; } = 512;
 
     /// <summary>Gets or sets the maximum output audio length in mel frames.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro emits waveforms rather than mel frames; duration logits and Speed determine its output length.", ModelType = typeof(EndToEnd.Kokoro<>))]
     public int MaxMelLength { get; set; } = 2048;
 
     /// <summary>Gets or sets the dropout rate.</summary>

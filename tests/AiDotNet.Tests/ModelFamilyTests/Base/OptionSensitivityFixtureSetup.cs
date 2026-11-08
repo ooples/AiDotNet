@@ -39,10 +39,13 @@ internal static class OptionSensitivityFixtureSetup
             or AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>;
 
     internal static long ParameterCountBeforeFitting<T>(INeuralNetworkModel<T> network)
-        => network.GetParameters().Length;
+        => network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> kokoro
+            ? kokoro.ParameterCount
+            : network.GetParameters().Length;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => option == nameof(AiDotNet.Models.Options.ModelOptions.Seed) ? "model-options-seed"
+            : network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> ? "kokoro-" + option
             : network is AiDotNet.Finance.Forecasting.StateSpace.Hippo<T> && option == "TimescaleMax" ? "hippo-timescale-clamp"
             : network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> && option == "ConfidenceWindow" ? "ctc-segmentation-confidence"
             : network is AiDotNet.TextToSpeech.Latest.MegaTTS3<T> ? "mega-" + option
@@ -136,6 +139,8 @@ internal static class OptionSensitivityFixtureSetup
     internal static long Observe<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> kokoro)
+            return KokoroOptionFixture.Observe(kokoro, option);
         var task = ObserveTask(network, input, option, observe);
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         // Vector.Select materializes another full vector (and a double copy for float models).
@@ -757,6 +762,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.EndToEnd.KokoroOptions kokoro)
+            KokoroOptionFixture.PrepareOptions(kokoro, option);
         if (options is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentationOptions segmentation && option == "ConfidenceWindow")
             segmentation.ConfidenceWindow = 2;
         // Infinity's only finite generic candidate is 1, above every LegS step 1/(t+1).

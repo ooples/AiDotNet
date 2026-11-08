@@ -87,6 +87,7 @@ public partial class Kokoro<T>
             if (_vocabulary.TryGetValue(symbol, out int id)) ids.Add(id);
         ids.Add(0);
         if (ids.Count > 512) throw new ArgumentException("Kokoro accepts at most 510 phoneme IDs plus two pad IDs.", nameof(phonemes));
+        if (ids.Count > _options.MaxTextLength) throw new ArgumentException("Phoneme input exceeds MaxTextLength.", nameof(phonemes));
         return ids.ToArray();
     }
 

@@ -31,10 +31,14 @@ public class KokoroOptions : EndToEndTtsOptions
         NumFlowSteps = 0;
         VocabSize = 178;
         NumEncoderLayers = 3;
+        NumDecoderLayers = 3;
+        NumHeads = 12;
+        FilterChannels = 2048;
         DropoutRate = .2;
     }
 
     /// <summary>Gets or sets the width of the style vector that conditions synthesis.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The released voice bank has two 128-dimensional style halves; the native constructor rejects other style widths.", ModelType = typeof(Kokoro<>))]
     public int StyleDim { get; set; } = 128;
 
     /// <summary>Duration scaling used by the released model: sum(sigmoid(duration logits)) / speed.</summary>
