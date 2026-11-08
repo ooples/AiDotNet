@@ -192,6 +192,7 @@ public partial class ClonePlanGenerator : IIncrementalGenerator
         sb.AppendLine();
 
         var registrationMethods = new StringBuilder();
+        var registrationMap = new StringBuilder();
         int registrationIndex = 0;
         foreach (var type in distinct)
         {
@@ -200,10 +201,35 @@ public partial class ClonePlanGenerator : IIncrementalGenerator
             if (EmitRegistration(registrationMethods, type, registrationIndex))
             {
                 sb.AppendLine($"        Register_{registrationIndex:D6}();");
+                registrationMap.AppendLine($"        map[\"{RuntimeFullName(type)}\"] = Register_{registrationIndex:D6};");
                 registrationIndex++;
             }
         }
 
+        sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // Registering every plan binds every configuration property of every type by reflection: about 7 s on
+        // the first clone in a process (BiLSTMCRF's construction clones its LSTM, so its census constructMs read
+        // 4.1 s). The map lets the registry register only the type it was asked for. It is keyed on the runtime
+        // full name, not typeof: a typeof key loads every one of the types just to build the map (3.9 s).
+        sb.AppendLine("    private static Dictionary<string, Action>? _byType;");
+        sb.AppendLine();
+        sb.AppendLine("    /// <summary>Registers the plan generated for one type (the open definition of a generic), if any.</summary>");
+        sb.AppendLine("    internal static bool TryRegister(Type type)");
+        sb.AppendLine("    {");
+        sb.AppendLine("        var definition = type.IsGenericType && !type.IsGenericTypeDefinition ? type.GetGenericTypeDefinition() : type;");
+        sb.AppendLine("        if (definition.FullName is not { } name");
+        sb.AppendLine("            || !(_byType ??= BuildRegistrationMap()).TryGetValue(name, out var register)) return false;");
+        sb.AppendLine("        register();");
+        sb.AppendLine("        return true;");
+        sb.AppendLine("    }");
+        sb.AppendLine();
+        sb.AppendLine("    private static Dictionary<string, Action> BuildRegistrationMap()");
+        sb.AppendLine("    {");
+        sb.AppendLine($"        var map = new Dictionary<string, Action>({registrationIndex}, StringComparer.Ordinal);");
+        sb.Append(registrationMap);
+        sb.AppendLine("        return map;");
         sb.AppendLine("    }");
         sb.AppendLine();
         sb.Append(registrationMethods);
@@ -279,6 +305,19 @@ public partial class ClonePlanGenerator : IIncrementalGenerator
         sb.AppendLine("    }");
         sb.AppendLine();
         return true;
+    }
+
+    /// <summary>
+    /// The <c>Type.FullName</c> the runtime reports for a type's definition: namespace, containing types joined
+    /// by '+', and metadata names carrying the generic arity (<c>Ns.Outer`1+Inner</c>).
+    /// </summary>
+    private static string RuntimeFullName(INamedTypeSymbol type)
+    {
+        var name = type.MetadataName;
+        for (var outer = type.ContainingType; outer is not null; outer = outer.ContainingType)
+            name = outer.MetadataName + "+" + name;
+        var ns = type.ContainingNamespace;
+        return ns is null || ns.IsGlobalNamespace ? name : ns.ToDisplayString() + "." + name;
     }
 
     /// <summary>
