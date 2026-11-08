@@ -49,6 +49,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> ? "glmvoice-" + option
             : network is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T> && option is "DvaeFftSize" or "DvaeHopSize" or "DvaeWindowSize" ? "xtts-codec"
             : network is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T> && XttsOptionFixture.IsSamplerOption(option) ? "xtts-sampler"
+            : network is AiDotNet.TextToSpeech.CodecBased.Pheme<T> && PhemeOptionFixture.IsTrainingOption(option) ? "pheme-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.MARS5TTS<T> ? "mars5-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.SeedTTS<T> ? "seedtts-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T> ? "naturalspeech3-" + option
@@ -586,6 +587,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.Pheme<T> pheme && PhemeOptionFixture.IsTrainingOption(option))
+        {
+            PhemeOptionFixture.Train(pheme, option);
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.CodecBased.MARS5TTS<T> mars5 && Mars5OptionFixture.IsNarOption(option))
         {
             Mars5OptionFixture.Train(mars5);
@@ -710,6 +716,8 @@ internal static class OptionSensitivityFixtureSetup
     {
         if (options is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options xtts)
             XttsOptionFixture.PrepareOptions(xtts, option);
+        if (options is AiDotNet.TextToSpeech.CodecBased.PhemeOptions pheme)
+            PhemeOptionFixture.PrepareOptions(pheme, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions mars5)
             Mars5OptionFixture.PrepareOptions(mars5, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions seedTts)

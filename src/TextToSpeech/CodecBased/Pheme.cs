@@ -543,9 +543,10 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
                 Beta1 = 0.9,
                 Beta2 = 0.98,
                 Epsilon = 1e-8,
-                WeightDecay = text ? 0.0 : 0.01,
+                WeightDecay = text ? 0.0 : o.WeightDecay,
                 EnableGradientClipping = text,
                 MaxGradientNorm = 1.0,
+                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
                 LearningRateScheduler = schedule,
             };
             optimizer = PaperOptimizerFactory.VerifyHandBuilt(this, new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, options),

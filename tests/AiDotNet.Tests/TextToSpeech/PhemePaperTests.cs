@@ -24,6 +24,41 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class PhemePaperTests
 {
+    [Theory]
+    [InlineData("TextTrainingSteps")]
+    [InlineData("AcousticTrainingSteps")]
+    public void NativeScheduleAdvancesAfterEachTrainingUpdate(string option)
+    {
+        var options = Tiny();
+        PhemeOptionFixture.PrepareOptions(options, option);
+        using var model = Create(options);
+        model.CurrentStage = option == "TextTrainingSteps" ? PhemeTrainingStage.TextToSemantic : PhemeTrainingStage.SemanticToAcoustic;
+        var optimizer = (AiDotNet.Interfaces.IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>)typeof(Pheme<double>)
+            .GetMethod("StageOptimizer", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(model, null)!;
+        Assert.Equal(options.LearningRate, optimizer.GetCurrentLearningRate(), 12);
+        PhemeOptionFixture.Train(model, option);
+        Assert.Equal(.75 * options.LearningRate, optimizer.GetCurrentLearningRate(), 12);
+        PhemeOptionFixture.Train(model, option);
+        Assert.Equal(.5 * options.LearningRate, optimizer.GetCurrentLearningRate(), 12);
+    }
+
+    [Fact]
+    public void AcousticWeightDecayChangesNativeTrainingUpdates()
+    {
+        var firstOptions = Tiny();
+        PhemeOptionFixture.PrepareOptions(firstOptions, "WeightDecay");
+        var secondOptions = new PhemeOptions(firstOptions) { WeightDecay = .1 };
+        using var first = Create(firstOptions);
+        using var second = Create(secondOptions);
+        Assert.Equal(first.GetParameters().ToArray(), second.GetParameters().ToArray());
+        for (int step = 0; step < 2; step++)
+        {
+            PhemeOptionFixture.Train(first, "WeightDecay");
+            PhemeOptionFixture.Train(second, "WeightDecay");
+        }
+        Assert.False(first.GetParameters().SequenceEqual(second.GetParameters()));
+    }
+
     private static PhemeOptions Tiny(int codes = 16) => new()
     {
         HiddenDim = 16, TextModelDim = 16, TextFeedForwardDim = 32, TextKeyValueDim = 8, NumHeads = 2,
