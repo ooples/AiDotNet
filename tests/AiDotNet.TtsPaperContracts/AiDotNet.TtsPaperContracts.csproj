@@ -34,6 +34,8 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/NaturalSpeech3ModelTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/Mars5ModelTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/Mars5OptionFixture.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/XttsOptionFixture.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/XttsCodecOptionTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/GLM4VoiceTaskTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/GLM4VoiceFixture.cs" />
     <Compile Include="../AiDotNet.Tests/Audio/MusicGenPaperTests.cs" />
