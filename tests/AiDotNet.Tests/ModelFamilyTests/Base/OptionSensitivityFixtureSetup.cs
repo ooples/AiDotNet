@@ -47,6 +47,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
             : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> ? "musicgen-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> ? "glmvoice-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T> ? "voicecraft-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.VALLE2<T> ? "valle2-" + option
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> ? "stylezs-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T> ? "whisperspeech-" + option
@@ -132,6 +133,10 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T> voiceCraft
+            && VoiceCraftOptionFixture.Observe(voiceCraft, option) is { } voiceObservation)
+            return voiceObservation;
+
         if (network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> glmVoice
             && GlmVoiceOptionFixture.Observe(glmVoice, option) is { } glmObservation)
             return glmObservation;
@@ -561,6 +566,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T> voiceCraft)
+        {
+            VoiceCraftOptionFixture.Train(voiceCraft);
+            return true;
+        }
         if (network is AiDotNet.Audio.MusicGen.MusicGenModel<T> musicGen && AiDotNet.Tests.Audio.MusicGenOptionFixture.TryTrain(musicGen, input, option))
             return true;
         if (network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> glmVoice && GlmVoiceOptionFixture.TryTrain(glmVoice, option))
@@ -663,6 +673,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions voiceCraft)
+            VoiceCraftOptionFixture.PrepareOptions(voiceCraft, option);
         if (options is AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions glmVoice)
             GlmVoiceOptionFixture.PrepareOptions(glmVoice, option);
         if (options is AiDotNet.Audio.MusicGen.MusicGenOptions musicGen)
@@ -955,6 +967,9 @@ internal static class OptionSensitivityFixtureSetup
 
         switch (network)
         {
+            case AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T> model:
+                VoiceCraftNativeFixture.Prepare(model);
+                break;
             case AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> model:
                 GLM4VoiceFixture.Prepare(model);
                 break;

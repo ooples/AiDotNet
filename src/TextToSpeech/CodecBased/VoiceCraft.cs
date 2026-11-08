@@ -262,7 +262,8 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
     {
         RequirePipeline();
         if (_optimizer is null) throw new NotSupportedException("Native optimizer is unavailable.");
-        if (_scaledAdamOptions is not null) _scaledAdamOptions.InitialLearningRate = EdenLearningRate(_trainingStep);
+        if (_scaledAdamOptions is not null && _optimizer is ScaledAdamOptimizer<T, Tensor<T>, Tensor<T>> scaled)
+            scaled.SetScheduledLearningRate(EdenLearningRate(_trainingStep));
         T loss = TrainWithCustomObjective(sample.Tokens, sample.Tokens, (_, _) => BuildObjective(sample), _optimizer);
         _trainingStep++;
         return loss;
@@ -291,12 +292,17 @@ public partial class VoiceCraft<T> : TtsModelBase<T>, ICodecTts<T>
         }
         var codecOptions = (EnCodecOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(_options.Codec);
         codecOptions.IncludeDiscriminators = false;
-        _codecNetwork = new EnCodec<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional,
-            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1) { RandomSeed = Architecture.RandomSeed }, codecOptions);
+        var parentInitialization = LayerInitializationSeedScope.CaptureScope();
+        try
+        {
+            _codecNetwork = new EnCodec<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional,
+                NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1) { RandomSeed = Architecture.RandomSeed }, codecOptions);
+        }
+        finally { LayerInitializationSeedScope.RestoreScope(parentInitialization); }
         if (_codecNetwork.HopLength != _options.HopSize || codecOptions.SampleRate != _options.SampleRate ||
             codecOptions.CodebookSize != _options.CodebookSize ||
             _codecNetwork.QuantizersForBandwidth(codecOptions.TargetBandwidthKbps) != _options.NumCodebooks)
-            throw new ArgumentException("VoiceCraft options must match its 16 kHz, 320-hop, four-by-2048 EnCodec.");
+            throw new ArgumentException("VoiceCraft options must match the nested codec's sample rate, hop, codebook size and quantizer bandwidth.");
         _codec = new AudioCodecLayer<T>(_codecNetwork);
         ComponentLayers.Add(_codec);
         _network = new VoiceCraftNetwork<T>(Engine, ComponentLayers, _options);

@@ -12,6 +12,122 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class VoiceCraftPaperTests
 {
     [Theory]
+    [InlineData("MinimumGeneratedFrames")]
+    [InlineData("StopSilenceRepetition")]
+    [InlineData("SilenceTokens")]
+    [InlineData("SampleBatchSize")]
+    [InlineData("MaxCodecFrames")]
+    [InlineData("MaxTextLength")]
+    public void NativeOptionContextsExerciseTheirBoundaryAndRestoreReadoutParameters(string option)
+    {
+        var options = SmallOptions();
+        VoiceCraftOptionFixture.PrepareOptions(options, option);
+        using var model = Create(options);
+        model.Voice = model.CreateVoice(Audio(), "hello");
+        var control = VoiceCraftOptionFixture.Observe(model, option);
+        var parameters = model.GetParameters().ToArray();
+        switch (option)
+        {
+            case "MinimumGeneratedFrames": options.MinimumGeneratedFrames = 3; break;
+            case "StopSilenceRepetition": options.StopSilenceRepetition = 6; break;
+            case "SilenceTokens": options.SilenceTokens = new[] { 2 }; break;
+            case "SampleBatchSize": options.SampleBatchSize = 1; break;
+            case "MaxCodecFrames": options.MaxCodecFrames = 4; break;
+            case "MaxTextLength": options.MaxTextLength = 4; break;
+        }
+        Assert.NotNull(control);
+        Assert.NotEqual(control, VoiceCraftOptionFixture.Observe(model, option));
+        Assert.Equal(parameters, model.GetParameters().ToArray());
+    }
+
+    [Theory]
+    [InlineData("SampleRate", 8000)]
+    [InlineData("SampleRate", 24000)]
+    [InlineData("HopSize", 160)]
+    [InlineData("HopSize", 640)]
+    [InlineData("CodecFrameRate", 25)]
+    [InlineData("CodecFrameRate", 75)]
+    [InlineData("NumCodebooks", 2)]
+    [InlineData("CodebookSize", 16)]
+    public void NativeCodecRejectsUnpairedGeometry(string property, int value)
+    {
+        var options = SmallOptions();
+        typeof(VoiceCraftOptions).GetProperty(property)!.SetValue(options, value);
+        Assert.Throws<ArgumentException>(() => Create(options));
+    }
+
+    [Theory]
+    [InlineData(2, 8)]
+    [InlineData(4, 16)]
+    public void PairedCodecGeometryEncodesAndDecodesNativeAudio(int codebooks, int vocabulary)
+    {
+        var options = SmallOptions();
+        options.NumCodebooks = options.Codec.NumQuantizers = codebooks;
+        options.CodebookSize = options.Codec.CodebookSize = vocabulary;
+        options.CodebookLossWeights = Enumerable.Range(0, codebooks).Select(q => q == 0 ? 5.0 : 1.0).ToArray();
+        double bandwidth = codebooks * 50.0 * Math.Log(vocabulary, 2) / 1000;
+        options.Codec.TargetBandwidthKbps = bandwidth;
+        options.Codec.TargetBandwidths = new[] { bandwidth };
+        using var model = Create(options);
+        var codes = model.EncodeToTokens(Audio());
+        Assert.Equal(2 * codebooks, codes.Length);
+        var audio = model.DecodeFromTokens(codes);
+        Assert.Equal(640, audio.Length);
+        Assert.All(audio.ToArray(), value => Assert.True(TtsPaperNumerics.IsFinite(value)));
+        Assert.Equal(16000, model.SampleRate);
+        Assert.Equal(50, model.CodecFrameRate);
+    }
+
+    [Fact]
+    public void EdenUpdatesTheLearningRateUsedByScaledAdam()
+    {
+        var options = SmallOptions();
+        options.UseScaledAdam = true;
+        options.LearningRate = .02;
+        options.EdenWarmupSteps = 2;
+        options.EdenStep = 4;
+        options.EdenEpoch = 2;
+        options.PseudoEpochSteps = 2;
+        using var model = Create(options);
+        var codes = new Tensor<double>(new[] { 12, options.NumCodebooks });
+        for (int i = 0; i < codes.Length; i++) codes[i] = i % options.CodebookSize;
+        var sample = new TtsTrainingSample<double> { Text = "hello", Tokens = model.TokenizeText("hello"), CodecTokens = codes };
+        var optimizer = (AiDotNet.Interfaces.IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>)typeof(VoiceCraft<double>)
+            .GetField("_optimizer", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(model)!;
+        model.Train(sample);
+        Assert.Equal(.01, optimizer.GetCurrentLearningRate(), 12);
+        model.Train(sample);
+        Assert.True(optimizer.GetCurrentLearningRate() > .01);
+    }
+
+    [Fact]
+    public void NestedCodecConstructionPreservesTheTransformerOptionsSeed()
+    {
+        var previousScope = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.CaptureScope();
+        int? previousFallback = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed;
+        try
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = 1337;
+            double[] Snapshot(int optionsSeed, int? architectureSeed = null)
+            {
+                var options = SmallOptions();
+                options.Seed = optionsSeed;
+                using var model = new VoiceCraft<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+                    NeuralNetworkTaskType.Generative, inputSize: 4, outputSize: 1) { RandomSeed = architectureSeed }, options);
+                return model.GetParameters().ToArray();
+            }
+            Assert.Equal(Snapshot(7), Snapshot(7));
+            Assert.False(Snapshot(7).SequenceEqual(Snapshot(11)));
+            Assert.Equal(Snapshot(7, 2294), Snapshot(11, 2294));
+        }
+        finally
+        {
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.AmbientFallbackSeed = previousFallback;
+            AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.RestoreScope(previousScope);
+        }
+    }
+
+    [Theory]
     [InlineData(true)]
     [InlineData(false)]
     public void PublicGeneration_UsesDistinctTtsAndEditingEndTokensAndDurationGates(bool tts)

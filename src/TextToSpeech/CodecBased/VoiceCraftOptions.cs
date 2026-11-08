@@ -11,6 +11,41 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class VoiceCraftOptions : CodecTtsOptions
 {
+    /// <summary>The causal Transformer width, forwarded to <see cref="CodecTtsOptions.LLMDim"/>.</summary>
+    public new int HiddenDim { get => LLMDim; set => LLMDim = value; }
+
+    /// <summary>The causal Transformer stack depth, forwarded to <see cref="CodecTtsOptions.NumLLMLayers"/>.</summary>
+    public new int NumEncoderLayers { get => NumLLMLayers; set => NumLLMLayers = value; }
+
+    /// <summary>The causal Transformer stack depth, forwarded to <see cref="CodecTtsOptions.NumLLMLayers"/>.</summary>
+    public new int NumDecoderLayers { get => NumLLMLayers; set => NumLLMLayers = value; }
+
+    /// <summary>The text embedding vocabulary, forwarded to <see cref="TextVocabularySize"/>.</summary>
+    public new int VocabSize { get => TextVocabularySize; set => TextVocabularySize = value; }
+
+    /// <summary>The causal Transformer's training dropout, forwarded to <see cref="TransformerDropout"/>.</summary>
+    public new double DropoutRate { get => TransformerDropout; set => TransformerDropout = value; }
+
+    /// <summary>The GigaSpeech codec's fixed 16000 Hz sample rate.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("VoiceCraft's GigaSpeech codec is fixed at 16000 Hz; native geometry rejection and paired codec round-trip tests cover this contract.")]
+    public new int SampleRate { get => base.SampleRate; set => base.SampleRate = value; }
+
+    /// <summary>The GigaSpeech codec's fixed 320-sample hop.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("VoiceCraft's GigaSpeech codec uses a fixed 320-sample hop; native geometry tests reject other hops and verify decoded lengths.")]
+    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+
+    /// <summary>The GigaSpeech codec's fixed 50 Hz frame rate.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("VoiceCraft's codec frame rate is fixed to 16000/320=50 Hz; native geometry and codec round-trip tests verify it.")]
+    public new int CodecFrameRate { get => base.CodecFrameRate; set => base.CodecFrameRate = value; }
+
+    /// <summary>The codebook count, paired with the codec bandwidth, quantizer count and loss weights.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("NumCodebooks must match Codec.NumQuantizers, its bandwidth and CodebookLossWeights; native tests reject unpaired values and round-trip paired two/four-codebook models.")]
+    public new int NumCodebooks { get => base.NumCodebooks; set => base.NumCodebooks = value; }
+
+    /// <summary>The codec vocabulary, paired with the nested codec configuration and bandwidth.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("CodebookSize must match Codec.CodebookSize and its bandwidth; native tests reject unpaired values and round-trip paired vocabularies of eight/sixteen codes.")]
+    public new int CodebookSize { get => base.CodebookSize; set => base.CodebookSize = value; }
+
     /// <summary>Optional externally precomputed IPA phones using the checkpoint's inventory. Null runs the released eSpeak NG front end.</summary>
     public Func<string, IReadOnlyList<string>>? TextPhonemizer { get; set; }
     /// <summary>Creates the paper's main 830M configuration.</summary>
