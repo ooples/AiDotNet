@@ -8,7 +8,7 @@ using AiDotNet.Tensors.Engines.Optimization;
 using AiDotNet.Training;
 using Xunit;
 
-namespace AiDotNetTests.IntegrationTests.Training;
+namespace AiDotNet.Tests.IntegrationTests.Training;
 
 /// <summary>
 /// <c>ResetState</c> clears recurrent state, not optimizer state. A committed fused plan holds the optimizer's moments,
