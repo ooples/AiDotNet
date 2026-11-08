@@ -45,7 +45,7 @@ public class SeedTTSPaperTests
         Assert.Equal(1, model.NumCodebooks);
         var audio = model.DecodeFromTokens(codes);
         Assert.Equal(3 * options.SamplesPerCodecFrame, audio.Length);
-        Assert.All(audio.ToArray(), value => Assert.True(double.IsFinite(value)));
+        Assert.All(audio.ToArray(), value => Assert.True(TtsPaperNumerics.IsFinite(value)));
     }
 
     [Theory]

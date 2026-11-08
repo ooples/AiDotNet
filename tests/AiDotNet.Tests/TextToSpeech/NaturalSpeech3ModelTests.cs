@@ -61,7 +61,7 @@ public class NaturalSpeech3ModelTests
         Assert.Equal(12, codes.GetLength(1));
         var audio = model.DecodeFactors(codes, timbre);
         Assert.Equal(12 * options.HopSize, audio.Length);
-        Assert.All(audio.ToArray(), value => Assert.True(double.IsFinite(value)));
+        Assert.All(audio.ToArray(), value => Assert.True(TtsPaperNumerics.IsFinite(value)));
     }
 
     private static NaturalSpeech3Options Tiny(bool phonemeProsody = false) => new()

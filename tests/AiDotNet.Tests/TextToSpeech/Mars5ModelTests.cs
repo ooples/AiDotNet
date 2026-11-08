@@ -51,7 +51,7 @@ public class Mars5ModelTests
         Assert.Equal(codebooks, codes.GetLength(1));
         var audio = model.Vocode(codes);
         Assert.Equal(6 * hop, audio.Length);
-        Assert.All(audio.ToArray(), value => Assert.True(double.IsFinite(value)));
+        Assert.All(audio.ToArray(), value => Assert.True(TtsPaperNumerics.IsFinite(value)));
     }
 
     [Theory]
