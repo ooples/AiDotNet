@@ -25,6 +25,28 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class PhemePaperTests
 {
     [Theory]
+    [InlineData("AcousticDecoding")]
+    [InlineData("MaskGitSteps")]
+    [InlineData("MaxTextLength")]
+    public void NativeOptionObserversExerciseDecodingAndTextLimitsWithoutChangingMode(string option)
+    {
+        var options = Tiny();
+        PhemeOptionFixture.PrepareOptions(options, option);
+        using var model = Create(options);
+        model.CurrentStage = PhemeTrainingStage.SemanticToAcoustic;
+        model.SetTrainingMode(true);
+        var control = PhemeOptionFixture.Observe(model, option);
+        if (option == "MaskGitSteps") options.MaskGitSteps = 4;
+        if (option == "MaxTextLength") options.MaxTextLength = 1;
+        if (option == "AcousticDecoding") options.AcousticDecoding = Enum.GetValues(typeof(PhemeAcousticDecoding))
+            .Cast<PhemeAcousticDecoding>().First(value => value != options.AcousticDecoding);
+        Assert.NotNull(control);
+        Assert.NotEqual(control, PhemeOptionFixture.Observe(model, option));
+        Assert.Equal(PhemeTrainingStage.SemanticToAcoustic, model.CurrentStage);
+        Assert.True(model.IsTrainingMode);
+    }
+
+    [Theory]
     [InlineData("TextTrainingSteps")]
     [InlineData("AcousticTrainingSteps")]
     public void NativeScheduleAdvancesAfterEachTrainingUpdate(string option)

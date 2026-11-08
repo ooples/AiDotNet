@@ -49,7 +49,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> ? "glmvoice-" + option
             : network is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T> && option is "DvaeFftSize" or "DvaeHopSize" or "DvaeWindowSize" ? "xtts-codec"
             : network is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T> && XttsOptionFixture.IsSamplerOption(option) ? "xtts-sampler"
-            : network is AiDotNet.TextToSpeech.CodecBased.Pheme<T> && PhemeOptionFixture.IsTrainingOption(option) ? "pheme-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.Pheme<T> && (PhemeOptionFixture.IsTrainingOption(option) || PhemeOptionFixture.IsInferenceOption(option)) ? "pheme-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.MARS5TTS<T> ? "mars5-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.SeedTTS<T> ? "seedtts-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T> ? "naturalspeech3-" + option
@@ -139,6 +139,10 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.Pheme<T> pheme
+            && PhemeOptionFixture.Observe(pheme, option) is { } phemeObservation)
+            return phemeObservation;
+
         if (network is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T> xtts
             && option is "DvaeFftSize" or "DvaeHopSize" or "DvaeWindowSize")
             return XttsOptionFixture.ObserveCodec(xtts);
