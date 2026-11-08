@@ -345,45 +345,45 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         int columns = input.Columns;
         var predictions = new Vector<T>(input.Rows);
 
-        // Rows are independent, so fixed blocks of them run in parallel.
+        // Rows are independent, so fixed blocks of them run in parallel. Within a block each tree walks every row before
+        // the next tree starts, so a tree's nodes stay in cache; each row still sums the trees in tree order.
         int jobs = ResolveHistJobs();
         int blocks = (input.Rows + PredictBlockRows - 1) / PredictBlockRows;
+        var labels = new T[input.Rows];
         Parallel.For(0, blocks, new ParallelOptions { MaxDegreeOfParallelism = jobs }, block =>
         {
-            var row = new double[columns];
-            var rawPred = new double[numOutputs];
-            int end = Math.Min(input.Rows, (block + 1) * PredictBlockRows);
-            for (int i = block * PredictBlockRows; i < end; i++)
+            int start = block * PredictBlockRows;
+            int count = Math.Min(input.Rows, start + PredictBlockRows) - start;
+            var rows = new double[count * columns];
+            var raw = new double[count * numOutputs];
+            for (int r = 0; r < count; r++)
             {
-                var source = input.GetRowReadOnlySpan(i);
-                for (int j = 0; j < columns; j++) row[j] = NumOps.ToDouble(source[j]);
-                predictions[i] = PredictRow(forest, row, rawPred, initialPrediction, classLabels, numOutputs);
+                var source = input.GetRowReadOnlySpan(start + r);
+                for (int j = 0; j < columns; j++) rows[r * columns + j] = NumOps.ToDouble(source[j]);
+                for (int k = 0; k < numOutputs; k++) raw[r * numOutputs + k] = initialPrediction[k];
+            }
+
+            for (int tree = 0; tree < forest.Trees; tree++)
+                forest.Accumulate(tree, rows, count, columns, raw, numOutputs, tree % numOutputs, _learningRate);
+
+            var rawPred = new double[numOutputs];
+            for (int r = 0; r < count; r++)
+            {
+                Array.Copy(raw, r * numOutputs, rawPred, 0, numOutputs);
+                labels[start + r] = ClassOf(rawPred, classLabels);
             }
         });
 
+        for (int i = 0; i < labels.Length; i++) predictions[i] = labels[i];
         return predictions;
     }
 
     /// <summary>Rows per block of a parallel prediction: small, as a row costs a walk down every tree.</summary>
     private const int PredictBlockRows = 128;
 
-    /// <summary>The predicted label of one row: the trees' outputs summed in tree order, then the likeliest class.</summary>
-    private T PredictRow(FlatForest forest, double[] row, double[] rawPred, double[] initialPrediction,
-        Vector<T> classLabels, int numOutputs)
+    /// <summary>The likeliest class for one row's summed raw outputs.</summary>
+    private T ClassOf(double[] rawPred, Vector<T> classLabels)
     {
-        for (int k = 0; k < numOutputs; k++)
-        {
-            rawPred[k] = initialPrediction[k];
-        }
-
-        // Sum tree predictions
-        for (int treeIdx = 0; treeIdx < forest.Trees; treeIdx++)
-        {
-            int k = treeIdx % numOutputs;
-            rawPred[k] += _learningRate * forest.Evaluate(treeIdx, row);
-        }
-
-        // Convert to class prediction
         if (NumClasses == 2)
         {
             double prob = 1.0 / (1.0 + Math.Exp(-rawPred[0]));
@@ -425,12 +425,19 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// </remarks>
     private sealed class FlatForest
     {
+        /// <summary>
+        /// A split (<see cref="Feature"/> &gt;= 0), whose left child is the next node, or a leaf (-1) holding its value in
+        /// <see cref="Value"/>. One small struct per node in preorder, so a step down a tree reads one cache line.
+        /// </summary>
+        private struct Node
+        {
+            public double Value;
+            public int Feature;
+            public int Right;
+        }
+
         private readonly int[] _roots;
-        private readonly int[] _feature;
-        private readonly double[] _threshold;
-        private readonly int[] _left;
-        private readonly int[] _right;
-        private readonly double[] _value;
+        private readonly Node[] _nodes;
 
         public FlatForest(List<HistTree> trees, double[][] boundaries)
         {
@@ -452,50 +459,67 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
             }
 
             _roots = new int[trees.Count];
-            _feature = new int[nodes];
-            _threshold = new double[nodes];
-            _left = new int[nodes];
-            _right = new int[nodes];
-            _value = new double[nodes];
+            _nodes = new Node[nodes];
             int next = 0;
-            var pending = new Stack<(HistTree Node, int Index)>();
             for (int t = 0; t < trees.Count; t++)
             {
                 _roots[t] = next;
-                pending.Push((trees[t], next++));
-                while (pending.Count > 0)
+                next = Lay(trees[t], next, boundaries);
+            }
+        }
+
+        /// <summary>Lays out <paramref name="root"/>'s subtree in preorder from <paramref name="at"/>; returns the next free index.</summary>
+        private int Lay(HistTree root, int at, double[][] boundaries)
+        {
+            // Preorder without recursion: a split's left subtree follows it, and its right child's index is patched in
+            // once the left subtree has been laid out.
+            var pending = new Stack<(HistTree Node, int Parent)>();
+            pending.Push((root, -1));
+            while (pending.Count > 0)
+            {
+                var (node, parent) = pending.Pop();
+                int index = at++;
+                if (parent >= 0) _nodes[parent].Right = index;
+                if (node.LeftChild is not null && node.RightChild is not null)
                 {
-                    var (node, index) = pending.Pop();
-                    if (node.LeftChild is not null && node.RightChild is not null)
-                    {
-                        var bounds = boundaries[node.FeatureIndex];
-                        _feature[index] = node.FeatureIndex;
-                        _threshold[index] = node.BinThreshold < bounds.Length
-                            ? bounds[node.BinThreshold]
-                            : double.PositiveInfinity;
-                        _left[index] = next++;
-                        _right[index] = next++;
-                        pending.Push((node.LeftChild, _left[index]));
-                        pending.Push((node.RightChild, _right[index]));
-                    }
-                    else
-                    {
-                        _feature[index] = -1;
-                        _value[index] = node.LeafValue;
-                    }
+                    var bounds = boundaries[node.FeatureIndex];
+                    _nodes[index].Feature = node.FeatureIndex;
+                    _nodes[index].Value = node.BinThreshold < bounds.Length
+                        ? bounds[node.BinThreshold]
+                        : double.PositiveInfinity;
+                    pending.Push((node.RightChild, index));
+                    pending.Push((node.LeftChild, -1));
+                }
+                else
+                {
+                    _nodes[index].Feature = -1;
+                    _nodes[index].Value = node.LeafValue;
                 }
             }
+
+            return at;
         }
 
         public int Trees => _roots.Length;
 
-        /// <summary>The leaf value tree <paramref name="tree"/> gives <paramref name="row"/>.</summary>
-        public double Evaluate(int tree, double[] row)
+        /// <summary>
+        /// Adds <paramref name="learningRate"/> times tree <paramref name="tree"/>'s leaf value for each of
+        /// <paramref name="count"/> rows (row-major in <paramref name="rows"/>) to output <paramref name="output"/> of that
+        /// row in <paramref name="raw"/>.
+        /// </summary>
+        public void Accumulate(int tree, double[] rows, int count, int columns, double[] raw, int outputs, int output,
+            double learningRate)
         {
-            int node = _roots[tree];
-            while (_feature[node] >= 0)
-                node = row[_feature[node]] > _threshold[node] ? _right[node] : _left[node];
-            return _value[node];
+            var nodes = _nodes;
+            int root = _roots[tree];
+            for (int r = 0; r < count; r++)
+            {
+                int offset = r * columns;
+                int node = root;
+                while (nodes[node].Feature >= 0)
+                    node = rows[offset + nodes[node].Feature] > nodes[node].Value ? nodes[node].Right : node + 1;
+                raw[r * outputs + output] += learningRate * nodes[node].Value;
+            }
         }
     }
 
