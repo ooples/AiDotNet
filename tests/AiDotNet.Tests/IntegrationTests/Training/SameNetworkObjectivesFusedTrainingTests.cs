@@ -154,6 +154,25 @@ public class SameNetworkObjectivesFusedTrainingTests
         Assert.Equal(EncoderDecoder(reference), EncoderDecoder(reset));
     }
 
+    /// <summary>
+    /// An objective whose session never committed (the critic, whose RMSProp steps eagerly) and that a prior fallback
+    /// disabled is re-enabled by ResetState, as the model's own session is.
+    /// </summary>
+    [Fact(Timeout = 600_000)]
+    public async System.Threading.Tasks.Task ResetState_ReEnablesAnUncommittedObjectiveSession()
+    {
+        await System.Threading.Tasks.Task.Yield();
+        var model = Build();
+        Run(model, compile: true, steps: 1);
+        var uncommitted = ObjectiveSessions(model).Where(session => !session.IsCommitted).ToList();
+        Assert.NotEmpty(uncommitted);
+        foreach (var session in uncommitted) session.IsDisabled = true;
+
+        model.ResetState();
+
+        Assert.All(uncommitted, session => Assert.False(session.IsDisabled));
+    }
+
     private static IEnumerable<FusedTrainingSession<float>> ObjectiveSessions(StegaStampWatermarker<float> model)
     {
         var field = typeof(NeuralNetworkBase<float>).GetField("_objectiveSessions", BindingFlags.Instance | BindingFlags.NonPublic);
