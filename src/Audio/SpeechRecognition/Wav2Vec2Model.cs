@@ -620,6 +620,17 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     /// <inheritdoc />
     /// <remarks>With <see cref="Wav2Vec2ModelOptions.FreezeFeatureEncoder"/> the convolutional feature encoder's
     /// parameters are frozen: fine-tuning does not train them (and the forward computes no gradient for them).</remarks>
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
+    {
+        if (!_options.FreezeFeatureEncoder) return parameters;
+        var frozenLayers = Layers.Where((layer, index) => ResolveLayerParameterRole(index,
+            AiDotNet.Models.Parameters.ParameterSlotRole.Trainable) == AiDotNet.Models.Parameters.ParameterSlotRole.Frozen).ToList();
+        var frozen = new HashSet<Tensor<T>>(AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(frozenLayers, -1),
+            AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        return parameters.Where(parameter => !frozen.Contains(parameter)).ToList();
+    }
+
+
     protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
     {
         if (declared != AiDotNet.Models.Parameters.ParameterSlotRole.Trainable || !_options.FreezeFeatureEncoder || _network is null)

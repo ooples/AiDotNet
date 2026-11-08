@@ -132,6 +132,17 @@ public partial class WavLMASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => _stack is null ? base.ForwardForTraining(input) : Logits(input, training: true);
 
+    protected override IReadOnlyList<Tensor<T>> SelectTrainableParametersForTraining(IReadOnlyList<Tensor<T>> parameters)
+    {
+        if (!_options.FreezeFeatureEncoder) return parameters;
+        var frozenLayers = Layers.Where((layer, index) => ResolveLayerParameterRole(index,
+            AiDotNet.Models.Parameters.ParameterSlotRole.Trainable) == AiDotNet.Models.Parameters.ParameterSlotRole.Frozen).ToList();
+        var frozen = new HashSet<Tensor<T>>(AiDotNet.Training.TapeTrainingStep<T>.CollectParameters(frozenLayers, -1),
+            AiDotNet.Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        return parameters.Where(parameter => !frozen.Contains(parameter)).ToList();
+    }
+
+
     protected override AiDotNet.Models.Parameters.ParameterSlotRole ResolveLayerParameterRole(int layerIndex, AiDotNet.Models.Parameters.ParameterSlotRole declared)
         => declared == AiDotNet.Models.Parameters.ParameterSlotRole.Trainable && _options.FreezeFeatureEncoder
             && _stack is not null && _stack.IsFeatureEncoderLayer(Layers[layerIndex])
