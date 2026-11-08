@@ -243,24 +243,7 @@ public partial class KMeans<T> : ClusteringBase<T>
             kernel.Assign(centers, clusters, labels, sums, counts);
             iterations++;
 
-            var newCenters = new double[clusters * columns];
-            double shift = 0;
-            for (int k = 0; k < clusters; k++)
-            {
-                int offset = k * columns;
-                if (counts[k] > 0)
-                {
-                    for (int j = 0; j < columns; j++) newCenters[offset + j] = sums[offset + j] / counts[k];
-                }
-                else
-                {
-                    // Empty cluster: keep its old center.
-                    Array.Copy(centers, offset, newCenters, offset, columns);
-                }
-
-                shift += EuclideanKMeansKernel.SquaredDistance(centers, offset, newCenters, offset, columns);
-            }
-
+            var (newCenters, shift) = MeanCenters(centers, sums, counts, clusters, columns);
             centers = newCenters;
             if (labels.AsSpan().SequenceEqual(previousLabels))
             {
@@ -285,6 +268,33 @@ public partial class KMeans<T> : ClusteringBase<T>
         var labelVector = new Vector<T>(labels.Length);
         for (int i = 0; i < labels.Length; i++) labelVector[i] = NumOps.FromDouble(labels[i]);
         return (centerMatrix, labelVector, NumOps.FromDouble(inertia), iterations);
+    }
+
+    /// <summary>
+    /// Each cluster's new center, the mean of its rows (an empty cluster keeps its old center), and the sum of the
+    /// centers' squared shifts.
+    /// </summary>
+    private static (double[] Centers, double Shift) MeanCenters(double[] centers, double[] sums, int[] counts,
+        int clusters, int columns)
+    {
+        var newCenters = new double[clusters * columns];
+        double shift = 0;
+        for (int k = 0; k < clusters; k++)
+        {
+            int offset = k * columns;
+            if (counts[k] > 0)
+            {
+                for (int j = 0; j < columns; j++) newCenters[offset + j] = sums[offset + j] / counts[k];
+            }
+            else
+            {
+                Array.Copy(centers, offset, newCenters, offset, columns);
+            }
+
+            shift += EuclideanKMeansKernel.SquaredDistance(centers, offset, newCenters, offset, columns);
+        }
+
+        return (newCenters, shift);
     }
 
     /// <summary>

@@ -73,15 +73,15 @@ internal sealed class EuclideanKMeansKernel
 
         bool accumulate = sums is not null && counts is not null;
         int blocks = BlockCount;
-        var blockSums = accumulate ? new double[blocks][] : null;
-        var blockCounts = accumulate ? new int[blocks][] : null;
+        var blockSums = new double[accumulate ? blocks : 0][];
+        var blockCounts = new int[accumulate ? blocks : 0][];
 
         System.Threading.Tasks.Parallel.For(0, blocks, block =>
         {
             int start = block * BlockRows;
             int end = Math.Min(start + BlockRows, Rows);
-            var localSums = accumulate ? new double[clusters * columns] : null;
-            var localCounts = accumulate ? new int[clusters] : null;
+            var localSums = accumulate ? new double[clusters * columns] : Array.Empty<double>();
+            var localCounts = accumulate ? new int[clusters] : Array.Empty<int>();
             var dots = new double[padded];
             var dotVectors = MemoryMarshal.Cast<double, SimdVector>(new Span<double>(dots));
             var centerVectors = MemoryMarshal.Cast<double, SimdVector>(new ReadOnlySpan<double>(centersByColumn));
@@ -105,7 +105,7 @@ internal sealed class EuclideanKMeansKernel
                 }
 
                 labels[i] = best;
-                if (localSums is not null && localCounts is not null)
+                if (accumulate)
                 {
                     localCounts[best]++;
                     int target = best * columns;
@@ -114,11 +114,14 @@ internal sealed class EuclideanKMeansKernel
                 }
             }
 
-            if (blockSums is not null && localSums is not null) blockSums[block] = localSums;
-            if (blockCounts is not null && localCounts is not null) blockCounts[block] = localCounts;
+            if (accumulate)
+            {
+                blockSums[block] = localSums;
+                blockCounts[block] = localCounts;
+            }
         });
 
-        if (sums is not null && counts is not null && blockSums is not null && blockCounts is not null)
+        if (sums is not null && counts is not null)
         {
             Array.Clear(sums, 0, sums.Length);
             Array.Clear(counts, 0, counts.Length);

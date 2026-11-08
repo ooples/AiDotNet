@@ -26,7 +26,15 @@ internal static class ClassicalBench
     private const int TrainRows = 20_000;
     private const int TestRows = 5_000;
 
+    /// <summary>
+    /// Writes the shared train and test CSVs to <paramref name="outputDirectory"/>, fits and times every classical row,
+    /// and writes the AiDotNet report beside them for pytorch/classical.py to compare against.
+    /// </summary>
+    /// <param name="outputDirectory">Where the CSVs and the report go.</param>
+    /// <param name="repeats">Fits per row; the report records the median.</param>
+    /// <param name="seed">The data and model seed.</param>
     /// <param name="only">Row names to run (for profiling one row); empty runs every row.</param>
+    /// <returns>0 on success.</returns>
     public static int Run(string outputDirectory, int repeats, int seed, IReadOnlyCollection<string> only)
     {
         Directory.CreateDirectory(outputDirectory);

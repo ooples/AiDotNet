@@ -1101,7 +1101,7 @@ internal sealed class AiDotNetGcnModel : AiDotNetBenchmarkModel
             outputSize: 10,
             layers: layers);
         var network = new GraphNeuralNetwork<float>(arch, lossFunction: new CrossEntropyWithLogitsLoss<float>(),
-            graphConvolutionalVectorActivation: (IVectorActivationFunction<float>?)null);
+            graphConvolutionalVectorActivation: null);
         network.SetAdjacencyMatrix(KipfGraph());
         return network;
     }

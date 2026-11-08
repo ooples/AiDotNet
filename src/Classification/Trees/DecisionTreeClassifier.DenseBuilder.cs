@@ -86,6 +86,8 @@ public partial class DecisionTreeClassifier<T>
         _featurePool = new int[NumFeatures];
         _selectedFeatures = new int[NumFeatures];
 
+        // A bootstrap repeats about a third of its rows; each distinct row's class is looked up once. The skip reads
+        // the flag this loop writes, so it stays in the body rather than in a Where over the rows.
         var labelled = new bool[data.Rows];
         foreach (int row in rows)
         {
@@ -122,6 +124,7 @@ public partial class DecisionTreeClassifier<T>
             return CreateDenseLeaf(counts, count);
 
         var (bestFeature, bestThreshold, bestThresholdRank, bestGain) = FindBestDenseSplit(start, count, counts);
+        // Not "bestGain <= MinImpurityDecrease": a NaN gain must make a leaf, and only the negated form does.
         if (bestFeature < 0 || !(bestGain > Options.MinImpurityDecrease))
             return CreateDenseLeaf(counts, count);
 
