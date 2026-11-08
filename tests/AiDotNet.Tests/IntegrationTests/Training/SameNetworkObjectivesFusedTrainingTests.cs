@@ -4,6 +4,7 @@ using System.Linq;
 using System.Reflection;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.Optimizers;
 using AiDotNet.Safety.Watermarking;
 using AiDotNet.Tensors.Engines.Optimization;
@@ -121,6 +122,46 @@ public class SameNetworkObjectivesFusedTrainingTests
             Assert.True(Math.Abs(f[step] / e[step] - 1) <= RelativeTolerance,
                 $"step {step + 1}: the fused mean |update| is {f[step]:E4}, the eager {e[step]:E4}");
         }
+    }
+
+    /// <summary>
+    /// ResetState clears recurrent state, not optimizer state, so a mid-run ResetState must leave each objective's
+    /// committed plan, and the Adam moments inside it, in place: the run continues bit for bit as one without it.
+    /// Dropping an objective's plan there restarts its Adam at t = 1 (an update of lr * sign(g)).
+    /// </summary>
+    [Fact(Timeout = 600_000)]
+    public async System.Threading.Tasks.Task ResetState_KeepsEachObjectivesCommittedPlan()
+    {
+        await System.Threading.Tasks.Task.Yield();
+        const int steps = 6, resetAfter = 3;
+        var reference = Build();
+        Run(reference, compile: true, steps);
+
+        var reset = Build();
+        bool[] before = Array.Empty<bool>(), after = Array.Empty<bool>();
+        Run(reset, compile: true, steps, step =>
+        {
+            if (step != resetAfter) return;
+            before = ObjectiveSessions(reset).Select(session => session.IsCommitted).ToArray();
+            reset.ResetState();
+            after = ObjectiveSessions(reset).Select(session => session.IsCommitted).ToArray();
+        });
+
+        // The encoder and decoder's Adam runs fused (committed); the critic's RMSProp steps eagerly.
+        Assert.Equal(steps, reset.CustomFusedStepCount);
+        Assert.Contains(true, before);
+        Assert.Equal(before, after);
+        Assert.Equal(EncoderDecoder(reference), EncoderDecoder(reset));
+    }
+
+    private static IEnumerable<FusedTrainingSession<float>> ObjectiveSessions(StegaStampWatermarker<float> model)
+    {
+        var field = typeof(NeuralNetworkBase<float>).GetField("_objectiveSessions", BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.True(field is not null, "NeuralNetworkBase has no field _objectiveSessions; update this test's reflection.");
+        var sessions = field!.GetValue(model);
+        Assert.True(sessions is not null, "the model has no objective sessions after fused training");
+        var values = sessions!.GetType().GetProperty("Values")!.GetValue(sessions)!;
+        return ((System.Collections.IEnumerable)values).Cast<FusedTrainingSession<float>>().ToList();
     }
 
     private static float[] EncoderDecoder(StegaStampWatermarker<float> model)

@@ -46,6 +46,31 @@ public class StegaStampWatermarkerPaperTests
                 Assert.True(System.Math.Abs(edge[y] * edge[x] - falloff[y, x]) <= 1e-15, $"({y}, {x}): {edge[y] * edge[x]} against {falloff[y, x]}");
     }
 
+    /// <summary>
+    /// An untrained network hides nothing readable, so it is not ready; one training step makes it ready, and the step
+    /// count is model state, so a deserialized copy stays ready.
+    /// </summary>
+    [Fact]
+    public void IsReady_FollowsTraining_AndSurvivesSerialization()
+    {
+        var model = Small(errorCorrection: false);
+        Assert.False(model.IsReady);
+
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(3);
+        var images = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 2, 3, 16, 16 });
+        for (int i = 0; i < images.Length; i++) images.SetFlat(i, (float)rng.NextDouble());
+        var secrets = new AiDotNet.Tensors.LinearAlgebra.Tensor<float>(new[] { 2, 100 });
+        for (int i = 0; i < secrets.Length; i++) secrets.SetFlat(i, rng.Next(2));
+        model.Train(images, secrets);
+        Assert.True(model.IsReady);
+        Assert.Equal(1, model.TrainingStep);
+
+        var restored = Small(errorCorrection: false);
+        restored.Deserialize(model.Serialize());
+        Assert.Equal(1, restored.TrainingStep);
+        Assert.True(restored.IsReady);
+    }
+
     [Fact]
     public void JpegNoise_UsesTheStandardTables_ScaledByTheIjgQualityRule()
     {

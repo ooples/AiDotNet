@@ -18,12 +18,12 @@ namespace AiDotNet.Tests.IntegrationTests.Safety;
 public class StegaStampWatermarkerTests : WatermarkRoundTripTestBase<Tensor<float>>, IClassFixture<StegaStampWatermarkerTests.TrainedModel>
 {
     internal const int Size = 32;
-    internal const int Bits = 16;
+    internal const int Bits = 64;
 
     /// <summary>Trains the networks once for the class; xUnit builds fixtures outside each test's timeout.</summary>
     public sealed class TrainedModel
     {
-        internal const int Steps = 600;
+        internal const int Steps = 2400;
         internal const int Batch = 8;
         internal const double LearningRate = 1e-3;
 
@@ -111,13 +111,14 @@ public class StegaStampWatermarkerTests : WatermarkRoundTripTestBase<Tensor<floa
     private StegaStampWatermarker<float> Watermarker(string key) => _trained.Model.WithKey(key);
 
     /// <summary>
-    /// Smoke-scale bars. A 16-bit payload caps the soft z at sqrt(16) = 4, so the default 5.7 needs a larger payload
-    /// (and a longer-trained model).
+    /// Smoke-scale bars, below what this fixture measures (64 bits, 2400 steps on 32 x 32 images): z 5.10-5.19 on the
+    /// three marked samples (confidence 0.70-0.73, detected) and 5.06-5.20 after the perturbation. The default 5.7 needs
+    /// a longer-trained model.
     /// </summary>
-    protected override double OwnKeyMinimumZ => 2.5;
+    protected override double OwnKeyMinimumZ => 4.5;
 
     /// <inheritdoc />
-    protected override double PerturbedMinimumZ => 2.5;
+    protected override double PerturbedMinimumZ => 4.5;
 
     protected override Tensor<float> Sample(int seed) =>
         Images(RandomHelper.CreateSeededRandom(10_000 + seed), 1).Slice(0);
@@ -164,10 +165,10 @@ public class StegaStampWatermarkerTests : WatermarkRoundTripTestBase<Tensor<floa
             psnr += Psnr(image, encoded) / images;
         }
 
-        // Smoke scale, measured: bit accuracy 0.934, PSNR 16.7 dB. The run is the reference schedule's first 4500 steps,
-        // so the image loss has reached 0.6 of its weight; the PSNR was 7-9 dB when it started (five seeds' training
-        // batches at step 600: bit accuracy 0.89-0.98, PSNR 15.9-18.4 dB).
-        Assert.True(accuracy >= 0.85, $"Mean bit accuracy {accuracy:F3} over {images} fresh images (PSNR {psnr:F1} dB).");
+        // Smoke scale, measured with the 64-bit payload: bit accuracy 0.785, PSNR 21.9 dB (the 16-bit, 600-step fixture
+        // measured 0.934 and 16.7 dB). Chance is 0.5, and over 16 x 64 bits its standard error is 0.016, so 0.75 is far
+        // above it. The run is the reference schedule's first 4500 steps, so the image loss has reached 0.6 of its weight.
+        Assert.True(accuracy >= 0.75, $"Mean bit accuracy {accuracy:F3} over {images} fresh images (PSNR {psnr:F1} dB).");
         Assert.True(psnr >= 15, $"Encoded images average PSNR {psnr:F1} dB (bit accuracy {accuracy:F3}).");
     }
 
@@ -189,7 +190,8 @@ public class StegaStampWatermarkerTests : WatermarkRoundTripTestBase<Tensor<floa
             accuracy += BitAccuracy(model.DecodeSecret(jpeg), secret) / images;
         }
 
-        Assert.True(accuracy >= 0.85, $"Mean bit accuracy {accuracy:F3} after quality-75 JPEG rounding.");
+        // Measured with the 64-bit payload: 0.788 (16 bits: above 0.85).
+        Assert.True(accuracy >= 0.75, $"Mean bit accuracy {accuracy:F3} after quality-75 JPEG rounding.");
     }
 }
 

@@ -61,12 +61,11 @@ public class SynthIdImageOptions : StegaStampOptions
     internal void ValidateDetection()
     {
         Validate();
-        if (double.IsNaN(DetectionLossScale) || DetectionLossScale <= 0)
-            throw new ArgumentOutOfRangeException(nameof(DetectionLossScale), DetectionLossScale, "The detection loss needs a positive weight.");
-        if (double.IsNaN(SpecificityLossScale) || SpecificityLossScale < 0)
-            throw new ArgumentOutOfRangeException(nameof(SpecificityLossScale), SpecificityLossScale, "The specificity loss weight cannot be negative.");
-        if (double.IsNaN(ImageLossScale) || ImageLossScale <= 0)
-            throw new ArgumentOutOfRangeException(nameof(ImageLossScale), ImageLossScale, "The detection loss ramps with the image loss, which needs a positive weight.");
+        // The detection loss needs a positive weight, and it ramps with the image loss, which needs one too; an infinite
+        // weight would make the training loss non-finite.
+        Positive(DetectionLossScale, nameof(DetectionLossScale));
+        NotNegative(SpecificityLossScale, nameof(SpecificityLossScale));
+        Positive(ImageLossScale, nameof(ImageLossScale));
         if (!(FalsePositiveRate > 0 && FalsePositiveRate < 1))
             throw new ArgumentOutOfRangeException(nameof(FalsePositiveRate), FalsePositiveRate, "The false positive rate lies in (0, 1).");
     }

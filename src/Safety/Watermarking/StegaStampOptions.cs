@@ -218,13 +218,13 @@ public class StegaStampOptions : NeuralNetworkOptions
             throw new ArgumentOutOfRangeException(nameof(BlurProbability), BlurProbability, "Each blur's probability lies in [0, 0.5].");
     }
 
-    private static void Positive(double value, string name)
+    private protected static void Positive(double value, string name)
     {
         if (double.IsNaN(value) || value <= 0 || double.IsInfinity(value))
             throw new ArgumentOutOfRangeException(name, value, "Must be positive and finite.");
     }
 
-    private static void NotNegative(double value, string name)
+    private protected static void NotNegative(double value, string name)
     {
         if (double.IsNaN(value) || value < 0 || double.IsInfinity(value))
             throw new ArgumentOutOfRangeException(name, value, "Must be zero or positive, and finite.");

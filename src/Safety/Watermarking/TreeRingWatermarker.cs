@@ -478,9 +478,9 @@ public partial class TreeRingWatermarker<T> : ImageSafetyModuleBase<T>, IKeyedWa
     internal static double NoncentralChiSquaredLogCdf(double x, int k, double lambda)
     {
         if (double.IsNaN(x) || double.IsNaN(lambda) || double.IsInfinity(lambda)) return double.NaN;
-        if (double.IsNaN(x) || x <= 0) return double.NegativeInfinity;
+        if (x <= 0) return double.NegativeInfinity;
         if (double.IsPositiveInfinity(x)) return 0.0;
-        if (double.IsNaN(lambda) || lambda <= 0) return LogRegularizedLowerGamma(k / 2.0, x / 2.0);
+        if (lambda <= 0) return LogRegularizedLowerGamma(k / 2.0, x / 2.0);
         // The Poisson mixture is summed outward from its mode, an int; beyond that the series is not evaluated.
         if (lambda / 2.0 >= int.MaxValue - 1024) return double.NaN;
         double halfLambda = lambda / 2.0;

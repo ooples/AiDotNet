@@ -20,7 +20,7 @@ namespace AiDotNet.Tests.IntegrationTests.Safety;
 public class SynthIdImageWatermarkerTests : WatermarkRoundTripTestBase<Tensor<float>>, IClassFixture<SynthIdImageWatermarkerTests.TrainedModel>
 {
     private const int Size = StegaStampWatermarkerTests.Size;
-    private const int Bits = StegaStampWatermarkerTests.Bits;
+    internal const int Bits = 32;
 
     /// <summary>Trains and calibrates the networks once for the class.</summary>
     public sealed class TrainedModel
@@ -80,16 +80,17 @@ public class SynthIdImageWatermarkerTests : WatermarkRoundTripTestBase<Tensor<fl
     private SynthIdImageWatermarker<float> Watermarker(string key) => _trained.Model.WithKey(key);
 
     /// <summary>
-    /// Smoke-scale bars. A 16-bit payload caps the soft z at sqrt(16) = 4, so the default 5.7 needs a larger payload
-    /// (and a longer-trained model).
+    /// Smoke-scale bars, below what this fixture measures (32 bits, 2400 steps on 32 x 32 images): z 4.79-4.84 on the
+    /// three marked samples (confidence 0.60-0.61, detected, the detection head agreeing) and 4.78-4.84 after the
+    /// perturbation. The default 5.7 needs a longer-trained model.
     /// </summary>
-    protected override double OwnKeyMinimumZ => 2.5;
+    protected override double OwnKeyMinimumZ => 4.3;
 
     /// <inheritdoc />
     protected override bool GatesOnASecondTest => true;
 
     /// <inheritdoc />
-    protected override double PerturbedMinimumZ => 2.5;
+    protected override double PerturbedMinimumZ => 4.3;
 
     protected override Tensor<float> Sample(int seed) =>
         StegaStampWatermarkerTests.Images(RandomHelper.CreateSeededRandom(10_000 + seed), 1).Slice(0);

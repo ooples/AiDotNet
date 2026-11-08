@@ -131,5 +131,10 @@ public class SynthIdImageDecisionTests
             new SynthIdImageWatermarker<float>(new SynthIdImageOptions { ImageSize = Size, SecretBits = 16, FalsePositiveRate = 0 }));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             new SynthIdImageWatermarker<float>(new SynthIdImageOptions { ImageSize = Size, SecretBits = 16, SpecificityLossScale = -1 }));
+        // An infinite weight would make the training loss non-finite.
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new SynthIdImageWatermarker<float>(new SynthIdImageOptions { ImageSize = Size, SecretBits = 16, DetectionLossScale = double.PositiveInfinity }));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            new SynthIdImageWatermarker<float>(new SynthIdImageOptions { ImageSize = Size, SecretBits = 16, SpecificityLossScale = double.PositiveInfinity }));
     }
 }

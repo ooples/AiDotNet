@@ -28,7 +28,7 @@ public class FixedRateQuasiNewtonLineSearchTests
     private const double Curvature = 10.0;
 
     // f(w) = 10 w^2 with its gradient 20 w seeded, as a training step would have it.
-    private static TapeStepContext<double> Context(Tensor<double> parameter)
+    private static TapeStepContext<double> Context(Tensor<double> parameter, double gradientSign = 1.0)
     {
         var engine = AiDotNetEngine.Current;
         Tensor<double> Forward(Tensor<double> _, Tensor<double> __) => parameter;
@@ -37,7 +37,7 @@ public class FixedRateQuasiNewtonLineSearchTests
 
         double w = parameter[0];
         var gradient = new Tensor<double>(parameter._shape);
-        gradient[0] = 2.0 * Curvature * w;
+        gradient[0] = gradientSign * 2.0 * Curvature * w;
         var unused = new Tensor<double>(new[] { 1 });
         return new TapeStepContext<double>(
             new[] { parameter },
@@ -97,5 +97,28 @@ public class FixedRateQuasiNewtonLineSearchTests
         }
 
         Assert.True(searched[0] < Curvature, $"{method}: the first backtracked step did not lower the loss ({searched[0]:G6})");
+    }
+
+    /// <summary>
+    /// A step the line search rejects (here an uphill gradient, so every halving raises the loss) restores the
+    /// parameters, so its direction was never taken. The next step must start again from steepest descent, as a fresh
+    /// optimizer's does. Conjugating against the rejected direction instead (beta = 1 here, the previous direction
+    /// +20 against a gradient of 20) gives a zero direction, and the parameter does not move.
+    /// </summary>
+    [Fact]
+    public void ConjugateGradient_RejectedStep_RestartsFromSteepestDescent()
+    {
+        var rejected = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 1.0 }));
+        var optimizer = Build("CG", lineSearch: true);
+        optimizer.Step(Context(rejected, gradientSign: -1.0));
+        Assert.Equal(1.0, rejected[0]);
+        optimizer.Step(Context(rejected));
+
+        var fresh = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 1.0 }));
+        Build("CG", lineSearch: true).Step(Context(fresh));
+
+        _output.WriteLine($"after a rejected step x = {rejected[0]:G6}; a fresh optimizer's first step x = {fresh[0]:G6}");
+        Assert.Equal(fresh[0], rejected[0]);
+        Assert.NotEqual(1.0, rejected[0]);
     }
 }
