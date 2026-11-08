@@ -14,6 +14,63 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class GLM4VoiceTaskTests
 {
+    [Theory]
+    [InlineData("SampleRate", 16000)]
+    [InlineData("SampleRate", 44100)]
+    [InlineData("HopSize", 128)]
+    [InlineData("HopSize", 512)]
+    [InlineData("MelChannels", 40)]
+    [InlineData("MelChannels", 128)]
+    public void ReleasedDecoderRejectsUnpairedGeometry(string property, int value)
+    {
+        var options = GLM4VoiceFixture.Options();
+        typeof(GLM4VoiceOptions).GetProperty(property)!.SetValue(options, value);
+        Assert.Throws<ArgumentException>(() => GLM4VoiceFixture.Tts<double>(options));
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task MaximumMelLengthBoundsNativeDecodedAudio(int frames)
+    {
+        await Task.Yield();
+        var options = GLM4VoiceFixture.Options();
+        options.MaxMelLength = frames;
+        using var model = GLM4VoiceFixture.Tts<double>(options);
+        var audio = model.DecodeSpeech(new[] { 1, 2, 3, 4 });
+        Assert.Equal(frames * 256, audio.Length);
+        Assert.All(audio.ToArray(), value => Assert.True(!double.IsNaN(value) && !double.IsInfinity(value)));
+        Assert.Equal(22050, model.SampleRate);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void MaximumMelLengthMustBePositive(int frames)
+    {
+        var options = GLM4VoiceFixture.Options();
+        options.MaxMelLength = frames;
+        Assert.Throws<ArgumentOutOfRangeException>(() => GLM4VoiceFixture.Tts<double>(options));
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData("NumDecoderLayers")]
+    [InlineData("NumEncoderLayers")]
+    public async Task SharedDepthChangesTheNativeNetwork(string option)
+    {
+        await Task.Yield();
+        int ParameterCount(int depth)
+        {
+            var options = GLM4VoiceFixture.Options();
+            options.IncludeSpeechTokenizerTraining = true;
+            if (option == "NumDecoderLayers") options.NumDecoderLayers = depth;
+            else options.NumEncoderLayers = depth;
+            using var model = GLM4VoiceFixture.Tts<double>(options);
+            return model.GetParameters().Length;
+        }
+        Assert.True(ParameterCount(5) > ParameterCount(4));
+    }
+
     [Fact(Timeout = 120000)]
     public async Task ChatPrompt_IsTheWebDemoStringTokenized()
     {

@@ -9,6 +9,12 @@ internal static class MusicGenOptionFixture
     {
         if (option == "Delays") options.Delays = options.ResolveDelays();
         if (option == "StereoPattern") options.Stereo = true;
+        if (option == "UseDAdaptation")
+        {
+            // Null already selects D-Adaptation for Small, so null -> true is the same optimizer.
+            options.UseDAdaptation ??= options.ModelSize == MusicGenModelSize.Small;
+            options.WarmupSteps = 0;
+        }
         if (option is "TopK" or "TopP" or "Temperature" or "UseSampling")
         {
             options.UseSampling = true;

@@ -21979,3 +21979,13 @@ AiDotNet.TextToSpeech.CodecBased.VALLE2Options.PrependBos.get -> bool
 AiDotNet.TextToSpeech.CodecBased.VALLE2Options.PrependBos.set -> void
 AiDotNet.TextToSpeech.CodecBased.VALLE2Options.StopOnMostLikelyEndToken.get -> bool
 AiDotNet.TextToSpeech.CodecBased.VALLE2Options.StopOnMostLikelyEndToken.set -> void
+AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.NumDecoderLayers.get -> int
+AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.NumDecoderLayers.set -> void
+AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.NumEncoderLayers.get -> int
+AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.NumEncoderLayers.set -> void
+AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.SampleRate.get -> int
+AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.SampleRate.set -> void
+AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.HopSize.get -> int
+AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.HopSize.set -> void
+AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.MelChannels.get -> int
+AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions.MelChannels.set -> void

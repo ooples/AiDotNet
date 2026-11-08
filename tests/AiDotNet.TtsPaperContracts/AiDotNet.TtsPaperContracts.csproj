@@ -29,6 +29,11 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/CamPlusPlusReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/WhisperTiktokenReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VALLE*PaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/Valle2OptionFixture.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/GLM4VoiceTaskTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/GLM4VoiceFixture.cs" />
+    <Compile Include="../AiDotNet.Tests/Audio/MusicGenPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/Audio/MusicGenReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VallECoreParityTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/SPEARTTS*Tests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/E3TTSOptionsTests.cs" />

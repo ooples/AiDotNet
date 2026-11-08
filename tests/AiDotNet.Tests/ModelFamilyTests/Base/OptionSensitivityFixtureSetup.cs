@@ -667,12 +667,8 @@ internal static class OptionSensitivityFixtureSetup
             GlmVoiceOptionFixture.PrepareOptions(glmVoice, option);
         if (options is AiDotNet.Audio.MusicGen.MusicGenOptions musicGen)
             AiDotNet.Tests.Audio.MusicGenOptionFixture.PrepareOptions(musicGen, option);
-        if (options is AiDotNet.TextToSpeech.CodecBased.VALLE2Options valle2
-            && option is "MinPromptSeconds" or "MaxPromptSeconds")
-        {
-            valle2.MinPromptSeconds = 0.04;
-            valle2.MaxPromptSeconds = 0.06;
-        }
+        if (options is AiDotNet.TextToSpeech.CodecBased.VALLE2Options valle2)
+            Valle2OptionFixture.PrepareOptions(valle2, option);
 
         if (options is AiDotNet.TextToSpeech.Latest.MegaTTS3Options mega)
             MegaTts3Fixture.PrepareOptions(mega, option);

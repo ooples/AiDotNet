@@ -1,12 +1,19 @@
 using AiDotNet.TextToSpeech;
 using AiDotNet.TextToSpeech.CodecBased;
-using AiDotNet.Tests.ModelFamilyTests.Base;
 
 namespace AiDotNet.Tests.TextToSpeech;
 
 /// <summary>Teacher-forced observations do not require an untrained AR model to avoid EOS.</summary>
 internal static class Valle2OptionFixture
 {
+    internal static void PrepareOptions(VALLE2Options options, string option)
+    {
+        if (option is not ("MinPromptSeconds" or "MaxPromptSeconds")) return;
+        // Doubling the minimum reaches 7.5 frames, which rounds to eight; the control stays below that boundary.
+        options.MaxPromptSeconds = 7.5 * options.HopSize / options.SampleRate;
+        options.MinPromptSeconds = options.MaxPromptSeconds / 2;
+    }
+
     internal static long? Observe<T>(VALLE2<T> model, string option)
     {
         var options = (VALLE2Options)model.GetOptions();
@@ -30,7 +37,7 @@ internal static class Valle2OptionFixture
                     new[] { 1, 2, 3 }, new[] { 1, 2 }, prompt,
                     new TtsVoice<T>(), option == "MaxCodesPerTextToken" ? new FirstCodeRandom() : new Random(options.SamplingSeed),
                 })!;
-                return OptionSensitivityHarness.Fingerprint(new[] { (double)generated.GetLength(0) }
+                return TtsPaperNumerics.Fingerprint(new[] { (double)generated.GetLength(0) }
                     .Concat(generated.Cast<int>().Select(code => (double)code)));
             }
             finally { for (int i = 0; i < table.Length; i++) table[i] = saved[i]; }
@@ -55,7 +62,7 @@ internal static class Valle2OptionFixture
                 observations.Add(ops.ToDouble(model.EvaluateTrainingObjective(sample)));
             }
             observations.AddRange(model.DecodeFromTokens(codes).Select(ops.ToDouble));
-            return OptionSensitivityHarness.Fingerprint(observations);
+            return TtsPaperNumerics.Fingerprint(observations);
         }
         finally { model.CurrentStage = stage; }
     }

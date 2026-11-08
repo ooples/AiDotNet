@@ -82,6 +82,24 @@ public class GLM4VoiceOptions : TtsModelOptions
     /// <summary>Transformer layers of the language model (40).</summary>
     public int Layers { get; set; } = 40;
 
+    /// <summary>Gets or sets the language-model decoder depth, forwarding to <see cref="Layers"/>.</summary>
+    public new int NumDecoderLayers { get => Layers; set => Layers = value; }
+
+    /// <summary>Gets or sets the speech-tokenizer encoder depth, forwarding to <see cref="SpeechTokenizerLayers"/>.</summary>
+    public new int NumEncoderLayers { get => SpeechTokenizerLayers; set => SpeechTokenizerLayers = value; }
+
+    /// <summary>The released HiFT decoder's fixed sample rate, 22050 Hz.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The released HiFT decoder is fixed at 22050 Hz; native geometry tests reject other rates and verify bounded decoding.")]
+    public new int SampleRate { get => base.SampleRate; set => base.SampleRate = value; }
+
+    /// <summary>The released HiFT decoder's fixed hop, 256 samples.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("HiFT upsamples by 8*8*4, fixing its hop to 256; native geometry tests reject other hops and verify decoded length.")]
+    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+
+    /// <summary>The released speech decoder's fixed 80-band mel representation.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The released speech decoder has 80 mel channels; native geometry tests reject other widths and exercise actual decoding.")]
+    public new int MelChannels { get => base.MelChannels; set => base.MelChannels = value; }
+
     /// <summary>Key-value groups of the multi-query attention (2).</summary>
     public int KeyValueGroups { get; set; } = 2;
 

@@ -157,6 +157,7 @@ public partial class GLM4Voice<T> : TtsModelBase<T>
         if (o.TextTokensPerChunk <= 0 || o.SpeechTokensPerChunk <= 0) throw new ArgumentException("Streaming-thoughts chunks must be positive.");
         if (o.Temperature <= 0 || o.TopP <= 0 || o.TopP > 1) throw new ArgumentException("Sampling needs a positive temperature and a top-p in (0, 1].");
         if (o.MaxNewTokens <= 0) throw new ArgumentException("MaxNewTokens must be positive.");
+        if (o.MaxMelLength <= 0) throw new ArgumentOutOfRangeException(nameof(o.MaxMelLength), "The maximum output mel length must be positive.");
     }
 
     /// <summary>The longest token sequence the language model takes (8192).</summary>
@@ -482,8 +483,14 @@ public partial class GLM4Voice<T> : TtsModelBase<T>
     {
         if (speechTokens is null) throw new ArgumentNullException(nameof(speechTokens));
         if (speechTokens.Count == 0) return new Tensor<T>(new[] { 0 });
-        return Inference(() => SpeechDecoder.Decode(speechTokens, new Tensor<T>(new[] { SpeechDecoder.Flow.Configuration.SpeakerDim }),
-            _options.Decoding, SamplingRandom));
+        return Inference(() =>
+        {
+            var audio = SpeechDecoder.Decode(speechTokens, new Tensor<T>(new[] { SpeechDecoder.Flow.Configuration.SpeakerDim }),
+                _options.Decoding, SamplingRandom);
+            long maximumSamples = (long)_options.MaxMelLength * _options.HopSize;
+            return audio.Length <= maximumSamples ? audio
+                : Engine.TensorSlice(audio, new[] { 0 }, new[] { (int)maximumSamples });
+        });
     }
 
     private GlmVoiceReply<T> Reply(List<int> ids)
