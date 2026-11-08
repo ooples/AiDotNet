@@ -46,6 +46,8 @@ internal static class OptionSensitivityFixtureSetup
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => option == nameof(AiDotNet.Models.Options.ModelOptions.Seed) ? "model-options-seed"
             : network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> ? "kokoro-" + option
+            : network is AiDotNet.TextToSpeech.Classic.DeepVoice3<T> && option == "GradientClipValue" ? "deepvoice-value-clip"
+
             : network is AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T> && option is "TextPadId" or "NumHeads" ? "ditto-" + option
 
             : network is AiDotNet.TextToSpeech.CodecBased.Bark<T> && BarkOptionFixture.Handles(option) ? "bark-" + option
@@ -781,6 +783,9 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Classic.DeepVoice3Options deepVoice && option == "GradientClipValue")
+            deepVoice.GradientClipValue = 1e-5;
+
         if (options is AiDotNet.TextToSpeech.CodecBased.BarkOptions bark && BarkOptionFixture.Handles(option))
             BarkOptionFixture.PrepareOptions(bark, option);
 

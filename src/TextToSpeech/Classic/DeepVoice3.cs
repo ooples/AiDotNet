@@ -81,7 +81,7 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
+        base.HiddenDim = _options.DecoderPrenetSizes.LastOrDefault();
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path required.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -103,7 +103,7 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.HiddenDim;
+        base.HiddenDim = _options.DecoderPrenetSizes.LastOrDefault();
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
                 new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate, UseAdaptiveBetas = false }));

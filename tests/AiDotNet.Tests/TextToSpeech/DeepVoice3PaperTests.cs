@@ -22,6 +22,23 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </remarks>
 public class DeepVoice3PaperTests
 {
+    [Fact]
+    public void OptionsCopyPreservesThePaperConfigurationAndOwnsItsArrays()
+    {
+        var options = new DeepVoice3Options
+        {
+            SampleRate = 16000, MelChannels = 8, HopSize = 200, FftSize = 64, VocabSize = 100,
+            NumEncoderLayers = 2, NumDecoderLayers = 3, DropoutRate = .2, MaxTextLength = 20,
+            LearningRate = .002, OutputsPerStep = 2, ModelPath = "model.onnx", DecoderPrenetSizes = new[] { 8, 16 }
+        };
+        var copy = new DeepVoice3Options(options);
+        foreach (var property in typeof(DeepVoice3Options).GetProperties().Where(property => property.PropertyType.IsValueType || property.PropertyType == typeof(string)))
+            Assert.Equal(property.GetValue(options), property.GetValue(copy));
+        Assert.NotSame(options.OnnxOptions, copy.OnnxOptions);
+        copy.DecoderPrenetSizes[0] = 99;
+        Assert.Equal(8, options.DecoderPrenetSizes[0]);
+    }
+
     private const int MelBins = 8;
 
     private static DeepVoice3<double> CreateModel() => new(

@@ -12,7 +12,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </para>
 /// <para><b>For Beginners:</b> These options configure the DeepVoice3 model. Default values follow the original paper settings.</para>
 /// </remarks>
-public class DeepVoice3Options : AcousticModelOptions
+public class DeepVoice3Options : AiDotNet.Models.Options.ModelOptions
 {
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
@@ -20,6 +20,19 @@ public class DeepVoice3Options : AcousticModelOptions
     public DeepVoice3Options(DeepVoice3Options other)
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
+        SampleRate = other.SampleRate;
+        MelChannels = other.MelChannels;
+        HopSize = other.HopSize;
+        FftSize = other.FftSize;
+        VocabSize = other.VocabSize;
+        NumEncoderLayers = other.NumEncoderLayers;
+        NumDecoderLayers = other.NumDecoderLayers;
+        DropoutRate = other.DropoutRate;
+        MaxTextLength = other.MaxTextLength;
+        LearningRate = other.LearningRate;
+        OutputsPerStep = other.OutputsPerStep;
+        ModelPath = other.ModelPath;
+        OnnxOptions = new AiDotNet.Onnx.OnnxModelOptions(other.OnnxOptions);
         ConvKernelSize = other.ConvKernelSize;
         EmbeddingDim = other.EmbeddingDim;
         EncoderChannels = other.EncoderChannels;
@@ -49,8 +62,34 @@ public class DeepVoice3Options : AcousticModelOptions
         NumDecoderLayers = 4;
         DropoutRate = 0.05;
         LearningRate = 0.001;
-        UsePostnet = false;
     }
+
+    /// <summary>Audio sampling rate in Hz (48000).</summary>
+    public int SampleRate { get; set; } = 48000;
+    /// <summary>Number of mel frequency bands (80).</summary>
+    public int MelChannels { get; set; } = 80;
+    /// <summary>Analysis frame shift in samples (600).</summary>
+    public int HopSize { get; set; } = 600;
+    /// <summary>Analysis FFT size (4096).</summary>
+    public int FftSize { get; set; } = 4096;
+    /// <summary>Character vocabulary size (256).</summary>
+    public int VocabSize { get; set; } = 256;
+    /// <summary>Number of encoder convolution blocks (7).</summary>
+    public int NumEncoderLayers { get; set; } = 7;
+    /// <summary>Number of causal decoder blocks (4).</summary>
+    public int NumDecoderLayers { get; set; } = 4;
+    /// <summary>Training dropout probability (0.05).</summary>
+    public double DropoutRate { get; set; } = .05;
+    /// <summary>Maximum input text length (512).</summary>
+    public int MaxTextLength { get; set; } = 512;
+    /// <summary>Adam learning rate (0.001).</summary>
+    public double LearningRate { get; set; } = .001;
+    /// <summary>Mel frames produced by each decoder step (4).</summary>
+    public int OutputsPerStep { get; set; } = 4;
+    /// <summary>Optional ONNX checkpoint path.</summary>
+    public string? ModelPath { get; set; }
+    /// <summary>ONNX runtime configuration.</summary>
+    public AiDotNet.Onnx.OnnxModelOptions OnnxOptions { get; set; } = new();
 
     /// <summary>Gets or sets the width of every convolution (5).</summary>
     public int ConvKernelSize { get; set; } = 5;
