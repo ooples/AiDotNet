@@ -383,12 +383,14 @@ class DDPMResBlock(nn.Module):
 
 
 class DDPMAttention(nn.Module):
-    """AiDotNet's DiffusionAttention: multi-head self-attention over the H*W positions with bias-free Q/K/V and a biased
-    output projection (its FlashAttentionLayer). As AiDotNet builds it there is no GroupNorm and no residual add."""
+    """AiDotNet's DiffusionAttention as the U-Net builds it (residualGroupNorm): GroupNorm(32), multi-head
+    self-attention over the H*W positions with bias-free Q/K/V and a biased output projection (its
+    FlashAttentionLayer), then the input added back. Ho et al. 2020's attention block."""
 
     def __init__(self, ch: int, heads: int) -> None:
         super().__init__()
         self.heads = heads
+        self.norm = nn.GroupNorm(32, ch, eps=1e-5)
         self.q = nn.Linear(ch, ch, bias=False)
         self.k = nn.Linear(ch, ch, bias=False)
         self.v = nn.Linear(ch, ch, bias=False)
@@ -396,14 +398,14 @@ class DDPMAttention(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         b, c, h, w = x.shape
-        seq = x.permute(0, 2, 3, 1).reshape(b, h * w, c)
+        seq = self.norm(x).permute(0, 2, 3, 1).reshape(b, h * w, c)
 
         def split(t: torch.Tensor) -> torch.Tensor:
             return t.reshape(b, h * w, self.heads, c // self.heads).transpose(1, 2)
 
         out = F.scaled_dot_product_attention(split(self.q(seq)), split(self.k(seq)), split(self.v(seq)))
         out = self.o(out.transpose(1, 2).reshape(b, h * w, c))
-        return out.reshape(b, h, w, c).permute(0, 3, 1, 2)
+        return x + out.reshape(b, h, w, c).permute(0, 3, 1, 2)
 
 
 class DDPMUNet(nn.Module):
@@ -450,6 +452,48 @@ class DDPMUNet(nn.Module):
         alpha_bar = torch.cumprod(1 - betas, dim=0)
         self.register_buffer("sqrt_ab", alpha_bar.sqrt().float())
         self.register_buffer("sqrt_1m_ab", (1 - alpha_bar).sqrt().float())
+        self._init_like_aidotnet()
+
+    # Ho et al. 2020: Adam at 2e-4 with the gradient norm clipped to 1 (no weight decay). The C# row uses the same.
+    optimizer_settings = {"lr": 2e-4, "weight_decay": 0.0}
+
+    @torch.no_grad()
+    def _init_like_aidotnet(self) -> None:
+        """The initial distributions AiDotNet's layers draw, so both sides start the same network and train the same
+        way. Convolutions: U(+-sqrt(3 / fan_in)) (Kaiming, gain 1), zero bias. Transposed convolutions and the
+        residual blocks' time projections: Xavier normal truncated at 2 sigma, zero bias. The time MLP (ReLU): He
+        normal truncated at 2 sigma. Attention Q/K/V: Xavier uniform. Zero (as Ho et al. and LDM): each residual
+        block's second conv, the attention output projection and the output conv."""
+        def trunc(weight: torch.Tensor, std: float) -> None:
+            nn.init.trunc_normal_(weight, std=std, a=-2 * std, b=2 * std)
+
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d):
+                bound = math.sqrt(3.0 / (module.in_channels * module.kernel_size[0] * module.kernel_size[1]))
+                nn.init.uniform_(module.weight, -bound, bound)
+                nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.ConvTranspose2d):
+                fan_in, fan_out = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                trunc(module.weight, math.sqrt(2.0 / (fan_in + fan_out)))
+                nn.init.zeros_(module.bias)
+            elif isinstance(module, DDPMResBlock):
+                trunc(module.time.weight, math.sqrt(2.0 / (module.time.in_features + module.time.out_features)))
+                nn.init.zeros_(module.time.bias)
+            elif isinstance(module, DDPMAttention):
+                for projection in (module.q, module.k, module.v):
+                    nn.init.xavier_uniform_(projection.weight)
+        for linear in (self.time1, self.time2):
+            trunc(linear.weight, math.sqrt(2.0 / linear.in_features))
+            nn.init.zeros_(linear.bias)
+        for module in self.modules():
+            if isinstance(module, DDPMResBlock):
+                nn.init.zeros_(module.conv2.weight)
+                nn.init.zeros_(module.conv2.bias)
+            elif isinstance(module, DDPMAttention):
+                nn.init.zeros_(module.o.weight)
+                nn.init.zeros_(module.o.bias)
+        nn.init.zeros_(self.out.weight)
+        nn.init.zeros_(self.out.bias)
 
     def timestep_embedding(self, t: torch.Tensor) -> torch.Tensor:
         """NoisePredictorBase.GetTimestepEmbedding: [sin, cos] of t * exp(-i ln(10000) / (half - 1))."""
@@ -587,7 +631,7 @@ def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.devic
 
 def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int, breakdown: bool = False) -> TrainingResult:
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.AdamW(model.parameters(), **getattr(model, "optimizer_settings", {"lr": 1e-3}))
     epoch_seconds: list[float] = []
     gradient_seconds: list[float] = []
     data_seconds: list[float] = []

@@ -33,12 +33,13 @@ internal sealed class AiDotNetDdpmModel : IBenchmarkModel
                 BetaStart = 0.0001,
                 BetaEnd = 0.02,
                 BetaSchedule = BetaSchedule.Linear,
-                // The optimizer every row uses (torch.optim.AdamW defaults, lr 1e-3), with the same global-norm clip
-                // at 1.0 the PyTorch loop applies.
+                // Ho et al. 2020's optimizer: Adam at 2e-4 with the global gradient norm clipped to 1, no weight decay.
+                // The other rows' AdamW at 1e-3 is too large for this U-Net without warmup: a step that size took the
+                // loss from 2 to 50 on both sides at the paper's initial weight scale. The twin uses the same settings.
                 OptimizerFactory = () => new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null,
                     new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
                     {
-                        InitialLearningRate = 1e-3, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.01,
+                        InitialLearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.0,
                         EnableGradientClipping = true, MaxGradientNorm = 1.0,
                     }),
             },
