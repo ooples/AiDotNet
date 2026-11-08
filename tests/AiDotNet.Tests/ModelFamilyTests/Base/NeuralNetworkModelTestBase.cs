@@ -3124,11 +3124,23 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
         // public Train operation instead of accumulating the entire diagnostic graph beside it.
         _arena.Reset();
 
+        // The first public Train pays one-time costs (compiling the fused plan, allocating optimizer state), so
+        // it is recorded separately; trainStepMs is the second, warm step. Timing only the first made the
+        // census's training amplification compare a cold step with a warm forward: UnifiedMultimodalNetwork
+        // read 779 ms against 62 ms of tape forward plus backward, while its warm steps take about 40 ms.
+        double firstTrainStepMs = 0.0;
         double trainStepMs = 0.0;
         if (!TrainingInvariantsNotApplicable(network))
         {
             WritePerformanceProgress(outputDirectory, performanceFileName, "train-step");
             var trainTimer = System.Diagnostics.Stopwatch.StartNew();
+            network.Train(input, target);
+            trainTimer.Stop();
+            firstTrainStepMs = trainTimer.Elapsed.TotalMilliseconds;
+            _arena.Reset();
+
+            WritePerformanceProgress(outputDirectory, performanceFileName, "warm-train-step");
+            trainTimer.Restart();
             network.Train(input, target);
             trainTimer.Stop();
             trainStepMs = trainTimer.Elapsed.TotalMilliseconds;
@@ -3219,6 +3231,7 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             tapeEntries,
             backwardMs,
             gradientTensorCount,
+            firstTrainStepMs,
             trainStepMs,
             requestedTrainingIterations,
             requestedTrainingReduceLossIterations,
