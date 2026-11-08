@@ -22021,3 +22021,13 @@ AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.SampleRate.get -> int
 AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.SampleRate.set -> void
 AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.CodecFrameRate.get -> int
 AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions.CodecFrameRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.NumEncoderLayers.get -> int
+AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.NumEncoderLayers.set -> void
+AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.DropoutRate.get -> double
+AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.DropoutRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.VocabSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.VocabSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.SampleRate.get -> int
+AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.SampleRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.HopSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.HopSize.set -> void

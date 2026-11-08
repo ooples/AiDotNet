@@ -110,6 +110,8 @@ public partial class MARS5TTS<T> : TtsModelBase<T>
     {
         var o = _options;
         base.SampleRate = o.SampleRate;
+        if (o.DropoutRate != 0)
+            throw new ArgumentOutOfRangeException(nameof(o.DropoutRate), "Released MARS5 blocks support zero activation dropout; use ConditionDropProbability for NAR conditioning dropout.");
         foreach (double beta in new[] { o.ArBeta1, o.ArBeta2, o.NarBeta1, o.NarBeta2 })
             if (double.IsNaN(beta) || double.IsInfinity(beta) || beta is < 0 or >= 1)
                 throw new ArgumentOutOfRangeException("options", "Adam betas must be finite and lie in [0, 1).");

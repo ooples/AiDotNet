@@ -26,6 +26,25 @@ public enum Mars5Stage
 /// </remarks>
 public class MARS5TTSOptions : TtsModelOptions
 {
+    /// <summary>The NAR text encoder's depth.</summary>
+    public new int NumEncoderLayers { get => NarEncoderLayers; set => NarEncoderLayers = value; }
+
+    /// <summary>The released MARS5 blocks use zero activation dropout.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Released MARS5 blocks have no activation dropout; native contracts reject nonzero rates. ConditionDropProbability controls NAR conditioning dropout.")]
+    public new double DropoutRate { get => base.DropoutRate; set => base.DropoutRate = value; }
+
+    /// <summary>Inherited vocabulary metadata; TextTokenizerModel defines the native vocabulary.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("TextTokenizerModel defines the native vocabulary (258 tokens for the byte fallback); native tests verify tokenizer IDs independently of inherited VocabSize metadata.")]
+    public new int VocabSize { get => base.VocabSize; set => base.VocabSize = value; }
+
+    /// <summary>The waveform rate, paired with Codec.SampleRate.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("SampleRate must match Codec.SampleRate; native tests reject unpaired values and encode/vocode paired 16/24 kHz configurations.")]
+    public new int SampleRate { get => base.SampleRate; set => base.SampleRate = value; }
+
+    /// <summary>The waveform hop, paired with the codec's stride product.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("HopSize must equal the codec stride product; native tests reject unpaired values and encode/vocode paired 320/640-sample hops.")]
+    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+
     /// <summary>Creates the release's configuration.</summary>
     public MARS5TTSOptions()
     {
@@ -64,9 +83,11 @@ public class MARS5TTSOptions : TtsModelOptions
     public EnCodecOptions Codec { get; set; }
 
     /// <summary>The codebooks the models read (8).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("NumCodebooks must match the codec bandwidth and divide both network widths; native tests reject unpaired values and round-trip paired two/four-codebook configurations.")]
     public int NumCodebooks { get; set; } = 8;
 
     /// <summary>Codes per codebook (1024; the NAR adds one pad class).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("CodebookSize must match Codec.CodebookSize and its bandwidth; native tests reject unpaired vocabularies and round-trip paired 16/64-code vocabularies.")]
     public int CodebookSize { get; set; } = 1024;
 
     /// <summary>The text tokenizer's minbpe model (the AR checkpoint's <c>texttok.model</c>); null for a byte-level
@@ -93,6 +114,7 @@ public class MARS5TTSOptions : TtsModelOptions
     public int ArSpeakerLayers { get; set; } = 2;
 
     /// <summary>The AR decoder's attention window (3000).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("SlidingWindow bounds accepted AR sequences and MaxGenerationLength; native boundary tests accept sequences at the window and reject longer ones.")]
     public int SlidingWindow { get; set; } = 3000;
 
     // ---------------------------------------------------------------- NAR
