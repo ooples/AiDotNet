@@ -19,6 +19,27 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class DiaReferenceTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData(31)]
+    public void InitializationHonorsModelSeedUnlessArchitectureOverridesIt(int? architectureSeed)
+    {
+        Dia<double> Create(int seed)
+        {
+            var options = TinyOptions();
+            options.Seed = seed;
+            return new Dia<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+                NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1) { RandomSeed = architectureSeed }, options);
+        }
+
+        using var first = Create(7);
+        using var repeat = Create(7);
+        using var different = Create(11);
+        var parameters = first.GetParameters().ToArray();
+        Assert.Equal(parameters, repeat.GetParameters().ToArray());
+        Assert.Equal(architectureSeed.HasValue, parameters.SequenceEqual(different.GetParameters().ToArray()));
+    }
+
     private static JsonElement Load(string name)
     {
         string relative = Path.Combine("TextToSpeech", "ReferenceData", name);
