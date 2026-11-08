@@ -27,6 +27,7 @@ public abstract class CosyVoiceFamilyOptions : ModelOptions
     /// <summary>Language-model query attention heads.</summary>
     public int NumHeads { get; set; } = 8;
     /// <summary>Text vocabulary size.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("CosyVoice v1 and its voice-cloning wrapper derive this vocabulary from the fixed Whisper tokenizer; v2 and v3 have separate configurable language models.", ModelType = typeof(CosyVoice<>))]
     public int VocabSize { get; set; } = 256;
     /// <summary>Maximum input text length.</summary>
     public int MaxTextLength { get; set; } = 512;

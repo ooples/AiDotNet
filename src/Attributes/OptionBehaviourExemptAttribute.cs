@@ -42,7 +42,7 @@ namespace AiDotNet.Attributes;
 /// }
 /// </code>
 /// </example>
-[AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+[AttributeUsage(AttributeTargets.Property, AllowMultiple = true, Inherited = true)]
 public sealed class OptionBehaviourExemptAttribute : Attribute
 {
     /// <summary>Exempts a property from the generated option-sensitivity test.</summary>
