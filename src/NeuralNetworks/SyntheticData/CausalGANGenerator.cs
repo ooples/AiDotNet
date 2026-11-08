@@ -261,7 +261,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             // tests masked it because Fit() rebuilds the stack via RebuildLayersWithActualDimensions.
             int layerInput = i == 0 ? inputDim : dims[i - 1] + inputDim;
             Layers.Add(new FullyConnectedLayer<T>(layerInput, dims[i], identity));
-            _genBNLayers.Add(new BatchNormalizationLayer<T>());
+            _genBNLayers.Add(new BatchNormalizationLayer<T>(dims[i]));
         }
 
         // Output layer: produces raw features (no activation). Its input is likewise the last hidden
