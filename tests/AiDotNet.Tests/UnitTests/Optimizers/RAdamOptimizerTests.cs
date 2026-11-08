@@ -73,6 +73,8 @@ public class RAdamOptimizerTests
         double lr = Lr, bool adaptiveLr = false)
         => new(null, new RAdamOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            // The expected values are the update rule on the raw gradient; the default norm clip is not part of it.
+            EnableGradientClipping = false,
             InitialLearningRate = lr,
             Beta1 = Beta1,
             Beta2 = Beta2,

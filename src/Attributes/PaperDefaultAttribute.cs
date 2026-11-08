@@ -31,6 +31,13 @@ namespace AiDotNet.Attributes;
 /// <c>T LearningRate</c> can be declared as <c>0.001</c>).
 /// </para>
 /// <para>
+/// <b>Inherited properties.</b> A property declared on a shared base (<c>SequenceModelOptions.VocabSize</c>,
+/// <c>GanOptions.LatentSize</c>) and given its value by each model's options constructor is declared on that
+/// options class instead, naming the property with <c>nameof</c> so a rename still carries the declaration:
+/// <c>[PaperDefault(nameof(VocabSize), 65024, Source = "Table 1")]</c>. The nearest declaration wins, so a
+/// derived options class can restate a value its base declares.
+/// </para>
+/// <para>
 /// <b>For Beginners:</b> A paper says things like "we use a discount factor of 0.99". This attribute
 /// writes that sentence down next to the setting, with the page or table it came from, and the tests
 /// then make sure the library's default really is 0.99.
@@ -51,7 +58,7 @@ namespace AiDotNet.Attributes;
 /// }
 /// </code>
 /// </example>
-[AttributeUsage(AttributeTargets.Property, AllowMultiple = false, Inherited = true)]
+[AttributeUsage(AttributeTargets.Property | AttributeTargets.Class, AllowMultiple = true, Inherited = true)]
 public sealed class PaperDefaultAttribute : Attribute
 {
     /// <summary>Declares the paper's value for this property.</summary>
@@ -63,6 +70,23 @@ public sealed class PaperDefaultAttribute : Attribute
     {
         Value = value;
     }
+
+    /// <summary>
+    /// Declares, on an options class, the paper's value for one of its properties, typically one inherited
+    /// from a shared base and set by this class's constructor.
+    /// </summary>
+    /// <param name="property">The property, written as <c>nameof(Property)</c>.</param>
+    /// <param name="value">The value the paper states, as for <see cref="PaperDefaultAttribute(object)"/>.</param>
+    public PaperDefaultAttribute(string property, object value)
+    {
+        Property = property ?? throw new ArgumentNullException(nameof(property));
+        Value = value;
+    }
+
+    /// <summary>
+    /// The property a class-level declaration is for; null when the attribute sits on the property itself.
+    /// </summary>
+    public string? Property { get; }
 
     /// <summary>The value the paper states for this property.</summary>
     public object Value { get; }

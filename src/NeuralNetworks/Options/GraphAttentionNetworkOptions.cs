@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
@@ -48,6 +49,7 @@ public class GraphAttentionNetworkOptions : GraphEncoderOptions
     /// <para><b>For Beginners:</b> Each head forms its own opinion about which neighbours matter,
     /// and the results are combined — several viewpoints rather than one.</para>
     /// </remarks>
+    [PaperDefault(8, Source = "Velickovic et al. 2018, Sec. 3.3: K = 8 attention heads in the first layer")]
     public int NumHeads { get; set; }
 
     /// <summary>
@@ -65,6 +67,7 @@ public class GraphAttentionNetworkOptions : GraphEncoderOptions
     /// HiddenSize / NumHeads features, so HiddenSize must be a multiple of NumHeads.
     /// </para>
     /// </remarks>
+    [PaperDefault(64, Source = "Velickovic et al. 2018, Sec. 3.3: 8 heads of F' = 8 features, a total of 64")]
     public int HiddenSize { get; set; }
 
     /// <summary>Throws if a value this model requires has been left unset or is not positive.</summary>

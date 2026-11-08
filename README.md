@@ -17,7 +17,7 @@
 ![Models](https://img.shields.io/badge/Models-2%2C100%2B-blue)
 ![Neural Networks](https://img.shields.io/badge/Neural_Networks-1%2C400%2B-blue)
 ![Classical ML](https://img.shields.io/badge/Classical_ML-390%2B-green)
-![Vision](https://img.shields.io/badge/Vision-650%2B-orange)
+![Vision](https://img.shields.io/badge/Vision-660%2B-orange)
 ![Audio](https://img.shields.io/badge/Audio-360%2B-purple)
 ![Video](https://img.shields.io/badge/Video-190%2B-red)
 ![RL Agents](https://img.shields.io/badge/RL_Agents-75%2B-yellow)
@@ -31,7 +31,7 @@
 | Models (all families) | **2,100+** |
 | Neural network architectures | **1,400+** |
 | Classical ML algorithms | **390+** |
-| Computer vision models | **650+** |
+| Computer vision models | **660+** |
 | Language models | **450+** |
 | Audio models | **360+** |
 | Video models | **190+** |
