@@ -215,7 +215,11 @@ public partial class TestScaffoldGenerator
             {
                 string? skip = null;
                 var exemption = property.GetAttributes().FirstOrDefault(a =>
-                    a.AttributeClass?.ToDisplayString() == OptionsFidelityAnalyzer.OptionBehaviourExemptAttributeName);
+                    a.AttributeClass?.ToDisplayString() == OptionsFidelityAnalyzer.OptionBehaviourExemptAttributeName
+                    && (!a.NamedArguments.Any(argument => argument.Key == "ModelType")
+                        || a.NamedArguments.Any(argument => argument.Key == "ModelType"
+                            && (argument.Value.IsNull || argument.Value.Value is INamedTypeSymbol exemptModel
+                                && SymbolEqualityComparer.Default.Equals(exemptModel.OriginalDefinition, modelClass.OriginalDefinition)))));
                 if (exemption is { ConstructorArguments.Length: 1 } && exemption.ConstructorArguments[0].Value is string reason
                     && !string.IsNullOrWhiteSpace(reason))
                 {

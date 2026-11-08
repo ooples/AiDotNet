@@ -57,4 +57,10 @@ public sealed class OptionBehaviourExemptAttribute : Attribute
 
     /// <summary>Why this property cannot change observable behaviour at test scale.</summary>
     public string Reason { get; }
+
+    /// <summary>
+    /// Limits this exemption to one model type, or its open generic definition.
+    /// Null applies it to every model using the options property.
+    /// </summary>
+    public Type? ModelType { get; set; }
 }

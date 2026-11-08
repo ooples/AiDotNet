@@ -67,7 +67,8 @@ public partial class AudioPaLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
         MaxGradNorm = NumOps.FromDouble(_options.MaxGradientNorm);
         AudioPalmCore<T>.Validate(_options, withDetokenizer: false);
         base.SampleRate = _options.SampleRate;
-        _core = new AudioPalmCore<T>(Engine, _options, _decoderLayers, architecture.RandomSeed ?? _options.Seed ?? _options.TrainingSeed, withDetokenizer: false);
+        int seed = architecture.HasExplicitRandomSeed ? architecture.RandomSeed!.Value : _options.Seed ?? architecture.RandomSeed ?? _options.TrainingSeed;
+        _core = new AudioPalmCore<T>(Engine, _options, _decoderLayers, seed, withDetokenizer: false);
         Layers.AddRange(_decoderLayers);
         // The speech tokenizer (its encoder and fitted codebook), so clones and saved models keep it; it does not train.
         Layers.AddRange(_core.ComponentLayers());

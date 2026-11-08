@@ -21625,6 +21625,8 @@ AiDotNet.ReinforcementLearning.Policies.MultiModalPolicy<T>.MultiModalPolicy(AiD
 AiDotNet.Attributes.OptionBehaviourExemptAttribute
 AiDotNet.Attributes.OptionBehaviourExemptAttribute.OptionBehaviourExemptAttribute(string! reason) -> void
 AiDotNet.Attributes.OptionBehaviourExemptAttribute.Reason.get -> string!
+AiDotNet.Attributes.OptionBehaviourExemptAttribute.ModelType.get -> System.Type?
+AiDotNet.Attributes.OptionBehaviourExemptAttribute.ModelType.set -> void
 AiDotNet.Attributes.PaperDefaultAttribute
 AiDotNet.Attributes.PaperDefaultAttribute.PaperDefaultAttribute(object! value) -> void
 AiDotNet.Attributes.PaperDefaultAttribute.Source.get -> string!

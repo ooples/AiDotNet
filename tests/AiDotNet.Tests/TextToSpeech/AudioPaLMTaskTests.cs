@@ -13,8 +13,77 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// audio rows (§3.2), task prefixes (§3.4), the loss masked to the outputs with PaLM's z-loss (§3.6), training of the
 /// TTS task and of others, constrained generation, the detokenizers, and the speech-recognition task variant.
 /// </summary>
+[Collection("SeedFallbackGlobalState")]
 public class AudioPaLMTaskTests
 {
+    [Theory(Timeout = 120000)]
+    [InlineData(false, 4)]
+    [InlineData(true, 4)]
+    [InlineData(true, 8)]
+    public void PairedSynthesisTokenizersProduceTheirConfiguredVocabulary(bool secondEncoder, int vocabulary)
+    {
+        var options = AudioPaLMFixture.Options();
+        options.AudioTokens = options.SoundStorm.SemanticCodes = options.AudioLM.SemanticCodes = vocabulary;
+        options.SpeechTokenizer = secondEncoder ? AudioPalmSpeechTokenizer.W2vBert2 : AudioPalmSpeechTokenizer.W2vBert;
+        options.W2vBert2Layer = 0;
+        AudioPalmAsrOptionFixture.ConfigureTokenizerRate(options, secondEncoder ? 50 : 25);
+        using var model = AudioPaLMFixture.Tts<double>(options);
+        var tokens = model.AudioTokensOf(AudioPaLMFixture.Tones<double>(.4));
+        Assert.NotEmpty(tokens);
+        Assert.All(tokens, code => Assert.InRange(code, 0, vocabulary - 1));
+        Assert.InRange(tokens.Length, secondEncoder ? 18 : 9, secondEncoder ? 20 : 10);
+        Assert.Equal(vocabulary, model.Core.Vocabulary - model.AudioOffset);
+    }
+
+    [Fact(Timeout = 120000)]
+    public void AlternateTokenizerLayerControlsTheNativeEncoderDepth()
+    {
+        var options = AudioPaLMFixture.Options();
+        AudioPalmAsrOptionFixture.PrepareOptions(options, "W2vBert2Layer");
+        using var first = new AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<double>(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(AiDotNet.Enums.InputType.OneDimensional,
+                AiDotNet.Enums.NeuralNetworkTaskType.SpeechRecognition, inputSize: 1, outputSize: 1), options);
+        var other = AudioPaLMFixture.Options();
+        AudioPalmAsrOptionFixture.PrepareOptions(other, "W2vBert2Layer");
+        other.W2vBert2Layer = 1;
+        using var second = new AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<double>(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(AiDotNet.Enums.InputType.OneDimensional,
+                AiDotNet.Enums.NeuralNetworkTaskType.SpeechRecognition, inputSize: 1, outputSize: 1), other);
+        Assert.Empty(first.Core.W2vBert2!.EncoderLayers);
+        Assert.Single(second.Core.W2vBert2!.EncoderLayers);
+        Assert.NotEqual(first.GetParameters().Length, second.GetParameters().Length);
+    }
+
+    [Fact(Timeout = 120000)]
+    public void SynthesisVoicePromptDurationChangesTheNativeWaveformPrompt()
+    {
+        var options = AudioPaLMFixture.Options();
+        using var model = new AiDotNet.TextToSpeech.MultiModal.AudioPaLM<double>(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(AiDotNet.Enums.InputType.OneDimensional,
+                AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
+        options.VoicePromptSeconds = .04;
+        var first = AudioPalmAsrOptionFixture.ObserveSynthesis(model, "VoicePromptSeconds");
+        options.VoicePromptSeconds = .08;
+        Assert.NotEqual(first, AudioPalmAsrOptionFixture.ObserveSynthesis(model, "VoicePromptSeconds"));
+    }
+
+    [Theory]
+    [InlineData(false, 8000)]
+    [InlineData(false, 24000)]
+    [InlineData(true, 8000)]
+    [InlineData(true, 24000)]
+    public void NativeSpeechTokenizersRejectUnsupportedWaveformRates(bool tts, int rate)
+    {
+        var options = AudioPaLMFixture.Options();
+        options.SampleRate = rate;
+        var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
+        if (tts)
+            Assert.Throws<ArgumentException>(() => new AiDotNet.TextToSpeech.MultiModal.AudioPaLM<double>(architecture, options));
+        else
+            Assert.Throws<ArgumentException>(() => new AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<double>(architecture, options));
+    }
+
     [Fact(Timeout = 120000)]
     public void AsrGradientNormControlsNativeClipping()
     {
@@ -113,6 +182,7 @@ public class AudioPaLMTaskTests
     [InlineData(true)]
     public void OptionsSeedControlsNativeDecoderInitialization(bool tts)
     {
+        using var fallback = new ArchitectureSeedFallback(42);
         var firstOptions = AudioPaLMFixture.Options();
         firstOptions.Seed = 7;
         var secondOptions = AudioPaLMFixture.Options();
@@ -130,6 +200,13 @@ public class AudioPaLMTaskTests
             : new AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<double>(Architecture(), secondOptions);
         Assert.Equal(first.GetParameters().ToArray(), again.GetParameters().ToArray());
         Assert.False(first.GetParameters().SequenceEqual(second.GetParameters()));
+    }
+
+    private sealed class ArchitectureSeedFallback : IDisposable
+    {
+        private readonly int? _previous = AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>.DefaultRandomSeedOverride;
+        internal ArchitectureSeedFallback(int seed) => AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>.DefaultRandomSeedOverride = seed;
+        public void Dispose() => AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>.DefaultRandomSeedOverride = _previous;
     }
 
     [Fact(Timeout = 300000)]

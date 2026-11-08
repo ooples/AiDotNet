@@ -53,6 +53,7 @@ public class AudioPaLMOptions : ModelOptions
     }
 
     /// <summary>The speech tokenizer's waveform sample rate (16 kHz).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Both native speech tokenizers require 16 kHz waveforms; native task tests reject unsupported rates for both synthesis and recognition.")]
     public int SampleRate { get; set; } = 16000;
     /// <summary>The language decoder's hidden width (4096 for PaLM 8B).</summary>
     public int HiddenDim { get; set; } = 4096;
@@ -123,6 +124,7 @@ public class AudioPaLMOptions : ModelOptions
     // ---------------------------------------------------------------- tokens
 
     /// <summary>Audio tokens appended after the text vocabulary (1024, §3.1).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Synthesis requires AudioTokens to match the selected detokenizer's semantic vocabulary; native task tests exercise paired tokenizer and codec vocabularies.", ModelType = typeof(AudioPaLM<>))]
     public int AudioTokens { get; set; } = 1024;
 
     /// <summary>The text SentencePiece model (PaLM's is not public; Gemma's <c>tokenizer.model</c> with
@@ -141,6 +143,7 @@ public class AudioPaLMOptions : ModelOptions
     // ---------------------------------------------------------------- audio tokens and audio
 
     /// <summary>How speech becomes audio tokens (w2v-BERT).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Synthesis pairs the tokenizer's 25/50 Hz output with the codec semantic rate and hop; native task tests construct and tokenize paired configurations for both encoders.", ModelType = typeof(AudioPaLM<>))]
     public AudioPalmSpeechTokenizer SpeechTokenizer { get; set; } = AudioPalmSpeechTokenizer.W2vBert;
 
     /// <summary>The w2v-BERT tokenizer's options (w2v-BERT XL, its 7th masked block, 1024 clusters, not normalized).</summary>
@@ -150,6 +153,7 @@ public class AudioPaLMOptions : ModelOptions
     public int W2vBert2Layer { get; set; } = 12;
 
     /// <summary>How audio tokens become speech (SoundStorm).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Speech recognition constructs no detokenizer; native ASR task tests verify that neither synthesis codec is constructed.", ModelType = typeof(AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<>))]
     public AudioPalmDetokenizer Detokenizer { get; set; } = AudioPalmDetokenizer.SoundStorm;
 
     /// <summary>SoundStorm's options (its acoustic model only; AudioPaLM supplies the semantic tokens).</summary>
@@ -159,6 +163,7 @@ public class AudioPaLMOptions : ModelOptions
     public AiDotNet.Audio.Generation.AudioLMOptions AudioLM { get; set; } = new();
 
     /// <summary>Seconds of voice prompt the detokenizer continues (3, repeated when the recording is shorter; §3.3).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Speech recognition has no synthesis voice prompt; native ASR task tests accept zero prompt duration and independently configured synthesis codec settings.", ModelType = typeof(AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<>))]
     public double VoicePromptSeconds { get; set; } = 3.0;
 
     // ---------------------------------------------------------------- training and generation

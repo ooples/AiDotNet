@@ -13,6 +13,54 @@ namespace AiDotNet.Tests.Generators;
 public class OptionsFidelityReadGraphTests
 {
     [Theory]
+    [InlineData("typeof(Example.Asr<>)", true)]
+    [InlineData("typeof(Example.Asr<int>)", true)]
+    [InlineData("typeof(Example.Tts<>)", false)]
+    [InlineData("null", true)]
+    public void ModelScopedExemptionKeepsOtherTaskVariantsActive(string scope, bool skipsAsr)
+    {
+        string source = @"
+namespace AiDotNet.Models.Options { public abstract class ModelOptions {} }
+namespace AiDotNet.Attributes {
+    public sealed class OptionBehaviourExemptAttribute : System.Attribute {
+        public OptionBehaviourExemptAttribute(string reason) {}
+        public System.Type ModelType { get; set; }
+    }
+}
+namespace Example {
+    public class Options : AiDotNet.Models.Options.ModelOptions {
+        [AiDotNet.Attributes.OptionBehaviourExempt(""scope"", ModelType = " + scope + @")]
+        public int Scoped { get; set; }
+        [AiDotNet.Attributes.OptionBehaviourExempt(""all models"")]
+        public int Global { get; set; }
+        public int Live { get; set; }
+    }
+    public class Asr<T> { public Asr(Options options) {} }
+    public class Tts<T> { public Tts(Options options) {} }
+}";
+        var references = AppDomain.CurrentDomain.GetAssemblies()
+            .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
+            .Select(a => a.Location).Distinct(StringComparer.OrdinalIgnoreCase)
+            .Select(CachedMetadataReference.FromFile);
+        var compilation = CSharpCompilation.Create("ScopedOptions", new[] { CSharpSyntaxTree.ParseText(source) }, references,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
+        var compute = typeof(AiDotNet.Generators.TestScaffoldGenerator).GetMethod("ComputeOptionSensitivityCases",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        foreach (string name in new[] { "Asr", "Tts" })
+        {
+            var symbol = compilation.GetTypeByMetadataName("Example." + name + "`1")!;
+            var cases = ((System.Collections.IEnumerable)compute.Invoke(null, new object[] { symbol })!).Cast<object>()
+                .ToDictionary(item => (string)item.GetType().GetProperty("Property")!.GetValue(item)!,
+                    item => item.GetType().GetProperty("SkipReason")!.GetValue(item) as string);
+            Assert.NotNull(cases["Global"]);
+            Assert.Null(cases["Live"]);
+            bool expected = scope == "null" || (name == "Asr" ? skipsAsr : !skipsAsr);
+            Assert.Equal(expected, cases["Scoped"] is not null);
+        }
+    }
+
+    [Theory]
     [InlineData(false, false, false)]
     [InlineData(true, false, false)]
     [InlineData(false, true, false)]

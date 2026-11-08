@@ -146,6 +146,10 @@ internal static class OptionSensitivityFixtureSetup
             && AudioPalmAsrOptionFixture.Observe(audioPalm, option) is { } audioPalmObservation)
             return audioPalmObservation;
 
+        if (network is AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T> synthesisPalm
+            && AudioPalmAsrOptionFixture.ObserveSynthesis(synthesisPalm, option) is { } promptObservation)
+            return promptObservation;
+
         if (network is AiDotNet.TextToSpeech.CodecBased.SoundStorm<T> soundStorm
             && SoundStormOptionFixture.Observe(soundStorm, option) is { } soundStormObservation)
             return soundStormObservation;
@@ -567,7 +571,8 @@ internal static class OptionSensitivityFixtureSetup
     }
 
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
-        => network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> && option.StartsWith("Ramp", StringComparison.Ordinal)
+        => network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> or AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>
+            && option.StartsWith("Ramp", StringComparison.Ordinal)
             ? Math.Max(4, steps)
             : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> && option is "WarmupSteps" or "TrainingSteps"
             ? Math.Max(4, steps)
@@ -604,7 +609,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
-        if (network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> audioPalm && AudioPalmAsrOptionFixture.IsTrainingOption(option))
+        if (network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> audioPalm)
         {
             AudioPalmAsrOptionFixture.Train(audioPalm);
             return true;
