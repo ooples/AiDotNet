@@ -123,9 +123,9 @@ public partial class NaturalSpeech3<T> : TtsModelBase<T>, IEndToEndTts<T>
         // A non-positive warm-up would silently train on another schedule.
         if (o.WarmupSteps <= 0) throw new ArgumentOutOfRangeException("options", o.WarmupSteps, "WarmupSteps must be positive.");
         if (o.DetailDropout is < 0 or > 1 || o.PromptDropProbability is < 0 or > 1) throw new ArgumentException("Probabilities lie in [0, 1].");
-        if (!double.IsFinite(o.CodecBeta1) || o.CodecBeta1 is < 0 or >= 1)
+        if ((double.IsNaN(o.CodecBeta1) || double.IsInfinity(o.CodecBeta1)) || o.CodecBeta1 is < 0 or >= 1)
             throw new ArgumentOutOfRangeException(nameof(o.CodecBeta1), "CodecBeta1 must be finite and lie in [0, 1).");
-        if (!double.IsFinite(o.CodecBeta2) || o.CodecBeta2 is < 0 or >= 1)
+        if ((double.IsNaN(o.CodecBeta2) || double.IsInfinity(o.CodecBeta2)) || o.CodecBeta2 is < 0 or >= 1)
             throw new ArgumentOutOfRangeException(nameof(o.CodecBeta2), "CodecBeta2 must be finite and lie in [0, 1).");
     }
 
