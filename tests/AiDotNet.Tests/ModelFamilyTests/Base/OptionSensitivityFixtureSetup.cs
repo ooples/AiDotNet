@@ -136,8 +136,11 @@ internal static class OptionSensitivityFixtureSetup
     {
         var task = ObserveTask(network, input, option, observe);
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        // Vector.Select materializes another full vector (and a double copy for float models).
+        // Stream conversions so a paper-scale model needs only the existing parameter snapshot.
+        var parameters = network.GetParameters();
         return OptionSensitivityHarness.Combine(task,
-            OptionSensitivityHarness.Fingerprint(network.GetParameters().Select(ops.ToDouble)));
+            OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, parameters.Length).Select(i => ops.ToDouble(parameters[i]))));
     }
 
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,

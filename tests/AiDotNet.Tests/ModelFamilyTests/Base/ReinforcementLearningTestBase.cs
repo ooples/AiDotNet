@@ -1369,7 +1369,8 @@ public abstract class ReinforcementLearningTestBase<T>
             options =>
             {
                 TryLowerInt(options, "WarmupSteps", 2);
-                TryLowerInt(options, "BatchSize", 8);
+                // A batch of eight masks every warmup candidate around two: neither agent can update yet.
+                TryLowerInt(options, "BatchSize", option == "WarmupSteps" ? 1 : 8);
                 // Dreamer trains on min(BatchLength, longest stored run) steps; the loop above ends an episode
                 // every 16 steps, so the paper's 50 and every candidate near it clamped to 16 and measured
                 // Insensitive. Below the episode length the perturbation reaches the sequence it sizes.
