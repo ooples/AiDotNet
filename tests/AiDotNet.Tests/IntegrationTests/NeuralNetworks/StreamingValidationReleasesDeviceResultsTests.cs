@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
@@ -41,35 +42,14 @@ public class StreamingValidationReleasesDeviceResultsTests
         AiDotNetEngine.Current = gpu;
         try
         {
-            var layers = new List<ILayer<float>>
-            {
-                new DenseLayer<float>(Hidden, (IActivationFunction<float>)new ReLUActivation<float>()),
-                new DenseLayer<float>(Outputs, (IActivationFunction<float>?)null),
-            };
-            var architecture = new NeuralNetworkArchitecture<float>(
-                inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
-                inputSize: Inputs, outputSize: Outputs, layers: layers);
-            var network = new NeuralNetwork<float>(architecture);
+            var network = Network();
+            Assert.True(network.ReleasesPredictResults, "Dense layers keep nothing between calls, so validation frees them.");
+            var (x, y) = Batch_();
 
-            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20261107);
-            var x = new Tensor<float>(new[] { Batch, Inputs });
-            var y = new Tensor<float>(new[] { Batch, Outputs });
-            for (int r = 0; r < Batch; r++)
-            {
-                for (int i = 0; i < Inputs; i++) x[r, i] = (float)(rng.NextDouble() * 2 - 1);
-                for (int o = 0; o < Outputs; o++) y[r, o] = (float)(rng.NextDouble() * 2 - 1);
-            }
-
-            // The per-batch loss of AiModelBuilder's streaming validation (EvaluateStreamingValidationAsync).
-            var sampleLoss = typeof(AiModelBuilder<float, Tensor<float>, Tensor<float>>).GetMethod(
-                "SampleLoss", BindingFlags.NonPublic | BindingFlags.Static)
-                ?? throw new InvalidOperationException("AiModelBuilder has no SampleLoss.");
-            float Loss() => (float)sampleLoss.Invoke(null, new object[] { network, network.DefaultLossFunction, x, y })!;
-
-            float first = Loss(); // warm: weights uploaded, kernels and pools built
+            float first = Loss(network, x, y); // warm: weights uploaded, kernels and pools built
             long before = GpuMemoryStats.Snapshot().AllocatedBytes;
             for (int b = 0; b < Batches; b++)
-                Assert.Equal(first, Loss());
+                Assert.Equal(first, Loss(network, x, y));
             long grown = GpuMemoryStats.Snapshot().AllocatedBytes - before;
 
             // Each leaked batch would hold at least its prediction; all of them together at least Batches of those.
@@ -77,5 +57,113 @@ public class StreamingValidationReleasesDeviceResultsTests
                 $"{Batches} validation batches left {grown:N0} device bytes allocated (one prediction is {OutputBytes:N0}).");
         }
         finally { AiDotNetEngine.Current = previous; }
+    }
+
+    /// <summary>
+    /// A model that keeps a GPU result between calls (here one layer's offset, built on the device by its first forward
+    /// and read by every later one, as a generation cache is) must still have it after validation. A scope around
+    /// Predict would free it with the call's other results, and the next prediction would read a released buffer.
+    /// </summary>
+    [SkippableFact]
+    public void Validation_keeps_what_a_model_holds_between_calls()
+    {
+        using var gpu = new DirectGpuTensorEngine();
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+        var previous = AiDotNetEngine.Current;
+        AiDotNetEngine.Current = gpu;
+        try
+        {
+            var network = Network(new CachedOffsetLayer(Inputs));
+            Assert.False(network.ReleasesPredictResults, "A layer nobody checked counts as keeping a result.");
+            var (x, y) = Batch_();
+
+            float first = Loss(network, x, y);
+            for (int b = 0; b < Batches; b++)
+            {
+                // Other work allocates between batches, as training steps do, so a released offset buffer is reused.
+                using (TensorScope.Begin())
+                    gpu.TensorMultiply(x, x);
+                Assert.Equal(first, Loss(network, x, y));
+            }
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
+    [Fact]
+    public void Only_networks_whose_layers_keep_nothing_release_their_predict_results()
+    {
+        Assert.True(Network().ReleasesPredictResults);
+        Assert.False(Network(new CachedOffsetLayer(Inputs)).ReleasesPredictResults);
+
+        var transformer = new Transformer<float>(new TransformerArchitecture<float>(
+            InputType.OneDimensional, NeuralNetworkTaskType.SequenceClassification,
+            numEncoderLayers: 0, numDecoderLayers: 2, numHeads: 2, modelDimension: 32, feedForwardDimension: 64,
+            NetworkComplexity.Simple, inputSize: 64, outputSize: 64));
+        var keeping = string.Join(", ", transformer.Layers
+            .Where(layer => layer is not LayerBase<float> { KeepsResultsBetweenCalls: false })
+            .Select(layer => layer.GetType().Name));
+        Assert.True(transformer.ReleasesPredictResults, $"Default transformer layers that keep a result: {keeping}.");
+    }
+
+    private static NeuralNetwork<float> Network(ILayer<float>? first = null)
+    {
+        var layers = new List<ILayer<float>>();
+        if (first is not null) layers.Add(first);
+        layers.Add(new DenseLayer<float>(Hidden, (IActivationFunction<float>)new ReLUActivation<float>()));
+        layers.Add(new DenseLayer<float>(Outputs, (IActivationFunction<float>?)null));
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.OneDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputSize: Inputs, outputSize: Outputs, layers: layers);
+        return new NeuralNetwork<float>(architecture);
+    }
+
+    private static (Tensor<float> X, Tensor<float> Y) Batch_()
+    {
+        var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20261107);
+        var x = new Tensor<float>(new[] { Batch, Inputs });
+        var y = new Tensor<float>(new[] { Batch, Outputs });
+        for (int r = 0; r < Batch; r++)
+        {
+            for (int i = 0; i < Inputs; i++) x[r, i] = (float)(rng.NextDouble() * 2 - 1);
+            for (int o = 0; o < Outputs; o++) y[r, o] = (float)(rng.NextDouble() * 2 - 1);
+        }
+
+        return (x, y);
+    }
+
+    /// <summary>The per-batch loss of AiModelBuilder's streaming validation (EvaluateStreamingValidationAsync).</summary>
+    private static float Loss(NeuralNetwork<float> network, Tensor<float> x, Tensor<float> y)
+    {
+        var sampleLoss = typeof(AiModelBuilder<float, Tensor<float>, Tensor<float>>).GetMethod(
+            "SampleLoss", BindingFlags.NonPublic | BindingFlags.Static)
+            ?? throw new InvalidOperationException("AiModelBuilder has no SampleLoss.");
+        return sampleLoss.Invoke(null, new object[] { network, network.DefaultLossFunction, x, y }) is float loss
+            ? loss
+            : throw new InvalidOperationException("SampleLoss returned no float.");
+    }
+
+    /// <summary>Adds an offset it builds on the device from its first input and keeps for every later call.</summary>
+    [AiDotNet.Attributes.ElementWiseShape]
+    private sealed class CachedOffsetLayer : LayerBase<float>
+    {
+        private Tensor<float>? _offset;
+
+        internal CachedOffsetLayer(int features) : base([features], [features])
+        {
+        }
+
+        protected override Tensor<float> ForwardTraced(Tensor<float> input)
+        {
+            _offset ??= Engine.TensorAdd(input, input);
+            return Engine.TensorAdd(input, _offset);
+        }
+
+        public override bool SupportsTraining => false;
+
+        public override void ResetState()
+        {
+        }
     }
 }
