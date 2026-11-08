@@ -26,6 +26,9 @@ namespace AiDotNet.LossFunctions;
 /// </remarks>
 public sealed class ParaformerObjective<T> : LossFunctionBase<T>
 {
+    /// <summary>It runs the model's token-count providers, callbacks, which may keep a GPU result between calls; nothing here can check that.</summary>
+    internal override bool KeepsResultsBetweenCalls => true;
+
     private readonly LossFunctionBase<T> _crossEntropy;
     private readonly Func<Tensor<T>?> _predictedTokenCount;
 

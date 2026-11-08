@@ -95,8 +95,10 @@ public class StreamingValidationReleasesDeviceResultsTests
     /// by every later one). Validation must leave it alive: a scope around the loss, or the predict scope enclosing it,
     /// would free it, and the next batch's loss would read a released buffer.
     /// </summary>
-    [SkippableFact]
-    public void Validation_keeps_what_a_callers_loss_holds_between_calls()
+    [SkippableTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Validation_keeps_what_a_callers_loss_holds_between_calls(bool insideAComposite)
     {
         using var gpu = new DirectGpuTensorEngine();
         if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
@@ -108,7 +110,9 @@ public class StreamingValidationReleasesDeviceResultsTests
         {
             var network = Network();
             Assert.True(network.ReleasesPredictResults, "the predict scope must be open around the loss for this test to bite");
-            var loss = new CachedScaleLoss();
+            AiDotNet.Interfaces.ILossFunction<float> loss = insideAComposite
+                ? new AiDotNet.LossFunctions.CompositeLoss<float>((new CachedScaleLoss(), 1.0))
+                : new CachedScaleLoss();
             var (x, y) = Batch_();
 
             float first = AiModelBuilder<float, Tensor<float>, Tensor<float>>.SampleLoss(network, loss, x, y);
@@ -121,6 +125,21 @@ public class StreamingValidationReleasesDeviceResultsTests
             }
         }
         finally { AiDotNetEngine.Current = previous; }
+    }
+
+    /// <summary>
+    /// Only a loss checked to keep nothing between calls is scoped: the library's own, and a composite of them. A loss
+    /// defined elsewhere, a composite holding one, and a library loss running a caller's network or callback are not.
+    /// </summary>
+    [Fact]
+    public void Only_losses_that_keep_nothing_are_scoped()
+    {
+        var mse = new AiDotNet.LossFunctions.MeanSquaredErrorLoss<float>();
+        Assert.False(mse.KeepsResultsBetweenCalls);
+        Assert.False(new AiDotNet.LossFunctions.CompositeLoss<float>((mse, 1.0), (new AiDotNet.LossFunctions.MeanAbsoluteErrorLoss<float>(), 0.5)).KeepsResultsBetweenCalls);
+        Assert.True(new CachedScaleLoss().KeepsResultsBetweenCalls);
+        Assert.True(new AiDotNet.LossFunctions.CompositeLoss<float>((mse, 1.0), (new CachedScaleLoss(), 1.0)).KeepsResultsBetweenCalls);
+        Assert.True(new AiDotNet.LossFunctions.FactorVAEObjective<float>(mse, () => null, 1.0).KeepsResultsBetweenCalls);
     }
 
     /// <summary>Mean squared error times a scale of 1 it builds on the device from its first target and keeps.</summary>
