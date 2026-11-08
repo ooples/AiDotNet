@@ -17,6 +17,53 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class NaturalSpeech3ModelTests
 {
+    [Theory]
+    [InlineData("CodecBeta1", -0.1)]
+    [InlineData("CodecBeta1", 1)]
+    [InlineData("CodecBeta1", double.NaN)]
+    [InlineData("CodecBeta1", double.PositiveInfinity)]
+    [InlineData("CodecBeta2", -0.1)]
+    [InlineData("CodecBeta2", 1)]
+    [InlineData("CodecBeta2", double.NaN)]
+    [InlineData("CodecBeta2", double.PositiveInfinity)]
+    public void InvalidCodecAdamBetasAreRejectedBeforeTraining(string option, double value)
+    {
+        var options = Tiny();
+        typeof(NaturalSpeech3Options).GetProperty(option)!.SetValue(options, value);
+        Assert.Throws<ArgumentOutOfRangeException>(() => Model(options));
+    }
+
+    [Theory]
+    [InlineData("HopSize")]
+    [InlineData("CodecEncoderRates")]
+    [InlineData("CodecDecoderRates")]
+    public void UnpairedCodecGeometryIsRejected(string option)
+    {
+        var options = Tiny();
+        if (option == "HopSize") options.HopSize = 6;
+        else typeof(NaturalSpeech3Options).GetProperty(option)!.SetValue(options, new[] { 2, 3 });
+        Assert.Throws<ArgumentException>(() => Model(options));
+    }
+
+    [Theory]
+    [InlineData(2, 4)]
+    [InlineData(3, 40)]
+    [InlineData(4, 128)]
+    public void PairedStrideProductsRoundTripWaveforms(int secondStride, int inheritedMelChannels)
+    {
+        var options = Tiny();
+        options.CodecEncoderRates = new[] { 2, secondStride };
+        options.CodecDecoderRates = new[] { secondStride, 2 };
+        options.HopSize = 2 * secondStride;
+        options.MelChannels = inheritedMelChannels;
+        using var model = Model(options);
+        var (codes, timbre) = model.EncodeFactors(Tone(12 * options.HopSize, .05));
+        Assert.Equal(12, codes.GetLength(1));
+        var audio = model.DecodeFactors(codes, timbre);
+        Assert.Equal(12 * options.HopSize, audio.Length);
+        Assert.All(audio.ToArray(), value => Assert.True(double.IsFinite(value)));
+    }
+
     private static NaturalSpeech3Options Tiny(bool phonemeProsody = false) => new()
     {
         SampleRate = 1000, HopSize = 4, CodecEncoderDim = 4, CodecEncoderRates = new[] { 2, 2 }, CodecDim = 16, CodecDecoderChannels = 16,

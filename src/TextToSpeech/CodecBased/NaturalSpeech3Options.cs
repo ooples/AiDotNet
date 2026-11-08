@@ -25,6 +25,14 @@ public enum NaturalSpeech3Stage
 /// </remarks>
 public class NaturalSpeech3Options : TtsModelOptions
 {
+    /// <summary>The codec hop, which must equal both stride products.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("HopSize must equal both CodecEncoderRates and CodecDecoderRates products; paired native codec round trips and unpaired rejection tests cover this contract.")]
+    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+
+    /// <summary>Inherited mel-output metadata; NaturalSpeech 3 decodes waveforms through FACodec.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("NaturalSpeech 3 emits codec-decoded waveforms, not mel outputs. MelBins controls the codec's spectral training losses; native round trips verify waveform geometry independently of inherited MelChannels.")]
+    public new int MelChannels { get => base.MelChannels; set => base.MelChannels = value; }
+
     /// <summary>Creates the configuration.</summary>
     public NaturalSpeech3Options()
     {
@@ -51,6 +59,7 @@ public class NaturalSpeech3Options : TtsModelOptions
     public int CodecEncoderDim { get; set; } = 32;
 
     /// <summary>The encoder's strides (2, 4, 5, 5: a hop of 200 at 16 kHz).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The encoder stride product must equal HopSize and the decoder stride product; native tests exercise paired hops and reject unpaired strides.")]
     public int[] CodecEncoderRates { get; set; } = { 2, 4, 5, 5 };
 
     /// <summary>The latent width (256).</summary>
@@ -60,6 +69,7 @@ public class NaturalSpeech3Options : TtsModelOptions
     public int CodecDecoderChannels { get; set; } = 1024;
 
     /// <summary>The decoder's strides (5, 5, 4, 2).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The decoder stride product must equal HopSize and the encoder stride product; native tests exercise paired hops and reject unpaired strides.")]
     public int[] CodecDecoderRates { get; set; } = { 5, 5, 4, 2 };
 
     /// <summary>The prosody quantizers N_qp (1).</summary>

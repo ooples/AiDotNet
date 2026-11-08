@@ -47,6 +47,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
             : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> ? "musicgen-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> ? "glmvoice-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T> ? "naturalspeech3-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T> ? "voicecraft-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.VALLE2<T> ? "valle2-" + option
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> ? "stylezs-" + option
@@ -566,6 +567,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T> naturalSpeech && NaturalSpeech3OptionFixture.IsCodecOption(option))
+        {
+            NaturalSpeech3OptionFixture.Train(naturalSpeech);
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T> voiceCraft)
         {
             VoiceCraftOptionFixture.Train(voiceCraft);
@@ -673,6 +679,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options naturalSpeech)
+            NaturalSpeech3OptionFixture.PrepareOptions(naturalSpeech, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions voiceCraft)
             VoiceCraftOptionFixture.PrepareOptions(voiceCraft, option);
         if (options is AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions glmVoice)
