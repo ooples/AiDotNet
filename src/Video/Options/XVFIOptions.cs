@@ -34,7 +34,7 @@ public class XVFIOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public XVFIOptions(XVFIOptions other)
+    public XVFIOptions(XVFIOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

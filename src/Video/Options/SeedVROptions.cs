@@ -26,7 +26,7 @@ public class SeedVROptions : NeuralNetworkOptions
     }
 
     /// <summary>Copies <paramref name="other"/>.</summary>
-    public SeedVROptions(SeedVROptions other)
+    public SeedVROptions(SeedVROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

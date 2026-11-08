@@ -36,7 +36,7 @@ public class VFITOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public VFITOptions(VFITOptions other)
+    public VFITOptions(VFITOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

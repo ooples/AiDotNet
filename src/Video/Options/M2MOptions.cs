@@ -35,7 +35,7 @@ public class M2MOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public M2MOptions(M2MOptions other)
+    public M2MOptions(M2MOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

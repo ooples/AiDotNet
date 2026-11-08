@@ -25,7 +25,7 @@ public class RealisVSROptions : NeuralNetworkOptions
     }
 
     /// <summary>Copies <paramref name="other"/>.</summary>
-    public RealisVSROptions(RealisVSROptions other)
+    public RealisVSROptions(RealisVSROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

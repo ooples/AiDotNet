@@ -38,7 +38,7 @@ public class Upscale4KAgentOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public Upscale4KAgentOptions(Upscale4KAgentOptions other)
+    public Upscale4KAgentOptions(Upscale4KAgentOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

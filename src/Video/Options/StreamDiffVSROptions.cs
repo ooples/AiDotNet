@@ -27,7 +27,7 @@ public class StreamDiffVSROptions : NeuralNetworkOptions
     }
 
     /// <summary>Copies <paramref name="other"/>.</summary>
-    public StreamDiffVSROptions(StreamDiffVSROptions other)
+    public StreamDiffVSROptions(StreamDiffVSROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

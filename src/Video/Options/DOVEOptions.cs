@@ -37,7 +37,7 @@ public class DOVEOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public DOVEOptions(DOVEOptions other)
+    public DOVEOptions(DOVEOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
