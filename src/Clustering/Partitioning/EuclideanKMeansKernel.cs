@@ -210,6 +210,44 @@ internal sealed class EuclideanKMeansKernel
         });
     }
 
+    /// <summary>
+    /// For each row in <paramref name="candidates"/>, the total of every row's <paramref name="minDistances"/> entry
+    /// lowered to its squared distance to that candidate: the k-means++ potential if it became a center. Each candidate's
+    /// squared distances are written to the matching array of <paramref name="distances"/>. One pass over fixed row
+    /// blocks, merged in block order.
+    /// </summary>
+    public double[] CandidatePotentials(int[] candidates, double[] minDistances, double[][] distances)
+    {
+        int columns = Columns;
+        int count = candidates.Length;
+        int blocks = BlockCount;
+        var partial = new double[blocks * count];
+        System.Threading.Tasks.Parallel.For(0, blocks, block =>
+        {
+            int start = block * BlockRows;
+            int end = Math.Min(start + BlockRows, Rows);
+            for (int t = 0; t < count; t++)
+            {
+                int offset = candidates[t] * columns;
+                var target = distances[t];
+                double total = 0;
+                for (int i = start; i < end; i++)
+                {
+                    double distance = SquaredDistance(_x, i * columns, _x, offset, columns);
+                    target[i] = distance;
+                    total += Math.Min(minDistances[i], distance);
+                }
+
+                partial[block * count + t] = total;
+            }
+        });
+
+        var potentials = new double[count];
+        for (int block = 0; block < blocks; block++)
+            for (int t = 0; t < count; t++) potentials[t] += partial[block * count + t];
+        return potentials;
+    }
+
     /// <summary>Each row's Euclidean distance to every center, row-major <c>[rows, clusters]</c>.</summary>
     public double[] Distances(double[] centers, int clusters)
     {
