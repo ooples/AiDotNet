@@ -23,6 +23,16 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class DeepVoice3PaperTests
 {
     [Fact]
+    public void OptionsModelPathSelectsOnnxLoading()
+    {
+        var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), Guid.NewGuid() + ".onnx");
+        var error = Assert.Throws<System.IO.FileNotFoundException>(() => new DeepVoice3<double>(
+            new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
+                inputSize: 1, outputSize: 1), new DeepVoice3Options { ModelPath = path }));
+        Assert.Equal(path, error.FileName);
+    }
+
+    [Fact]
     public void OptionsCopyPreservesThePaperConfigurationAndOwnsItsArrays()
     {
         var options = new DeepVoice3Options

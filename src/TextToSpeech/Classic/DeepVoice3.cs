@@ -99,11 +99,20 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
     {
         _options = options ?? new DeepVoice3Options();
         Options = _options;
-        _useNativeMode = true;
+        _useNativeMode = string.IsNullOrWhiteSpace(_options.ModelPath);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.DecoderPrenetSizes.LastOrDefault();
+        if (!_useNativeMode)
+        {
+            var modelPath = _options.ModelPath!;
+            if (!File.Exists(modelPath))
+                throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
+            OnnxModel = new OnnxModel<T>(modelPath, _options.OnnxOptions);
+            InitializeLayers();
+            return;
+        }
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
             new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
                 new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate, UseAdaptiveBetas = false }));
