@@ -1073,6 +1073,11 @@ internal static class OptionSensitivityFixtureSetup
 
         switch (network)
         {
+            case AiDotNet.Audio.Generation.SoundStream<T> model:
+                // Configuration clones preserve the source's public runtime flag, which can
+                // override the options candidate applied by the probe's reconstructed constructor.
+                model.Denoise = ((AiDotNet.Audio.Generation.SoundStreamOptions)model.GetOptions()).Denoise;
+                break;
             case AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T> model:
                 VoiceCraftNativeFixture.Prepare(model);
                 break;
