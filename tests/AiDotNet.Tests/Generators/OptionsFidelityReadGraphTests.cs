@@ -36,6 +36,7 @@ namespace Example {
         public int Live { get; set; }
     }
     public class Asr<T> { public Asr(Options options) {} }
+    public class DerivedAsr<T> : Asr<T> { public DerivedAsr(Options options) : base(options) {} }
     public class Tts<T> { public Tts(Options options) {} }
 }";
         var references = AppDomain.CurrentDomain.GetAssemblies()
@@ -47,7 +48,7 @@ namespace Example {
         Assert.Empty(compilation.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error));
         var compute = typeof(AiDotNet.Generators.TestScaffoldGenerator).GetMethod("ComputeOptionSensitivityCases",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
-        foreach (string name in new[] { "Asr", "Tts" })
+        foreach (string name in new[] { "Asr", "DerivedAsr", "Tts" })
         {
             var symbol = compilation.GetTypeByMetadataName("Example." + name + "`1")!;
             var cases = ((System.Collections.IEnumerable)compute.Invoke(null, new object[] { symbol })!).Cast<object>()
@@ -55,7 +56,7 @@ namespace Example {
                     item => item.GetType().GetProperty("SkipReason")!.GetValue(item) as string);
             Assert.NotNull(cases["Global"]);
             Assert.Null(cases["Live"]);
-            bool expected = scope == "null" || (name == "Asr" ? skipsAsr : !skipsAsr);
+            bool expected = scope == "null" || (name != "Tts" ? skipsAsr : !skipsAsr);
             Assert.Equal(expected, cases["Scoped"] is not null);
         }
     }

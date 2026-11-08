@@ -111,6 +111,7 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
     private readonly List<(int InputSize, int OutputSize)> _discLayerDims = new();
     private int _discLastHiddenDim;
 
+    private bool _hasClassificationTarget;
     // Auxiliary classifier head (separate from discriminator's critic head)
     private FullyConnectedLayer<T>? _classifierHead;
     private int _numClasses;
@@ -192,6 +193,7 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new CTABGANPlusOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         _optimizer = optimizer ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -281,7 +283,7 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
 
         // Build auxiliary classifier head from last hidden dim
         var identity = new IdentityActivation<T>() as IActivationFunction<T>;
-        _classifierHead = new FullyConnectedLayer<T>(_numClasses, identity);
+        _classifierHead = new FullyConnectedLayer<T>(_discLastHiddenDim, _numClasses, identity);
     }
 
     /// <summary>
@@ -430,8 +432,10 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
             {
                 for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
                 {
+                    TrainNativeBatch(transformedData, numPacks, critic: true);
                 }
 
+                TrainNativeBatch(transformedData, numPacks, critic: false);
             }
         }
 
@@ -480,8 +484,8 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
                 for (int batch = 0; batch < numBatches; batch++)
                 {
                     for (int dStep = 0; dStep < _options.DiscriminatorSteps; dStep++)
-                    {
-                    }
+                        TrainNativeBatch(transformedData, numPacks, critic: true);
+                    TrainNativeBatch(transformedData, numPacks, critic: false);
                 }
             }
         }, ct).ConfigureAwait(false);
@@ -577,6 +581,7 @@ public partial class CTABGANPlusGenerator<T> : NeuralSyntheticTabularGeneratorBa
                 }
             }
         }
+        _hasClassificationTarget = targetIdx >= 0 && targetIdx < columns.Count && columns[targetIdx].IsCategorical;
 
         if (targetIdx >= 0 && targetIdx < columns.Count && columns[targetIdx].IsCategorical)
         {

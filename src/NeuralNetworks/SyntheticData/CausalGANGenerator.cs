@@ -187,6 +187,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new CausalGANOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
             new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -657,7 +658,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             _options.GradientPenaltyWeight,
             _discriminatorOptimizer,
             _random,
-            ref _wganFusedStep);
+            ref _wganFusedStep, maxGradNorm: _options.MaxGradNorm);
     }
 
     /// <summary>
@@ -700,6 +701,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
                 forward: Fwd,
                 computeLoss: Loss,
                 optimizer: _generatorOptimizer,
+                maxGradNorm: _options.MaxGradNorm,
                 extraTensors: genParams);
         }
     }
@@ -976,7 +978,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             for (int j = 0; j < d; j++)
             {
                 double w = NumOps.ToDouble(_adjacency[i, j]);
-                gradient[i, j] = 2.0 * expMatrix[i, j] * w;
+                gradient[i, j] = 2.0 * expMatrix[j, i] * w;
             }
         }
 
@@ -993,7 +995,8 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         double adjLr = NumOps.ToDouble(lr) * 0.01;
 
         var (h, notearGrad) = ComputeNOTEARSConstraintAndGradient();
-        double lagrangianCoeff = _lagrangeAlpha + _lagrangeRho * h;
+        // The configured linear acyclicity penalty accompanies the augmented constraint.
+        double lagrangianCoeff = _options.DAGPenaltyWeight + _lagrangeAlpha + _lagrangeRho * h;
 
         for (int i = 0; i < _dataWidth; i++)
         {

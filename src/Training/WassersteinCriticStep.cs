@@ -50,7 +50,8 @@ internal static class WassersteinCriticStep<T>
         double gradientPenaltyWeight,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         Random random,
-        ref WganGpFusedStep<T>? fusedPrimitive)
+        ref WganGpFusedStep<T>? fusedPrimitive,
+        double maxGradNorm = 0.0)
     {
         Guard.NotNull(owner);
         Guard.NotNull(criticLayers);
@@ -70,7 +71,7 @@ internal static class WassersteinCriticStep<T>
         var parameters = TapeTrainingStep<T>.CollectParameters(criticLayers);
 
         // GPU-resident primitive: real, fake and epsilon are persistent slots it refreshes per step (#1845).
-        if (parameters.Count > 0
+        if (maxGradNorm <= 0 && parameters.Count > 0
             && FusedTrainingSession<T>.TryMapToFusedOptimizerConfig(optimizer, out var config))
         {
             var primitive = fusedPrimitive ??= new WganGpFusedStep<T>();
@@ -133,6 +134,7 @@ internal static class WassersteinCriticStep<T>
             Forward,
             Loss,
             optimizer,
+            maxGradNorm: maxGradNorm,
             extraTensors: parameters);
     }
 

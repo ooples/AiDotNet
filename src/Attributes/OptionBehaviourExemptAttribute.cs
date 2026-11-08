@@ -59,7 +59,7 @@ public sealed class OptionBehaviourExemptAttribute : Attribute
     public string Reason { get; }
 
     /// <summary>
-    /// Limits this exemption to one model type, or its open generic definition.
+    /// Limits this exemption to one model type and its subclasses, or their open generic definitions.
     /// Null applies it to every model using the options property.
     /// </summary>
     public Type? ModelType { get; set; }

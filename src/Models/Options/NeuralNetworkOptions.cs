@@ -40,5 +40,6 @@ public class NeuralNetworkOptions : ModelOptions
     /// how many of those layers belong to the encoder. If not set, the model assumes an even split.
     /// </para>
     /// </remarks>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Synthetic tabular GANs use separate generator and critic networks rather than an encoder/decoder layer split; native generator schema tests exercise inherited split metadata.", ModelType = typeof(AiDotNet.NeuralNetworks.SyntheticData.NeuralSyntheticTabularGeneratorBase<>))]
     public int? EncoderLayerCount { get; set; }
 }

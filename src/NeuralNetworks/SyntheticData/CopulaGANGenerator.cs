@@ -218,6 +218,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         : base(architecture, lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType), (options ??= new CopulaGANOptions<T>()).MaxGradNorm)
     {
         _options = options;
+        base.Options = _options;
         _lossFunction = lossFunction ?? NeuralNetworkHelper<T>.GetDefaultLossFunction(architecture.TaskType);
         AdamOptimizer<T, Tensor<T>, Tensor<T>> MakeAdam() =>
             new(this, new Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
@@ -690,7 +691,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
             _options.GradientPenaltyWeight,
             _discriminatorOptimizer,
             _random,
-            ref _wganFusedStep);
+            ref _wganFusedStep, maxGradNorm: _options.MaxGradNorm);
     }
 
     /// <summary>
@@ -742,6 +743,7 @@ public partial class CopulaGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
                 forward: Fwd,
                 computeLoss: Loss,
                 optimizer: _generatorOptimizer,
+                maxGradNorm: _options.MaxGradNorm,
                 extraTensors: genParams);
         }
     }

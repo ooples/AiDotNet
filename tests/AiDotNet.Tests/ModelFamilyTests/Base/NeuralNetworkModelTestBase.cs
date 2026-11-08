@@ -7788,6 +7788,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
             network => OptionSensitivityFixtureSetup.Observe(network, input, option, ObserveNetwork),
             network =>
             {
+                if (AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Handles(network))
+                {
+                    AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Train(network);
+                    return;
+                }
                 if (TrainingInvariantsNotApplicable(network)) return;
                 network.SetTrainingMode(true);
                 PrepareForSupervisedTrainingInvariant(network, input);

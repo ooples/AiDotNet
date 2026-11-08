@@ -49,6 +49,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> ? "glmvoice-" + option
             : network is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T> && option is "DvaeFftSize" or "DvaeHopSize" or "DvaeWindowSize" ? "xtts-codec"
             : network is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T> && XttsOptionFixture.IsSamplerOption(option) ? "xtts-sampler"
+            : AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Handles(network) ? "synthetic-" + option
             : network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> ? "audiopalm-asr-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T> ? "audiopalm-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.SoundStorm<T> && (SoundStormOptionFixture.IsTrainingOption(option) || SoundStormOptionFixture.IsInferenceOption(option)) ? "soundstorm-" + option
@@ -142,6 +143,9 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Handles(network))
+            return AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Observe(network);
+
         if (network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> audioPalm
             && AudioPalmAsrOptionFixture.Observe(audioPalm, option) is { } audioPalmObservation)
             return audioPalmObservation;
@@ -746,6 +750,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.PrepareOptions(options, option);
         if (options is AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions audioPalm)
             AudioPalmAsrOptionFixture.PrepareOptions(audioPalm, option);
         if (options is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options xtts)

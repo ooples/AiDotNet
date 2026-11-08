@@ -219,7 +219,7 @@ public partial class TestScaffoldGenerator
                     && (!a.NamedArguments.Any(argument => argument.Key == "ModelType")
                         || a.NamedArguments.Any(argument => argument.Key == "ModelType"
                             && (argument.Value.IsNull || argument.Value.Value is INamedTypeSymbol exemptModel
-                                && SymbolEqualityComparer.Default.Equals(exemptModel.OriginalDefinition, modelClass.OriginalDefinition)))));
+                                && MatchesModelScope(exemptModel, modelClass)))));
                 if (exemption is { ConstructorArguments.Length: 1 } && exemption.ConstructorArguments[0].Value is string reason
                     && !string.IsNullOrWhiteSpace(reason))
                 {
@@ -238,6 +238,13 @@ public partial class TestScaffoldGenerator
         }
 
         return cases;
+    }
+
+    private static bool MatchesModelScope(INamedTypeSymbol scope, INamedTypeSymbol model)
+    {
+        for (INamedTypeSymbol? current = model; current is not null; current = current.BaseType)
+            if (SymbolEqualityComparer.Default.Equals(scope.OriginalDefinition, current.OriginalDefinition)) return true;
+        return false;
     }
 
     /// <summary>Whether the runtime harness has a generic valid perturbation for a property of this type.</summary>
