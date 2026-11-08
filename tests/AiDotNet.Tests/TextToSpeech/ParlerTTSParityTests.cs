@@ -73,12 +73,14 @@ public class ParlerTTSParityTests
         };
     }
 
-    private static (ParlerTTS<double> Model, JObject Fixture, JToken Case) Load(string caseName)
+    private static (ParlerTTS<double> Model, JObject Fixture, JToken Case) Load(string caseName, double[]? lossWeights = null)
     {
         var fixture = Reference();
         var testCase = fixture["cases"]![caseName]!;
+        var options = Options(fixture, testCase);
+        options.CodebookWeights = lossWeights;
         var model = new ParlerTTS<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
-            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), Options(fixture, testCase));
+            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
         string path = Path.Combine(Path.GetTempPath(), $"parler_reference_{Guid.NewGuid():N}.safetensors");
         File.WriteAllBytes(path, Convert.FromBase64String((string)testCase["safetensors_base64"]!));
         try
@@ -118,6 +120,29 @@ public class ParlerTTSParityTests
     private static void Close(double expected, double actual, string what) =>
         Assert.True(Math.Abs(expected - actual) <= 1e-8 * Math.Max(1, Math.Abs(expected)),
             $"{what}: reference {expected:R}, port {actual:R}.");
+
+    [Fact]
+    public void CodebookWeightsProduceTheNormalizedWeightedReferenceLoss()
+    {
+        var weights = new[] { 1.0, 2.0, 4.0 };
+        var (model, fixture, testCase) = Load("released", weights);
+        using var _ = model;
+        var (loss, perCodebook) = model.EvaluateLosses(Ints(fixture["transcript"]!), Ints(fixture["description"]!), Matrix(fixture["codes"]!));
+        var expected = testCase["per_codebook_losses"]!.Select(value => (double)value).ToArray();
+        Close(expected.Zip(weights, (value, weight) => value * weight).Sum() / weights.Sum(), loss, "weighted loss");
+        for (int i = 0; i < expected.Length; i++) Close(expected[i], perCodebook[i], $"codebook {i} loss");
+    }
+
+    [Theory]
+    [InlineData(new double[] { 1.0 })]
+    [InlineData(new double[] { 0.0, 0.0, 0.0 })]
+    [InlineData(new double[] { -1.0, 1.0, 1.0 })]
+    [InlineData(new double[] { double.NaN, 1.0, 1.0 })]
+    [InlineData(new double[] { double.PositiveInfinity, 1.0, 1.0 })]
+    public void RejectsInvalidCodebookWeightsBeforeBuildingTheGraph(double[] weights)
+        => Assert.Throws<ArgumentException>(() => new ParlerTTS<double>(
+            new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1),
+            new ParlerTTSOptions { NumCodebooks = 3, CodebookWeights = weights }));
 
     [Theory(Timeout = 120000)]
     [InlineData("released")]

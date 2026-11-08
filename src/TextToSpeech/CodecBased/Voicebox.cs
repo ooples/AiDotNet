@@ -367,8 +367,8 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         if (targetFrames <= 0) throw new InvalidOperationException("Voicebox predicted an empty target utterance.");
         int totalFrames = referenceFrames + targetFrames;
         if (totalFrames > _options.MaximumAudioFrames)
-            throw new InvalidOperationException(
-                $"Voicebox synthesis needs {totalFrames} frames, above the configured {_options.MaximumAudioFrames} frame limit.");
+            throw new ArgumentException(
+                $"Voicebox synthesis needs {totalFrames} frames, above the configured {_options.MaximumAudioFrames} frame limit.", nameof(targetPhones));
         var framePhones = RepeatPhones(allPhones, durations);
         var context = new Tensor<T>(new[] { totalFrames, _options.MelChannels });
         if (reference is not null)

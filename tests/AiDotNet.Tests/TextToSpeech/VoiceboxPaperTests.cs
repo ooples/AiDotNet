@@ -50,6 +50,16 @@ public class VoiceboxPaperTests
 
     private static Voicebox<double> Create() => new(Architecture(), SmallOptions());
 
+    [Fact]
+    public void SynthesisReportsInputThatExceedsItsFrameBudget()
+    {
+        var options = SmallOptions();
+        options.MaximumAudioFrames = 1;
+        using var model = new Voicebox<double>(Architecture(), options);
+        var error = Assert.Throws<ArgumentException>(() => model.Predict(Ids(1, 2, 3, 4)));
+        Assert.Contains("frame limit", error.Message);
+    }
+
     private static Tensor<double> Ids(params int[] ids)
     {
         var tensor = new Tensor<double>(new[] { ids.Length });

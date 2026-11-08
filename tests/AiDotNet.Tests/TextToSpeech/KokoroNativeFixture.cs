@@ -8,12 +8,14 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// <summary>Full Kokoro-82M topology with synthetic style; original weights are audited separately.</summary>
 internal static class KokoroNativeFixture
 {
-    internal static Kokoro<T> Create<T>()
+    internal static Kokoro<T> Create<T>(Action<KokoroOptions>? configure = null)
     {
         var operations = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        var options = new KokoroOptions { UseNativeEnglishFallback = true, Speed = 20, LearningRate = 1e-5, Seed = 2294, SynthesisSeed = 2294 };
+        configure?.Invoke(options);
         var model = new Kokoro<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional,
             NeuralNetworkTaskType.Generative, inputSize: 4, outputSize: 1200),
-            new KokoroOptions { UseNativeEnglishFallback = true, Speed = 20, LearningRate = 1e-5, Seed = 2294, SynthesisSeed = 2294 });
+            options);
         model.LoadAuthorConfiguration(Path.Combine(AppContext.BaseDirectory, "TextToSpeech", "ReferenceData", "kokoro_author_config.json"));
         model.Voice = new TtsVoice<T>
         {

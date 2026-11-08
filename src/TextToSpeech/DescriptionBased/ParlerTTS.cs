@@ -124,6 +124,10 @@ public partial class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
         base.HopSize = o.HopSize;
         base.HiddenDim = o.HiddenDim;
         o.VocabSize = o.PromptVocabulary;
+        if (o.CodebookWeights is { } weights && (weights.Length != o.NumCodebooks
+            || weights.Any(value => double.IsNaN(value) || double.IsInfinity(value) || value < 0) || weights.Sum() <= 0))
+            throw new ArgumentException("CodebookWeights must contain one finite nonnegative value per codebook and have a positive sum.", nameof(o.CodebookWeights));
+
         if (o.AudioVocabulary < o.CodebookSize + 2)
             throw new ArgumentException($"Parler-TTS's {o.AudioVocabulary} logits per codebook must hold the {o.CodebookSize} codes, " +
                 "the end token and the start token.");

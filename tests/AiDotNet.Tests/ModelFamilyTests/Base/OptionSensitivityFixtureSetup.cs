@@ -46,6 +46,8 @@ internal static class OptionSensitivityFixtureSetup
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => option == nameof(AiDotNet.Models.Options.ModelOptions.Seed) ? "model-options-seed"
             : network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> ? "kokoro-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> && option == "MaxLength" ? "vevo-autoregressive-budget"
+
             : network is AiDotNet.Finance.Forecasting.StateSpace.Hippo<T> && option == "TimescaleMax" ? "hippo-timescale-clamp"
             : network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> && option == "ConfidenceWindow" ? "ctc-segmentation-confidence"
             : network is AiDotNet.TextToSpeech.Latest.MegaTTS3<T> ? "mega-" + option
@@ -153,6 +155,9 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> vevo && option == "MaxLength")
+            return VevoOptionFixture.Observe(vevo);
+
         if (network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> segmentation && option == "ConfidenceWindow")
             return AiDotNet.Tests.Audio.CtcSegmentationOptionFixture.Observe(segmentation);
         if (AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Handles(network))
@@ -587,7 +592,11 @@ internal static class OptionSensitivityFixtureSetup
     }
 
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
-        => network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> or AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>
+        // Graph, inference and dropout probes already observe their native path directly; reserve the
+        // full 100M-parameter backward pass for the optimizer settings that require it.
+        => network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> && option is not ("LearningRate" or "WeightDecay")
+            ? 0
+            : network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> or AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>
             && option.StartsWith("Ramp", StringComparison.Ordinal)
             ? Math.Max(4, steps)
             : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> && option is "WarmupSteps" or "TrainingSteps"
@@ -762,6 +771,12 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.VevoOptions vevo && option == "MaxLength")
+            VevoOptionFixture.PrepareOptions(vevo);
+
+        if (options is AiDotNet.TextToSpeech.DescriptionBased.ParlerTTSOptions parler && option == "CodebookWeights")
+            parler.CodebookWeights ??= Enumerable.Repeat(1.0, parler.NumCodebooks).ToArray();
+
         if (options is AiDotNet.TextToSpeech.EndToEnd.KokoroOptions kokoro)
             KokoroOptionFixture.PrepareOptions(kokoro, option);
         if (options is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentationOptions segmentation && option == "ConfidenceWindow")
