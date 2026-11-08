@@ -6,6 +6,19 @@ namespace AiDotNet.Tests.UnitTests.Training;
 
 public class SummedTapeObjectiveTests
 {
+    [Fact]
+    public void FiniteTermsThatOverflowTheirSumCannotReachTheOptimizer()
+    {
+        var parameter = new Tensor<double>(new[] { 1 }, new Vector<double>(new[] { 1.0 }));
+        Func<Tensor<double>> term = () => AiDotNetEngine.Current.TensorMultiplyScalar(parameter, double.MaxValue * .75);
+        int updates = 0;
+        Assert.Throws<InvalidOperationException>(() => SummedTapeObjective<double>.Step(
+            new[] { term, term }, () => new[] { parameter }, _ => updates++,
+            parameter, parameter, (_, _) => term(), (value, _) => value));
+        Assert.Equal(0, updates);
+        Assert.Equal(1.0, parameter[0]);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

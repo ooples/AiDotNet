@@ -50,6 +50,9 @@ internal static class SummedTapeObjective<T>
         {
             var term = Differentiate(objective, parameters, hooks);
             total = ops.Add(total, term.Loss);
+            double totalValue = ops.ToDouble(total);
+            if (double.IsNaN(totalValue) || double.IsInfinity(totalValue))
+                throw new InvalidOperationException("An additive training objective must have a finite total loss.");
             foreach (var parameter in term.Parameters)
                 if (seen.Add(parameter)) selected.Add(parameter);
             foreach (var pair in term.Gradients)

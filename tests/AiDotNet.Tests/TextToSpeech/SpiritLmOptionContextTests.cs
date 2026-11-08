@@ -7,6 +7,21 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class SpiritLmOptionContextTests
 {
     [Theory]
+    [InlineData(1)]
+    [InlineData(4)]
+    [InlineData(72)]
+    [InlineData(99)]
+    [InlineData(100)]
+    public void PitchOnlyFallbackUsesTheConfiguredStyleVocabulary(int styles)
+    {
+        var actual = AiDotNet.TextToSpeech.MultiModal.SpiritLmTokens.StringToUnits(
+            "[Pi1][Hu1]", new Random(7), styleTokenCount: styles);
+        Assert.NotNull(actual.Style);
+        Assert.InRange(actual.Style[0], 0, styles - 1);
+        if (styles == 100) Assert.Equal(68, actual.Style[0]);
+    }
+
+    [Theory]
     [InlineData(2560, 4)]
     [InlineData(5120, 8)]
     [InlineData(100000, 12)]

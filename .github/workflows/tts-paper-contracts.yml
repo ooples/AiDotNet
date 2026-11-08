@@ -6,8 +6,11 @@ on:
       - 'src/TextToSpeech/**'
       - 'src/Audio/**'
       - 'src/NeuralNetworks/Layers/**'
+      - 'src/NeuralNetworks/NeuralNetworkBase.cs'
+      - 'src/Training/**'
       - 'src/Tokenization/**'
       - 'tests/AiDotNet.Tests/TextToSpeech/**'
+      - 'tests/AiDotNet.Tests/UnitTests/Training/**'
       - 'tests/AiDotNet.TtsPaperContracts/**'
       - 'tools/TtsCheckpointAudit/review-filter.txt'
   workflow_dispatch:

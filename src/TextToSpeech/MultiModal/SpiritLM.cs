@@ -398,7 +398,8 @@ public partial class SpiritLM<T> : TtsModelBase<T>
     {
         ThrowIfDisposed();
         if (speechTokens is null) throw new ArgumentNullException(nameof(speechTokens));
-        var (hubert, pitch, style) = SpiritLmTokens.StringToUnits(speechTokens, SamplingRandom());
+        var (hubert, pitch, style) = SpiritLmTokens.StringToUnits(speechTokens, SamplingRandom(),
+            styleTokenCount: IsExpressive ? _options.StyleTokens : 100);
         if (hubert.Length == 0) return new Tensor<T>(new[] { 0 });
         if (IsExpressive && (pitch is null || style is null))
             throw new ArgumentException("SpiritLM Expressive's vocoder reads pitch and style tokens; the string has none.", nameof(speechTokens));

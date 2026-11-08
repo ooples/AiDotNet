@@ -6,6 +6,30 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class StyleTtsZsOptionContextTests
 {
     [Fact]
+    public void TmaGeneratorObjectiveReachesPitchExtractorParameters()
+    {
+        var options = StyleTtsZsFixture.Options();
+        options.TmaStartStep = 0;
+        using var model = StyleTtsZsFixture.Create<double>(options);
+        object Call(string name, params object[] args) => typeof(StyleTTSZS<double>)
+            .GetMethod(name, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
+            ?.Invoke(model, args) ?? throw new InvalidOperationException(name);
+        var sample = StyleTtsZsFixture.Sample<double>();
+        var ids = Call("ToIds", sample.Tokens, "sample");
+        var wave = Call("Padded", sample.Audio ?? throw new InvalidOperationException("Missing recording."));
+        var prepared = Call("Prepare", ids, wave, Call("MelOf", wave), 7, true);
+        var layers = (IEnumerable<AiDotNet.Interfaces.ILayer<double>>)Call("Module", "pitch_extractor");
+        var parameters = AiDotNet.Training.TapeTrainingStep<double>.CollectParameters(layers, -1);
+        using var tape = new AiDotNet.Tensors.Engines.Autodiff.GradientTape<double>();
+        var pass = Call("GeneratorPass", prepared, true, false, false);
+        var loss = (Tensor<double>)(pass.GetType().GetField("Loss")?.GetValue(pass)
+            ?? throw new InvalidOperationException("Missing generator objective."));
+        var gradients = tape.ComputeGradients(loss, parameters);
+        Assert.Contains(gradients.Values, gradient => gradient.Any(value => Math.Abs(value) > 1e-12));
+        Assert.All(gradients.Values.SelectMany(gradient => gradient), value => Assert.True(TtsPaperNumerics.IsFinite(value)));
+    }
+
+    [Fact]
     public void NativeTextFrontendClipsAtTheConfiguredLimit()
     {
         foreach (int limit in new[] { 4, 8 })

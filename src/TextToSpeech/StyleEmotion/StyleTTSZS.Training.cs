@@ -238,7 +238,7 @@ public partial class StyleTTSZS<T>
         p.Start = random.Next(0, half - length);
         p.SegmentMel = MelCrop(mel, 2 * p.Start, 2 * length);
         p.Wave = Engine.TensorSlice(wave, new[] { 2 * p.Start * o.HopSize }, new[] { 2 * length * o.HopSize });
-        p.SegmentPitch = Engine.Reshape(PitchExtractorNetwork.Forward(p.SegmentMel, training && TmaActive, random), new[] { 1, 2 * length });
+        p.SegmentPitch = Engine.Reshape(PitchExtractorNetwork.Forward(p.SegmentMel, false, random), new[] { 1, 2 * length });
         p.SegmentEnergy = FrontEnd.LogNorm(p.SegmentMel);
         int promptFrames = Math.Min(o.PromptFrames, mel.Shape[1]);
         int promptStart = random.Next(0, mel.Shape[1] - promptFrames + 1);
@@ -356,7 +356,10 @@ public partial class StyleTTSZS<T>
         var styleIn = training && o.StyleDropout > 0 ? CodecBased.T5Seq2Seq<T>.Dropout(Engine, style, o.StyleDropout, random) : style;
         var asr = Engine.Reshape(Engine.TensorMatMul(Engine.TensorTranspose(text), alignment), new[] { 1, o.ModelDim, alignment.Shape[1] });
         var en = Engine.TensorSlice(asr, new[] { 0, 0, p.Start }, new[] { 1, o.ModelDim, p.Length });
-        var wave = DecoderNetwork.Forward(en, p.SegmentPitch, p.SegmentEnergy, styleIn, false, random);
+        var segmentPitch = training && TmaActive
+            ? Engine.Reshape(PitchExtractorNetwork.Forward(p.SegmentMel, true, Fork(p.Seed, 12)), new[] { 1, 2 * p.Length })
+            : p.SegmentPitch;
+        var wave = DecoderNetwork.Forward(en, segmentPitch, p.SegmentEnergy, styleIn, false, random);
         // Prosody autoencoder.
         var e = BertEncoderLayer.Forward(BertNetwork.Encode(p.Ids, training, random));
         var continuous = ProsodyEncoderNetwork.Forward(p.MaskedFrames, p.EncoderPitch, p.EncoderEnergy, training, random);

@@ -47,8 +47,10 @@ internal static class SpiritLmTokens
     /// style takes one of the release's most common styles, drawn by <paramref name="random"/>. Text and other bracketed
     /// pieces are ignored.
     /// </summary>
-    public static (int[] Hubert, int[]? Pitch, int[]? Style) StringToUnits(string generated, Random? random = null, bool duplicateHubertForMultiplePitch = false)
+    public static (int[] Hubert, int[]? Pitch, int[]? Style) StringToUnits(string generated, Random? random = null, bool duplicateHubertForMultiplePitch = false,
+        int styleTokenCount = 100)
     {
+        if (styleTokenCount < 1) throw new ArgumentOutOfRangeException(nameof(styleTokenCount));
         int? previousPitch = null, firstPitch = null, previousStyle = null, firstStyle = null, previousHubert = null, firstHubert = null;
         bool previousIsPitch = false;
         var hubert = new List<int?>();
@@ -91,7 +93,11 @@ internal static class SpiritLmTokens
             }
         }
         if (firstPitch is not null && firstStyle is null)
-            firstStyle = MostCommonStyles[(random ?? new Random()).Next(MostCommonStyles.Length)];
+        {
+            var available = MostCommonStyles.Where(id => id < styleTokenCount).ToArray();
+            var draw = random ?? new Random();
+            firstStyle = available.Length > 0 ? available[draw.Next(available.Length)] : draw.Next(styleTokenCount);
+        }
         for (int i = 0; i < hubert.Count; i++)
         {
             hubert[i] ??= firstHubert;
