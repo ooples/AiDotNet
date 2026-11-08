@@ -22039,3 +22039,13 @@ AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumCodebooks.get -> int
 AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumCodebooks.set -> void
 AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.CodebookSize.get -> int
 AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.CodebookSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.PhemeOptions.SampleRate.get -> int
+AiDotNet.TextToSpeech.CodecBased.PhemeOptions.SampleRate.set -> void
+AiDotNet.TextToSpeech.CodecBased.PhemeOptions.HopSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.PhemeOptions.HopSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.PhemeOptions.VocabSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.PhemeOptions.VocabSize.set -> void
+AiDotNet.TextToSpeech.CodecBased.PhemeOptions.MelChannels.get -> int
+AiDotNet.TextToSpeech.CodecBased.PhemeOptions.MelChannels.set -> void
+AiDotNet.TextToSpeech.CodecBased.PhemeOptions.FftSize.get -> int
+AiDotNet.TextToSpeech.CodecBased.PhemeOptions.FftSize.set -> void

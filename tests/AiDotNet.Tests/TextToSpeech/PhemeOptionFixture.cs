@@ -9,14 +9,16 @@ internal static class PhemeOptionFixture
     internal static bool IsTrainingOption(string option) => option is "TextWarmupSteps" or "TextTrainingSteps"
         or "AcousticWarmupSteps" or "AcousticTrainingSteps" or "WeightDecay" or "SpeakerEmbeddingDropout";
 
-    internal static bool IsInferenceOption(string option) => option is "AcousticDecoding" or "MaskGitSteps" or "MaxTextLength";
+    internal static bool IsInferenceOption(string option) => option is "AcousticDecoding" or "MaskGitSteps" or "MaxTextLength" or "MaxMelLength";
 
     internal static void PrepareOptions(PhemeOptions options, string option)
     {
         if (IsInferenceOption(option))
         {
             options.UseSpeakerEmbedding = false;
+            if (option is "AcousticDecoding" or "MaskGitSteps") options.MaxNewSemanticTokens = 8;
             if (option == "MaxTextLength") options.MaxTextLength = 2;
+            if (option == "MaxMelLength") options.MaxMelLength = 3;
             return;
         }
         if (!IsTrainingOption(option)) return;
@@ -43,6 +45,8 @@ internal static class PhemeOptionFixture
         model.SetTrainingMode(false);
         try
         {
+            if (option == "MaxMelLength")
+                return TtsPaperNumerics.Fingerprint(SemanticSamples(model).SelectMany(codes => new[] { (double)codes.Length }.Concat(codes.Select(code => (double)code))));
             var values = new List<double>();
             for (int seed = 0; seed < 16; seed++)
             {
@@ -53,6 +57,16 @@ internal static class PhemeOptionFixture
             return TtsPaperNumerics.Fingerprint(values);
         }
         finally { model.SetTrainingMode(training); }
+    }
+
+    internal static int[][] SemanticSamples<T>(Pheme<T> model)
+    {
+        var options = (PhemeOptions)model.GetOptions();
+        var prompt = new int[options.AcousticCodebooks + 1, 3];
+        var text = model.TextToTokens("hello there");
+        var generate = typeof(Pheme<T>).GetMethod("GenerateSemantic", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        return Enumerable.Range(0, 16).Select(seed => (int[])generate.Invoke(model,
+            new object[] { text, prompt, new Random(options.SamplingSeed + seed) })!).ToArray();
     }
 
     internal static void Train<T>(Pheme<T> model, string option)

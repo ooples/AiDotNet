@@ -25,9 +25,86 @@ namespace AiDotNet.Tests.TextToSpeech;
 public class PhemePaperTests
 {
     [Theory]
+    [InlineData("AcousticCodebooks", 3)]
+    [InlineData("CodebookSize", 32)]
+    [InlineData("SemanticCodes", 32)]
+    [InlineData("SampleRate", 24000)]
+    [InlineData("HopSize", 640)]
+    public void UnpairedNativeCodecOptionsAreRejected(string property, int value)
+    {
+        var options = Tiny();
+        options.UseSpeakerEmbedding = false;
+        typeof(PhemeOptions).GetProperty(property)!.SetValue(options, value);
+        Assert.Throws<ArgumentException>(() => Create(options));
+    }
+
+    [Theory]
+    [InlineData(16000, 320, 1, 8, 4, 64)]
+    [InlineData(24000, 320, 2, 16, 128, 2048)]
+    [InlineData(16000, 640, 3, 32, 80, 128)]
+    public void PairedNativeCodecOptionsRoundTripWaveformsAndResolveVocabulary(int rate, int hop, int acousticBooks, int vocabulary, int melMetadata, int fftMetadata)
+    {
+        var options = Tiny(vocabulary);
+        options.UseSpeakerEmbedding = false;
+        options.SampleRate = options.SpeechTokenizer.SampleRate = rate;
+        options.HopSize = hop;
+        options.SpeechTokenizer.Ratios = hop == 320 ? new[] { 8, 5, 4, 2 } : new[] { 8, 5, 4, 4 };
+        options.AcousticCodebooks = acousticBooks;
+        options.SpeechTokenizer.NumQuantizers = acousticBooks + 1;
+        options.SpeechTokenizer.TargetBandwidthKbps = (double)rate / hop * (acousticBooks + 1) * Math.Log(vocabulary, 2) / 1000;
+        options.MelChannels = melMetadata;
+        options.FftSize = fftMetadata;
+        options.VocabSize = 3; // The actual text vocabulary is owned by the phoneme table and semantic code count.
+        using var model = Create(options);
+        model.SetTrainingMode(false);
+        var codes = model.Codec.Encode(Tone(6 * hop));
+        Assert.Equal(acousticBooks + 1, codes.GetLength(0));
+        Assert.Equal(6, codes.GetLength(1));
+        var audio = model.Codec.Decode(codes);
+        Assert.Equal(6 * hop, audio.Length);
+        Assert.All(audio.ToArray(), value => Assert.True(TtsPaperNumerics.IsFinite(value)));
+        Assert.Equal(5 + LibriTtsPhonemeTable.Symbols.Length + vocabulary, options.VocabSize);
+        Assert.Equal(melMetadata, options.MelChannels);
+        Assert.Equal(fftMetadata, options.FftSize);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public void GenericOutputLimitIncludesTheRegeneratedPromptFrame(int maximumFrames)
+    {
+        var options = Tiny();
+        PhemeOptionFixture.PrepareOptions(options, "MaxMelLength");
+        int semanticBudget = options.MaxNewSemanticTokens;
+        options.MaxMelLength = maximumFrames;
+        using var model = Create(options);
+        model.SetTrainingMode(false);
+        Assert.Equal(semanticBudget, options.MaxNewSemanticTokens);
+        var generate = typeof(Pheme<double>).GetMethod("GenerateAcoustic", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        foreach (var semantic in PhemeOptionFixture.SemanticSamples(model))
+        {
+            var codes = (int[,])generate.Invoke(model, new object?[] { new int[3, 3], semantic, null, new Random(7) })!;
+            Assert.Equal(semantic.Length + 1, codes.GetLength(1));
+            Assert.InRange(codes.GetLength(1), 1, maximumFrames);
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void GenericOutputLimitRejectsNonpositiveValues(int value)
+    {
+        var options = Tiny();
+        options.UseSpeakerEmbedding = false;
+        options.MaxMelLength = value;
+        Assert.Throws<ArgumentOutOfRangeException>(() => Create(options));
+    }
+
+    [Theory]
     [InlineData("AcousticDecoding")]
     [InlineData("MaskGitSteps")]
     [InlineData("MaxTextLength")]
+    [InlineData("MaxMelLength")]
     public void NativeOptionObserversExerciseDecodingAndTextLimitsWithoutChangingMode(string option)
     {
         var options = Tiny();
@@ -38,6 +115,7 @@ public class PhemePaperTests
         var control = PhemeOptionFixture.Observe(model, option);
         if (option == "MaskGitSteps") options.MaskGitSteps = 4;
         if (option == "MaxTextLength") options.MaxTextLength = 1;
+        if (option == "MaxMelLength") options.MaxMelLength = 2;
         if (option == "AcousticDecoding") options.AcousticDecoding = Enum.GetValues(typeof(PhemeAcousticDecoding))
             .Cast<PhemeAcousticDecoding>().First(value => value != options.AcousticDecoding);
         Assert.NotNull(control);

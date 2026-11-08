@@ -28,11 +28,33 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// temperature 0.7 from the top 210 (§4.1), at most 750 new tokens, resampled while any token repeats more than 100
 /// times in a row; the acoustic codebooks are decoded as <see cref="AcousticDecoding"/> says.
 /// </para>
+/// <para>MaxMelLength caps decoded codec frames, including the regenerated final prompt frame. MaxNewSemanticTokens
+/// separately limits new T5 tokens; generation respects the smaller budget.</para>
 /// <para><b>For Beginners:</b> These options set the sizes and training settings of Pheme's two networks. The defaults
 /// reproduce the released small model.</para>
 /// </remarks>
 public class PhemeOptions : TtsModelOptions
 {
+    /// <summary>The waveform rate, paired with SpeechTokenizer.SampleRate.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("SampleRate must match SpeechTokenizer.SampleRate; native contracts reject unpaired rates and round-trip paired codec configurations.")]
+    public new int SampleRate { get => base.SampleRate; set => base.SampleRate = value; }
+
+    /// <summary>The waveform hop, paired with the SpeechTokenizer stride product.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("HopSize must match the SpeechTokenizer stride product; native tests reject unpaired hops and round-trip paired 320/640-sample hops.")]
+    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+
+    /// <summary>The derived phoneme/special/semantic vocabulary size.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The native vocabulary is derived from the USLM phoneme table, five specials and SemanticCodes; paired codec tests verify the resolved vocabulary for multiple semantic vocabularies.")]
+    public new int VocabSize { get => base.VocabSize; set => base.VocabSize = value; }
+
+    /// <summary>Inherited mel-output metadata; native Pheme emits codec-decoded waveforms.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Pheme emits SpeechTokenizer waveforms, not mel outputs; native codec round trips verify waveform geometry with different inherited MelChannels metadata.")]
+    public new int MelChannels { get => base.MelChannels; set => base.MelChannels = value; }
+
+    /// <summary>Inherited spectrogram metadata; the native codec owns its analysis configuration.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Native Pheme encodes and decodes with SpeechTokenizer, not the inherited spectrogram frontend; codec round trips exercise different inherited FftSize metadata.")]
+    public new int FftSize { get => base.FftSize; set => base.FftSize = value; }
+
     /// <summary>Creates the paper's small model's options (Budzianowski et al. 2024, Table 5 and §4.1).</summary>
     public PhemeOptions()
     {
@@ -130,12 +152,15 @@ public class PhemeOptions : TtsModelOptions
     public int AcousticConvKernel { get; set; } = 5;
 
     /// <summary>Acoustic codebooks after the semantic one (7).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("AcousticCodebooks+1 must match the codec quantizer bandwidth; native tests reject unpaired counts and round-trip paired two/three/four-codebook configurations.")]
     public int AcousticCodebooks { get; set; } = 7;
 
     /// <summary>Codes per acoustic codebook (1024).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("CodebookSize, SemanticCodes and SpeechTokenizer.CodebookSize must agree; native tests reject unpaired values and round-trip paired 8/16/32-code vocabularies.")]
     [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]    public int CodebookSize { get; set; } = 1024;
 
     /// <summary>Semantic codes (1024).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("SemanticCodes must match both the acoustic and codec vocabularies; native tests reject unpaired values and round-trip paired vocabularies with the derived text rows.")]
     [AiDotNet.Attributes.NotScaled("the semantic codec's codes per codebook, which it must equal")]
     public int SemanticCodes { get; set; } = 1024;
 

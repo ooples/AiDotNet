@@ -198,10 +198,21 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
 
     private void ConfigureBase()
     {
+        _ = SemanticGenerationBudget();
         base.SampleRate = _options.SampleRate;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
         _options.VocabSize = 5 + LibriTtsPhonemeTable.Symbols.Length + _options.SemanticCodes;
+    }
+
+    private int SemanticGenerationBudget()
+    {
+        if (_options.MaxMelLength < 1)
+            throw new ArgumentOutOfRangeException(nameof(_options.MaxMelLength), "Pheme's decoded frame limit must be positive.");
+        if (_options.MaxNewSemanticTokens < 0)
+            throw new ArgumentOutOfRangeException(nameof(_options.MaxNewSemanticTokens), "The new-token budget must be nonnegative.");
+        // The reference also regenerates and returns the final prompt frame.
+        return Math.Min(_options.MaxNewSemanticTokens, _options.MaxMelLength - 1);
     }
 
     private static (string[] Tokens, int[] SemanticIds) BuildVocabulary(Dictionary<string, int> ids, int semanticCodes)
@@ -623,12 +634,13 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
     // PhemeClient.infer_text: continue the prompt's semantic tokens; resample while a token repeats > 100 times.
     private int[] GenerateSemantic(Tensor<T> textIds, int[,] promptCodes, Random random)
     {
+        int newTokenBudget = SemanticGenerationBudget();
         int promptFrames = promptCodes.GetLength(1);
         var prefix = new List<int> { BeginToken, Speaker1Token };
         for (int f = 0; f < promptFrames; f++) prefix.Add(_semanticIds[promptCodes[0, f]]);
         for (int attempt = 0; ; attempt++)
         {
-            var output = TextToSemantic.Generate(textIds, prefix, _options.Temperature, _options.TopK, _options.MaxNewSemanticTokens, random);
+            var output = TextToSemantic.Generate(textIds, prefix, _options.Temperature, _options.TopK, newTokenBudget, random);
             int longest = 0, run = 0;
             for (int i = 0; i < output.Count; i++)
             {
