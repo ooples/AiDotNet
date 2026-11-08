@@ -108,6 +108,11 @@ public partial class VALLE2<T> : VallEModelBase<T>
     private protected override void BuildNetworks(List<LayerBase<T>> arLayers, List<LayerBase<T>> narLayers, Random initialization)
     {
         var o = Options2;
+        if (o.Temperature != 1 || o.TopK != 0 || o.PrependBos || o.StopOnMostLikelyEndToken)
+            throw new NotSupportedException("VALL-E 2 requires Temperature=1, TopK=0, PrependBos=false and StopOnMostLikelyEndToken=false; its native sampler follows Algorithm 1.");
+        if (double.IsNaN(o.MinPromptSeconds) || double.IsInfinity(o.MinPromptSeconds) || o.MinPromptSeconds < 0
+            || double.IsNaN(o.MaxPromptSeconds) || double.IsInfinity(o.MaxPromptSeconds) || o.MaxPromptSeconds < o.MinPromptSeconds)
+            throw new ArgumentException("The prompt duration range must be finite, nonnegative and ordered.");
         if (o.GroupSize < 1) throw new ArgumentException("The group size must be at least 1.");
         _core2 = new VallE2Core<T>(Engine, arLayers, narLayers, new VallE2Configuration(
             TextTokens: o.TextTokens, AudioTokens: o.CodebookSize, Codebooks: o.NumCodebooks, GroupSize: o.GroupSize,

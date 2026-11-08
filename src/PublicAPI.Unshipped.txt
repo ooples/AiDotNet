@@ -21971,3 +21971,11 @@ AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleRates.get -> int[]!
 AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleRates.set -> void
 AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleKernels.get -> int[]!
 AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions.UpsampleKernels.set -> void
+AiDotNet.TextToSpeech.CodecBased.VALLE2Options.Temperature.get -> double
+AiDotNet.TextToSpeech.CodecBased.VALLE2Options.Temperature.set -> void
+AiDotNet.TextToSpeech.CodecBased.VALLE2Options.TopK.get -> int
+AiDotNet.TextToSpeech.CodecBased.VALLE2Options.TopK.set -> void
+AiDotNet.TextToSpeech.CodecBased.VALLE2Options.PrependBos.get -> bool
+AiDotNet.TextToSpeech.CodecBased.VALLE2Options.PrependBos.set -> void
+AiDotNet.TextToSpeech.CodecBased.VALLE2Options.StopOnMostLikelyEndToken.get -> bool
+AiDotNet.TextToSpeech.CodecBased.VALLE2Options.StopOnMostLikelyEndToken.set -> void

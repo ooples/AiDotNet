@@ -45,6 +45,9 @@ internal static class OptionSensitivityFixtureSetup
         => option == nameof(AiDotNet.Models.Options.ModelOptions.Seed) ? "model-options-seed"
             : network is AiDotNet.TextToSpeech.Latest.MegaTTS3<T> ? "mega-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
+            : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> ? "musicgen-" + option
+            : network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> ? "glmvoice-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.VALLE2<T> ? "valle2-" + option
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> ? "stylezs-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T> ? "whisperspeech-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> ? "speecht5-" + option
@@ -129,6 +132,14 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> glmVoice
+            && GlmVoiceOptionFixture.Observe(glmVoice, option) is { } glmObservation)
+            return glmObservation;
+
+        if (network is AiDotNet.Audio.MusicGen.MusicGenModel<T> musicGen
+            && AiDotNet.Tests.Audio.MusicGenOptionFixture.Observe(musicGen, input, option) is { } musicGenObservation)
+            return musicGenObservation;
+
         if (network is AiDotNet.TextToSpeech.Latest.MegaTTS3<T> mega
             && MegaTts3Fixture.Observe(mega, option) is { } megaObservation)
             return megaObservation;
@@ -136,6 +147,10 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> styleZs
             && StyleTtsZsFixture.Observe(styleZs, option) is { } styleZsObservation)
             return styleZsObservation;
+
+        if (network is AiDotNet.TextToSpeech.CodecBased.VALLE2<T> valle2
+            && Valle2OptionFixture.Observe(valle2, option) is { } valle2Observation)
+            return valle2Observation;
 
         if (network is AiDotNet.TextToSpeech.MultiModal.WhisperSpeech<T> whisperSpeech
             && WhisperSpeechFixture.Observe(whisperSpeech, option) is { } whisperObservation)
@@ -511,7 +526,9 @@ internal static class OptionSensitivityFixtureSetup
     }
 
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
-        => network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "BertBeta1"
+        => network is AiDotNet.Audio.MusicGen.MusicGenModel<T> && option is "WarmupSteps" or "TrainingSteps"
+            ? Math.Max(4, steps)
+            : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "BertBeta1"
             ? Math.Max(2, steps)
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> && option == "TmaStartStep"
             ? Math.Max(2, steps)
@@ -544,6 +561,10 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.Audio.MusicGen.MusicGenModel<T> musicGen && AiDotNet.Tests.Audio.MusicGenOptionFixture.TryTrain(musicGen, input, option))
+            return true;
+        if (network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> glmVoice && GlmVoiceOptionFixture.TryTrain(glmVoice, option))
+            return true;
         if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> styleZs)
         {
             StyleTtsZsFixture.Train(styleZs, option);
@@ -642,6 +663,17 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.MultiModal.GLM4VoiceOptions glmVoice)
+            GlmVoiceOptionFixture.PrepareOptions(glmVoice, option);
+        if (options is AiDotNet.Audio.MusicGen.MusicGenOptions musicGen)
+            AiDotNet.Tests.Audio.MusicGenOptionFixture.PrepareOptions(musicGen, option);
+        if (options is AiDotNet.TextToSpeech.CodecBased.VALLE2Options valle2
+            && option is "MinPromptSeconds" or "MaxPromptSeconds")
+        {
+            valle2.MinPromptSeconds = 0.04;
+            valle2.MaxPromptSeconds = 0.06;
+        }
+
         if (options is AiDotNet.TextToSpeech.Latest.MegaTTS3Options mega)
             MegaTts3Fixture.PrepareOptions(mega, option);
 
@@ -927,6 +959,9 @@ internal static class OptionSensitivityFixtureSetup
 
         switch (network)
         {
+            case AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> model:
+                GLM4VoiceFixture.Prepare(model);
+                break;
             case AiDotNet.TextToSpeech.Latest.MegaTTS3<T> model:
                 MegaTts3Fixture.Prepare(model);
                 break;

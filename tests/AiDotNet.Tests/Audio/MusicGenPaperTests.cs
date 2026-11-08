@@ -36,6 +36,30 @@ public class MusicGenPaperTests
         return codes;
     }
 
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(63)]
+    [InlineData(65)]
+    public void ChromaRejectsUnsupportedFftWindowsBeforeInference(int window)
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => Create(o => o.ChromaWindow = window));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MusicGenChroma.Extract(new double[256], 32000, window, 16));
+    }
+
+    [Theory]
+    [InlineData(64)]
+    [InlineData(128)]
+    public void ChromaSupportsPowerOfTwoWindows(int window)
+    {
+        var audio = Enumerable.Range(0, 256).Select(i => .3 * Math.Sin(i * .13)).ToArray();
+        var chroma = MusicGenChroma.Extract(audio, 32000, window, 16);
+        Assert.Equal(12, chroma.GetLength(1));
+        Assert.All(chroma.Cast<double>(), value => Assert.True(!double.IsNaN(value) && !double.IsInfinity(value)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => Create(o => o.ChromaHop = 0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => MusicGenChroma.Extract(audio, 32000, window, 0));
+    }
+
     [Fact(Timeout = 30000)]
     public async Task DelayPattern_LagsEachCodebookByItsDelay()
     {
@@ -143,6 +167,31 @@ public class MusicGenPaperTests
         double after = model.EvaluateTrainingObjective(tokens, codes);
         Assert.True(after < 0.8 * before, $"The objective did not fall ({before} -> {after}).");
         Assert.True(model.HasEmaForTests, "Thirty updates every five should have produced EMA weights.");
+    }
+
+    [Theory(Timeout = 60000)]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PerSampleTrainingAdvancesWarmupAndDecay(bool useDAdaptation)
+    {
+        await Task.Yield();
+        using var model = Create(o =>
+        {
+            o.UseDAdaptation = useDAdaptation;
+            o.LearningRate = 1e-3;
+            o.WarmupSteps = 2;
+            o.TrainingSteps = 6;
+            o.ConditionDropout = 0;
+        });
+        var tokens = model.TextToTokens("strings and drums");
+        var rates = new List<double>();
+        for (int i = 0; i < 4; i++)
+        {
+            model.Train(tokens, Codes(6));
+            rates.Add(model.OptimizerForTests.GetCurrentLearningRate());
+        }
+        Assert.True(rates[1] > rates[0], $"Warmup did not advance: {string.Join(", ", rates)}");
+        Assert.True(rates[3] < rates[1], $"Decay did not advance: {string.Join(", ", rates)}");
     }
 
     [Fact(Timeout = 300000)]

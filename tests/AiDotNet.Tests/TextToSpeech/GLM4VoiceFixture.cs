@@ -68,7 +68,7 @@ internal static class GLM4VoiceFixture
     {
         var model = new GLM4Voice<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1),
             options ?? Options());
-        SpreadCodebook(model);
+        Prepare(model);
         return model;
     }
 
@@ -78,7 +78,7 @@ internal static class GLM4VoiceFixture
     /// only; they are scaled 40×. The codebook is then spread over the encoder's states at evenly spaced frames of a
     /// second of noisy tones.
     /// </summary>
-    private static void SpreadCodebook<T>(GLM4Voice<T> model)
+    internal static void Prepare<T>(GLM4Voice<T> model)
     {
         var tokenizer = model.SpeechTokenizer;
         var scale = MathHelper.GetNumericOperations<T>().FromDouble(40);
@@ -96,9 +96,10 @@ internal static class GLM4VoiceFixture
         var ops = MathHelper.GetNumericOperations<T>();
         var states = output.PreQuantized.ToArray();
         int rows = output.Codes.Length, width = states.Length / rows;
-        var codebook = new double[Codes * width];
-        for (int j = 0; j < Codes; j++)
-            for (int i = 0; i < width; i++) codebook[j * width + i] = ops.ToDouble(states[j * rows / Codes * width + i]);
+        int codes = ((GLM4VoiceOptions)model.GetOptions()).SpeechCodebookSize;
+        var codebook = new double[codes * width];
+        for (int j = 0; j < codes; j++)
+            for (int i = 0; i < width; i++) codebook[j * width + i] = ops.ToDouble(states[j * rows / codes * width + i]);
         AiDotNet.TextToSpeech.CodecBased.TorchParameters.Linear(tokenizer.Codebook, 1, codebook.Length, codebook);
         Array.Copy(codebook, tokenizer.EmaWeight, codebook.Length);
     }

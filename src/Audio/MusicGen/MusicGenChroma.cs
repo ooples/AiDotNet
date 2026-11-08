@@ -22,6 +22,9 @@ internal static class MusicGenChroma
     /// <summary>The one-hot chromagram <c>[frames, 12]</c> of a mono waveform.</summary>
     public static double[,] Extract(double[] audio, int sampleRate, int window = 1 << 14, int hop = 1 << 12)
     {
+        if (window < 2 || (window & (window - 1)) != 0)
+            throw new ArgumentOutOfRangeException(nameof(window), "The chroma FFT window must be a power of two, at least two.");
+        if (hop <= 0) throw new ArgumentOutOfRangeException(nameof(hop), "The chroma hop must be positive.");
         if (audio.Length < window)
         {
             int pad = window - audio.Length, left = pad / 2;

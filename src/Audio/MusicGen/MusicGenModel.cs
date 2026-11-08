@@ -184,6 +184,10 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     {
         if (_core is not null) return;
         var o = _options;
+        if (o.ChromaWindow < 2 || (o.ChromaWindow & (o.ChromaWindow - 1)) != 0)
+            throw new ArgumentOutOfRangeException(nameof(o.ChromaWindow), "The chroma FFT window must be a power of two, at least two.");
+        if (o.ChromaHop <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.ChromaHop), "The chroma hop must be positive.");
         var (d, heads, layers) = Dimensions;
         var initialization = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.Seed ?? 0);
         _core = new MusicGenCore<T>(Engine, _lmLayers, new MusicGenConfiguration(o.ResolveDelays().Length, o.Codec.CodebookSize, d,
@@ -511,11 +515,13 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
             {
                 InitialLearningRate = rate, Beta1 = o.Beta1, Beta2 = o.Beta2, WeightDecay = o.WeightDecay,
                 EnableGradientClipping = o.GradientClipNorm > 0, MaxGradientNorm = o.GradientClipNorm, LearningRateScheduler = schedule,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             })
             : new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = rate, Beta1 = o.Beta1, Beta2 = o.Beta2, Epsilon = 1e-8, WeightDecay = o.WeightDecay,
                 EnableGradientClipping = o.GradientClipNorm > 0, MaxGradientNorm = o.GradientClipNorm, LearningRateScheduler = schedule,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
                 UseAdaptiveBetas = false,
             });
         return _paperOptimizer = PaperOptimizerFactory.VerifyHandBuilt(this, optimizer);

@@ -54,6 +54,52 @@ public class VALLE2PaperTests
     private static double[] Snapshot(IEnumerable<LayerBase<double>> layers) =>
         layers.SelectMany(l => l.GetParameters().ToArray()).ToArray();
 
+    [Theory]
+    [InlineData("Temperature")]
+    [InlineData("TopK")]
+    [InlineData("PrependBos")]
+    [InlineData("StopOnMostLikelyEndToken")]
+    public void UnsupportedSharedSamplerSettingsAreRejectedThroughBaseOptions(string property)
+    {
+        var options = Tiny();
+        VallEModelOptions shared = options;
+        switch (property)
+        {
+            case "Temperature": shared.Temperature = 0.5; break;
+            case "TopK": shared.TopK = 2; break;
+            case "PrependBos": shared.PrependBos = true; break;
+            case "StopOnMostLikelyEndToken": shared.StopOnMostLikelyEndToken = true; break;
+        }
+        Assert.Throws<NotSupportedException>(() => Create(options));
+    }
+
+    [Theory]
+    [InlineData(-1.0, 1.0)]
+    [InlineData(2.0, 1.0)]
+    [InlineData(double.NaN, 1.0)]
+    [InlineData(0.0, double.PositiveInfinity)]
+    public void InvalidPromptDurationRangesAreRejected(double minimum, double maximum)
+    {
+        var options = Tiny();
+        options.MinPromptSeconds = minimum;
+        options.MaxPromptSeconds = maximum;
+        Assert.Throws<ArgumentException>(() => Create(options));
+    }
+
+    [Fact(Timeout = 60000)]
+    public async Task NativeOptionObserverMeasuresUntrainedModelsAndPreservesTheirStageAndParameters()
+    {
+        await Task.Yield();
+        using var model = Create(Tiny());
+        model.CurrentStage = VallETrainingStage.NonAutoRegressive;
+        var before = model.GetParameters().ToArray();
+        Assert.NotNull(Valle2OptionFixture.Observe(model, "DecoderDim"));
+        var limit = Valle2OptionFixture.Observe(model, "MaxCodesPerTextToken");
+        Assert.NotNull(limit);
+        Assert.Equal(before, model.GetParameters().ToArray());
+        Assert.Equal(VallETrainingStage.NonAutoRegressive, model.CurrentStage);
+    }
+
     [Theory(Timeout = 60000)]
     [InlineData(1)]
     [InlineData(2)]
