@@ -232,20 +232,21 @@ public partial class LogisticRegression<T> : RegressionBase<T>
         => GradientDescentOptimizer<T, Matrix<T>, Vector<T>>.CreateForFunction(
             new GradientDescentOptimizerOptions<T, Matrix<T>, Vector<T>> { InitialLearningRate = _options.LearningRate });
 
+    /// <summary>Rows per block of the objective's parallel pass.</summary>
+    private const int LossBlockRows = 2048;
+
     /// <summary>
     /// The objective every solver minimizes, and its gradient, at <paramref name="weights"/> = [coefficients, intercept].
     /// </summary>
     /// <remarks>
     /// The mean log loss uses <c>softplus(z) - y z</c>, which stays finite for any margin <c>z</c>. The penalty's value is
     /// recovered from the regularizer's gradient by integrating along the ray from zero, <c>integral over t in [0, 1] of
-    /// beta . g(t beta)</c>, with Simpson's rule: exact for L1, L2 and elastic net, whose penalty gradients are constant or
-    /// linear along that ray. The objective and gradient must agree for a line search to work, and
+    /// beta . g(t beta)</c>, with the midpoint rule <c>beta . g(beta / 2)</c>: exact for L1, L2 and elastic net, whose
+    /// penalty gradients are constant or linear along that ray for t &gt; 0. A rule that samples t = 0 is not exact for L1,
+    /// whose gradient there is the subgradient 0 rather than the constant it takes on the rest of the ray. The objective and gradient must agree for a line search to work, and
     /// <see cref="IRegularization{T, TInput, TOutput}"/> exposes only the gradient. The intercept is not penalized.
     /// </remarks>
-    /// <summary>Rows per block of the objective's parallel pass.</summary>
-    private const int LossBlockRows = 2048;
-
-    private (T Objective, Vector<T> Gradient) LogLossAndGradient(
+    internal (T Objective, Vector<T> Gradient) LogLossAndGradient(
         Vector<T> weights, double[] x, double[] y, int p)
     {
         int n = y.Length;
@@ -308,14 +309,7 @@ public partial class LogisticRegression<T> : RegressionBase<T>
             var zero = new Vector<T>(p);
             var atEnd = Regularization.Regularize(zero, coefficients);
             var atMiddle = Regularization.Regularize(zero, coefficients.Multiply(NumOps.FromDouble(0.5)));
-            var atStart = Regularization.Regularize(zero, zero);
-            T penalty = NumOps.Divide(
-                NumOps.Add(
-                    NumOps.Add(coefficients.DotProduct(atStart),
-                        NumOps.Multiply(NumOps.FromDouble(4.0), coefficients.DotProduct(atMiddle))),
-                    coefficients.DotProduct(atEnd)),
-                NumOps.FromDouble(6.0));
-            objective = NumOps.Add(objective, penalty);
+            objective = NumOps.Add(objective, coefficients.DotProduct(atMiddle));
             coefficientGradient = coefficientGradient.Add(atEnd);
         }
 
