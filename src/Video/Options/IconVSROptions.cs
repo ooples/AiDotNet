@@ -21,7 +21,7 @@ namespace AiDotNet.Video.Options;
 /// from the neighboring frames there, and lets the forward pass see what the backward pass found.
 /// </para>
 /// </remarks>
-public class IconVSROptions : NeuralNetworkOptions
+public class IconVSROptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -35,7 +35,7 @@ public class IconVSROptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public IconVSROptions(IconVSROptions other)
+    public IconVSROptions(IconVSROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

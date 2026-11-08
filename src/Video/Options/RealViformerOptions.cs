@@ -21,7 +21,7 @@ namespace AiDotNet.Video.Options;
 /// the network is and how it is trained: first to match the clean frames, then to also look realistic.
 /// </para>
 /// </remarks>
-public class RealViformerOptions : NeuralNetworkOptions
+public class RealViformerOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -35,7 +35,7 @@ public class RealViformerOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public RealViformerOptions(RealViformerOptions other)
+    public RealViformerOptions(RealViformerOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

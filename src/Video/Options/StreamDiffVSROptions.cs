@@ -19,7 +19,7 @@ namespace AiDotNet.Video.Options;
 /// <para><b>For Beginners:</b> the defaults build the released model. Shrink the widths for experiments on modest
 /// hardware; every value stays settable.</para>
 /// </remarks>
-public class StreamDiffVSROptions : NeuralNetworkOptions
+public class StreamDiffVSROptions : ModelOptions
 {
     /// <summary>Creates the released configuration.</summary>
     public StreamDiffVSROptions()

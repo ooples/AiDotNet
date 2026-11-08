@@ -21,7 +21,7 @@ namespace AiDotNet.Video.Options;
 /// the current one, each pixel follows the motion and then learns how to blend the four pixels around where it lands.
 /// </para>
 /// </remarks>
-public class IARTOptions : NeuralNetworkOptions
+public class IARTOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -35,7 +35,7 @@ public class IARTOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public IARTOptions(IARTOptions other)
+    public IARTOptions(IARTOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

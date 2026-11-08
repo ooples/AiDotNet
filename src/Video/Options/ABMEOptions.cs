@@ -18,7 +18,7 @@ namespace AiDotNet.Video.Options;
 /// then lets the motion toward each frame differ, and a third network blends the two warped frames into the middle one.
 /// </para>
 /// </remarks>
-public class ABMEOptions : NeuralNetworkOptions
+public class ABMEOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

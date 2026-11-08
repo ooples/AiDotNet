@@ -19,7 +19,7 @@ namespace AiDotNet.Video.Options;
 /// time) convolutions over it in a U-Net, and directly paints the in-between frame or frames.
 /// </para>
 /// </remarks>
-public class FLAVROptions : NeuralNetworkOptions
+public class FLAVROptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

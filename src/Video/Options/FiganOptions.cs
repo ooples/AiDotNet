@@ -21,7 +21,7 @@ namespace AiDotNet.Video.Options;
 /// through, how wide the small convolutional networks are, and how strongly the critic influences
 /// training.</para>
 /// </remarks>
-public class FiganOptions : NeuralNetworkOptions
+public class FiganOptions : ModelOptions
 {
     /// <summary>
     /// Gets or sets the number of scales J in the coarse-to-fine flow recursion. Default 3.

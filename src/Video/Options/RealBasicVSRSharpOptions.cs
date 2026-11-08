@@ -22,7 +22,7 @@ namespace AiDotNet.Video.Options;
 /// and more natural to human eyes, even if individual pixels differ slightly.
 /// </para>
 /// </remarks>
-public class RealBasicVSRSharpOptions : NeuralNetworkOptions
+public class RealBasicVSRSharpOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -36,7 +36,7 @@ public class RealBasicVSRSharpOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public RealBasicVSRSharpOptions(RealBasicVSRSharpOptions other)
+    public RealBasicVSRSharpOptions(RealBasicVSRSharpOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

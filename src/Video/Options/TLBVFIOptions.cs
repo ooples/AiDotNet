@@ -29,7 +29,7 @@ namespace AiDotNet.Video.Options;
 /// to build the intermediate frame.
 /// </para>
 /// </remarks>
-public class TLBVFIOptions : NeuralNetworkOptions
+public class TLBVFIOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -43,7 +43,7 @@ public class TLBVFIOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public TLBVFIOptions(TLBVFIOptions other)
+    public TLBVFIOptions(TLBVFIOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

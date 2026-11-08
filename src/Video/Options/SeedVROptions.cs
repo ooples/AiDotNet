@@ -18,7 +18,7 @@ namespace AiDotNet.Video.Options;
 /// <para><b>For Beginners:</b> the defaults build the released 7-billion-parameter model. Shrink the widths and depth for
 /// experiments on modest hardware.</para>
 /// </remarks>
-public class SeedVROptions : NeuralNetworkOptions
+public class SeedVROptions : ModelOptions
 {
     /// <summary>Creates the released configuration.</summary>
     public SeedVROptions()

@@ -22,7 +22,7 @@ namespace AiDotNet.Video.Options;
 /// and deep its attention is and how it is trained: first to match clean frames, then also to look realistic.
 /// </para>
 /// </remarks>
-public class DualXVSROptions : NeuralNetworkOptions
+public class DualXVSROptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -36,7 +36,7 @@ public class DualXVSROptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public DualXVSROptions(DualXVSROptions other)
+    public DualXVSROptions(DualXVSROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

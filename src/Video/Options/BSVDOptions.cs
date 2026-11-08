@@ -26,7 +26,7 @@ namespace AiDotNet.Video.Options;
 /// using small memory buffers, making it practical for live video and long recordings.
 /// </para>
 /// </remarks>
-public class BSVDOptions : NeuralNetworkOptions
+public class BSVDOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -40,7 +40,7 @@ public class BSVDOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public BSVDOptions(BSVDOptions other)
+    public BSVDOptions(BSVDOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

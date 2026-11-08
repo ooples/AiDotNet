@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// from the surrounding pixels and frames; the noisy pixel is then folded back in with Bayes' rule.
 /// </para>
 /// </remarks>
-public class UDVDOptions : NeuralNetworkOptions
+public class UDVDOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -34,7 +34,7 @@ public class UDVDOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public UDVDOptions(UDVDOptions other)
+    public UDVDOptions(UDVDOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

@@ -27,7 +27,7 @@ namespace AiDotNet.Video.Options;
 /// in-between frames for cartoons.
 /// </para>
 /// </remarks>
-public class ToonCrafterOptions : NeuralNetworkOptions
+public class ToonCrafterOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -41,7 +41,7 @@ public class ToonCrafterOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public ToonCrafterOptions(ToonCrafterOptions other)
+    public ToonCrafterOptions(ToonCrafterOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

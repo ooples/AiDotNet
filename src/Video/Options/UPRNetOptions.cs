@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// refines its predictions until they're good enough, like iterating on a drawing.
 /// </para>
 /// </remarks>
-public class UPRNetOptions : NeuralNetworkOptions
+public class UPRNetOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -34,7 +34,7 @@ public class UPRNetOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public UPRNetOptions(UPRNetOptions other)
+    public UPRNetOptions(UPRNetOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

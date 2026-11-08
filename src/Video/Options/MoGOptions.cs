@@ -29,7 +29,7 @@ namespace AiDotNet.Video.Options;
 /// warped frames, especially for complex motions.
 /// </para>
 /// </remarks>
-public class MoGOptions : NeuralNetworkOptions
+public class MoGOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -43,7 +43,7 @@ public class MoGOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public MoGOptions(MoGOptions other)
+    public MoGOptions(MoGOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

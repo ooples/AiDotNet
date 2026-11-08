@@ -28,7 +28,7 @@ namespace AiDotNet.Video.Options;
 /// understanding how every pixel relates to every other pixel.
 /// </para>
 /// </remarks>
-public class VFIMambaOptions : NeuralNetworkOptions
+public class VFIMambaOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -42,7 +42,7 @@ public class VFIMambaOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public VFIMambaOptions(VFIMambaOptions other)
+    public VFIMambaOptions(VFIMambaOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

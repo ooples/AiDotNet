@@ -30,7 +30,7 @@ namespace AiDotNet.Video.Options;
 /// sharper and more natural even if pixel differences are slightly larger.
 /// </para>
 /// </remarks>
-public class PerVFIOptions : NeuralNetworkOptions
+public class PerVFIOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -44,7 +44,7 @@ public class PerVFIOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public PerVFIOptions(PerVFIOptions other)
+    public PerVFIOptions(PerVFIOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

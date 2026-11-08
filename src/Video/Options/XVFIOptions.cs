@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// at every level, so you can add levels at test time for bigger motion.
 /// </para>
 /// </remarks>
-public class XVFIOptions : NeuralNetworkOptions
+public class XVFIOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

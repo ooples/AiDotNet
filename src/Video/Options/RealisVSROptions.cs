@@ -17,7 +17,7 @@ namespace AiDotNet.Video.Options;
 /// <para><b>For Beginners:</b> the defaults build the paper's 1.6B-parameter model. Shrink <see cref="ModelDim"/>,
 /// <see cref="NumLayers"/>, <see cref="ControlNetLayers"/> and the VAE widths for experiments on modest hardware.</para>
 /// </remarks>
-public class RealisVSROptions : NeuralNetworkOptions
+public class RealisVSROptions : ModelOptions
 {
     /// <summary>Creates the paper's configuration.</summary>
     public RealisVSROptions()

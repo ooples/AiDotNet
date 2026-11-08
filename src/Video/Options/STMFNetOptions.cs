@@ -28,7 +28,7 @@ namespace AiDotNet.Video.Options;
 /// much better in tricky areas like where objects overlap or where motion is ambiguous.
 /// </para>
 /// </remarks>
-public class STMFNetOptions : NeuralNetworkOptions
+public class STMFNetOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -42,7 +42,7 @@ public class STMFNetOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public STMFNetOptions(STMFNetOptions other)
+    public STMFNetOptions(STMFNetOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

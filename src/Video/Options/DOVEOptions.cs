@@ -23,7 +23,7 @@ namespace AiDotNet.Video.Options;
 /// of it in a single step, which makes it far faster than diffusion upscalers that take dozens of steps.
 /// </para>
 /// </remarks>
-public class DOVEOptions : NeuralNetworkOptions
+public class DOVEOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

@@ -21,7 +21,7 @@ namespace AiDotNet.Video.Options;
 /// for real time.
 /// </para>
 /// </remarks>
-public class FlashVSROptions : NeuralNetworkOptions
+public class FlashVSROptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

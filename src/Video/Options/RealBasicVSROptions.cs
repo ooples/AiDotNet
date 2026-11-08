@@ -19,7 +19,7 @@ namespace AiDotNet.Video.Options;
 /// then upscales the cleaned frames with BasicVSR, so the artifacts are not spread from frame to frame.
 /// </para>
 /// </remarks>
-public class RealBasicVSROptions : NeuralNetworkOptions
+public class RealBasicVSROptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -33,7 +33,7 @@ public class RealBasicVSROptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public RealBasicVSROptions(RealBasicVSROptions other)
+    public RealBasicVSROptions(RealBasicVSROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

@@ -29,7 +29,7 @@ namespace AiDotNet.Video.Options;
 /// preserved while fake ones are avoided, and anti-aliasing prevents flickering.
 /// </para>
 /// </remarks>
-public class VideoGigaGANOptions : NeuralNetworkOptions
+public class VideoGigaGANOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -43,13 +43,12 @@ public class VideoGigaGANOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public VideoGigaGANOptions(VideoGigaGANOptions other)
+    public VideoGigaGANOptions(VideoGigaGANOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
 
         Seed = other.Seed;
-        EncoderLayerCount = other.EncoderLayerCount;
         Variant = other.Variant;
         NumFeatures = other.NumFeatures;
         NumResBlocks = other.NumResBlocks;

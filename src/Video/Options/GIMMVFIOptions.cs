@@ -29,7 +29,7 @@ namespace AiDotNet.Video.Options;
 /// creating variable slow-motion effects or non-uniform frame rate conversion.
 /// </para>
 /// </remarks>
-public class GIMMVFIOptions : NeuralNetworkOptions
+public class GIMMVFIOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -43,7 +43,7 @@ public class GIMMVFIOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public GIMMVFIOptions(GIMMVFIOptions other)
+    public GIMMVFIOptions(GIMMVFIOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

@@ -28,7 +28,7 @@ namespace AiDotNet.Video.Options;
 /// the intermediate frame. Think of it as using AI to "draw" better motion maps.
 /// </para>
 /// </remarks>
-public class MoMoOptions : NeuralNetworkOptions
+public class MoMoOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -42,7 +42,7 @@ public class MoMoOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public MoMoOptions(MoMoOptions other)
+    public MoMoOptions(MoMoOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

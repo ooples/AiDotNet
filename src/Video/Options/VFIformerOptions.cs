@@ -23,7 +23,7 @@ namespace AiDotNet.Video.Options;
 /// scale, to fix the places where the warping went wrong.
 /// </para>
 /// </remarks>
-public class VFIformerOptions : NeuralNetworkOptions
+public class VFIformerOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

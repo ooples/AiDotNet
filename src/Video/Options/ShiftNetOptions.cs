@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// whichever slide lines up. Sliding is free, so it gets the benefit of alignment without computing motion.
 /// </para>
 /// </remarks>
-public class ShiftNetOptions : NeuralNetworkOptions
+public class ShiftNetOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -34,7 +34,7 @@ public class ShiftNetOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public ShiftNetOptions(ShiftNetOptions other)
+    public ShiftNetOptions(ShiftNetOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

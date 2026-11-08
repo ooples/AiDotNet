@@ -21,7 +21,7 @@ namespace AiDotNet.Video.Options;
 /// artifacts while it upscales. For video it simply upscales every frame.
 /// </para>
 /// </remarks>
-public class RealESRGANVideoOptions : NeuralNetworkOptions
+public class RealESRGANVideoOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -35,7 +35,7 @@ public class RealESRGANVideoOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public RealESRGANVideoOptions(RealESRGANVideoOptions other)
+    public RealESRGANVideoOptions(RealESRGANVideoOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

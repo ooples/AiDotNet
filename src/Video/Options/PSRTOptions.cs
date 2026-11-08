@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// the current one it moves whole 8x8 tiles by their average motion, then lets attention fill in the details.
 /// </para>
 /// </remarks>
-public class PSRTOptions : NeuralNetworkOptions
+public class PSRTOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -34,7 +34,7 @@ public class PSRTOptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public PSRTOptions(PSRTOptions other)
+    public PSRTOptions(PSRTOptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

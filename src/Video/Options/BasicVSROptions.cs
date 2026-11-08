@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// align them before combining their features for higher resolution output.
 /// </para>
 /// </remarks>
-public class BasicVSROptions : NeuralNetworkOptions
+public class BasicVSROptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -34,7 +34,7 @@ public class BasicVSROptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public BasicVSROptions(BasicVSROptions other)
+    public BasicVSROptions(BasicVSROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));

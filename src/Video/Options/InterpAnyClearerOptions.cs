@@ -23,7 +23,7 @@ namespace AiDotNet.Video.Options;
 /// previous step produced, which keeps the result sharp. A map that is the same everywhere behaves like a time.
 /// </para>
 /// </remarks>
-public class InterpAnyClearerOptions : NeuralNetworkOptions
+public class InterpAnyClearerOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

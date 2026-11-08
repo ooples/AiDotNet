@@ -18,7 +18,7 @@ namespace AiDotNet.Video.Options;
 /// frame.
 /// </para>
 /// </remarks>
-public class AMTOptions : NeuralNetworkOptions
+public class AMTOptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

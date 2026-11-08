@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// of independently upscaled images.
 /// </para>
 /// </remarks>
-public class StableVideoSROptions : NeuralNetworkOptions
+public class StableVideoSROptions : ModelOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
@@ -34,7 +34,7 @@ public class StableVideoSROptions : NeuralNetworkOptions
     /// </summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
-    public StableVideoSROptions(StableVideoSROptions other)
+    public StableVideoSROptions(StableVideoSROptions other) : base(other)
     {
         if (other == null)
             throw new ArgumentNullException(nameof(other));
