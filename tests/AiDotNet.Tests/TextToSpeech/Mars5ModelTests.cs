@@ -16,6 +16,21 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class Mars5ModelTests
 {
+    [Fact]
+    public void NativeTrimmingContextExercisesZeroDbBoundaryAndRestoresVoice()
+    {
+        var options = Tiny(Mars5Stage.Autoregressive);
+        Mars5OptionFixture.PrepareOptions(options, "TrimDb");
+        using var model = new MARS5TTS<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
+        var voice = model.Voice;
+        var control = Mars5OptionFixture.Observe(model, "TrimDb");
+        options.TrimDb = 0;
+        Assert.NotNull(control);
+        Assert.NotEqual(control, Mars5OptionFixture.Observe(model, "TrimDb"));
+        Assert.Same(voice, model.Voice);
+    }
+
     [Theory]
     [InlineData("ArBeta1", -.1)]
     [InlineData("ArBeta1", 1)]
