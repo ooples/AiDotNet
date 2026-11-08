@@ -7,16 +7,20 @@ using AiDotNet.Validation;
 namespace AiDotNet.Serving.Security;
 
 /// <summary>
-/// Resolves the tier from the authenticated request principal (API key claims).
+/// Resolves the tier from the authenticated request principal: the API key's tier claim, or for a JWT caller the
+/// claim named by <see cref="ServingJwtTierOptions.TierClaimType"/>.
 /// </summary>
 public sealed class ClaimsTierResolver : ITierResolver
 {
     private readonly TierEnforcementOptions _options;
+    private readonly string _jwtTierClaimType;
 
-    public ClaimsTierResolver(IOptions<TierEnforcementOptions> options)
+    public ClaimsTierResolver(IOptions<TierEnforcementOptions> options, IOptions<ServingSecurityOptions> security)
     {
         Guard.NotNull(options);
         _options = options.Value;
+        Guard.NotNull(security);
+        _jwtTierClaimType = security.Value.Jwt.TierClaimType;
     }
 
     public SubscriptionTier ResolveTier(HttpContext httpContext)
@@ -37,13 +41,14 @@ public sealed class ClaimsTierResolver : ITierResolver
             return _options.DefaultTier;
         }
 
-        var tierClaim = user.FindFirst(ApiKeyClaimTypes.Tier)?.Value;
+        var tierClaim = user.FindFirst(ApiKeyClaimTypes.Tier)?.Value ?? user.FindFirst(_jwtTierClaimType)?.Value;
         if (string.IsNullOrWhiteSpace(tierClaim))
         {
             return _options.DefaultTier;
         }
 
-        return Enum.TryParse<SubscriptionTier>(tierClaim, ignoreCase: true, out var tier)
+        // Names only: Enum.TryParse also accepts undefined numbers such as "999".
+        return Enum.TryParse<SubscriptionTier>(tierClaim, ignoreCase: true, out var tier) && Enum.IsDefined(tier)
             ? tier
             : _options.DefaultTier;
     }

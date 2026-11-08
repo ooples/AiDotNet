@@ -1,4 +1,5 @@
 using AiDotNet.Serving.Security.ApiKeys;
+using AiDotNet.Serving.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using AiDotNet.Validation;
@@ -10,7 +11,7 @@ namespace AiDotNet.Serving.Controllers.Admin;
 /// </summary>
 [ApiController]
 [Route("api/admin/api-keys")]
-[Authorize(Policy = "AiDotNetAdmin")]
+[Authorize(Policy = ServingAuthorizationPolicies.Admin)]
 public sealed class ApiKeysController : ControllerBase
 {
     private readonly IApiKeyService _apiKeys;

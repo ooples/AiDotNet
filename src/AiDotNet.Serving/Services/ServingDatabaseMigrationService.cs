@@ -7,30 +7,36 @@ using AiDotNet.Validation;
 namespace AiDotNet.Serving.Services;
 
 /// <summary>
-/// Applies EF Core migrations for the Serving persistence database at startup.
+/// Applies EF Core migrations for the Serving persistence database at startup, when
+/// <see cref="ServingPersistenceOptions.MigrateOnStartup"/> is set.
 /// </summary>
+/// <remarks>
+/// Hosted services start before the server accepts requests, so with startup migrations enabled no request
+/// reaches an unmigrated database. With <see cref="ServingPersistenceOptions.MigrateOnStartup"/> off, the
+/// schema must be migrated out of band before the server starts.
+/// </remarks>
 public sealed class ServingDatabaseMigrationService : IHostedService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly ServingDatabaseOptions _dbOptions;
+    private readonly ServingPersistenceOptions _persistence;
     private readonly ILogger<ServingDatabaseMigrationService> _logger;
 
     public ServingDatabaseMigrationService(
         IServiceScopeFactory scopeFactory,
-        IOptions<ServingDatabaseOptions> dbOptions,
+        IOptions<ServingPersistenceOptions> persistence,
         ILogger<ServingDatabaseMigrationService> logger)
     {
         Guard.NotNull(scopeFactory);
         _scopeFactory = scopeFactory;
-        Guard.NotNull(dbOptions);
-        _dbOptions = dbOptions.Value;
+        Guard.NotNull(persistence);
+        _persistence = persistence.Value;
         Guard.NotNull(logger);
         _logger = logger;
     }
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!_dbOptions.ApplyMigrationsAtStartup)
+        if (!_persistence.MigrateOnStartup)
         {
             return;
         }
@@ -38,7 +44,7 @@ public sealed class ServingDatabaseMigrationService : IHostedService
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<ServingDbContext>();
 
-        _logger.LogInformation("Applying Serving DB migrations (Provider={Provider}).", _dbOptions.Provider);
+        _logger.LogInformation("Applying Serving DB migrations (Provider={Provider}).", _persistence.Provider);
         await db.Database.MigrateAsync(cancellationToken).ConfigureAwait(false);
         _logger.LogInformation("Serving DB migrations applied.");
     }
