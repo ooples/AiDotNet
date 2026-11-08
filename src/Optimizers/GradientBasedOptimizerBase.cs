@@ -3835,7 +3835,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             SparseEmbeddingOptimizerHelpers.MaterializeSparseGradients(duplicated, context.Gradients, AiDotNetEngine.Current);
         var grads = new List<Tensor<T>>(context.Gradients.Count + sparseValues.Count);
         foreach (var kvp in context.Gradients)
-            if (kvp.Value is { Length: > 0 } grad) grads.Add(kvp.Value);
+            if (kvp.Value is { Length: > 0 } grad) grads.Add(grad);
         grads.AddRange(sparseValues);
         return grads;
     }

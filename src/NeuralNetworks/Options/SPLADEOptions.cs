@@ -16,13 +16,13 @@ public class SPLADEOptions : TransformerEmbeddingOptions
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> You do not need to set any of these. They are the values this
-    /// model has always used, moved here from its constructor so they can be seen and
-    /// changed in one place.
+    /// <b>For Beginners:</b> You do not need to set any of these. They were moved here from
+    /// the model's constructor so they can be seen and changed in one place.
     /// </para>
     /// <para>
-    /// Carried over unchanged. Whether each matches the published paper is verified, and
-    /// corrected where it does not, in a later phase of issue #2090.
+    /// <c>MaxSequenceLength</c> is the paper's 256 (Sec. 4); it was 512, so
+    /// inputs longer than 256 tokens are now truncated unless it is set higher. The vocabulary is the paper's
+    /// too. The model sizes are carried over unchanged; checking them against the paper is issue #2090's.
     /// </para>
     /// </remarks>
     public SPLADEOptions()

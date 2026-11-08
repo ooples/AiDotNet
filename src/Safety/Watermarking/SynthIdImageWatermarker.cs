@@ -256,7 +256,9 @@ public partial class SynthIdImageWatermarker<T> : StegaStampWatermarker<T>
     /// <summary>
     /// Tests <paramref name="image"/> for this key's payload. The reported z is the payload score of
     /// <see cref="StegaStampWatermarker{T}.Detect"/>. A detection is reported only when the detection logit also
-    /// agrees: the calibrated verdict is watermarked, or, before calibration, the logit is positive.
+    /// agrees: the calibrated verdict is watermarked, or, before calibration, the logit is positive. When it does not,
+    /// the confidence is zero too, so <see cref="StegaStampWatermarker{T}.DetectWatermark"/> agrees with the verdict: a
+    /// residual lifted onto another image can keep a high payload z that the detection head rejects.
     /// </summary>
     public override WatermarkResult Detect(Tensor<T> image)
     {
@@ -267,7 +269,7 @@ public partial class SynthIdImageWatermarker<T> : StegaStampWatermarker<T>
         return new WatermarkResult
         {
             WatermarkDetected = payload.WatermarkDetected && marked,
-            Confidence = payload.Confidence,
+            Confidence = marked ? payload.Confidence : 0.0,
             ZScore = payload.ZScore,
             PValue = payload.PValue,
             ScoredUnits = payload.ScoredUnits,

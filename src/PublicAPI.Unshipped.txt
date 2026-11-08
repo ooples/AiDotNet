@@ -1072,7 +1072,7 @@ override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.DefineTrainingObj
 override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
 override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
 override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.GetModelMetadata() -> AiDotNet.Models.ModelMetadata<T>!
-override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.InitializeLayers() -> void
+override sealed AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.InitializeLayers() -> void
 override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
 override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
@@ -1118,14 +1118,10 @@ override AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.ModuleName.get 
 virtual AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Safety.Watermarking.WatermarkResult!
 virtual AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.ModuleName.get -> string!
 override AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
-override AiDotNet.Safety.Watermarking.SynthIdImageOptions.ImageSize.get -> int
-override AiDotNet.Safety.Watermarking.SynthIdImageOptions.ImageSize.set -> void
-override AiDotNet.Safety.Watermarking.SynthIdImageOptions.SecretBits.get -> int
-override AiDotNet.Safety.Watermarking.SynthIdImageOptions.SecretBits.set -> void
-virtual AiDotNet.Safety.Watermarking.StegaStampOptions.ImageSize.get -> int
-virtual AiDotNet.Safety.Watermarking.StegaStampOptions.ImageSize.set -> void
-virtual AiDotNet.Safety.Watermarking.StegaStampOptions.SecretBits.get -> int
-virtual AiDotNet.Safety.Watermarking.StegaStampOptions.SecretBits.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.ImageSize.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.ImageSize.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.SecretBits.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.SecretBits.set -> void
 AiDotNet.Models.Options.RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>.InitialMeanSquare.get -> double
 AiDotNet.Models.Options.RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>.InitialMeanSquare.set -> void
 AiDotNet.Safety.Watermarking.StegaStampOptions.CriticGradientClip.get -> double
@@ -1135,3 +1131,9 @@ AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossDelaySteps.set -> void
 AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossRampSteps.get -> int
 AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossRampSteps.set -> void
 AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.TryComputeFusedLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Interfaces.ILossFunction<T>! loss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLineSearchIterations.get -> int
+AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLineSearchIterations.set -> void
+AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
+AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
+AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
+AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void

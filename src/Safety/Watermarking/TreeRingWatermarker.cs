@@ -198,13 +198,16 @@ public partial class TreeRingWatermarker<T> : ImageSafetyModuleBase<T>, IKeyedWa
         return FromDoubles(x, shape);
     }
 
-    /// <summary>Tests an image for this key's rings: DDIM inversion, then the noncentral chi-squared test.</summary>
+    /// <summary>
+    /// Tests an image for this key's rings: DDIM inversion, then the matched-filter z of <see cref="DetectFromNoise"/>
+    /// (not the paper's chi-squared statistic; see the class remarks).
+    /// </summary>
     public WatermarkResult Detect(Tensor<T> image) => DetectFromNoise(InvertToNoise(image));
 
     /// <summary>Tests recovered initial noise (see <see cref="InvertToNoise"/>) for this key's rings.</summary>
     public WatermarkResult DetectFromNoise(Tensor<T> noise)
     {
-        var (correlationZ, _, units) = Statistics(noise);
+        var (correlationZ, _, units) = Statistics(noise, withChiSquared: false);
         return Result(correlationZ, units);
     }
 
@@ -214,13 +217,14 @@ public partial class TreeRingWatermarker<T> : ImageSafetyModuleBase<T>, IKeyedWa
     /// <see cref="DetectFromNoise"/>; it estimates sigma^2 from the same modes it scores, which fixes |y|^2 / sigma^2
     /// and so is not calibrated against other keys.
     /// </summary>
-    internal double PaperChiSquaredZ(Tensor<T> noise) => Statistics(noise).ChiSquaredZ;
+    internal double PaperChiSquaredZ(Tensor<T> noise) => Statistics(noise, withChiSquared: true).ChiSquaredZ;
 
     // Both statistics over the independent half of the mask: one mode of each conjugate pair, plus the DC term.
     // Whitened by sigma^2 (per real degree of freedom sigma^2 / 2 off DC, sigma^2 at DC), the matched filter
     // sum w k y / (sigma sqrt(sum w k^2)) is N(0, 1) for unmarked noise (y independent of k) and, given y, for an image
     // marked under another key (k independent of y), so one z is calibrated against both nulls.
-    private (double CorrelationZ, double ChiSquaredZ, int Units) Statistics(Tensor<T> noise)
+    // The chi-squared z is computed only when asked for (PaperChiSquaredZ); detection does not use it.
+    private (double CorrelationZ, double ChiSquaredZ, int Units) Statistics(Tensor<T> noise, bool withChiSquared)
     {
         if (noise is null) throw new ArgumentNullException(nameof(noise));
         var (channels, height, width) = SampleDimensions(noise);
@@ -268,8 +272,9 @@ public partial class TreeRingWatermarker<T> : ImageSafetyModuleBase<T>, IKeyedWa
         int units = pairs + (hasDc ? 1 : 0);
         if (units == 0) return (0.0, 0.0, 0);
         double sigma2 = energy / units;
-        if (!(sigma2 > 1e-300) || !(keyEnergy > 0)) return (0.0, 0.0, units);
+        if (double.IsNaN(sigma2) || sigma2 <= 1e-300 || double.IsNaN(keyEnergy) || keyEnergy <= 0) return (0.0, 0.0, units);
         double correlationZ = WatermarkStatistics.CorrelationZ(correlation, keyEnergy * sigma2);
+        if (!withChiSquared) return (correlationZ, 0.0, units);
         int degreesOfFreedom = 2 * pairs + (hasDc ? 1 : 0);
         double eta = distance / sigma2, lambda = keyEnergy / sigma2;
         // A small eta means y sits close to the key: the evidence is the lower tail of the noncentral chi-squared.
@@ -472,17 +477,23 @@ public partial class TreeRingWatermarker<T> : ImageSafetyModuleBase<T>, IKeyedWa
     // chi-squared(k + 2j) CDFs, summed in log space outward from the Poisson mode until the terms stop mattering.
     internal static double NoncentralChiSquaredLogCdf(double x, int k, double lambda)
     {
-        if (!(x > 0)) return double.NegativeInfinity;
-        if (!(lambda > 0)) return LogRegularizedLowerGamma(k / 2.0, x / 2.0);
+        if (double.IsNaN(x) || double.IsNaN(lambda) || double.IsInfinity(lambda)) return double.NaN;
+        if (double.IsNaN(x) || x <= 0) return double.NegativeInfinity;
+        if (double.IsPositiveInfinity(x)) return 0.0;
+        if (double.IsNaN(lambda) || lambda <= 0) return LogRegularizedLowerGamma(k / 2.0, x / 2.0);
+        // The Poisson mixture is summed outward from its mode, an int; beyond that the series is not evaluated.
+        if (lambda / 2.0 >= int.MaxValue - 1024) return double.NaN;
         double halfLambda = lambda / 2.0;
         int mode = (int)Math.Floor(halfLambda);
         double LogTerm(int j) => -halfLambda + j * Math.Log(halfLambda) - LogGamma(j + 1.0)
             + LogRegularizedLowerGamma(k / 2.0 + j, x / 2.0);
         double max = LogTerm(mode);
+        if (double.IsNaN(max)) return double.NaN;
         double sum = 1.0;
         for (int j = mode + 1; ; j++)
         {
             double term = LogTerm(j);
+            if (double.IsNaN(term)) return double.NaN;
             if (term > max) { sum = sum * Math.Exp(max - term) + 1.0; max = term; continue; }
             sum += Math.Exp(term - max);
             if (term - max < -40 && j > mode + 10) break;
@@ -523,7 +534,7 @@ public partial class TreeRingWatermarker<T> : ImageSafetyModuleBase<T>, IKeyedWa
     // continued fraction for Q (Numerical Recipes 6.2).
     internal static double LogRegularizedLowerGamma(double a, double x)
     {
-        if (!(x > 0)) return double.NegativeInfinity;
+        if (double.IsNaN(x) || x <= 0) return double.NegativeInfinity;
         double logPrefix = a * Math.Log(x) - x - LogGamma(a);
         if (x < a + 1)
         {

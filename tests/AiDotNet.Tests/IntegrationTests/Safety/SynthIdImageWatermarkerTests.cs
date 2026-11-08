@@ -86,6 +86,9 @@ public class SynthIdImageWatermarkerTests : WatermarkRoundTripTestBase<Tensor<fl
     protected override double OwnKeyMinimumZ => 2.5;
 
     /// <inheritdoc />
+    protected override bool GatesOnASecondTest => true;
+
+    /// <inheritdoc />
     protected override double PerturbedMinimumZ => 2.5;
 
     protected override Tensor<float> Sample(int seed) =>

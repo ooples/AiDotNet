@@ -448,15 +448,16 @@ public partial class OpenSora<T> : NeuralNetworkBase<T>, AiDotNet.Interfaces.ITr
         if (input is null)
             throw new ArgumentNullException(nameof(input));
         EnsureLayerRandomSeedsWired();
-        if (_trainingTime is not null && AuxiliaryInput is { } timeInput)
-            return PredictNoise(input, null, _timeEmbed.Forward(timeInput));
-
         if (input.Rank == 3)
         {
+            // Promoted before either branch, so the step's-timestep branch below also sees a batch axis.
             // Engine reshapes, not AddBatchDimension's span copy, so the batch promotion stays on the tape.
             var noise = ForwardForTraining(Engine.Reshape(input, new[] { 1, input.Shape[0], input.Shape[1], input.Shape[2] }));
             return Engine.Reshape(noise, new[] { noise.Shape[1], noise.Shape[2], noise.Shape[3] });
         }
+
+        if (_trainingTime is not null && AuxiliaryInput is { } timeInput)
+            return PredictNoise(input, null, _timeEmbed.Forward(timeInput));
 
         return PredictNoise(input, null, CreateTimeEmbedding(0.5));
     }

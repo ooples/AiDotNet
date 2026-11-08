@@ -159,6 +159,25 @@ public class DFPOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOpt
     public int MaxLineSearchIterations { get; set; } = 20;
 
     /// <summary>
+    /// Gets or sets whether a training step backtracks along its DFP step when the full step does not lower the loss.
+    /// </summary>
+    /// <value><c>true</c> by default.</value>
+    /// <remarks>
+    /// <para>
+    /// DFP produces a DIRECTION; like BFGS it is paired with a line search (Nocedal and Wright, section 6.1). The full step along it is not guaranteed to improve anything: with
+    /// the default rate 0.1 on <c>f(x) = 10x^2</c>, the first step from <c>x = 1</c> lands on <c>x = -19</c>, raising the loss from 10 to 3610. A training step
+    /// (<c>Train</c>, which has no line search of its own) therefore halves the step until it satisfies the Armijo
+    /// condition (Nocedal and Wright, Algorithm 3.1), the safeguard BFGS and L-BFGS use, and keeps the parameters
+    /// when no halving lowers the loss. <c>Optimize</c> and <c>Minimize</c> run their own line search and do not
+    /// read this. Turning it off makes every training step exactly <c>lr</c> along the direction.
+    /// </para>
+    /// <para><b>For Beginners:</b> "Take the step, and if it made things worse, take a smaller one instead". It costs
+    /// an extra forward pass per attempt. Leave it on unless you are matching another framework's fixed-step behaviour.
+    /// </para>
+    /// </remarks>
+    public bool UseLineSearch { get; set; } = true;
+
+    /// <summary>
     /// Gets or sets the rate at which the algorithm adapts its approximation of the inverse Hessian matrix.
     /// </summary>
     /// <value>The adaptation rate, defaulting to 0.1 (10%).</value>

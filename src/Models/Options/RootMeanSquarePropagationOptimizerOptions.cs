@@ -152,5 +152,18 @@ public class RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput> : Gra
     /// The compiled (fused) training plan and streaming training start this state at zero, so a non-zero start
     /// trains on the eager tape step.
     /// </remarks>
-    public double InitialMeanSquare { get; set; }
+    /// <exception cref="ArgumentOutOfRangeException">The value is negative, NaN or infinite.</exception>
+    public double InitialMeanSquare
+    {
+        get => _initialMeanSquare;
+        set
+        {
+            if (double.IsNaN(value) || value < 0.0 || double.IsInfinity(value))
+                throw new ArgumentOutOfRangeException(nameof(InitialMeanSquare), value,
+                    "The initial mean of squared gradients must be finite and zero or positive.");
+            _initialMeanSquare = value;
+        }
+    }
+
+    private double _initialMeanSquare;
 }

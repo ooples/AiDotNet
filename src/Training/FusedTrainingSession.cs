@@ -183,6 +183,28 @@ internal sealed class FusedTrainingSession<T>
         LastFallbackException = null;
     }
 
+    /// <summary>
+    /// Re-enables the fused path after a reset that keeps the model's optimizer (<c>ResetState</c>, which clears
+    /// recurrent state). An uncommitted session restarts. A committed one keeps its plan, and with it the
+    /// optimizer's moments, which the eager optimizer would also keep: it stays committed, so a step that cannot
+    /// run fused fails loudly instead of continuing eagerly from the eager optimizer's older moments, and its next
+    /// step re-checks that the plan still trains the live parameters and, when the caller asks, that its replay
+    /// agrees with the eager forward.
+    /// </summary>
+    public void Rearm(bool disabled = false)
+    {
+        if (!IsCommitted)
+        {
+            Restart(disabled);
+            return;
+        }
+
+        _stepsSincePersistenceCheck = PersistenceRecheckInterval;
+        _replayAgreementVerified = false;
+        LastMissReason = null;
+        LastFallbackException = null;
+    }
+
     /// <summary>Runs one fused step, or says why it cannot.</summary>
     public FusedStepOutcome TryStep(FusedTrainingStepRequest<T> request, out T loss)
     {

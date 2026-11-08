@@ -12,21 +12,17 @@ namespace AiDotNet.Safety.Watermarking;
 /// payload here. It does not publish its networks, losses or training schedule. Those come from
 /// <see cref="StegaStampOptions"/>.
 /// </remarks>
+[PaperDefault(nameof(ImageSize), 512, Source = "Sec. 8: SynthID-O can encode 136-bit payloads within 512 x 512 pixel images")]
+[PaperDefault(nameof(SecretBits), 136, Source = "Sec. 8: SynthID-O can encode 136-bit payloads within 512 x 512 pixel images")]
 public class SynthIdImageOptions : StegaStampOptions
 {
     /// <summary>SynthID-O's stated sizes, 512 x 512 images and 136 payload bits, with no error correction.</summary>
     public SynthIdImageOptions()
     {
+        ImageSize = 512;
+        SecretBits = 136;
         UseErrorCorrection = false;
     }
-
-    /// <summary>Side of the square image the networks work at (SynthID-O: 512).</summary>
-    [PaperDefault(512, Source = "Sec. 8: SynthID-O can encode 136-bit payloads within 512 x 512 pixel images")]
-    public override int ImageSize { get; set; } = 512;
-
-    /// <summary>Payload bits the encoder hides (SynthID-O: 136).</summary>
-    [PaperDefault(136, Source = "Sec. 8: SynthID-O can encode 136-bit payloads within 512 x 512 pixel images")]
-    public override int SecretBits { get; set; } = 136;
 
     /// <summary>A copy of <paramref name="other"/>.</summary>
     public SynthIdImageOptions(SynthIdImageOptions other) : base(other)
@@ -65,11 +61,11 @@ public class SynthIdImageOptions : StegaStampOptions
     internal void ValidateDetection()
     {
         Validate();
-        if (!(DetectionLossScale > 0))
+        if (double.IsNaN(DetectionLossScale) || DetectionLossScale <= 0)
             throw new ArgumentOutOfRangeException(nameof(DetectionLossScale), DetectionLossScale, "The detection loss needs a positive weight.");
-        if (!(SpecificityLossScale >= 0))
+        if (double.IsNaN(SpecificityLossScale) || SpecificityLossScale < 0)
             throw new ArgumentOutOfRangeException(nameof(SpecificityLossScale), SpecificityLossScale, "The specificity loss weight cannot be negative.");
-        if (!(ImageLossScale > 0))
+        if (double.IsNaN(ImageLossScale) || ImageLossScale <= 0)
             throw new ArgumentOutOfRangeException(nameof(ImageLossScale), ImageLossScale, "The detection loss ramps with the image loss, which needs a positive weight.");
         if (!(FalsePositiveRate > 0 && FalsePositiveRate < 1))
             throw new ArgumentOutOfRangeException(nameof(FalsePositiveRate), FalsePositiveRate, "The false positive rate lies in (0, 1).");

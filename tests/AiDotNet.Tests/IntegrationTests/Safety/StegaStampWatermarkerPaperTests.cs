@@ -13,6 +13,39 @@ public class StegaStampWatermarkerPaperTests
     private static StegaStampWatermarker<float> Small(bool errorCorrection = true) =>
         new(new StegaStampOptions { ImageSize = 16, SecretBits = 100, UseErrorCorrection = errorCorrection, Seed = 2 }, "paper-key");
 
+    /// <summary>
+    /// The residual loss's border map is the reference's two passes over an s x s array (rows i and -i, then columns,
+    /// for i below s / 4, each multiplied by (cos(4 pi i / s + pi) + 1) / 2), computed here as one factor per row times
+    /// one per column.
+    /// </summary>
+    [Theory]
+    [InlineData(16)]
+    [InlineData(400)]
+    public void EdgeFalloff_IsTheReferencesRowThenColumnPasses(int s)
+    {
+        var falloff = new double[s, s];
+        for (int y = 0; y < s; y++)
+            for (int x = 0; x < s; x++) falloff[y, x] = 1.0;
+        for (int i = 0; i < s / 4; i++)
+        {
+            double factor = (System.Math.Cos(4 * System.Math.PI * i / s + System.Math.PI) + 1) / 2;
+            int minus = i == 0 ? 0 : s - i;   // numpy's row -i
+            for (int x = 0; x < s; x++) { falloff[minus, x] *= factor; falloff[i, x] *= factor; }
+        }
+
+        for (int j = 0; j < s / 4; j++)
+        {
+            double factor = (System.Math.Cos(4 * System.Math.PI * j / s + System.Math.PI) + 1) / 2;
+            int minus = j == 0 ? 0 : s - j;
+            for (int y = 0; y < s; y++) { falloff[y, minus] *= factor; falloff[y, j] *= factor; }
+        }
+
+        var edge = StegaStampWatermarker<double>.EdgeFactors(s);
+        for (int y = 0; y < s; y++)
+            for (int x = 0; x < s; x++)
+                Assert.True(System.Math.Abs(edge[y] * edge[x] - falloff[y, x]) <= 1e-15, $"({y}, {x}): {edge[y] * edge[x]} against {falloff[y, x]}");
+    }
+
     [Fact]
     public void JpegNoise_UsesTheStandardTables_ScaledByTheIjgQualityRule()
     {

@@ -37,6 +37,40 @@ public class ConjugateGradientOptimizerOptions<T, TInput, TOutput> : GradientBas
     }
 
     /// <summary>
+    /// Gets or sets whether a training step backtracks along its Conjugate gradient step when the full step does not lower the loss.
+    /// </summary>
+    /// <value><c>true</c> by default.</value>
+    /// <remarks>
+    /// <para>
+    /// Conjugate gradient produces a DIRECTION; nonlinear conjugate gradient is defined with a line search choosing the step length (Nocedal and Wright, section 5.2). The full step along it is not guaranteed to improve anything: with
+    /// the default rate 0.1 on <c>f(x) = 10x^2</c>, the first step from <c>x = 1</c> uses gradient 20 and lands on <c>x = -1</c>, and later steps oscillate rather than converge. A training step
+    /// (<c>Train</c>, which has no line search of its own) therefore halves the step until it satisfies the Armijo
+    /// condition (Nocedal and Wright, Algorithm 3.1), the safeguard BFGS and L-BFGS use, and keeps the parameters
+    /// when no halving lowers the loss. <c>Optimize</c> and <c>Minimize</c> run their own line search and do not
+    /// read this. Turning it off makes every training step exactly <c>lr</c> along the direction.
+    /// </para>
+    /// <para><b>For Beginners:</b> "Take the step, and if it made things worse, take a smaller one instead". It costs
+    /// an extra forward pass per attempt. Leave it on unless you are matching another framework's fixed-step behaviour.
+    /// </para>
+    /// </remarks>
+    public bool UseLineSearch { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets how many times a failing training step is halved before it is rejected outright.
+    /// </summary>
+    /// <value>A positive integer, defaulting to 20.</value>
+    /// <remarks>
+    /// <para>
+    /// Backtracking terminates on its own for a genuine descent direction, so this bound only matters when the
+    /// direction is not one. The default of 20 takes the step below 1e-6 of its original length (0.5^20).
+    /// </para>
+    /// <para><b>For Beginners:</b> How many times to try a smaller step before giving up on this one and leaving the
+    /// parameters where they were. You rarely need to change it.
+    /// </para>
+    /// </remarks>
+    public int MaxLineSearchIterations { get; set; } = 20;
+
+    /// <summary>
     /// Gets or sets the batch size for gradient computation.
     /// </summary>
     /// <value>A positive integer for mini-batch size, or -1 for full batch (default).</value>

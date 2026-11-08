@@ -38,7 +38,8 @@ public class StegaStampOptions : NeuralNetworkOptions
         EdgeLossGain = other.EdgeLossGain;
         EdgeLossDelaySteps = other.EdgeLossDelaySteps;
         EdgeLossRampSteps = other.EdgeLossRampSteps;
-        YuvLossScales = (double[])other.YuvLossScales.Clone();
+        // Copied without dereferencing a null, so Validate reports it rather than a NullReferenceException here.
+        YuvLossScales = other.YuvLossScales is null ? null! : (double[])other.YuvLossScales.Clone();
         PerspectiveJitter = other.PerspectiveJitter;
         PerspectiveRampSteps = other.PerspectiveRampSteps;
         BrightnessShift = other.BrightnessShift;
@@ -54,11 +55,11 @@ public class StegaStampOptions : NeuralNetworkOptions
 
     /// <summary>Side of the square image the networks work at (the paper uses 400). A multiple of 16.</summary>
     [PaperDefault(400, Source = "Sec. 4.1: the encoder receives a 400 x 400 pixel input")]
-    public virtual int ImageSize { get; set; } = 400;
+    public int ImageSize { get; set; } = 400;
 
     /// <summary>Bits the encoder hides (the paper uses 100: 56 data bits, BCH parity, padding).</summary>
     [PaperDefault(100, Source = "Sec. 4.1 and 5.4: the message is a 100 bit binary string")]
-    public virtual int SecretBits { get; set; } = 100;
+    public int SecretBits { get; set; } = 100;
 
     /// <summary>
     /// Protects the keyed payload with a BCH code correcting 5 errors, as the paper does for its 56 data bits
@@ -184,17 +185,53 @@ public class StegaStampOptions : NeuralNetworkOptions
             throw new ArgumentOutOfRangeException(nameof(SecretBits), SecretBits, "The BCH payload needs at least 91 secret bits.");
         if (LearningRateWarmupSteps < 0)
             throw new ArgumentOutOfRangeException(nameof(LearningRateWarmupSteps), LearningRateWarmupSteps, "The warmup cannot be negative.");
-        if (!(CriticGradientClip > 0))
+        Positive(LearningRate, nameof(LearningRate));
+        Positive(CriticLearningRate, nameof(CriticLearningRate));
+        Positive(CriticWeightClip, nameof(CriticWeightClip));
+        NotNegative(ImageLossScale, nameof(ImageLossScale));
+        NotNegative(SecretLossScale, nameof(SecretLossScale));
+        NotNegative(CriticLossScale, nameof(CriticLossScale));
+        NotNegative(EdgeLossGain, nameof(EdgeLossGain));
+        NotNegative(PerspectiveJitter, nameof(PerspectiveJitter));
+        NotNegative(BrightnessShift, nameof(BrightnessShift));
+        NotNegative(HueShift, nameof(HueShift));
+        NotNegative(NoiseStdDev, nameof(NoiseStdDev));
+        if (!(SaturationMix >= 0 && SaturationMix <= 1))
+            throw new ArgumentOutOfRangeException(nameof(SaturationMix), SaturationMix, "The desaturation mix lies in [0, 1].");
+        Steps(NoImageLossSteps, nameof(NoImageLossSteps));
+        Steps(ImageLossRampSteps, nameof(ImageLossRampSteps));
+        Steps(CriticLossRampSteps, nameof(CriticLossRampSteps));
+        Steps(PerspectiveRampSteps, nameof(PerspectiveRampSteps));
+        Steps(ColorRampSteps, nameof(ColorRampSteps));
+        if (double.IsNaN(CriticGradientClip) || CriticGradientClip <= 0)
             throw new ArgumentOutOfRangeException(nameof(CriticGradientClip), CriticGradientClip, "The critic's gradient clip must be positive.");
         if (EdgeLossDelaySteps < 0 || EdgeLossRampSteps < 0)
             throw new ArgumentOutOfRangeException(nameof(EdgeLossDelaySteps), "The edge loss delay and ramp cannot be negative.");
         if (YuvLossScales is null || YuvLossScales.Length != 3)
             throw new ArgumentException("Three YUV loss scales are needed.", nameof(YuvLossScales));
+        foreach (double scale in YuvLossScales) NotNegative(scale, nameof(YuvLossScales));
         if (!(ContrastLow > 0 && ContrastHigh >= ContrastLow))
             throw new ArgumentOutOfRangeException(nameof(ContrastLow), "Contrast factors must be positive and ordered.");
         if (!(MinimumJpegQuality >= 1 && MinimumJpegQuality <= 100))
             throw new ArgumentOutOfRangeException(nameof(MinimumJpegQuality), MinimumJpegQuality, "JPEG quality lies in [1, 100].");
         if (!(BlurProbability >= 0 && BlurProbability <= 0.5))
             throw new ArgumentOutOfRangeException(nameof(BlurProbability), BlurProbability, "Each blur's probability lies in [0, 0.5].");
+    }
+
+    private static void Positive(double value, string name)
+    {
+        if (double.IsNaN(value) || value <= 0 || double.IsInfinity(value))
+            throw new ArgumentOutOfRangeException(name, value, "Must be positive and finite.");
+    }
+
+    private static void NotNegative(double value, string name)
+    {
+        if (double.IsNaN(value) || value < 0 || double.IsInfinity(value))
+            throw new ArgumentOutOfRangeException(name, value, "Must be zero or positive, and finite.");
+    }
+
+    private static void Steps(int value, string name)
+    {
+        if (value < 0) throw new ArgumentOutOfRangeException(name, value, "A step count cannot be negative.");
     }
 }

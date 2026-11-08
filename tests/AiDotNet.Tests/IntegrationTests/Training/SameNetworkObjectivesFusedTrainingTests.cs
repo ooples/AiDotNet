@@ -46,8 +46,12 @@ public class SameNetworkObjectivesFusedTrainingTests
 
     // The encoder and decoder optimizer that trains from step 0, which carries the warmup.
     private static GradientBasedOptimizerBase<float, Tensor<float>, Tensor<float>> FirstOptimizer(StegaStampWatermarker<float> model, bool secretPhase)
-        => (GradientBasedOptimizerBase<float, Tensor<float>, Tensor<float>>)typeof(StegaStampWatermarker<float>)
-            .GetField(secretPhase ? "_secretOptimizer" : "_optimizer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(model)!;
+    {
+        string name = secretPhase ? "_secretOptimizer" : "_optimizer";
+        var field = typeof(StegaStampWatermarker<float>).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.True(field is not null, $"StegaStampWatermarker has no field {name}; update this test's reflection.");
+        return Assert.IsAssignableFrom<GradientBasedOptimizerBase<float, Tensor<float>, Tensor<float>>>(field!.GetValue(model));
+    }
 
     private static void Run(StegaStampWatermarker<float> model, bool compile, int steps, Action<int>? afterStep = null)
     {
@@ -112,6 +116,8 @@ public class SameNetworkObjectivesFusedTrainingTests
         for (int step = 0; step < steps; step++)
         {
             _output.WriteLine($"step {step + 1}: mean |update| fused {f[step]:E4}, eager {e[step]:E4}");
+            Assert.True(e[step] > 0 && double.IsFinite(e[step]) && double.IsFinite(f[step]),
+                $"step {step + 1}: the ratio needs a positive, finite eager update; fused {f[step]:E4}, eager {e[step]:E4}");
             Assert.True(Math.Abs(f[step] / e[step] - 1) <= RelativeTolerance,
                 $"step {step + 1}: the fused mean |update| is {f[step]:E4}, the eager {e[step]:E4}");
         }
@@ -138,6 +144,9 @@ public class SameNetworkObjectivesFusedTrainingTests
         Run(model, compile, steps, step =>
         {
             double expected = reference.Step();
+            // The schedule must move: during warmup the rate is below the base rate.
+            if (step < warmup)
+                Assert.True(expected < 1e-3, $"the reference schedule gives {expected:R} after warmup step {step}");
             Assert.True(Math.Abs(optimizer.GetCurrentLearningRate() - expected) <= 1e-12,
                 $"after step {step} the learning rate is {optimizer.GetCurrentLearningRate():R}, the schedule's {expected:R}");
         });

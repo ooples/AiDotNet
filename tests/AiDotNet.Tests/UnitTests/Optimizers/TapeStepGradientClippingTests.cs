@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.Models.Options;
 using AiDotNet.Optimizers;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
 using Xunit;
@@ -129,5 +130,66 @@ public class TapeStepGradientClippingTests
         Assert.Equal(0.3, byValue.TapeStepGradientClipValue);
         Assert.Equal(0.0, off.TapeStepGradientClipNorm);
         Assert.Equal(0.0, off.TapeStepGradientClipValue);
+
+        // A negative norm clips nothing on the fused path rather than flipping the gradient's sign.
+        var negative = Create(name, o => { o.EnableGradientClipping = true; o.GradientClippingMethod = GradientClippingMethod.ByNorm; o.MaxGradientNorm = -1.0; });
+        Assert.Equal(0.0, negative.TapeStepGradientClipNorm);
+    }
+
+    /// <summary>
+    /// An embedding table's gradient arrives as sparse rows. Rows that occur once are clipped in place and the sparse
+    /// step still runs; repeated rows are densified first, since their gradient row is the sum. Either way the table
+    /// must land where a dense step on the hand-clipped dense gradient puts it.
+    /// </summary>
+    [Theory]
+    [InlineData(new[] { 1, 4 })]
+    [InlineData(new[] { 1, 1, 4 })]
+    public void NormClip_CoversSparseEmbeddingGradients(int[] ids)
+    {
+        const int vocab = 6, dim = 3;
+        const double maxNorm = 0.5;
+        var engine = AiDotNetEngine.Current;
+        var start = new double[vocab * dim];
+        for (int i = 0; i < start.Length; i++) start[i] = Math.Sin(0.37 * i) + 0.1;
+        var weight = new Tensor<double>(new[] { ids.Length, dim });
+        for (int i = 0; i < weight.Length; i++) weight[i] = 0.2 + 0.3 * i;
+
+        // The dense gradient of sum(rows * weight): each looked-up row adds its weight row to its table row.
+        var dense = new double[vocab * dim];
+        for (int n = 0; n < ids.Length; n++)
+            for (int c = 0; c < dim; c++) dense[ids[n] * dim + c] += weight[n * dim + c];
+        double norm = 0;
+        foreach (double g in dense) norm += g * g;
+        norm = Math.Sqrt(norm);
+        Assert.True(norm > maxNorm, "the case must actually clip");
+
+        var table = new Tensor<double>((double[])start.Clone(), new[] { vocab, dim });
+        var optimizer = Create("SGD", o =>
+        {
+            o.EnableGradientClipping = true;
+            o.GradientClippingMethod = GradientClippingMethod.ByNorm;
+            o.MaxGradientNorm = maxNorm;
+        });
+        bool sawSparse = false;
+        using (var tape = new GradientTape<double>())
+        {
+            var rows = engine.TensorEmbeddingLookup<double, int>(table, new Tensor<int>(ids, new[] { ids.Length }));
+            var loss = engine.ReduceSum(engine.TensorMultiply(rows, weight), null);
+            tape.ComputeGradientsStreaming(loss, new[] { table }, (source, grad) =>
+            {
+                sawSparse |= SparseEmbeddingOptimizerHelpers.HasSparseEmbeddingGrad(source);
+                optimizer.Step(new TapeStepContext<double>(new[] { source }, new Dictionary<Tensor<double>, Tensor<double>>(), 0.0));
+            });
+        }
+
+        Assert.True(sawSparse, "the embedding backward produced no sparse gradient, so the sparse clip was not exercised");
+        var byHand = new Tensor<double>((double[])start.Clone(), new[] { vocab, dim });
+        var gradients = new Dictionary<Tensor<double>, Tensor<double>>(TensorReferenceComparer<Tensor<double>>.Instance)
+        {
+            [byHand] = new Tensor<double>(Array.ConvertAll(dense, g => g * maxNorm / (norm + 1e-6)), new[] { vocab, dim }),
+        };
+        Create("SGD", o => o.EnableGradientClipping = false)
+            .Step(new TapeStepContext<double>(new[] { byHand }, gradients, loss: 0.0));
+        AssertSameStep($"sparse rows [{string.Join(", ", ids)}]", table.ToArray(), byHand.ToArray());
     }
 }

@@ -377,15 +377,18 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
     /// </summary>
     private static void ValidateClassPaperDefaults(SymbolAnalysisContext context, INamedTypeSymbol type)
     {
-        var declared = new HashSet<string>(System.StringComparer.Ordinal);
-        foreach (var property in type.GetMembers().OfType<IPropertySymbol>())
-        {
-            if (HasPaperDefault(property.GetAttributes())) declared.Add(property.Name);
-        }
+        var classLevel = type.GetAttributes()
+            .Where(a => a.AttributeClass?.ToDisplayString() == PaperDefaultAttributeName).ToList();
+        if (classLevel.Count == 0) return;
 
-        foreach (var attribute in type.GetAttributes())
+        // A class-level declaration conflicts with a property-level one on a property this class declares. One on an
+        // inherited property is a restatement for this class, and the nearest declaration wins.
+        var declared = new HashSet<string>(
+            type.GetMembers().OfType<IPropertySymbol>().Where(p => HasPaperDefault(p.GetAttributes())).Select(p => p.Name),
+            System.StringComparer.Ordinal);
+
+        foreach (var attribute in classLevel)
         {
-            if (attribute.AttributeClass?.ToDisplayString() != PaperDefaultAttributeName) continue;
             Location location = attribute.ApplicationSyntaxReference is { } reference
                 ? Location.Create(reference.SyntaxTree, reference.Span)
                 : type.Locations.FirstOrDefault() ?? Location.None;
@@ -397,7 +400,7 @@ public sealed class OptionsFidelityAnalyzer : DiagnosticAnalyzer
             }
 
             string? name = attribute.ConstructorArguments[0].Value as string;
-            string display = type.ToDisplayString() + "." + name;
+            string display = name is null ? type.ToDisplayString() : type.ToDisplayString() + "." + name;
             string? source = attribute.NamedArguments.Where(a => a.Key == "Source").Select(a => a.Value.Value as string).FirstOrDefault();
             if (string.IsNullOrWhiteSpace(source))
             {

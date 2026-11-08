@@ -14,6 +14,8 @@ namespace AiDotNet.Tests.IntegrationTests.Safety;
 /// </summary>
 public class TreeRingWatermarkerPaperTests
 {
+    private const double ApproximationTolerance = 0.01;
+
     private const int Size = 32;
     private const int Radius = 10;
     private static readonly int[] NoiseShape = { 1, 3, Size, Size };
@@ -143,9 +145,21 @@ public class TreeRingWatermarkerPaperTests
         // (317 - 1) / 2 conjugate pairs plus DC.
         Assert.Equal(159, units);
         double sigma2 = energy / units;
+        double eta = distance / sigma2, lambda = keyEnergy / sigma2;
+        int k = 2 * pairs + 1;
         double expected = TreeRingWatermarker<double>.ZFromLogUpperTail(
-            TreeRingWatermarker<double>.NoncentralChiSquaredLogCdf(distance / sigma2, 2 * pairs + 1, keyEnergy / sigma2));
+            TreeRingWatermarker<double>.NoncentralChiSquaredLogCdf(eta, k, lambda));
         double actual = watermarker.PaperChiSquaredZ(new AiDotNet.Tensors.LinearAlgebra.Tensor<double>(unmarked, NoiseShape));
         Assert.Equal(expected, actual, 6);
+
+        // The tail itself, checked independently of the series: Patnaik's two-moment fit, noncentral chi^2_k(lambda)
+        // ~ c chi^2_nu, then Wilson-Hilferty's normal approximation of that chi^2. At k = 317 the fit's z is close to
+        // the exact one: measured 0.3920 against the series' 0.3940, which an independent 60-digit Poisson-mixture
+        // sum also gives (0.393964). The 0.01 allowed is five times that gap.
+        double scale = (k + 2 * lambda) / (k + lambda), nu = (k + lambda) * (k + lambda) / (k + 2 * lambda);
+        double h = 2.0 / (9.0 * nu);
+        double approximate = -(Math.Cbrt(eta / (scale * nu)) - (1 - h)) / Math.Sqrt(h);
+        Assert.True(Math.Abs(expected - approximate) <= ApproximationTolerance,
+            $"eta = {eta:R}, k = {k}, lambda = {lambda:R}: the series gives z = {expected:R}, the approximation {approximate:R}.");
     }
 }

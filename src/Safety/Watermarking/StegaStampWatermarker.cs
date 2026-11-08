@@ -116,8 +116,11 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
     /// <summary>The decoder's output count: one logit per secret bit.</summary>
     private protected virtual int DecoderOutputs => _options.SecretBits;
 
-    /// <inheritdoc />
-    public bool IsReady => true;
+    /// <summary>
+    /// True once the networks have taken a training step (here, or in the model whose state this one copied or
+    /// loaded). Freshly initialised weights hide nothing: they add an arbitrary residual and decode noise.
+    /// </summary>
+    public bool IsReady => _trainingStep > 0;
 
     /// <inheritdoc />
     public bool UsesPublicKey => _key.IsPublic;
@@ -211,7 +214,7 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
     }
 
     /// <inheritdoc />
-    protected override void InitializeLayers()
+    protected sealed override void InitializeLayers()
     {
         int s = _options.ImageSize;
         IActivationFunction<T> relu = new ReLUActivation<T>();
@@ -347,7 +350,7 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
         if (secret is null) throw new ArgumentNullException(nameof(secret));
         if (secret.Count != _options.SecretBits)
             throw new ArgumentException($"Expected {_options.SecretBits} secret bits, got {secret.Count}.", nameof(secret));
-        var batch = AsBatch(image);
+        var batch = SingleImage(image);
         int h = batch.Shape[2], w = batch.Shape[3], s = _options.ImageSize;
         var resized = h == s && w == s ? batch : Engine.Interpolate(batch, new[] { s, s }, InterpolateMode.Bilinear);
         var bits = new Tensor<T>(new[] { 1, secret.Count });
@@ -361,7 +364,7 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
     /// <summary>The decoded bits of <paramref name="image"/> (resized to the model's size if needed).</summary>
     public bool[] DecodeSecret(Tensor<T> image)
     {
-        var probabilities = Predict(Resized(AsBatch(image)));
+        var probabilities = Predict(Resized(SingleImage(image)));
         var bits = new bool[_options.SecretBits];
         for (int i = 0; i < bits.Length; i++) bits[i] = NumOps.ToDouble(probabilities[0, i]) > 0.5;
         return bits;
@@ -435,7 +438,7 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
     // The decoder's logit per scored bit (the codeword's bits; padding excluded).
     private protected double[] DecoderLogits(Tensor<T> image)
     {
-        var logits = DecodeLogits(Resized(AsBatch(image)));
+        var logits = DecodeLogits(Resized(SingleImage(image)));
         int scored = _bch?.CodewordBits ?? _options.SecretBits;
         var values = new double[scored];
         for (int i = 0; i < scored; i++) values[i] = NumOps.ToDouble(logits[0, i]);
@@ -491,6 +494,16 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
         if (image.Rank == 3 && image.Shape[0] == 3) return Engine.Reshape(image, new[] { 1, 3, image.Shape[1], image.Shape[2] });
         if (image.Rank == 4 && image.Shape[1] == 3) return image;
         throw new ArgumentException($"Expected an RGB image, [3, H, W] or [B, 3, H, W]; got [{string.Join(", ", image.Shape.ToArray())}].", nameof(image));
+    }
+
+    // One image, [3, H, W] or [1, 3, H, W], for the methods that encode or score a single image: a larger batch
+    // would fail an opaque reshape (encoding) or be scored on its first image alone (decoding and detection).
+    private protected Tensor<T> SingleImage(Tensor<T> image)
+    {
+        var batch = AsBatch(image);
+        if (batch.Shape[0] != 1)
+            throw new ArgumentException($"Expected one image, [3, H, W] or [1, 3, H, W]; got a batch of {batch.Shape[0]}.", nameof(image));
+        return batch;
     }
 
     private protected Tensor<T> Resized(Tensor<T> batch)
@@ -591,43 +604,39 @@ public partial class StegaStampWatermarker<T> : NeuralNetworkBase<T>, IImageWate
             Engine.Reshape(Engine.TensorSlice(weights, new[] { 3 }, new[] { 1 }), new[] { 1, 1, 1, 1 }), new[] { b, 1, s, s });
         var scale = Engine.TensorAddScalar(
             Engine.TensorMultiply(Engine.TensorBroadcastTo(EdgeFalloff(), new[] { b, 1, s, s }), gain), NumOps.One);
-        Tensor<T>? total = null;
-        for (int c = 0; c < 3; c++)
-        {
-            var term = Engine.TensorMultiplyScalar(
-                Engine.ReduceMean(Engine.TensorSquare(Engine.TensorMultiply(yuv[c], scale)), new[] { 0, 1, 2, 3 }, keepDims: false),
-                NumOps.FromDouble(_options.YuvLossScales[c]));
-            total = total is null ? term : Engine.TensorAdd(total, term);
-        }
-
-        return total!;
+        Tensor<T> Term(int c) => Engine.TensorMultiplyScalar(
+            Engine.ReduceMean(Engine.TensorSquare(Engine.TensorMultiply(yuv[c], scale)), new[] { 0, 1, 2, 3 }, keepDims: false),
+            NumOps.FromDouble(_options.YuvLossScales[c]));
+        return Engine.TensorAdd(Engine.TensorAdd(Term(0), Term(1)), Term(2));
     }
 
     // 1 - falloff, the reference's border map: falloff starts at 1, and rows i and -i (then columns) for i below a
     // quarter of the side are multiplied by (cos(4 pi i / s + pi) + 1) / 2, which rises from 0 at i = 0 to 1 at s / 4.
-    // Row -0 is row 0, so the last row's factor is the one for i = 1, as in the reference.
+    // Row -0 is row 0, so the last row's factor is the one for i = 1, as in the reference. The row pass scales whole
+    // rows and the column pass whole columns, so falloff[y, x] is the product of one edge factor per row and per column.
     private Tensor<T> EdgeFalloff()
     {
         int s = _options.ImageSize;
-        var falloff = new double[s, s];
-        for (int y = 0; y < s; y++)
-            for (int x = 0; x < s; x++) falloff[y, x] = 1.0;
-        double Factor(int i) => (Math.Cos(4 * Math.PI * i / s + Math.PI) + 1) / 2;
-        int Wrap(int i) => i == 0 ? 0 : s - i;
-        for (int i = 0; i < s / 4; i++)
-        {
-            for (int x = 0; x < s; x++) { falloff[Wrap(i), x] *= Factor(i); falloff[i, x] *= Factor(i); }
-        }
-
-        for (int j = 0; j < s / 4; j++)
-        {
-            for (int y = 0; y < s; y++) { falloff[y, Wrap(j)] *= Factor(j); falloff[y, j] *= Factor(j); }
-        }
-
+        double[] edge = EdgeFactors(s);
         var map = new Tensor<T>(new[] { 1, 1, s, s });
         for (int y = 0; y < s; y++)
-            for (int x = 0; x < s; x++) map[0, 0, y, x] = NumOps.FromDouble(1.0 - falloff[y, x]);
+            for (int x = 0; x < s; x++) map[0, 0, y, x] = NumOps.FromDouble(1.0 - edge[y] * edge[x]);
         return map;
+    }
+
+    // The factor the reference's row pass leaves on each row (its column pass leaves the same on each column).
+    internal static double[] EdgeFactors(int s)
+    {
+        var edge = new double[s];
+        for (int i = 0; i < s; i++) edge[i] = 1.0;
+        for (int i = 0; i < s / 4; i++)
+        {
+            double factor = (Math.Cos(4 * Math.PI * i / s + Math.PI) + 1) / 2;
+            edge[i == 0 ? 0 : s - i] *= factor;
+            edge[i] *= factor;
+        }
+
+        return edge;
     }
 
     // [secret, image, critic, edge gain]. The reference's ramps count from the start of training

@@ -6,6 +6,7 @@ using AiDotNet.Optimizers;
 using AiDotNet.Optimizers.Fused;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
+using AiDotNet.Training;
 using Xunit;
 
 namespace AiDotNet.Tests.UnitTests.Optimizers;
@@ -87,11 +88,32 @@ public class RmsPropInitialMeanSquareTests
         Assert.True(((IFusedOptimizerSpec)Create(0.0)).TryGetFusedOptimizerConfig(out _));
     }
 
-    [Fact]
-    public void NegativeStart_IsRejected()
+    /// <summary>Rejected when the options are configured, not at the first state allocation mid-training.</summary>
+    [Theory]
+    [InlineData(-1.0)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void InvalidStart_IsRejected_ByTheOptions(double initial)
     {
-        var optimizer = Create(-1.0);
-        Assert.Throws<ArgumentOutOfRangeException>(() =>
-            optimizer.UpdateParameters(new Vector<double>((double[])Start.Clone()), new Vector<double>((double[])Gradient.Clone())));
+        var options = new RootMeanSquarePropagationOptimizerOptions<double, Tensor<double>, Tensor<double>>();
+        var error = Assert.Throws<ArgumentOutOfRangeException>(() => options.InitialMeanSquare = initial);
+        Assert.Equal(nameof(options.InitialMeanSquare), error.ParamName);
+        Assert.Equal(0.0, options.InitialMeanSquare);
+    }
+
+    /// <summary>Streaming RMSProp is uncentered and starts at zero, so it refuses both variants rather than train another rule.</summary>
+    [Theory]
+    [InlineData(1.0, false)]
+    [InlineData(0.0, true)]
+    public void Streaming_Refuses_ANonZeroStartOrTheCenteredForm(double initial, bool centered)
+    {
+        var optimizer = new RootMeanSquarePropagationOptimizer<float, Tensor<float>, Tensor<float>>(null,
+            new RootMeanSquarePropagationOptimizerOptions<float, Tensor<float>, Tensor<float>>
+            {
+                InitialLearningRate = Lr, InitialMeanSquare = initial, Centered = centered,
+            });
+        var error = Assert.Throws<NotSupportedException>(() => StreamingOptimizerResolver<float>.Create(
+            optimizer, useStreamingDefaults: false, fallbackLearningRate: 0.01, fallbackWeightDecay: 0.0));
+        Assert.Contains("InitialMeanSquare", error.Message);
     }
 }

@@ -79,7 +79,7 @@ public sealed class PaperDefaultAttribute : Attribute
     /// <param name="value">The value the paper states, as for <see cref="PaperDefaultAttribute(object)"/>.</param>
     public PaperDefaultAttribute(string property, object value)
     {
-        Property = property;
+        Property = property ?? throw new ArgumentNullException(nameof(property));
         Value = value;
     }
 

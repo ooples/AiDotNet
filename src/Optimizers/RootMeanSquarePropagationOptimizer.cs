@@ -49,7 +49,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     {
         config = default;
         // The fused kernel's mean-square state starts at zero.
-        if (_options.UseAdaptiveLearningRate || _options.Centered || _options.InitialMeanSquare != 0.0)
+        if (_options.UseAdaptiveLearningRate || _options.Centered || _options.InitialMeanSquare > 0.0)
         {
             return false;
         }
@@ -714,24 +714,25 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     private Vector<T> NewMeanSquare(int length)
     {
         ValidateInitialMeanSquare();
-        return _options.InitialMeanSquare == 0.0
-            ? new Vector<T>(length)
-            : Vector<T>.CreateDefault(length, NumOps.FromDouble(_options.InitialMeanSquare));
+        return _options.InitialMeanSquare > 0.0
+            ? Vector<T>.CreateDefault(length, NumOps.FromDouble(_options.InitialMeanSquare))
+            : new Vector<T>(length);
     }
 
     private Tensor<T> NewTapeMeanSquare(int[] shape, bool onDevice)
     {
         ValidateInitialMeanSquare();
         var state = CreateOptimizerStateTensor(shape, onDevice);
-        if (_options.InitialMeanSquare != 0.0)
+        if (_options.InitialMeanSquare > 0.0)
             Engine.TensorCopy(Engine.TensorAddScalar(state, NumOps.FromDouble(_options.InitialMeanSquare)), state);
         return state;
     }
 
+    // The options' setter rejects these values too; this guards an options type that overrides or bypasses it.
     private void ValidateInitialMeanSquare()
     {
         double v = _options.InitialMeanSquare;
-        if (!(v >= 0.0) || double.IsInfinity(v))
+        if (double.IsNaN(v) || v < 0.0 || double.IsInfinity(v))
             throw new ArgumentOutOfRangeException(nameof(_options.InitialMeanSquare), v,
                 "The initial mean of squared gradients must be finite and zero or positive.");
     }
@@ -757,8 +758,9 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         if (_gpuStateInitialized && _gpuSquaredAvg != null)
             return;
 
+        ValidateInitialMeanSquare();
         var initial = new float[parameterCount];
-        if (_options.InitialMeanSquare != 0.0)
+        if (_options.InitialMeanSquare > 0.0)
             for (int i = 0; i < initial.Length; i++) initial[i] = (float)_options.InitialMeanSquare;
         _gpuSquaredAvg = backend.AllocateBuffer(initial);
 

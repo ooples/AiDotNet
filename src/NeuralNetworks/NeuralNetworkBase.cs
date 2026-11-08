@@ -11039,6 +11039,10 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     // the encoder it judges) train different parameters of the same layers with different optimizers, alternating
     // every step. Through the model's one session each switch dropped the other's compiled plan and moments, so
     // every fused step restarted Adam at t = 1: an update of lr * sign(g). Each optimizer keeps its own slot here.
+    // A failed step resets only its own session: Reset drops that optimizer's slot and the callback reclaims GPU
+    // transients. The model session's callback (OnFusedSessionReset) would drop every slot of the model and
+    // restart every session, discarding the other objective's committed plan and moments and clearing a sticky
+    // disable it had earned.
     private Dictionary<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>, Training.FusedTrainingSession<T>>? _objectiveSessions;
 
     private Training.FusedTrainingSession<T> ObjectiveSession(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
@@ -11046,7 +11050,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         _objectiveSessions ??= new(ReferenceEqualityComparer<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>.Instance);
         if (!_objectiveSessions.TryGetValue(optimizer, out var session))
         {
-            session = new Training.FusedTrainingSession<T>(this, onReset: OnFusedSessionReset, stateKey: optimizer)
+            session = new Training.FusedTrainingSession<T>(this, onReset: ReclaimGpuTransientsAfterFusedFailure, stateKey: optimizer)
             {
                 IsDisabled = FusedSession.IsDisabled,
             };
@@ -15937,13 +15941,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             layer.ResetState();
         }
-        // Give the fused-training path a fresh chance after ResetState — the
+        // Give the fused-training path a fresh chance after ResetState: the
         // user typically calls this between training runs, which is exactly
         // when the sticky-disable from a prior fallback should be cleared.
-        // Also clear the fused-commitment: ResetState is an explicit
-        // "start training over" signal, so any plan-embedded Adam/SGD state
-        // is no longer needed, and the next run can engage fused fresh.
-        RestartFusedSessions(disabled: FusedTrainingDisabledByConfiguration);
+        // ResetState clears recurrent state, not optimizer state: the eager
+        // optimizer keeps its moments across it, so a committed plan keeps its
+        // own too (no retrace per sequence) and stays committed, so a step that
+        // cannot run fused fails loudly rather than continuing eagerly from the
+        // eager optimizer's older moments. ResetBaseTrainOptimizerState is the
+        // reset that also drops the plan.
+        FusedSession.Rearm(disabled: FusedTrainingDisabledByConfiguration);
+        if (_objectiveSessions is not null)
+        {
+            foreach (var session in _objectiveSessions.Values)
+                session.Rearm(disabled: FusedTrainingDisabledByConfiguration);
+        }
     }
 
     /// <summary>

@@ -24,6 +24,9 @@ public class SynthIdImageDecisionTests
 
     private const double LogitTolerance = 1e-6;
 
+    private static double[] SingleImageScores(SynthIdImageWatermarker<float> model, Tensor<float> images) =>
+        Enumerable.Range(0, images.Shape[0]).Select(i => model.DetectionLogits(images.Slice(i))[0]).ToArray();
+
     [Fact(Timeout = 120000)]
     public async System.Threading.Tasks.Task Decide_MatchesBruteForceConformalPValues_AndTheThreeStateRule()
     {
@@ -34,7 +37,8 @@ public class SynthIdImageDecisionTests
         var clean = Images(1, 24);
         var marked = Images(2, 24);
         model.Calibrate(clean, marked);
-        double[] cleanScores = model.DetectionLogits(clean), markedScores = model.DetectionLogits(marked);
+        // Scored one image at a time, as Calibrate and Decide score them, so the counts compare the same values.
+        double[] cleanScores = SingleImageScores(model, clean), markedScores = SingleImageScores(model, marked);
 
         var probes = Images(3, 12);
         var probeScores = model.DetectionLogits(probes);

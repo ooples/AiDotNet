@@ -139,7 +139,7 @@ public class TreeRingWatermarkerTests : WatermarkRoundTripTestBase<TreeRingWater
         // while the paper's chi-squared z is biased upward because sigma^2 comes from the scored modes themselves.
         var marked = Embed(TestKey, Sample(31));
         var noise = Watermarker(TestKey).InvertToNoise(marked.Image);
-        double sumMatched = 0, sumPaper = 0, squareMatched = 0;
+        double sumMatched = 0, sumPaper = 0, squareMatched = 0, sumGap = 0, squareGap = 0;
         const int keys = 100;
         for (int i = 0; i < keys; i++)
         {
@@ -148,14 +148,20 @@ public class TreeRingWatermarkerTests : WatermarkRoundTripTestBase<TreeRingWater
             sumMatched += m;
             squareMatched += m * m;
             sumPaper += c;
+            sumGap += c - m;
+            squareGap += (c - m) * (c - m);
         }
 
         double meanMatched = sumMatched / keys, meanPaper = sumPaper / keys;
         double sdMatched = Math.Sqrt(squareMatched / keys - meanMatched * meanMatched);
         Assert.True(Math.Abs(meanMatched) < 0.3 && sdMatched > 0.7 && sdMatched < 1.3,
             $"Matched-filter foreign-key z: mean {meanMatched:F3}, sd {sdMatched:F3}.");
-        Assert.True(meanPaper > meanMatched,
-            $"The paper's chi-squared foreign-key z averaged {meanPaper:F3}, the matched filter {meanMatched:F3}.");
+        // The bias must stand out of the Monte Carlo noise: the paired gap's mean over three standard errors.
+        double meanGap = sumGap / keys;
+        double gapStandardError = Math.Sqrt((squareGap / keys - meanGap * meanGap) / (keys - 1));
+        Assert.True(meanGap > 3 * gapStandardError,
+            $"The paper's chi-squared foreign-key z averaged {meanPaper:F3}, the matched filter {meanMatched:F3}: "
+            + $"a gap of {meanGap:F3} with standard error {gapStandardError:F3}.");
     }
 
     [Fact]

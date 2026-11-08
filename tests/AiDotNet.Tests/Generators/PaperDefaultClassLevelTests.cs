@@ -162,13 +162,34 @@ public class SubjectOptions : SequenceOptions
         PaperDefaultsHarness.AssertConstructorDefaultsMatchPaper(typeof(PaperDefaultClassLevelTests), typeof(DerivedOptions));
     }
 
+    // ADNOPT003 rejects declaring one property both ways on one class (the test above); the harness still has an order
+    // for that case, pinned here with the diagnostic suppressed.
+#pragma warning disable ADNOPT003
+    [PaperDefault(nameof(MaxLength), 256, Source = "class: Sec. 4")]
+    public class BothFormsOptions
+    {
+        [PaperDefault(512, Source = "property: Sec. 5")]
+        public int MaxLength { get; set; } = 256;
+    }
+#pragma warning restore ADNOPT003
+
+    [Fact(Timeout = 60000)]
+    public async Task Harness_OnOneClass_TheClassLevelDeclarationComesFirst()
+    {
+        await Task.Yield();
+        var declaration = Assert.Single(PaperDefaultsHarness.Declarations(typeof(BothFormsOptions)));
+        Assert.Equal("MaxLength", declaration.Property.Name);
+        Assert.Equal(256, declaration.Declaration.Value);
+        Assert.Equal("class: Sec. 4", declaration.Declaration.Source);
+    }
+
     [Fact(Timeout = 60000)]
     public async Task Harness_ReportsAClassLevelValueTheConstructorDoesNotShip()
     {
         await Task.Yield();
         var declarations = PaperDefaultsHarness.Declarations(typeof(DriftedOptions)).Select(d => d.Property.Name).ToArray();
         Assert.Equal(new[] { "VocabSize", "NumLayers" }, declarations);
-        var failure = Assert.ThrowsAny<Exception>(() =>
+        var failure = Assert.Throws<Xunit.Sdk.TrueException>(() =>
             PaperDefaultsHarness.AssertConstructorDefaultsMatchPaper(typeof(PaperDefaultClassLevelTests), typeof(DriftedOptions)));
         Assert.Contains("VocabSize: paper value 50277 (drifted: Table 1), constructor default 65536", failure.Message);
     }
