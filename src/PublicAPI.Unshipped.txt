@@ -997,3 +997,5 @@ AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.TryComputeFusedLoss(AiDotNet.Tensor
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.GetLastLoss() -> T
 AiDotNet.Diffusion.Attention.DiffusionAttention<T>.DiffusionAttention(int channels, int numHeads = 8, int spatialSize = 64, bool useCausalMask = false, bool residualGroupNorm = false) -> void
 *REMOVED*AiDotNet.Diffusion.Attention.DiffusionAttention<T>.DiffusionAttention(int channels, int numHeads = 8, int spatialSize = 64, int flashAttentionThreshold = 256, bool useCausalMask = false) -> void
+override AiDotNet.Diffusion.DDPMModel<T>.CanPredictFromTimestepTensor.get -> bool
+override AiDotNet.Diffusion.DDPMModel<T>.PredictTrainingNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! noisySample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! timesteps, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
