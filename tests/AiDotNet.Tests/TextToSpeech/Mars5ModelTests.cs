@@ -16,6 +16,31 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </summary>
 public class Mars5ModelTests
 {
+    [Theory]
+    [InlineData("ArBeta1", -.1)]
+    [InlineData("ArBeta1", 1)]
+    [InlineData("ArBeta1", double.NaN)]
+    [InlineData("ArBeta1", double.PositiveInfinity)]
+    [InlineData("ArBeta2", -.1)]
+    [InlineData("ArBeta2", 1)]
+    [InlineData("ArBeta2", double.NaN)]
+    [InlineData("ArBeta2", double.PositiveInfinity)]
+    [InlineData("NarBeta1", -.1)]
+    [InlineData("NarBeta1", 1)]
+    [InlineData("NarBeta1", double.NaN)]
+    [InlineData("NarBeta1", double.PositiveInfinity)]
+    [InlineData("NarBeta2", -.1)]
+    [InlineData("NarBeta2", 1)]
+    [InlineData("NarBeta2", double.NaN)]
+    [InlineData("NarBeta2", double.PositiveInfinity)]
+    public void InvalidStageAdamBetasAreRejectedBeforeTraining(string option, double value)
+    {
+        var options = Tiny(Mars5Stage.Autoregressive);
+        typeof(MARS5TTSOptions).GetProperty(option)!.SetValue(options, value);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new MARS5TTS<double>(new NeuralNetworkArchitecture<double>(
+            InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options));
+    }
+
     private static MARS5TTSOptions Tiny(Mars5Stage stage) => new()
     {
         CurrentStage = stage, HiddenDim = 16, NumHeads = 2, ArLayers = 1, ArFeedForward = 32, ArSpeakerLayers = 1, SlidingWindow = 512,

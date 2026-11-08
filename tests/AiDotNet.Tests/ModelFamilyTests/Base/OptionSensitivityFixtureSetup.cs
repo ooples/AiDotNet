@@ -47,6 +47,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
             : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> ? "musicgen-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> ? "glmvoice-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.MARS5TTS<T> ? "mars5-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.SeedTTS<T> ? "seedtts-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3<T> ? "naturalspeech3-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.VoiceCraft<T> ? "voicecraft-" + option
@@ -135,6 +136,10 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.MARS5TTS<T> mars5
+            && Mars5OptionFixture.Observe(mars5, option) is { } marsObservation)
+            return marsObservation;
+
         if (network is AiDotNet.TextToSpeech.CodecBased.SeedTTS<T> seedTts
             && SeedTtsOptionFixture.Observe(seedTts, option) is { } seedObservation)
             return seedObservation;
@@ -572,6 +577,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.MARS5TTS<T> mars5 && Mars5OptionFixture.IsNarOption(option))
+        {
+            Mars5OptionFixture.Train(mars5);
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.CodecBased.SeedTTS<T> seedTts)
         {
             SeedTtsOptionFixture.Train(seedTts);
@@ -689,6 +699,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions mars5)
+            Mars5OptionFixture.PrepareOptions(mars5, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.SeedTTSOptions seedTts)
             SeedTtsOptionFixture.PrepareOptions(seedTts, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech3Options naturalSpeech)
