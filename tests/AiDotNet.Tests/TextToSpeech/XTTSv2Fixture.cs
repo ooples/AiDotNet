@@ -11,11 +11,23 @@ internal static class XTTSv2Fixture
 {
     private static readonly Lazy<string> Tokenizer = new(CreateTokenizer);
 
-    internal static XTTSv2<T> Create<T>() =>
-        new(Architecture<T>(), Configure(new XTTSv2Options()));
+    internal static XTTSv2<T> Create<T>() => Create<T>(null);
 
-    internal static XTTSv2Clone<T> CreateClone<T>() =>
-        new(Architecture<T>(), Configure(new XTTSv2CloneOptions { MinReferenceDurationSec = 0.1 }));
+    internal static XTTSv2<T> Create<T>(Action<XTTSv2Options>? prepare)
+    {
+        var options = Configure(new XTTSv2Options());
+        prepare?.Invoke(options);
+        return new(Architecture<T>(), options);
+    }
+
+    internal static XTTSv2Clone<T> CreateClone<T>() => CreateClone<T>(null);
+
+    internal static XTTSv2Clone<T> CreateClone<T>(Action<XTTSv2Options>? prepare)
+    {
+        var options = Configure(new XTTSv2CloneOptions { MinReferenceDurationSec = 0.1 });
+        prepare?.Invoke(options);
+        return new(Architecture<T>(), options);
+    }
 
     private static NeuralNetworkArchitecture<T> Architecture<T>() =>
         new(InputType.OneDimensional, NeuralNetworkTaskType.Generative, inputSize: 16, outputSize: 16)
