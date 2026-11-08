@@ -263,7 +263,7 @@ public partial class AiModelBuilder<T, TInput, TOutput>
     /// class-index targets are shorter than the logits (the vector loss refused them), and a batch of rows
     /// read as one vector is one distribution, not a mean of per-row losses.
     /// </summary>
-    private static T SampleLoss(IFullModel<T, TInput, TOutput> model, ILossFunction<T> lossFunction, TInput x, TOutput y)
+    internal static T SampleLoss(IFullModel<T, TInput, TOutput> model, ILossFunction<T> lossFunction, TInput x, TOutput y)
     {
         // Only the host scalar leaves this method. On a GPU engine Predict keeps its output on the device and the loss
         // adds more device results ([rows, vocabulary] for an LM head: 805 MB at 4096 x 49152). Without a scope they

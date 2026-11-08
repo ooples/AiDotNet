@@ -874,8 +874,11 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         _embeddingGradient = null;
     }
 
-    /// <summary>Its forward caches serve only the next backward and are rewritten by every forward.</summary>
-    internal override bool KeepsResultsBetweenCalls => false;
+    /// <summary>
+    /// Its forward caches serve only the next backward and are rewritten by every forward. Only this exact type has been
+    /// checked: a derived layer may keep more, so it counts as keeping a result.
+    /// </summary>
+    internal override bool KeepsResultsBetweenCalls => GetType() != typeof(EmbeddingLayer<T>);
 
     public override void ResetState()
     {

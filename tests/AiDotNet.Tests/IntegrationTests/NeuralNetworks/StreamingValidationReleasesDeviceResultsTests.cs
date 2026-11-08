@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -91,6 +90,48 @@ public class StreamingValidationReleasesDeviceResultsTests
         finally { AiDotNetEngine.Current = previous; }
     }
 
+    /// <summary>
+    /// With ALiBi the attention weights are computed even in eval mode, and with the auxiliary loss on the layer keeps them
+    /// for <see cref="MultiHeadAttentionLayer{T}.ComputeAuxiliaryLoss"/>, which reads them after the forward returned.
+    /// Validation must leave them alive. Today that path computes the weights on the host, which no scope frees, so the
+    /// layer declaring it keeps them (asserted first) is what protects a kernel that returns them on the device.
+    /// </summary>
+    [SkippableFact]
+    public void Validation_keeps_the_attention_weights_the_auxiliary_loss_reads()
+    {
+        using var gpu = new DirectGpuTensorEngine();
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+        var previous = AiDotNetEngine.Current;
+        AiDotNetEngine.Current = gpu;
+        try
+        {
+            var (network, attention) = AttentionNetwork();
+            Assert.False(network.ReleasesPredictResults, "The auxiliary loss reads weights a forward kept.");
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(20261108);
+            var x = new Tensor<float>(new[] { 2, Sequence, Heads * HeadDimension });
+            var y = new Tensor<float>(new[] { 2, Sequence, Heads * HeadDimension });
+            for (int i = 0; i < x.Length; i++)
+            {
+                x.SetFlat(i, (float)(rng.NextDouble() * 2 - 1));
+                y.SetFlat(i, (float)(rng.NextDouble() * 2 - 1));
+            }
+
+            float firstLoss = Loss(network, x, y);
+            float firstAuxiliary = attention.ComputeAuxiliaryLoss();
+            Assert.NotEqual(0f, firstAuxiliary); // the weights were cached and read, not skipped
+            for (int b = 0; b < Batches; b++)
+            {
+                using (TensorScope.Begin())
+                    gpu.TensorMultiply(x, x);
+                Assert.Equal(firstLoss, Loss(network, x, y));
+                Assert.Equal(firstAuxiliary, attention.ComputeAuxiliaryLoss());
+            }
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
     [Fact]
     public void Only_networks_whose_layers_keep_nothing_release_their_predict_results()
     {
@@ -105,6 +146,26 @@ public class StreamingValidationReleasesDeviceResultsTests
             .Where(layer => layer is not LayerBase<float> { KeepsResultsBetweenCalls: false })
             .Select(layer => layer.GetType().Name));
         Assert.True(transformer.ReleasesPredictResults, $"Default transformer layers that keep a result: {keeping}.");
+
+        // Plain attention keeps only backward caches; the auxiliary loss and ALiBi each make it keep a result.
+        Assert.False(new MultiHeadAttentionLayer<float>(Heads, HeadDimension).KeepsResultsBetweenCalls);
+        Assert.True(AttentionNetwork().Attention.KeepsResultsBetweenCalls);
+        var alibi = new MultiHeadAttentionLayer<float>(Heads, HeadDimension);
+        alibi.ConfigurePositionalEncoding(PositionalEncodingType.ALiBi);
+        Assert.True(alibi.KeepsResultsBetweenCalls);
+    }
+
+    private const int Sequence = 4, Heads = 4, HeadDimension = 8;
+
+    private static (NeuralNetwork<float> Network, MultiHeadAttentionLayer<float> Attention) AttentionNetwork()
+    {
+        var attention = new MultiHeadAttentionLayer<float>(Heads, HeadDimension) { UseAuxiliaryLoss = true };
+        attention.ConfigurePositionalEncoding(PositionalEncodingType.ALiBi);
+        var architecture = new NeuralNetworkArchitecture<float>(
+            inputType: InputType.TwoDimensional, taskType: NeuralNetworkTaskType.Regression,
+            inputHeight: Sequence, inputWidth: Heads * HeadDimension, outputSize: Heads * HeadDimension,
+            layers: new List<ILayer<float>> { attention });
+        return (new NeuralNetwork<float>(architecture), attention);
     }
 
     private static NeuralNetwork<float> Network(ILayer<float>? first = null)
@@ -134,15 +195,8 @@ public class StreamingValidationReleasesDeviceResultsTests
     }
 
     /// <summary>The per-batch loss of AiModelBuilder's streaming validation (EvaluateStreamingValidationAsync).</summary>
-    private static float Loss(NeuralNetwork<float> network, Tensor<float> x, Tensor<float> y)
-    {
-        var sampleLoss = typeof(AiModelBuilder<float, Tensor<float>, Tensor<float>>).GetMethod(
-            "SampleLoss", BindingFlags.NonPublic | BindingFlags.Static)
-            ?? throw new InvalidOperationException("AiModelBuilder has no SampleLoss.");
-        return sampleLoss.Invoke(null, new object[] { network, network.DefaultLossFunction, x, y }) is float loss
-            ? loss
-            : throw new InvalidOperationException("SampleLoss returned no float.");
-    }
+    private static float Loss(NeuralNetwork<float> network, Tensor<float> x, Tensor<float> y) =>
+        AiModelBuilder<float, Tensor<float>, Tensor<float>>.SampleLoss(network, network.DefaultLossFunction, x, y);
 
     /// <summary>Adds an offset it builds on the device from its first input and keeps for every later call.</summary>
     [AiDotNet.Attributes.ElementWiseShape]

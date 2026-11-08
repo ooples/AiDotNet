@@ -612,8 +612,11 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
 
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
 
-    /// <summary>Its forward caches serve only the next backward and are rewritten by every forward.</summary>
-    internal override bool KeepsResultsBetweenCalls => false;
+    /// <summary>
+    /// Its forward caches serve only the next backward and are rewritten by every forward. Only this exact type has been
+    /// checked: a derived layer may keep more, so it counts as keeping a result.
+    /// </summary>
+    internal override bool KeepsResultsBetweenCalls => GetType() != typeof(LayerNormalizationLayer<T>);
 
     public override void ResetState()
     {

@@ -262,8 +262,11 @@ public partial class ActivationLayer<T> : LayerBase<T>, IShapeContract
         return ActivationHelper.ApplyActivation(activation, input, Engine);
     }
 
-    /// <summary>Its forward caches serve only the next backward and are rewritten by every forward.</summary>
-    internal override bool KeepsResultsBetweenCalls => false;
+    /// <summary>
+    /// Its forward caches serve only the next backward and are rewritten by every forward. Only this exact type has been
+    /// checked: a derived layer may keep more, so it counts as keeping a result.
+    /// </summary>
+    internal override bool KeepsResultsBetweenCalls => GetType() != typeof(ActivationLayer<T>);
 
     /// <summary>
     /// Clears the layer's memory of previous inputs.

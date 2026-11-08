@@ -841,9 +841,10 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
 
     /// <summary>
     /// Its forward caches serve only the next backward; the fused-linear scratch it reuses across calls is detached from
-    /// any open <see cref="AiDotNet.Tensors.Engines.TensorScope"/> each time it is written.
+    /// any open <see cref="AiDotNet.Tensors.Engines.TensorScope"/> each time it is written. Only this exact type has been
+    /// checked: a derived layer may keep more, so it counts as keeping a result.
     /// </summary>
-    internal override bool KeepsResultsBetweenCalls => false;
+    internal override bool KeepsResultsBetweenCalls => GetType() != typeof(FeedForwardLayer<T>);
 
     public override void ResetState()
     {
