@@ -143,6 +143,11 @@ internal static class LocalObjectiveGradientComputer<T>
             }
             rule.ApplyAuxiliaryGradients(auxGrads);
 
+            // The output objective and prediction outlive this tape (the caller reads the loss value and the
+            // prediction's shape). Only the loss handed to ComputeGradients is kept automatically; on a GPU engine the
+            // rest are released with the tape, so reading the loss threw "GPU intermediate of a finished GradientTape".
+            tape.Retain(outputObjective);
+            tape.Retain(prediction);
             return new LocalObjectiveGradients<T>(grads, outputObjective, prediction, hiddenIdx.Count, locals);
         }
         finally
