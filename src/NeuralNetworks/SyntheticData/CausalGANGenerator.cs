@@ -971,7 +971,7 @@ public partial class CausalGANGenerator<T> : NeuralSyntheticTabularGeneratorBase
         }
         double constraintValue = trace - d;
 
-        // Gradient: dh/dW = 2 * e^(W hadamard W) hadamard W
+        // Gradient: dh/dW = 2 * transpose(e^(W hadamard W)) hadamard W
         var gradient = new double[d, d];
         for (int i = 0; i < d; i++)
         {
