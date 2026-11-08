@@ -9,6 +9,22 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// <summary>Paper-level invariants and an executable miniature of DiTTo-TTS (Lee et al., 2024).</summary>
 public sealed class DiTToTTSPaperTests
 {
+    [Theory]
+    [InlineData("HiddenDim", 16)]
+    [InlineData("EncoderDim", 16)]
+    [InlineData("DecoderDim", 16)]
+    [InlineData("NumDecoderLayers", 2)]
+    public void SharedWidthAndDepthOptionsReachTheNativeTransformer(string option, int value)
+    {
+        using var control = Tiny();
+        var options = TinyOptions();
+        typeof(DiTToTTSOptions).GetProperty(option)!.SetValue(options, value);
+        using var changed = new DiTToTTS<double>(new NeuralNetworkArchitecture<double>(
+            InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
+        Assert.Equal(value, typeof(DiTToTTSOptions).GetProperty(option)!.GetValue(changed.GetOptions()));
+        Assert.NotEqual(control.GetParameters().Length, changed.GetParameters().Length);
+    }
+
     [Fact]
     public void MelVae_LaterInputsCannotChangeEarlierEncodedOrDecodedFrames()
     {

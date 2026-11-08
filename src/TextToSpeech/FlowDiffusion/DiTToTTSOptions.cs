@@ -105,9 +105,9 @@ public class DiTToTTSOptions : EndToEndTtsOptions
     public int RvqVocabulary { get; set; } = 1024;
 
     /// <summary>Gets or sets the feature width of the diffusion transformer hidden. Defaults to <c>768</c>.</summary>
-    public int DiTHiddenDim { get; set; } = 768;
+    public int DiTHiddenDim { get => HiddenDim; set => HiddenDim = value; }
     /// <summary>Gets or sets the number of layers in the diffusion transformer. Defaults to <c>12</c>.</summary>
-    public int DiTLayers { get; set; } = 12;
+    public int DiTLayers { get => NumDecoderLayers; set => NumDecoderLayers = value; }
     /// <summary>Gets or sets the number of attention heads in the diffusion transformer. Defaults to <c>12</c>.</summary>
     public int DiTHeads { get; set; } = 12;
     /// <summary>Gets or sets the diffusion transformer feed forward multiplier. Defaults to <c>4</c>.</summary>
