@@ -43,6 +43,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => option == nameof(AiDotNet.Models.Options.ModelOptions.Seed) ? "model-options-seed"
+            : network is AiDotNet.Finance.Forecasting.StateSpace.Hippo<T> && option == "TimescaleMax" ? "hippo-timescale-clamp"
+            : network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> && option == "ConfidenceWindow" ? "ctc-segmentation-confidence"
             : network is AiDotNet.TextToSpeech.Latest.MegaTTS3<T> ? "mega-" + option
             : network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> ? "spirit-" + option
             : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> ? "musicgen-" + option
@@ -146,6 +148,8 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> segmentation && option == "ConfidenceWindow")
+            return AiDotNet.Tests.Audio.CtcSegmentationOptionFixture.Observe(segmentation);
         if (AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Handles(network))
             return AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Observe(network);
 
@@ -753,6 +757,13 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentationOptions segmentation && option == "ConfidenceWindow")
+            segmentation.ConfidenceWindow = 2;
+        // Infinity's only finite generic candidate is 1, above every LegS step 1/(t+1).
+        // A finite cap below one exercises the upper-clamp contract.
+        if (option == "TimescaleMax" && options.GetType().IsGenericType
+            && options.GetType().GetGenericTypeDefinition() == typeof(AiDotNet.Models.Options.HippoOptions<>))
+            options.GetType().GetProperty("TimescaleMax")!.SetValue(options, .1);
         AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.PrepareOptions(options, option);
         if (options is AiDotNet.TextToSpeech.MultiModal.AudioPaLMOptions audioPalm)
             AudioPalmAsrOptionFixture.PrepareOptions(audioPalm, option);

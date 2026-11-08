@@ -1853,7 +1853,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.Finance.Forecasting.StateSpace.Hippo`1::ModelType", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.StateSpace.Hippo`1::SeasonalPeriod", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.StateSpace.Hippo`1::TimeStep", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.Finance.Forecasting.StateSpace.Hippo`1::TimescaleMax", OptionSensitivityOutcome.NoValidPerturbation },
             { "AiDotNet.Finance.Forecasting.StateSpace.Hippo`1::UseEarlyStopping", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.StateSpace.Hippo`1::UseIntercept", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.StateSpace.Mamba2`1::AutocorrelationCorrection", OptionSensitivityOutcome.Insensitive },
