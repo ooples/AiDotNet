@@ -24,6 +24,23 @@ public class MatchaTTSPaperTests
 {
     private const int MelBins = 8;
 
+    [Fact(Timeout = 120000)]
+    public void ConfiguredLearningRateChangesNativeUpdates()
+    {
+        double[] Fit(double learningRate)
+        {
+            using var template = CreateModel();
+            var options = new MatchaTTSOptions((MatchaTTSOptions)template.GetOptions()) { LearningRate = learningRate };
+            using var model = new MatchaTTS<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+                NeuralNetworkTaskType.Regression, inputSize: 8, outputSize: MelBins) { RandomSeed = 11 }, options);
+            for (int i = 0; i < 2; i++) model.Train(Tokens(5), Mel(14));
+            return model.GetParameters().ToArray();
+        }
+        var control = Fit(1e-4);
+        Assert.Equal(control, Fit(1e-4));
+        Assert.False(control.SequenceEqual(Fit(2e-4)));
+    }
+
     private static MatchaTTS<double> CreateModel(int steps = 3) => new(
         new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
             inputSize: 8, outputSize: MelBins) { RandomSeed = 11 },
