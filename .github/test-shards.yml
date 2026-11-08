@@ -1728,6 +1728,8 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.StyleTransfer.UniVSTComponentTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.VaeDecodeAliasingTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.VaeTapeTrainingTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiffusionAttentionSingleWeightSetTests.|
+      FullyQualifiedName~AiDotNet.Tests.UnitTests.Diffusion.DiffusionBlockInitializationTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.APNet2NetworkGradientTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ArenaLazyWeightPinningTests.|
       FullyQualifiedName~AiDotNet.Tests.UnitTests.NeuralNetworks.ChainedForwardForTrainingTapeTests.|
