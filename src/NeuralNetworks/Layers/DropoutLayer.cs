@@ -340,6 +340,9 @@ public partial class DropoutLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_dropoutMask);
     }
 
+    /// <summary>Its forward caches serve only the next backward and are rewritten by every forward.</summary>
+    internal override bool KeepsResultsBetweenCalls => false;
+
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>

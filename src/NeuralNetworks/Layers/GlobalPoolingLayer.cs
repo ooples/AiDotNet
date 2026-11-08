@@ -523,6 +523,9 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
         };
     }
 
+    /// <summary>Pooling reads only its input; nothing it computes is kept for a later call.</summary>
+    internal override bool KeepsResultsBetweenCalls => false;
+
     /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>

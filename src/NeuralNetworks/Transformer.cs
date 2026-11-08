@@ -155,6 +155,12 @@ public partial class Transformer<T> : TokenLanguageModelLayoutBase<T>, IAuxiliar
     public Tensor<T>? AttentionMask { get; set; }
 
     /// <summary>
+    /// Each Predict frees its GPU intermediates as it ends, provided no layer keeps a tensor between calls
+    /// (<see cref="NeuralNetworkBase{T}.LayersKeepNoResultsBetweenCalls"/>); otherwise the model keeps the default.
+    /// </summary>
+    protected override bool ReleasesInferenceIntermediates => LayersKeepNoResultsBetweenCalls();
+
+    /// <summary>
     /// The optimizer used to update the Transformer's parameters during training.
     /// </summary>
     /// <remarks>

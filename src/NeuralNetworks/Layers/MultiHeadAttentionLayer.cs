@@ -1986,6 +1986,9 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _queryWeightsGradient = null; _keyWeightsGradient = null; _valueWeightsGradient = null;
     }
 
+    /// <summary>Its forward caches serve only the next backward and are rewritten by every forward.</summary>
+    internal override bool KeepsResultsBetweenCalls => false;
+
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

@@ -7074,6 +7074,27 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected virtual bool ReleasesInferenceIntermediates => false;
 
     /// <summary>
+    /// Whether a caller may free every GPU result a <see cref="Predict(Tensor{T})"/> call creates once it has read the
+    /// output (<see cref="ReleasesInferenceIntermediates"/>): the model keeps none of them for a later call.
+    /// </summary>
+    internal bool ReleasesPredictResults => ReleasesInferenceIntermediates;
+
+    /// <summary>
+    /// True when the network has layers and every one has been checked to keep no GPU result between calls
+    /// (<see cref="LayerBase{T}.KeepsResultsBetweenCalls"/>); a layer of any other kind counts as keeping one.
+    /// </summary>
+    protected bool LayersKeepNoResultsBetweenCalls()
+    {
+        if (Layers.Count == 0) return false;
+        foreach (var layer in Layers)
+        {
+            if (layer is not LayerBase<T> checkedLayer || checkedLayer.KeepsResultsBetweenCalls) return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Whether this model sizes its layers from its options rather than from its architecture, so an architecture
     /// stating other sizes must be refused rather than ignored (#2147).
     /// </summary>

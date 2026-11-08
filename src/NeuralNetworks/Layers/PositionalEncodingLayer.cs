@@ -395,6 +395,9 @@ public partial class PositionalEncodingLayer<T> : LayerBase<T>, IShapeContract
         return result;
     }
 
+    /// <summary>Its forward caches serve only the next backward and are rewritten by every forward.</summary>
+    internal override bool KeepsResultsBetweenCalls => false;
+
     /// <summary>
     /// Resets the internal state of the positional encoding layer.
     /// </summary>

@@ -269,10 +269,16 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // adds more device results ([rows, vocabulary] for an LM head: 805 MB at 4096 x 49152). Without a scope they
         // were freed only when a garbage collection finalized them, and small managed wrappers rarely trigger one:
         // 16 validation batches filled a 12 GB device and every later training step waited on buffer frees.
-        using var scope = Tensors.Engines.TensorScope.Begin();
+        // A scope frees every GPU result created inside it, so Predict runs in one only for a model that keeps none of
+        // them for a later call; a generation cache or carried state would be freed under the model. The loss results
+        // belong to validation alone and are always freed.
+        using var predictScope = model is NeuralNetworks.NeuralNetworkBase<T> { ReleasesPredictResults: true }
+            ? Tensors.Engines.TensorScope.Begin()
+            : null;
         var prediction = model.Predict(x);
         if (prediction is Tensor<T> predicted && y is Tensor<T> target)
         {
+            using var lossScope = Tensors.Engines.TensorScope.Begin();
             return lossFunction.ComputeTapeLoss(predicted, target).Data.Span[0];
         }
 

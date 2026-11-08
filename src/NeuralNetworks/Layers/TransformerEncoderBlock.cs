@@ -280,6 +280,11 @@ public partial class TransformerEncoderBlock<T> : LayerBase<T>, IShapeContract
         return postNorm ? _norm2.Forward(output) : output;
     }
 
+    /// <summary>The block itself keeps nothing between calls; it keeps whatever one of its sublayers keeps.</summary>
+    internal override bool KeepsResultsBetweenCalls =>
+        new LayerBase<T>?[] { _attention, _norm1, _ffnUp, _ffnDown, _norm2, _attnDropout, _ffnDropout }
+            .Any(layer => layer is not null && layer.KeepsResultsBetweenCalls);
+
     /// <inheritdoc/>
     public override void SetTrainingMode(bool isTraining)
     {

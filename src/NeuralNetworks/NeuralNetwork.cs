@@ -59,6 +59,12 @@ namespace AiDotNet.NeuralNetworks;
     [ResearchPaper("Learning Internal Representations by Error Propagation", "https://doi.org/10.21236/ADA164453")]
 public partial class NeuralNetwork<T> : SequentialVectorModelLayoutBase<T>
 {
+    /// <summary>
+    /// Each Predict frees its GPU intermediates as it ends, provided no layer keeps a tensor between calls
+    /// (<see cref="NeuralNetworkBase{T}.LayersKeepNoResultsBetweenCalls"/>); otherwise the model keeps the default.
+    /// </summary>
+    protected override bool ReleasesInferenceIntermediates => LayersKeepNoResultsBetweenCalls();
+
     private readonly NeuralNetworkDefaultOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 

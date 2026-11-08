@@ -977,3 +977,7 @@ AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Name
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1) -> void
 AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.TryComputeFusedLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Interfaces.ILossFunction<T>! loss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+override AiDotNet.NeuralNetworks.NeuralNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+override AiDotNet.NeuralNetworks.FeedForwardNeuralNetwork<T>.ReleasesInferenceIntermediates.get -> bool
+override AiDotNet.NeuralNetworks.Transformer<T>.ReleasesInferenceIntermediates.get -> bool
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.LayersKeepNoResultsBetweenCalls() -> bool

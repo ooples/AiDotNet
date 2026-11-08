@@ -874,6 +874,9 @@ public partial class EmbeddingLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, I
         _embeddingGradient = null;
     }
 
+    /// <summary>Its forward caches serve only the next backward and are rewritten by every forward.</summary>
+    internal override bool KeepsResultsBetweenCalls => false;
+
     public override void ResetState()
     {
         // Clear gradients from the backward pass

@@ -612,6 +612,9 @@ public partial class LayerNormalizationLayer<T> : LayerBase<T>, IShapeContract
 
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
 
+    /// <summary>Its forward caches serve only the next backward and are rewritten by every forward.</summary>
+    internal override bool KeepsResultsBetweenCalls => false;
+
     public override void ResetState()
     {
 
