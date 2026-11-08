@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using AiDotNet.Audio.Generation;
 using AiDotNet.Enums;
@@ -38,6 +39,47 @@ public class SoundStormPaperTests
     private static SoundStorm<double> Create(SoundStormOptions? options = null) =>
         new(new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
             inputSize: 1, outputSize: 1) { RandomSeed = 7 }, options ?? Tiny());
+
+    [Theory]
+    [InlineData(SoundStormTrainingStage.TextToSemantic, 0.0)]
+    [InlineData(SoundStormTrainingStage.SemanticToAcoustic, 0.0)]
+    [InlineData(SoundStormTrainingStage.TextToSemantic, 0.1)]
+    [InlineData(SoundStormTrainingStage.SemanticToAcoustic, 0.1)]
+    public void NativeCosineScheduleAdvancesPerUpdate(SoundStormTrainingStage stage, double decay)
+    {
+        var options = Tiny();
+        options.WarmupSteps = 0;
+        options.TrainingSteps = 4;
+        options.WeightDecay = decay;
+        using var model = Create(options);
+        model.CurrentStage = stage;
+        var optimizer = (AiDotNet.Interfaces.IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>)typeof(SoundStorm<double>)
+            .GetMethod("StageOptimizer", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(model, null)!;
+        Assert.Equal(options.LearningRate, optimizer.GetCurrentLearningRate(), 12);
+        model.Train(Sample(model));
+        Assert.Equal(options.LearningRate * .5 * (1 + Math.Cos(Math.PI / 4)), optimizer.GetCurrentLearningRate(), 12);
+        model.Train(Sample(model));
+        Assert.Equal(options.LearningRate * .5, optimizer.GetCurrentLearningRate(), 12);
+    }
+
+    [Theory]
+    [InlineData(SoundStormTrainingStage.TextToSemantic)]
+    [InlineData(SoundStormTrainingStage.SemanticToAcoustic)]
+    public void WeightDecayChangesNativeUpdates(SoundStormTrainingStage stage)
+    {
+        var options = Tiny();
+        var decayed = new SoundStormOptions(options) { WeightDecay = .1 };
+        using var first = Create(options);
+        using var second = Create(decayed);
+        first.CurrentStage = second.CurrentStage = stage;
+        Assert.Equal(first.GetParameters().ToArray(), second.GetParameters().ToArray());
+        for (int step = 0; step < 4; step++)
+        {
+            first.Train(Sample(first));
+            second.Train(Sample(second));
+        }
+        Assert.False(first.GetParameters().SequenceEqual(second.GetParameters()));
+    }
 
     private static int[,] CodeGrid(int frames)
     {

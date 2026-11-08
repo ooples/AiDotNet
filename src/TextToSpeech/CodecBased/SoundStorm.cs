@@ -420,8 +420,23 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
                 EnableGradientClipping = true,
                 MaxGradientNorm = o.MaxGradientNorm,
                 LearningRateScheduler = schedule,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             };
-            optimizer = PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, options),
+            IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> configured = o.WeightDecay == 0.0
+                ? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, options)
+                : new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
+                {
+                    InitialLearningRate = peak,
+                    Beta1 = options.Beta1,
+                    Beta2 = options.Beta2,
+                    Epsilon = options.Epsilon,
+                    WeightDecay = o.WeightDecay,
+                    EnableGradientClipping = options.EnableGradientClipping,
+                    MaxGradientNorm = options.MaxGradientNorm,
+                    LearningRateScheduler = schedule,
+                    SchedulerStepMode = SchedulerStepMode.StepPerBatch,
+                });
+            optimizer = PaperOptimizerFactory.VerifyHandBuilt(this, configured,
                 CurrentStage == SoundStormTrainingStage.TextToSemantic ? "text-to-semantic" : "semantic-to-acoustic");
             _stageOptimizers[CurrentStage] = optimizer;
         }
