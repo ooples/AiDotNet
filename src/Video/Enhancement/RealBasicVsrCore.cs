@@ -82,6 +82,7 @@ internal sealed class RealBasicVsrCore<T>
     /// </summary>
     internal static Tensor<T> UnsharpMask(Tensor<T> frames, double weight, int kernelSize, double threshold)
     {
+        if (kernelSize < 1) throw new ArgumentOutOfRangeException(nameof(kernelSize), "Kernel size must be positive.");
         var ops = MathHelper.GetNumericOperations<T>();
         int rank = frames.Rank, h = frames.Shape[rank - 2], w = frames.Shape[rank - 1];
         int planes = frames.Length / (h * w);
@@ -125,14 +126,14 @@ internal sealed class RealBasicVsrCore<T>
             for (int x = 0; x < w; x++)
             {
                 double s = 0;
-                for (int k = -radius; k <= radius; k++) s += kernel[k + radius] * image[y * w + Reflect101(x + k, w)];
+                for (int k = 0; k < kernel.Length; k++) s += kernel[k] * image[y * w + Reflect101(x + k - radius, w)];
                 rows[y * w + x] = s;
             }
         for (int y = 0; y < h; y++)
             for (int x = 0; x < w; x++)
             {
                 double s = 0;
-                for (int k = -radius; k <= radius; k++) s += kernel[k + radius] * rows[Reflect101(y + k, h) * w + x];
+                for (int k = 0; k < kernel.Length; k++) s += kernel[k] * rows[Reflect101(y + k - radius, h) * w + x];
                 output[y * w + x] = s;
             }
         return output;
