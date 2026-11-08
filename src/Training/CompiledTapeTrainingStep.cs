@@ -243,6 +243,30 @@ public static class CompiledTapeTrainingStep<T>
         finally { _currentState = previous; }
     }
 
+    /// <summary>
+    /// Drops the compiled plan, optimizer moments and step counter of one of <paramref name="owner"/>'s slots, the one
+    /// a step keyed by <paramref name="stateKey"/> trains; the owner's other slots keep theirs.
+    /// </summary>
+    internal static void Invalidate(object owner, object stateKey)
+    {
+        if (owner is null) throw new System.ArgumentNullException(nameof(owner));
+        if (stateKey is null) throw new System.ArgumentNullException(nameof(stateKey));
+        if (!States.TryGetValue(owner, out var ownerStates)) return;
+        TrainingState? state;
+        lock (ownerStates.Sync)
+        {
+            if (!ownerStates.ByLayerSet.TryGetValue(stateKey, out state)) return;
+        }
+
+        var previous = _currentState;
+        try
+        {
+            _currentState = state;
+            Invalidate();
+        }
+        finally { _currentState = previous; }
+    }
+
     /// <summary>Forgets <paramref name="owner"/>'s state entirely, e.g. when the model is disposed.</summary>
     /// <param name="owner">The model whose state to drop.</param>
     internal static void Forget(object owner)
@@ -1063,14 +1087,18 @@ public static class CompiledTapeTrainingStep<T>
         // When set, a compiled step hands back its loss TENSOR here instead of reading the scalar (lossValue is then
         // zero). Reading the scalar waits for the device to finish the step; a caller that may never look at the
         // loss lets the host prepare the next step while the device runs this one.
-        System.Runtime.CompilerServices.StrongBox<Tensor<T>?>? deferredLoss = null)
+        System.Runtime.CompilerServices.StrongBox<Tensor<T>?>? deferredLoss = null,
+        // The slot that keeps this step's plan, moments and step counter, when the layer set does not identify it:
+        // one model's objectives train different parameters with different optimizers over the same layers, and
+        // each needs its own (see FusedTrainingSession's state key). Null keys the slot by the layer set.
+        object? stateKey = null)
     {
         if (layers is null) throw new ArgumentNullException(nameof(layers));
         // A model whose whole training surface is raw extra tensors passes no layers; its first extra tensor then
         // identifies it, so its plan and moments still persist across steps.
         object ownerKey = owner
             ?? (layers.Count > 0 ? layers[0] : extraTensors is { Count: > 0 } ? extraTensors[0] : new object());
-        if (!TryEnterState(ownerKey, LayerSetKey(ownerKey, layers, extraTensors), out var ownerStates, out var state))
+        if (!TryEnterState(ownerKey, stateKey ?? LayerSetKey(ownerKey, layers, extraTensors), out var ownerStates, out var state))
         {
             // Another thread is training this model right now; its compiled plan is not ours to touch, so this call
             // takes the caller's eager path.

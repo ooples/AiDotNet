@@ -273,6 +273,11 @@ internal static class StreamingOptimizerResolver<T>
             case RootMeanSquarePropagationOptimizer<T, Tensor<T>, Tensor<T>> o:
             {
                 var opt = (RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>>)o.GetOptions();
+                // Streaming RMSProp keeps an uncentered mean square that starts at zero; it cannot run either variant.
+                if (opt.Centered || opt.InitialMeanSquare > 0.0)
+                    throw new NotSupportedException(
+                        "Streaming training's RMSProp is uncentered with a zero initial mean square; "
+                        + "train centered RMSProp or a non-zero InitialMeanSquare without streaming.");
                 return new StreamingConfig { Kind = StreamingKind.RmsProp, Decay = opt.Decay, Epsilon = opt.Epsilon };
             }
             case MomentumOptimizer<T, Tensor<T>, Tensor<T>> o:

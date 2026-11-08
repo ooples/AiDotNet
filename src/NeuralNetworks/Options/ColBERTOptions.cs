@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
@@ -53,6 +54,7 @@ public class ColBERTOptions : TransformerEmbeddingOptions
     /// <para><b>For Beginners:</b> Every search query becomes exactly this many token vectors. Short
     /// queries get placeholder tokens that the model learns to use for related words.</para>
     /// </remarks>
+    [PaperDefault(32, Source = "Khattab and Zaharia 2020, Sec. 4.1.2: the number of embeddings per query is fixed at Nq = 32")]
     public int MaxQueryLength { get; set; }
 
     /// <summary>

@@ -345,8 +345,21 @@ public partial class ConjugateGradientOptimizer<T, TInput, TOutput> : GradientBa
         // and for embedding params that already have a dense entry.
         SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
 
-        var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+        var pv = context.GetFlatParameters();
+        var gv = context.GetFlatGradients();
+        var updated = UpdateParameters(pv, gv);
         context.SetFlatParameters(updated);
+
+        // Nocedal and Wright, section 5.2. The method gives a direction; the step length along it is the line search's job, and a
+        // fixed-rate step along it can overshoot and climb (see UseLineSearch). Backtrack as BFGS does.
+        if (_options.UseLineSearch && context.SupportsReevaluation
+            && !ApplyBacktrackingLineSearch(context, pv, updated, gv, _options.MaxLineSearchIterations))
+        {
+            // The step was rejected and the parameters restored, so the direction just saved was never taken: restart
+            // from steepest descent at the next step rather than conjugating against it.
+            _previousDirection = null;
+            _previousGradient = Vector<T>.Empty();
+        }
     }
 
     /// <inheritdoc/>

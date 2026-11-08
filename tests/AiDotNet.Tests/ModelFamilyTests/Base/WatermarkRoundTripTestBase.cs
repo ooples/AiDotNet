@@ -39,6 +39,24 @@ public abstract class WatermarkRoundTripTestBase<TContent>
     /// </summary>
     protected virtual bool ReportsStandardNormalZ => true;
 
+    /// <summary>
+    /// The smallest z the own key must reach on marked content. The default, 5.7, is p &lt; 1e-8, and with it the
+    /// detection must also be reported as confident (confidence &gt;= 0.9). A trained watermarker tested at smoke scale
+    /// lowers this to what its short training measurably reaches. At every bar the mark must be reported as detected,
+    /// with positive confidence.
+    /// </summary>
+    protected virtual double OwnKeyMinimumZ => 5.7;
+
+    /// <summary>
+    /// True when a detection also needs a second test to agree (SynthID's detection head), which reports zero
+    /// confidence and no detection when it does not. Otherwise the reported confidence is exactly the z-score's
+    /// (<see cref="WatermarkStatistics.Confidence"/>).
+    /// </summary>
+    protected virtual bool GatesOnASecondTest => false;
+
+    /// <summary>The smallest z the own key must reach after <see cref="Perturb"/>.</summary>
+    protected virtual double PerturbedMinimumZ => 4.5;
+
     /// <summary>The number of unmarked samples the false-positive test checks.</summary>
     protected virtual int UnmarkedSampleCount => 12;
 
@@ -64,10 +82,15 @@ public abstract class WatermarkRoundTripTestBase<TContent>
         for (int seed = 1; seed <= 3; seed++)
         {
             var result = Detect(TestKey, Embed(TestKey, Sample(seed)));
-            Assert.True(result.ZScore >= 5.7 && result.Confidence >= 0.9,
+            Assert.True(result.ZScore >= OwnKeyMinimumZ,
                 $"Sample {seed}: the mark scored z = {result.ZScore:F2} (confidence {result.Confidence:F3}) under its own key.");
-            Assert.True(result.WatermarkDetected, $"Sample {seed}: a confident detection must be reported as detected.");
-            Assert.True(result.PValue < 1e-8, $"Sample {seed}: p = {result.PValue:E2} for z = {result.ZScore:F2}.");
+            Assert.True(result.PValue <= WatermarkStatistics.UpperTailProbability(OwnKeyMinimumZ),
+                $"Sample {seed}: p = {result.PValue:E2} for z = {result.ZScore:F2}.");
+            AssertReportAgreesWithZ(result, $"Sample {seed}");
+            Assert.True(result.WatermarkDetected && result.Confidence > 0,
+                $"Sample {seed}: the mark under its own key was reported as detected = {result.WatermarkDetected} with confidence {result.Confidence:F3} at z = {result.ZScore:F2}.");
+            if (OwnKeyMinimumZ >= 5.7)
+                Assert.True(result.Confidence >= 0.9, $"Sample {seed}: confidence {result.Confidence:F3} at z = {result.ZScore:F2}.");
         }
     }
 
@@ -102,7 +125,7 @@ public abstract class WatermarkRoundTripTestBase<TContent>
             Assert.True(Math.Abs(mean) < 0.4, $"Foreign-key z-scores average {mean:F3}; they should centre on 0.");
             Assert.True(sd > 0.6 && sd < 1.4, $"Foreign-key z-scores have standard deviation {sd:F3}; they should be near 1.");
         }
-        Assert.True(Detect(TestKey, marked).ZScore >= 5.7, "The mark's own key must still detect it.");
+        Assert.True(Detect(TestKey, marked).ZScore >= OwnKeyMinimumZ, "The mark's own key must still detect it.");
     }
 
     [Fact(Timeout = 120000)]
@@ -113,9 +136,28 @@ public abstract class WatermarkRoundTripTestBase<TContent>
         {
             var perturbed = Perturb(Embed(TestKey, Sample(seed)), seed);
             var result = Detect(TestKey, perturbed);
-            Assert.True(result.ZScore >= 4.5,
+            Assert.True(result.ZScore >= PerturbedMinimumZ,
                 $"Sample {seed}: after a mild perturbation the mark scored z = {result.ZScore:F2} (confidence {result.Confidence:F3}).");
+            AssertReportAgreesWithZ(result, $"Perturbed sample {seed}");
         }
+    }
+
+    /// <summary>
+    /// The reported outcome, checked at every bar: the p-value and confidence are the z-score's, and a detection is
+    /// never reported without confidence. A lowered <see cref="OwnKeyMinimumZ"/> still runs this, so a broken
+    /// reporting path fails even when the smoke-scale z sits below the confident range.
+    /// </summary>
+    private void AssertReportAgreesWithZ(WatermarkResult result, string what)
+    {
+        double expectedP = WatermarkStatistics.UpperTailProbability(result.ZScore);
+        Assert.True(Math.Abs(result.PValue - expectedP) <= 1e-12 * Math.Max(1.0, expectedP),
+            $"{what}: p = {result.PValue:E3}, but z = {result.ZScore:F3} gives p = {expectedP:E3}.");
+        double expected = WatermarkStatistics.Confidence(result.ZScore);
+        bool gatedOff = GatesOnASecondTest && result.Confidence == 0.0 && !result.WatermarkDetected;
+        Assert.True(result.Confidence == expected || gatedOff,
+            $"{what}: confidence {result.Confidence:F4}, but z = {result.ZScore:F3} gives {expected:F4}.");
+        Assert.True(!result.WatermarkDetected || result.Confidence > 0,
+            $"{what}: reported as detected with confidence {result.Confidence:F4}.");
     }
 
     [Fact(Timeout = 120000)]

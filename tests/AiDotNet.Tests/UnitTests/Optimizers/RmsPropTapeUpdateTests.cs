@@ -15,6 +15,8 @@ public class RmsPropTapeUpdateTests
 
         var options = new RootMeanSquarePropagationOptimizerOptions<double, Tensor<double>, Tensor<double>>
         {
+            // The expected values are the update rule on the raw gradient; the default norm clip is not part of it.
+            EnableGradientClipping = false,
             InitialLearningRate = 0.1,
             Decay = 0.5,
             InitialMomentum = 0.9,
@@ -40,6 +42,8 @@ public class RmsPropTapeUpdateTests
 
         var options = new RootMeanSquarePropagationOptimizerOptions<double, Tensor<double>, Tensor<double>>
         {
+            // The expected values are the update rule on the raw gradient; the default norm clip is not part of it.
+            EnableGradientClipping = false,
             InitialLearningRate = 0.1,
             Decay = 0.5,
             InitialMomentum = 0.9,
@@ -67,6 +71,8 @@ public class RmsPropTapeUpdateTests
 
         var options = new RootMeanSquarePropagationOptimizerOptions<double, Tensor<double>, Tensor<double>>
         {
+            // The expected values are the update rule on the raw gradient; the default norm clip is not part of it.
+            EnableGradientClipping = false,
             InitialLearningRate = 0.1,
             Decay = 0.5,
             Epsilon = 0.01,
@@ -95,6 +101,8 @@ public class RmsPropTapeUpdateTests
         {
             var options = new RootMeanSquarePropagationOptimizerOptions<double, Tensor<double>, Tensor<double>>
             {
+                // The expected values are the update rule on the raw gradient; the default norm clip is not part of it.
+                EnableGradientClipping = false,
                 InitialLearningRate = 0.1,
                 Decay = 0.5,
                 InitialMomentum = 0.9,

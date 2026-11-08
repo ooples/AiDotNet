@@ -22,6 +22,10 @@ public class BFGSOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOp
     /// </summary>
     public BFGSOptimizerOptions()
     {
+        // A second-order or line-search method sizes its step from curvature (a Hessian, curvature pairs, a line
+        // search or a trust radius). Clipping the gradient breaks that: the Newton system and the s/y pairs then
+        // describe a different function. SciPy and torch.optim.LBFGS never clip; opt in explicitly if wanted.
+        EnableGradientClipping = false;
         MaxIterations = 1000;
     }
 

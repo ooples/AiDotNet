@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
@@ -5,6 +6,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the DCGAN (Deep Convolutional GAN) model.
 /// </summary>
+[PaperDefault(nameof(LatentSize), 100, Source = "Radford et al. 2016, Fig. 1 caption: a 100 dimensional uniform distribution Z")]
 public class DCGANOptions : GanOptions
 {
     /// <summary>
