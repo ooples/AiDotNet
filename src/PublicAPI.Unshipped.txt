@@ -22031,3 +22031,11 @@ AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.SampleRate.get -> int
 AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.SampleRate.set -> void
 AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.HopSize.get -> int
 AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions.HopSize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumEncoderLayers.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumEncoderLayers.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.VocabSize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.VocabSize.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumCodebooks.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.NumCodebooks.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.CodebookSize.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options.CodebookSize.set -> void

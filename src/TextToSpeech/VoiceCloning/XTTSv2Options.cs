@@ -11,6 +11,22 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// </remarks>
 public class XTTSv2Options : CodecTtsOptions
 {
+    /// <summary>The GPT is decoder-only; use ConditioningBlocks for the reference encoder.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("XTTS GPT is decoder-only and requires NumEncoderLayers=0; native contracts reject other values. ConditioningBlocks controls the separate reference encoder.")]
+    public new int NumEncoderLayers { get => base.NumEncoderLayers; set => base.NumEncoderLayers = value; }
+
+    /// <summary>The text embedding rows, paired with the loaded tokenizer vocabulary.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("VocabSize must match the loaded tokenizer's rows; native contracts reject unpaired counts and load paired tokenizer/embedding vocabularies.")]
+    public new int VocabSize { get => base.VocabSize; set => base.VocabSize = value; }
+
+    /// <summary>The released dVAE's single codebook.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The native XTTS dVAE supports one codebook; native contracts reject other counts and encode/decode its single-stream tokens.")]
+    public new int NumCodebooks { get => base.NumCodebooks; set => base.NumCodebooks = value; }
+
+    /// <summary>The dVAE vocabulary, paired with the audio vocabulary and special IDs.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("CodebookSize must pair with AudioVocabularySize=CodebookSize+2 and the following start/stop IDs; native tests reject unpaired values and encode/decode paired vocabularies.")]
+    public new int CodebookSize { get => base.CodebookSize; set => base.CodebookSize = value; }
+
     /// <summary>The language ids in the released checkpoint, in model-card order.</summary>
     public static readonly string[] ReleasedLanguages =
         ["en", "es", "fr", "de", "it", "pt", "pl", "tr", "ru", "nl", "cs", "ar", "zh-cn", "hu", "ko", "ja", "hi"];
@@ -107,18 +123,24 @@ public class XTTSv2Options : CodecTtsOptions
     public int InputSampleRate { get; set; }
 
     /// <summary>Embedding rows in the released checkpoint.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("TextVocabularySize must match the loaded tokenizer; native contracts reject unpaired counts and exercise a paired tokenizer/embedding vocabulary.")]
     public int TextVocabularySize { get => VocabSize; set => VocabSize = value; }
     /// <summary>Vocabulary size stated by the paper and present in the pinned official checkpoint.</summary>
     public int PaperTextVocabularySize { get; set; } = 6681;
     /// <summary>1024 dVAE codes plus start and stop.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("AudioVocabularySize must equal CodebookSize+2 with the following special IDs; native tests reject unpaired values and round-trip paired vocabularies.")]
     public int AudioVocabularySize { get; set; } = 1026;
     /// <summary>Resolved from <c>[START]</c> in the released tokenizer when it is loaded.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The loaded tokenizer owns [START]'s ID; native tests load tokenizer assets with exchanged start/stop IDs and verify the resolved IDs.")]
     public int StartTextToken { get; set; } = -1;
     /// <summary>Resolved from <c>[STOP]</c> in the released tokenizer when it is loaded.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The loaded tokenizer owns [STOP]'s ID; native tests load tokenizer assets with exchanged start/stop IDs and verify the resolved IDs.")]
     public int StopTextToken { get; set; } = -1;
     /// <summary>Gets or sets the token ID for start audio. Defaults to <c>1024</c>.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("StartAudioToken must follow the dVAE codes, before StopAudioToken; native tests reject unpaired IDs and encode/decode paired audio vocabularies.")]
     public int StartAudioToken { get; set; } = 1024;
     /// <summary>Gets or sets the token ID for stop audio. Defaults to <c>1025</c>.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("StopAudioToken must follow StartAudioToken at CodebookSize+1; native tests reject unpaired IDs and encode/decode paired audio vocabularies.")]
     public int StopAudioToken { get; set; } = 1025;
     /// <summary>Gets or sets the max prompt tokens. Defaults to <c>70</c>.</summary>
     public int MaxPromptTokens { get; set; } = 70;
@@ -134,6 +156,7 @@ public class XTTSv2Options : CodecTtsOptions
     /// <summary>Gets or sets the number of attention heads in the perceiver. Defaults to <c>8</c>.</summary>
     public int PerceiverHeads { get; set; } = 8;
     /// <summary>Gets or sets the feature width of the perceiver head. Defaults to <c>64</c>.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The released XTTS Perceiver uses 64-wide heads; native rejection contracts cover other widths and the native sampling contracts exercise the supported graph.")]
     public int PerceiverHeadDim { get; set; } = 64;
     /// <summary>Gets or sets the perceiver feed forward multiple. Defaults to <c>4</c>.</summary>
     public int PerceiverFeedForwardMultiple { get; set; } = 4;
@@ -143,6 +166,7 @@ public class XTTSv2Options : CodecTtsOptions
     /// <summary>Gets or sets the feature width of the discrete VAE codebook. Defaults to <c>512</c>.</summary>
     public int DvaeCodebookDim { get; set; } = 512;
     /// <summary>Gets or sets the number of layers in the discrete VAE. Defaults to <c>2</c>.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The released dVAE has two stride-2 layers; native contracts reject other depths and verify the supported fourfold downsampling.")]
     public int DvaeLayers { get; set; } = 2;
     /// <summary>Gets or sets the discrete VAE residual blocks. Defaults to <c>3</c>.</summary>
     public int DvaeResidualBlocks { get; set; } = 3;

@@ -479,6 +479,8 @@ public partial class XTTSv2<T> : TtsModelBase<T>, ICodecTts<T>
 
     private static void ValidateOptions(XTTSv2Options options)
     {
+        if (options.NumEncoderLayers != 0)
+            throw new ArgumentException("XTTS GPT is decoder-only; NumEncoderLayers must be zero. Use ConditioningBlocks for its reference encoder.", nameof(options));
         if (options.NumCodebooks != 1) throw new ArgumentException("XTTS-v2 uses one dVAE codebook.", nameof(options));
         if (options.CodebookSize + 2 != options.AudioVocabularySize
             || options.StartAudioToken != options.CodebookSize || options.StopAudioToken != options.CodebookSize + 1)
