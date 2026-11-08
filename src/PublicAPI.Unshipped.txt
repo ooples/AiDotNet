@@ -22057,3 +22057,9 @@ AiDotNet.TextToSpeech.CodecBased.PhemeOptions.MelChannels.get -> int
 AiDotNet.TextToSpeech.CodecBased.PhemeOptions.MelChannels.set -> void
 AiDotNet.TextToSpeech.CodecBased.PhemeOptions.FftSize.get -> int
 AiDotNet.TextToSpeech.CodecBased.PhemeOptions.FftSize.set -> void
+override AiDotNet.Audio.SpeechRecognition.Wav2Vec2Model<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.SpeechRecognition.Foundation.HuBERTASR<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.SpeechRecognition.Foundation.WavLMASR<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.SpeechRecognition.Multilingual.OmnilangualASR<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.SpeechRecognition.Multilingual.XLSR<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+override AiDotNet.SpeechRecognition.Robust.WavLMRobust<T>.SelectTrainableParametersForTraining(System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! parameters) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
