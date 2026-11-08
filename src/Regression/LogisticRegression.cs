@@ -175,8 +175,7 @@ public partial class LogisticRegression<T> : RegressionBase<T>
         // which is exactly why standardization is the standing advice for gradient-based logistic
         // regression. The back-transform at the end keeps Coefficients and Intercept meaningful on the
         // caller's own scale, so nothing outside this method has to know.
-        var (featureMean, featureStd) = ComputeStandardization(x, p);
-        var (standardized, targets) = StandardizedDoubles(x, y, featureMean, featureStd);
+        var (standardized, targets, featureMean, featureStd) = StandardizedData(x, y);
 
         // One objective for every solver: the mean log loss plus the regularization penalty, over [coefficients,
         // intercept]. This was a hand-written gradient ascent of 1,000 fixed steps, 160x slower than scikit-learn's
@@ -232,20 +231,21 @@ public partial class LogisticRegression<T> : RegressionBase<T>
         => GradientDescentOptimizer<T, Matrix<T>, Vector<T>>.CreateForFunction(
             new GradientDescentOptimizerOptions<T, Matrix<T>, Vector<T>> { InitialLearningRate = _options.LearningRate });
 
+    /// <summary>Rows per block of the objective's parallel pass.</summary>
+    private const int LossBlockRows = 2048;
+
     /// <summary>
     /// The objective every solver minimizes, and its gradient, at <paramref name="weights"/> = [coefficients, intercept].
     /// </summary>
     /// <remarks>
     /// The mean log loss uses <c>softplus(z) - y z</c>, which stays finite for any margin <c>z</c>. The penalty's value is
     /// recovered from the regularizer's gradient by integrating along the ray from zero, <c>integral over t in [0, 1] of
-    /// beta . g(t beta)</c>, with Simpson's rule: exact for L1, L2 and elastic net, whose penalty gradients are constant or
-    /// linear along that ray. The objective and gradient must agree for a line search to work, and
+    /// beta . g(t beta)</c>, with the midpoint rule <c>beta . g(beta / 2)</c>: exact for L1, L2 and elastic net, whose
+    /// penalty gradients are constant or linear along that ray for t &gt; 0. A rule that samples t = 0 is not exact for L1,
+    /// whose gradient there is the subgradient 0 rather than the constant it takes on the rest of the ray. The objective and gradient must agree for a line search to work, and
     /// <see cref="IRegularization{T, TInput, TOutput}"/> exposes only the gradient. The intercept is not penalized.
     /// </remarks>
-    /// <summary>Rows per block of the objective's parallel pass.</summary>
-    private const int LossBlockRows = 2048;
-
-    private (T Objective, Vector<T> Gradient) LogLossAndGradient(
+    internal (T Objective, Vector<T> Gradient) LogLossAndGradient(
         Vector<T> weights, double[] x, double[] y, int p)
     {
         int n = y.Length;
@@ -308,14 +308,7 @@ public partial class LogisticRegression<T> : RegressionBase<T>
             var zero = new Vector<T>(p);
             var atEnd = Regularization.Regularize(zero, coefficients);
             var atMiddle = Regularization.Regularize(zero, coefficients.Multiply(NumOps.FromDouble(0.5)));
-            var atStart = Regularization.Regularize(zero, zero);
-            T penalty = NumOps.Divide(
-                NumOps.Add(
-                    NumOps.Add(coefficients.DotProduct(atStart),
-                        NumOps.Multiply(NumOps.FromDouble(4.0), coefficients.DotProduct(atMiddle))),
-                    coefficients.DotProduct(atEnd)),
-                NumOps.FromDouble(6.0));
-            objective = NumOps.Add(objective, penalty);
+            objective = NumOps.Add(objective, coefficients.DotProduct(atMiddle));
             coefficientGradient = coefficientGradient.Add(atEnd);
         }
 
@@ -327,77 +320,99 @@ public partial class LogisticRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Computes the per-feature mean and standard deviation used to standardize the design matrix.
+    /// The design matrix with each column centered and scaled, row-major in double precision, the 0/1 targets, and the
+    /// per-feature mean and standard deviation used (a constant column gets a deviation of 1): the data every evaluation
+    /// of the objective reads, and the statistics that map the fit back to the caller's scale.
     /// </summary>
-    /// <param name="x">The design matrix.</param>
-    /// <param name="featureCount">Number of columns in <paramref name="x"/>.</param>
-    /// <returns>The per-feature mean and standard deviation; a constant column gets a deviation of 1.</returns>
-    private (Vector<T> Mean, Vector<T> Std) ComputeStandardization(Matrix<T> x, int featureCount)
+    /// <remarks>
+    /// One conversion to double, then the column sums, the squared deviations and the scaling each run over fixed
+    /// blocks of rows in parallel, merged in block order so the result does not depend on the thread count. Three serial
+    /// passes through the generic matrix took about three times as long as the whole L-BFGS solve on 20,000 x 20.
+    /// </remarks>
+    private (double[] X, double[] Y, Vector<T> Mean, Vector<T> Std) StandardizedData(Matrix<T> x, Vector<T> y)
     {
-        var mean = new Vector<T>(featureCount);
-        var std = new Vector<T>(featureCount);
         int n = x.Rows;
-
-        // Row by row, each column's sums accumulating in row order (the order a column-by-column pass would take).
-        var sums = new double[featureCount];
-        for (int i = 0; i < n; i++)
-        {
-            var row = x.GetRowReadOnlySpan(i);
-            for (int j = 0; j < featureCount; j++) sums[j] += NumOps.ToDouble(row[j]);
-        }
-
-        var means = new double[featureCount];
-        for (int j = 0; j < featureCount; j++) means[j] = sums[j] / n;
-
-        var squares = new double[featureCount];
-        for (int i = 0; i < n; i++)
-        {
-            var row = x.GetRowReadOnlySpan(i);
-            for (int j = 0; j < featureCount; j++)
-            {
-                double d = NumOps.ToDouble(row[j]) - means[j];
-                squares[j] += d * d;
-            }
-        }
-
-        for (int j = 0; j < featureCount; j++)
-        {
-            double s = Math.Sqrt(squares[j] / n);
-            if (s < 1e-10) s = 1.0;
-
-            mean[j] = NumOps.FromDouble(means[j]);
-            std[j] = NumOps.FromDouble(s);
-        }
-
-        return (mean, std);
-    }
-
-    /// <summary>
-    /// The design matrix with each column centered and scaled, row-major in double precision, and the 0/1 targets:
-    /// the data every evaluation of the objective reads.
-    /// </summary>
-    private (double[] X, double[] Y) StandardizedDoubles(Matrix<T> x, Vector<T> y, Vector<T> mean, Vector<T> std)
-    {
         int p = x.Columns;
-        var meanValues = new double[p];
-        var stdValues = new double[p];
+        int blocks = (n + LossBlockRows - 1) / LossBlockRows;
+        var values = new double[n * p];
+
+        var blockSums = new double[blocks][];
+        System.Threading.Tasks.Parallel.For(0, blocks, block =>
+        {
+            var sums = new double[p];
+            int end = Math.Min(n, (block + 1) * LossBlockRows);
+            for (int i = block * LossBlockRows; i < end; i++)
+            {
+                var row = x.GetRowReadOnlySpan(i);
+                int offset = i * p;
+                for (int j = 0; j < p; j++)
+                {
+                    double value = NumOps.ToDouble(row[j]);
+                    values[offset + j] = value;
+                    sums[j] += value;
+                }
+            }
+
+            blockSums[block] = sums;
+        });
+
+        var means = new double[p];
+        foreach (var sums in blockSums)
+            for (int j = 0; j < p; j++) means[j] += sums[j];
+        for (int j = 0; j < p; j++) means[j] /= n;
+
+        var blockSquares = new double[blocks][];
+        System.Threading.Tasks.Parallel.For(0, blocks, block =>
+        {
+            var squares = new double[p];
+            int end = Math.Min(n, (block + 1) * LossBlockRows);
+            for (int i = block * LossBlockRows; i < end; i++)
+            {
+                int offset = i * p;
+                for (int j = 0; j < p; j++)
+                {
+                    double d = values[offset + j] - means[j];
+                    squares[j] += d * d;
+                }
+            }
+
+            blockSquares[block] = squares;
+        });
+
+        var squareTotals = new double[p];
+        foreach (var squares in blockSquares)
+            for (int j = 0; j < p; j++) squareTotals[j] += squares[j];
+
+        // The scaling applied is the one stored in T, so the back-transform divides by exactly what the fit saw.
+        var mean = new Vector<T>(p);
+        var std = new Vector<T>(p);
+        var center = new double[p];
+        var scale = new double[p];
         for (int j = 0; j < p; j++)
         {
-            meanValues[j] = NumOps.ToDouble(mean[j]);
-            stdValues[j] = NumOps.ToDouble(std[j]);
+            double deviation = Math.Sqrt(squareTotals[j] / n);
+            if (deviation < 1e-10) deviation = 1.0;
+
+            mean[j] = NumOps.FromDouble(means[j]);
+            std[j] = NumOps.FromDouble(deviation);
+            center[j] = NumOps.ToDouble(mean[j]);
+            scale[j] = NumOps.ToDouble(std[j]);
         }
 
-        var result = new double[x.Rows * p];
-        for (int i = 0; i < x.Rows; i++)
+        System.Threading.Tasks.Parallel.For(0, blocks, block =>
         {
-            var source = x.GetRowReadOnlySpan(i);
-            for (int j = 0; j < p; j++)
-                result[i * p + j] = (NumOps.ToDouble(source[j]) - meanValues[j]) / stdValues[j];
-        }
+            int end = Math.Min(n, (block + 1) * LossBlockRows);
+            for (int i = block * LossBlockRows; i < end; i++)
+            {
+                int offset = i * p;
+                for (int j = 0; j < p; j++) values[offset + j] = (values[offset + j] - center[j]) / scale[j];
+            }
+        });
 
-        var targets = new double[y.Length];
-        for (int i = 0; i < y.Length; i++) targets[i] = NumOps.ToDouble(y[i]);
-        return (result, targets);
+        var labels = y.AsSpan();
+        var targets = new double[labels.Length];
+        for (int i = 0; i < labels.Length; i++) targets[i] = NumOps.ToDouble(labels[i]);
+        return (values, targets, mean, std);
     }
 
     /// <summary>

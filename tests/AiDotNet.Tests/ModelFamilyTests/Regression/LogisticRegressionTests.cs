@@ -103,4 +103,49 @@ public class LogisticRegressionTests : RegressionModelTestBase
         Assert.True(Norm(lbfgs.Coefficients) < Norm(unpenalized.Coefficients),
             $"L2 should shrink the coefficients: penalized norm {Norm(lbfgs.Coefficients)}, unpenalized {Norm(unpenalized.Coefficients)}.");
     }
+
+    public enum Penalty { None, L1, L2, ElasticNet }
+
+    public static TheoryData<Penalty> Penalties => new TheoryData<Penalty> { Penalty.None, Penalty.L1, Penalty.L2, Penalty.ElasticNet };
+
+    [Theory]
+    [MemberData(nameof(Penalties))]
+    public void Objective_AgreesWithItsGradient(Penalty penalty)
+    {
+        // L-BFGS's line search compares objective values against the gradient's prediction, so the two must agree. The
+        // penalty's value is rebuilt from the regularizer's gradient; a quadrature that sampled the ray at t = 0 met L1's
+        // subgradient 0 there and reported 5/6 of the L1 penalty while the gradient carried all of it.
+        IRegularization<double, Matrix<double>, Vector<double>>? regularization = penalty switch
+        {
+            Penalty.L1 => new L1Regularization<double, Matrix<double>, Vector<double>>(new RegularizationOptions { Strength = 0.1 }),
+            Penalty.L2 => new L2Regularization<double, Matrix<double>, Vector<double>>(new RegularizationOptions { Strength = 0.1 }),
+            Penalty.ElasticNet => new ElasticNetRegularization<double, Matrix<double>, Vector<double>>(
+                new RegularizationOptions { Strength = 0.1, L1Ratio = 0.5 }),
+            _ => null,
+        };
+        var model = regularization is null
+            ? new LogisticRegression<double>()
+            : new LogisticRegression<double>(new LogisticRegressionOptions<double>(), regularization);
+
+        var (x, y) = OverlappingClasses();
+        const int p = 3;
+        var rows = new double[x.Rows * p];
+        var targets = new double[x.Rows];
+        for (int i = 0; i < x.Rows; i++)
+        {
+            for (int j = 0; j < p; j++) rows[i * p + j] = x[i, j];
+            targets[i] = y[i];
+        }
+
+        // Every coefficient away from zero, and a step too small to cross it, so L1 is differentiable along the path.
+        var weights = new Vector<double>(new[] { 0.7, -0.4, 0.3, 0.2 });
+        var direction = new Vector<double>(new[] { 0.5, -0.5, 0.5, 0.5 });
+        const double h = 1e-5;
+        double At(double t) => model.LogLossAndGradient(weights.Add(direction.Multiply(t)), rows, targets, p).Objective;
+
+        double finiteDifference = (At(h) - At(-h)) / (2 * h);
+        double analytic = model.LogLossAndGradient(weights, rows, targets, p).Gradient.DotProduct(direction);
+
+        Assert.Equal(analytic, finiteDifference, 6);
+    }
 }

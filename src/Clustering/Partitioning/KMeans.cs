@@ -304,26 +304,31 @@ public partial class KMeans<T> : ClusteringBase<T>
         var minDistances = new double[rows];
         for (int i = 0; i < rows; i++) minDistances[i] = double.MaxValue;
 
+        int trials = LocalTrials(clusters);
+        var cumulative = new double[rows];
+        var candidateDistances = new double[trials][];
+        for (int t = 0; t < trials; t++) candidateDistances[t] = new double[rows];
+        kernel.UpdateMinSquaredDistances(centers, 0, minDistances);
         for (int k = 1; k < clusters; k++)
         {
-            kernel.UpdateMinSquaredDistances(centers, k - 1, minDistances);
-            double totalWeight = 0;
-            for (int i = 0; i < rows; i++) totalWeight += minDistances[i];
-
-            double threshold = _random.NextDouble() * totalWeight;
-            double cumulative = 0;
-            int selectedIdx = 0;
-            for (int i = 0; i < rows; i++)
-            {
-                cumulative += minDistances[i];
-                if (cumulative >= threshold)
-                {
-                    selectedIdx = i;
-                    break;
-                }
-            }
-
+            // Every candidate's squared distances and potential in one pass; the winner's distances then lower
+            // minDistances directly, with no second pass for the new center.
+            int chosen = -1;
+            int selectedIdx = DrawCenter(minDistances, cumulative, trials, candidates =>
+                kernel.CandidatePotentials(candidates, minDistances, candidateDistances), out chosen);
             Array.Copy(data, selectedIdx * columns, centers, k * columns, columns);
+            if (k + 1 == clusters) break;
+
+            if (chosen < 0)
+            {
+                kernel.UpdateMinSquaredDistances(centers, k, minDistances);
+            }
+            else
+            {
+                var distances = candidateDistances[chosen];
+                for (int i = 0; i < rows; i++)
+                    if (distances[i] < minDistances[i]) minDistances[i] = distances[i];
+            }
         }
 
         return centers;
@@ -451,6 +456,73 @@ public partial class KMeans<T> : ClusteringBase<T>
         return centers;
     }
 
+    /// <summary>
+    /// Candidates per k-means++ center: <see cref="KMeansOptions{T}.KMeansPlusPlusLocalTrials"/>, or scikit-learn's
+    /// <c>2 + floor(ln k)</c>.
+    /// </summary>
+    private int LocalTrials(int clusters)
+    {
+        if (_options.KMeansPlusPlusLocalTrials is int trials)
+        {
+            if (trials < 1)
+            {
+                throw new ArgumentOutOfRangeException(nameof(KMeansOptions<T>.KMeansPlusPlusLocalTrials), trials,
+                    "k-means++ needs at least one candidate per center.");
+            }
+
+            return trials;
+        }
+
+        return 2 + (int)Math.Log(clusters);
+    }
+
+    /// <summary>
+    /// Draws <paramref name="trials"/> rows with probability proportional to <paramref name="minDistances"/> and returns
+    /// the one whose potential is lowest (the first drawn on a tie), with its draw index in <paramref name="chosen"/>. One
+    /// trial returns the drawn row, classic k-means++, without evaluating any potential, and sets
+    /// <paramref name="chosen"/> to -1.
+    /// </summary>
+    /// <param name="potentials">Each candidate's potential, given the candidates in draw order.</param>
+    private int DrawCenter(double[] minDistances, double[] cumulative, int trials, Func<int[], double[]> potentials,
+        out int chosen)
+    {
+        double total = 0;
+        for (int i = 0; i < minDistances.Length; i++)
+        {
+            total += minDistances[i];
+            cumulative[i] = total;
+        }
+
+        var candidates = new int[trials];
+        for (int t = 0; t < trials; t++) candidates[t] = FirstAtLeast(cumulative, _random.NextDouble() * total);
+
+        chosen = -1;
+        if (trials == 1) return candidates[0];
+
+        var values = potentials(candidates);
+        chosen = 0;
+        for (int t = 1; t < trials; t++)
+            if (values[t] < values[chosen]) chosen = t;
+        return candidates[chosen];
+    }
+
+    /// <summary>
+    /// The first index whose running total reaches <paramref name="threshold"/>, or 0 when none does (as the linear
+    /// scan this replaces did).
+    /// </summary>
+    private static int FirstAtLeast(double[] cumulative, double threshold)
+    {
+        int low = 0, high = cumulative.Length;
+        while (low < high)
+        {
+            int middle = low + (high - low) / 2;
+            if (cumulative[middle] >= threshold) high = middle;
+            else low = middle + 1;
+        }
+
+        return low < cumulative.Length ? low : 0;
+    }
+
     private Matrix<T> InitializeKMeansPlusPlus(Matrix<T> x)
     {
         var centers = new Matrix<T>(_options.NumClusters, x.Columns);
@@ -470,40 +542,43 @@ public partial class KMeans<T> : ClusteringBase<T>
             minDistances[i] = double.MaxValue;
         }
 
+        var points = new Vector<T>[x.Rows];
+        for (int i = 0; i < x.Rows; i++) points[i] = GetRow(x, i);
+
+        int trials = LocalTrials(_options.NumClusters);
+        var cumulative = new double[x.Rows];
         for (int k = 1; k < _options.NumClusters; k++)
         {
             // Update minimum distances to already selected centers
             var lastCenter = GetRow(centers, k - 1);
-            double totalWeight = 0;
-
             for (int i = 0; i < x.Rows; i++)
             {
-                var point = GetRow(x, i);
-                T dist = distanceMetric.Compute(point, lastCenter);
-                double distSquared = Math.Pow(NumOps.ToDouble(dist), 2);
-
+                double distSquared = Math.Pow(NumOps.ToDouble(distanceMetric.Compute(points[i], lastCenter)), 2);
                 if (distSquared < minDistances[i])
                 {
                     minDistances[i] = distSquared;
                 }
-
-                totalWeight += minDistances[i];
             }
 
-            // Select next center with probability proportional to distance squared
-            double threshold = _random.NextDouble() * totalWeight;
-            double cumulative = 0;
-            int selectedIdx = 0;
-
-            for (int i = 0; i < x.Rows; i++)
+            // Select next center with probability proportional to distance squared, keeping the best of the trials
+            int selectedIdx = DrawCenter(minDistances, cumulative, trials, candidates =>
             {
-                cumulative += minDistances[i];
-                if (cumulative >= threshold)
+                var potentials = new double[candidates.Length];
+                for (int t = 0; t < candidates.Length; t++)
                 {
-                    selectedIdx = i;
-                    break;
+                    double potential = 0;
+                    for (int i = 0; i < x.Rows; i++)
+                    {
+                        double distSquared = Math.Pow(
+                            NumOps.ToDouble(distanceMetric.Compute(points[i], points[candidates[t]])), 2);
+                        potential += Math.Min(minDistances[i], distSquared);
+                    }
+
+                    potentials[t] = potential;
                 }
-            }
+
+                return potentials;
+            }, out _);
 
             for (int j = 0; j < x.Columns; j++)
             {
@@ -646,7 +721,8 @@ public partial class KMeans<T> : ClusteringBase<T>
         {
             foreach (T value in x.GetRowReadOnlySpan(i))
             {
-                if (NumericalStabilityHelper.IsNaN(value) || NumericalStabilityHelper.IsInfinity(value))
+                // NumOps, not NumericalStabilityHelper, which looks the operations up again for every element.
+                if (NumOps.IsNaN(value) || NumOps.IsInfinity(value))
                 {
                     throw new ArgumentException("Input data contains NaN or Infinity values.", nameof(x));
                 }

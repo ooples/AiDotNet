@@ -106,6 +106,59 @@ public class KMeansTests : ClusteringModelTestBase
             Assert.Equal(predicted[i], labels[i]);
     }
 
+    /// <summary>
+    /// Greedy k-means++ (the default) keeps the best of several drawn candidates per center, so its seeding leaves less
+    /// squared distance than classic k-means++ (one candidate). On uniform data no seeding finds a perfect clustering, so
+    /// the quality of each draw shows; one Lloyd step makes the inertia a measure of the seeding. Summed over twenty
+    /// seeds, on both training paths.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Train_GreedySeedingLeavesLessInertiaThanClassic(bool genericMetric)
+    {
+        const int rows = 1000;
+        var rand = RandomHelper.CreateSeededRandom(5);
+        var x = new Matrix<double>(rows, 2);
+        for (int i = 0; i < rows; i++)
+        {
+            x[i, 0] = rand.NextDouble() * 10;
+            x[i, 1] = rand.NextDouble() * 10;
+        }
+
+        double TotalInertia(int? localTrials)
+        {
+            double total = 0;
+            for (int seed = 1; seed <= 20; seed++)
+            {
+                var model = new KMeans<double>(new KMeansOptions<double>
+                {
+                    NumClusters = 8, NumInitializations = 1, Seed = seed, MaxIterations = 1,
+                    KMeansPlusPlusLocalTrials = localTrials,
+                    DistanceMetric = genericMetric ? new SubclassedEuclidean() : null
+                });
+                model.Train(x, new Vector<double>(rows));
+                total += model.Inertia;
+            }
+
+            return total;
+        }
+
+        double greedy = TotalInertia(null);
+        double classic = TotalInertia(1);
+        Assert.True(greedy < classic, $"Greedy seeding left {greedy} total inertia; classic left {classic}.");
+    }
+
+    [Fact]
+    public void Train_RejectsFewerThanOneLocalTrial()
+    {
+        var model = new KMeans<double>(new KMeansOptions<double> { NumClusters = 2, KMeansPlusPlusLocalTrials = 0 });
+        var x = new Matrix<double>(4, 1);
+        for (int i = 0; i < 4; i++) x[i, 0] = i;
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => model.Train(x, new Vector<double>(4)));
+    }
+
     /// <summary>Euclidean distance under another type, which routes training through the generic metric path.</summary>
     private sealed class SubclassedEuclidean : EuclideanDistance<double>
     {
