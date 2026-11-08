@@ -81,6 +81,81 @@ public class SoundStormPaperTests
         Assert.False(first.GetParameters().SequenceEqual(second.GetParameters()));
     }
 
+    [Theory]
+    [InlineData("SampleRate", 24000)]
+    [InlineData("HopSize", 800)]
+    [InlineData("NumCodebooks", 2)]
+    [InlineData("CodebookSize", 8)]
+    public void UnpairedCodecGeometryIsRejected(string option, int value)
+    {
+        var options = Tiny();
+        typeof(SoundStormOptions).GetProperty(option)!.SetValue(options, value);
+        Assert.Throws<ArgumentException>(() => Create(options));
+    }
+
+    [Theory]
+    [InlineData(16000, 1600, 2, 8)]
+    [InlineData(24000, 1600, 3, 16)]
+    [InlineData(16000, 800, 3, 8)]
+    public void PairedCodecGeometryRoundTripsAudio(int rate, int hop, int levels, int vocabulary)
+    {
+        var options = Tiny();
+        options.SampleRate = options.SoundStream.SampleRate = rate;
+        options.HopSize = hop;
+        options.NumCodebooks = options.SoundStream.NumQuantizers = levels;
+        options.CodebookSize = options.SoundStream.CodebookSize = vocabulary;
+        options.SoundStream.Ratios = hop == 800 ? new[] { 8, 5, 5, 4 } : new[] { 8, 5, 5, 4, 2 };
+        options.SoundStream.TargetBandwidthKbps = levels * (rate / hop) * Math.Log(vocabulary, 2) / 1000;
+        using var model = Create(options);
+        var audio = new Tensor<double>(new[] { hop * 2 });
+        for (int i = 0; i < audio.Length; i++) audio[i] = .4 * Math.Sin(2 * Math.PI * 180 * i / rate);
+        var tokens = model.EncodeToTokens(audio);
+        Assert.Equal(new[] { 2, levels }, tokens.Shape);
+        foreach (var token in tokens) Assert.InRange(token, 0, vocabulary - 1);
+        var decoded = model.DecodeFromTokens(tokens);
+        Assert.Equal(hop * 2, decoded.Length);
+        Assert.All(decoded, value => Assert.True(TtsPaperNumerics.IsFinite(value)));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2048)]
+    public void NativeByT5VocabularyIgnoresInheritedMetadata(int metadata)
+    {
+        using var first = Create();
+        var options = Tiny();
+        options.VocabSize = metadata;
+        using var second = Create(options);
+        Assert.Equal(384 + options.SemanticCodes, ((SoundStormOptions)second.GetOptions()).VocabSize);
+        Assert.Equal(first.GetParameters().ToArray(), second.GetParameters().ToArray());
+        Assert.Equal(first.TextToTokens("hello there").ToArray(), second.TextToTokens("hello there").ToArray());
+        second.Train(Sample(second));
+        Assert.False(first.GetParameters().SequenceEqual(second.GetParameters()));
+        Assert.All(second.GetParameters(), value => Assert.True(TtsPaperNumerics.IsFinite(value)));
+    }
+
+    [Theory]
+    [InlineData("TopK", 4.0)]
+    [InlineData("Temperature", 1.8)]
+    [InlineData("SamplingSeed", 1235.0)]
+    [InlineData("FirstLevelIterations", 5.0)]
+    public void NativeSamplingOptionsChangeGeneratedTokensAndPreserveState(string option, double value)
+    {
+        using var first = Create();
+        var options = Tiny();
+        var property = typeof(SoundStormOptions).GetProperty(option)!;
+        property.SetValue(options, Convert.ChangeType(value, property.PropertyType));
+        using var second = Create(options);
+        first.SetTrainingMode(true);
+        second.SetTrainingMode(true);
+        var parameters = first.GetParameters().ToArray();
+        Assert.NotEqual(SoundStormOptionFixture.Observe(first, option), SoundStormOptionFixture.Observe(second, option));
+        Assert.True(first.IsTrainingMode);
+        Assert.True(second.IsTrainingMode);
+        Assert.Equal(parameters, first.GetParameters().ToArray());
+        Assert.Equal(parameters, second.GetParameters().ToArray());
+    }
+
     private static int[,] CodeGrid(int frames)
     {
         var codes = new int[Levels, frames];

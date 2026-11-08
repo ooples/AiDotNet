@@ -49,6 +49,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.MultiModal.GLM4Voice<T> ? "glmvoice-" + option
             : network is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T> && option is "DvaeFftSize" or "DvaeHopSize" or "DvaeWindowSize" ? "xtts-codec"
             : network is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T> && XttsOptionFixture.IsSamplerOption(option) ? "xtts-sampler"
+            : network is AiDotNet.TextToSpeech.CodecBased.SoundStorm<T> && (SoundStormOptionFixture.IsTrainingOption(option) || SoundStormOptionFixture.IsInferenceOption(option)) ? "soundstorm-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.Pheme<T> && (PhemeOptionFixture.IsTrainingOption(option) || PhemeOptionFixture.IsInferenceOption(option)) ? "pheme-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.MARS5TTS<T> ? "mars5-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.SeedTTS<T> ? "seedtts-" + option
@@ -139,6 +140,10 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.SoundStorm<T> soundStorm
+            && SoundStormOptionFixture.Observe(soundStorm, option) is { } soundStormObservation)
+            return soundStormObservation;
+
         if (network is AiDotNet.TextToSpeech.CodecBased.Pheme<T> pheme
             && PhemeOptionFixture.Observe(pheme, option) is { } phemeObservation)
             return phemeObservation;
@@ -591,6 +596,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.SoundStorm<T> soundStorm && SoundStormOptionFixture.IsTrainingOption(option))
+        {
+            SoundStormOptionFixture.Train(soundStorm, option);
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.CodecBased.Pheme<T> pheme && PhemeOptionFixture.IsTrainingOption(option))
         {
             PhemeOptionFixture.Train(pheme, option);
@@ -720,6 +730,8 @@ internal static class OptionSensitivityFixtureSetup
     {
         if (options is AiDotNet.TextToSpeech.VoiceCloning.XTTSv2Options xtts)
             XttsOptionFixture.PrepareOptions(xtts, option);
+        if (options is AiDotNet.TextToSpeech.CodecBased.SoundStormOptions soundStorm)
+            SoundStormOptionFixture.PrepareOptions(soundStorm, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.PhemeOptions pheme)
             PhemeOptionFixture.PrepareOptions(pheme, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.MARS5TTSOptions mars5)

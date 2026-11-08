@@ -30,6 +30,18 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class SoundStormOptions : TtsModelOptions
 {
+    /// <summary>The codec sample rate; must match SoundStream.SampleRate.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("SampleRate must match SoundStream.SampleRate; native tests reject unpaired rates and round-trip paired codec rates.")]
+    public new int SampleRate { get => base.SampleRate; set => base.SampleRate = value; }
+
+    /// <summary>The codec hop; must match the product of SoundStream.Ratios.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("HopSize must match the SoundStream stride product; native tests reject unpaired hops and round-trip paired stride products.")]
+    public new int HopSize { get => base.HopSize; set => base.HopSize = value; }
+
+    /// <summary>The derived ByT5 byte and semantic token vocabulary.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Native SoundStorm derives VocabSize as 384 plus SemanticCodes; native tests verify tokenizer and network invariance to inherited vocabulary metadata.")]
+    public new int VocabSize { get => base.VocabSize; set => base.VocabSize = value; }
+
     /// <summary>Creates the paper's options (§4.1, §5).</summary>
     public SoundStormOptions()
     {
@@ -124,10 +136,13 @@ public class SoundStormOptions : TtsModelOptions
     // ---------------------------------------------------------------- tokens (§4.1)
 
     /// <summary>Q, the RVQ levels modeled (12).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("NumCodebooks must match the SoundStream quantizer bandwidth; native tests reject unpaired counts and round-trip paired codebook counts.")]
     public int NumCodebooks { get; set; } = 12;
 
     /// <summary>C, the codes per RVQ level (1024).</summary>
-    [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]    public int CodebookSize { get; set; } = 1024;
+    [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]
+    [AiDotNet.Attributes.OptionBehaviourExempt("CodebookSize must match SoundStream.CodebookSize; native tests reject unpaired values and round-trip paired vocabularies.")]
+    public int CodebookSize { get; set; } = 1024;
 
     /// <summary>Semantic token vocabulary (1024 w2v-BERT k-means clusters).</summary>
     public int SemanticCodes { get; set; } = 1024;
