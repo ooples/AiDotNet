@@ -7,12 +7,24 @@ namespace AiDotNet.Tests.IntegrationTests.SyntheticData;
 
 internal static class SyntheticGanOptionFixture
 {
-    internal static bool Handles<T>(INeuralNetworkModel<T> model) => model is CTABGANPlusGenerator<T> or CopulaGANGenerator<T> or CausalGANGenerator<T>;
+    internal static bool Handles<T>(INeuralNetworkModel<T> model) => model is CTABGANPlusGenerator<T> or CopulaGANGenerator<T> or CausalGANGenerator<T> or PATEGANGenerator<T>;
 
     internal static void PrepareOptions(ModelOptions options, string option)
     {
         var type = options.GetType();
         var definition = type.IsGenericType ? type.GetGenericTypeDefinition() : null;
+        if (definition == typeof(PATEGANOptions<>))
+        {
+            type.GetProperty("EmbeddingDimension")!.SetValue(options, 4);
+            type.GetProperty("NumTeachers")!.SetValue(options, 3);
+            type.GetProperty("BatchSize")!.SetValue(options, 4);
+            type.GetProperty("Epochs")!.SetValue(options, 4);
+            // With unit Laplace noise the first moment is always the tightest bound.
+            // A larger noise scale makes the accountant's moment-order limit observable.
+            if (option == "MomentOrders") type.GetProperty("LaplaceScale")!.SetValue(options, 10.0);
+            if (option == "Epochs") type.GetProperty("Epsilon")!.SetValue(options, 100.0);
+            return;
+        }
         if (definition != typeof(CTABGANPlusOptions<>) && definition != typeof(CopulaGANOptions<>) && definition != typeof(CausalGANOptions<>)) return;
         void Set(string name, object value) => type.GetProperty(name)?.SetValue(options, value);
         Set("EmbeddingDimension", 4);
@@ -56,17 +68,24 @@ internal static class SyntheticGanOptionFixture
             case CTABGANPlusGenerator<T> ctab: ctab.Fit(data, columns); break;
             case CopulaGANGenerator<T> copula: copula.Fit(data, columns); break;
             case CausalGANGenerator<T> causal: causal.Fit(data, columns); break;
+            case PATEGANGenerator<T> pate: pate.Fit(data, columns); break;
         }
     }
 
     internal static long Observe<T>(INeuralNetworkModel<T> model)
     {
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        bool fitted = model switch { CTABGANPlusGenerator<T> ctab => ctab.IsFitted, CopulaGANGenerator<T> copula => copula.IsFitted, CausalGANGenerator<T> causal => causal.IsFitted, _ => false };
+        bool fitted = model switch { CTABGANPlusGenerator<T> ctab => ctab.IsFitted, CopulaGANGenerator<T> copula => copula.IsFitted, CausalGANGenerator<T> causal => causal.IsFitted, PATEGANGenerator<T> pate => pate.IsFitted, _ => false };
         if (fitted)
         {
             var rows = ((ISyntheticTabularGenerator<T>)model).Generate(4);
             var values = new List<double>();
+            if (model is PATEGANGenerator<T> pate)
+            {
+                values.Add(pate.PrivacySpent);
+                values.Add(pate.IterationsTrained);
+                values.Add(pate.MeanTeacherScore(pate.EncodeRows(Data<T>().Data)));
+            }
             for (int r = 0; r < rows.Rows; r++) for (int c = 0; c < rows.Columns; c++) values.Add(ops.ToDouble(rows[r, c]));
             // The critic and causal graph are learned state outside the generator parameter vector.
             const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
@@ -78,7 +97,7 @@ internal static class SyntheticGanOptionFixture
         }
         var options = ((AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)model).GetOptions();
         int width = (int)options.GetType().GetProperty("EmbeddingDimension")!.GetValue(options)!;
-        if (model is not CausalGANGenerator<T>) width += model.GetArchitecture().CalculatedInputSize;
+        if (model is not CausalGANGenerator<T> and not PATEGANGenerator<T>) width += model.GetArchitecture().CalculatedInputSize;
         var input = new Tensor<T>(new[] { 1, width });
         for (int i = 0; i < input.Length; i++) input[i] = ops.FromDouble(.1 * (i + 1));
         return TtsPaperNumerics.Fingerprint(model.Predict(input).Select(ops.ToDouble));
