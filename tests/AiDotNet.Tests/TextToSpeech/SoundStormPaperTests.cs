@@ -110,7 +110,8 @@ public class SoundStormPaperTests
         var audio = new Tensor<double>(new[] { hop * 2 });
         for (int i = 0; i < audio.Length; i++) audio[i] = .4 * Math.Sin(2 * Math.PI * 180 * i / rate);
         var tokens = model.EncodeToTokens(audio);
-        Assert.Equal(new[] { 2, levels }, tokens.Shape);
+        Assert.Equal(2, tokens.Shape[0]);
+        Assert.Equal(levels, tokens.Shape[1]);
         foreach (var token in tokens) Assert.InRange(token, 0, vocabulary - 1);
         var decoded = model.DecodeFromTokens(tokens);
         Assert.Equal(hop * 2, decoded.Length);
