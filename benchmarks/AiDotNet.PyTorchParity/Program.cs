@@ -458,6 +458,8 @@ internal sealed class AiDotNetTensorBackend(int seed)
         // A small causal decoder LM: Embedding(512, 128) + 2x pre-RMSNorm block (causal MHA 4 heads, GELU FFN 512) +
         // RMSNorm + Linear(128, 512), next-token loss over 64 positions.
         "decoder-lm" => new AiDotNetDecoderLmModel(seed),
+        // DDPM (Ho et al. 2020): the shipped DDPMModel's CIFAR-10 U-Net on [3, 32, 32], noise-prediction MSE (FamilyRows.cs).
+        "ddpm" => new AiDotNetDdpmModel(seed),
         _ => throw new ArgumentException($"Unknown model '{model}'.")
     };
 }

@@ -37,6 +37,7 @@ from pathlib import Path
 import psutil
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 BATCH_SIZES = [1, 8, 32, 128]
 
@@ -358,6 +359,145 @@ class GCNClassifier(nn.Module):
         return self.head(h.mean(dim=1))
 
 
+DDPM_IMAGE, DDPM_CHANNELS, DDPM_STEPS, DDPM_INFERENCE_T = 32, 3, 1000, 500
+
+
+class DDPMResBlock(nn.Module):
+    """AiDotNet's DiffusionResBlock: GroupNorm(32, eps 1e-5) -> SiLU -> Conv3x3, plus Linear(SiLU(temb)) per channel,
+    then GroupNorm -> SiLU -> Conv3x3, plus the input (through a 1x1 conv when the width changes). No dropout."""
+
+    def __init__(self, in_ch: int, out_ch: int, temb: int) -> None:
+        super().__init__()
+        self.norm1 = nn.GroupNorm(32, in_ch, eps=1e-5)
+        self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1)
+        self.time = nn.Linear(temb, out_ch)
+        self.norm2 = nn.GroupNorm(32, out_ch, eps=1e-5)
+        self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1)
+        self.skip = nn.Conv2d(in_ch, out_ch, 1) if in_ch != out_ch else None
+
+    def forward(self, x: torch.Tensor, temb: torch.Tensor) -> torch.Tensor:
+        h = self.conv1(F.silu(self.norm1(x)))
+        h = h + self.time(F.silu(temb))[:, :, None, None]
+        h = self.conv2(F.silu(self.norm2(h)))
+        return h + (self.skip(x) if self.skip is not None else x)
+
+
+class DDPMAttention(nn.Module):
+    """AiDotNet's DiffusionAttention: multi-head self-attention over the H*W positions with bias-free Q/K/V and a biased
+    output projection (its FlashAttentionLayer). As AiDotNet builds it there is no GroupNorm and no residual add."""
+
+    def __init__(self, ch: int, heads: int) -> None:
+        super().__init__()
+        self.heads = heads
+        self.q = nn.Linear(ch, ch, bias=False)
+        self.k = nn.Linear(ch, ch, bias=False)
+        self.v = nn.Linear(ch, ch, bias=False)
+        self.o = nn.Linear(ch, ch)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, c, h, w = x.shape
+        seq = x.permute(0, 2, 3, 1).reshape(b, h * w, c)
+
+        def split(t: torch.Tensor) -> torch.Tensor:
+            return t.reshape(b, h * w, self.heads, c // self.heads).transpose(1, 2)
+
+        out = F.scaled_dot_product_attention(split(self.q(seq)), split(self.k(seq)), split(self.v(seq)))
+        out = self.o(out.transpose(1, 2).reshape(b, h * w, c))
+        return out.reshape(b, h, w, c).permute(0, 3, 1, 2)
+
+
+class DDPMUNet(nn.Module):
+    """The C# "ddpm" row's denoiser as AiDotNet's UNetNoisePredictor builds it for DDPMModel: 128 base channels,
+    multipliers [1, 2, 2, 2], two residual blocks per level, attention (4 heads) at level 1 (16x16) and in the middle;
+    a sinusoidal timestep embedding of width 512 through two Linear+ReLU; stride-2 conv down, ConvTranspose(4, 2, 1)
+    up; each decoder residual block concatenates one encoder skip."""
+
+    def __init__(self, base: int = 128, mults: tuple[int, ...] = (1, 2, 2, 2), blocks: int = 2,
+                 attention_levels: tuple[int, ...] = (1,), heads: int = 4) -> None:
+        super().__init__()
+        self.temb_dim = base * 4
+        self.time1 = nn.Linear(self.temb_dim, self.temb_dim)
+        self.time2 = nn.Linear(self.temb_dim, self.temb_dim)
+        self.inp = nn.Conv2d(DDPM_CHANNELS, base, 3, padding=1)
+        self.encoder = nn.ModuleList()
+        ch = base
+        for level, mult in enumerate(mults):
+            out = base * mult
+            for _ in range(blocks):
+                block = nn.ModuleDict({"res": DDPMResBlock(ch, out, self.temb_dim)})
+                if level in attention_levels:
+                    block["attn"] = DDPMAttention(out, heads)
+                self.encoder.append(block)
+                ch = out
+            if level < len(mults) - 1:
+                self.encoder.append(nn.ModuleDict({"down": nn.Conv2d(out, out, 3, stride=2, padding=1)}))
+        self.mid_res1 = DDPMResBlock(ch, ch, self.temb_dim)
+        self.mid_attn = DDPMAttention(ch, heads)
+        self.mid_res2 = DDPMResBlock(ch, ch, self.temb_dim)
+        self.decoder = nn.ModuleList()
+        for level in reversed(range(len(mults))):
+            out = base * mults[level]
+            for _ in range(blocks):
+                block = nn.ModuleDict({"res": DDPMResBlock(ch + out, out, self.temb_dim)})
+                if level in attention_levels:
+                    block["attn"] = DDPMAttention(out, heads)
+                self.decoder.append(block)
+                ch = out
+            if level > 0:
+                self.decoder.append(nn.ModuleDict({"up": nn.ConvTranspose2d(out, out, 4, stride=2, padding=1)}))
+        self.out = nn.Conv2d(base * mults[0], DDPM_CHANNELS, 3, padding=1)
+        betas = torch.linspace(1e-4, 0.02, DDPM_STEPS, dtype=torch.float64)
+        alpha_bar = torch.cumprod(1 - betas, dim=0)
+        self.register_buffer("sqrt_ab", alpha_bar.sqrt().float())
+        self.register_buffer("sqrt_1m_ab", (1 - alpha_bar).sqrt().float())
+
+    def timestep_embedding(self, t: torch.Tensor) -> torch.Tensor:
+        """NoisePredictorBase.GetTimestepEmbedding: [sin, cos] of t * exp(-i ln(10000) / (half - 1))."""
+        half = self.temb_dim // 2
+        freqs = torch.exp(-math.log(10000.0) / (half - 1) * torch.arange(half, device=t.device, dtype=torch.float64))
+        angles = t.double()[:, None] * freqs[None, :]
+        return torch.cat([angles.sin(), angles.cos()], dim=1).float()
+
+    def denoise(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        temb = F.relu(self.time2(F.relu(self.time1(self.timestep_embedding(t)))))
+        h = self.inp(x)
+        skips = []
+        for block in self.encoder:
+            if "down" in block:
+                h = block["down"](h)
+                continue
+            h = block["res"](h, temb)
+            if "attn" in block:
+                h = block["attn"](h)
+            skips.append(h)
+        h = self.mid_res2(self.mid_attn(self.mid_res1(h, temb)), temb)
+        for block in self.decoder:
+            if "up" in block:
+                h = block["up"](h)
+                continue
+            h = block["res"](torch.cat([h, skips.pop()], dim=1), temb)
+            if "attn" in block:
+                h = block["attn"](h)
+        return self.out(h)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Inference: one denoiser evaluation of the batch at timestep 500 (the C# row's Forward)."""
+        return self.denoise(x, torch.full((x.shape[0],), DDPM_INFERENCE_T, device=x.device, dtype=torch.long))
+
+    def training_loss(self, x0: torch.Tensor, _: torch.Tensor) -> torch.Tensor:
+        """Ho et al. 2020 Algorithm 1: a timestep and Gaussian noise per image, MSE against the noise."""
+        t = torch.randint(0, DDPM_STEPS, (x0.shape[0],), device=x0.device)
+        noise = torch.randn_like(x0)
+        xt = self.sqrt_ab[t][:, None, None, None] * x0 + self.sqrt_1m_ab[t][:, None, None, None] * noise
+        return F.mse_loss(self.denoise(xt, t), noise)
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """Clean images uniform in [-1, 1] (the C# row's LoadSyntheticBatch); the label half is unused."""
+        x = (torch.rand(batch_size, DDPM_CHANNELS, DDPM_IMAGE, DDPM_IMAGE) * 2 - 1).to(device)
+        return x, x
+
+
 def make_vision_model(name: str) -> nn.Module:
     """torchvision's definition of each architecture, adjusted only where AiDotNet's builder adjusts it for a
     32x32 input, so both sides run the same network: VGG's classifier reads the 512x1x1 feature map directly
@@ -396,6 +536,8 @@ def make_model(name: str) -> tuple[nn.Module, tuple[int, ...]]:
         return GCNClassifier(), (GCN_NODES, GCN_FEATURES)
     if name == "decoder-lm":
         return DecoderLM(), (LM_POSITIONS,)
+    if name == "ddpm":
+        return DDPMUNet(), (DDPM_CHANNELS, DDPM_IMAGE, DDPM_IMAGE)
     if name in VISION_MODELS:
         return make_vision_model(name), (3, 32, 32)
     if name == "mlp":
@@ -429,7 +571,11 @@ def synchronize(device: torch.device) -> None:
         torch.cuda.synchronize(device)
 
 
-def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.device,
+                    model: nn.Module | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+    # A row whose data is not "randn input, random class" (DDPM's clean images) generates its own batch.
+    if model is not None and hasattr(model, "make_batch"):
+        return model.make_batch(batch_size, device)
     if shape == (LM_POSITIONS,):
         return lm_batch(batch_size, device)
     if shape == (GCN_NODES, GCN_FEATURES):
@@ -451,7 +597,7 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
     pool: list[tuple[torch.Tensor, torch.Tensor]] = []
     for _ in range(batches):
         start_data = time.perf_counter()
-        pool.append(synthetic_batch(batch_size, shape, device))
+        pool.append(synthetic_batch(batch_size, shape, device, model))
         synchronize(device)
         data_seconds.append(time.perf_counter() - start_data)
 
@@ -468,9 +614,13 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
             for x, y in pool:
 
                 optimizer.zero_grad(set_to_none=True)
-                logits = model(x)
-                # Flattened so a per-position target (the decoder LM's [B, S] next tokens) is scored like a class one.
-                loss = criterion(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
+                if hasattr(model, "training_loss"):
+                    # A row with its own objective (DDPM's noise regression) computes its loss itself.
+                    loss = model.training_loss(x, y)
+                else:
+                    logits = model(x)
+                    # Flattened so a per-position target (the decoder LM's [B, S] next tokens) is scored like a class one.
+                    loss = criterion(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
                 if first_loss is None:
                     first_loss = loss.detach()
                 # Per-step device syncs inflate the step on GPU; they run only under --breakdown,
@@ -525,7 +675,7 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
                         batch_sizes: list[int], warmup_min_ms: float = 0.0) -> list[InferenceBatchResult]:
     results: list[InferenceBatchResult] = []
     for batch_size in batch_sizes:
-        x, _ = synthetic_batch(batch_size, shape, device)
+        x, _ = synthetic_batch(batch_size, shape, device, model)
         warmup_times: list[float] = []
         # Same rule as the C# twin: at least warmup calls and at least warmup_min_ms of warm-up per batch size.
         warmup_start = time.perf_counter()

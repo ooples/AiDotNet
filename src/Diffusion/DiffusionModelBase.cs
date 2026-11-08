@@ -61,6 +61,17 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
     /// <summary>Training steps this model has run on the fused compiled plan.</summary>
     internal int FusedTrainingStepCount { get; private set; }
 
+    private T _lastTrainingLoss = default!;
+    private bool _lastTrainingLossRecorded;
+
+    /// <summary>
+    /// The noise-prediction loss of the most recent <see cref="Train"/> step, on the fused plan or the eager tape.
+    /// </summary>
+    /// <remarks>
+    /// Returns zero before the first step. NaN and Infinity are returned as they are, so divergence stays visible.
+    /// </remarks>
+    public virtual T GetLastLoss() => _lastTrainingLossRecorded ? _lastTrainingLoss : NumOps.Zero;
+
     /// <summary>Training steps this model has run on the eager tape.</summary>
     internal int EagerTrainingStepCount { get; private set; }
 
@@ -280,11 +291,14 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
             ComputeLoss = Loss,
             Optimizer = optimizer,
             ExtraParameters = parameters,
-        }, out _);
+        }, out var loss);
 
         if (outcome == AiDotNet.Training.FusedStepOutcome.CommittedFailure)
             session.DropAfterCommittedFailure();
-        return outcome == AiDotNet.Training.FusedStepOutcome.Stepped;
+        if (outcome != AiDotNet.Training.FusedStepOutcome.Stepped)
+            return false;
+        RecordTrainingLoss(loss);
+        return true;
     }
 
     private static void RestoreShadow(Tensor<T> param, Vector<T> shadow)
@@ -1592,7 +1606,7 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         //
         // Default optimizer: paper-faithful Adam (DDPM: beta1=0.9, beta2=0.999, eps=1e-8, no weight decay, fixed LR
         // captured at the first Train). Supply DiffusionModelOptions.OptimizerFactory for schedules.
-        AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
+        var eagerLoss = AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(
             TrainedTensors,
             NoisePredictionLoss,
             GetOrCreateTrainingOptimizer(),
@@ -1606,6 +1620,13 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
                         RestoreShadow(shadowedParams[i], shadows[i]);
                 }
                 : null);
+        RecordTrainingLoss(eagerLoss);
+    }
+
+    private void RecordTrainingLoss(T loss)
+    {
+        _lastTrainingLoss = loss;
+        _lastTrainingLossRecorded = true;
     }
 
     /// <summary>
