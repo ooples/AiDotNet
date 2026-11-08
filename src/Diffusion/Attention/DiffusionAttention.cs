@@ -14,9 +14,8 @@ namespace AiDotNet.Diffusion.Attention;
 /// <typeparam name="T">The numeric type used for calculations.</typeparam>
 /// <remarks>
 /// <para>
-/// This attention layer automatically uses Flash Attention when the sequence length
-/// exceeds a threshold, providing significant memory and performance benefits for
-/// high-resolution image generation.
+/// This attention layer runs Flash Attention at every sequence length, providing significant
+/// memory and performance benefits for high-resolution image generation.
 /// </para>
 /// <para>
 /// <b>For Beginners:</b> Attention in diffusion models is computationally expensive.
@@ -70,29 +69,21 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     private readonly int _spatialSize;
 
     /// <summary>
-    /// Sequence length threshold for switching to Flash Attention.
+    /// The attention every input runs through, at any sequence length.
     /// </summary>
-    private readonly int _flashAttentionThreshold;
-
-    /// <summary>
-    /// Flash Attention layer for long sequences.
-    /// </summary>
+    /// <remarks>
+    /// There used to be a second, standard attention for sequences shorter than a threshold. It had its own
+    /// weights, so the layer computed a different function with untrained weights on one side of the threshold,
+    /// and the unused set still counted as parameters and took optimizer steps: 262,400 per 256-channel block,
+    /// 1,312,000 in DDPM's CIFAR-10 U-Net. Flash attention is exact attention and reads the sequence length from
+    /// its input, so one set serves every length.
+    /// </remarks>
     private readonly FlashAttentionLayer<T> _flashAttention;
-
-    /// <summary>
-    /// Standard attention layer for short sequences.
-    /// </summary>
-    private readonly MultiHeadAttentionLayer<T> _standardAttention;
 
     /// <summary>
     /// Flash Attention configuration.
     /// </summary>
     private readonly FlashAttentionConfig _flashConfig;
-
-    /// <summary>
-    /// Whether Flash Attention was used in the last forward pass.
-    /// </summary>
-    private bool _usedFlashAttention;
 
     /// <summary>
     /// Whether this layer supports training.
@@ -123,7 +114,6 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     /// <param name="channels">Number of input/output channels.</param>
     /// <param name="numHeads">Number of attention heads.</param>
     /// <param name="spatialSize">Spatial size (height = width) of input feature maps.</param>
-    /// <param name="flashAttentionThreshold">Sequence length threshold for using Flash Attention (default: 256).</param>
     /// <param name="useCausalMask">Whether to use causal masking (default: false for images).</param>
     /// <remarks>
     /// <para>
@@ -132,14 +122,12 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     /// - channels: Should match your UNet block channels (e.g., 320, 640, 1280)
     /// - numHeads: 8 is typical; channels must be divisible by numHeads
     /// - spatialSize: 64 for 512px images at 8x downsampling
-    /// - flashAttentionThreshold: Lower = more Flash Attention usage = less memory
     /// </para>
     /// </remarks>
     public DiffusionAttention(
         int channels,
         int numHeads = 8,
         int spatialSize = 64,
-        int flashAttentionThreshold = 256,
         bool useCausalMask = false)
         : base(
             CalculateInputShape(channels, spatialSize),
@@ -157,7 +145,6 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
         _numHeads = numHeads;
         _headDim = channels / numHeads;
         _spatialSize = spatialSize;
-        _flashAttentionThreshold = flashAttentionThreshold;
 
         int sequenceLength = spatialSize * spatialSize;
 
@@ -178,10 +165,6 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
             embeddingDimension: channels,
             headCount: numHeads,
             config: _flashConfig);
-
-        // Create standard attention as fallback for short sequences
-        _standardAttention = new MultiHeadAttentionLayer<T>(numHeads, (channels) / (numHeads), 
-            activationFunction: new IdentityActivation<T>());
     }
 
     private static int[] CalculateInputShape(int channels, int spatialSize)
@@ -235,20 +218,7 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
             x = input;
         }
 
-        // Choose attention implementation based on sequence length
-        Tensor<T> output;
-        if (sequenceLength >= _flashAttentionThreshold)
-        {
-            // Use Flash Attention for long sequences
-            output = _flashAttention.Forward(x);
-            _usedFlashAttention = true;
-        }
-        else
-        {
-            // Use standard attention for short sequences
-            output = _standardAttention.Forward(x);
-            _usedFlashAttention = false;
-        }
+        var output = _flashAttention.Forward(x);
 
         // Reshape back to image format if needed — via Engine for tape recording.
         if (isImageFormat)
@@ -272,7 +242,6 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     {
         base.SetTrainingMode(isTraining);
         _flashAttention.SetTrainingMode(isTraining);
-        _standardAttention.SetTrainingMode(isTraining);
     }
 
     /// <summary>
@@ -281,7 +250,6 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     public override void UpdateParameters(T learningRate)
     {
         _flashAttention.UpdateParameters(learningRate);
-        _standardAttention.UpdateParameters(learningRate);
     }
 
     /// <summary>
@@ -289,9 +257,7 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
     /// </summary>
     public override void ResetState()
     {
-        _usedFlashAttention = false;
         _flashAttention.ResetState();
-        _standardAttention.ResetState();
     }
 
 
@@ -305,8 +271,6 @@ public partial class DiffusionAttention<T> : LayerBase<T>, IShapeContract
         diagnostics["NumHeads"] = _numHeads.ToString();
         diagnostics["HeadDim"] = _headDim.ToString();
         diagnostics["SpatialSize"] = _spatialSize.ToString();
-        diagnostics["FlashAttentionThreshold"] = _flashAttentionThreshold.ToString();
-        diagnostics["LastUsedFlashAttention"] = _usedFlashAttention.ToString();
         return diagnostics;
     }
 }

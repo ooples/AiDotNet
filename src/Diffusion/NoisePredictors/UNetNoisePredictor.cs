@@ -1210,8 +1210,7 @@ public partial class UNetNoisePredictor<T> : NoisePredictorBase<T>
         return new DiffusionAttention<T>(
             channels: channels,
             numHeads: _numHeads,
-            spatialSize: spatialSize,
-            flashAttentionThreshold: spatialSize * spatialSize / 16);
+            spatialSize: spatialSize);
     }
 
     private ILayer<T> CreateCrossAttentionBlock(int channels, int spatialSize)

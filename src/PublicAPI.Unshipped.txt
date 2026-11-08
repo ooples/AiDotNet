@@ -993,3 +993,5 @@ AiDotNet.Classification.Boosting.HistGradientBoostingClassifier<T>.NJobs.set -> 
 override AiDotNet.Classification.Ensemble.RandomForestClassifier<T>.PredictProbabilities(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
 AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.TryComputeFusedLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Interfaces.ILossFunction<T>! loss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.GetLastLoss() -> T
+AiDotNet.Diffusion.Attention.DiffusionAttention<T>.DiffusionAttention(int channels, int numHeads = 8, int spatialSize = 64, bool useCausalMask = false) -> void
+*REMOVED*AiDotNet.Diffusion.Attention.DiffusionAttention<T>.DiffusionAttention(int channels, int numHeads = 8, int spatialSize = 64, int flashAttentionThreshold = 256, bool useCausalMask = false) -> void

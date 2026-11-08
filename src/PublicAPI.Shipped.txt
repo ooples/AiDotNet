@@ -24040,7 +24040,6 @@ AiDotNet.Diffusion.Attention.CausalTemporalAttention<T>.NumHeads.get -> int
 AiDotNet.Diffusion.Attention.CausalTemporalAttention<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
 AiDotNet.Diffusion.Attention.DiffusionAttention<T>
 AiDotNet.Diffusion.Attention.DiffusionAttention<T>.Channels.get -> int
-AiDotNet.Diffusion.Attention.DiffusionAttention<T>.DiffusionAttention(int channels, int numHeads = 8, int spatialSize = 64, int flashAttentionThreshold = 256, bool useCausalMask = false) -> void
 AiDotNet.Diffusion.Attention.DiffusionAttention<T>.FlashAttentionEnabled.get -> bool
 AiDotNet.Diffusion.Attention.DiffusionAttention<T>.NumHeads.get -> int
 AiDotNet.Diffusion.Attention.DiffusionAttention<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
