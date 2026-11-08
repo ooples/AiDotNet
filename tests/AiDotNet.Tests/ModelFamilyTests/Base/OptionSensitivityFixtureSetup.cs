@@ -125,6 +125,8 @@ internal static class OptionSensitivityFixtureSetup
                 ? option == "DecoderType" ? "styletts2-decoder-switch"
                 : option == "IstftFftSize" ? "styletts2-istft"
                 : IsStyleTts2JointOption(option) ? "styletts2-joint" : "styletts2-pretraining"
+            : network is AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T> && option is "MaskThreshold" or "SamDecoderHeads" ? "grounded-sam2-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.CosyVoice<T> && option == "SpeechTokenizerHeads" ? "cosy-native-s3-heads"
             : network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && option == "TopK" ? "cosy-top-k"
             : network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> && IsCosyFlowOption(option) ? "cosy-flow"
             : network is AiDotNet.TextToSpeech.Classic.ForwardTacotron<T> ? option switch
@@ -161,6 +163,12 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T> groundedSam && option is "MaskThreshold" or "SamDecoderHeads")
+            return AiDotNet.Tests.VisionLanguage.GroundedSam2OptionFixture.Observe(groundedSam, input);
+
+        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoice<T> cosyTokenizer && option == "SpeechTokenizerHeads")
+            return CosyVoiceTokenizerOptionFixture.Observe(cosyTokenizer);
+
         if (network is AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T> ditto && option is "TextPadId" or "NumHeads")
             return option == "NumHeads" ? DiTToOptionFixture.ObserveHeads(ditto) : DiTToOptionFixture.ObserveTextPadding(ditto);
 
@@ -783,6 +791,12 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.VisionLanguage.Grounding.GroundedSAM2Options groundedSam && option is "MaskThreshold" or "SamDecoderHeads")
+        {
+            groundedSam.Detector.ConfidenceThreshold = 0;
+            groundedSam.Detector.MaxDetections = 1;
+        }
+
         if (options is AiDotNet.TextToSpeech.Classic.DeepVoice3Options deepVoice && option == "GradientClipValue")
             deepVoice.GradientClipValue = 1e-5;
 
@@ -1092,7 +1106,8 @@ internal static class OptionSensitivityFixtureSetup
     internal static void UseConfiguredOptimizer<T>(INeuralNetworkModel<T> network)
     {
         if (network is not AiDotNet.TextToSpeech.TtsModelBase<T>
-            and not AiDotNet.Audio.Codecs.NeuralAudioCodecBase<T>) return;
+            and not AiDotNet.Audio.Codecs.NeuralAudioCodecBase<T>
+            and not AiDotNet.SpeechRecognition.NeMo.CanaryQwen<T>) return;
         // The generated fixtures inject constant-rate optimizers for convergence invariants.
         // Reconstruct option probes without that override so the paper optimizer reads its settings.
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance

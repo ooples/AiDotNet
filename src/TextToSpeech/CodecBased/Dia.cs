@@ -186,7 +186,8 @@ public partial class Dia<T> : TtsModelBase<T>, ICodecTts<T>
             return;
         }
         var o = _options;
-        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.Seed ?? o.SamplingSeed);
+        int seed = (Architecture.HasExplicitRandomSeed ? Architecture.RandomSeed : o.Seed ?? Architecture.RandomSeed) ?? o.SamplingSeed;
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);
         _network = new DiaNetwork<T>(Engine, _modelLayers, NetworkConfiguration());
         _network.InitializeLikeReference(random);
 
@@ -194,7 +195,7 @@ public partial class Dia<T> : TtsModelBase<T>, ICodecTts<T>
         var codecOptions = (DACOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(o.Codec);
         codecOptions.IncludeDiscriminators = false;
         var codec = new DAC<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional, NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1)
-            { RandomSeed = Architecture.RandomSeed ?? o.Seed ?? o.SamplingSeed }, codecOptions);
+            { RandomSeed = seed }, codecOptions);
         if (((IAudioCodec<T>)codec).SampleRate != o.SampleRate)
             throw new ArgumentException($"Dia's {o.SampleRate} Hz audio must be its codec's ({((IAudioCodec<T>)codec).SampleRate} Hz).");
         if (codec.QuantizersForBandwidth(codecOptions.TargetBandwidthKbps) != o.Channels)
