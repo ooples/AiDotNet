@@ -685,21 +685,19 @@ jobs:
       # then the test project for net471 ONLY, which is the compatibility check itself and
       # pulls the satellites to net471 with it.
       #
-      # -m:2 is kept HERE and only here: this is the job that actually runs net8/net10/net471
-      # csc processes together, the combination that reached the 16-GB ceiling and got a
-      # compiler killed with exit 137.
-      # ONE solution build, so tools/ and the satellites stay covered exactly as they were
-      # and projects still compile in parallel. CompatBuildOnly narrows the test project to
-      # net471 -- its net10.0 compile is the most expensive in the repo and the Build job
-      # just did it, so repeating it on a second runner would burn CI minutes for nothing.
+      # ONE solution build, so tools/ and the satellites stay covered exactly as they were.
+      # CompatBuildOnly narrows the test project to net471 -- its net10.0 compile is the most
+      # expensive in the repo and the Build job just did it, so repeating it on a second runner
+      # would burn CI minutes for nothing.
       #
-      # -m:2 is kept HERE and only here: this is the job that actually runs net8/net10/net471
-      # csc processes together, the combination that reached the 16-GB ceiling and got a
-      # compiler killed with exit 137.
+      # -m:1 because this is the job whose csc processes are each the largest in the repo: src/AiDotNet's
+      # net471 compile alone peaks near 7.5 GB on master (8.7 GB once a PR adds ~240k source lines), so
+      # two of them in parallel (-m:2) reach the 16-GB ceiling; the runner's OOM kill then surfaces as
+      # "The runner has received a shutdown signal" with no compiler error.
       # A pull request compiles the test project for net471 only and skips the pack: nothing consumes
       # the package it produced, and master pushes still pack every framework.
       - name: Build (Release, compat frameworks)
-        run: dotnet build -c Release --no-restore -m:2 -p:CompatBuildOnly=true ${{ github.event_name == 'pull_request' && '-p:CompatNet471Only=true' || '' }}
+        run: dotnet build -c Release --no-restore -m:1 -p:CompatBuildOnly=true ${{ github.event_name == 'pull_request' && '-p:CompatNet471Only=true' || '' }}
 
       - name: Build NuGet package
         if: github.event_name != 'pull_request'
