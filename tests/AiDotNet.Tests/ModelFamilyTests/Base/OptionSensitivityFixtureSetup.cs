@@ -46,6 +46,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => option == nameof(AiDotNet.Models.Options.ModelOptions.Seed) ? "model-options-seed"
+            : network is AiDotNet.TextToSpeech.MultiModal.MinMo<T> && MinMoOptionFixture.Handles(option) ? "minmo-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.CSM<T> && CsmOptionFixture.Handles(option) ? "csm-" + option
             : network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> ? "kokoro-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T> && TortoiseOptionFixture.Handles(option) ? "tortoise-" + option
@@ -174,6 +175,9 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.MultiModal.MinMo<T> minMo && MinMoOptionFixture.Handles(option))
+            return MinMoOptionFixture.Observe(minMo, option);
+
         if (network is AiDotNet.TextToSpeech.CodecBased.CSM<T> csm && CsmOptionFixture.Handles(option))
             return CsmOptionFixture.Observe(csm, input, option);
 
@@ -843,6 +847,9 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.MultiModal.MinMoOptions minMoOptions)
+            MinMoOptionFixture.Prepare(minMoOptions, option);
+
         if (options is AiDotNet.TextToSpeech.CodecBased.CSMOptions csmOptions)
             CsmOptionFixture.Prepare(csmOptions, option);
 
