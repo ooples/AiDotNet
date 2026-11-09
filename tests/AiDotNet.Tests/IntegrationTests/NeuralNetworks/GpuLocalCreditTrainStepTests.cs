@@ -60,7 +60,8 @@ public class GpuLocalCreditTrainStepTests
             net.Train(x, y);
 
             float loss = net.GetLastLoss();
-            Assert.True(float.IsFinite(loss) && loss > 0f, $"loss {loss}");
+            // float.IsFinite does not exist on net471, so the check is spelled out.
+            Assert.True(!float.IsNaN(loss) && !float.IsInfinity(loss) && loss > 0f, $"loss {loss}");
         }
         finally { AiDotNetEngine.Current = previous; }
     }
