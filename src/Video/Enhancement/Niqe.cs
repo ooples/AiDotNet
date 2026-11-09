@@ -311,6 +311,9 @@ internal static class Niqe
     {
         var rows = Enumerable.Range(0, features.GetLength(0))
             .Where(r => Enumerable.Range(0, Features).All(k => !double.IsNaN(features[r, k]))).ToList();
+        // The unbiased covariance has no estimate with fewer than two usable patches.
+        // Preserve the metric's unscorable result so callers can rank it last, as for undersized images.
+        if (rows.Count < 2) return double.NaN;
         var mean = new double[Features];
         for (int k = 0; k < Features; k++)
         {
