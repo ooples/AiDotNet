@@ -1,5 +1,8 @@
-"""Resemble's Perth implicit watermarker reference (resemble-perth 1.1.0, PerthImplicitWatermarker), Chatterbox's output
+"""Resemble's Perth implicit watermarker reference (resemble-perth 1.0.1, PerthImplicitWatermarker), Chatterbox's output
 watermark.
+
+Install the published distribution with ``pip install resemble-perth==1.0.1``. Its internal
+``perth.__version__`` string is still 1.0.0; the distribution version identifies the reference.
 
 apply_watermark: the signal resampled to 32 kHz (librosa's soxr_hq), torchaudio's Spectrogram (2048-point periodic Hann,
 hop 320, centred, reflect-padded), magnitude in dB normalized over [20·log10(1e-9), +15 dB] and phase, the encoder (1×1,

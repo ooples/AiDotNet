@@ -42,6 +42,9 @@ internal static class StyleTts2Fixture
         options.SlmAdversarialMinFrames = option == "SlmAdversarialMinFrames" ? 80 : 16;
         options.SlmAdversarialMaxFrames = option == "SlmAdversarialMaxFrames" ? 48 : 128;
         options.SlmDiscriminatorInterval = 3;
+        // The compact predictor has much smaller gradients than the released network.
+        // Probe normalization from an active threshold; the paired candidate crosses above it.
+        if (option == "SlmGradientThreshold") options.SlmGradientThreshold = 1e-12;
     }
 
     internal static TtsTrainingSample<T> SlmAdversarialSample<T>(int hopSize)

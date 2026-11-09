@@ -12,7 +12,7 @@ using Xunit;
 
 namespace AiDotNet.Tests.Audio;
 
-/// <summary>Resemble's Perth implicit watermarker against resemble-perth 1.1.0 (<c>tools/reference-data/perth_reference.py</c>):
+/// <summary>Resemble's Perth implicit watermarker against resemble-perth 1.0.1 (<c>tools/reference-data/perth_reference.py</c>):
 /// the watermarked signal and the detections of a tiny model; with <c>PERTH_CHECKPOINT</c> set (perth_net_250000.pth.tar
 /// from the resemble-perth package), the released model's.</summary>
 public class PerthWatermarkerReferenceTests

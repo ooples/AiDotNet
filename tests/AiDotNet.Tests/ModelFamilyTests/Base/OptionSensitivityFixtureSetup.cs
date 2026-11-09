@@ -138,6 +138,10 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option is "UseNativeEnglishFallback" or "SpectrogramMaskMinimum" ? "voicebox-" + option
 
             : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option == "MaximumAudioFrames" ? "voicebox-audio-chunk"
+            : network is AiDotNet.TextToSpeech.EndToEnd.VITS<T> or AiDotNet.TextToSpeech.EndToEnd.Piper<T>
+                && option is "SpeakerEmbeddingDim" or "LanguageEmbeddingDim" ? "vits-conditioning-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.OrpheusTTS<T>
+                && option is "MaxGradNorm" or "RemoveDuplicateFrames" ? "orpheus-training-" + option
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T>
                 ? option == "DecoderType" ? "styletts2-decoder-switch"
                 : option == "IstftFftSize" ? "styletts2-istft"
@@ -317,6 +321,21 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.MultiModal.SpeechT5<T> speechT5
             && SpeechT5Fixture.Observe(speechT5, option) is { } speechObservation)
             return speechObservation;
+
+        if (network is AiDotNet.TextToSpeech.CodecBased.OrpheusTTS<T> orpheus && option == "RemoveDuplicateFrames")
+        {
+            // Pre-tokenized SNAC frames are a supported training input. Include a repeated coarse
+            // code so the release's deduplication path changes the actual language-model sequence.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var codes = new Tensor<T>(new[] { 3, 7 });
+            for (int frame = 0; frame < 3; frame++)
+                for (int slot = 0; slot < 7; slot++) codes[frame, slot] = ops.FromDouble(slot + (frame < 2 ? 1 : 2));
+            var ids = orpheus.TrainingIds(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+            {
+                Tokens = input, Text = "A repeated codec frame.", CodecTokens = codes,
+            });
+            return OptionSensitivityHarness.Fingerprint(ids.Select(id => (double)id));
+        }
 
         // Unlike the joint prosody losses, these two objectives belong to stage-1 alignment.
         // Observe the real objective as well as weights: Adam can absorb a scalar loss rescaling.
@@ -714,7 +733,7 @@ internal static class OptionSensitivityFixtureSetup
             ? Math.Max(4, steps)
             : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> && option is "WarmupSteps" or "TrainingSteps"
             ? Math.Max(4, steps)
-            : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && StyleTts2Fixture.IsSlmAdversarialOption(option)
+            : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "SlmDiscriminatorInterval"
             ? Math.Max(3, steps)
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "BertBeta1"
             ? Math.Max(2, steps)
@@ -894,6 +913,20 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.OrpheusTTSOptions orpheus && option == "MaxGradNorm")
+            // Bind the actual optimizer clip in the compact LM; the release threshold can exceed every test gradient.
+            orpheus.MaxGradNorm = 1e-12;
+
+        // The single-speaker, monolingual graph has no conditioning tables to resize.
+        // Enable the native conditioning path in both builds before perturbing its width.
+        if ((options.GetType() == typeof(AiDotNet.TextToSpeech.EndToEnd.VITSOptions)
+             || options.GetType() == typeof(AiDotNet.TextToSpeech.EndToEnd.PiperOptions))
+            && options is AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions vits)
+        {
+            if (option == "SpeakerEmbeddingDim") vits.NumSpeakers = 2;
+            if (option == "LanguageEmbeddingDim") vits.NumLanguages = 2;
+        }
+
         if (options is AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions durationVoiceboxOptions && option == "MaximumPhoneDuration")
             durationVoiceboxOptions.MaximumPhoneDuration = 2;
 
@@ -1257,6 +1290,14 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void Prepare<T>(INeuralNetworkModel<T> network)
     {
+        if (network is AiDotNet.TextToSpeech.EndToEnd.VITS<T> or AiDotNet.TextToSpeech.EndToEnd.Piper<T>
+            && ((AiDotNet.TextToSpeech.TtsModelBase<T>)network).GetOptions() is AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions vits
+            && (vits.NumSpeakers > 1 || vits.NumLanguages > 1))
+            ((AiDotNet.TextToSpeech.TtsModelBase<T>)network).Voice = new AiDotNet.TextToSpeech.TtsVoice<T>
+            {
+                SpeakerId = 0, LanguageId = 0,
+            };
+
         if (network is AiDotNet.TextToSpeech.CodecBased.GPTSoVITS<T> gptSoVits)
             GptSoVitsFixture.Prepare(gptSoVits);
 
