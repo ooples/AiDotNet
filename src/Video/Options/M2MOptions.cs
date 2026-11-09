@@ -21,7 +21,7 @@ namespace AiDotNet.Video.Options;
 /// same spot they are blended by how reliable each one is. There is no heavy synthesis network, so it is fast.
 /// </para>
 /// </remarks>
-public class M2MOptions : ModelOptions
+public class M2MOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

@@ -22,7 +22,7 @@ namespace AiDotNet.Video.Options;
 /// and more natural to human eyes, even if individual pixels differ slightly.
 /// </para>
 /// </remarks>
-public class RealBasicVSRSharpOptions : ModelOptions
+public class RealBasicVSRSharpOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

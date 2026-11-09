@@ -21,7 +21,7 @@ namespace AiDotNet.Video.Options;
 /// recomputed, which is where the method saves its compute.
 /// </para>
 /// </remarks>
-public class MIAVSROptions : ModelOptions
+public class MIAVSROptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

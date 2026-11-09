@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// of independently upscaled images.
 /// </para>
 /// </remarks>
-public class StableVideoSROptions : ModelOptions
+public class StableVideoSROptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

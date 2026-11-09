@@ -24,7 +24,7 @@ namespace AiDotNet.Video.Options;
 /// reaches the target size.
 /// </para>
 /// </remarks>
-public class Upscale4KAgentOptions : ModelOptions
+public class Upscale4KAgentOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

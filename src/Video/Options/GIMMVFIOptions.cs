@@ -29,7 +29,7 @@ namespace AiDotNet.Video.Options;
 /// creating variable slow-motion effects or non-uniform frame rate conversion.
 /// </para>
 /// </remarks>
-public class GIMMVFIOptions : ModelOptions
+public class GIMMVFIOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

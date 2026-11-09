@@ -19,7 +19,7 @@ namespace AiDotNet.Video.Options;
 /// borrows detail from the same patch in earlier frames along that path, even many frames back.
 /// </para>
 /// </remarks>
-public class TTVSROptions : ModelOptions
+public class TTVSROptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

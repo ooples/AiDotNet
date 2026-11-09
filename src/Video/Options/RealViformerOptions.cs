@@ -21,7 +21,7 @@ namespace AiDotNet.Video.Options;
 /// the network is and how it is trained: first to match the clean frames, then to also look realistic.
 /// </para>
 /// </remarks>
-public class RealViformerOptions : ModelOptions
+public class RealViformerOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

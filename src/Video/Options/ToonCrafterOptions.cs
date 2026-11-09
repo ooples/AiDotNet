@@ -27,7 +27,7 @@ namespace AiDotNet.Video.Options;
 /// in-between frames for cartoons.
 /// </para>
 /// </remarks>
-public class ToonCrafterOptions : ModelOptions
+public class ToonCrafterOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

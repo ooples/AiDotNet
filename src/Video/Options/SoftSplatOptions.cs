@@ -19,7 +19,7 @@ namespace AiDotNet.Video.Options;
 /// importance), and then lets a grid of convolutions paint the in-between frame from the pushed features.
 /// </para>
 /// </remarks>
-public class SoftSplatOptions : ModelOptions
+public class SoftSplatOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

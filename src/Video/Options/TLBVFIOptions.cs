@@ -29,7 +29,7 @@ namespace AiDotNet.Video.Options;
 /// to build the intermediate frame.
 /// </para>
 /// </remarks>
-public class TLBVFIOptions : ModelOptions
+public class TLBVFIOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

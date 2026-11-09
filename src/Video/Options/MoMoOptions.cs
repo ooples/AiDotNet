@@ -28,7 +28,7 @@ namespace AiDotNet.Video.Options;
 /// the intermediate frame. Think of it as using AI to "draw" better motion maps.
 /// </para>
 /// </remarks>
-public class MoMoOptions : ModelOptions
+public class MoMoOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

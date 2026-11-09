@@ -22,7 +22,7 @@ namespace AiDotNet.Video.Options;
 /// which nearby input pixels to blend and by how much.
 /// </para>
 /// </remarks>
-public class VFITOptions : ModelOptions
+public class VFITOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

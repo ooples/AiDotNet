@@ -22,7 +22,7 @@ namespace AiDotNet.Video.Options;
 /// objects move between frames (optical flow) and nudges the frames to agree, so the result does not flicker.
 /// </para>
 /// </remarks>
-public class MGLDVSROptions : ModelOptions
+public class MGLDVSROptions : NeuralNetworkOptions
 {
     /// <summary>Initializes a new instance with default values.</summary>
     public MGLDVSROptions()

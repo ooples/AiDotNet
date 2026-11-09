@@ -23,7 +23,7 @@ namespace AiDotNet.Video.Options;
 /// fills in the rest of the frames consistently.
 /// </para>
 /// </remarks>
-public class DAMVSROptions : ModelOptions
+public class DAMVSROptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

@@ -21,7 +21,7 @@ namespace AiDotNet.Video.Options;
 /// from the neighboring frames there, and lets the forward pass see what the backward pass found.
 /// </para>
 /// </remarks>
-public class IconVSROptions : ModelOptions
+public class IconVSROptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

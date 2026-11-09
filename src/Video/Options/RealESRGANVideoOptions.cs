@@ -21,7 +21,7 @@ namespace AiDotNet.Video.Options;
 /// artifacts while it upscales. For video it simply upscales every frame.
 /// </para>
 /// </remarks>
-public class RealESRGANVideoOptions : ModelOptions
+public class RealESRGANVideoOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

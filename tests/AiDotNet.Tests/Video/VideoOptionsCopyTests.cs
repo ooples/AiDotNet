@@ -66,10 +66,12 @@ public class VideoOptionsCopyTests
     {
         var source = (ModelOptions)Activator.CreateInstance(optionsType)!;
         source.Seed = 7;
+        ((NeuralNetworkOptions)source).EncoderLayerCount = 3;
         var constructor = optionsType.GetConstructor(new[] { optionsType });
         var copy = (ModelOptions)(constructor is null ? AiDotNet.Models.CloneEngine.CopyConfiguration(source)
             : constructor.Invoke(new object[] { source }));
         Assert.NotSame(source, copy);
         Assert.Equal(7, copy.Seed);
+        Assert.Equal(3, ((NeuralNetworkOptions)copy).EncoderLayerCount);
     }
 }

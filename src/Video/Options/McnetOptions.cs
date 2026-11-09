@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// the model watches, how many future frames it predicts, and how much the critic network influences
 /// training.</para>
 /// </remarks>
-public class McnetOptions : ModelOptions
+public class McnetOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Gets or sets the feature width of the encoders and decoder. Default 64.

@@ -27,7 +27,7 @@ namespace AiDotNet.Video.Options;
 /// frames with realistic motion, lighting changes, and object interactions.
 /// </para>
 /// </remarks>
-public class DynamiCrafterOptions : ModelOptions
+public class DynamiCrafterOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// whichever slide lines up. Sliding is free, so it gets the benefit of alignment without computing motion.
 /// </para>
 /// </remarks>
-public class ShiftNetOptions : ModelOptions
+public class ShiftNetOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

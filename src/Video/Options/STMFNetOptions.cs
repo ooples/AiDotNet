@@ -28,7 +28,7 @@ namespace AiDotNet.Video.Options;
 /// much better in tricky areas like where objects overlap or where motion is ambiguous.
 /// </para>
 /// </remarks>
-public class STMFNetOptions : ModelOptions
+public class STMFNetOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

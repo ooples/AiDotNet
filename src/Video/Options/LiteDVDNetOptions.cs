@@ -26,7 +26,7 @@ namespace AiDotNet.Video.Options;
 /// It's designed to run efficiently on devices with limited computing power.
 /// </para>
 /// </remarks>
-public class LiteDVDNetOptions : ModelOptions
+public class LiteDVDNetOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

@@ -29,7 +29,7 @@ namespace AiDotNet.Video.Options;
 /// warped frames, especially for complex motions.
 /// </para>
 /// </remarks>
-public class MoGOptions : ModelOptions
+public class MoGOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

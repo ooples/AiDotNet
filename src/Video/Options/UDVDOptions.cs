@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// from the surrounding pixels and frames; the noisy pixel is then folded back in with Bayes' rule.
 /// </para>
 /// </remarks>
-public class UDVDOptions : ModelOptions
+public class UDVDOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

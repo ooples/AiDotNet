@@ -30,7 +30,7 @@ namespace AiDotNet.Video.Options;
 /// sharper and more natural even if pixel differences are slightly larger.
 /// </para>
 /// </remarks>
-public class PerVFIOptions : ModelOptions
+public class PerVFIOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

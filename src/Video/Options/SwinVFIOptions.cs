@@ -28,7 +28,7 @@ namespace AiDotNet.Video.Options;
 /// efficient enough to handle full-resolution video frames.
 /// </para>
 /// </remarks>
-public class SwinVFIOptions : ModelOptions
+public class SwinVFIOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

@@ -19,7 +19,7 @@ namespace AiDotNet.Video.Options;
 /// then upscales the cleaned frames with BasicVSR, so the artifacts are not spread from frame to frame.
 /// </para>
 /// </remarks>
-public class RealBasicVSROptions : ModelOptions
+public class RealBasicVSROptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

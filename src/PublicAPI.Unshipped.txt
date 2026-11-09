@@ -1,31 +1,4 @@
 #nullable enable
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.SampleRate.get -> int
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.SampleRate.set -> void
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.MelChannels.get -> int
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.MelChannels.set -> void
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.HopSize.get -> int
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.HopSize.set -> void
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.FftSize.get -> int
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.FftSize.set -> void
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.VocabSize.get -> int
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.VocabSize.set -> void
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.NumEncoderLayers.get -> int
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.NumEncoderLayers.set -> void
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.NumDecoderLayers.get -> int
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.NumDecoderLayers.set -> void
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.DropoutRate.get -> double
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.DropoutRate.set -> void
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.MaxTextLength.get -> int
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.MaxTextLength.set -> void
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.LearningRate.get -> double
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.LearningRate.set -> void
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.OutputsPerStep.get -> int
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.OutputsPerStep.set -> void
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.ModelPath.get -> string?
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.ModelPath.set -> void
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.OnnxOptions.get -> AiDotNet.Onnx.OnnxModelOptions!
-AiDotNet.TextToSpeech.Classic.DeepVoice3Options.OnnxOptions.set -> void
-
 AiDotNet.TextToSpeech.Latest.MegaTTS3Options.DropoutRate.get -> double
 AiDotNet.TextToSpeech.Latest.MegaTTS3Options.DropoutRate.set -> void
 AiDotNet.TextToSpeech.Latest.MegaTTS3Options.HopSize.get -> int

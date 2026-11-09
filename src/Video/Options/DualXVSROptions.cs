@@ -22,7 +22,7 @@ namespace AiDotNet.Video.Options;
 /// and deep its attention is and how it is trained: first to match clean frames, then also to look realistic.
 /// </para>
 /// </remarks>
-public class DualXVSROptions : ModelOptions
+public class DualXVSROptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

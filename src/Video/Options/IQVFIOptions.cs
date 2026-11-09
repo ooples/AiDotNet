@@ -28,7 +28,7 @@ namespace AiDotNet.Video.Options;
 /// that may have noise, blur, or compression artifacts.
 /// </para>
 /// </remarks>
-public class IQVFIOptions : ModelOptions
+public class IQVFIOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

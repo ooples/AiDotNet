@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// refines its predictions until they're good enough, like iterating on a drawing.
 /// </para>
 /// </remarks>
-public class UPRNetOptions : ModelOptions
+public class UPRNetOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

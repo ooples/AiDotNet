@@ -26,7 +26,7 @@ namespace AiDotNet.Video.Options;
 /// using small memory buffers, making it practical for live video and long recordings.
 /// </para>
 /// </remarks>
-public class BSVDOptions : ModelOptions
+public class BSVDOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

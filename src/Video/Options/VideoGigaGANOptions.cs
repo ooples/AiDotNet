@@ -29,7 +29,7 @@ namespace AiDotNet.Video.Options;
 /// preserved while fake ones are avoided, and anti-aliasing prevents flickering.
 /// </para>
 /// </remarks>
-public class VideoGigaGANOptions : ModelOptions
+public class VideoGigaGANOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

@@ -28,7 +28,7 @@ namespace AiDotNet.Video.Options;
 /// understanding how every pixel relates to every other pixel.
 /// </para>
 /// </remarks>
-public class VFIMambaOptions : ModelOptions
+public class VFIMambaOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

@@ -21,7 +21,7 @@ namespace AiDotNet.Video.Options;
 /// motion and then looks around each moved point for the best-matching detail.
 /// </para>
 /// </remarks>
-public class RVRTOptions : ModelOptions
+public class RVRTOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

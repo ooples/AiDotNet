@@ -19,7 +19,7 @@ namespace AiDotNet.Video.Options;
 /// features are warped back along the motion so the current frame also benefits from the future.
 /// </para>
 /// </remarks>
-public class FloRNNOptions : ModelOptions
+public class FloRNNOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

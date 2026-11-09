@@ -21,7 +21,7 @@ namespace AiDotNet.Video.Options;
 /// the current one, each pixel follows the motion and then learns how to blend the four pixels around where it lands.
 /// </para>
 /// </remarks>
-public class IARTOptions : ModelOptions
+public class IARTOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

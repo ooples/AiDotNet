@@ -18,7 +18,7 @@ namespace AiDotNet.Video.Options;
 /// last one also predicts how to blend the two warped frames and a correction.
 /// </para>
 /// </remarks>
-public class IFRNetOptions : ModelOptions
+public class IFRNetOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

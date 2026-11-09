@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// the current one it moves whole 8x8 tiles by their average motion, then lets attention fill in the details.
 /// </para>
 /// </remarks>
-public class PSRTOptions : ModelOptions
+public class PSRTOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

@@ -20,7 +20,7 @@ namespace AiDotNet.Video.Options;
 /// align them before combining their features for higher resolution output.
 /// </para>
 /// </remarks>
-public class BasicVSROptions : ModelOptions
+public class BasicVSROptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

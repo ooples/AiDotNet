@@ -18,7 +18,7 @@ namespace AiDotNet.Video.Options;
 /// coarse-to-fine motion estimator and a refinement network that produce the in-between frame.
 /// </para>
 /// </remarks>
-public class EMAVFIOptions : ModelOptions
+public class EMAVFIOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.

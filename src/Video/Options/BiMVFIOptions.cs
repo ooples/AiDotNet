@@ -18,7 +18,7 @@ namespace AiDotNet.Video.Options;
 /// coarse-to-fine, and blends the two warped frames into the in-between frame.
 /// </para>
 /// </remarks>
-public class BiMVFIOptions : ModelOptions
+public class BiMVFIOptions : NeuralNetworkOptions
 {
     /// <summary>
     /// Initializes a new instance with default values.
