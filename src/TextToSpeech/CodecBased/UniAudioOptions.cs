@@ -142,8 +142,8 @@ public class UniAudioOptions : CodecTtsOptions
     /// <summary>Gets or sets the speaker-prompt duration (three seconds).</summary>
     public double PromptSeconds { get; set; } = 3.0;
 
-    /// <summary>Gets or sets the paper's joint vocabulary size (4,212, including special tokens).</summary>
-    public int JointVocabularySize { get; set; } = 4212;
+    /// <summary>Gets or sets the paper's joint vocabulary size (4,212, including special tokens). This is the same setting as <see cref="TtsModelOptions.VocabSize"/>.</summary>
+    public int JointVocabularySize { get => VocabSize; set => VocabSize = value; }
 
     /// <summary>Gets or sets the reserved phoneme vocabulary (the release reserves 500 entries).</summary>
     public int PhoneVocabularySize { get; set; } = 500;
