@@ -169,12 +169,14 @@ public class OptionsSurfaceRatchetTests
     private const int Slack = 10;
 
     /// <summary>
-    /// Constructor parameters that are collaborators or artifacts rather than hyperparameters.
+    /// Constructor parameters that are collaborators or artifacts rather than hyperparameters. A watermark
+    /// <c>key</c> is a secret: it stays out of the options, which are copied and serialized with the model's
+    /// configuration.
     /// </summary>
     private static readonly HashSet<string> ExcludedParameterNames =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            "modelIdentity", "modelPath", "name", "seed", "checkpointPath", "weightsPath",
+            "modelIdentity", "modelPath", "name", "seed", "checkpointPath", "weightsPath", "key",
         };
 
     [Fact]

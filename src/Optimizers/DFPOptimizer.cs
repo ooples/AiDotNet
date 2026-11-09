@@ -471,8 +471,17 @@ public partial class DFPOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBa
         // and for embedding params that already have a dense entry.
         SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
 
-        var updated = UpdateParameters(context.GetFlatParameters(), context.GetFlatGradients());
+        var pv = context.GetFlatParameters();
+        var gv = context.GetFlatGradients();
+        var updated = UpdateParameters(pv, gv);
         context.SetFlatParameters(updated);
+
+        // Nocedal and Wright, section 6.1. The method gives a direction; the step length along it is the line search's job, and a
+        // fixed-rate step along it can overshoot and climb (see UseLineSearch). Backtrack as BFGS does.
+        if (_options.UseLineSearch && context.SupportsReevaluation)
+        {
+            ApplyBacktrackingLineSearch(context, pv, updated, gv, _options.MaxLineSearchIterations);
+        }
     }
 
     /// <inheritdoc/>

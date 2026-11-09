@@ -857,6 +857,8 @@ AiDotNet.Attributes.OptionBehaviourExemptAttribute.OptionBehaviourExemptAttribut
 AiDotNet.Attributes.OptionBehaviourExemptAttribute.Reason.get -> string!
 AiDotNet.Attributes.PaperDefaultAttribute
 AiDotNet.Attributes.PaperDefaultAttribute.PaperDefaultAttribute(object! value) -> void
+AiDotNet.Attributes.PaperDefaultAttribute.PaperDefaultAttribute(string! property, object! value) -> void
+AiDotNet.Attributes.PaperDefaultAttribute.Property.get -> string?
 AiDotNet.Attributes.PaperDefaultAttribute.Source.get -> string!
 AiDotNet.Attributes.PaperDefaultAttribute.Source.set -> void
 AiDotNet.Attributes.PaperDefaultAttribute.Value.get -> object!
@@ -993,9 +995,167 @@ AiDotNet.Regression.LogisticRegression<T>.CreateGradientDescentSolver() -> AiDot
 AiDotNet.Classification.Boosting.HistGradientBoostingClassifier<T>.NJobs.get -> int
 AiDotNet.Classification.Boosting.HistGradientBoostingClassifier<T>.NJobs.set -> void
 override AiDotNet.Classification.Ensemble.RandomForestClassifier<T>.PredictProbabilities(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+override AiDotNet.Audio.Fingerprinting.CLAPModel<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.NeuralNetworks.WGANGP<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.VisionLanguage.Document.GOTOCR2<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.Channel.get -> int
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.DetectFromNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! noise) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.Generate(int[]! noiseShape, int seed, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, int, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? noisePredictor = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.GenerateWithoutWatermark(int[]! noiseShape, int seed, System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, int, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>? noisePredictor = null) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.InferenceSteps.get -> int
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.InvertToNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.Radius.get -> int
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.UsesPublicKey.get -> bool
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.WatermarkedNoise(int[]! noiseShape, int seed) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+override AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.ModuleName.get -> string!
+override AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.RegisterGeneratedParameterComponents(AiDotNet.Models.Parameters.ParameterComponentRegistry<T>! registry) -> void
+override AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+AiDotNet.Safety.Watermarking.TreeRingKeyPattern
+AiDotNet.Safety.Watermarking.TreeRingKeyPattern.Random = 0 -> AiDotNet.Safety.Watermarking.TreeRingKeyPattern
+AiDotNet.Safety.Watermarking.TreeRingKeyPattern.Rings = 1 -> AiDotNet.Safety.Watermarking.TreeRingKeyPattern
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.Pattern.get -> AiDotNet.Safety.Watermarking.TreeRingKeyPattern
+AiDotNet.Safety.Watermarking.TreeRingWatermarker<T>.TreeRingWatermarker(AiDotNet.Interfaces.IDiffusionModel<T>! model, string? key = null, int radius = 10, int channel = 0, int inferenceSteps = 50, AiDotNet.Safety.Watermarking.TreeRingKeyPattern pattern = AiDotNet.Safety.Watermarking.TreeRingKeyPattern.Random, double reportThreshold = 0.3) -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions
+AiDotNet.Safety.Watermarking.StegaStampOptions.BlurProbability.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.BlurProbability.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.BrightnessShift.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.BrightnessShift.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.ColorRampSteps.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.ColorRampSteps.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.ContrastHigh.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.ContrastHigh.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.ContrastLow.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.ContrastLow.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.CriticLearningRate.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.CriticLearningRate.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.CriticLossRampSteps.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.CriticLossRampSteps.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.CriticLossScale.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.CriticLossScale.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.CriticWeightClip.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.CriticWeightClip.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossGain.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossGain.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.HueShift.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.HueShift.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.ImageLossRampSteps.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.ImageLossRampSteps.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.ImageLossScale.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.ImageLossScale.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.LearningRate.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.LearningRate.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.LearningRateWarmupSteps.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.LearningRateWarmupSteps.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.MinimumJpegQuality.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.MinimumJpegQuality.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.NoImageLossSteps.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.NoImageLossSteps.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.NoiseStdDev.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.NoiseStdDev.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.PerspectiveJitter.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.PerspectiveJitter.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.PerspectiveRampSteps.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.PerspectiveRampSteps.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.SaturationMix.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.SaturationMix.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.SecretLossScale.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.SecretLossScale.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.StegaStampOptions() -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.StegaStampOptions(AiDotNet.Safety.Watermarking.StegaStampOptions! other) -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.UseErrorCorrection.get -> bool
+AiDotNet.Safety.Watermarking.StegaStampOptions.UseErrorCorrection.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.YuvLossScales.get -> double[]!
+AiDotNet.Safety.Watermarking.StegaStampOptions.YuvLossScales.set -> void
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.DecodePayload(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> (bool[]! Data, int Corrected)?
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.DecodeSecret(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> bool[]!
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.DetectWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> double
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.EmbedWatermark(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.EncodeSecret(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image, System.Collections.Generic.IReadOnlyList<bool>! secret) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.Evaluate(AiDotNet.Tensors.LinearAlgebra.Vector<T>! content) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.EvaluateImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Safety.SafetyFinding!>!
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.IsReady.get -> bool
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.KeySecret() -> bool[]!
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.StegaStampWatermarker() -> void
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.StegaStampWatermarker(AiDotNet.Safety.Watermarking.StegaStampOptions! options, string? key = null) -> void
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.TrainingStep.get -> int
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.UsesPublicKey.get -> bool
+override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
+override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.DefineTrainingObjectives(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Training.TrainingObjective<T>!>?
+override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
+override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
+override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.GetModelMetadata() -> AiDotNet.Models.ModelMetadata<T>!
+override sealed AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.InitializeLayers() -> void
+override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.PredictCore(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
+override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.SupportsTraining.get -> bool
+override AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.TrainingOptimizer.get -> AiDotNet.Interfaces.IGradientBasedOptimizer<T, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
+AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.WithKey(string? key) -> AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>!
+AiDotNet.Safety.Watermarking.SynthIdImageOptions
+AiDotNet.Safety.Watermarking.SynthIdImageOptions.DetectionLossScale.get -> double
+AiDotNet.Safety.Watermarking.SynthIdImageOptions.DetectionLossScale.set -> void
+AiDotNet.Safety.Watermarking.SynthIdImageOptions.FalsePositiveRate.get -> double
+AiDotNet.Safety.Watermarking.SynthIdImageOptions.FalsePositiveRate.set -> void
+AiDotNet.Safety.Watermarking.SynthIdImageOptions.SpecificityLossScale.get -> double
+AiDotNet.Safety.Watermarking.SynthIdImageOptions.SpecificityLossScale.set -> void
+AiDotNet.Safety.Watermarking.SynthIdImageOptions.SynthIdImageOptions() -> void
+AiDotNet.Safety.Watermarking.SynthIdImageOptions.SynthIdImageOptions(AiDotNet.Safety.Watermarking.SynthIdImageOptions! other) -> void
+AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>
+AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.Calibrate(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! cleanImages, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! watermarkedImages) -> void
+AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.Decide(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Safety.Watermarking.WatermarkDecision!
+AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.DetectionLogits(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images) -> double[]!
+AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.IsCalibrated.get -> bool
+AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.SynthIdImageWatermarker() -> void
+AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.SynthIdImageWatermarker(AiDotNet.Safety.Watermarking.SynthIdImageOptions! options, string? key = null) -> void
+AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.WithKey(string? key) -> AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>!
+AiDotNet.Safety.Watermarking.WatermarkDecision
+AiDotNet.Safety.Watermarking.WatermarkDecision.Alpha.get -> double
+AiDotNet.Safety.Watermarking.WatermarkDecision.Alpha.init -> void
+AiDotNet.Safety.Watermarking.WatermarkDecision.CleanPValue.get -> double
+AiDotNet.Safety.Watermarking.WatermarkDecision.CleanPValue.init -> void
+AiDotNet.Safety.Watermarking.WatermarkDecision.DetectionLogit.get -> double
+AiDotNet.Safety.Watermarking.WatermarkDecision.DetectionLogit.init -> void
+AiDotNet.Safety.Watermarking.WatermarkDecision.Verdict.get -> AiDotNet.Safety.Watermarking.WatermarkVerdict
+AiDotNet.Safety.Watermarking.WatermarkDecision.Verdict.init -> void
+AiDotNet.Safety.Watermarking.WatermarkDecision.WatermarkDecision() -> void
+AiDotNet.Safety.Watermarking.WatermarkDecision.WatermarkedPValue.get -> double
+AiDotNet.Safety.Watermarking.WatermarkDecision.WatermarkedPValue.init -> void
+AiDotNet.Safety.Watermarking.WatermarkVerdict
+AiDotNet.Safety.Watermarking.WatermarkVerdict.Abstain = 2 -> AiDotNet.Safety.Watermarking.WatermarkVerdict
+AiDotNet.Safety.Watermarking.WatermarkVerdict.NotWatermarked = 0 -> AiDotNet.Safety.Watermarking.WatermarkVerdict
+AiDotNet.Safety.Watermarking.WatermarkVerdict.Watermarked = 1 -> AiDotNet.Safety.Watermarking.WatermarkVerdict
+override AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+override AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.GetModelMetadata() -> AiDotNet.Models.ModelMetadata<T>!
+override AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.ModuleName.get -> string!
+virtual AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.Detect(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! image) -> AiDotNet.Safety.Watermarking.WatermarkResult!
+virtual AiDotNet.Safety.Watermarking.StegaStampWatermarker<T>.ModuleName.get -> string!
+override AiDotNet.Safety.Watermarking.SynthIdImageWatermarker<T>.RegisterState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.ImageSize.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.ImageSize.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.SecretBits.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.SecretBits.set -> void
+AiDotNet.Models.Options.RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>.InitialMeanSquare.get -> double
+AiDotNet.Models.Options.RootMeanSquarePropagationOptimizerOptions<T, TInput, TOutput>.InitialMeanSquare.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.CriticGradientClip.get -> double
+AiDotNet.Safety.Watermarking.StegaStampOptions.CriticGradientClip.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossDelaySteps.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossDelaySteps.set -> void
+AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossRampSteps.get -> int
+AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossRampSteps.set -> void
 AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.TryComputeFusedLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Interfaces.ILossFunction<T>! loss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.GetLastLoss() -> T
 AiDotNet.Diffusion.Attention.DiffusionAttention<T>.DiffusionAttention(int channels, int numHeads = 8, int spatialSize = 64, bool useCausalMask = false, bool residualGroupNorm = false) -> void
 *REMOVED*AiDotNet.Diffusion.Attention.DiffusionAttention<T>.DiffusionAttention(int channels, int numHeads = 8, int spatialSize = 64, int flashAttentionThreshold = 256, bool useCausalMask = false) -> void
+AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLineSearchIterations.get -> int
+AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.MaxLineSearchIterations.set -> void
+AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
+AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
+AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
+AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
 override AiDotNet.Diffusion.DDPMModel<T>.CanPredictFromTimestepTensor.get -> bool
 override AiDotNet.Diffusion.DDPMModel<T>.PredictTrainingNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! noisySample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! timesteps, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
