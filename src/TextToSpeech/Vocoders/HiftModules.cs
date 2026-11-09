@@ -12,6 +12,10 @@ internal sealed record HiftConfiguration(
 {
     /// <summary>Waveform samples per mel frame: the upsampling rates' product times the iSTFT hop.</summary>
     public int UpsampleScale => UpsampleRates.Aggregate(1, (a, b) => a * b) * HopSize;
+
+    /// <summary>The original <c>SineGen</c> at any rate (Chatterbox's S3Gen keeps it at 24 kHz); CosyVoice uses it only at
+    /// 22.05 kHz and <c>SineGen2</c> otherwise.</summary>
+    public bool OriginalSineGen { get; init; }
 }
 
 /// <summary>
@@ -195,7 +199,7 @@ internal sealed class HiftGenerator<T>
         for (int h = 0; h < harmonics; h++)
             for (int s = 0; s < samples; s++)
                 noise[h, s] = Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
-        if (c.SampleRate == 22050) return Merge(Harmonics(f0, phases, noise));
+        if (c.SampleRate == 22050 || c.OriginalSineGen) return Merge(Harmonics(f0, phases, noise));
         // SineGen2's initial phases are fractions of a cycle, U[0, 1), drawn after the noise's shape is known.
         var fractions = new double[harmonics];
         for (int h = 1; h < harmonics; h++) fractions[h] = phases[h] / (2 * Math.PI) + 0.5;

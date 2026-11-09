@@ -20530,7 +20530,6 @@ override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.RequiredSupervision.get ->
 override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.RequiredVoice.get -> AiDotNet.TextToSpeech.TtsSupervision
 override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
 override AiDotNet.TextToSpeech.VoiceCloning.XTTSv2<T>.TrainsOnSampleObjective.get -> bool
-static AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.CheckpointReader(string! path) -> System.Func<string!, int[]!, double[]!>!
 static AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.OfficialV1() -> AiDotNet.TextToSpeech.CodecBased.UniAudioOptions!
 static AiDotNet.TextToSpeech.CodecBased.VALLEXOptions.CommunityCheckpoint() -> AiDotNet.TextToSpeech.CodecBased.VALLEXOptions!
 static AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions.Official330M() -> AiDotNet.TextToSpeech.CodecBased.VoiceCraftOptions!
