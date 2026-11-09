@@ -6,6 +6,13 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// </remarks>
 public class OpenVoiceV2Options : VoiceCloningOptions
 {
+    [System.Runtime.Serialization.OnDeserialized]
+    private void RestoreLegacyDecoderMetadata(System.Runtime.Serialization.StreamingContext context)
+    {
+        // Older options retained the generic depth of six although the released renderer had four stages.
+        if (NumDecoderLayers == 6) NumDecoderLayers = 4;
+    }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>

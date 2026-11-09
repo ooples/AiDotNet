@@ -30,13 +30,13 @@ public class AcousticModelOptions : TtsModelOptions
     }
 
     /// <summary>Gets or sets the encoder embedding dimension.</summary>
-    public int EncoderDim { get; set; } = 256;
+    public virtual int EncoderDim { get; set; } = 256;
 
     /// <summary>Ordered symbol inventory used to train the text embedding. Null selects this model's English inventory.</summary>
     public string[]? TextSymbols { get; set; }
 
     /// <summary>Gets or sets the decoder output dimension (mel channels).</summary>
-    public int DecoderDim { get; set; } = 80;
+    public virtual int DecoderDim { get; set; } = 80;
 
     /// <summary>Gets or sets the number of mel frames generated per decoder step (reduction factor).</summary>
     public int OutputsPerStep { get; set; } = 1;

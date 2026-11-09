@@ -1,4 +1,18 @@
 #nullable enable
+*REMOVED*AiDotNet.TextToSpeech.Classic.AcousticModelOptions.EncoderDim.get -> int
+*REMOVED*AiDotNet.TextToSpeech.Classic.AcousticModelOptions.EncoderDim.set -> void
+*REMOVED*AiDotNet.TextToSpeech.Classic.AcousticModelOptions.DecoderDim.get -> int
+*REMOVED*AiDotNet.TextToSpeech.Classic.AcousticModelOptions.DecoderDim.set -> void
+virtual AiDotNet.TextToSpeech.Classic.AcousticModelOptions.EncoderDim.get -> int
+virtual AiDotNet.TextToSpeech.Classic.AcousticModelOptions.EncoderDim.set -> void
+virtual AiDotNet.TextToSpeech.Classic.AcousticModelOptions.DecoderDim.get -> int
+virtual AiDotNet.TextToSpeech.Classic.AcousticModelOptions.DecoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.DeepVoice3Options.EncoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.DeepVoice3Options.EncoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.DeepVoice3Options.DecoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.DeepVoice3Options.DecoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.DeepVoice3Options.HiddenDim.get -> int
+override AiDotNet.TextToSpeech.Classic.DeepVoice3Options.HiddenDim.set -> void
 *REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.HopSize.get -> int
 *REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.HopSize.set -> void
 *REMOVED*AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.CodecFrameRate.get -> int
