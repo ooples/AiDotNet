@@ -118,6 +118,7 @@ internal sealed class StyleTts2Source<T>
         SampleRate = sampleRate;
         UpsampleScale = upsampleScale;
         Merge = StyleTtsOps.Own(layers, StyleTtsOps.Linear<T>(1));
+        Merge.ResolveShapesOnly(new[] { 1, Harmonics });
     }
 
     public int SampleRate { get; }

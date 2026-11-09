@@ -47,7 +47,7 @@ public class Upscale4KAgentPaperTests
     }
 
     // The two images niqe_ref.py scored with pyiqa's calculate_niqe (pyiqa 0.1.16, its niqe_modelparameters.mat).
-    private static double[] ReferenceImage(int mode, int height, int width)
+    internal static double[] ReferenceImage(int mode, int height, int width)
     {
         var img = new double[3 * height * width];
         for (int ch = 0; ch < 3; ch++)

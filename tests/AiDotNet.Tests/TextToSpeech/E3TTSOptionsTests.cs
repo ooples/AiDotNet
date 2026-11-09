@@ -5,6 +5,38 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class E3TTSOptionsTests
 {
+    [Theory]
+    [InlineData("NumEncoderLayers", "BertLayers", "Layers", 2)]
+    [InlineData("NumHeads", "BertHeads", "Heads", 1)]
+    [InlineData("DropoutRate", "BertDropout", "Dropout", .25)]
+    public void InheritedTextEncoderSettingsReachTheNativeBertAndIndependentCopies(
+        string inheritedName, string nativeName, string configurationName, double value)
+    {
+        var original = E3TTSPaperTests.TinyOptions();
+        var inherited = typeof(AiDotNet.TextToSpeech.TtsModelOptions).GetProperty(inheritedName)!;
+        var native = typeof(E3TTSOptions).GetProperty(nativeName)!;
+        var expected = Convert.ChangeType(value, inherited.PropertyType);
+        inherited.SetValue(original, expected);
+        Assert.Equal(expected, native.GetValue(original));
+        var copy = (E3TTSOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(original);
+        using var model = new E3TTS<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 1, outputSize: 1), copy);
+        var configuration = model.TextEncoder!.Network.Configuration;
+        Assert.Equal(expected, configuration.GetType().GetProperty(configurationName)!.GetValue(configuration));
+        var changed = Convert.ChangeType(value == 1 ? 2 : value / 2, inherited.PropertyType);
+        native.SetValue(copy, changed);
+        Assert.Equal(changed, inherited.GetValue(copy));
+        Assert.Equal(expected, inherited.GetValue(original));
+    }
+
+    [Fact]
+    public void InheritedTextEncoderDefaultsDescribeThePublishedBert()
+    {
+        var options = new E3TTSOptions();
+        Assert.Equal((12, 12, .1), (options.NumEncoderLayers, options.NumHeads, options.DropoutRate));
+    }
+
     [Fact]
     public void CopyPreservesInheritedTrainingAndSynthesisSettings()
     {

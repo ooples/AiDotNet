@@ -12512,6 +12512,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 // StateSize = ActionSize = the RL base's StateDim (4). The actor maps state -> action (SAC's paper head
                 // emits a mean and a log standard deviation per action dimension, so 8 outputs);
                 // A2C's critic maps state -> value, SAC's maps (state, action) -> Q.
+                // The 800-update bandit smoke fixture needs an explicit SAC step size; its learning
+                // threshold, entropy objective and the production learning-rate default stay unchanged.
                 bool sac = model.ClassName == "FinancialSACAgent";
                 string criticInputs = sac ? "8" : "4";
                 string actorOutputs = sac ? "8" : "4";
@@ -12526,7 +12528,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     $"inputSize: {criticInputs}, outputSize: 1), " +
                     "new AiDotNet.Models.Options.TradingAgentOptions<double> { " +
                     "StateSize = 4, ActionSize = 4, BatchSize = 1, ReplayBufferSize = 64, " +
-                    "WarmupSteps = 0, Seed = 42 })";
+                    "WarmupSteps = 0, Seed = 42" + (sac ? ", LearningRate = 0.001f" : "") + " })";
             }
             else if (model.ClassName == "FinancialPPOAgent" && model.TypeParameterCount == 1)
             {

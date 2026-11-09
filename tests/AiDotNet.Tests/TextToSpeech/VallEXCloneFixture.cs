@@ -29,9 +29,23 @@ internal static class VallEXCloneFixture
         if (option == "UseCommunityPhoneTokenizer") options.TextTokens = 512;
     }
 
-    internal static long? Observe<T>(VALLEX<T> model, string option)
+    internal static long? Observe<T>(VALLEX<T> model, string option, Tensor<T>? input = null)
     {
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        if (option == "Seed" && input is not null)
+        {
+            try
+            {
+                return TtsPaperNumerics.Fingerprint(model.Predict(input).ToArray().Select(value => ops.ToDouble(value)));
+            }
+            catch (InvalidOperationException error) when (error.Message.StartsWith(
+                "VALL-E's AR model ended the utterance before its first code", StringComparison.Ordinal))
+            {
+                // A different seed can legitimately draw immediate EOS from an untrained AR model.
+                // Keep that native sampling outcome observable rather than treating it as a harness crash.
+                return -1;
+            }
+        }
         if (option == "StopOnMostLikelyEndToken")
         {
             model.SetTrainingMode(false);

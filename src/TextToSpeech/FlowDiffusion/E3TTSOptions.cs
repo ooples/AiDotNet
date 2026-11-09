@@ -9,6 +9,15 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </remarks>
 public class E3TTSOptions : EndToEndTtsOptions
 {
+    /// <summary>Number of layers in the BERT text encoder. Shares the setting with <see cref="BertLayers"/>.</summary>
+    public override int NumEncoderLayers { get => BertLayers; set => BertLayers = value; }
+
+    /// <summary>Attention heads in the BERT text encoder. Shares the setting with <see cref="BertHeads"/>.</summary>
+    public override int NumHeads { get => BertHeads; set => BertHeads = value; }
+
+    /// <summary>Dropout probability in the BERT text encoder. Shares the setting with <see cref="BertDropout"/>.</summary>
+    public override double DropoutRate { get => BertDropout; set => BertDropout = value; }
+
     /// <summary>Creates an instance with the default settings.</summary>
     public E3TTSOptions()
     {

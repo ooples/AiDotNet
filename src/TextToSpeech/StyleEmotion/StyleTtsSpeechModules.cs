@@ -79,6 +79,8 @@ internal sealed class StyleTtsAdaIn<T>
         _engine = engine;
         Norm = StyleTtsOps.Own(layers, new InstanceNormalizationLayer<T>(channels, 1e-5, affine: false));
         Style = StyleTtsOps.Own(layers, StyleTtsOps.Linear<T>(2 * channels));
+        // This projection consumes the style vector, not the preceding acoustic feature width.
+        Style.ResolveShapesOnly(new[] { 1, styleDim });
         Channels = channels;
         StyleDim = styleDim;
     }
@@ -305,6 +307,8 @@ internal sealed class StyleTtsAdaLayerNorm<T>
     {
         _engine = engine;
         Style = StyleTtsOps.Own(layers, StyleTtsOps.Linear<T>(2 * channels));
+        // This projection consumes the style vector, not the preceding acoustic feature width.
+        Style.ResolveShapesOnly(new[] { 1, styleDim });
         Channels = channels;
         StyleDim = styleDim;
     }

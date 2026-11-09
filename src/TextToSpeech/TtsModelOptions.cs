@@ -47,7 +47,7 @@ public class TtsModelOptions : ModelOptions
 
     /// <summary>Gets or sets the number of mel-spectrogram frequency channels.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro predicts waveform spectra directly with ISTFTNet and has no mel-spectrogram representation.", ModelType = typeof(EndToEnd.Kokoro<>))]
-    public int MelChannels { get; set; } = 80;
+    public virtual int MelChannels { get; set; } = 80;
 
     /// <summary>Gets or sets the hop size for mel-spectrogram computation.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro has no mel frontend; its released ISTFTNet upsampling and inverse-STFT hop geometry are fixed by the decoder.", ModelType = typeof(EndToEnd.Kokoro<>))]
@@ -64,14 +64,14 @@ public class TtsModelOptions : ModelOptions
     /// <summary>Gets or sets the number of encoder layers.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("CSM configures its native Llama layer counts through BackboneLayers and DecoderLayers.", ModelType = typeof(CodecBased.CSM<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("MinMo configures SenseVoice depth through LargeEncoderLayers, SmallEncoderBlocks and SmallEncoderTpBlocks.", ModelType = typeof(MultiModal.MinMo<>))]
-    public int NumEncoderLayers { get; set; } = 6;
+    public virtual int NumEncoderLayers { get; set; } = 6;
 
     /// <summary>Gets or sets the number of decoder layers.</summary>
     public int NumDecoderLayers { get; set; } = 6;
 
     /// <summary>Gets or sets the number of attention heads.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("CSM configures native attention heads through BackboneHeads, DecoderHeads and MimiHeads.", ModelType = typeof(CodecBased.CSM<>))]
-    public int NumHeads { get; set; } = 8;
+    public virtual int NumHeads { get; set; } = 8;
 
     /// <summary>Gets or sets the phoneme/text vocabulary size.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro uses the released 178-symbol phoneme vocabulary; the native constructor rejects other vocabulary sizes.", ModelType = typeof(EndToEnd.Kokoro<>))]
@@ -95,7 +95,7 @@ public class TtsModelOptions : ModelOptions
 
     [AiDotNet.Attributes.OptionBehaviourExempt("CSM's native Llama and Mimi blocks use deterministic attention without dropout.", ModelType = typeof(CodecBased.CSM<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("MinMo configures dropout on its native Qwen adapters through LoraDropout; its other native blocks do not use this generic setting.", ModelType = typeof(MultiModal.MinMo<>))]
-    public double DropoutRate { get; set; } = 0.1;
+    public virtual double DropoutRate { get; set; } = 0.1;
 
     /// <summary>Gets or sets the ONNX model path.</summary>
     public string? ModelPath { get; set; }
