@@ -312,6 +312,9 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
     /// (its semantic tokens are the prompt, its length sets the speaking rate), as the release loads the prompt file at
     /// each rate, and the transcript's phone ids.
     /// </summary>
+    /// <remarks>For conditioned duration prediction, a supplied voice may also carry ReferenceDurations aligned to
+    /// ReferenceTokens, in semantic frames (50 Hz).</remarks>
+
     public TtsVoice<T> CreateVoice(Tensor<T> recording, int sampleRate, string transcript, string language)
     {
         ThrowIfDisposed();
@@ -388,7 +391,7 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
                 for (int i = 0; i < count; i++) u[i] = random.NextDouble();
                 return u;
             };
-            int length = TargetLength(promptPhones, target, samples16k, random);
+            int length = TargetLength(promptPhones, target, samples16k, random, voice.ReferenceDurations);
             var semantic = Generate(promptPhones, target, promptSemantic, length, uniforms);
             var promptCodes = AcousticCodec.Encode(Doubles(voice.ReferenceAudio!));
             var codes = Acoustic(semantic, promptCodes, uniforms);
@@ -402,7 +405,8 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
 
     /// <summary>The target's length in semantic frames: <see cref="MaskGCTOptions.TargetDurationSeconds"/>, the release's
     /// rule, or the duration predictor, times <see cref="MaskGCTOptions.DurationMultiplier"/>.</summary>
-    internal int TargetLength(IReadOnlyList<int> promptPhones, IReadOnlyList<int> targetPhones, int samples16k, Random random)
+    internal int TargetLength(IReadOnlyList<int> promptPhones, IReadOnlyList<int> targetPhones, int samples16k, Random random,
+        IReadOnlyList<int>? promptDurations = null)
     {
         var o = _options;
         const int framesPerSecond = 50;
@@ -419,7 +423,10 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
         else
         {
             var noise = Enumerable.Range(0, targetPhones.Count).Select(_ => Normal(random)).ToArray();
-            frames = DurationPredictor.Generate(Array.Empty<int>(), Array.Empty<int>(), targetPhones, o.DurationSteps, o.DurationGuidance, noise).Sum();
+            if (promptDurations is not null && (promptDurations.Count != promptPhones.Count || promptDurations.Any(duration => duration < 0)))
+                throw new ArgumentException("Aligned prompt durations must be non-negative and match the prompt phones.", nameof(promptDurations));
+            frames = DurationPredictor.Generate(promptDurations is null ? Array.Empty<int>() : promptPhones,
+                promptDurations ?? Array.Empty<int>(), targetPhones, o.DurationSteps, o.DurationGuidance, noise).Sum();
         }
         return Math.Max(1, (int)(frames * o.DurationMultiplier));
     }

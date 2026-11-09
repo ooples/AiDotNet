@@ -98,6 +98,8 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> && IsFishScheduleOption(option) ? "fish-training-schedule"
             : network is AiDotNet.Audio.Effects.DAC<T> && option == "QuantizerDropout" ? "dac-quantizer-dropout"
             : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && IsMaskGctSamplingOption(option) ? "maskgct-token-sampling"
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && option == "DurationGuidance" ? "maskgct-prompted-duration"
+
             : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && IsMaskGctDurationOption(option) ? "maskgct-duration-predictor"
             : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && option == "SemanticToAcousticHeads" ? "maskgct-acoustic-heads"
             : network is AiDotNet.TextToSpeech.FlowDiffusion.MaskGCT<T> && option == "GuidanceRescale" ? "maskgct-guided-logits"
@@ -121,6 +123,8 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option is "MelMean" or "MelScale" ? "vocoder-normalization"
             : IsVocoderFrontendOption(option) && network is AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T>
                 or AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T> ? "vocoder-frontend"
+            : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option is "UseNativeEnglishFallback" or "SpectrogramMaskMinimum" ? "voicebox-" + option
+
             : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option == "MaximumAudioFrames" ? "voicebox-audio-chunk"
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T>
                 ? option == "DecoderType" ? "styletts2-decoder-switch"
@@ -164,6 +168,35 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> voicebox)
+        {
+            if (option == "UseNativeEnglishFallback")
+            {
+                try
+                {
+                    return OptionSensitivityHarness.Fingerprint(string.Join("|", voicebox.Phonemize("test")).Select(value => (double)value));
+                }
+                catch (InvalidOperationException error) when (error.Message.StartsWith("Voicebox raw text requires an MFA-compatible", StringComparison.Ordinal))
+                {
+                    return OptionSensitivityHarness.Fingerprint(Array.Empty<double>());
+                }
+            }
+            if (option == "SpectrogramMaskMinimum")
+            {
+                var settings = (AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions)voicebox.GetOptions();
+                var numeric = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+                var mel = new Tensor<T>(new[] { 16, settings.MelChannels });
+                for (int i = 0; i < mel.Length; i++) mel[i] = numeric.FromDouble(-5 + 0.2 * Math.Sin(i * 0.13));
+                var tokens = new Tensor<T>(new[] { 4 });
+                for (int i = 0; i < tokens.Length; i++) tokens[i] = numeric.FromDouble(i + 1);
+                var objective = voicebox.EvaluateTrainingObjective(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+                {
+                    Tokens = tokens, Mel = mel, Durations = new[] { 4, 4, 4, 4 },
+                });
+                return OptionSensitivityHarness.Fingerprint(new[] { numeric.ToDouble(objective) });
+            }
+        }
+
         if (network is AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T> groundedSam && option is "MaskThreshold" or "SamDecoderHeads")
             return AiDotNet.Tests.VisionLanguage.GroundedSam2OptionFixture.Observe(groundedSam, input);
 
@@ -320,7 +353,7 @@ internal static class OptionSensitivityFixtureSetup
             const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
             var random = new Random(settings.SamplingSeed);
             int frames = (int)durationMask.GetType().GetMethod("TargetLength", flags)!.Invoke(durationMask,
-                new object[] { new[] { 1, 2 }, phones, 640, random })!;
+                new object?[] { new[] { 1, 2 }, phones, 640, random, option == "DurationGuidance" ? new[] { 1, 1 } : null })!;
             long result = OptionSensitivityHarness.Fingerprint(new[] { (double)frames });
             if (option != "DurationMode")
             {
@@ -328,7 +361,8 @@ internal static class OptionSensitivityFixtureSetup
                 random = new Random(settings.SamplingSeed);
                 var noise = phones.Select(_ => Math.Sqrt(-2 * Math.Log(1 - random.NextDouble())) * Math.Cos(2 * Math.PI * random.NextDouble())).ToArray();
                 var durations = (double[])predictor.GetType().GetMethod("Generate")!.Invoke(predictor,
-                    new object[] { Array.Empty<int>(), Array.Empty<int>(), phones, settings.DurationSteps, settings.DurationGuidance, noise })!;
+                    new object[] { option == "DurationGuidance" ? new[] { 1, 2 } : Array.Empty<int>(),
+                        option == "DurationGuidance" ? new[] { 1, 1 } : Array.Empty<int>(), phones, settings.DurationSteps, settings.DurationGuidance, noise })!;
                 result = OptionSensitivityHarness.Combine(result, OptionSensitivityHarness.Fingerprint(durations));
             }
             return result;
@@ -793,6 +827,9 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions voiceboxMask && option == "SpectrogramMaskMinimum")
+            voiceboxMask.SpectrogramDropProbability = 0;
+
         if (options is AiDotNet.VisionLanguage.Grounding.GroundedSAM2Options groundedSam && option is "MaskThreshold" or "SamDecoderHeads")
         {
             groundedSam.Detector.ConfidenceThreshold = 0;

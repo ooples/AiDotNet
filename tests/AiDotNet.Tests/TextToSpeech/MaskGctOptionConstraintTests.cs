@@ -6,6 +6,38 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class MaskGctOptionConstraintTests
 {
+    [Theory]
+    [InlineData(0.5)]
+    [InlineData(2.5)]
+    public void DurationPredictionUsesAlignedPromptAndConfiguredGuidance(double guidance)
+    {
+        var options = Options();
+        options.DurationMode = MaskGctDurationMode.Predictor;
+        options.DurationGuidance = guidance;
+        options.DurationSteps = 4;
+        options.DurationMultiplier = 1000;
+        using var model = new MaskGCT<double>(Architecture(), options);
+        model.SetTrainingMode(false);
+        var prompt = new[] { 1, 2 };
+        var durations = new[] { 5, 7 };
+        var target = new[] { 3, 4, 5, 6 };
+        var random = new Random(1337);
+        var noise = target.Select(_ => MaskGCT<double>.Normal(random)).ToArray();
+        var expected = model.DurationPredictor.Generate(prompt, durations, target, options.DurationSteps, guidance, noise);
+        Assert.Equal(Math.Max(1, (int)(expected.Sum() * options.DurationMultiplier)),
+            model.TargetLength(prompt, target, 3840, new Random(1337), durations));
+    }
+
+    [Fact]
+    public void DurationPredictionRejectsInvalidPromptAlignment()
+    {
+        var options = Options();
+        options.DurationMode = MaskGctDurationMode.Predictor;
+        using var model = new MaskGCT<double>(Architecture(), options);
+        Assert.Throws<ArgumentException>(() => model.TargetLength(new[] { 1, 2 }, new[] { 3 }, 640, new Random(1), new[] { 1 }));
+        Assert.Throws<ArgumentException>(() => model.TargetLength(new[] { 1, 2 }, new[] { 3 }, 640, new Random(1), new[] { -1, 1 }));
+    }
+
     [Fact]
     public void QuantizerCountRequiresOneDecodingSchedulePerLayer()
     {
