@@ -86,3 +86,81 @@ internal sealed class AiDotNetDdpmModel : IBenchmarkModel
 
     public double? LastLoss => _hasTrainingLoss ? _model.GetLastLoss() : null;
 }
+
+/// <summary>
+/// The "whisper-tiny" row: the shipped <see cref="AiDotNet.Audio.Whisper.WhisperModel{T}"/> at the tiny size (width
+/// 384, 4 encoder and 4 decoder layers, 6 heads) on 30-second [3000, 80] log-mel clips. A training step is
+/// teacher-forced cross-entropy over a 16-token transcript; inference is the encoder plus one decoder step from
+/// <c>&lt;|startoftranscript|&gt;</c>. benchmark.py's <c>WhisperTiny</c> is transformers'
+/// WhisperForConditionalGeneration at the same configuration; it has 9,216 more parameters, the q and v attention
+/// biases AiDotNet's attention layers do not have.
+/// </summary>
+internal sealed class AiDotNetWhisperTinyModel : IBenchmarkModel
+{
+    internal const int Mels = 80;
+    internal const int Frames = 3000;
+    internal const int Tokens = 16;
+    internal const int StartOfTranscript = 50258;
+
+    private readonly AiDotNet.Audio.Whisper.WhisperModel<float> _model;
+    private readonly Random _random;
+    private Tensor<float> _input = Tensor<float>.Empty();
+    private Tensor<float> _label = Tensor<float>.Empty();
+    private bool _trained;
+
+    public AiDotNetWhisperTinyModel(int seed)
+    {
+        _random = new Random(seed);
+        _model = new AiDotNet.Audio.Whisper.WhisperModel<float>(
+            new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<float>(
+                inputType: InputType.TwoDimensional, taskType: NeuralNetworkTaskType.SequenceToSequence,
+                inputHeight: Frames, inputWidth: Mels, inputDepth: 1, outputSize: 51865),
+            new AiDotNet.Audio.Whisper.WhisperOptions { ModelSize = AiDotNet.Audio.Whisper.WhisperModelSize.Tiny },
+            // The optimizer every row uses (torch.optim.AdamW defaults, lr 1e-3) with the same global-norm clip.
+            new AdamWOptimizer<float, Tensor<float>, Tensor<float>>(null,
+                new AdamWOptimizerOptions<float, Tensor<float>, Tensor<float>>
+                {
+                    InitialLearningRate = 1e-3, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.01,
+                    EnableGradientClipping = true, MaxGradientNorm = 1.0,
+                }));
+
+        LoadSyntheticBatch(1);
+        Forward();
+        ParameterCount = _model.GetParameters().Length;
+    }
+
+    public long ParameterCount { get; }
+
+    public (Tensor<float> Input, Tensor<float> Label) CurrentBatch
+    {
+        get => (_input, _label);
+        set => (_input, _label) = value;
+    }
+
+    /// <summary>Log-mel features in [-1, 1] and random transcript tokens below the special-token range.</summary>
+    public void LoadSyntheticBatch(int batchSize)
+    {
+        var features = new float[batchSize * Frames * Mels];
+        for (var i = 0; i < features.Length; i++) features[i] = (float)(_random.NextDouble() * 2.0 - 1.0);
+        _input = new Tensor<float>(features, [batchSize, Frames, Mels]);
+        var tokens = new float[batchSize * Tokens];
+        for (var i = 0; i < tokens.Length; i++) tokens[i] = _random.Next(0, StartOfTranscript);
+        _label = new Tensor<float>(tokens, [batchSize, Tokens]);
+    }
+
+    public void Forward() => _ = _model.Predict(_input);
+
+    public void Backward()
+    {
+        // WhisperModel.Train is the whole step: teacher-forced forward, cross-entropy, backward and the update.
+        _model.Train(_input, _label);
+        _trained = true;
+    }
+
+    public void Step()
+    {
+        // The optimizer step ran inside Backward's Train call.
+    }
+
+    public double? LastLoss => _trained ? _model.GetLastLoss() : null;
+}

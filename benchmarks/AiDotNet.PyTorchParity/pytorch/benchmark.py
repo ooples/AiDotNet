@@ -542,6 +542,42 @@ class DDPMUNet(nn.Module):
         return x, x
 
 
+WHISPER_MELS, WHISPER_FRAMES, WHISPER_TOKENS, WHISPER_VOCAB, WHISPER_SOT = 80, 3000, 16, 51865, 50258
+
+
+class WhisperTiny(nn.Module):
+    """The "whisper-tiny" row: transformers' WhisperForConditionalGeneration at the whisper-tiny configuration (width
+    384, 4 + 4 layers, 6 heads, FFN 1536), randomly initialized. A training step is teacher-forced cross-entropy over a
+    16-token transcript of a 30-second log-mel clip (labels shifted right behind <|startoftranscript|>, as AiDotNet's
+    WhisperModel does); inference is the encoder plus one decoder step from the start token. AiDotNet's whisper-tiny
+    has 9,216 fewer parameters: the q and v attention biases its attention layers do not have."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        from transformers import WhisperConfig, WhisperForConditionalGeneration
+
+        config = WhisperConfig(
+            vocab_size=WHISPER_VOCAB, num_mel_bins=WHISPER_MELS, d_model=384, encoder_layers=4, decoder_layers=4,
+            encoder_attention_heads=6, decoder_attention_heads=6, encoder_ffn_dim=1536, decoder_ffn_dim=1536,
+            max_source_positions=WHISPER_FRAMES // 2, max_target_positions=448, dropout=0.0,
+            decoder_start_token_id=WHISPER_SOT, pad_token_id=50257)
+        self.model = WhisperForConditionalGeneration(config)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        start = torch.full((x.shape[0], 1), WHISPER_SOT, dtype=torch.long, device=x.device)
+        return self.model(input_features=x, decoder_input_ids=start).logits
+
+    def training_loss(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        return self.model(input_features=x, labels=y).loss
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """Log-mel features in [-1, 1] (Whisper's normalized range) and random transcript tokens."""
+        x = (torch.rand(batch_size, WHISPER_MELS, WHISPER_FRAMES) * 2 - 1).to(device)
+        y = torch.randint(0, WHISPER_SOT, (batch_size, WHISPER_TOKENS)).to(device)
+        return x, y
+
+
 def make_vision_model(name: str) -> nn.Module:
     """torchvision's definition of each architecture, adjusted only where AiDotNet's builder adjusts it for a
     32x32 input, so both sides run the same network: VGG's classifier reads the 512x1x1 feature map directly
@@ -582,6 +618,8 @@ def make_model(name: str) -> tuple[nn.Module, tuple[int, ...]]:
         return DecoderLM(), (LM_POSITIONS,)
     if name == "ddpm":
         return DDPMUNet(), (DDPM_CHANNELS, DDPM_IMAGE, DDPM_IMAGE)
+    if name == "whisper-tiny":
+        return WhisperTiny(), (WHISPER_MELS, WHISPER_FRAMES)
     if name in VISION_MODELS:
         return make_vision_model(name), (3, 32, 32)
     if name == "mlp":
