@@ -1,0 +1,53 @@
+name: PR2294 targeted recovery verification
+on:
+  push:
+    branches: [codex/pr2294-verify-20261109-1]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      DOTNET_GCHeapHardLimit: '180000000'
+      DOTNET_GCConserveMemory: '9'
+      DOTNET_PROCESSOR_COUNT: '2'
+      TEST_FILTER: >-
+        (FullyQualifiedName~.FlashVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~TeacherIterations)|(FullyQualifiedName~.FlashVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~SparseRatio)|(FullyQualifiedName~.FlashVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~SparseIterations)|(FullyQualifiedName~.FlashVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~SigmaShift)|(FullyQualifiedName~.FlashVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~ScaleFactor)|(FullyQualifiedName~.FlashVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~NumTrainTimesteps)|(FullyQualifiedName~.FlashVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~LqProjectionLayers)|(FullyQualifiedName~.FlashVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~LocalRange)|(FullyQualifiedName~.FlashVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~KvCacheChunks)|(FullyQualifiedName~.MGLDVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~TrainingFusionWeight)|(FullyQualifiedName~.MGLDVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~MinimumSide)|(FullyQualifiedName~.MGLDVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~DecoderLearningRate)|(FullyQualifiedName~.MGLDVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~DifferenceWeight)|(FullyQualifiedName~.MGLDVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~DiscriminatorWeight)|(FullyQualifiedName~.MGLDVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~EdgeWeight)|(FullyQualifiedName~.MGLDVSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~DiscriminatorStart)|(FullyQualifiedName~.DeepARTests.Options_EachShouldChangeObservableBehaviour&DisplayName~CovariateSize)|(FullyQualifiedName~.StepAudioTests.Options_EachShouldChangeObservableBehaviour&DisplayName~LinguisticCodes)|(FullyQualifiedName~.StableVideoSRTests.Options_EachShouldChangeObservableBehaviour&DisplayName~NumTemporalLayers)
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build normal test project
+        run: >-
+          dotnet build tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0 -m:1
+          -p:UseSharedCompilation=false -nodeReuse:false -p:Optimize=false -p:RunAnalyzers=false
+          -p:GenerateDocumentationFile=false -p:DebugType=None -p:GeneratePackageOnBuild=false
+      - name: Run original failure cases
+        env:
+          DOTNET_GCHeapHardLimit: '100000000'
+        run: >-
+          dotnet test tests/AiDotNet.Tests/AiDotNetTests.csproj -c Release -f net10.0
+          --no-build --no-restore --filter "$TEST_FILTER"
+          --logger 'trx;LogFileName=pr2294-recovery.trx' --results-directory recovery-results
+      - name: Record build source
+        if: always()
+        run: |
+          git rev-parse HEAD > core-build-source.txt
+          git rev-parse HEAD:src >> core-build-source.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: pr2294-recovery-results
+          path: recovery-results/*.trx
+          retention-days: 3
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: pr2294-net10-core
+          path: |
+            core-build-source.txt
+            src/bin/Release/net10.0/AiDotNet.dll
+            src/obj/Release/net10.0/ref/AiDotNet.dll
+          retention-days: 3
