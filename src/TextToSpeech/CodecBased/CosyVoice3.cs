@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Whisper;
 using AiDotNet.Enums;
@@ -188,7 +189,7 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
     protected override Tensor<T> LanguageModelLoss(IReadOnlyList<int> text, IReadOnlyList<int> speech, Tensor<T> xvector,
         bool training, Random random) => Lm.Loss(EnsureSystemPrompt(text), speech, random);
 
-    protected override void LoadLanguageModel(Func<string, int[], double[]> read) => Lm.LoadTorchWeights(read, "");
+    private protected override void LoadLanguageModel(TorchTensorSource source) => Lm.LoadTorchWeights(source, "");
 
     public override Tensor<T> TokensToMel(IReadOnlyList<int> tokens, Random random)
     {
@@ -247,8 +248,8 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
         _options.SpeechTokenizerPath = path;
     }
 
-    protected override void LoadFlowWeights(Func<string, int[], double[]> read) => DiTFlow.LoadTorchWeights(read);
-    protected override void LoadVocoderWeights(Func<string, int[], double[]> read) => CausalHift.LoadTorchWeights(read);
+    private protected override void LoadFlowWeights(TorchTensorSource source) => DiTFlow.LoadTorchWeights(source.AsFunction());
+    private protected override void LoadVocoderWeights(TorchTensorSource source) => CausalHift.LoadTorchWeights(source);
 
     private void OpenSpeakerEncoder(string path)
     {

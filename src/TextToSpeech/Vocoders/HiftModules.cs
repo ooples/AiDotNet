@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 
@@ -379,18 +380,16 @@ internal sealed class HiftGenerator<T>
 
     /// <summary>Loads a CosyVoice <c>hift.pt</c> state dict (weight-norm parametrizations as <c>original0</c> gain and
     /// <c>original1</c> direction).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
         // weight_norm(dim=0): the gain original0 has one value per weight row (dim 0), the direction original1 the weight.
-        void WeightNorm(NormedConv1DLayer<T> conv, string name, int[] shape)
-        {
-            var gainShape = new[] { shape[0] }.Concat(Enumerable.Repeat(1, shape.Length - 1)).ToArray();
-            conv.LoadTorchWeights(read(name + ".parametrizations.weight.original1", shape),
-                read(name + ".parametrizations.weight.original0", gainShape), read(name + ".bias", new[] { conv.OutputChannels }));
-        }
+        void WeightNorm(NormedConv1DLayer<T> conv, string name, int[] shape) =>
+            conv.LoadTorchWeights(source, name + ".parametrizations.weight.original1", shape, name + ".parametrizations.weight.original0", name + ".bias");
         void Plain(NormedConv1DLayer<T> conv, string name, int[] shape) =>
-            conv.LoadTorchWeights(read(name + ".weight", shape), null, read(name + ".bias", new[] { conv.OutputChannels }));
+            conv.LoadTorchWeights(source, name + ".weight", shape, null, name + ".bias");
 
         for (int i = 0; i < F0Convs.Count; i++)
         {
@@ -398,8 +397,8 @@ internal sealed class HiftGenerator<T>
             int kernel = c.Causal && i == 0 ? 4 : 3;
             WeightNorm(F0Convs[i], $"f0_predictor.condnet.{2 * i}", new[] { c.F0Channels, input, kernel });
         }
-        F0Classifier.LoadTorchWeights(read("f0_predictor.classifier.weight", new[] { 1, c.F0Channels }), null, read("f0_predictor.classifier.bias", new[] { 1 }));
-        SourceMerge.LoadTorchWeights(read("m_source.l_linear.weight", new[] { 1, c.Harmonics + 1 }), null, read("m_source.l_linear.bias", new[] { 1 }));
+        F0Classifier.LoadTorchWeights(source, "f0_predictor.classifier.weight", new[] { 1, c.F0Channels }, null, "f0_predictor.classifier.bias");
+        SourceMerge.LoadTorchWeights(source, "m_source.l_linear.weight", new[] { 1, c.Harmonics + 1 }, null, "m_source.l_linear.bias");
         WeightNorm(ConvPre, "conv_pre", new[] { c.BaseChannels, c.InChannels, c.Causal ? c.ConvPreLookRight + 1 : 7 });
         for (int i = 0; i < Ups.Count; i++)
         {
@@ -429,8 +428,8 @@ internal sealed class HiftGenerator<T>
             {
                 WeightNorm(block.Convs1[j], $"{prefix}.convs1.{j}", new[] { channels, channels, kernel });
                 WeightNorm(block.Convs2[j], $"{prefix}.convs2.{j}", new[] { channels, channels, kernel });
-                block.Snakes1[j].LoadAlpha(read($"{prefix}.activations1.{j}.alpha", new[] { channels }));
-                block.Snakes2[j].LoadAlpha(read($"{prefix}.activations2.{j}.alpha", new[] { channels }));
+                block.Snakes1[j].LoadAlpha(source.Read($"{prefix}.activations1.{j}.alpha", new[] { channels }));
+                block.Snakes2[j].LoadAlpha(source.Read($"{prefix}.activations2.{j}.alpha", new[] { channels }));
             }
         }
     }

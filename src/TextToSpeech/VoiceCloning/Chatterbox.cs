@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Resampling;
 using AiDotNet.Helpers;
@@ -244,7 +245,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
             "Chatterbox's T3 loss needs the voice-encoder recording as well as CAM++; use Train(TtsTrainingSample).");
     }
 
-    protected override void LoadLanguageModel(Func<string, int[], double[]> read) => T3.LoadTorchWeights(read);
+    private protected override void LoadLanguageModel(TorchTensorSource source) => T3.LoadTorchWeights(source);
 
     /// <inheritdoc />
     /// <remarks>The release provides inference checkpoints, not a training recipe. Native training uses configured
@@ -350,14 +351,14 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         _options.TokenizerPath = tokenizerPath;
 
         // Each file is streamed one tensor at a time and closed after its components load.
-        using (var t3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "t3_cfg.safetensors"))) T3.LoadTorchWeights(t3.Read);
+        using (var t3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "t3_cfg.safetensors"))) T3.LoadTorchWeights(t3);
         using (var ve = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "ve.safetensors"))) VoiceEncoder.LoadTorchWeights(ve.Read);
         using (var s3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "s3gen.safetensors")))
         {
-            Flow.LoadTorchWeights((name, shape) => s3.Read("flow." + name, shape), "");
-            Hift.LoadTorchWeights((name, shape) => s3.Read("mel2wav." + name, shape));
-            SpeechTokenizer.LoadTorchWeights((name, shape) => s3.Read("tokenizer." + name, shape));
-            SpeakerEncoder.LoadTorchWeights((name, shape) => s3.Read("speaker_encoder." + name, shape));
+            Flow.LoadTorchWeights(s3.WithPrefix("flow."), "");
+            Hift.LoadTorchWeights(s3.WithPrefix("mel2wav."));
+            SpeechTokenizer.LoadTorchWeights(s3.WithPrefix("tokenizer."));
+            SpeakerEncoder.LoadTorchWeights(s3.WithPrefix("speaker_encoder.").AsFunction());
         }
         _t3WeightsGeneration++;
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();

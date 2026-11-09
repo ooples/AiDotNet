@@ -185,6 +185,56 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
     internal int[] TorchWeightShape => new[] { _direction.Shape[0], _direction.Shape[1], _kernel };
 
     /// <summary>
+    /// Loads a torch convolution straight from <paramref name="source"/>: the kernel <paramref name="weightName"/> of torch
+    /// shape <paramref name="weightShape"/> (the direction <c>weight_v</c> of a weight-normalized one, with its gain
+    /// <paramref name="gainName"/>, else each row's norm is its gain) and the bias <paramref name="biasName"/> (zero without
+    /// one).
+    /// </summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string weightName, int[] weightShape, string? gainName,
+        string? biasName)
+    {
+        if (gainName is not null && _normalization != ConvolutionNormalization.Weight)
+            throw new InvalidOperationException("A weight-norm gain loads only into a weight-normalized convolution.");
+        if (_normalization == ConvolutionNormalization.Spectral)
+            throw new InvalidOperationException("Loading PyTorch weights into a spectrally normalized convolution is not supported.");
+        source.CopyTo(weightName, weightShape, _direction);
+        int rows = _direction.Shape[0], per = _direction.Length / rows;
+        if (gainName is not null)
+        {
+            // weight_norm(dim=0)'s gain keeps the weight's rank: [rows, 1, ...].
+            source.CopyTo(gainName, new[] { weightShape[0] }.Concat(Enumerable.Repeat(1, weightShape.Length - 1)).ToArray(), _gain);
+        }
+        else
+        {
+            var direction = _direction.AsSpan();
+            for (int r = 0; r < rows; r++)
+            {
+                double sum = 0;
+                for (int i = 0; i < per; i++)
+                {
+                    double v = NumOps.ToDouble(direction[r * per + i]);
+                    sum += v * v;
+                }
+                _gain[r] = NumOps.FromDouble(Math.Sqrt(sum));
+            }
+        }
+        if (biasName is null)
+        {
+            _bias.AsWritableSpan().Clear();
+        }
+        else
+        {
+            source.CopyTo(biasName, new[] { _bias.Length }, _bias);
+            if (!_useBias)
+                foreach (var b in _bias.AsSpan())
+                    if (NumOps.ToDouble(b) != 0) throw new InvalidOperationException("The checkpoint has a bias but this convolution has none.");
+        }
+        Engine.InvalidatePersistentTensor(_direction);
+        Engine.InvalidatePersistentTensor(_gain);
+        Engine.InvalidatePersistentTensor(_bias);
+    }
+
+    /// <summary>
     /// Loads a PyTorch convolution's parameters: the weight in <see cref="TorchWeightShape"/> order (weight_norm's
     /// <c>weight_v</c> when <paramref name="gain"/> is given), the weight-norm gain <c>weight_g</c> (one per row), and the
     /// bias. Without a gain a weight-normalized layer takes the weight as its direction with gain ‖V‖, so W = V.

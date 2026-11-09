@@ -9229,7 +9229,6 @@ abstract AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.Tokenize(string! text
 abstract AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.Detokenize(System.Collections.Generic.IEnumerable<int>! ids) -> string!
 abstract AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.BuildLanguageModel(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>! layers, System.Random! initialization) -> void
 abstract AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.GenerateWithLanguageModel(System.Collections.Generic.IReadOnlyList<int>! text, System.Collections.Generic.IReadOnlyList<int>! promptText, System.Collections.Generic.IReadOnlyList<int>! promptSpeech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? xvector, System.Random! random) -> int[]!
-abstract AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.LoadLanguageModel(System.Func<string!, int[]!, double[]!>! read) -> void
 abstract AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.LanguageModelLoss(System.Collections.Generic.IReadOnlyList<int>! text, System.Collections.Generic.IReadOnlyList<int>! speech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! xvector, bool training, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.Initialize() -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.MaxTextLength.get -> int
@@ -9309,12 +9308,10 @@ override AiDotNet.TextToSpeech.CodecBased.CosyVoice2<T>.BuildLanguageModel(Syste
 override AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
 override AiDotNet.TextToSpeech.CodecBased.CosyVoice2<T>.GenerateWithLanguageModel(System.Collections.Generic.IReadOnlyList<int>! text, System.Collections.Generic.IReadOnlyList<int>! promptText, System.Collections.Generic.IReadOnlyList<int>! promptSpeech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? xvector, System.Random! random) -> int[]!
 override AiDotNet.TextToSpeech.CodecBased.CosyVoice2<T>.LanguageModelLoss(System.Collections.Generic.IReadOnlyList<int>! text, System.Collections.Generic.IReadOnlyList<int>! speech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! xvector, bool training, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.TextToSpeech.CodecBased.CosyVoice2<T>.LoadLanguageModel(System.Func<string!, int[]!, double[]!>! read) -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoice2<T>.LoadPretrainedWeights(string! modelDirectory) -> void
 override AiDotNet.TextToSpeech.CodecBased.CosyVoice<T>.BuildLanguageModel(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>!>! layers, System.Random! initialization) -> void
 override AiDotNet.TextToSpeech.CodecBased.CosyVoice<T>.GenerateWithLanguageModel(System.Collections.Generic.IReadOnlyList<int>! text, System.Collections.Generic.IReadOnlyList<int>! promptText, System.Collections.Generic.IReadOnlyList<int>! promptSpeech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? xvector, System.Random! random) -> int[]!
 override AiDotNet.TextToSpeech.CodecBased.CosyVoice<T>.LanguageModelLoss(System.Collections.Generic.IReadOnlyList<int>! text, System.Collections.Generic.IReadOnlyList<int>! speech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! xvector, bool training, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.TextToSpeech.CodecBased.CosyVoice<T>.LoadLanguageModel(System.Func<string!, int[]!, double[]!>! read) -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoice<T>.LoadPretrainedWeights(string! modelDirectory) -> void
 override AiDotNet.TextToSpeech.CodecBased.GPTSoVITS<T>.EvaluateTrainingObjective(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
 override AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T>.CopyGeneratedLayerAliasesTo(AiDotNet.NeuralNetworks.NeuralNetworkBase<T>! destination) -> void
@@ -20379,11 +20376,8 @@ override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.FlowTrainingLoss(System.
 override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.ForwardSpeakerEncoder(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! features) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.GenerateWithLanguageModel(System.Collections.Generic.IReadOnlyList<int>! text, System.Collections.Generic.IReadOnlyList<int>! promptText, System.Collections.Generic.IReadOnlyList<int>! promptSpeech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>? xvector, System.Random! random) -> int[]!
 override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.LanguageModelLoss(System.Collections.Generic.IReadOnlyList<int>! text, System.Collections.Generic.IReadOnlyList<int>! speech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! xvector, bool training, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.LoadFlowWeights(System.Func<string!, int[]!, double[]!>! read) -> void
-override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.LoadLanguageModel(System.Func<string!, int[]!, double[]!>! read) -> void
 override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.LoadSpeakerEncoderCheckpoint(string! modelDirectory) -> void
 override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.LoadSpeechTokenizerWeights(string! modelDirectory, string! speechTokenizerFile) -> void
-override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.LoadVocoderWeights(System.Func<string!, int[]!, double[]!>! read) -> void
 override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.MelMaximumFrequency.get -> double
 override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.Settings.get -> AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions!
 override AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T>.SpeechTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate) -> int[]!
@@ -20489,7 +20483,6 @@ override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.GenerateWithLanguageMo
 override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.GetExtraTrainableLayers() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.Layers.LayerBase<T>?>!
 override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.GetGeneratedAdditionalLayerGroups() -> System.Collections.Generic.IEnumerable<AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.GeneratedAdditionalLayerGroup!>!
 override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.LanguageModelLoss(System.Collections.Generic.IReadOnlyList<int>! text, System.Collections.Generic.IReadOnlyList<int>! speech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! xvector, bool training, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.LoadLanguageModel(System.Func<string!, int[]!, double[]!>! read) -> void
 override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.RebindLayerAliases(System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! previousLayers, System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>! replacementLayers) -> void
 override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.RequiredVoice.get -> AiDotNet.TextToSpeech.TtsSupervision
 override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.SetTrainingMode(bool isTraining) -> void
@@ -20548,11 +20541,8 @@ virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.BuildVocoder(System.Co
 virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.CreateVoice(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate, string? transcript = null) -> AiDotNet.TextToSpeech.TtsVoice<T>!
 virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.FlowTrainingLoss(System.Collections.Generic.IReadOnlyList<int>! speech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! xvector, bool training, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.ForwardSpeakerEncoder(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! features) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
-virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.LoadFlowWeights(System.Func<string!, int[]!, double[]!>! read) -> void
 virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.LoadSpeakerEncoderCheckpoint(string! modelDirectory) -> void
-virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.LoadSpeakerEncoderWeights(System.Func<string!, int[]!, double[]!>! read) -> void
 virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.LoadSpeechTokenizerWeights(string! modelDirectory, string! speechTokenizerFile) -> void
-virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.LoadVocoderWeights(System.Func<string!, int[]!, double[]!>! read) -> void
 virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.MelMaximumFrequency.get -> double
 virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.MelToAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 virtual AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T>.SpeechTokens(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! recording, int sampleRate) -> int[]!

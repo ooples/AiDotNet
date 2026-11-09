@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
@@ -205,7 +206,7 @@ public partial class CosyVoice2<T> : CosyVoiceBase<T>
         bool training, Random random) => Lm.Loss(text, speech, random);
 
     /// <inheritdoc />
-    protected override void LoadLanguageModel(Func<string, int[], double[]> read) => Lm.LoadTorchWeights(read, "");
+    private protected override void LoadLanguageModel(TorchTensorSource source) => Lm.LoadTorchWeights(source, "");
 
     /// <summary>
     /// Loads the released networks from a CosyVoice2-0.5B directory, each a state dict converted to safetensors:

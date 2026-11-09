@@ -134,6 +134,13 @@ public partial class TiedEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_table);
     }
 
+    /// <summary>Loads the table from the named tensor of <paramref name="source"/>, copied straight into it.</summary>
+    internal void LoadTable(AiDotNet.ModelLoading.TorchTensorSource source, string name)
+    {
+        source.CopyTo(name, _table.Shape.ToArray(), _table);
+        Engine.InvalidatePersistentTensor(_table);
+    }
+
     internal void LoadTable(double[] values)
     {
         if (values.Length != _table.Length)

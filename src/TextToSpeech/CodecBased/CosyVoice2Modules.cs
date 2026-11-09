@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -99,16 +100,18 @@ internal sealed class UpsampleConformerEncoder<T>
 
     /// <summary>Loads an <c>UpsampleConformerEncoder</c> state: <c>embed</c>, <c>pre_lookahead_layer.conv1/2</c>,
     /// <c>encoders</c>, <c>up_layer.conv</c>, <c>up_embed</c>, <c>up_encoders</c> and <c>after_norm</c>.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
         int d = Configuration.OutputSize;
         void Conv(NormedConv1DLayer<T> conv, string name, int kernel) =>
-            conv.LoadTorchWeights(read(name + ".weight", new[] { d, d, kernel }), null, read(name + ".bias", new[] { d }));
-        Lower.LoadTorchWeights(read, prefix);
+            conv.LoadTorchWeights(source, name + ".weight", new[] { d, d, kernel }, null, name + ".bias");
+        Lower.LoadTorchWeights(source, prefix);
         Conv(LookaheadConv1, prefix + "pre_lookahead_layer.conv1", Lookahead + 1);
         Conv(LookaheadConv2, prefix + "pre_lookahead_layer.conv2", 3);
         Conv(UpConv, prefix + "up_layer.conv", 5);
-        Upper.LoadTorchWeights(read, prefix, "up_embed", "up_encoders");
+        Upper.LoadTorchWeights(source, prefix, "up_embed", "up_encoders");
     }
 }
 
@@ -357,16 +360,18 @@ internal sealed class CosyVoice2Lm<T>
 
     /// <summary>Loads <c>llm.pt</c>'s state: <c>llm_embedding</c>, <c>llm.model.model.*</c> (Qwen2), <c>llm_decoder</c>
     /// and <c>speech_embedding</c>.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
         var c = Configuration;
         int d = c.Qwen.Hidden, outputs = c.SpeechVocabulary + c.SpeechSpecialTokens;
-        if (!c.SpecialsInSpeechEmbedding) LlmEmbedding.LoadTable(read(prefix + "llm_embedding.weight", new[] { 2, d }));
-        Qwen.LoadTorchWeights(read, prefix + "llm.model.model.");
+        if (!c.SpecialsInSpeechEmbedding) LlmEmbedding.LoadTable(source, prefix + "llm_embedding.weight");
+        Qwen.LoadTorchWeights(source, prefix + "llm.model.model.");
         if (_biasFreeHead is not null)
-            TorchParameters.Linear(_biasFreeHead, d, outputs, read(prefix + "llm_decoder.weight", new[] { outputs, d }));
+            TorchParameters.Linear(_biasFreeHead, d, outputs, source, prefix + "llm_decoder.weight");
         else
-            TorchParameters.Linear(_engine, Head, d, outputs, read(prefix + "llm_decoder.weight", new[] { outputs, d }), read(prefix + "llm_decoder.bias", new[] { outputs }));
-        SpeechEmbedding.LoadTable(read(prefix + "speech_embedding.weight", new[] { outputs, d }));
+            TorchParameters.Linear(_engine, Head, d, outputs, source, prefix + "llm_decoder.weight", prefix + "llm_decoder.bias");
+        SpeechEmbedding.LoadTable(source, prefix + "speech_embedding.weight");
     }
 }
