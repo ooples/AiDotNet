@@ -621,7 +621,6 @@ internal static class OptionsFidelityBaselines
             "AiDotNet.SpeechRecognition.WhisperFamily.WhisperXOptions.ModelPath",
             "AiDotNet.TextToSpeech.Classic.AcousticModelOptions.UsePostnet",
             "AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.LanguageModelName",
-            "AiDotNet.TextToSpeech.TtsModelOptions.ModelPath",
             "AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.DecoderDim",
             "AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions.EncoderDim",
             "AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.EncoderDim",
