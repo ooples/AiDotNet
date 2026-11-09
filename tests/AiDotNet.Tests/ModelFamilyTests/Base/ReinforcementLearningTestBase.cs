@@ -1371,12 +1371,22 @@ public abstract class ReinforcementLearningTestBase<T>
                 TryLowerInt(options, "WarmupSteps", 2);
                 // A batch of eight masks every warmup candidate around two: neither agent can update yet.
                 TryLowerInt(options, "BatchSize", option == "WarmupSteps" ? 1 : 8);
+                if (options is AiDotNet.Models.Options.QMIXOptions<T> qmixOptions)
+                {
+                    // QMIX batches complete episodes, not transitions: this probe stores four episodes.
+                    TryLowerInt(options, "BatchSize", 2);
+                    if (option == "HypernetEmbed")
+                        options.GetType().GetProperty("HypernetLayers")!.SetValue(qmixOptions, 2);
+                }
+
                 // Dreamer trains on min(BatchLength, longest stored run) steps; the loop above ends an episode
                 // every 16 steps, so the paper's 50 and every candidate near it clamped to 16 and measured
                 // Insensitive. Below the episode length the perturbation reaches the sequence it sizes.
                 TryLowerInt(options, "BatchLength", 8);
             },
-            model => DescribeAgent(model, battery));
+            model => DescribeAgent(model, battery),
+            controlGroup: option == "WarmupSteps" ? "rl-warmup"
+                : option == "HypernetEmbed" ? "qmix-two-layer-hypernet" : "rl-default");
         OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
     }
 
@@ -1472,6 +1482,11 @@ public abstract class ReinforcementLearningTestBase<T>
     private static long ObserveAgent(IFullModel<T, Vector<T>, Vector<T>> model, Vector<T>[] battery)
     {
         var parts = new List<long>();
+        if (model is AiDotNet.ReinforcementLearning.Agents.QMIX.QMIXAgent<T> qmix)
+        {
+            parts.Add(OptionSensitivityHarness.Fingerprint(new[] { qmix.Epsilon }));
+        }
+
         var parameters = ((IParameterizable<T, Vector<T>, Vector<T>>)model).GetParameters();
         parts.Add(OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, parameters.Length).Select(i => ToD(parameters[i]))));
         foreach (var state in battery)

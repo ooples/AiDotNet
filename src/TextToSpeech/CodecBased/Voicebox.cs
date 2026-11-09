@@ -91,7 +91,7 @@ public partial class Voicebox<T> : TtsModelBase<T>, AiDotNet.TextToSpeech.Interf
         _useNativeMode = true;
         _trainingRandom = new Random(_options.SamplingSeed);
         _optimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, learningRateOverride: _options.LearningRate)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ConfigureBaseProperties();
         InitializeLayers();
