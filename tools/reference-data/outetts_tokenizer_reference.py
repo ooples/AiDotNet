@@ -6,10 +6,11 @@
   src/TextToSpeech/Latest/Resources/outetts_qwen3_added_tokens.json.gz (content, id, special) after checking that the
   vocabulary, merges, normalizer and pre-tokenizer are Qwen2's, and records the ids of a corpus of prompts and texts.
   Pass the model's tokenizer.json with --qwen3.
-- Llama-OuteTTS-1.0-1B's tokenizer (CC-BY-NC-SA, read from the user's model directory at run time) cannot be stored
-  here, so a small tokenizer of the same form is trained with the tokenizers library (Llama 3's Split pattern, ByteLevel
+- A small tokenizer of Llama 3's form is trained with the tokenizers library (Llama 3's Split pattern, ByteLevel
   without its own regex, ignore_merges, the release's special tokens) and stored with the ids it gives the corpus.
-  A GPT-2-form tokenizer (ByteLevel with its own regex) is added for coverage.
+  A GPT-2-form tokenizer (ByteLevel with its own regex) is added for coverage. The separate
+  outetts_llama_tokenizer_reference.py verifies the actual Llama release against the existing embedded Llama 3
+  resources and reproduces the published token ids used by the native tokenizer tests.
 Writes tests/AiDotNet.Tests/TextToSpeech/ReferenceData/outetts_tokenizer_reference.json. Default: verify; --write:
 regenerate.
 """
