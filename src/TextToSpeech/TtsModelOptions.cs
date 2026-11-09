@@ -78,6 +78,7 @@ public class TtsModelOptions : ModelOptions
 
     /// <summary>Gets or sets the number of attention heads.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("CSM configures native attention heads through BackboneHeads, DecoderHeads and MimiHeads.", ModelType = typeof(CodecBased.CSM<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Deep Voice 3 section 3.6 uses a single dot-product alignment per convolutional attention hop, not configurable multi-head attention; the native constructor requires NumHeads=1 (arXiv:1710.07654).", ModelType = typeof(Classic.DeepVoice3<>))]
     public virtual int NumHeads { get; set; } = 8;
 
     /// <summary>Gets or sets the phoneme/text vocabulary size.</summary>

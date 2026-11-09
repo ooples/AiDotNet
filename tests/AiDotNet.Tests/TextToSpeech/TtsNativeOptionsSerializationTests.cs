@@ -8,6 +8,14 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class TtsNativeOptionsSerializationTests
 {
+    [Fact]
+    public void OpenVoiceV2LegacyDepthMetadataRestoresTheReleasedFourStageRenderer()
+    {
+        var restored = JsonConvert.DeserializeObject<AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options>(
+            "{\"NumDecoderLayers\":6}")!;
+        Assert.Equal(4, restored.NumDecoderLayers);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
