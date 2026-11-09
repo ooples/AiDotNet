@@ -228,15 +228,36 @@ internal static class OpenAiJson
     /// <summary>Flattens a string or a content-part array (<c>[{type:"text",text:"..."}]</c>) to text.</summary>
     public static string ContentText(JToken? t)
     {
-        if (t == null) return string.Empty;
+        if (t == null || t.Type == JTokenType.Null) return string.Empty;
         if (t.Type == JTokenType.String) return t.Value<string>() ?? string.Empty;
         if (t.Type == JTokenType.Array)
         {
             var sb = new StringBuilder();
             foreach (var part in t)
             {
-                var txt = part.Type == JTokenType.String ? part.Value<string>() : part["text"]?.Value<string>();
-                if (!string.IsNullOrEmpty(txt)) sb.Append(txt);
+                if (part.Type == JTokenType.String)
+                {
+                    var txt = part.Value<string>();
+                    if (!string.IsNullOrEmpty(txt)) sb.Append(txt);
+                }
+                else if (part.Type == JTokenType.Object)
+                {
+                    var txt = part["text"]?.Value<string>();
+                    if (!string.IsNullOrEmpty(txt))
+                    {
+                        sb.Append(txt);
+                    }
+                    else if (part["content"] != null)
+                    {
+                        sb.Append(ContentText(part["content"]));
+                    }
+                    else if (part["type"]?.Value<string>() == "tool_use")
+                    {
+                        var toolName = part["name"]?.Value<string>() ?? "tool";
+                        var toolInput = part["input"]?.ToString(Formatting.None) ?? "{}";
+                        sb.Append($"[tool_use: {toolName}({toolInput})]");
+                    }
+                }
             }
             return sb.ToString();
         }

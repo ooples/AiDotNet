@@ -465,6 +465,15 @@ public sealed class OpenAiController : ControllerBase
         }
 
         var info = _modelRepository.GetModelInfo(modelName);
+        if (info == null && IsStandardCliAlias(modelName))
+        {
+            info = _modelRepository.GetAllModelInfo()
+                .FirstOrDefault(m => _textGeneration.SupportsGeneration(m.Name, m.NumericType) && _tokenizers.TryGet(m.Name, out _));
+            if (info != null)
+            {
+                modelName = info.Name;
+            }
+        }
         if (info == null)
         {
             error = OpenAiError(StatusCodes.Status404NotFound, $"The model '{modelName}' does not exist.", "invalid_request_error", "model_not_found");
@@ -770,4 +779,13 @@ public sealed class OpenAiController : ControllerBase
 
     private ObjectResult OpenAiError(int status, string message, string type = "invalid_request_error", string? code = null)
         => new(new { error = new { message, type, param = (string?)null, code } }) { StatusCode = status };
+
+    internal static bool IsStandardCliAlias(string modelName)
+    {
+        return modelName.Equals("default", StringComparison.OrdinalIgnoreCase)
+            || modelName.StartsWith("gpt-", StringComparison.OrdinalIgnoreCase)
+            || modelName.StartsWith("o1-", StringComparison.OrdinalIgnoreCase)
+            || modelName.StartsWith("o3-", StringComparison.OrdinalIgnoreCase)
+            || modelName.StartsWith("claude-", StringComparison.OrdinalIgnoreCase);
+    }
 }

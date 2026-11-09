@@ -68,6 +68,16 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAu
             }
         }
 
+        // Anthropic Messages API / Claude Code CLI compatibility (`x-api-key` header)
+        if (Request.Headers.TryGetValue("x-api-key", out var anthropicHeaderValues))
+        {
+            var value = anthropicHeaderValues.ToString();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
+            }
+        }
+
         if (Request.Headers.TryGetValue("Authorization", out var authValues))
         {
             var raw = authValues.ToString();
