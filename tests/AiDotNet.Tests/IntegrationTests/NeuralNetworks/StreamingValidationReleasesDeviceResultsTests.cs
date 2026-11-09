@@ -59,6 +59,38 @@ public class StreamingValidationReleasesDeviceResultsTests
     }
 
     /// <summary>
+    /// The CPU half of the same leak. A scope frees device results only, so on the CPU each batch's prediction and loss
+    /// buffers were fresh arrays left to the garbage collector. An LM head's are large-object-heap arrays (402 MB at
+    /// 2048 x 49152), collected only by a full GC: a 400-step HreLm run validating 8 batches every 5 steps held 22.5 GB of
+    /// heap of which 0.36 GB was live. Validation now runs the forward and the loss in one arena with no output copy
+    /// (Predict copied its output out of its own arena), and the arena hands every array back to the pool, so after the
+    /// first batch the next ones reuse them: 67,502,904 bytes for 8 batches before, 373,152 after.
+    /// </summary>
+    [Fact]
+    public void Cpu_validation_batches_reuse_their_host_buffers()
+    {
+        var previous = AiDotNetEngine.Current;
+        AiDotNetEngine.Current = new CpuEngine();
+        try
+        {
+            var network = Network();
+            Assert.True(network.ReleasesPredictResults, "Dense layers keep nothing between calls, so validation pools them.");
+            var (x, y) = Batch_();
+
+            float first = Loss(network, x, y); // warm: the arena's pool now holds one batch's arrays
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            for (int b = 0; b < Batches; b++)
+                Assert.Equal(first, Loss(network, x, y));
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            // Each unpooled batch allocates at least its prediction; all of them together at least Batches of those.
+            Assert.True(allocated < OutputBytes,
+                $"{Batches} validation batches allocated {allocated:N0} host bytes (one prediction is {OutputBytes:N0}).");
+        }
+        finally { AiDotNetEngine.Current = previous; }
+    }
+
+    /// <summary>
     /// A model that keeps a GPU result between calls (here one layer's offset, built on the device by its first forward
     /// and read by every later one, as a generation cache is) must still have it after validation. A scope around
     /// Predict would free it with the call's other results, and the next prediction would read a released buffer.

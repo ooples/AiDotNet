@@ -7222,9 +7222,32 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // per-call arena for both capture and its matching reference forward so validation compares
         // the same execution path. Normal eager inference and compiled-plan execution still use the
         // default-on arena and retain its allocation savings.
+        // Taken once, by this model only: a sub-model's Predict inside PredictCore takes the normal path, so its
+        // between-layer Reset never rewinds the caller's arena under this model's live intermediates.
+        var callerArena = t_callerArena;
+        if (callerArena.Owner is not null) t_callerArena = default;
+
         if (!InferenceArenaSettings.Enabled
             || GraphCaptureCompatibility.IsActive)
             return PredictCore(input);
+
+        if (ReferenceEquals(callerArena.Owner, this) && callerArena.Arena is { } arenaOfCaller
+            && ReferenceEquals(TensorArena.Current, arenaOfCaller))
+        {
+            // PredictIntoCallerArena: the caller consumes the output inside its own top-level arena, so the output
+            // stays that arena's memory. No per-call arena and no DetachFromArena copy ([rows, vocabulary] for an LM
+            // head); the caller's Dispose returns every buffer of the forward to the cross-arena pool.
+            var prevCallerRecycle = _inferenceRecycleArena;
+            _inferenceRecycleArena = InferenceArenaSettings.RecycleLayerScratch ? arenaOfCaller : null;
+            try
+            {
+                return PredictCore(input);
+            }
+            finally
+            {
+                _inferenceRecycleArena = prevCallerRecycle;
+            }
+        }
 
         // Run the forward inside a per-call arena. The arena recycles intermediate Rent-backed
         // buffers; it Resets/returns them to the cross-arena pool on Dispose. The output is
@@ -7282,6 +7305,30 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     [ThreadStatic]
     private static TensorArena? _inferenceRecycleArena;
+
+    // Set by PredictIntoCallerArena for one Predict of one model.
+    [ThreadStatic]
+    private static (NeuralNetworkBase<T>? Owner, TensorArena? Arena) t_callerArena;
+
+    /// <summary>
+    /// Predict whose output is memory of <paramref name="arena"/>, the caller's active top-level arena, instead of a
+    /// fresh garbage-collected copy. For a caller that consumes the output before disposing the arena (streaming
+    /// validation reads one loss scalar). Disposing the arena returns the output and every intermediate to the
+    /// cross-arena pool, so the next call reuses them. The output must not be read after the arena is disposed.
+    /// </summary>
+    internal Tensor<T> PredictIntoCallerArena(Tensor<T> input, TensorArena arena)
+    {
+        var previous = t_callerArena;
+        t_callerArena = (this, arena);
+        try
+        {
+            return Predict(input);
+        }
+        finally
+        {
+            t_callerArena = previous;
+        }
+    }
 
     /// <summary>
     /// True when the current forward is running under an authorized inference recycle arena

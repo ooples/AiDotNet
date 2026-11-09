@@ -275,13 +275,26 @@ public partial class AiModelBuilder<T, TInput, TOutput>
         // validation alone, and they are freed. Any other loss may cache one (a basis built on its first call, or a
         // caller's loss nested in a composite), so it runs with every scope suspended: neither a loss scope nor the
         // enclosing predict scope can free what it keeps.
-        using var predictScope = model is NeuralNetworks.NeuralNetworkBase<T> { ReleasesPredictResults: true }
-            ? Tensors.Engines.TensorScope.Begin()
+        var releasing = model as NeuralNetworks.NeuralNetworkBase<T> is { ReleasesPredictResults: true } n ? n : null;
+        bool lossKeepsNothing = lossFunction is LossFunctions.LossFunctionBase<T> { KeepsResultsBetweenCalls: false };
+        // A scope frees GPU results only; host arrays were left to the garbage collector. On the CPU Predict returns a
+        // fresh copy of its output and the loss allocates buffers of the same size, outside any arena. For an LM head
+        // those are [rows, vocabulary] large-object-heap arrays (402 MB at 2048 x 49152), collected only by a full GC:
+        // a 400-step CPU run validating 8 batches every 5 steps held 22.5 GB of heap of which 0.36 GB was live. Under
+        // the same condition (only the host scalar leaves this method), the forward and the loss run in one top-level
+        // arena with no output copy, and its Dispose returns every buffer to the cross-arena pool for the next batch.
+        // Only when no arena is open: a nested arena does not pool, and its per-layer boundaries become copies.
+        using var arena = releasing is not null && lossKeepsNothing && x is Tensor<T> && y is Tensor<T>
+            && typeof(TOutput) == typeof(Tensor<T>) && Tensors.Helpers.TensorArena.Current is null
+            ? Tensors.Helpers.TensorArena.Create()
             : null;
-        var prediction = model.Predict(x);
+        using var predictScope = releasing is not null ? Tensors.Engines.TensorScope.Begin() : null;
+        var prediction = arena is not null
+            ? (TOutput)(object)releasing!.PredictIntoCallerArena((Tensor<T>)(object)x!, arena)
+            : model.Predict(x);
         if (prediction is Tensor<T> predicted && y is Tensor<T> target)
         {
-            if (lossFunction is LossFunctions.LossFunctionBase<T> { KeepsResultsBetweenCalls: false })
+            if (lossKeepsNothing)
             {
                 using var lossScope = Tensors.Engines.TensorScope.Begin();
                 return lossFunction.ComputeTapeLoss(predicted, target).Data.Span[0];
