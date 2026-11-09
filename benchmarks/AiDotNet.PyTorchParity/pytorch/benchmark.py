@@ -578,6 +578,50 @@ class WhisperTiny(nn.Module):
         return x, y
 
 
+DETECTION_IMAGE, DETECTION_CLASSES, DETECTION_BOXES = 320, 90, 2
+
+
+class FasterRcnnR50Fpn(nn.Module):
+    """The "faster-rcnn" row: torchvision's fasterrcnn_resnet50_fpn with no pretrained weights (so batch normalization
+    trains, as in AiDotNet's backbone), 90 classes plus background, images fixed at 320x320. A training step sums the
+    RPN and RoI-head losses for one image with two boxes; inference is the full detect pipeline in eval mode. The
+    optimizer is SGD at 1e-3 with momentum 0.9, AiDotNet FasterRCNN's paper recipe."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        import torchvision
+
+        self.model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
+            weights=None, weights_backbone=None, num_classes=DETECTION_CLASSES + 1,
+            min_size=DETECTION_IMAGE, max_size=DETECTION_IMAGE)
+
+    def make_optimizer(self) -> torch.optim.Optimizer:
+        return torch.optim.SGD(self.parameters(), lr=1e-3, momentum=0.9)
+
+    def forward(self, x: torch.Tensor) -> list[dict[str, torch.Tensor]]:
+        was_training = self.model.training
+        self.model.eval()
+        try:
+            return self.model(list(x))
+        finally:
+            self.model.train(was_training)
+
+    def training_loss(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        self.model.train()
+        targets = [{"boxes": boxes[:, 1:], "labels": boxes[:, 0].long() + 1} for boxes in y]
+        return sum(self.model(list(x), targets).values())
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """Images uniform in [0, 1] and, per image, rows of (class, x1, y1, x2, y2) in pixels."""
+        x = torch.rand(batch_size, 3, DETECTION_IMAGE, DETECTION_IMAGE).to(device)
+        centers = torch.rand(batch_size, DETECTION_BOXES, 2) * 0.5 + 0.25
+        sizes = torch.rand(batch_size, DETECTION_BOXES, 2) * 0.3 + 0.1
+        corners = torch.cat([centers - sizes / 2, centers + sizes / 2], dim=2) * DETECTION_IMAGE
+        classes = torch.randint(0, DETECTION_CLASSES, (batch_size, DETECTION_BOXES, 1)).float()
+        return x, torch.cat([classes, corners], dim=2).to(device)
+
+
 def make_vision_model(name: str) -> nn.Module:
     """torchvision's definition of each architecture, adjusted only where AiDotNet's builder adjusts it for a
     32x32 input, so both sides run the same network: VGG's classifier reads the 512x1x1 feature map directly
@@ -620,6 +664,8 @@ def make_model(name: str) -> tuple[nn.Module, tuple[int, ...]]:
         return DDPMUNet(), (DDPM_CHANNELS, DDPM_IMAGE, DDPM_IMAGE)
     if name == "whisper-tiny":
         return WhisperTiny(), (WHISPER_MELS, WHISPER_FRAMES)
+    if name == "faster-rcnn":
+        return FasterRcnnR50Fpn(), (3, DETECTION_IMAGE, DETECTION_IMAGE)
     if name in VISION_MODELS:
         return make_vision_model(name), (3, 32, 32)
     if name == "mlp":
@@ -669,7 +715,9 @@ def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.devic
 
 def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int, breakdown: bool = False) -> TrainingResult:
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), **getattr(model, "optimizer_settings", {"lr": 1e-3}))
+    # A row whose model trains with another recipe (the detector's paper SGD) builds its own optimizer.
+    optimizer = (model.make_optimizer() if hasattr(model, "make_optimizer")
+                 else torch.optim.AdamW(model.parameters(), **getattr(model, "optimizer_settings", {"lr": 1e-3})))
     epoch_seconds: list[float] = []
     gradient_seconds: list[float] = []
     data_seconds: list[float] = []

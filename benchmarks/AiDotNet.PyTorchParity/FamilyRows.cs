@@ -164,3 +164,99 @@ internal sealed class AiDotNetWhisperTinyModel : IBenchmarkModel
 
     public double? LastLoss => _trained ? _model.GetLastLoss() : null;
 }
+
+/// <summary>
+/// The "faster-rcnn" row: the shipped <see cref="AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.FasterRCNN{T}"/>
+/// (ResNet-50 + FPN, 90 classes plus background) on 320x320 images. A training step is the RPN plus RoI-head loss for
+/// one image with two boxes, under the model's paper SGD (lr 1e-3, momentum 0.9); inference is the full Detect pipeline.
+/// benchmark.py's <c>FasterRcnnR50Fpn</c> is torchvision's fasterrcnn_resnet50_fpn at the same size. The trainable
+/// layouts match layer for layer except the RPN objectness: Ren et al.'s 2k-way softmax here, torchvision's k sigmoid
+/// scores there (771 parameters).
+/// </summary>
+internal sealed class AiDotNetFasterRcnnModel : IBenchmarkModel
+{
+    internal const int ImageSize = 320;
+    internal const int Classes = 90;
+    internal const int BoxesPerImage = 2;
+
+    private readonly AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.FasterRCNN<float> _model;
+    private readonly Random _random;
+    private Tensor<float> _input = Tensor<float>.Empty();
+    private Tensor<float> _label = Tensor<float>.Empty();
+    private bool _trained;
+
+    public AiDotNetFasterRcnnModel(int seed)
+    {
+        _random = new Random(seed);
+        _model = new AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.FasterRCNN<float>(
+            new ObjectDetectionOptions<float>
+            {
+                Size = ModelSize.Medium, NumClasses = Classes, InputSize = [ImageSize, ImageSize], Seed = seed,
+            });
+
+        LoadSyntheticBatch(1);
+        Forward();
+        // Trainable parameters, as benchmark.py counts them: BatchNormalizationLayer's ParameterCount also includes
+        // its running mean and variance, two values per normalized channel that no optimizer step touches.
+        ParameterCount = _model.ParameterCount - 2L * 26_560;
+    }
+
+    public long ParameterCount { get; }
+
+    /// <summary>The label holds, per image, rows of (class, x1, y1, x2, y2) in pixels, as benchmark.py's make_batch.</summary>
+    public (Tensor<float> Input, Tensor<float> Label) CurrentBatch
+    {
+        get => (_input, _label);
+        set => (_input, _label) = value;
+    }
+
+    public void LoadSyntheticBatch(int batchSize)
+    {
+        var pixels = new float[batchSize * 3 * ImageSize * ImageSize];
+        for (var i = 0; i < pixels.Length; i++) pixels[i] = (float)_random.NextDouble();
+        _input = new Tensor<float>(pixels, [batchSize, 3, ImageSize, ImageSize]);
+
+        var boxes = new float[batchSize * BoxesPerImage * 5];
+        for (var b = 0; b < batchSize * BoxesPerImage; b++)
+        {
+            double cx = _random.NextDouble() * 0.5 + 0.25, cy = _random.NextDouble() * 0.5 + 0.25;
+            double w = _random.NextDouble() * 0.3 + 0.1, h = _random.NextDouble() * 0.3 + 0.1;
+            boxes[b * 5] = _random.Next(0, Classes);
+            boxes[b * 5 + 1] = (float)((cx - w / 2) * ImageSize);
+            boxes[b * 5 + 2] = (float)((cy - h / 2) * ImageSize);
+            boxes[b * 5 + 3] = (float)((cx + w / 2) * ImageSize);
+            boxes[b * 5 + 4] = (float)((cy + h / 2) * ImageSize);
+        }
+        _label = new Tensor<float>(boxes, [batchSize, BoxesPerImage, 5]);
+    }
+
+    public void Forward() => _ = _model.Detect(_input);
+
+    public void Backward()
+    {
+        if (_input.Shape[0] != 1)
+            throw new InvalidOperationException(
+                "FasterRCNN trains one image per step (its detection head classifies one image's proposals); run the " +
+                "faster-rcnn row with --batch-size 1.");
+
+        var targets = new List<AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<float>>();
+        for (var b = 0; b < BoxesPerImage; b++)
+        {
+            float x1 = _label[0, b, 1] / ImageSize, y1 = _label[0, b, 2] / ImageSize;
+            float x2 = _label[0, b, 3] / ImageSize, y2 = _label[0, b, 4] / ImageSize;
+            targets.Add(new AiDotNet.ComputerVision.Detection.DetectionTrainingTarget<float>(
+                (int)_label[0, b, 0], (x1 + x2) / 2, (y1 + y2) / 2, x2 - x1, y2 - y1));
+        }
+
+        // TrainDetections is the whole step: forward, RPN and RoI losses, backward and the SGD update.
+        _model.TrainDetections(_input, new AiDotNet.ComputerVision.Detection.DetectionTrainingBatch<float>(new[] { targets }));
+        _trained = true;
+    }
+
+    public void Step()
+    {
+        // The optimizer step ran inside Backward's TrainDetections call.
+    }
+
+    public double? LastLoss => _trained ? _model.GetLastLoss() : null;
+}

@@ -461,6 +461,7 @@ internal sealed class AiDotNetTensorBackend(int seed)
         // DDPM (Ho et al. 2020): the shipped DDPMModel's CIFAR-10 U-Net on [3, 32, 32], noise-prediction MSE (FamilyRows.cs).
         "ddpm" => new AiDotNetDdpmModel(seed),
         "whisper-tiny" => new AiDotNetWhisperTinyModel(seed),
+        "faster-rcnn" => new AiDotNetFasterRcnnModel(seed),
         _ => throw new ArgumentException($"Unknown model '{model}'.")
     };
 }
