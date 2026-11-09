@@ -16,7 +16,7 @@ public sealed class StyleTtsConditioningShapeTests
         Assert.Equal(new[] { 3 }, module.Style.GetInputShape());
         Assert.Equal(64, module.Style.ParameterCount);
         Assert.Equal(new[] { 1, 8, 4 }, module.Forward(new Tensor<double>(new[] { 1, 8, 4 }),
-            new Tensor<double>(new[] { 1, 3 })).Shape);
+            new Tensor<double>(new[] { 1, 3 })).Shape.ToArray());
         Assert.Equal(64, module.Style.ParameterCount);
     }
 
@@ -28,7 +28,7 @@ public sealed class StyleTtsConditioningShapeTests
         Assert.Equal(new[] { 3 }, module.Style.GetInputShape());
         Assert.Equal(64, module.Style.ParameterCount);
         Assert.Equal(new[] { 4, 8 }, module.Forward(new Tensor<double>(new[] { 4, 8 }),
-            new Tensor<double>(new[] { 1, 3 })).Shape);
+            new Tensor<double>(new[] { 1, 3 })).Shape.ToArray());
         Assert.Equal(64, module.Style.ParameterCount);
     }
 
@@ -40,7 +40,7 @@ public sealed class StyleTtsConditioningShapeTests
         Assert.Equal(new[] { 9 }, module.Merge.GetInputShape());
         Assert.Equal(10, module.Merge.ParameterCount);
         Assert.Equal(new[] { 1, 1, 300 }, module.Forward(new Tensor<double>(new[] { 1, 1 }),
-            new Random(2294)).Shape);
+            new Random(2294)).Shape.ToArray());
         Assert.Equal(10, module.Merge.ParameterCount);
     }
 }
