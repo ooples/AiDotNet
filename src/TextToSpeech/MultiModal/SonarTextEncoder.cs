@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -151,14 +152,20 @@ internal sealed class SonarTextEncoder<T>
 
     /// <summary>Loads transformers' <c>M2M100Encoder</c> state (<c>encoder.</c>-prefixed or not; the token table as
     /// <c>embed_tokens.weight</c> or <c>shared.weight</c>).</summary>
-    public void LoadTorchWeights(Func<string, double[]?> take)
+    public void LoadTorchWeights(Func<string, double[]?> take) => LoadTorchWeights(TorchTensorSource.From(take));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
-        double[] Read(string name) => take("encoder." + name) ?? take(name) ?? throw new InvalidDataException($"The SONAR encoder checkpoint has no tensor '{name}'.");
-        Embedding.LoadTable(take("encoder.embed_tokens.weight") ?? take("embed_tokens.weight") ?? take("shared.weight")
-            ?? throw new InvalidDataException("The SONAR encoder checkpoint has no token table."));
-        void Lin(DenseLayer<T> layer, string name, int inputs, int outputs) => TorchParameters.Linear(_engine, layer, inputs, outputs, Read(name + ".weight"), Read(name + ".bias"));
-        void Norm(LayerNormalizationLayer<T> layer, string name) => TorchParameters.LayerNorm(_engine, layer, Read(name + ".weight"), Read(name + ".bias"));
+        // transformers' M2M100Encoder names, with or without the "encoder." of a full model.
+        string Name(string name) => source.Contains("encoder." + name) ? "encoder." + name : name;
+        string table = new[] { "encoder.embed_tokens.weight", "embed_tokens.weight", "shared.weight" }.FirstOrDefault(source.Contains)
+            ?? throw new InvalidDataException("The SONAR encoder checkpoint has no token table.");
+        Embedding.LoadTable(source, table);
+        void Lin(DenseLayer<T> layer, string name, int inputs, int outputs) =>
+            TorchParameters.Linear(_engine, layer, inputs, outputs, source, Name(name + ".weight"), Name(name + ".bias"));
+        void Norm(LayerNormalizationLayer<T> layer, string name) => TorchParameters.LayerNorm(_engine, layer, source, Name(name + ".weight"), Name(name + ".bias"));
         for (int i = 0; i < Layers.Count; i++)
         {
             var l = Layers[i];

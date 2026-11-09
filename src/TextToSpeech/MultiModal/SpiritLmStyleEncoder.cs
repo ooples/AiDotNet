@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Audio.Foundations;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -95,12 +96,14 @@ internal sealed class SpiritLmStyleEncoder<T>
 
     /// <summary>Loads transformers' <c>Wav2Vec2ForSequenceClassification</c> state (<c>wav2vec2.*</c>, <c>projector</c>,
     /// <c>classifier</c>).</summary>
-    public void LoadTorchWeights(Func<string, double[]?> take)
+    public void LoadTorchWeights(Func<string, double[]?> take) => LoadTorchWeights(TorchTensorSource.From(take));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
-        double[] Read(string name) => take(name) ?? throw new InvalidDataException($"The style encoder checkpoint has no tensor '{name}'.");
-        Network.LoadTorchWeights(name => name.StartsWith("hubert.", StringComparison.Ordinal) ? null : take("wav2vec2." + name));
+        Network.LoadTorchWeights(name => name.StartsWith("hubert.", StringComparison.Ordinal) ? null : source.TryRead("wav2vec2." + name));
         int hidden = Network.Configuration.HiddenSize;
-        TorchParameters.Linear(_engine, Projector, hidden, ProjectionWidth, Read("projector.weight"), Read("projector.bias"));
-        TorchParameters.Linear(_engine, Classifier, ProjectionWidth, Styles, Read("classifier.weight"), Read("classifier.bias"));
+        TorchParameters.Linear(_engine, Projector, hidden, ProjectionWidth, source, "projector.weight", "projector.bias");
+        TorchParameters.Linear(_engine, Classifier, ProjectionWidth, Styles, source, "classifier.weight", "classifier.bias");
     }
 }

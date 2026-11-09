@@ -4,6 +4,7 @@ using AiDotNet.Audio.Whisper;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
+using AiDotNet.ModelLoading;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -484,26 +485,6 @@ public partial class LlamaOmni<T> : TtsModelBase<T>
 
     // ---------------------------------------------------------------- weights
 
-    private static Dictionary<string, Tensor<float>> ReadAll(IEnumerable<string> paths)
-    {
-        var tensors = new Dictionary<string, Tensor<float>>(StringComparer.Ordinal);
-        foreach (var path in paths)
-        {
-            if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
-            foreach (var pair in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path)) tensors[pair.Key] = pair.Value;
-        }
-        return tensors;
-    }
-
-    private static double[] Values(Dictionary<string, Tensor<float>> tensors, HashSet<string> used, string name)
-    {
-        if (!tensors.TryGetValue(name, out var tensor)) throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-        used.Add(name);
-        var values = new double[tensor.Length];
-        for (int i = 0; i < values.Length; i++) values[i] = tensor.GetFlat(i);
-        return values;
-    }
-
     /// <summary>
     /// Loads ICTNLP/Llama-3.1-8B-Omni (its safetensors shards): the speech encoder (<c>model.speech_encoder</c>), the
     /// adaptor (<c>model.speech_projector</c>), the LLM (<c>model.*</c>, <c>lm_head</c>) and the speech decoder
@@ -513,18 +494,14 @@ public partial class LlamaOmni<T> : TtsModelBase<T>
     {
         ThrowIfDisposed();
         if (directory is null) throw new ArgumentNullException(nameof(directory));
-        string index = Path.Combine(directory, "model.safetensors.index.json");
-        var files = File.Exists(index)
-            ? Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(index))["weight_map"]!.Values<string>().Distinct().Select(f => Path.Combine(directory, f!)).ToList()
-            : new List<string> { Path.Combine(directory, "model.safetensors") };
-        var tensors = ReadAll(files);
-        var used = new HashSet<string>(StringComparer.Ordinal);
-        SpeechEncoder.LoadTorchWeights((name, _) => Values(tensors, used, "model.speech_" + name));
-        Adaptor.Load((name, _) => Values(tensors, used, name), "model.speech_projector.");
-        LanguageModel.LoadTorchWeights((name, _) => Values(tensors, used, name), "model.", "lm_head.weight");
-        SpeechDecoder.Load((name, _) => Values(tensors, used, name), "speech_generator.");
-        var left = tensors.Keys.Where(k => !used.Contains(k)).ToList();
-        if (left.Count > 0) throw new InvalidDataException($"The checkpoint has {left.Count} tensors this model has no place for (first: '{left[0]}').");
+        using (var tensors = TorchCheckpointFile.OpenDirectory(directory))
+        {
+            SpeechEncoder.LoadTorchWeights(tensors.WithPrefix("model.speech_"));
+            Adaptor.Load(tensors, "model.speech_projector.");
+            LanguageModel.LoadTorchWeights(tensors, "model.", "lm_head.weight");
+            SpeechDecoder.Load(tensors, "speech_generator.");
+            tensors.RequireAllUsed("Llama-Omni");
+        }
         string tokenizer = Path.Combine(directory, "tokenizer.json");
         if (_options.TokenizerPath is null && File.Exists(tokenizer))
         {
@@ -537,9 +514,8 @@ public partial class LlamaOmni<T> : TtsModelBase<T>
     public void LoadVocoder(string path)
     {
         ThrowIfDisposed();
-        var tensors = ReadAll(new[] { path });
-        var used = new HashSet<string>(StringComparer.Ordinal);
-        Vocoder.LoadTorchWeights(name => tensors.ContainsKey(name) ? Values(tensors, used, name) : null, "generator.");
+        using var tensors = TorchCheckpointFile.Open(path);
+        Vocoder.LoadTorchWeights(name => tensors.TryRead(name), "generator.");
     }
 
     /// <summary>Loads the unit extractor that makes the decoder's training targets: fairseq's mHuBERT checkpoint and its
@@ -547,9 +523,8 @@ public partial class LlamaOmni<T> : TtsModelBase<T>
     public void LoadUnitExtractor(string hubertCheckpoint, string kmeansModel)
     {
         ThrowIfDisposed();
-        var tensors = ReadAll(new[] { hubertCheckpoint });
-        var used = new HashSet<string>(StringComparer.Ordinal);
-        UnitExtractor.LoadFairseqWeights(name => tensors.ContainsKey("model." + name) ? Values(tensors, used, "model." + name) : null);
+        using (var tensors = TorchCheckpointFile.Open(hubertCheckpoint))
+            UnitExtractor.LoadFairseqWeights(name => tensors.TryRead("model." + name));
         UnitExtractor.Centroids = JoblibKMeans.ReadClusterCenters(kmeansModel);
     }
 

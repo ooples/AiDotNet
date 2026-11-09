@@ -134,6 +134,15 @@ public partial class TiedEmbeddingLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_table);
     }
 
+    /// <summary>Loads the first <paramref name="rows"/> rows from the named tensor of <paramref name="source"/>, copied
+    /// straight into the table, leaving the rest as they are.</summary>
+    internal void LoadLeadingRows(AiDotNet.ModelLoading.TorchTensorSource source, string name, int rows)
+    {
+        if (rows > _vocabularySize) throw new ArgumentException($"Expected at most {_vocabularySize} rows, got {rows}.", nameof(rows));
+        source.CopyTo(name, new[] { rows, _dimension }, _table);
+        Engine.InvalidatePersistentTensor(_table);
+    }
+
     /// <summary>Loads the table from the named tensor of <paramref name="source"/>, copied straight into it.</summary>
     internal void LoadTable(AiDotNet.ModelLoading.TorchTensorSource source, string name)
     {

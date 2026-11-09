@@ -96,6 +96,27 @@ public partial class LSTMCellLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(recurrent);
     }
 
+    /// <summary>Loads one layer of a PyTorch <c>nn.LSTM</c> straight from <paramref name="source"/> (the weights copied
+    /// into the layer's own tensors; the two biases add).</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string weightIhName, string weightHhName, string biasIhName,
+        string biasHhName)
+    {
+        int gates = 4 * _hiddenSize;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            _input.Forward(new Tensor<T>(new[] { 1, _inputSize }));
+        var input = _input.GetWeights();                                                    // [input, 4H]
+        var bias = _input.GetBiases();
+        var recurrent = _recurrent.Weights;                                                 // [H, 4H]
+        source.CopyTransposedTo(weightIhName, gates, _inputSize, input);
+        source.CopyTransposedTo(weightHhName, gates, _hiddenSize, recurrent);
+        var biasIh = source.Read(biasIhName, new[] { gates });
+        var biasHh = source.Read(biasHhName, new[] { gates });
+        for (int g = 0; g < gates; g++) bias[g] = NumOps.FromDouble(biasIh[g] + biasHh[g]);
+        Engine.InvalidatePersistentTensor(input);
+        Engine.InvalidatePersistentTensor(bias);
+        Engine.InvalidatePersistentTensor(recurrent);
+    }
+
     /// <inheritdoc />
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank)
         => inputRank == 2

@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Latest;
@@ -192,12 +193,15 @@ internal sealed class SpeechT5Attention<T>
     public (Tensor<T> K, Tensor<T> V) StaticKeys(Tensor<T> memory) =>
         (IndexTtsOps.SplitHeads(_engine, Key.Forward(memory), _heads), IndexTtsOps.SplitHeads(_engine, Value.Forward(memory), _heads));
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        IndexTtsOps.LoadLinear(_engine, read, Query, prefix + "q_proj", _d, _d);
-        IndexTtsOps.LoadLinear(_engine, read, Key, prefix + "k_proj", _d, _d);
-        IndexTtsOps.LoadLinear(_engine, read, Value, prefix + "v_proj", _d, _d);
-        IndexTtsOps.LoadLinear(_engine, read, Output, prefix + "out_proj", _d, _d);
+        IndexTtsOps.LoadLinear(_engine, source, Query, prefix + "q_proj", _d, _d);
+        IndexTtsOps.LoadLinear(_engine, source, Key, prefix + "k_proj", _d, _d);
+        IndexTtsOps.LoadLinear(_engine, source, Value, prefix + "v_proj", _d, _d);
+        IndexTtsOps.LoadLinear(_engine, source, Output, prefix + "out_proj", _d, _d);
     }
 }
 
@@ -256,21 +260,24 @@ internal sealed class SpeechT5Encoder<T>
         return x;
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
         int d = _c.Hidden;
         for (int i = 0; i < Layers.Count; i++)
         {
             var l = Layers[i];
             string p = $"{prefix}layers.{i}.";
-            l.Attention.Load(read, p + "self_attn.");
-            IndexTtsOps.LoadNorm(_engine, read, l.AttentionNorm, p + "self_attn_layer_norm", d);
-            IndexTtsOps.LoadLinear(_engine, read, l.Fc1, p + "fc1", d, _c.FeedForward);
-            IndexTtsOps.LoadLinear(_engine, read, l.Fc2, p + "fc2", _c.FeedForward, d);
-            IndexTtsOps.LoadNorm(_engine, read, l.FinalNorm, p + "final_layer_norm", d);
+            l.Attention.Load(source, p + "self_attn.");
+            IndexTtsOps.LoadNorm(_engine, source, l.AttentionNorm, p + "self_attn_layer_norm", d);
+            IndexTtsOps.LoadLinear(_engine, source, l.Fc1, p + "fc1", d, _c.FeedForward);
+            IndexTtsOps.LoadLinear(_engine, source, l.Fc2, p + "fc2", _c.FeedForward, d);
+            IndexTtsOps.LoadNorm(_engine, source, l.FinalNorm, p + "final_layer_norm", d);
         }
-        IndexTtsOps.LoadNorm(_engine, read, InputNorm, prefix + "layer_norm", d);
-        RelativePositions.LoadTable(read(prefix + "pos_emb.pe_k.weight", new[] { 2 * _c.MaxRelativePosition, d / _c.Heads }));
+        IndexTtsOps.LoadNorm(_engine, source, InputNorm, prefix + "layer_norm", d);
+        RelativePositions.LoadTable(source, prefix + "pos_emb.pe_k.weight");
     }
 }
 
@@ -333,20 +340,23 @@ internal sealed class SpeechT5Decoder<T>
         return (x, weights);
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
         int d = _c.Hidden;
         for (int i = 0; i < Layers.Count; i++)
         {
             var l = Layers[i];
             string p = $"{prefix}layers.{i}.";
-            l.SelfAttention.Load(read, p + "self_attn.");
-            IndexTtsOps.LoadNorm(_engine, read, l.SelfNorm, p + "self_attn_layer_norm", d);
-            l.CrossAttention.Load(read, p + "encoder_attn.");
-            IndexTtsOps.LoadNorm(_engine, read, l.CrossNorm, p + "encoder_attn_layer_norm", d);
-            IndexTtsOps.LoadLinear(_engine, read, l.Fc1, p + "fc1", d, _c.FeedForward);
-            IndexTtsOps.LoadLinear(_engine, read, l.Fc2, p + "fc2", _c.FeedForward, d);
-            IndexTtsOps.LoadNorm(_engine, read, l.FinalNorm, p + "final_layer_norm", d);
+            l.SelfAttention.Load(source, p + "self_attn.");
+            IndexTtsOps.LoadNorm(_engine, source, l.SelfNorm, p + "self_attn_layer_norm", d);
+            l.CrossAttention.Load(source, p + "encoder_attn.");
+            IndexTtsOps.LoadNorm(_engine, source, l.CrossNorm, p + "encoder_attn_layer_norm", d);
+            IndexTtsOps.LoadLinear(_engine, source, l.Fc1, p + "fc1", d, _c.FeedForward);
+            IndexTtsOps.LoadLinear(_engine, source, l.Fc2, p + "fc2", _c.FeedForward, d);
+            IndexTtsOps.LoadNorm(_engine, source, l.FinalNorm, p + "final_layer_norm", d);
         }
     }
 }
@@ -374,7 +384,10 @@ internal sealed class SpeechT5ScaledPositions<T>
         return SpeechT5Ops.Drop(_engine, y, dropout, training, random);
     }
 
-    public void Load(Func<string, int[], double[]> read, string name) => TorchParameters.Linear(Alpha, 1, 1, read(name, new[] { 1 }));
+    public void Load(Func<string, int[], double[]> read, string name) => Load(TorchTensorSource.From(read), name);
+
+    /// <summary>Loads the same tensor from <paramref name="source"/>.</summary>
+    internal void Load(TorchTensorSource source, string name) => TorchParameters.Linear(Alpha, 1, 1, source, name, new[] { 1 });
 }
 
 /// <summary>
@@ -415,13 +428,16 @@ internal sealed class SpeechT5SpeechDecoderPrenet<T>
         return _engine.ReLU(Speaker.Forward(_engine.TensorConcatenate(new[] { x, s }, 1)));
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
         for (int i = 0; i < Prenet.Count; i++)
-            IndexTtsOps.LoadLinear(_engine, read, Prenet[i], $"{prefix}decoder_prenet.0.0.prenet.{i}.0", i == 0 ? _c.MelChannels : _c.PrenetUnits, _c.PrenetUnits);
-        IndexTtsOps.LoadLinear(_engine, read, Projection, prefix + "decoder_prenet.0.1", _c.PrenetUnits, _c.Hidden);
-        Positions.Load(read, prefix + "decoder_prenet.1.alpha");
-        IndexTtsOps.LoadLinear(_engine, read, Speaker, prefix + "spkembs_layer.0", _c.SpeakerDim + _c.Hidden, _c.Hidden);
+            IndexTtsOps.LoadLinear(_engine, source, Prenet[i], $"{prefix}decoder_prenet.0.0.prenet.{i}.0", i == 0 ? _c.MelChannels : _c.PrenetUnits, _c.PrenetUnits);
+        IndexTtsOps.LoadLinear(_engine, source, Projection, prefix + "decoder_prenet.0.1", _c.PrenetUnits, _c.Hidden);
+        Positions.Load(source, prefix + "decoder_prenet.1.alpha");
+        IndexTtsOps.LoadLinear(_engine, source, Speaker, prefix + "spkembs_layer.0", _c.SpeakerDim + _c.Hidden, _c.Hidden);
     }
 }
 
@@ -482,18 +498,20 @@ internal sealed class SpeechT5SpeechDecoderPostnet<T>
         return _engine.TensorAdd(frames, _engine.TensorTranspose(_engine.Reshape(h, new[] { _c.MelChannels, f })));
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        IndexTtsOps.LoadLinear(_engine, read, FeatureOut, prefix + "feat_out", _c.Hidden, _c.MelChannels * _c.ReductionFactor);
-        IndexTtsOps.LoadLinear(_engine, read, ProbabilityOut, prefix + "prob_out", _c.Hidden, _c.ReductionFactor);
+        IndexTtsOps.LoadLinear(_engine, source, FeatureOut, prefix + "feat_out", _c.Hidden, _c.MelChannels * _c.ReductionFactor);
+        IndexTtsOps.LoadLinear(_engine, source, ProbabilityOut, prefix + "prob_out", _c.Hidden, _c.ReductionFactor);
         for (int i = 0; i < Postnet.Count; i++)
         {
             var (conv, norm) = Postnet[i];
             int outputs = conv.OutputChannels;
-            conv.LoadTorchWeights(read($"{prefix}postnet.postnet.{i}.0.weight", conv.TorchWeightShape), null, new double[outputs]);
+            conv.LoadTorchWeights(source, $"{prefix}postnet.postnet.{i}.0.weight", conv.TorchWeightShape, null, null);
             string n = $"{prefix}postnet.postnet.{i}.1.";
-            TorchParameters.BatchNorm(norm, read(n + "weight", new[] { outputs }), read(n + "bias", new[] { outputs }),
-                read(n + "running_mean", new[] { outputs }), read(n + "running_var", new[] { outputs }));
+            TorchParameters.BatchNorm(norm, source, n, outputs);
         }
     }
 }

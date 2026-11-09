@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -306,28 +307,28 @@ internal sealed class MoshiLanguageModel<T>
     /// <summary>Loads the release's <c>LMModel</c> state (<c>text_emb</c>, <c>emb.{q}</c>, <c>transformer.</c>,
     /// <c>out_norm.alpha</c>, <c>text_linear</c>, <c>depformer_in.{s}</c>, <c>depformer_text_emb</c>,
     /// <c>depformer_emb.{s}</c>, <c>depformer.</c>, <c>linears.{s}</c>).</summary>
-    public void LoadTorchWeights(Func<string, double[]?> take)
+    public void LoadTorchWeights(Func<string, double[]?> take) => LoadTorchWeights(TorchTensorSource.From(take));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
         int d = c.Temporal.Dim, dd = c.Depth.Dim;
-        double[] Read(string name) => take(name) ?? throw new InvalidDataException($"The Moshi checkpoint has no tensor '{name}'.");
         void Values(BiasFreeLinearLayer<T> holder, string name)
         {
-            var v = Read(name);
             var w = holder.Weights;
-            if (v.Length != w.Length) throw new InvalidDataException($"'{name}' holds {v.Length} values; expected {w.Length}.");
-            for (int i = 0; i < v.Length; i++) w[i] = NumOps.FromDouble(v[i]);
+            source.CopyTo(name, Array.Empty<int>(), w);
             _engine.InvalidatePersistentTensor(w);
         }
         Values(TextEmbedding, "text_emb.weight");
         for (int q = 0; q < c.AudioStreams; q++) Values(AudioEmbeddings[q], $"emb.{q}.weight");
-        Temporal.LoadTorchWeights(take, "transformer.");
+        Temporal.LoadTorchWeights(source, "transformer.");
         Values(OutNorm, "out_norm.alpha");
-        TorchParameters.Linear(TextLinear, d, c.TextCardinality, Read("text_linear.weight"));
-        for (int s = 0; s < DepthIn.Length; s++) TorchParameters.Linear(DepthIn[s], d, dd, Read($"depformer_in.{s}.weight"));
+        TorchParameters.Linear(TextLinear, d, c.TextCardinality, source, "text_linear.weight");
+        for (int s = 0; s < DepthIn.Length; s++) TorchParameters.Linear(DepthIn[s], d, dd, source, $"depformer_in.{s}.weight");
         Values(DepthTextEmbedding, "depformer_text_emb.weight");
         for (int s = 0; s < DepthEmbeddings.Length; s++) Values(DepthEmbeddings[s], $"depformer_emb.{s}.weight");
-        Depth.LoadTorchWeights(take, "depformer.");
-        for (int s = 0; s < Heads.Length; s++) TorchParameters.Linear(Heads[s], dd, c.AudioCardinality, Read($"linears.{s}.weight"));
+        Depth.LoadTorchWeights(source, "depformer.");
+        for (int s = 0; s < Heads.Length; s++) TorchParameters.Linear(Heads[s], dd, c.AudioCardinality, source, $"linears.{s}.weight");
     }
 }

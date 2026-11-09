@@ -4,6 +4,7 @@ using AiDotNet.Clustering.Options;
 using AiDotNet.Clustering.Partitioning;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -388,57 +389,19 @@ internal sealed class AudioPalmCore<T>
 
     // ---------------------------------------------------------------- weights
 
-    private sealed class Checkpoint
-    {
-        private readonly Dictionary<string, Tensor<float>> _tensors = new(StringComparer.Ordinal);
-
-        public Checkpoint(IEnumerable<string> paths)
-        {
-            foreach (var path in paths)
-            {
-                if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
-                foreach (var pair in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path)) _tensors[pair.Key] = pair.Value;
-            }
-            Keys = new HashSet<string>(_tensors.Keys, StringComparer.Ordinal);
-        }
-
-        public HashSet<string> Keys { get; }
-        public HashSet<string> Used { get; } = new(StringComparer.Ordinal);
-
-        public int[] Shape(string name) => _tensors.TryGetValue(name, out var t) ? t.Shape.ToArray() : throw new InvalidDataException($"No tensor '{name}'.");
-
-        public Func<string, int[], double[]> Reader(string what) => (name, _) =>
-        {
-            if (!_tensors.TryGetValue(name, out var tensor)) throw new InvalidDataException($"The {what} checkpoint has no tensor '{name}'.");
-            _tensors.Remove(name);
-            Used.Add(name);
-            var values = new double[tensor.Length];
-            for (int i = 0; i < values.Length; i++) values[i] = tensor.GetFlat(i);
-            return values;
-        };
-
-        public void RequireAllUsed(string what)
-        {
-            var left = Keys.Where(k => !Used.Contains(k)).ToList();
-            if (left.Count > 0) throw new InvalidDataException($"The {what} checkpoint has {left.Count} tensors this model has no place for (first: '{left[0]}').");
-        }
-    }
-
     /// <summary>Loads a Hugging Face Gemma checkpoint directory (one <c>model.safetensors</c> or its index's shards); its
     /// text rows, the audio rows zeroed (§3.2); its <c>tokenizer.model</c> unless a tokenizer is set.</summary>
     public void LoadGemma(string directory)
     {
         if (directory is null) throw new ArgumentNullException(nameof(directory));
         if (_o.Decoder != PalmDecoderKind.Gemma) throw new InvalidOperationException("Gemma weights need AudioPaLMOptions.Gemma2B() (Decoder = Gemma).");
-        string index = Path.Combine(directory, "model.safetensors.index.json");
-        var files = File.Exists(index)
-            ? Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(index))["weight_map"]!.Values<string>().Distinct().Select(f => Path.Combine(directory, f!)).ToList()
-            : new List<string> { Path.Combine(directory, "model.safetensors") };
-        var checkpoint = new Checkpoint(files);
-        int rows = checkpoint.Shape("model.embed_tokens.weight")[0];
-        if (rows != _o.VocabSize) throw new InvalidDataException($"The checkpoint has {rows} text tokens; set VocabSize to it.");
-        Decoder.LoadGemma(checkpoint.Reader("Gemma"), rows);
-        checkpoint.RequireAllUsed("Gemma");
+        using (var checkpoint = TorchCheckpointFile.OpenDirectory(directory))
+        {
+            int rows = Rows(checkpoint, "model.embed_tokens.weight");
+            if (rows != _o.VocabSize) throw new InvalidDataException($"The checkpoint has {rows} text tokens; set VocabSize to it.");
+            Decoder.LoadGemma(checkpoint, rows);
+            checkpoint.RequireAllUsed("Gemma");
+        }
         string tokenizer = Path.Combine(directory, "tokenizer.model");
         if (_o.SentencePieceModelPath is null && File.Exists(tokenizer))
         {
@@ -451,14 +414,16 @@ internal sealed class AudioPalmCore<T>
     public void LoadPalmPytorch(string path)
     {
         if (path is null) throw new ArgumentNullException(nameof(path));
-        var checkpoint = new Checkpoint(new[] { path });
-        int rows = checkpoint.Shape("0.weight")[0];
+        using var checkpoint = TorchCheckpointFile.Open(path);
+        int rows = Rows(checkpoint, "0.weight");
         if (rows != _o.VocabSize) throw new InvalidDataException($"The checkpoint has {rows} text tokens; set VocabSize to it.");
-        Decoder.LoadPalmPytorch(checkpoint.Reader("PaLM-pytorch"), rows);
+        Decoder.LoadPalmPytorch(checkpoint, rows);
         // PaLM-pytorch's shared output projection is the embedding under a second name.
-        checkpoint.Used.Add($"{_o.Layers + 2}.weight");
-        checkpoint.RequireAllUsed("PaLM-pytorch");
+        checkpoint.RequireAllUsed("PaLM-pytorch", k => k == $"{_o.Layers + 2}.weight");
     }
+
+    private static int Rows(TorchCheckpointFile checkpoint, string name) =>
+        checkpoint.ShapeOf(name) is { Length: > 0 } shape ? (int)shape[0] : throw new InvalidDataException($"No tensor '{name}'.");
 
     /// <summary>Loads w2v-BERT 2.0 (<c>facebook/w2v-bert-2.0</c>'s <c>model.safetensors</c>); its layers above the one
     /// clustered are not read.</summary>
@@ -466,6 +431,7 @@ internal sealed class AudioPalmCore<T>
     {
         if (path is null) throw new ArgumentNullException(nameof(path));
         var network = W2vBert2 ?? throw new InvalidOperationException("w2v-BERT 2.0 weights need SpeechTokenizer = W2vBert2.");
-        network.LoadTorchWeights(new Checkpoint(new[] { path }).Reader("w2v-BERT 2.0"));
+        using var checkpoint = TorchCheckpointFile.Open(path);
+        network.LoadTorchWeights((name, _) => checkpoint.Read(name, Array.Empty<int>()));
     }
 }

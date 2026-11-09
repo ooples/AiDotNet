@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -68,11 +69,13 @@ internal static class MegaTts3Ops
         return e;
     }
 
-    public static void LoadDense<T>(IEngine engine, Func<string, double[]> read, DenseLayer<T> layer, string name, int inputs, int outputs) =>
-        TorchParameters.Linear(engine, layer, inputs, outputs, read($"{name}.weight"), read($"{name}.bias"));
+    /// <summary>Loads <c>{name}.weight</c> (an <c>nn.Linear</c>'s or a kernel-1 convolution's) and <c>{name}.bias</c>.</summary>
+    public static void LoadDense<T>(IEngine engine, TorchTensorSource source, DenseLayer<T> layer, string name, int inputs, int outputs) =>
+        TorchParameters.Linear(engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias");
 
-    public static void LoadConv<T>(Func<string, double[]> read, NormedConv1DLayer<T> conv, string name) =>
-        conv.LoadTorchWeights(read($"{name}.weight"), null, read($"{name}.bias"));
+    /// <summary>Loads a convolution's <c>{name}.weight</c> and <c>{name}.bias</c>.</summary>
+    public static void LoadConv<T>(TorchTensorSource source, NormedConv1DLayer<T> conv, string name) =>
+        conv.LoadTorchWeights(source, $"{name}.weight", conv.TorchWeightShape, null, $"{name}.bias");
 }
 
 /// <summary>
@@ -227,35 +230,36 @@ internal sealed class MegaTts3RelEncoder<T>
         return (onehot, m);
     }
 
-    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix)
+    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix) => LoadTorch(engine, TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(IEngine engine, TorchTensorSource source, string prefix)
     {
-        Embedding.LoadTable(read($"{prefix}.emb.weight"));
+        Embedding.LoadTable(source, $"{prefix}.emb.weight");
         for (int i = 0; i < PrenetConvs.Count; i++)
         {
-            MegaTts3Ops.LoadConv(read, PrenetConvs[i], $"{prefix}.pre.conv_layers.{i}");
-            TorchParameters.LayerNorm(engine, PrenetNorms[i], read($"{prefix}.pre.norm_layers.{i}.gamma"), read($"{prefix}.pre.norm_layers.{i}.beta"));
+            MegaTts3Ops.LoadConv(source, PrenetConvs[i], $"{prefix}.pre.conv_layers.{i}");
+            TorchParameters.LayerNorm(engine, PrenetNorms[i], source, $"{prefix}.pre.norm_layers.{i}.gamma", $"{prefix}.pre.norm_layers.{i}.beta");
         }
-        MegaTts3Ops.LoadConv(read, PrenetProjection, $"{prefix}.pre.proj");
+        MegaTts3Ops.LoadConv(source, PrenetProjection, $"{prefix}.pre.proj");
         int h = _hidden;
         for (int i = 0; i < Blocks.Count; i++)
         {
             var bl = Blocks[i];
             string a = $"{prefix}.encoder.attn_layers.{i}";
             // 1×1 convolutions [out, in, 1] as dense layers.
-            MegaTts3Ops.LoadDense(engine, read, bl.Query, $"{a}.conv_q", h, h);
-            MegaTts3Ops.LoadDense(engine, read, bl.Key, $"{a}.conv_k", h, h);
-            MegaTts3Ops.LoadDense(engine, read, bl.Value, $"{a}.conv_v", h, h);
-            MegaTts3Ops.LoadDense(engine, read, bl.Output, $"{a}.conv_o", h, h);
-            var rk = read($"{a}.emb_rel_k");
-            var rv = read($"{a}.emb_rel_v");
-            TorchParameters.Linear(bl.RelativeKeys, 1, rk.Length, rk);
-            TorchParameters.Linear(bl.RelativeValues, 1, rv.Length, rv);
-            TorchParameters.LayerNorm(engine, bl.Norm1, read($"{prefix}.encoder.norm_layers_1.{i}.gamma"), read($"{prefix}.encoder.norm_layers_1.{i}.beta"));
-            MegaTts3Ops.LoadConv(read, bl.Ffn1, $"{prefix}.encoder.ffn_layers.{i}.conv_1");
-            MegaTts3Ops.LoadConv(read, bl.Ffn2, $"{prefix}.encoder.ffn_layers.{i}.conv_2");
-            TorchParameters.LayerNorm(engine, bl.Norm2, read($"{prefix}.encoder.norm_layers_2.{i}.gamma"), read($"{prefix}.encoder.norm_layers_2.{i}.beta"));
+            MegaTts3Ops.LoadDense(engine, source, bl.Query, $"{a}.conv_q", h, h);
+            MegaTts3Ops.LoadDense(engine, source, bl.Key, $"{a}.conv_k", h, h);
+            MegaTts3Ops.LoadDense(engine, source, bl.Value, $"{a}.conv_v", h, h);
+            MegaTts3Ops.LoadDense(engine, source, bl.Output, $"{a}.conv_o", h, h);
+            TorchParameters.Linear(bl.RelativeKeys, 1, bl.RelativeKeys.OutputSize, source, $"{a}.emb_rel_k");
+            TorchParameters.Linear(bl.RelativeValues, 1, bl.RelativeValues.OutputSize, source, $"{a}.emb_rel_v");
+            TorchParameters.LayerNorm(engine, bl.Norm1, source, $"{prefix}.encoder.norm_layers_1.{i}.gamma", $"{prefix}.encoder.norm_layers_1.{i}.beta");
+            MegaTts3Ops.LoadConv(source, bl.Ffn1, $"{prefix}.encoder.ffn_layers.{i}.conv_1");
+            MegaTts3Ops.LoadConv(source, bl.Ffn2, $"{prefix}.encoder.ffn_layers.{i}.conv_2");
+            TorchParameters.LayerNorm(engine, bl.Norm2, source, $"{prefix}.encoder.norm_layers_2.{i}.gamma", $"{prefix}.encoder.norm_layers_2.{i}.beta");
         }
-        TorchParameters.LayerNorm(engine, LastNorm, read($"{prefix}.encoder.last_ln.gamma"), read($"{prefix}.encoder.last_ln.beta"));
+        TorchParameters.LayerNorm(engine, LastNorm, source, $"{prefix}.encoder.last_ln.gamma", $"{prefix}.encoder.last_ln.beta");
     }
 }
 
@@ -540,11 +544,14 @@ internal sealed class MegaTts3Dit<T>
         return x;
     }
 
-    public void LoadTorch(IEngine engine, Func<string, double[]> read)
+    public void LoadTorch(IEngine engine, Func<string, double[]> read) => LoadTorch(engine, TorchTensorSource.From(read));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(IEngine engine, TorchTensorSource source)
     {
         var c = Configuration;
         int h = c.Width, ff = 256 * ((2 * c.Width + 255) / 256);
-        void Dense(DenseLayer<T> layer, string name, int inputs, int outputs) => MegaTts3Ops.LoadDense(engine, read, layer, name, inputs, outputs);
+        void Dense(DenseLayer<T> layer, string name, int inputs, int outputs) => MegaTts3Ops.LoadDense(engine, source, layer, name, inputs, outputs);
         Dense(ContextMaskProjection, "ctx_mask_proj", 1, c.ContextMaskDim);
         Dense(LocalConditionProjection, "local_cond_project", c.LatentChannels + c.ContextMaskDim, c.LocalConditionDim);
         for (int i = 0; i < Blocks.Count; i++)
@@ -566,8 +573,8 @@ internal sealed class MegaTts3Dit<T>
         Dense(Postnet, "postnet", h, c.LatentChannels);
         Dense(TimeMlp1, "f5_time_embed.time_mlp.0", 256, h);
         Dense(TimeMlp2, "f5_time_embed.time_mlp.2", h, h);
-        PhoneEncoder.LoadTorch(engine, read, "ph_encoder");
-        ToneEmbedding.LoadTable(read("tone_embed.weight"));
-        for (int i = 0; i < LingConvs.Count; i++) MegaTts3Ops.LoadConv(read, LingConvs[i], $"ling_pre_net.{i}");
+        PhoneEncoder.LoadTorch(engine, source, "ph_encoder");
+        ToneEmbedding.LoadTable(source, "tone_embed.weight");
+        for (int i = 0; i < LingConvs.Count; i++) MegaTts3Ops.LoadConv(source, LingConvs[i], $"ling_pre_net.{i}");
     }
 }

@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -211,16 +212,17 @@ internal sealed class MoshiTransformer<T>
     /// <summary>Loads the release's names under <paramref name="prefix"/> (<c>layers.{i}.norm1.alpha</c>,
     /// <c>self_attn.in_projs.{s}.weight</c>, <c>self_attn.out_projs.{s}.weight</c>, <c>norm2.alpha</c>,
     /// <c>gating.{s}.linear_in/linear_out.weight</c>; shared weights without the step index).</summary>
-    public void LoadTorchWeights(Func<string, double[]?> take, string prefix)
+    public void LoadTorchWeights(Func<string, double[]?> take, string prefix) => LoadTorchWeights(TorchTensorSource.From(take), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
         var c = Configuration;
-        double[] Read(string name) => take(prefix + name) ?? throw new InvalidDataException($"The Moshi checkpoint has no tensor '{prefix}{name}'.");
-        void Load(BiasFreeLinearLayer<T> layer, int inputs, int outputs, string name) => TorchParameters.Linear(layer, inputs, outputs, Read(name));
+        void Load(BiasFreeLinearLayer<T> layer, int inputs, int outputs, string name) => TorchParameters.Linear(layer, inputs, outputs, source, prefix + name);
         void LoadValues(BiasFreeLinearLayer<T> holder, string name)
         {
-            var values = Read(name);
             var w = holder.Weights;
-            for (int i = 0; i < values.Length; i++) w[i] = NumOps.FromDouble(values[i]);
+            source.CopyTo(prefix + name, Array.Empty<int>(), w);
             _engine.InvalidatePersistentTensor(w);
         }
         for (int i = 0; i < Layers.Count; i++)

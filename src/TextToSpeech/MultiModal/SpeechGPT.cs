@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
+using AiDotNet.ModelLoading;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -298,34 +299,17 @@ public partial class SpeechGPT<T> : TtsModelBase<T>
 
     // ---------------------------------------------------------------- weights
 
-    private static Dictionary<string, Tensor<float>> ReadAll(IEnumerable<string> paths)
+    // The checkpoint's files: its safetensors (one source over the shards), else its pytorch_model.bin shards.
+    private static TorchCheckpointFile[] OpenShards(string directory)
     {
-        var tensors = new Dictionary<string, Tensor<float>>(StringComparer.Ordinal);
-        foreach (var path in paths)
-        {
-            if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
-            foreach (var pair in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path)) tensors[pair.Key] = pair.Value;
-        }
-        return tensors;
-    }
-
-    private static double[] Values(Tensor<float> tensor)
-    {
-        var values = new double[tensor.Length];
-        for (int i = 0; i < values.Length; i++) values[i] = tensor.GetFlat(i);
-        return values;
-    }
-
-    private static IEnumerable<string> Shards(string directory)
-    {
-        foreach (var index in new[] { "model.safetensors.index.json", "pytorch_model.bin.index.json" })
-        {
-            string path = Path.Combine(directory, index);
-            if (File.Exists(path))
-                return Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(path))["weight_map"]!.Values<string>().Distinct().Select(f => Path.Combine(directory, f!)).ToList();
-        }
-        foreach (var single in new[] { "model.safetensors", "pytorch_model.bin" })
-            if (File.Exists(Path.Combine(directory, single))) return new[] { Path.Combine(directory, single) };
+        if (File.Exists(Path.Combine(directory, "model.safetensors.index.json")) || File.Exists(Path.Combine(directory, "model.safetensors")))
+            return new[] { TorchCheckpointFile.OpenDirectory(directory) };
+        string index = Path.Combine(directory, "pytorch_model.bin.index.json");
+        if (File.Exists(index))
+            return Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(index))["weight_map"]!.Values<string>().Distinct()
+                .Select(f => TorchCheckpointFile.Open(Path.Combine(directory, f!))).ToArray();
+        string single = Path.Combine(directory, "pytorch_model.bin");
+        if (File.Exists(single)) return new[] { TorchCheckpointFile.Open(single) };
         throw new FileNotFoundException($"No checkpoint in {directory}.");
     }
 
@@ -338,22 +322,31 @@ public partial class SpeechGPT<T> : TtsModelBase<T>
     {
         ThrowIfDisposed();
         if (directory is null) throw new ArgumentNullException(nameof(directory));
-        var tensors = ReadAll(Shards(directory));
-        if (loraDirectory is not null)
+        if (loraDirectory is not null && _options.Stage != SpeechGptTrainingStage.ChainOfModality)
+            throw new InvalidOperationException("LoRA adapters need Stage = ChainOfModality.");
+        var files = OpenShards(directory).ToList();
+        TorchCheckpointFile? adapter = null;
+        try
         {
-            if (_options.Stage != SpeechGptTrainingStage.ChainOfModality) throw new InvalidOperationException("LoRA adapters need Stage = ChainOfModality.");
-            foreach (var pair in ReadAll(new[] { Path.Combine(loraDirectory, "adapter_model.bin") }))
-                tensors[pair.Key.StartsWith("base_model.model.", StringComparison.Ordinal) ? pair.Key.Substring("base_model.model.".Length) : pair.Key] = pair.Value;
+            TorchTensorSource source = files.Skip(1).Aggregate((TorchTensorSource)files[0], (all, file) => all.Or(file));
+            if (loraDirectory is not null)
+            {
+                // peft saves the adapters under base_model.model.; they replace the base checkpoint's tensors of their names.
+                adapter = TorchCheckpointFile.Open(Path.Combine(loraDirectory, "adapter_model.bin"));
+                files.Add(adapter);
+                var adapters = adapter;
+                string Adapted(string name) => adapters.Contains("base_model.model." + name) ? "base_model.model." + name : name;
+                source = adapter.WithNames(Adapted).Or(source);
+            }
+            Core.LanguageModel.LoadTorchWeights(source, "model.", "lm_head.weight");
+            foreach (var file in files)
+                file.RequireAllUsed("SpeechGPT", k => k.EndsWith("rotary_emb.inv_freq", StringComparison.Ordinal)
+                    || (file != adapter && adapter is not null && (adapter.Contains("base_model.model." + k) || adapter.Contains(k))));
         }
-        var used = new HashSet<string>(StringComparer.Ordinal);
-        Core.LanguageModel.LoadTorchWeights((name, _) =>
+        finally
         {
-            if (!tensors.TryGetValue(name, out var tensor)) throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            used.Add(name);
-            return Values(tensor);
-        }, "model.", "lm_head.weight");
-        var left = tensors.Keys.Where(k => !used.Contains(k) && !k.EndsWith("rotary_emb.inv_freq", StringComparison.Ordinal)).ToList();
-        if (left.Count > 0) throw new InvalidDataException($"The checkpoint has {left.Count} tensors this model has no place for (first: '{left[0]}').");
+            foreach (var file in files) file.Dispose();
+        }
         if (_options.TokenizerDirectory is null && File.Exists(Path.Combine(directory, "tokenizer.model")))
         {
             _options.TokenizerDirectory = directory;
@@ -367,8 +360,8 @@ public partial class SpeechGPT<T> : TtsModelBase<T>
     {
         ThrowIfDisposed();
         if (_options.Vocoder != SpeechGptVocoder.ReleaseLJ) throw new InvalidOperationException("The released vocoder is single-speaker; set Vocoder = ReleaseLJ.");
-        var tensors = ReadAll(new[] { path });
-        (Core.Vocoder ?? throw NotNative()).LoadTorchWeights(name => tensors.TryGetValue(name, out var t) ? Values(t) : null, "generator.");
+        using var tensors = TorchCheckpointFile.Open(path);
+        (Core.Vocoder ?? throw NotNative()).LoadTorchWeights(name => tensors.TryRead(name), "generator.");
     }
 
     /// <summary>Loads mHuBERT and its k-means model, the unit extractor (<c>mhubert_base_vp_en_es_fr_it3.pt</c>,
@@ -376,8 +369,8 @@ public partial class SpeechGPT<T> : TtsModelBase<T>
     public void LoadUnitExtractor(string hubertCheckpoint, string kmeansModel)
     {
         ThrowIfDisposed();
-        var tensors = ReadAll(new[] { hubertCheckpoint });
-        Core.Units.LoadFairseqWeights(name => tensors.TryGetValue("model." + name, out var t) ? Values(t) : null);
+        using (var tensors = TorchCheckpointFile.Open(hubertCheckpoint))
+            Core.Units.LoadFairseqWeights(name => tensors.TryRead("model." + name));
         Core.Units.Centroids = AiDotNet.Audio.Foundations.JoblibKMeans.ReadClusterCenters(kmeansModel);
     }
 

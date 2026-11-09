@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -75,17 +76,19 @@ internal sealed class FunAsrEncoderLayer<T>
     }
 
     /// <summary>Loads <c>{prefix}self_attn.linear_q/k/v/out</c>, <c>feed_forward.w_1/w_2</c>, <c>norm1</c>, <c>norm2</c>.</summary>
-    public void LoadTorchWeights(Func<string, double[]?> read, string prefix)
+    public void LoadTorchWeights(Func<string, double[]?> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
-        double[] Read(string name) => read(prefix + name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{prefix}{name}'.");
         void Dense(DenseLayer<T> layer, string name, int inputs, int outputs) =>
-            TorchParameters.Linear(_engine, layer, inputs, outputs, Read(name + ".weight"), Read(name + ".bias"));
-        TorchParameters.LayerNorm(_engine, Norm1, Read("norm1.weight"), Read("norm1.bias"));
+            TorchParameters.Linear(_engine, layer, inputs, outputs, source, prefix + name + ".weight", prefix + name + ".bias");
+        TorchParameters.LayerNorm(_engine, Norm1, source, prefix + "norm1.weight", prefix + "norm1.bias");
         Dense(Query, "self_attn.linear_q", _width, _width);
         Dense(Key, "self_attn.linear_k", _width, _width);
         Dense(Value, "self_attn.linear_v", _width, _width);
         Dense(Output, "self_attn.linear_out", _width, _width);
-        TorchParameters.LayerNorm(_engine, Norm2, Read("norm2.weight"), Read("norm2.bias"));
+        TorchParameters.LayerNorm(_engine, Norm2, source, prefix + "norm2.weight", prefix + "norm2.bias");
         Dense(FeedForward1, "feed_forward.w_1", _width, FeedForwardSize);
         Dense(FeedForward2, "feed_forward.w_2", FeedForwardSize, _width);
     }
@@ -144,12 +147,14 @@ internal sealed class MinMoInputProjector<T>
     }
 
     /// <summary>Loads the adaptor's state (<c>{prefix}linear1</c>, <c>linear2</c>, <c>blocks.{i}.*</c>).</summary>
-    public void LoadTorchWeights(Func<string, double[]?> read, string prefix = "audio_adaptor.")
+    public void LoadTorchWeights(Func<string, double[]?> read, string prefix = "audio_adaptor.") => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix = "audio_adaptor.")
     {
-        double[] Read(string name) => read(prefix + name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{prefix}{name}'.");
-        TorchParameters.Linear(_engine, Linear1, EncoderWidth * Downsample, FeedForward, Read("linear1.weight"), Read("linear1.bias"));
-        TorchParameters.Linear(_engine, Linear2, FeedForward, LlmWidth, Read("linear2.weight"), Read("linear2.bias"));
-        for (int i = 0; i < Blocks.Count; i++) Blocks[i].LoadTorchWeights(read, $"{prefix}blocks.{i}.");
+        TorchParameters.Linear(_engine, Linear1, EncoderWidth * Downsample, FeedForward, source, prefix + "linear1.weight", prefix + "linear1.bias");
+        TorchParameters.Linear(_engine, Linear2, FeedForward, LlmWidth, source, prefix + "linear2.weight", prefix + "linear2.bias");
+        for (int i = 0; i < Blocks.Count; i++) Blocks[i].LoadTorchWeights(source, $"{prefix}blocks.{i}.");
     }
 }
 

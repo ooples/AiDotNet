@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -218,27 +219,30 @@ internal sealed class MegaTts3Duration<T>
 
     /// <summary>Loads a release checkpoint's <c>dur_model</c> state (the character encoder, unused by the release's
     /// inference, is not read).</summary>
-    public void LoadTorch(IEngine engine, Func<string, double[]> read)
+    public void LoadTorch(IEngine engine, Func<string, double[]> read) => LoadTorch(engine, TorchTensorSource.From(read));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(IEngine engine, TorchTensorSource source)
     {
         var c = Configuration;
         int h = c.DecoderWidth;
-        Encoder.LoadTorch(engine, read, "encoder");
-        ToneEmbedding.LoadTable(read("ling_label_embed_layers.tone.weight"));
-        MegaTts3Ops.LoadDense(engine, read, EncoderProjection, "enc_proj", c.EncoderWidth, h);
-        CodeEmbedding.LoadTable(read("code_emb.weight"));
+        Encoder.LoadTorch(engine, source, "encoder");
+        ToneEmbedding.LoadTable(source, "ling_label_embed_layers.tone.weight");
+        MegaTts3Ops.LoadDense(engine, source, EncoderProjection, "enc_proj", c.EncoderWidth, h);
+        CodeEmbedding.LoadTable(source, "code_emb.weight");
         for (int i = 0; i < Layers.Count; i++)
         {
             var layer = Layers[i];
             string p = $"layers.{i}.op";
-            TorchParameters.LayerNorm(engine, layer.Norm1, read($"{p}.layer_norm1.weight"), read($"{p}.layer_norm1.bias"));
-            TorchParameters.Linear(layer.InProjection, h, 3 * h, read($"{p}.self_attn.in_proj_weight"));
-            TorchParameters.Linear(layer.OutProjection, h, h, read($"{p}.self_attn.out_proj.weight"));
-            TorchParameters.LayerNorm(engine, layer.Norm2, read($"{p}.layer_norm2.weight"), read($"{p}.layer_norm2.bias"));
+            TorchParameters.LayerNorm(engine, layer.Norm1, source, $"{p}.layer_norm1.weight", $"{p}.layer_norm1.bias");
+            TorchParameters.Linear(layer.InProjection, h, 3 * h, source, $"{p}.self_attn.in_proj_weight");
+            TorchParameters.Linear(layer.OutProjection, h, h, source, $"{p}.self_attn.out_proj.weight");
+            TorchParameters.LayerNorm(engine, layer.Norm2, source, $"{p}.layer_norm2.weight", $"{p}.layer_norm2.bias");
             // ffn_1 is a kernel-1 convolution [4h, h, 1]: a dense layer.
-            MegaTts3Ops.LoadDense(engine, read, layer.Ffn1, $"{p}.ffn.ffn_1.1", h, 4 * h);
-            MegaTts3Ops.LoadDense(engine, read, layer.Ffn2, $"{p}.ffn.ffn_2", 4 * h, h);
+            MegaTts3Ops.LoadDense(engine, source, layer.Ffn1, $"{p}.ffn.ffn_1.1", h, 4 * h);
+            MegaTts3Ops.LoadDense(engine, source, layer.Ffn2, $"{p}.ffn.ffn_2", 4 * h, h);
         }
-        TorchParameters.LayerNorm(engine, FinalNorm, read("layer_norm.weight"), read("layer_norm.bias"));
-        MegaTts3Ops.LoadDense(engine, read, Output, "project_out_dim.0", h, 1);
+        TorchParameters.LayerNorm(engine, FinalNorm, source, "layer_norm.weight", "layer_norm.bias");
+        MegaTts3Ops.LoadDense(engine, source, Output, "project_out_dim.0", h, 1);
     }
 }

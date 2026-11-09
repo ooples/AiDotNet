@@ -2,6 +2,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Audio.Codecs;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
@@ -487,11 +488,8 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
         if (File.Exists(tokenizer)) LoadTokenizer(tokenizer);
         string config = Path.Combine(directory, "config.json");
         if (File.Exists(config)) ReadCheckpointConfig(JObject.Parse(File.ReadAllText(config)));
-        var weights = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var file in Directory.GetFiles(directory, "*.safetensors"))
-            foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(file))
-                weights[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        LoadLanguageModel(name => weights.TryGetValue(name, out var v) ? v : null);
+        using var weights = TorchCheckpointFile.OpenDirectory(directory);
+        LoadLanguageModel(weights);
     }
 
     /// <summary>Reads what the checkpoint's <c>config.json</c> adds to the options: Kani 1's speaker list.</summary>
@@ -502,21 +500,23 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
 
     /// <summary>Loads the language model's <c>Lfm2ForCausalLM</c> state dict; LoRA adapters it lacks start as peft starts
     /// them (A uniform in ±1/√inputs, B zero).</summary>
-    internal void LoadLanguageModel(Func<string, double[]?> read)
+    internal void LoadLanguageModel(Func<string, double[]?> read) => LoadLanguageModel(TorchTensorSource.From(read));
+
+    /// <summary>Loads the language model's state dict from <paramref name="source"/>.</summary>
+    internal void LoadLanguageModel(TorchTensorSource source)
     {
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
-        LanguageModel.LoadTorchWeights((name, shape) =>
+        LanguageModel.LoadTorchWeights(source.Or(TorchTensorSource.Generated((name, shape, _, values) =>
         {
-            if (read(name) is { } v) return v;
             if (!name.Contains(".lora_")) throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            var values = new double[shape.Aggregate(1, (a, s) => a * s)];
-            if (name.EndsWith("lora_A.weight", StringComparison.Ordinal))
+            if (!name.EndsWith("lora_A.weight", StringComparison.Ordinal))
             {
-                double bound = 1.0 / Math.Sqrt(shape[1]);
-                for (int i = 0; i < values.Length; i++) values[i] = bound * (2 * random.NextDouble() - 1);
+                values.Clear();
+                return;
             }
-            return values;
-        });
+            double bound = 1.0 / Math.Sqrt(shape[1]);
+            for (int i = 0; i < values.Length; i++) values[i] = bound * (2 * random.NextDouble() - 1);
+        })).AsFunction());
     }
 
     /// <summary>Loads NanoCodec from NeMo's <c>.nemo</c> archive (<c>nemo-nano-codec-22khz-0.6kbps-12.5fps.nemo</c>) or the
@@ -536,11 +536,10 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
         }
         try
         {
-            var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-            foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(checkpoint))
-                if (entry.Key.StartsWith("audio_encoder.", StringComparison.Ordinal) || entry.Key.StartsWith("audio_decoder.", StringComparison.Ordinal))
-                    state[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-            LoadCodec(name => state.TryGetValue(name, out var v) ? v : null, state.Keys);
+            // The codec's tensors (the discriminators' are not needed), each decoded as the codec reads it.
+            using var state = TorchCheckpointFile.Open(checkpoint);
+            bool IsCodec(string name) => name.StartsWith("audio_encoder.", StringComparison.Ordinal) || name.StartsWith("audio_decoder.", StringComparison.Ordinal);
+            LoadCodec(name => IsCodec(name) ? state.TryRead(name) : null, state.Names.Where(IsCodec).ToList());
         }
         finally
         {

@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
 
@@ -314,18 +315,20 @@ internal sealed class SpeechT5Core<T>
 
     /// <summary>Loads the official checkpoint's names (<c>encoder.*</c>, <c>decoder.*</c>, the pre- and post-nets,
     /// <c>hubert_layer.*</c>, <c>quantizer.*</c>); the pre-training modules only when <paramref name="pretraining"/>.</summary>
-    public void Load(Func<string, int[], double[]> read, bool pretraining)
+    public void Load(Func<string, int[], double[]> read, bool pretraining) => Load(TorchTensorSource.From(read), pretraining);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, bool pretraining)
     {
-        var c = Configuration;
-        Embedding.LoadTable(read("text_encoder_prenet.encoder_prenet.0.weight", new[] { c.TextVocabulary, c.Hidden }));
-        TextPositions.Load(read, "text_encoder_prenet.encoder_prenet.1.alpha");
-        Encoder.Load(read, "encoder.");
-        Decoder.Load(read, "decoder.");
-        SpeechPrenet.Load(read, "speech_decoder_prenet.");
-        SpeechPostnet.Load(read, "speech_decoder_postnet.");
+        Embedding.LoadTable(source, "text_encoder_prenet.encoder_prenet.0.weight");
+        TextPositions.Load(source, "text_encoder_prenet.encoder_prenet.1.alpha");
+        Encoder.Load(source, "encoder.");
+        Decoder.Load(source, "decoder.");
+        SpeechPrenet.Load(source, "speech_decoder_prenet.");
+        SpeechPostnet.Load(source, "speech_decoder_postnet.");
         if (!pretraining) return;
-        SpeechEncoderPrenet.Load(read, "speech_encoder_prenet.");
-        Hubert.Load(read, "hubert_layer.");
-        Quantizer.Load(read, "quantizer.");
+        SpeechEncoderPrenet.Load(source, "speech_encoder_prenet.");
+        Hubert.Load(source, "hubert_layer.");
+        Quantizer.Load(source, "quantizer.");
     }
 }

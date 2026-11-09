@@ -5,6 +5,7 @@ using AiDotNet.Audio.Whisper;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -487,40 +488,26 @@ public partial class MegaTTS3<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        Func<string, double[]> Required(Dictionary<string, double[]> state, string what) =>
-            name => state.TryGetValue(name, out var v) ? v : throw new InvalidDataException($"The {what} checkpoint has no tensor '{name}'.");
-        Dit.LoadTorch(Engine, Required(ReadCheckpoint(Path.Combine(root, "diffusion_transformer", "model_only_last.ckpt"), "state_dict.dit."), "diffusion"));
-        Duration.LoadTorch(Engine, Required(ReadCheckpoint(Path.Combine(root, "duration_lm", "model_only_last.ckpt"), "state_dict.dur_model."), "duration"));
-        var aligner = ReadCheckpoint(Path.Combine(root, "aligner_lm", "model_only_last.ckpt"), "state_dict.model.");
-        Aligner.LoadTorch(Required(aligner, "aligner"));
+        LoadModule(Path.Combine(root, "diffusion_transformer", "model_only_last.ckpt"), "state_dict.dit.", source => Dit.LoadTorch(Engine, source));
+        LoadModule(Path.Combine(root, "duration_lm", "model_only_last.ckpt"), "state_dict.dur_model.", source => Duration.LoadTorch(Engine, source));
+        LoadModule(Path.Combine(root, "aligner_lm", "model_only_last.ckpt"), "state_dict.model.", source => Aligner.LoadTorch(source));
         string g2p = Path.Combine(root, "g2p");
         _options.G2pTokenizerJson = File.ReadAllText(Path.Combine(g2p, "tokenizer.json"));
         G2p.LoadTokenizer(_options.G2pTokenizerJson);
-        var safetensors = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var file in Directory.GetFiles(g2p, "*.safetensors"))
-            foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(file))
-                safetensors[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        G2p.Network.LoadTorchWeights((name, _) => Required(safetensors, "g2p")(name));
+        using (var safetensors = TorchCheckpointFile.OpenDirectory(g2p)) G2p.Network.LoadTorchWeights(safetensors);
         string vaeFull = Path.Combine(root, "wavvae", "model_only_last.ckpt");
         bool full = File.Exists(vaeFull);
-        var vae = ReadCheckpoint(full ? vaeFull : Path.Combine(root, "wavvae", "decoder.ckpt"), "state_dict.model_gen.");
-        Vae.LoadTorch(Engine, name => vae.TryGetValue(name, out var v) ? v : null, includeEncoder: full);
+        LoadModule(full ? vaeFull : Path.Combine(root, "wavvae", "decoder.ckpt"), "state_dict.model_gen.",
+            source => Vae.LoadTorch(Engine, source, includeEncoder: full));
     }
 
     // A pytorch-lightning checkpoint's tensors under a prefix, with DistributedDataParallel's "module." dropped.
-    private static Dictionary<string, double[]> ReadCheckpoint(string path, string prefix)
+    private static void LoadModule(string path, string prefix, Action<TorchTensorSource> load)
     {
-        if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
-        var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path))
-        {
-            if (!entry.Key.StartsWith(prefix, StringComparison.Ordinal)) continue;
-            string name = entry.Key.Substring(prefix.Length);
-            if (name.StartsWith("module.", StringComparison.Ordinal)) name = name.Substring("module.".Length);
-            state[name] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        }
-        if (state.Count == 0) throw new InvalidDataException($"The checkpoint {path} has no tensors under '{prefix}'.");
-        return state;
+        using var checkpoint = TorchCheckpointFile.Open(path);
+        if (!checkpoint.Names.Any(k => k.StartsWith(prefix, StringComparison.Ordinal)))
+            throw new InvalidDataException($"The checkpoint {path} has no tensors under '{prefix}'.");
+        load(checkpoint.WithNames(name => checkpoint.Contains(prefix + name) ? prefix + name : prefix + "module." + name));
     }
 
     // ---------------------------------------------------------------- housekeeping

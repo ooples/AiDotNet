@@ -1,3 +1,5 @@
+using AiDotNet.ModelLoading;
+
 namespace AiDotNet.TextToSpeech.Latest;
 
 /// <summary>
@@ -27,47 +29,6 @@ public sealed class IndexTts2Checkpoints
 
 public partial class IndexTTS2<T>
 {
-    /// <summary>A checkpoint read once: each tensor becomes doubles when it is read and is then released, so loading a
-    /// multi-gigabyte checkpoint never holds a double copy of all of it.</summary>
-    private sealed class Checkpoint
-    {
-        private readonly Dictionary<string, Tensor<float>> _tensors;
-
-        public Checkpoint(string path)
-        {
-            _tensors = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-            Keys = new HashSet<string>(_tensors.Keys, StringComparer.Ordinal);
-        }
-
-        public HashSet<string> Keys { get; }
-        public HashSet<string> Used { get; } = new(StringComparer.Ordinal);
-
-        public bool Contains(string name) => Keys.Contains(name);
-
-        public double[]? Take(string name)
-        {
-            if (!_tensors.TryGetValue(name, out var tensor))
-            {
-                if (Used.Contains(name)) throw new InvalidOperationException($"'{name}' is read twice.");
-                return null;
-            }
-            _tensors.Remove(name);
-            Used.Add(name);
-            var values = new double[tensor.Length];
-            for (int i = 0; i < values.Length; i++) values[i] = tensor.GetFlat(i);
-            return values;
-        }
-
-        public Func<string, int[], double[]> Reader(string prefix, string what) => (name, _) =>
-            Take(prefix + name) ?? throw new InvalidDataException($"The {what} checkpoint has no tensor '{prefix + name}'.");
-
-        public void RequireAllUsed(string what, Func<string, bool> unused)
-        {
-            var left = Keys.Where(k => !Used.Contains(k) && !unused(k)).ToList();
-            if (left.Count > 0) throw new InvalidDataException($"The {what} checkpoint has {left.Count} tensors this model has no place for (first: '{left[0]}').");
-        }
-    }
-
     /// <summary>
     /// Loads the release: the text-to-semantic model (<c>gpt.pth</c>; the text head, which inference never reads, is
     /// skipped), the semantic-to-mel module (<c>s2mel.pth</c>'s <c>cfm</c>, <c>length_regulator</c> and <c>gpt_layer</c>),
@@ -75,6 +36,7 @@ public partial class IndexTTS2<T>
     /// (<c>feat2.pt</c> with <c>feat1.pt</c>'s speaker vectors) and, if asked, the text-to-emotion model. Use
     /// <see cref="IndexTTS2Options.Release"/>'s configuration for these weights.
     /// </summary>
+    /// <remarks>Each checkpoint is streamed into the layers and closed once its modules load.</remarks>
     public void LoadReferenceWeights(IndexTts2Checkpoints checkpoints)
     {
         ThrowIfDisposed();
@@ -84,55 +46,63 @@ public partial class IndexTTS2<T>
         string dir = checkpoints.Directory;
         if (o.BpeModelPath is null && File.Exists(Path.Combine(dir, "bpe.model"))) o.BpeModelPath = Path.Combine(dir, "bpe.model");
 
-        SemanticModel.LoadTorchWeights(new Checkpoint(checkpoints.SemanticModel).Reader("", "w2v-BERT"));
-        var stats = new Checkpoint(Path.Combine(dir, "wav2vec2bert_stats.pt"));
-        SemanticCodec.LoadStatistics(stats.Take("mean")!, stats.Take("var")!);
-        var codec = new Checkpoint(checkpoints.SemanticCodec);
-        SemanticCodec.Load((name, _) => codec.Take(name));
-        codec.RequireAllUsed("semantic codec", k => k.StartsWith("decoder.", StringComparison.Ordinal));
+        using (var semantic = TorchCheckpointFile.Open(checkpoints.SemanticModel)) SemanticModel.LoadTorchWeights((name, _) => semantic.Read(name, Array.Empty<int>()));
+        using (var stats = TorchCheckpointFile.Open(Path.Combine(dir, "wav2vec2bert_stats.pt")))
+            SemanticCodec.LoadStatistics(stats.TryRead("mean")!, stats.TryRead("var")!);
+        using (var codec = TorchCheckpointFile.Open(checkpoints.SemanticCodec))
+        {
+            SemanticCodec.Load((name, _) => codec.TryRead(name));
+            codec.RequireAllUsed("semantic codec", k => k.StartsWith("decoder.", StringComparison.Ordinal));
+        }
 
-        var gpt = new Checkpoint(Path.Combine(dir, "gpt.pth"));
-        string gptPrefix = gpt.Keys.Any(k => k.StartsWith("model.", StringComparison.Ordinal)) && !gpt.Contains("mel_head.weight") ? "model." : "";
-        TextToSemantic.Load(gpt.Reader(gptPrefix, "gpt"));
-        // The conformers' position tables are persistent buffers: the release runs on the checkpoint's float32 tables.
-        if (gpt.Take(gptPrefix + "conditioning_encoder.embed.pos_enc.pe") is { } speakerPositions)
-            TextToSemantic.Conditioning.LoadPositionTable(speakerPositions);
-        if (gpt.Take(gptPrefix + "emo_conditioning_encoder.embed.pos_enc.pe") is { } emotionPositions)
-            TextToSemantic.EmotionConditioning.LoadPositionTable(emotionPositions);
-        gpt.RequireAllUsed("gpt", k => k.Contains("text_head.")
-            || k.EndsWith("attn.bias", StringComparison.Ordinal) || k.EndsWith("attn.masked_bias", StringComparison.Ordinal)
-            || (o.Duration == IndexTts2DurationConditioning.Paper && k.EndsWith("speed_emb.weight", StringComparison.Ordinal)));
+        using (var gpt = TorchCheckpointFile.Open(Path.Combine(dir, "gpt.pth")))
+        {
+            string gptPrefix = gpt.Names.Any(k => k.StartsWith("model.", StringComparison.Ordinal)) && !gpt.Contains("mel_head.weight") ? "model." : "";
+            TextToSemantic.Load(gpt.WithPrefix(gptPrefix));
+            // The conformers' position tables are persistent buffers: the release runs on the checkpoint's float32 tables.
+            if (gpt.TryRead(gptPrefix + "conditioning_encoder.embed.pos_enc.pe") is { } speakerPositions)
+                TextToSemantic.Conditioning.LoadPositionTable(speakerPositions);
+            if (gpt.TryRead(gptPrefix + "emo_conditioning_encoder.embed.pos_enc.pe") is { } emotionPositions)
+                TextToSemantic.EmotionConditioning.LoadPositionTable(emotionPositions);
+            gpt.RequireAllUsed("gpt", k => k.Contains("text_head.")
+                || k.EndsWith("attn.bias", StringComparison.Ordinal) || k.EndsWith("attn.masked_bias", StringComparison.Ordinal)
+                || (o.Duration == IndexTts2DurationConditioning.Paper && k.EndsWith("speed_emb.weight", StringComparison.Ordinal)));
+        }
 
-        var s2mel = new Checkpoint(Path.Combine(dir, "s2mel.pth"));
-        string Strip(string module, string name) =>
-            s2mel.Contains($"net.{module}.module.{name}") ? $"net.{module}.module.{name}" : $"net.{module}.{name}";
-        Func<string, int[], double[]> Read(string module) => (name, _) =>
-            s2mel.Take(Strip(module, name)) ?? throw new InvalidDataException($"The s2mel checkpoint has no tensor '{Strip(module, name)}'.");
-        var mel = SemanticToMel;
-        mel.Regulator.Load(Engine, Read("length_regulator"), "");
-        mel.Estimator.Load(Read("cfm"), name => s2mel.Contains(Strip("cfm", name)), "estimator.");
-        var gptLayer = Read("gpt_layer");
-        IndexTtsOps.LoadLinear(Engine, gptLayer, mel.Gpt1, "0", o.HiddenDim, 256);
-        IndexTtsOps.LoadLinear(Engine, gptLayer, mel.Gpt2, "1", 256, 128);
-        IndexTtsOps.LoadLinear(Engine, gptLayer, mel.Gpt3, "2", 128, o.SemanticHiddenSize);
-        // The release builds but never runs the DiT's x_embedder, cond_embedder and content_mask_embedder, the regulator's
-        // discrete-content embedding and mask token, the skip projections of blocks that send rather than receive, and
-        // its buffers; s2mel.pth may also carry other modules' training state.
-        s2mel.RequireAllUsed("s2mel", k => !k.StartsWith("net.cfm.", StringComparison.Ordinal) && !k.StartsWith("net.length_regulator.", StringComparison.Ordinal)
-            && !k.StartsWith("net.gpt_layer.", StringComparison.Ordinal) || k.Contains("x_embedder") || k.Contains("cond_embedder")
-            || k.Contains("content_mask_embedder") || k.EndsWith(".embedding.weight", StringComparison.Ordinal) || k.EndsWith("mask_token", StringComparison.Ordinal)
-            || k.Contains("skip_in_linear") || k.EndsWith("input_pos", StringComparison.Ordinal) || k.EndsWith(".freqs", StringComparison.Ordinal)
-            || k.Contains("freqs_cis") || k.Contains("causal_mask"));
+        using (var s2mel = TorchCheckpointFile.Open(Path.Combine(dir, "s2mel.pth")))
+        {
+            string Strip(string module, string name) =>
+                s2mel.Contains($"net.{module}.module.{name}") ? $"net.{module}.module.{name}" : $"net.{module}.{name}";
+            TorchTensorSource Read(string module) => s2mel.WithNames(name => Strip(module, name));
+            var mel = SemanticToMel;
+            mel.Regulator.Load(Engine, Read("length_regulator"), "");
+            mel.Estimator.Load(Read("cfm"), name => s2mel.Contains(Strip("cfm", name)), "estimator.");
+            var gptLayer = Read("gpt_layer");
+            IndexTtsOps.LoadLinear(Engine, gptLayer, mel.Gpt1, "0", o.HiddenDim, 256);
+            IndexTtsOps.LoadLinear(Engine, gptLayer, mel.Gpt2, "1", 256, 128);
+            IndexTtsOps.LoadLinear(Engine, gptLayer, mel.Gpt3, "2", 128, o.SemanticHiddenSize);
+            // The release builds but never runs the DiT's x_embedder, cond_embedder and content_mask_embedder, the regulator's
+            // discrete-content embedding and mask token, the skip projections of blocks that send rather than receive, and
+            // its buffers; s2mel.pth may also carry other modules' training state.
+            s2mel.RequireAllUsed("s2mel", k => !k.StartsWith("net.cfm.", StringComparison.Ordinal) && !k.StartsWith("net.length_regulator.", StringComparison.Ordinal)
+                && !k.StartsWith("net.gpt_layer.", StringComparison.Ordinal) || k.Contains("x_embedder") || k.Contains("cond_embedder")
+                || k.Contains("content_mask_embedder") || k.EndsWith(".embedding.weight", StringComparison.Ordinal) || k.EndsWith("mask_token", StringComparison.Ordinal)
+                || k.Contains("skip_in_linear") || k.EndsWith("input_pos", StringComparison.Ordinal) || k.EndsWith(".freqs", StringComparison.Ordinal)
+                || k.Contains("freqs_cis") || k.Contains("causal_mask"));
+        }
 
-        SpeakerEncoder.LoadTorchWeights(new Checkpoint(checkpoints.SpeakerEncoder).Reader("", "CAM++"));
+        using (var campplus = TorchCheckpointFile.Open(checkpoints.SpeakerEncoder)) SpeakerEncoder.LoadTorchWeights((name, _) => campplus.Read(name, Array.Empty<int>()));
 
-        var vocoder = new Checkpoint(checkpoints.Vocoder);
-        string vocoderPrefix = vocoder.Keys.Any(k => k.StartsWith("generator.", StringComparison.Ordinal)) ? "generator." : "";
-        Vocoder.LoadTorch(name => vocoder.Take(vocoderPrefix + name));
+        using (var vocoder = TorchCheckpointFile.Open(checkpoints.Vocoder))
+        {
+            string vocoderPrefix = vocoder.Names.Any(k => k.StartsWith("generator.", StringComparison.Ordinal)) ? "generator." : "";
+            Vocoder.LoadTorch(name => vocoder.TryRead(vocoderPrefix + name));
+        }
 
         o.EmotionGroupSizes ??= new[] { 3, 17, 2, 8, 4, 5, 10, 24 };
-        LoadEmotionTable(Rows(new Checkpoint(Path.Combine(dir, "feat2.pt")).Take("")!, o.HiddenDim),
-            Rows(new Checkpoint(Path.Combine(dir, "feat1.pt")).Take("")!, o.StyleDim));
+        using (var feat2 = TorchCheckpointFile.Open(Path.Combine(dir, "feat2.pt")))
+        using (var feat1 = TorchCheckpointFile.Open(Path.Combine(dir, "feat1.pt")))
+            LoadEmotionTable(Rows(feat2.TryRead("")!, o.HiddenDim), Rows(feat1.TryRead("")!, o.StyleDim));
 
         if (checkpoints.TextToEmotion)
         {
@@ -143,17 +113,22 @@ public partial class IndexTTS2<T>
 
     internal static void LoadTextToEmotionState(IndexTtsTextToEmotion<T> t2e, string directory)
     {
-        var state = new Checkpoint(Path.Combine(directory, "model.safetensors"));
+        using var state = TorchCheckpointFile.Open(Path.Combine(directory, "model.safetensors"));
         var random = new Random(0);
-        t2e.Model.LoadTorchWeights((name, shape) =>
+        // The release ships the adapter merged; a missing adapter starts as peft does (A uniform, B zero), which leaves the
+        // merged model unchanged until it trains.
+        t2e.Model.LoadTorchWeights(state.Or(TorchTensorSource.Generated((name, shape, _, values) =>
         {
-            if (state.Take(name) is { } v) return v;
-            // The release ships the adapter merged; a missing adapter starts as peft does (A uniform, B zero), which
-            // leaves the merged model unchanged until it trains.
-            if (name.EndsWith("lora_B.weight", StringComparison.Ordinal)) return new double[shape.Aggregate(1, (a, b) => a * b)];
-            if (name.EndsWith("lora_A.weight", StringComparison.Ordinal)) return IndexTtsOps.Uniform(random, shape.Aggregate(1, (a, b) => a * b), shape[1]);
-            throw new InvalidDataException($"The text-to-emotion checkpoint has no tensor '{name}'.");
-        });
+            if (name.EndsWith("lora_B.weight", StringComparison.Ordinal))
+            {
+                values.Clear();
+                return;
+            }
+            if (!name.EndsWith("lora_A.weight", StringComparison.Ordinal))
+                throw new InvalidDataException($"The text-to-emotion checkpoint has no tensor '{name}'.");
+            double bound = 1.0 / Math.Sqrt(shape[1]);
+            for (int i = 0; i < values.Length; i++) values[i] = bound * (2 * random.NextDouble() - 1);
+        })));
     }
 
     private static double[][] Rows(double[] values, int width) =>

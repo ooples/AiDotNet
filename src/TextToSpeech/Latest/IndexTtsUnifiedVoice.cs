@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -148,29 +149,36 @@ internal sealed class IndexTtsGpt2<T>
 
     /// <summary>Loads <c>{prefix}h.{i}.*</c> and <c>{prefix}ln_f</c> (Hugging Face's <c>Conv1D</c> stores
     /// <c>[in, out]</c>).</summary>
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
         int d = Dim;
         void Conv1D(DenseLayer<T> layer, string name, int inputs, int outputs)
         {
-            var weight = read(name + ".weight", new[] { inputs, outputs });
-            var transposed = new double[weight.Length];
-            for (int r = 0; r < inputs; r++)
-                for (int c = 0; c < outputs; c++) transposed[c * inputs + r] = weight[r * outputs + c];
-            TorchParameters.Linear(_engine, layer, inputs, outputs, transposed, read(name + ".bias", new[] { outputs }));
+            // Stored [in, out], the layer's own layout.
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                layer.Forward(new Tensor<T>(new[] { 1, inputs }));
+            var weights = layer.GetWeights();
+            source.CopyTo(name + ".weight", new[] { inputs, outputs }, weights);
+            _engine.InvalidatePersistentTensor(weights);
+            var biases = layer.GetBiases();
+            source.CopyTo(name + ".bias", new[] { outputs }, biases);
+            _engine.InvalidatePersistentTensor(biases);
         }
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
             string p = $"{prefix}h.{i}.";
-            IndexTtsOps.LoadNorm(_engine, read, b.Norm1, p + "ln_1", d);
+            IndexTtsOps.LoadNorm(_engine, source, b.Norm1, p + "ln_1", d);
             Conv1D(b.Attention, p + "attn.c_attn", d, 3 * d);
             Conv1D(b.AttentionProjection, p + "attn.c_proj", d, d);
-            IndexTtsOps.LoadNorm(_engine, read, b.Norm2, p + "ln_2", d);
+            IndexTtsOps.LoadNorm(_engine, source, b.Norm2, p + "ln_2", d);
             Conv1D(b.FeedForward, p + "mlp.c_fc", d, 4 * d);
             Conv1D(b.FeedForwardProjection, p + "mlp.c_proj", 4 * d, d);
         }
-        IndexTtsOps.LoadNorm(_engine, read, FinalNorm, prefix + "ln_f", d);
+        IndexTtsOps.LoadNorm(_engine, source, FinalNorm, prefix + "ln_f", d);
     }
 }
 
@@ -371,23 +379,26 @@ internal sealed class IndexTtsUnifiedVoice<T>
     }
 
     /// <summary>Loads the release's <c>gpt.pth</c> names (the text head, which inference never reads, is not loaded).</summary>
-    public void Load(Func<string, int[], double[]> read)
+    public void Load(Func<string, int[], double[]> read) => Load(TorchTensorSource.From(read));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source)
     {
         var c = Configuration;
         int d = c.ModelDim;
-        Conditioning.Load(read, "conditioning_encoder.");
-        Perceiver.Load(_engine, read, "perceiver_encoder.");
-        if (SpeedEmbedding is not null) TorchParameters.Linear(SpeedEmbedding, 1, 2 * d, read("speed_emb.weight", new[] { 2, d }));
-        EmotionConditioning.Load(read, "emo_conditioning_encoder.");
-        EmotionPerceiver.Load(_engine, read, "emo_perceiver_encoder.");
-        TextEmbedding.LoadTable(read("text_embedding.weight", new[] { c.TextTokens + 1, d }));
-        IndexTtsOps.LoadLinear(_engine, read, EmotionLayer, "emo_layer", d, d);
-        IndexTtsOps.LoadLinear(_engine, read, EmotionVectorLayer, "emovec_layer", c.EmotionDim, d);
-        MelEmbedding.LoadTable(read("mel_embedding.weight", new[] { c.MelCodes, d }));
-        Gpt.Load(read, "gpt.");
-        MelPositions.LoadTable(read("mel_pos_embedding.emb.weight", new[] { MelPositions.VocabularySize, d }));
-        TextPositions.LoadTable(read("text_pos_embedding.emb.weight", new[] { TextPositions.VocabularySize, d }));
-        IndexTtsOps.LoadNorm(_engine, read, FinalNorm, "final_norm", d);
-        IndexTtsOps.LoadLinear(_engine, read, MelHead, "mel_head", d, c.MelCodes);
+        Conditioning.Load(source, "conditioning_encoder.");
+        Perceiver.Load(_engine, source, "perceiver_encoder.");
+        if (SpeedEmbedding is not null) TorchParameters.Linear(SpeedEmbedding, 1, 2 * d, source, "speed_emb.weight", new[] { 2, d });
+        EmotionConditioning.Load(source, "emo_conditioning_encoder.");
+        EmotionPerceiver.Load(_engine, source, "emo_perceiver_encoder.");
+        TextEmbedding.LoadTable(source, "text_embedding.weight");
+        IndexTtsOps.LoadLinear(_engine, source, EmotionLayer, "emo_layer", d, d);
+        IndexTtsOps.LoadLinear(_engine, source, EmotionVectorLayer, "emovec_layer", c.EmotionDim, d);
+        MelEmbedding.LoadTable(source, "mel_embedding.weight");
+        Gpt.Load(source, "gpt.");
+        MelPositions.LoadTable(source, "mel_pos_embedding.emb.weight");
+        TextPositions.LoadTable(source, "text_pos_embedding.emb.weight");
+        IndexTtsOps.LoadNorm(_engine, source, FinalNorm, "final_norm", d);
+        IndexTtsOps.LoadLinear(_engine, source, MelHead, "mel_head", d, c.MelCodes);
     }
 }

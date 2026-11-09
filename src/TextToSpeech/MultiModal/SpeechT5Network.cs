@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Latest;
@@ -144,25 +145,28 @@ internal sealed class SpeechT5SpeechEncoderPrenet<T>
         return SpeechT5Ops.Gelu(_engine, _engine.TensorTranspose(y));
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
         int inputs = 1;
         for (int i = 0; i < Convolutions.Count; i++)
         {
             var (channels, kernel, _) = _c.FeatureLayers[i];
-            Convolutions[i].LoadTorchWeights(read($"{prefix}feature_extractor.conv_layers.{i}.0.weight", new[] { channels, inputs, kernel }), null, new double[channels]);
+            Convolutions[i].LoadTorchWeights(source, $"{prefix}feature_extractor.conv_layers.{i}.0.weight", new[] { channels, inputs, kernel }, null, null);
             inputs = channels;
         }
         int c0 = _c.FeatureLayers[0].Channels;
-        TorchParameters.Linear(GroupGamma, 1, c0, read(prefix + "feature_extractor.conv_layers.0.2.weight", new[] { c0 }));
-        TorchParameters.Linear(GroupBeta, 1, c0, read(prefix + "feature_extractor.conv_layers.0.2.bias", new[] { c0 }));
-        IndexTtsOps.LoadNorm(_engine, read, FeatureNorm, prefix + "layer_norm", _features);
-        if (Projection is not null) IndexTtsOps.LoadLinear(_engine, read, Projection, prefix + "post_extract_proj", _features, _c.Hidden);
-        TorchParameters.Linear(MaskEmbedding, 1, _c.Hidden, read(prefix + "mask_emb", new[] { _c.Hidden }));
+        TorchParameters.Linear(GroupGamma, 1, c0, source, prefix + "feature_extractor.conv_layers.0.2.weight", new[] { c0 });
+        TorchParameters.Linear(GroupBeta, 1, c0, source, prefix + "feature_extractor.conv_layers.0.2.bias", new[] { c0 });
+        IndexTtsOps.LoadNorm(_engine, source, FeatureNorm, prefix + "layer_norm", _features);
+        if (Projection is not null) IndexTtsOps.LoadLinear(_engine, source, Projection, prefix + "post_extract_proj", _features, _c.Hidden);
+        TorchParameters.Linear(MaskEmbedding, 1, _c.Hidden, source, prefix + "mask_emb", new[] { _c.Hidden });
         int d = _c.Hidden, per = d / _c.ConvPositionGroups, k = _c.ConvPositionKernel;
-        TorchParameters.Linear(PositionDirection, 1, d * per * k, read(prefix + "pos_conv.0.weight_v", new[] { d, per, k }));
-        TorchParameters.Linear(PositionGain, 1, k, read(prefix + "pos_conv.0.weight_g", new[] { 1, 1, k }));
-        TorchParameters.Linear(PositionBias, 1, d, read(prefix + "pos_conv.0.bias", new[] { d }));
+        TorchParameters.Linear(PositionDirection, 1, d * per * k, source, prefix + "pos_conv.0.weight_v", new[] { d, per, k });
+        TorchParameters.Linear(PositionGain, 1, k, source, prefix + "pos_conv.0.weight_g", new[] { 1, 1, k });
+        TorchParameters.Linear(PositionBias, 1, d, source, prefix + "pos_conv.0.bias", new[] { d });
     }
 }
 
@@ -223,11 +227,14 @@ internal sealed class SpeechT5HubertPostnet<T>
         return result;
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
         int classes = _c.HubertClasses.Sum();
-        TorchParameters.Linear(LabelEmbeddings, 1, classes * _c.FinalDim, read(prefix + "label_embs_concat", new[] { classes, _c.FinalDim }));
-        IndexTtsOps.LoadLinear(_engine, read, Projection, prefix + "final_proj", _c.Hidden, _c.FinalDim * _c.HubertClasses.Length);
+        TorchParameters.Linear(LabelEmbeddings, 1, classes * _c.FinalDim, source, prefix + "label_embs_concat", new[] { classes, _c.FinalDim });
+        IndexTtsOps.LoadLinear(_engine, source, Projection, prefix + "final_proj", _c.Hidden, _c.FinalDim * _c.HubertClasses.Length);
     }
 }
 
@@ -315,9 +322,12 @@ internal sealed class SpeechT5Quantizer<T>
         return _engine.TensorMultiplyScalar(_engine.TensorAddScalar(_engine.TensorNegate(perplexity), NumOps.FromDouble(gv)), NumOps.FromDouble(1.0 / gv));
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        IndexTtsOps.LoadLinear(_engine, read, Projection, prefix + "weight_proj", _d, _groups * _vars);
-        TorchParameters.Linear(Vectors, 1, _groups * _vars * (_d / _groups), read(prefix + "vars", new[] { 1, _groups * _vars, _d / _groups }));
+        IndexTtsOps.LoadLinear(_engine, source, Projection, prefix + "weight_proj", _d, _groups * _vars);
+        TorchParameters.Linear(Vectors, 1, _groups * _vars * (_d / _groups), source, prefix + "vars", new[] { 1, _groups * _vars, _d / _groups });
     }
 }

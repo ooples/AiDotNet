@@ -1,15 +1,9 @@
+using AiDotNet.ModelLoading;
+
 namespace AiDotNet.TextToSpeech.MultiModal;
 
 public partial class Moshi<T>
 {
-    private static Dictionary<string, double[]> ReadState(string path)
-    {
-        var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path))
-            state[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        return state;
-    }
-
     /// <summary>
     /// Loads the release (<c>kyutai/moshiko-pytorch-bf16</c> or moshika): the language model from
     /// <c>model.safetensors</c>, Mimi from <c>tokenizer-e351c8d8-checkpoint125.safetensors</c> and Helium's tokenizer
@@ -39,16 +33,9 @@ public partial class Moshi<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var state = ReadState(path);
-        var used = new HashSet<string>(StringComparer.Ordinal);
-        Core.LanguageModel.LoadTorchWeights(name =>
-        {
-            if (!state.TryGetValue(name, out var v)) return null;
-            used.Add(name);
-            return v;
-        });
-        var unused = state.Keys.Where(k => !used.Contains(k)).ToList();
-        if (unused.Count > 0) throw new InvalidDataException($"The language model checkpoint has {unused.Count} tensors this model has no place for (first: '{unused[0]}').");
+        using var state = TorchCheckpointFile.Open(path);
+        Core.LanguageModel.LoadTorchWeights(state);
+        state.RequireAllUsed("language model");
     }
 
     /// <summary>Loads Mimi's state dict (the release's <c>MimiModel</c> names, a <c>.safetensors</c> file).</summary>
@@ -56,9 +43,9 @@ public partial class Moshi<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var state = ReadState(path);
-        var used = Core.Mimi.Load(name => state.TryGetValue(name, out var v) ? v : null);
-        var unused = state.Keys.Where(k => !used.Contains(k)).ToList();
+        using var state = TorchCheckpointFile.Open(path);
+        var used = Core.Mimi.Load(name => state.TryRead(name));
+        var unused = state.Names.Where(k => !used.Contains(k)).ToList();
         if (unused.Count > 0) throw new InvalidDataException($"The Mimi checkpoint has {unused.Count} tensors this model has no place for (first: '{unused[0]}').");
     }
 
@@ -71,10 +58,9 @@ public partial class Moshi<T>
         if (Directory.Exists(path))
             path = new[] { "model.safetensors", "pytorch_model.bin" }.Select(f => Path.Combine(path, f)).FirstOrDefault(File.Exists)
                 ?? throw new FileNotFoundException($"No model.safetensors or pytorch_model.bin in {path}.");
-        var state = ReadState(path);
-        string Key(string name) => state.ContainsKey(name) ? name : "wavlm." + name;
-        wavLm.LoadTorchWeights((name, _) => state.TryGetValue(Key(name), out var v) ? v : throw new InvalidDataException($"The WavLM checkpoint has no tensor '{name}'."),
-            name => state.ContainsKey(Key(name)));
+        using var file = TorchCheckpointFile.Open(path);
+        var state = file.WithNames(name => file.Contains(name) ? name : "wavlm." + name);
+        wavLm.LoadTorchWeights((name, _) => state.Read(name, Array.Empty<int>()), state.Contains);
     }
 
     /// <inheritdoc />

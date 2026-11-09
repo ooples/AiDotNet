@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Latest;
@@ -533,12 +534,12 @@ internal sealed class GlmSpeechTokenizer<T>
 
     // ---------------------------------------------------------------- weights
 
-    private static void LoadAttention(IEngine engine, Func<string, int[], double[]> read, Attention a, string p, int d)
+    private static void LoadAttention(IEngine engine, TorchTensorSource source, Attention a, string p, int d)
     {
-        IndexTtsOps.LoadLinear(engine, read, a.Query, p + "q_proj", d, d);
-        IndexTtsOps.LoadLinear(read, a.Key, p + "k_proj", d, d);
-        IndexTtsOps.LoadLinear(engine, read, a.Value, p + "v_proj", d, d);
-        IndexTtsOps.LoadLinear(engine, read, a.Output, p + "out_proj", d, d);
+        IndexTtsOps.LoadLinear(engine, source, a.Query, p + "q_proj", d, d);
+        IndexTtsOps.LoadLinear(source, a.Key, p + "k_proj", d, d);
+        IndexTtsOps.LoadLinear(engine, source, a.Value, p + "v_proj", d, d);
+        IndexTtsOps.LoadLinear(engine, source, a.Output, p + "out_proj", d, d);
     }
 
     /// <summary>
@@ -546,55 +547,62 @@ internal sealed class GlmSpeechTokenizer<T>
     /// <c>layers.N</c>, <c>codebook</c>, <c>embed_positions2</c>, and <c>ema_count</c> / <c>ema_weight</c> when present),
     /// under <paramref name="prefix"/>; the encoder layers built.
     /// </summary>
-    public void LoadEncoder(Func<string, int[], double[]> read, Func<string, bool> has, string prefix = "")
+    public void LoadEncoder(Func<string, int[], double[]> read, Func<string, bool> has, string prefix = "") => LoadEncoder(TorchTensorSource.From(read), has, prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadEncoder(TorchTensorSource source, Func<string, bool> has, string prefix = "")
     {
         var c = _c;
         int d = c.Dim;
-        Conv1.LoadTorchWeights(read(prefix + "conv1.weight", new[] { d, c.Mels, 3 }), null, read(prefix + "conv1.bias", new[] { d }));
-        Conv2.LoadTorchWeights(read(prefix + "conv2.weight", new[] { d, d, 3 }), null, read(prefix + "conv2.bias", new[] { d }));
-        TorchParameters.Linear(Positions, 1, c.MaxSourcePositions * d, read(prefix + "embed_positions.weight", new[] { c.MaxSourcePositions, d }));
+        Conv1.LoadTorchWeights(source, prefix + "conv1.weight", new[] { d, c.Mels, 3 }, null, prefix + "conv1.bias");
+        Conv2.LoadTorchWeights(source, prefix + "conv2.weight", new[] { d, d, 3 }, null, prefix + "conv2.bias");
+        TorchParameters.Linear(Positions, 1, c.MaxSourcePositions * d, source, prefix + "embed_positions.weight", new[] { c.MaxSourcePositions, d });
         for (int i = 0; i < EncoderLayers.Count; i++)
         {
             var l = EncoderLayers[i];
             string p = $"{prefix}layers.{i}.";
-            IndexTtsOps.LoadNorm(_engine, read, l.AttentionNorm, p + "self_attn_layer_norm", d);
-            LoadAttention(_engine, read, l.SelfAttention, p + "self_attn.", d);
-            IndexTtsOps.LoadNorm(_engine, read, l.FinalNorm, p + "final_layer_norm", d);
-            IndexTtsOps.LoadLinear(_engine, read, l.Fc1, p + "fc1", d, c.FeedForward);
-            IndexTtsOps.LoadLinear(_engine, read, l.Fc2, p + "fc2", c.FeedForward, d);
+            IndexTtsOps.LoadNorm(_engine, source, l.AttentionNorm, p + "self_attn_layer_norm", d);
+            LoadAttention(_engine, source, l.SelfAttention, p + "self_attn.", d);
+            IndexTtsOps.LoadNorm(_engine, source, l.FinalNorm, p + "final_layer_norm", d);
+            IndexTtsOps.LoadLinear(_engine, source, l.Fc1, p + "fc1", d, c.FeedForward);
+            IndexTtsOps.LoadLinear(_engine, source, l.Fc2, p + "fc2", c.FeedForward, d);
         }
-        if (FinalNorm is not null && has(prefix + "layer_norm.weight")) IndexTtsOps.LoadNorm(_engine, read, FinalNorm, prefix + "layer_norm", d);
+        if (FinalNorm is not null && has(prefix + "layer_norm.weight")) IndexTtsOps.LoadNorm(_engine, source, FinalNorm, prefix + "layer_norm", d);
         if (has(prefix + "codebook.weight"))
         {
-            var codebook = read(prefix + "codebook.weight", new[] { c.CodebookSize, d });
-            TorchParameters.Linear(Codebook, 1, codebook.Length, codebook);
-            TorchParameters.Linear(Positions2, 1, Positions2Rows * d, read(prefix + "embed_positions2.weight", new[] { Positions2Rows, d }));
-            EmaWeight = has(prefix + "ema_weight") ? read(prefix + "ema_weight", new[] { c.CodebookSize, d }) : (double[])codebook.Clone();
-            EmaCount = has(prefix + "ema_count") ? read(prefix + "ema_count", new[] { c.CodebookSize }) : Enumerable.Repeat(1.0, c.CodebookSize).ToArray();
+            var shape = new[] { c.CodebookSize, d };
+            TorchParameters.Linear(Codebook, 1, c.CodebookSize * d, source, prefix + "codebook.weight", shape);
+            TorchParameters.Linear(Positions2, 1, Positions2Rows * d, source, prefix + "embed_positions2.weight", new[] { Positions2Rows, d });
+            // The EMA state is kept as values; without one it starts from the codebook.
+            EmaWeight = source.Read(has(prefix + "ema_weight") ? prefix + "ema_weight" : prefix + "codebook.weight", shape);
+            EmaCount = has(prefix + "ema_count") ? source.Read(prefix + "ema_count", new[] { c.CodebookSize }) : Enumerable.Repeat(1.0, c.CodebookSize).ToArray();
         }
     }
 
     /// <summary>Loads a Hugging Face Whisper decoder (<c>embed_tokens</c>, <c>embed_positions</c>, <c>layers.N</c>,
     /// <c>layer_norm</c>) under <paramref name="prefix"/>, such as whisper-large-v3's <c>model.decoder.</c>.</summary>
-    public void LoadDecoder(Func<string, int[], double[]> read, string prefix)
+    public void LoadDecoder(Func<string, int[], double[]> read, string prefix) => LoadDecoder(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadDecoder(TorchTensorSource source, string prefix)
     {
         var c = _c;
         int d = c.Dim;
         var embedding = TokenEmbedding ?? throw new InvalidOperationException("The decoder exists with the training stack only.");
-        embedding.LoadTable(read(prefix + "embed_tokens.weight", new[] { c.Vocabulary, d }));
-        TorchParameters.Linear(DecoderPositions!, 1, c.MaxTargetPositions * d, read(prefix + "embed_positions.weight", new[] { c.MaxTargetPositions, d }));
+        embedding.LoadTable(source, prefix + "embed_tokens.weight");
+        TorchParameters.Linear(DecoderPositions!, 1, c.MaxTargetPositions * d, source, prefix + "embed_positions.weight", new[] { c.MaxTargetPositions, d });
         for (int i = 0; i < DecoderLayers.Count; i++)
         {
             var l = DecoderLayers[i];
             string p = $"{prefix}layers.{i}.";
-            IndexTtsOps.LoadNorm(_engine, read, l.SelfNorm, p + "self_attn_layer_norm", d);
-            LoadAttention(_engine, read, l.SelfAttention, p + "self_attn.", d);
-            IndexTtsOps.LoadNorm(_engine, read, l.CrossNorm, p + "encoder_attn_layer_norm", d);
-            LoadAttention(_engine, read, l.CrossAttention, p + "encoder_attn.", d);
-            IndexTtsOps.LoadNorm(_engine, read, l.FinalNorm, p + "final_layer_norm", d);
-            IndexTtsOps.LoadLinear(_engine, read, l.Fc1, p + "fc1", d, c.FeedForward);
-            IndexTtsOps.LoadLinear(_engine, read, l.Fc2, p + "fc2", c.FeedForward, d);
+            IndexTtsOps.LoadNorm(_engine, source, l.SelfNorm, p + "self_attn_layer_norm", d);
+            LoadAttention(_engine, source, l.SelfAttention, p + "self_attn.", d);
+            IndexTtsOps.LoadNorm(_engine, source, l.CrossNorm, p + "encoder_attn_layer_norm", d);
+            LoadAttention(_engine, source, l.CrossAttention, p + "encoder_attn.", d);
+            IndexTtsOps.LoadNorm(_engine, source, l.FinalNorm, p + "final_layer_norm", d);
+            IndexTtsOps.LoadLinear(_engine, source, l.Fc1, p + "fc1", d, c.FeedForward);
+            IndexTtsOps.LoadLinear(_engine, source, l.Fc2, p + "fc2", c.FeedForward, d);
         }
-        IndexTtsOps.LoadNorm(_engine, read, DecoderNorm!, prefix + "layer_norm", d);
+        IndexTtsOps.LoadNorm(_engine, source, DecoderNorm!, prefix + "layer_norm", d);
     }
 }

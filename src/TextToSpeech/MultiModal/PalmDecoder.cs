@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Latest;
@@ -252,18 +253,21 @@ internal sealed class PalmDecoder<T>
     /// <c>{i}.fn.ff_out.1.weight</c>, <c>{L+1}.gamma</c>); <paramref name="rows"/> embedding rows are read (the rest of
     /// the table, AudioPaLM's audio rows, stays as it is).
     /// </summary>
-    public void LoadPalmPytorch(Func<string, int[], double[]> read, int? rows = null)
+    public void LoadPalmPytorch(Func<string, int[], double[]> read, int? rows = null) => LoadPalmPytorch(TorchTensorSource.From(read), rows);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadPalmPytorch(TorchTensorSource source, int? rows = null)
     {
         var c = _c;
         if (c.Kind != PalmDecoderKind.Palm || c.KeyValueHeads != 1) throw new InvalidOperationException("PaLM-pytorch holds a multi-query PaLM block.");
-        LoadEmbedding(read("0.weight", new[] { rows ?? c.VocabSize, c.Hidden }), rows ?? c.VocabSize);
+        LoadEmbedding(source, "0.weight", rows ?? c.VocabSize);
         int d = c.Hidden, attention = c.Heads * c.HeadDim, hd = c.HeadDim, ff = c.Intermediate;
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
             string p = $"{i + 1}.fn.";
-            TorchParameters.Linear(b.AttentionNorm, 1, d, read(p + "norm.gamma", new[] { d }));
-            var fused = read(p + "fused_attn_ff_proj.weight", new[] { attention + 2 * hd + 2 * ff, d });
+            TorchParameters.Linear(b.AttentionNorm, 1, d, source, p + "norm.gamma", new[] { d });
+            var fused = source.Read(p + "fused_attn_ff_proj.weight", new[] { attention + 2 * hd + 2 * ff, d });
             double[] Rows(int from, int count) => fused.Skip(from * d).Take(count * d).ToArray();
             TorchParameters.Linear(b.Query, d, attention, Rows(0, attention));
             TorchParameters.Linear(b.Key, d, hd, Rows(attention, hd));
@@ -271,45 +275,47 @@ internal sealed class PalmDecoder<T>
             // SwiGLU: x, gate = ff.chunk(2); silu(gate) · x.
             TorchParameters.Linear(b.Up, d, ff, Rows(attention + 2 * hd, ff));
             TorchParameters.Linear(b.Gate, d, ff, Rows(attention + 2 * hd + ff, ff));
-            TorchParameters.Linear(b.Output, attention, d, read(p + "attn_out.weight", new[] { d, attention }));
-            TorchParameters.Linear(b.Down, ff, d, read(p + "ff_out.1.weight", new[] { d, ff }));
+            TorchParameters.Linear(b.Output, attention, d, source, p + "attn_out.weight");
+            TorchParameters.Linear(b.Down, ff, d, source, p + "ff_out.1.weight");
         }
-        TorchParameters.Linear(FinalNorm, 1, d, read($"{Blocks.Count + 1}.gamma", new[] { d }));
+        TorchParameters.Linear(FinalNorm, 1, d, source, $"{Blocks.Count + 1}.gamma", new[] { d });
     }
 
     /// <summary>Loads a Hugging Face <c>GemmaForCausalLM</c> state (<c>model.*</c>; the head is the shared table);
     /// <paramref name="rows"/> embedding rows are read.</summary>
-    public void LoadGemma(Func<string, int[], double[]> read, int? rows = null)
+    public void LoadGemma(Func<string, int[], double[]> read, int? rows = null) => LoadGemma(TorchTensorSource.From(read), rows);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadGemma(TorchTensorSource source, int? rows = null)
     {
         var c = _c;
         if (c.Kind != PalmDecoderKind.Gemma) throw new InvalidOperationException("Gemma weights need a Gemma decoder.");
-        LoadEmbedding(read("model.embed_tokens.weight", new[] { rows ?? c.VocabSize, c.Hidden }), rows ?? c.VocabSize);
+        LoadEmbedding(source, "model.embed_tokens.weight", rows ?? c.VocabSize);
         int d = c.Hidden, q = c.Heads * c.HeadDim, kv = c.KeyValueHeads * c.HeadDim, ff = c.Intermediate;
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
             string p = $"model.layers.{i}.";
-            TorchParameters.Linear(b.AttentionNorm, 1, d, read(p + "input_layernorm.weight", new[] { d }));
-            TorchParameters.Linear(b.MlpNorm!, 1, d, read(p + "post_attention_layernorm.weight", new[] { d }));
-            TorchParameters.Linear(b.Query, d, q, read(p + "self_attn.q_proj.weight", new[] { q, d }));
-            TorchParameters.Linear(b.Key, d, kv, read(p + "self_attn.k_proj.weight", new[] { kv, d }));
-            TorchParameters.Linear(b.Value, d, kv, read(p + "self_attn.v_proj.weight", new[] { kv, d }));
-            TorchParameters.Linear(b.Output, q, d, read(p + "self_attn.o_proj.weight", new[] { d, q }));
-            TorchParameters.Linear(b.Gate, d, ff, read(p + "mlp.gate_proj.weight", new[] { ff, d }));
-            TorchParameters.Linear(b.Up, d, ff, read(p + "mlp.up_proj.weight", new[] { ff, d }));
-            TorchParameters.Linear(b.Down, ff, d, read(p + "mlp.down_proj.weight", new[] { d, ff }));
+            TorchParameters.Linear(b.AttentionNorm, 1, d, source, p + "input_layernorm.weight", new[] { d });
+            TorchParameters.Linear(b.MlpNorm!, 1, d, source, p + "post_attention_layernorm.weight", new[] { d });
+            TorchParameters.Linear(b.Query, d, q, source, p + "self_attn.q_proj.weight");
+            TorchParameters.Linear(b.Key, d, kv, source, p + "self_attn.k_proj.weight");
+            TorchParameters.Linear(b.Value, d, kv, source, p + "self_attn.v_proj.weight");
+            TorchParameters.Linear(b.Output, q, d, source, p + "self_attn.o_proj.weight");
+            TorchParameters.Linear(b.Gate, d, ff, source, p + "mlp.gate_proj.weight");
+            TorchParameters.Linear(b.Up, d, ff, source, p + "mlp.up_proj.weight");
+            TorchParameters.Linear(b.Down, ff, d, source, p + "mlp.down_proj.weight");
         }
-        TorchParameters.Linear(FinalNorm, 1, d, read("model.norm.weight", new[] { d }));
+        TorchParameters.Linear(FinalNorm, 1, d, source, "model.norm.weight", new[] { d });
     }
 
     /// <summary>Overwrites the first <paramref name="rows"/> rows of the token table; with fewer rows than the table, the
     /// rest (AudioPaLM's audio tokens) are zeroed, as §3.2's checkpoint extension initializes them.</summary>
-    private void LoadEmbedding(double[] values, int rows)
+    private void LoadEmbedding(TorchTensorSource source, string name, int rows)
     {
-        int d = _c.Hidden;
         if (rows > _c.VocabSize) throw new InvalidDataException($"The checkpoint's {rows} tokens exceed the decoder's {_c.VocabSize}.");
-        var table = new double[_c.VocabSize * d];
-        Array.Copy(values, table, rows * d);
-        Embedding.LoadTable(table);
+        // The rows past the checkpoint's (the audio tokens) start at zero.
+        Embedding.Reinitialize(() => 0.0);
+        Embedding.LoadLeadingRows(source, name, rows);
     }
 }

@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Audio.Generation;
 using AiDotNet.Enums;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
@@ -258,8 +259,7 @@ public partial class SpiritLM<T>
         ThrowIfDisposed();
         var encoder = _sonarText ?? throw new InvalidOperationException("SONAR's text encoder is built with IncludeSonarTextEncoder.");
         string path = File.Exists(Path.Combine(directory, "model.safetensors")) ? Path.Combine(directory, "model.safetensors") : Path.Combine(directory, "pytorch_model.bin");
-        var tensors = ReadAll(new[] { path });
-        encoder.LoadTorchWeights(name => tensors.TryGetValue(name, out var t) ? Values(t) : null);
+        using (var tensors = TorchCheckpointFile.Open(path)) encoder.LoadTorchWeights(tensors);
         if (_options.SonarTokenizerDirectory is null && File.Exists(Path.Combine(directory, "sentencepiece.bpe.model")))
         {
             _options.SonarTokenizerDirectory = directory;

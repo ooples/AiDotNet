@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Vocoders;
@@ -69,16 +70,19 @@ internal sealed class IndexTtsLengthRegulator<T>
         return _engine.TensorTranspose(_engine.Reshape(h, new[] { _channels, frames }));
     }
 
-    public void Load(IEngine engine, Func<string, int[], double[]> read, string prefix)
+    public void Load(IEngine engine, Func<string, int[], double[]> read, string prefix) => Load(engine, TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(IEngine engine, TorchTensorSource source, string prefix)
     {
-        IndexTtsOps.LoadLinear(engine, read, ContentIn, prefix + "content_in_proj", _input, _channels);
+        IndexTtsOps.LoadLinear(engine, source, ContentIn, prefix + "content_in_proj", _input, _channels);
         for (int i = 0; i < Stages.Count; i++)
         {
-            IndexTtsOps.LoadConv(read, Stages[i].Conv, $"{prefix}model.{3 * i}", _channels);
-            TorchParameters.Linear(Stages[i].Gamma, 1, _channels, read($"{prefix}model.{3 * i + 1}.weight", new[] { _channels }));
-            TorchParameters.Linear(Stages[i].Beta, 1, _channels, read($"{prefix}model.{3 * i + 1}.bias", new[] { _channels }));
+            IndexTtsOps.LoadConv(source, Stages[i].Conv, $"{prefix}model.{3 * i}", _channels);
+            TorchParameters.Linear(Stages[i].Gamma, 1, _channels, source, $"{prefix}model.{3 * i + 1}.weight", new[] { _channels });
+            TorchParameters.Linear(Stages[i].Beta, 1, _channels, source, $"{prefix}model.{3 * i + 1}.bias", new[] { _channels });
         }
-        IndexTtsOps.LoadConv(read, Output, $"{prefix}model.{3 * Stages.Count}", _channels);
+        IndexTtsOps.LoadConv(source, Output, $"{prefix}model.{3 * Stages.Count}", _channels);
     }
 }
 
@@ -98,13 +102,13 @@ internal static class IndexTtsS2MelOps
 
     /// <summary>Loads a weight-normalized module (<c>weight_g</c>/<c>weight_v</c>, or <c>weight</c> without the
     /// parametrization).</summary>
-    public static void LoadWeightNorm<T>(Func<string, int[], double[]> read, Func<string, bool> has, NormedConv1DLayer<T> conv, string name, int outputs)
+    public static void LoadWeightNorm<T>(TorchTensorSource source, Func<string, bool> has, NormedConv1DLayer<T> conv, string name, int outputs)
     {
-        var bias = conv.HasBias ? read(name + ".bias", new[] { outputs }) : new double[outputs];
+        string? bias = conv.HasBias ? name + ".bias" : null;
         if (has(name + ".weight_v"))
-            conv.LoadTorchWeights(read(name + ".weight_v", conv.TorchWeightShape), read(name + ".weight_g", new[] { outputs }), bias);
+            conv.LoadTorchWeights(source, name + ".weight_v", conv.TorchWeightShape, name + ".weight_g", bias);
         else
-            conv.LoadTorchWeights(read(name + ".weight", conv.TorchWeightShape), null, bias);
+            conv.LoadTorchWeights(source, name + ".weight", conv.TorchWeightShape, null, bias);
     }
 
     /// <summary><c>GroupNorm(1, C)</c> of <c>[1, C, T]</c>: one mean and variance over every value, then per-channel
@@ -178,10 +182,13 @@ internal sealed class IndexTtsTimestepEmbedder<T>
         return Mlp2.Forward(_engine.Swish(Mlp1.Forward(e)));
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        IndexTtsOps.LoadLinear(_engine, read, Mlp1, prefix + "mlp.0", Frequencies, _hidden);
-        IndexTtsOps.LoadLinear(_engine, read, Mlp2, prefix + "mlp.2", _hidden, _hidden);
+        IndexTtsOps.LoadLinear(_engine, source, Mlp1, prefix + "mlp.0", Frequencies, _hidden);
+        IndexTtsOps.LoadLinear(_engine, source, Mlp2, prefix + "mlp.2", _hidden, _hidden);
     }
 }
 
@@ -368,44 +375,47 @@ internal sealed class IndexTtsDiT<T>
         return IndexTtsS2MelOps.PerRow(_engine, Conv2, z);
     }
 
-    public void Load(Func<string, int[], double[]> read, Func<string, bool> has, string prefix)
+    public void Load(Func<string, int[], double[]> read, Func<string, bool> has, string prefix) => Load(TorchTensorSource.From(read), has, prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, Func<string, bool> has, string prefix)
     {
         var c = Configuration;
         int d = c.Hidden, w = c.WavenetHidden;
-        Time.Load(read, prefix + "t_embedder.");
-        IndexTtsOps.LoadLinear(_engine, read, ContentProjection, prefix + "cond_projection", c.RegulatorChannels, d);
-        IndexTtsOps.LoadLinear(_engine, read, Merge, prefix + "cond_x_merge_linear", d + 2 * c.MelChannels + c.StyleDim, d);
+        Time.Load(source, prefix + "t_embedder.");
+        IndexTtsOps.LoadLinear(_engine, source, ContentProjection, prefix + "cond_projection", c.RegulatorChannels, d);
+        IndexTtsOps.LoadLinear(_engine, source, Merge, prefix + "cond_x_merge_linear", d + 2 * c.MelChannels + c.StyleDim, d);
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
             string p = $"{prefix}transformer.layers.{i}.";
-            IndexTtsOps.LoadLinear(_engine, read, b.AttentionModulation, p + "attention_norm.project_layer", d, 2 * d);
-            TorchParameters.Linear(b.AttentionNorm, 1, d, read(p + "attention_norm.norm.weight", new[] { d }));
-            IndexTtsOps.LoadLinear(read, b.QueryKeyValue, p + "attention.wqkv", d, 3 * d);
-            IndexTtsOps.LoadLinear(read, b.Output, p + "attention.wo", d, d);
-            IndexTtsOps.LoadLinear(_engine, read, b.FeedForwardModulation, p + "ffn_norm.project_layer", d, 2 * d);
-            TorchParameters.Linear(b.FeedForwardNorm, 1, d, read(p + "ffn_norm.norm.weight", new[] { d }));
-            IndexTtsOps.LoadLinear(read, b.W1, p + "feed_forward.w1", d, Intermediate);
-            IndexTtsOps.LoadLinear(read, b.W3, p + "feed_forward.w3", d, Intermediate);
-            IndexTtsOps.LoadLinear(read, b.W2, p + "feed_forward.w2", Intermediate, d);
-            if (b.SkipIn is not null) IndexTtsOps.LoadLinear(_engine, read, b.SkipIn, p + "skip_in_linear", 2 * d, d);
+            IndexTtsOps.LoadLinear(_engine, source, b.AttentionModulation, p + "attention_norm.project_layer", d, 2 * d);
+            TorchParameters.Linear(b.AttentionNorm, 1, d, source, p + "attention_norm.norm.weight", new[] { d });
+            IndexTtsOps.LoadLinear(source, b.QueryKeyValue, p + "attention.wqkv", d, 3 * d);
+            IndexTtsOps.LoadLinear(source, b.Output, p + "attention.wo", d, d);
+            IndexTtsOps.LoadLinear(_engine, source, b.FeedForwardModulation, p + "ffn_norm.project_layer", d, 2 * d);
+            TorchParameters.Linear(b.FeedForwardNorm, 1, d, source, p + "ffn_norm.norm.weight", new[] { d });
+            IndexTtsOps.LoadLinear(source, b.W1, p + "feed_forward.w1", d, Intermediate);
+            IndexTtsOps.LoadLinear(source, b.W3, p + "feed_forward.w3", d, Intermediate);
+            IndexTtsOps.LoadLinear(source, b.W2, p + "feed_forward.w2", Intermediate, d);
+            if (b.SkipIn is not null) IndexTtsOps.LoadLinear(_engine, source, b.SkipIn, p + "skip_in_linear", 2 * d, d);
         }
-        IndexTtsOps.LoadLinear(_engine, read, NormModulation, prefix + "transformer.norm.project_layer", d, 2 * d);
-        TorchParameters.Linear(NormWeight, 1, d, read(prefix + "transformer.norm.norm.weight", new[] { d }));
-        IndexTtsOps.LoadLinear(_engine, read, SkipLinear, prefix + "skip_linear", d + c.MelChannels, d);
-        IndexTtsOps.LoadLinear(_engine, read, Conv1, prefix + "conv1", d, w);
-        Time2.Load(read, prefix + "t_embedder2.");
-        IndexTtsS2MelOps.LoadWeightNorm(read, has, WavenetCondition, prefix + "wavenet.cond_layer.conv.conv", 2 * w * c.WavenetLayers);
+        IndexTtsOps.LoadLinear(_engine, source, NormModulation, prefix + "transformer.norm.project_layer", d, 2 * d);
+        TorchParameters.Linear(NormWeight, 1, d, source, prefix + "transformer.norm.norm.weight", new[] { d });
+        IndexTtsOps.LoadLinear(_engine, source, SkipLinear, prefix + "skip_linear", d + c.MelChannels, d);
+        IndexTtsOps.LoadLinear(_engine, source, Conv1, prefix + "conv1", d, w);
+        Time2.Load(source, prefix + "t_embedder2.");
+        IndexTtsS2MelOps.LoadWeightNorm(source, has, WavenetCondition, prefix + "wavenet.cond_layer.conv.conv", 2 * w * c.WavenetLayers);
         for (int i = 0; i < Wavenet.Count; i++)
         {
-            IndexTtsS2MelOps.LoadWeightNorm(read, has, Wavenet[i].In, $"{prefix}wavenet.in_layers.{i}.conv.conv", 2 * w);
-            IndexTtsS2MelOps.LoadWeightNorm(read, has, Wavenet[i].ResidualSkip, $"{prefix}wavenet.res_skip_layers.{i}.conv.conv",
+            IndexTtsS2MelOps.LoadWeightNorm(source, has, Wavenet[i].In, $"{prefix}wavenet.in_layers.{i}.conv.conv", 2 * w);
+            IndexTtsS2MelOps.LoadWeightNorm(source, has, Wavenet[i].ResidualSkip, $"{prefix}wavenet.res_skip_layers.{i}.conv.conv",
                 i < Wavenet.Count - 1 ? 2 * w : w);
         }
-        IndexTtsOps.LoadLinear(_engine, read, ResidualProjection, prefix + "res_projection", d, w);
-        IndexTtsOps.LoadLinear(_engine, read, FinalModulation, prefix + "final_layer.adaLN_modulation.1", w, 2 * w);
-        IndexTtsS2MelOps.LoadWeightNorm(read, has, FinalLinear, prefix + "final_layer.linear", w);
-        IndexTtsOps.LoadConv(read, Conv2, prefix + "conv2", c.MelChannels);
+        IndexTtsOps.LoadLinear(_engine, source, ResidualProjection, prefix + "res_projection", d, w);
+        IndexTtsOps.LoadLinear(_engine, source, FinalModulation, prefix + "final_layer.adaLN_modulation.1", w, 2 * w);
+        IndexTtsS2MelOps.LoadWeightNorm(source, has, FinalLinear, prefix + "final_layer.linear", w);
+        IndexTtsOps.LoadConv(source, Conv2, prefix + "conv2", c.MelChannels);
     }
 }
 
@@ -504,13 +514,16 @@ internal sealed class IndexTtsSemanticToMel<T>
     }
 
     /// <summary>Loads the release's <c>s2mel.pth</c> modules (<c>cfm</c>, <c>length_regulator</c>, <c>gpt_layer</c>).</summary>
-    public void Load(Func<string, int[], double[]> read, Func<string, bool> has)
+    public void Load(Func<string, int[], double[]> read, Func<string, bool> has) => Load(TorchTensorSource.From(read), has);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, Func<string, bool> has)
     {
         var c = Configuration;
-        Regulator.Load(_engine, read, "length_regulator.");
-        Estimator.Load(read, has, "cfm.estimator.");
-        IndexTtsOps.LoadLinear(_engine, read, Gpt1, "gpt_layer.0", c.GptDim, c.GptBottleneck1);
-        IndexTtsOps.LoadLinear(_engine, read, Gpt2, "gpt_layer.1", c.GptBottleneck1, c.GptBottleneck2);
-        IndexTtsOps.LoadLinear(_engine, read, Gpt3, "gpt_layer.2", c.GptBottleneck2, c.SemanticDim);
+        Regulator.Load(_engine, source, "length_regulator.");
+        Estimator.Load(source, has, "cfm.estimator.");
+        IndexTtsOps.LoadLinear(_engine, source, Gpt1, "gpt_layer.0", c.GptDim, c.GptBottleneck1);
+        IndexTtsOps.LoadLinear(_engine, source, Gpt2, "gpt_layer.1", c.GptBottleneck1, c.GptBottleneck2);
+        IndexTtsOps.LoadLinear(_engine, source, Gpt3, "gpt_layer.2", c.GptBottleneck2, c.SemanticDim);
     }
 }

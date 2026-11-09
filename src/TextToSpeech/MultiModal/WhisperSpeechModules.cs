@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -150,13 +151,15 @@ internal sealed class WhisperSpeechAttention<T>
         return Output.Forward(context);
     }
 
-    public void LoadTorchWeights(Func<string, double[]?> read, string prefix)
+    public void LoadTorchWeights(Func<string, double[]?> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
-        double[] Read(string name) => read(prefix + name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{prefix}{name}'.");
-        TorchParameters.Linear(_engine, Query, _width, _width, Read("query.weight"), Read("query.bias"));
-        TorchParameters.Linear(Key, _width, _width, Read("key.weight"));
-        TorchParameters.Linear(_engine, Value, _width, _width, Read("value.weight"), Read("value.bias"));
-        TorchParameters.Linear(_engine, Output, _width, _width, Read("out.weight"), Read("out.bias"));
+        TorchParameters.Linear(_engine, Query, _width, _width, source, prefix + "query.weight", prefix + "query.bias");
+        TorchParameters.Linear(Key, _width, _width, source, prefix + "key.weight");
+        TorchParameters.Linear(_engine, Value, _width, _width, source, prefix + "value.weight", prefix + "value.bias");
+        TorchParameters.Linear(_engine, Output, _width, _width, source, prefix + "out.weight", prefix + "out.bias");
     }
 }
 
@@ -210,19 +213,21 @@ internal sealed class WhisperSpeechBlock<T>
         return _engine.TensorAdd(x, h);
     }
 
-    public void LoadTorchWeights(Func<string, double[]?> read, string prefix)
+    public void LoadTorchWeights(Func<string, double[]?> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
-        double[] Read(string name) => read(prefix + name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{prefix}{name}'.");
-        TorchParameters.LayerNorm(_engine, AttentionNorm, Read("attn_ln.weight"), Read("attn_ln.bias"));
-        Attention.LoadTorchWeights(read, prefix + "attn.");
+        TorchParameters.LayerNorm(_engine, AttentionNorm, source, prefix + "attn_ln.weight", prefix + "attn_ln.bias");
+        Attention.LoadTorchWeights(source, prefix + "attn.");
         if (CrossAttention is not null)
         {
-            TorchParameters.LayerNorm(_engine, CrossNorm!, Read("cross_attn_ln.weight"), Read("cross_attn_ln.bias"));
-            CrossAttention.LoadTorchWeights(read, prefix + "cross_attn.");
+            TorchParameters.LayerNorm(_engine, CrossNorm!, source, prefix + "cross_attn_ln.weight", prefix + "cross_attn_ln.bias");
+            CrossAttention.LoadTorchWeights(source, prefix + "cross_attn.");
         }
-        TorchParameters.LayerNorm(_engine, MlpNorm, Read("mlp_ln.weight"), Read("mlp_ln.bias"));
-        TorchParameters.Linear(_engine, Mlp1, _width, _hidden, Read("mlp.0.weight"), Read("mlp.0.bias"));
-        TorchParameters.Linear(_engine, Mlp2, _hidden, _width, Read("mlp.2.weight"), Read("mlp.2.bias"));
+        TorchParameters.LayerNorm(_engine, MlpNorm, source, prefix + "mlp_ln.weight", prefix + "mlp_ln.bias");
+        TorchParameters.Linear(_engine, Mlp1, _width, _hidden, source, prefix + "mlp.0.weight", prefix + "mlp.0.bias");
+        TorchParameters.Linear(_engine, Mlp2, _hidden, _width, source, prefix + "mlp.2.weight", prefix + "mlp.2.bias");
     }
 }
 
@@ -308,12 +313,14 @@ internal sealed class WhisperSpeechEmbeddings<T>
         return _engine.TensorConcatenate(new[] { main, special }, 1);
     }
 
-    public void LoadTorchWeights(Func<string, double[]?> read, string prefix, bool loadSpecial = true)
+    public void LoadTorchWeights(Func<string, double[]?> read, string prefix, bool loadSpecial = true) => LoadTorchWeights(TorchTensorSource.From(read), prefix, loadSpecial);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix, bool loadSpecial = true)
     {
-        double[] Read(string name) => read(prefix + name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{prefix}{name}'.");
-        TorchParameters.Linear(Main, 1, Codes * FrozenWidth, Read("main.weight"));
-        if (EmbedToHidden is not null) TorchParameters.Linear(_engine, EmbedToHidden, FrozenWidth, Width, Read("emb_to_hidden.weight"), Read("emb_to_hidden.bias"));
-        if (HiddenToEmbed is not null) TorchParameters.Linear(_engine, HiddenToEmbed, Width, FrozenWidth, Read("hidden_to_emb.weight"), Read("hidden_to_emb.bias"));
-        if (Special is not null && loadSpecial) TorchParameters.Linear(Special, 1, SpecialCodes * Width, Read("special.weight"));
+        TorchParameters.Linear(Main, 1, Codes * FrozenWidth, source, prefix + "main.weight");
+        if (EmbedToHidden is not null) TorchParameters.Linear(_engine, EmbedToHidden, FrozenWidth, Width, source, prefix + "emb_to_hidden.weight", prefix + "emb_to_hidden.bias");
+        if (HiddenToEmbed is not null) TorchParameters.Linear(_engine, HiddenToEmbed, Width, FrozenWidth, source, prefix + "hidden_to_emb.weight", prefix + "hidden_to_emb.bias");
+        if (Special is not null && loadSpecial) TorchParameters.Linear(Special, 1, SpecialCodes * Width, source, prefix + "special.weight");
     }
 }
