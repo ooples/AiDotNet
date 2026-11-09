@@ -91,6 +91,8 @@ internal static class ChatterboxFixture
         WarmupSteps = 0,
         IncludeDiscriminators = false,
         VocoderSegmentLength = 32,
+        // The released watermark model is not part of the fixture; ChatterboxWatermarkTests cover the watermark.
+        Watermark = false,
     };
 
     internal static Chatterbox<T> Create<T>() =>
