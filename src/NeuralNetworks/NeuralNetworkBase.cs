@@ -7225,7 +7225,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Taken once, by this model only: a sub-model's Predict inside PredictCore takes the normal path, so its
         // between-layer Reset never rewinds the caller's arena under this model's live intermediates.
         var callerArena = t_callerArena;
-        if (callerArena.Owner is not null) t_callerArena = default;
+        if (callerArena.Owner is not null) ExchangeCallerArena(default);
 
         if (!InferenceArenaSettings.Enabled
             || GraphCaptureCompatibility.IsActive)
@@ -7237,15 +7237,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // PredictIntoCallerArena: the caller consumes the output inside its own top-level arena, so the output
             // stays that arena's memory. No per-call arena and no DetachFromArena copy ([rows, vocabulary] for an LM
             // head); the caller's Dispose returns every buffer of the forward to the cross-arena pool.
-            var prevCallerRecycle = _inferenceRecycleArena;
-            _inferenceRecycleArena = InferenceArenaSettings.RecycleLayerScratch ? arenaOfCaller : null;
+            var prevCallerRecycle = ExchangeRecycleArena(InferenceArenaSettings.RecycleLayerScratch ? arenaOfCaller : null);
             try
             {
                 return PredictCore(input);
             }
             finally
             {
-                _inferenceRecycleArena = prevCallerRecycle;
+                ExchangeRecycleArena(prevCallerRecycle);
             }
         }
 
@@ -7269,9 +7268,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // forward — never an outer training/composite arena (whose live tape/step tensors a
         // mid-forward Reset would corrupt). Save/restore makes it nesting-safe.
         using var arena = TensorArena.Create();
-        var prevRecycle = _inferenceRecycleArena;
-        _inferenceRecycleArena =
-            InferenceArenaSettings.RecycleLayerScratch ? arena : null;
+        var prevRecycle = ExchangeRecycleArena(InferenceArenaSettings.RecycleLayerScratch ? arena : null);
         Tensor<T> output;
         try
         {
@@ -7279,7 +7276,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
         finally
         {
-            _inferenceRecycleArena = prevRecycle;
+            ExchangeRecycleArena(prevRecycle);
         }
         // #2385: with no host scratch rented, nothing in this arena can back the output (a GPU forward keeps its
         // result on the device). Detaching anyway downloaded every result to a fresh host array on each call,
@@ -7310,6 +7307,22 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     [ThreadStatic]
     private static (NeuralNetworkBase<T>? Owner, TensorArena? Arena) t_callerArena;
 
+    // The two thread-static slots above are only ever swapped, the previous value restored in a finally.
+    private static TensorArena? ExchangeRecycleArena(TensorArena? arena)
+    {
+        var previous = _inferenceRecycleArena;
+        _inferenceRecycleArena = arena;
+        return previous;
+    }
+
+    private static (NeuralNetworkBase<T>? Owner, TensorArena? Arena) ExchangeCallerArena(
+        (NeuralNetworkBase<T>? Owner, TensorArena? Arena) value)
+    {
+        var previous = t_callerArena;
+        t_callerArena = value;
+        return previous;
+    }
+
     /// <summary>
     /// Predict whose output is memory of <paramref name="arena"/>, the caller's active top-level arena, instead of a
     /// fresh garbage-collected copy. For a caller that consumes the output before disposing the arena (streaming
@@ -7318,15 +7331,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     internal Tensor<T> PredictIntoCallerArena(Tensor<T> input, TensorArena arena)
     {
-        var previous = t_callerArena;
-        t_callerArena = (this, arena);
+        var previous = ExchangeCallerArena((this, arena));
         try
         {
             return Predict(input);
         }
         finally
         {
-            t_callerArena = previous;
+            ExchangeCallerArena(previous);
         }
     }
 

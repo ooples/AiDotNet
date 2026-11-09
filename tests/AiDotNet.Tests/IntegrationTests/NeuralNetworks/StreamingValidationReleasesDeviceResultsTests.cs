@@ -66,9 +66,13 @@ public class StreamingValidationReleasesDeviceResultsTests
     /// (Predict copied its output out of its own arena), and the arena hands every array back to the pool, so after the
     /// first batch the next ones reuse them: 67,502,904 bytes for 8 batches before, 373,152 after.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public void Cpu_validation_batches_reuse_their_host_buffers()
     {
+#if !NETCOREAPP3_0_OR_GREATER
+        // net471 has no per-thread allocation counter, and a process-wide one counts parallel tests too.
+        Skip.If(true, "GC.GetAllocatedBytesForCurrentThread needs .NET Core 3.0 or later.");
+#else
         var previous = AiDotNetEngine.Current;
         AiDotNetEngine.Current = new CpuEngine();
         try
@@ -88,6 +92,7 @@ public class StreamingValidationReleasesDeviceResultsTests
                 $"{Batches} validation batches allocated {allocated:N0} host bytes (one prediction is {OutputBytes:N0}).");
         }
         finally { AiDotNetEngine.Current = previous; }
+#endif
     }
 
     /// <summary>
