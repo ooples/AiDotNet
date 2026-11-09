@@ -35,6 +35,49 @@ public class OpenVoiceOptions : EndToEndTtsOptions
     public int SpeakerEmbeddingDim { get; set; } = 256;
     /// <summary>Gets or sets the number of layers in the tone-color converter.</summary>
     public int NumToneColorLayers { get; set; } = 3;
+    /// <summary>Number of layers in the auxiliary IPA training encoder. Shares the setting with <see cref="Training"/>.</summary>
+    public override int NumEncoderLayers
+    {
+        get => Training?.IpaLayers ?? base.NumEncoderLayers;
+        set
+        {
+            base.NumEncoderLayers = value;
+            if (Training is not null) Training.IpaLayers = value;
+        }
+    }
+
+    /// <summary>Attention heads in the auxiliary IPA training encoder. Shares the setting with <see cref="Training"/>.</summary>
+    public override int NumHeads
+    {
+        get => Training?.IpaHeads ?? base.NumHeads;
+        set
+        {
+            base.NumHeads = value;
+            if (Training is not null) Training.IpaHeads = value;
+        }
+    }
+
+    /// <summary>Dropout probability in the auxiliary IPA training encoder. Shares the setting with <see cref="Training"/>.</summary>
+    public override double DropoutRate
+    {
+        get => Training?.IpaDropout ?? base.DropoutRate;
+        set
+        {
+            base.DropoutRate = value;
+            if (Training is not null) Training.IpaDropout = value;
+        }
+    }
+
+    /// <summary>Number of mel bands used by the waveform reconstruction objective. Shares the setting with <see cref="Training"/>.</summary>
+    public override int MelChannels
+    {
+        get => Training?.MelChannels ?? base.MelChannels;
+        set
+        {
+            base.MelChannels = value;
+            if (Training is not null) Training.MelChannels = value;
+        }
+    }
     /// <summary>Auxiliary IPA prior, waveform reconstruction and adversarial training configuration.</summary>
     public OpenVoiceTrainingOptions Training { get; set; } = new();
 }

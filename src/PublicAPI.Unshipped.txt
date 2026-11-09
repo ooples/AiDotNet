@@ -1,4 +1,36 @@
 #nullable enable
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.DropoutRate.get -> double
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.DropoutRate.set -> void
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.MelChannels.get -> int
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.MelChannels.set -> void
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.NumEncoderLayers.get -> int
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.NumEncoderLayers.set -> void
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.NumHeads.get -> int
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.NumHeads.set -> void
+virtual AiDotNet.TextToSpeech.TtsModelOptions.DropoutRate.get -> double
+virtual AiDotNet.TextToSpeech.TtsModelOptions.DropoutRate.set -> void
+virtual AiDotNet.TextToSpeech.TtsModelOptions.MelChannels.get -> int
+virtual AiDotNet.TextToSpeech.TtsModelOptions.MelChannels.set -> void
+virtual AiDotNet.TextToSpeech.TtsModelOptions.NumEncoderLayers.get -> int
+virtual AiDotNet.TextToSpeech.TtsModelOptions.NumEncoderLayers.set -> void
+virtual AiDotNet.TextToSpeech.TtsModelOptions.NumHeads.get -> int
+virtual AiDotNet.TextToSpeech.TtsModelOptions.NumHeads.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceOptions.DropoutRate.get -> double
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceOptions.DropoutRate.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceOptions.MelChannels.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceOptions.MelChannels.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceOptions.NumHeads.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceOptions.NumHeads.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.DropoutRate.get -> double
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.DropoutRate.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.MelChannels.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.MelChannels.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.NumHeads.get -> int
+override AiDotNet.TextToSpeech.VoiceCloning.OpenVoiceV2Options.NumHeads.set -> void
 AiDotNet.TextToSpeech.Latest.MegaTTS3Options.DropoutRate.get -> double
 AiDotNet.TextToSpeech.Latest.MegaTTS3Options.DropoutRate.set -> void
 AiDotNet.TextToSpeech.Latest.MegaTTS3Options.HopSize.get -> int

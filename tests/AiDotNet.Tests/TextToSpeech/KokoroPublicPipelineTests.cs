@@ -8,6 +8,18 @@ namespace AiDotNet.Tests.TextToSpeech;
 public sealed class KokoroPublicPipelineTests
 {
     [Fact(Timeout = 300000)]
+    public async Task PlanningCountMatchesTheNativeGraphAfterItsFirstPrediction()
+    {
+        await Task.Yield();
+        using var model = KokoroNativeFixture.Create<float>();
+        long planned = model.ParameterCount;
+        var input = new Tensor<float>(new[] { 4 }, new Vector<float>(new[] { 12f, 24f, 36f, 48f }));
+        model.Predict(input);
+        Assert.Equal(81_337_667, model.ParameterCount);
+        Assert.Equal(planned, model.ParameterCount);
+    }
+
+    [Fact(Timeout = 300000)]
     public async Task SeededNativeTraining_PreservesPredictionsAcrossCloneAndFreshRestoration()
     {
         await Task.Yield();

@@ -20,6 +20,8 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/ReleasedTtsModuleReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VoiceCraftPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/UniAudioPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/UniAudioNativeFixture.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/UniAudioOptimizerOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/XTTSv2PaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/XTTSv2Fixture.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/DiTToTTSPaperTests.cs" />
@@ -32,6 +34,8 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceOutputPolicyTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/MetaVoiceSincFastTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/OpenVoiceTrainingReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/OpenVoiceOptionAliasesTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/StyleTtsConditioningShapeTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/OpenVoiceIpaPriorTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/EmotiVoiceFrontEndTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/MeloRomanceFrontEndTests.cs" />
