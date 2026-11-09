@@ -53,6 +53,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.CodecBased.UniAudio<T> ? "uniaudio-" + option
             : network is AiDotNet.Video.Enhancement.MGLDVSR<T> && MgldVsrOptionFixture.Handles(option) ? "mgldvsr-" + option
             : network is AiDotNet.Video.Enhancement.FlashVSR<T> && FlashVsrOptionFixture.Handles(option) ? "flashvsr-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option is "WarmupSteps" or "TrainingUpdates" or "GradientClipNorm" ? "voicebox-training-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option == "MaximumPhoneDuration" ? "voicebox-duration-cap"
             : network is AiDotNet.TextToSpeech.MultiModal.MinMo<T> && MinMoOptionFixture.Handles(option) ? "minmo-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.CSM<T> && CsmOptionFixture.Handles(option) ? "csm-" + option
@@ -882,6 +883,22 @@ internal static class OptionSensitivityFixtureSetup
 
         if (options is AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions durationVoiceboxOptions && option == "MaximumPhoneDuration")
             durationVoiceboxOptions.MaximumPhoneDuration = 2;
+
+        if (options is AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions voiceboxTraining)
+        {
+            // Reach warmup and decay boundaries within the native smoke training steps.
+            if (option == "WarmupSteps")
+            {
+                voiceboxTraining.WarmupSteps = 2;
+                voiceboxTraining.TrainingUpdates = 64;
+            }
+            if (option == "TrainingUpdates")
+            {
+                voiceboxTraining.WarmupSteps = 1;
+                voiceboxTraining.TrainingUpdates = 8;
+            }
+            if (option == "GradientClipNorm") voiceboxTraining.GradientClipNorm = 1e-5;
+        }
 
         if (options is AiDotNet.TextToSpeech.MultiModal.MinMoOptions minMoOptions)
             MinMoOptionFixture.Prepare(minMoOptions, option);
