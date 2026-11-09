@@ -161,6 +161,10 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
             rmsProp.InitialMeanSquare = 1.0;
             rmsProp.EpsilonInsideRoot = true;
         }
+        // Its weight decay is an L2 term in the loss (the official code adds it before computing the gradients), so a
+        // clip bounds the decay too: TensorFlow's order, not the PyTorch default.
+        if (optimizer is null && _optimizer.GetOptions() is GradientBasedOptimizerOptions<T, Tensor<T>, Tensor<T>> gradientOptions)
+            gradientOptions.RegularizationOrder = RegularizationOrder.RegularizeThenClip;
 
         InitializeLayers();
     }

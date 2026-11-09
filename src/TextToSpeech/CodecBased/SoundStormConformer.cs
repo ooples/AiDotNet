@@ -108,6 +108,18 @@ internal static class TorchParameters
     public static void Linear<T>(BiasFreeLinearLayer<T> layer, int inputs, int outputs, double[] weight)
     {
         var ops = MathHelper.GetNumericOperations<T>();
+        var weights = layer.Weights;
+        // Written straight into the layer's own [in, out] tensor: a full-size intermediate vector plus SetParameters'
+        // copies cost twice the weights again at load time (a 520M-parameter LLaMA peaked 3.2 GB above its weights). A
+        // streamed or not-yet-allocated weight has no storage to write into, so it takes the SetParameters route.
+        if (weights.Length == inputs * outputs && weights.Lifetime != WeightLifetime.Streaming)
+        {
+            var span = weights.AsWritableSpan();
+            for (int o = 0; o < outputs; o++)
+                for (int i = 0; i < inputs; i++) span[i * outputs + o] = ops.FromDouble(weight[o * inputs + i]);
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(weights);
+            return;
+        }
         var transposed = new Vector<T>(inputs * outputs);
         for (int o = 0; o < outputs; o++)
             for (int i = 0; i < inputs; i++) transposed[i * outputs + o] = ops.FromDouble(weight[o * inputs + i]);

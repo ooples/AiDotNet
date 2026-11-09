@@ -1,0 +1,78 @@
+name: Cancel superseded merged-PR runs
+
+# cancel-on-pr-close.yml keeps a MERGED pull request's Build & SonarCloud run alive, because the
+# master push for its merge commit reuses that run's results instead of re-running ~115 shards.
+# That reuse dies when a later merge lands first: every master push shares the concurrency group
+# build-refs/heads/master with cancel-in-progress, so the earlier push's run is cancelled and
+# nothing will ever read the merged run. On 2026-11-09 #2448, #2450 and #2449 merged within a
+# minute; the pushes for #2448 and #2450 were cancelled, yet their pull-request runs kept 9 jobs
+# running and about 290 queued, holding the account's hosted runners for every repository.
+#
+# On each master push this sweep cancels the in-flight Build & SonarCloud pull-request runs of
+# merged pull requests that no master push can reuse any more. A push can reuse the run while its
+# own run is queued or running, or, once finished (a deferred push completes and waits), while its
+# merge commit is still master's tip: Resume-DeferredCi.ps1 resumes only a non-cancelled push on
+# the current tip ("superseded", "tip-advanced" and "cancelled-push" are never resumed).
+#
+# It is a separate workflow because cancel-on-pr-close.yml's eviction jobs name concurrency
+# groups from pull_request fields; on a push those would evaluate to master's own groups.
+
+on:
+  push:
+    branches:
+      - master
+
+permissions: {}
+
+# A queued sweep waits for the running one. GitHub keeps at most one pending run per group, so a
+# third push can drop the second one's pending sweep; nothing is lost, because every sweep scans
+# all active pull-request runs, not only those of its own push.
+concurrency:
+  group: cancel-superseded-merged-runs
+  cancel-in-progress: false
+
+jobs:
+  cancel:
+    name: Cancel superseded merged-PR runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write        # list the Build & SonarCloud runs and cancel them
+      contents: read        # read master's tip
+      pull-requests: read   # resolve a run's commit to its merged pull request
+    steps:
+      - name: Cancel runs no master push can reuse
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          # The workflow master reuses, by file as Resume-DeferredCi.ps1 addresses it.
+          WORKFLOW: sonarcloud.yml
+        run: |
+          set -euo pipefail
+          for status in in_progress queued; do
+            gh api --paginate "repos/$REPO/actions/workflows/$WORKFLOW/runs?event=pull_request&status=$status&per_page=100" \
+              --jq '.workflow_runs[] | "\(.id) \(.head_sha)"' \
+              | while read -r run_id head_sha; do
+                  # The run's own pull request: merged into master with this commit as its head.
+                  pr=$(gh api "repos/$REPO/commits/$head_sha/pulls" \
+                    | jq -r --arg sha "$head_sha" \
+                      '[.[] | select(.head.sha == $sha and .base.ref == "master" and .merged_at != null)][0]
+                       // empty | "\(.number) \(.merge_commit_sha)"')
+                  [ -n "$pr" ] || continue
+                  read -r pr_number merge_sha <<< "$pr"
+                  tip=$(gh api "repos/$REPO/commits/master" --jq .sha)
+                  # The master push runs for the merge commit: active ones, finished ones not cancelled, and all.
+                  read -r active finished total <<< "$(gh api "repos/$REPO/actions/workflows/$WORKFLOW/runs?event=push&head_sha=$merge_sha&per_page=100" \
+                    --jq '[([.workflow_runs[] | select(.status != "completed")] | length),
+                           ([.workflow_runs[] | select(.status == "completed" and .conclusion != "cancelled")] | length),
+                           (.workflow_runs | length)] | @tsv')"
+                  # On the tip a push with no run listed yet is still coming: both workflows start from the
+                  # same push in no guaranteed order, so this sweep can query before that run exists.
+                  if [ "$active" -gt 0 ] || { [ "$merge_sha" = "$tip" ] && { [ "$finished" -gt 0 ] || [ "$total" -eq 0 ]; }; }; then
+                    echo "Keeping run $run_id: PR #$pr_number's master push (${merge_sha:0:9}) can still reuse it."
+                    continue
+                  fi
+                  echo "Cancelling run $run_id: PR #$pr_number merged as ${merge_sha:0:9}; master is at ${tip:0:9} and no push can reuse it."
+                  gh run cancel "$run_id" --repo "$REPO" || echo "::warning::Could not cancel run $run_id (it may have just finished)."
+                done
+          done

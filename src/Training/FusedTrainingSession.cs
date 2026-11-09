@@ -274,9 +274,9 @@ internal sealed class FusedTrainingSession<T>
         if (request.Layers.Count == 0 && (request.ExtraParameters is null || request.ExtraParameters.Count == 0))
             return Decline("no trainable layers");
 
-        // The optimizer's regularization, applied the way its flat path applies it: to the gradient, BEFORE clipping.
-        // L2 has a fused form (the plan adds strength * theta ahead of its clip); any other regularizer runs on the
-        // eager tape. Every decline is decided BEFORE the per-step arena below exists: TensorArena.Create is
+        // The optimizer's regularization, applied the way its flat path applies it: to the gradient, on the side of the
+        // clip its RegularizationOrder chooses. L2 has a fused form (the plan adds strength * theta ahead of its clip);
+        // any other regularizer runs on the eager tape. Every decline is decided BEFORE the per-step arena below exists: TensorArena.Create is
         // thread-static and stacks on the enclosing arena, so a decline after it would leave it current for the
         // eager fallback and every later step.
         double l2 = 0.0;
@@ -307,6 +307,12 @@ internal sealed class FusedTrainingSession<T>
             return DeclineAndDropCommitted("optimizer clips gradients by value; the fused plan clips only by global norm");
         if (optimizerClip > 0.0)
             clip = clip > 0.0 ? Math.Min(clip, optimizerClip) : optimizerClip;
+        // The linked plan adds its L2 term only ahead of its clip (CompiledTrainingPlan.SetL2Regularization), so L2
+        // after the clip - PyTorch's order, the default - trains on the eager tape whenever both are on.
+        if (l2 > 0.0 && clip > 0.0
+            && optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> { RegularizesAfterClip: true })
+            return DeclineAndDropCommitted(
+                "L2 after the gradient clip has no fused form in the linked plan; the eager tape applies it");
 
         bool verifyPersistence = (!_persistenceVerified && !IsCommitted)
             || ++_stepsSincePersistenceCheck >= PersistenceRecheckInterval;

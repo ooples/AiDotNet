@@ -11,6 +11,22 @@ namespace AiDotNet.Tests.TextToSpeech;
 public sealed class UniAudioOptimizerOptionsTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EitherVocabularyNameConfiguresTheSameNativeVocabulary(bool useJointName)
+    {
+        using var original = UniAudioNativeFixture.Create<double>();
+        var options = new UniAudioOptions((UniAudioOptions)original.GetOptions());
+        if (useJointName) options.JointVocabularySize = 193;
+        else options.VocabSize = 193;
+        Assert.Equal(193, options.JointVocabularySize);
+        Assert.Equal(193, options.VocabSize);
+        using var model = new UniAudio<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+            NeuralNetworkTaskType.Generative, inputSize: 4, outputSize: 64) { RandomSeed = 2294 }, options);
+        Assert.NotEqual(original.GetParameters().Length, model.GetParameters().Length);
+    }
+
+    [Theory]
     [InlineData(0.0001, 0.001)]
     [InlineData(0.003, 0.02)]
     [InlineData(0.0002, 0.0)]

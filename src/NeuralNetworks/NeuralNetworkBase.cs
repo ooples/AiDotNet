@@ -7695,14 +7695,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // probe caught exactly this). Clips over the layer-collected
             // params only — the same set TrainWithTape clips — using the
             // deterministic list order for the norm reduction.
-            // The optimizer's regularization goes on BEFORE the clip, as its flat path orders it.
-            ApplyOptimizerRegularization(optimizer, paramsList, avgGrads);
+            // The optimizer's regularization goes on the side of the clips its RegularizationOrder chooses.
             double maxGradNorm = MaxGradNormValue;
-            if (maxGradNorm > 0.0 && avgGrads.Count > 0)
-            {
-                var clipParameters = CollectLayerOwnedTrainableTensorsForClipping(paramsList);
-                ApplyGradientClipping(avgGrads, maxGradNorm, clipParameters);
-            }
+            Training.TapeTrainingStepper<T>.RegularizeAndClip(optimizer, paramsList, avgGrads,
+                OptimizerRegularizer(optimizer),
+                maxGradNorm > 0.0 && avgGrads.Count > 0
+                    ? g => ApplyGradientClipping(g, maxGradNorm, CollectLayerOwnedTrainableTensorsForClipping(paramsList))
+                    : null);
             PublishParameterGradients(avgGrads);
             // Include extra trainable tensors in the optimizer's
             // parameter list too, so its update step (and any per-
@@ -11985,11 +11984,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             fullPrecisionStreaming);
         streamingOptimizer.BeginStep();
 
-        // The optimizer's regularization joins each gradient before the clip norm and the update, as in the eager
-        // path (ApplyOptimizerRegularization) - streaming used to drop it, so ForceOn trained a different objective.
+        // The optimizer's regularization joins each gradient on the side of the clips its RegularizationOrder chooses,
+        // as in the eager path (TapeTrainingStepper.RegularizeAndClip) - streaming used to drop it, so ForceOn trained a
+        // different objective. Before the clip it also counts in the clip norm; after it, it does not.
         var regularization = OptimizerRegularizationOf(resolvedOptimizer);
+        bool regularizeAfterClip = clippingOptimizer?.RegularizesAfterClip == true;
         // Collected on the first gradient, after the forward has materialized any lazily sized parameters.
         HashSet<Tensor<T>>? decayExcluded = null;
+        Tensor<T> Regularize(Tensor<T> source, Tensor<T> grad)
+            => regularization is null ? grad : RegularizeGradient(regularization, source, grad, decayExcluded ??= DecayExcludedParameters());
 
         if (!clip)
         {
@@ -12007,8 +12010,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     if (grad is null || grad.Length == 0) return;
                     RetainStreamingGradient(source, grad);
-                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad, decayExcluded ??= DecayExcludedParameters());
+                    if (!regularizeAfterClip) grad = Regularize(source, grad);
                     ClampStreamingGradientByValue(grad, optimizerClipValue);
+                    if (regularizeAfterClip) grad = Regularize(source, grad);
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
@@ -12041,7 +12045,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                     if (grad is null || grad.Length == 0) return;
                     bool inClipSet = clipSet.Contains(source);
                     if (!inClipSet && optimizerClipNorm <= 0.0) return;
-                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad, decayExcluded ??= DecayExcludedParameters());
+                    if (!regularizeAfterClip) grad = Regularize(source, grad);
                     var span = grad.Data.Span;
                     int len = grad.Length;
                     double normSq = 0.0;
@@ -12083,7 +12087,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     if (grad is null || grad.Length == 0) return;
                     RetainStreamingGradient(source, grad);
-                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad, decayExcluded ??= DecayExcludedParameters());
+                    if (!regularizeAfterClip) grad = Regularize(source, grad);
                     if (scaleDown)
                     {
                         // Extras skip the network clip, as in the eager path, but not the optimizer's.
@@ -12094,6 +12098,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                             span[i] = NumOps.Multiply(span[i], sourceScale);
                     }
                     ClampStreamingGradientByValue(grad, optimizerClipValue);
+                    if (regularizeAfterClip) grad = Regularize(source, grad);
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
@@ -12129,7 +12134,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 {
                     if (grad is null || grad.Length == 0) return;
                     RetainStreamingGradient(source, grad);
-                    if (regularization is not null) grad = RegularizeGradient(regularization, source, grad, decayExcluded ??= DecayExcludedParameters());
+                    if (!regularizeAfterClip) grad = Regularize(source, grad);
                     if (clipSet.Contains(source))
                     {
                         var span = grad.Data.Span;
@@ -12142,6 +12147,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                         }
                     }
                     ClampStreamingGradientByValue(grad, optimizerClipValue);
+                    if (regularizeAfterClip) grad = Regularize(source, grad);
                     // Streaming optimizer writes this source's weights in place (#1624 OOM-retry gate).
                     MarkTrainMutationStarted();
                     streamingOptimizer.Apply(source, grad);
@@ -12273,7 +12279,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             ModelGradientClip = MaxGradNormValue,
             ExcludesParametersFromWeightDecay = () => DecayExcludedParameters().Count > 0,
             // The eager fallback regularizes as TrainWithTape does, sparing the parameters excluded from weight decay.
-            RegularizeGradients = (reached, gradients) => ApplyOptimizerRegularization(resolvedOptimizer, reached, gradients),
+            RegularizeGradients = OptimizerRegularizer(resolvedOptimizer),
             OnGradients = ScatterFusedGradients,
             // The opt-out TryTrainWithFusedOptimizer honours applies to custom and declared-objective steps as well: a
             // model whose step builds its batch on the host (a posterior sample, timesteps, noise or flows drawn per
@@ -13018,19 +13024,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // GraFPrint at batch=1) can produce single-step Adam explosions
             // that drive loss up by orders of magnitude on the very first
             // iteration. Skipped when MaxGradNorm <= 0 (the default).
-            // The optimizer's regularization goes on BEFORE the clip, as its flat path orders it.
-            ApplyOptimizerRegularization(opt, trainableParams, grads);
+            // The optimizer's regularization goes on the side of the clips its RegularizationOrder chooses.
             double maxGradNorm = MaxGradNormValue;
-            if (maxGradNorm > 0.0)
-            {
-                // Pass trainableParams as the iteration-order key so the
-                // total-norm sum is computed in a deterministic order
-                // (Dictionary iteration order is bucket-order, which uses
-                // the per-process-randomized identity hash for tensor
-                // keys → different sum-order per process → different
-                // clip scale per process → non-deterministic training).
-                ApplyGradientClipping(grads, maxGradNorm, trainableParams);
-            }
+            // Pass trainableParams as the iteration-order key so the
+            // total-norm sum is computed in a deterministic order
+            // (Dictionary iteration order is bucket-order, which uses
+            // the per-process-randomized identity hash for tensor
+            // keys → different sum-order per process → different
+            // clip scale per process → non-deterministic training).
+            Training.TapeTrainingStepper<T>.RegularizeAndClip(opt, trainableParams, grads, OptimizerRegularizer(opt),
+                maxGradNorm > 0.0 ? g => ApplyGradientClipping(g, maxGradNorm, trainableParams) : null);
 
             // Publish after loss-scale removal and global clipping so the surface is the exact
             // derivative field handed to the optimizer, not a scaled or unclipped intermediate.
@@ -14309,9 +14312,9 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             CollectModelTrainableTensors,
             context =>
             {
-                if (clipCustomObjective) ClipCustomObjectiveGradients(context.Gradients);
+                Training.TapeTrainingStepper<T>.RegularizeAndClip(opt, context.Parameters, context.Gradients,
+                    OptimizerRegularizer(opt), clipCustomObjective ? ClipCustomObjectiveGradients : null);
                 MarkTrainMutationStarted();
-                ApplyOptimizerRegularization(opt, context);
                 opt.Step(context);
                 InvalidateWeightCachesAfterSuccessfulWeightUpdate();
                 StepSchedulerIfSupported(opt);
@@ -14534,7 +14537,8 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
 
         // Tape optimizer step writes weights in place (#1624 OOM-retry gate).
         MarkTrainMutationStarted();
-        ApplyOptimizerRegularization(opt, context);
+        Training.TapeTrainingStepper<T>.RegularizeAndClip(opt, context.Parameters, context.Gradients,
+            OptimizerRegularizer(opt), modelClip: null);
         opt.Step(context);
         // GPU weight-cache coherence after the precomputed-loss step.
         // See InvalidateWeightCachesAfterSuccessfulWeightUpdate.
@@ -14837,6 +14841,19 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             var gradients = tape.ComputeGradients(lossTensor, union, false);
             T lossValue = lossTensor.Length > 0 ? lossTensor[0] : members[0].Network.NumOps.Zero;
 
+            // A member regularizing before the clip does it ahead of the group clip, which then covers its term; one
+            // regularizing after the clip (PyTorch's order) does it after both clips, in the loop below.
+            var memberOptimizers = new IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>[members.Count];
+            for (int i = 0; i < members.Count; i++)
+            {
+                var network = members[i].Network;
+                var optimizer = members[i].Optimizer ?? network.GetOrCreateBaseOptimizer();
+                memberOptimizers[i] = optimizer;
+                if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> { RegularizesAfterClip: true })
+                    continue;
+                network.OptimizerRegularizer(optimizer)?.Invoke(memberParameters[i], gradients);
+            }
+
             if (groupMaxGradientNorm > 0.0)
             {
                 // One norm over every member's parameters, then one scale applied to all of them in place, so each
@@ -14853,7 +14870,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             for (int i = 0; i < members.Count; i++)
             {
                 var network = members[i].Network;
-                var optimizer = members[i].Optimizer ?? network.GetOrCreateBaseOptimizer();
+                var optimizer = memberOptimizers[i];
 
                 // The gradient dictionary holds every member's tensors; publishing looks up only this
                 // network's own, so each member's gradient surface reports exactly its share.
@@ -14869,6 +14886,11 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 foreach (var parameter in memberParameters[i])
                 {
                     if (gradients.TryGetValue(parameter, out var gradient)) ownGradients[parameter] = gradient;
+                }
+                if (optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> { RegularizesAfterClip: true })
+                {
+                    Training.TapeTrainingStepper<T>.RegularizeAndClip(optimizer, memberParameters[i], ownGradients,
+                        network.OptimizerRegularizer(optimizer), modelClip: null);
                 }
                 var context = new AiDotNet.Tensors.Engines.Autodiff.TapeStepContext<T>(
                     memberParameters[i], ownGradients, lossValue);
@@ -15328,13 +15350,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         => Training.FusedTrainingSession<T>.OptimizerRegularizationOf(optimizer);
 
     /// <summary>
-    /// Applies the optimizer's regularization to the tape gradients before <c>Step</c> - which clips - so the eager
-    /// training step regularizes exactly as the optimizer's flat path does (gradient first, then clip). Train used to
-    /// ignore the optimizer's regularization entirely while the facade applied it, so the same optimizer trained
-    /// differently depending on how training was invoked. L2 runs as device tensor ops.
+    /// The optimizer's regularization as a gradient update for <c>TapeTrainingStepper.RegularizeAndClip</c>, which adds
+    /// it on the side of the clips the optimizer's RegularizationOrder chooses, as its flat path does; null when it
+    /// has none. Train used to ignore the optimizer's regularization entirely while the facade applied it, so the same
+    /// optimizer trained differently depending on how training was invoked. L2 runs as device tensor ops.
     /// </summary>
-    private void ApplyOptimizerRegularization(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer, TapeStepContext<T> context)
-        => ApplyOptimizerRegularization(optimizer, context.Parameters, context.Gradients);
+    private Action<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>>? OptimizerRegularizer(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+        => OptimizerRegularizationOf(optimizer) is null
+            ? null
+            : (parameters, gradients) => ApplyOptimizerRegularization(optimizer, parameters, gradients);
 
     private void ApplyOptimizerRegularization(
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,

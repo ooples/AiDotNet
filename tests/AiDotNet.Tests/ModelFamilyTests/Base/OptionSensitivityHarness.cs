@@ -81,7 +81,8 @@ public sealed class OptionSensitivityProbe<TModel> where TModel : class
         Action<TModel>? prepareModel = null,
         Func<TModel, long>? parameterCount = null,
         Func<TModel, IReadOnlyList<int[]>>? parameterShapes = null,
-        string? controlGroup = null)
+        string? controlGroup = null,
+        Func<TModel, IReadOnlyList<KeyValuePair<string, long>>>? observedParts = null)
     {
         Create = create ?? throw new ArgumentNullException(nameof(create));
         Observe = observe ?? throw new ArgumentNullException(nameof(observe));
@@ -92,6 +93,7 @@ public sealed class OptionSensitivityProbe<TModel> where TModel : class
         ParameterCount = parameterCount;
         ParameterShapes = parameterShapes;
         ControlGroup = controlGroup ?? string.Empty;
+        ObservedParts = observedParts;
     }
 
     /// <summary>The fixture's factory.</summary>
@@ -120,6 +122,9 @@ public sealed class OptionSensitivityProbe<TModel> where TModel : class
 
     /// <summary>The prepared configuration context of the cached control.</summary>
     public string ControlGroup { get; }
+
+    /// <summary>Returns cached parts of the last observation without running another forward.</summary>
+    public Func<TModel, IReadOnlyList<KeyValuePair<string, long>>>? ObservedParts { get; }
 
 
 
@@ -496,6 +501,8 @@ public static class OptionSensitivityHarness
         public long? ParameterShapesFingerprint { get; set; }
         public long Untrained { get; set; }
         public long? Trained { get; set; }
+        public IReadOnlyList<KeyValuePair<string, long>>? UntrainedParts { get; set; }
+        public IReadOnlyList<KeyValuePair<string, long>>? TrainedParts { get; set; }
         public string? Failure { get; set; }
         public OptionSensitivityOutcome FailureOutcome { get; set; }
         /// <summary>Why the control could not take the probe's training step, when it could not.</summary>
@@ -513,7 +520,10 @@ public static class OptionSensitivityHarness
             || first.ParameterShapesFingerprint != second.ParameterShapesFingerprint)
         {
             first.Failure = "Two identical, identically seeded builds already differ before training, so no difference can be attributed to an option."
-                + DescribeControlReplay(probe, declaredOptions, train: false);
+                + $" Control counts: {first.ParameterCount}/{second.ParameterCount}; fingerprints: {first.Untrained}/{second.Untrained}."
+                + (first.UntrainedParts is not null && second.UntrainedParts is not null
+                    ? " Original observations:" + DescribeDifference(first.UntrainedParts, second.UntrainedParts)
+                    : DescribeControlReplay(probe, declaredOptions, train: false));
             first.FailureOutcome = OptionSensitivityOutcome.NonDeterministic;
         }
         else if (first.TrainingFailure is null && second.TrainingFailure is not null)
@@ -524,7 +534,9 @@ public static class OptionSensitivityHarness
         else if (first.TrainingFailure is null && first.Trained != second.Trained)
         {
             first.Failure = "Two identical, identically seeded builds diverge during the fixed training steps, so a training-time difference cannot be attributed to an option."
-                + DescribeControlReplay(probe, declaredOptions, train: true);
+                + (first.TrainedParts is not null && second.TrainedParts is not null
+                    ? " Original observations:" + DescribeDifference(first.TrainedParts, second.TrainedParts)
+                    : DescribeControlReplay(probe, declaredOptions, train: true));
             first.FailureOutcome = OptionSensitivityOutcome.NonDeterministic;
         }
         return first;
@@ -554,6 +566,7 @@ public static class OptionSensitivityHarness
         try
         {
             result.Untrained = Seeded(() => probe.Observe(model));
+            result.UntrainedParts = probe.ObservedParts?.Invoke(model).ToArray();
             if (!train || probe.Train is null) return result;
             try
             {
@@ -565,6 +578,7 @@ public static class OptionSensitivityHarness
                 return result;
             }
             result.Trained = Seeded(() => probe.Observe(model));
+            result.TrainedParts = probe.ObservedParts?.Invoke(model).ToArray();
             return result;
         }
         finally
@@ -824,6 +838,10 @@ public static class OptionSensitivityHarness
         if (IsNumeric(underlying))
         {
             IEnumerable<object> candidates = NumericCandidates(underlying, current);
+            if (option == "ScaleFactor" && current is int scale && scale > 1)
+                // A coprime scale can inflate padding enormously (FlashVSR 4 -> 5 pads LR to 128).
+                // Try the smaller divisor before expanding the same real inference pipeline.
+                candidates = new object[] { scale % 2 == 0 ? scale / 2 : 1 }.Concat(candidates).Distinct();
             if (option?.EndsWith("Temperature", StringComparison.Ordinal) == true)
                 candidates = candidates.Concat(new[] { Convert.ChangeType(0, underlying) })
                     .Where(value => Convert.ToDouble(value) >= 0 && !Equals(value, current)).Distinct();
@@ -868,7 +886,9 @@ public static class OptionSensitivityHarness
         if (element is not null && current is IEnumerable sequence)
         {
             var items = sequence.Cast<object?>().ToList();
-            if (option?.EndsWith("UpsampleRates", StringComparison.Ordinal) == true && element == typeof(int) && items.Count > 1)
+            if ((option?.EndsWith("UpsampleRates", StringComparison.Ordinal) == true
+                    || option is "CodecRates" or "CodecRatios" or "UpsampleStrides" or "BlockStrides")
+                && element == typeof(int) && items.Count > 1)
             {
                 // Equal rates cannot be reordered. Transfer a factor between two stages so the
                 // product (and the coupled waveform hop) stays fixed while stage geometry changes.
@@ -882,6 +902,17 @@ public static class OptionSensitivityHarness
                             redistributed[to] = destination * 2;
                             yield return BuildList(propertyType, element, redistributed);
                         }
+                // Some codecs reject stride one. Merge adjacent stages instead of merely truncating:
+                // [2,2,2] -> [4,2] changes the graph while preserving the hop and keeping every stride >= 2.
+                for (int index = 0; index + 1 < items.Count; index++)
+                    if (items[index] is int left && items[index + 1] is int right
+                        && left > 0 && right > 0 && left <= int.MaxValue / right)
+                    {
+                        var merged = new List<object?>(items);
+                        merged[index] = left * right;
+                        merged.RemoveAt(index + 1);
+                        yield return BuildList(propertyType, element, merged);
+                    }
             }
             // Stage arrays often require an exact length. Change one scalar element at a time
             // as well as the length, without sharing mutable containers with the fixture.

@@ -331,6 +331,10 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         foreach (var layer in _voiceEncoderLayers) layer.SetTrainingMode(false);
     }
 
+    /// <inheritdoc />
+    /// <remarks>S3Gen's <c>hifigan.py</c> has only the original <c>SineGen</c>, which it runs at 24 kHz.</remarks>
+    private protected override bool HiftUsesOriginalSineGen => true;
+
     /// <summary>
     /// Loads the unmodified release directory: <c>t3_cfg.safetensors</c>, <c>s3gen.safetensors</c>,
     /// <c>ve.safetensors</c> and <c>tokenizer.json</c>.
@@ -345,14 +349,16 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         _tokenizer = ChatterboxTokenizer.Load(tokenizerPath);
         _options.TokenizerPath = tokenizerPath;
 
-        T3.LoadTorchWeights(Reader(Path.Combine(modelDirectory, "t3_cfg.safetensors")));
-        VoiceEncoder.LoadTorchWeights(Reader(Path.Combine(modelDirectory, "ve.safetensors")));
-
-        var s3 = Reader(Path.Combine(modelDirectory, "s3gen.safetensors"));
-        Flow.LoadTorchWeights((name, shape) => s3("flow." + name, shape), "");
-        Hift.LoadTorchWeights((name, shape) => s3("mel2wav." + name, shape));
-        SpeechTokenizer.LoadTorchWeights((name, shape) => s3("tokenizer." + name, shape));
-        SpeakerEncoder.LoadTorchWeights((name, shape) => s3("speaker_encoder." + name, shape));
+        // Each file is streamed one tensor at a time and closed after its components load.
+        using (var t3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "t3_cfg.safetensors"))) T3.LoadTorchWeights(t3.Read);
+        using (var ve = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "ve.safetensors"))) VoiceEncoder.LoadTorchWeights(ve.Read);
+        using (var s3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "s3gen.safetensors")))
+        {
+            Flow.LoadTorchWeights((name, shape) => s3.Read("flow." + name, shape), "");
+            Hift.LoadTorchWeights((name, shape) => s3.Read("mel2wav." + name, shape));
+            SpeechTokenizer.LoadTorchWeights((name, shape) => s3.Read("tokenizer." + name, shape));
+            SpeakerEncoder.LoadTorchWeights((name, shape) => s3.Read("speaker_encoder." + name, shape));
+        }
         _t3WeightsGeneration++;
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
@@ -479,24 +485,6 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
 
     private ChatterboxVoiceEncoder<T> VoiceEncoder => _voiceEncoder
         ?? throw new InvalidOperationException("Chatterbox's voice encoder exists in native release mode only.");
-
-    private static Func<string, int[], double[]> Reader(string path)
-    {
-        if (!File.Exists(path)) throw new FileNotFoundException($"The checkpoint {path} is missing.", path);
-        var file = AiDotNet.Agentic.Models.Local.SafetensorsReader.Read(File.ReadAllBytes(path));
-        return (name, shape) =>
-        {
-            var entry = file.Get(name)
-                ?? throw new InvalidDataException($"The checkpoint {path} has no tensor '{name}'.");
-            if (entry.DataType == "I64")
-                return new[] { (double)BitConverter.ToInt64(file.GetRawBytes(name), 0) };
-            var values = file.ReadAsDouble(name);
-            if (shape.Length > 0 && values.Length != shape.Aggregate(1, (a, b) => a * b))
-                throw new InvalidDataException(
-                    $"'{name}' has {values.Length} values in the checkpoint but [{string.Join(", ", shape)}] in this model.");
-            return values;
-        };
-    }
 
     private sealed record T3VoiceCondition(
         Tensor<T> SpeakerEmbedding,

@@ -249,6 +249,10 @@ public partial class Upscale4KAgent<T> : VideoSuperResolutionBase<T>, ITrainingO
         return counted == 0 ? double.NaN : sum / counted;
     }
 
+    // An unscorable candidate never satisfies the reflection cutoff.
+    internal bool MeetsRollbackThreshold(double score)
+        => !double.IsNegativeInfinity(score) && score >= _options.RollbackThreshold;
+
     // execute_subtask over a clip [F, 3, H, W] in [0, 1]: every expert, the best score kept, the color fix.
     private Tensor<T> RunClip(Tensor<T> clip, List<AgentStep> steps)
     {
@@ -276,7 +280,7 @@ public partial class Upscale4KAgent<T> : VideoSuperResolutionBase<T>, ITrainingO
                 }
             }
             if (best is null) throw new InvalidOperationException("4KAgent's toolbox is empty.");
-            bool success = !double.IsNegativeInfinity(bestScore) && bestScore >= _options.RollbackThreshold;
+            bool success = MeetsRollbackThreshold(bestScore);
             if (Math.Max(best.Shape[2], best.Shape[3]) >= _options.ColorFixMinSide) best = AdainColorFix(best, current);
             // A failed super-resolution step rolls back to a fully expanded node and compromises on its best descendant,
             // which is this step's best result, so the loop continues from it.

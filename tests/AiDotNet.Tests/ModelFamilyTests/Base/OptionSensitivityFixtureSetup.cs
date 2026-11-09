@@ -47,6 +47,10 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => option == nameof(AiDotNet.Models.Options.ModelOptions.Seed) ? "model-options-seed"
+            : AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
+            : network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> && option == "RollbackThreshold" ? "4k-reflection"
+            : network is AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T> && option == "StaticChunkSize" ? "cosy-streaming-flow"
+            : network is AiDotNet.TextToSpeech.CodecBased.UniAudio<T> ? "uniaudio-" + option
             : network is AiDotNet.Video.Enhancement.MGLDVSR<T> && MgldVsrOptionFixture.Handles(option) ? "mgldvsr-" + option
             : network is AiDotNet.Video.Enhancement.FlashVSR<T> && FlashVsrOptionFixture.Handles(option) ? "flashvsr-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option == "MaximumPhoneDuration" ? "voicebox-duration-cap"
@@ -185,6 +189,14 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.Video.Enhancement.FlashVSR<T> flashVsr && FlashVsrOptionFixture.Handles(option))
             return FlashVsrOptionFixture.Observe(flashVsr, input, option);
 
+        if (network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> agent && option == "RollbackThreshold")
+            return AiDotNet.Tests.Video.Upscale4KOptionFixture.Observe(agent);
+        if (network is AiDotNet.TextToSpeech.CodecBased.UniAudio<T> uniAudio && option == "UseReleasedTextFrontend")
+            return UniAudioOptionFixture.ObserveFrontend(uniAudio);
+        if (AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option))
+            return AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Observe(network);
+        if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T> streamingCosy && option == "StaticChunkSize")
+            return CosyVoiceStreamingOptionFixture.Observe(streamingCosy);
         if (network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> durationVoicebox && option == "MaximumPhoneDuration")
             return VoiceboxDurationOptionFixture.Observe(durationVoicebox);
 
@@ -335,7 +347,7 @@ internal static class OptionSensitivityFixtureSetup
             return GptSoVitsFixture.Observe(gptSoVits, input, option);
 
         if (network is AiDotNet.TextToSpeech.CodecBased.VALLEX<T> vallEX
-            && VallEXCloneFixture.Observe(vallEX, option) is { } vallEXObservation)
+            && VallEXCloneFixture.Observe(vallEX, option, input) is { } vallEXObservation)
             return vallEXObservation;
 
         if (network is AiDotNet.TextToSpeech.CodecBased.FireRedTTS<T> fireRed
@@ -655,7 +667,7 @@ internal static class OptionSensitivityFixtureSetup
 
     private static bool IsCosyFlowOption(string option) => option is
         "TrainingCfgRate" or "FlowLoss" or "FlowAttentionDropoutRate" or "DropoutRate"
-        or "DiTTrainingCfgRate" or "DiTSigmaMin";
+        or "DiTTrainingCfgRate" or "DiTSigmaMin" or "StaticChunkSize";
 
     private static bool IsNaturalJointOption(string option) => option is
         "MemoryKMeansIterations" or "MemoryHeads" or "DurationLossAfterWarmup" or "ForwardKlWeight";
@@ -680,9 +692,11 @@ internal static class OptionSensitivityFixtureSetup
     }
 
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
+        => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? 0
+        : network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> && option == "RollbackThreshold" ? 0
         // Graph, inference and dropout probes already observe their native path directly; reserve the
         // full 100M-parameter backward pass for the optimizer settings that require it.
-        => network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> && option is not ("LearningRate" or "WeightDecay")
+        : network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> && option is not ("LearningRate" or "WeightDecay")
             ? 0
             : network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> or AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>
             && option.StartsWith("Ramp", StringComparison.Ordinal)
@@ -902,6 +916,10 @@ internal static class OptionSensitivityFixtureSetup
         if (options is AiDotNet.TextToSpeech.DescriptionBased.ParlerTTSOptions parler && option == "CodebookWeights")
             parler.CodebookWeights ??= Enumerable.Repeat(1.0, parler.NumCodebooks).ToArray();
 
+        if (options is AiDotNet.Video.Options.Upscale4KAgentOptions agent && option == "RollbackThreshold")
+            AiDotNet.Tests.Video.Upscale4KOptionFixture.PrepareOptions(agent);
+        if (options is AiDotNet.TextToSpeech.CodecBased.UniAudioOptions uniAudio)
+            UniAudioOptionFixture.PrepareOptions(uniAudio, option);
         if (options is AiDotNet.TextToSpeech.EndToEnd.KokoroOptions kokoro)
             KokoroOptionFixture.PrepareOptions(kokoro, option);
         if (options is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentationOptions segmentation && option == "ConfidenceWindow")
