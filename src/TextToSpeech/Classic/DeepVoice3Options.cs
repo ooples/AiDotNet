@@ -1,3 +1,6 @@
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
 namespace AiDotNet.TextToSpeech.Classic;
 
 /// <summary>Options for Deep Voice 3 (fully convolutional attention-based TTS), single-speaker configuration.</summary>
@@ -12,8 +15,11 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </para>
 /// <para><b>For Beginners:</b> These options configure the DeepVoice3 model. Default values follow the original paper settings.</para>
 /// </remarks>
+[JsonConverter(typeof(DeepVoice3OptionsConverter))]
 public class DeepVoice3Options : AcousticModelOptions
 {
+    private bool _nativeWidthsReady;
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
@@ -35,6 +41,7 @@ public class DeepVoice3Options : AcousticModelOptions
         GradientClipValue = other.GradientClipValue;
         MaxDecoderSteps = other.MaxDecoderSteps;
         MinDecoderSteps = other.MinDecoderSteps;
+        _nativeWidthsReady = true;
     }
 
     /// <summary>Creates the paper's single-speaker configuration.</summary>
@@ -49,8 +56,36 @@ public class DeepVoice3Options : AcousticModelOptions
         NumDecoderLayers = 4;
         DropoutRate = 0.05;
         LearningRate = 0.001;
+        WeightDecay = 0;
+        NumHeads = 1;
         UsePostnet = false;
+        _nativeWidthsReady = true;
     }
+
+    /// <summary>Gets or sets the decoder convolution width through the last decoder pre-net projection.</summary>
+    public override int HiddenDim
+    {
+        get => _nativeWidthsReady
+            ? DecoderPrenetSizes is { Length: > 0 } ? DecoderPrenetSizes[DecoderPrenetSizes.Length - 1] : checked(MelChannels * OutputsPerStep)
+            : base.HiddenDim;
+        set
+        {
+            if (!_nativeWidthsReady) { base.HiddenDim = value; return; }
+            if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value));
+            if (DecoderPrenetSizes is null) throw new InvalidOperationException("Configure the decoder pre-net before its width.");
+            if (DecoderPrenetSizes.Length == 0 && value == checked(MelChannels * OutputsPerStep)) return;
+            var widths = DecoderPrenetSizes.Length == 0 ? new int[1] : (int[])DecoderPrenetSizes.Clone();
+            widths[widths.Length - 1] = value;
+            DecoderPrenetSizes = widths;
+            base.HiddenDim = value;
+        }
+    }
+
+    /// <summary>Gets or sets the encoder's output key/value width, which is the character embedding width.</summary>
+    public override int EncoderDim { get => EmbeddingDim; set => EmbeddingDim = value; }
+
+    /// <summary>Gets or sets the decoder's output mel width.</summary>
+    public override int DecoderDim { get => MelChannels; set => MelChannels = value; }
 
     /// <summary>Gets or sets the width of every convolution (5).</summary>
     public int ConvKernelSize { get; set; } = 5;
@@ -96,4 +131,39 @@ public class DeepVoice3Options : AcousticModelOptions
 
     /// <summary>Gets or sets the fewest decoder steps before the done prediction may stop decoding (10).</summary>
     public int MinDecoderSteps { get; set; } = 10;
+}
+
+/// <summary>Preserves native dimensions in archives written before the shared width aliases were connected.</summary>
+internal sealed class DeepVoice3OptionsConverter : JsonConverter<DeepVoice3Options>
+{
+    public DeepVoice3OptionsConverter() { }
+    public override bool CanWrite => false;
+
+    public override DeepVoice3Options? ReadJson(JsonReader reader, Type objectType, DeepVoice3Options? existingValue,
+        bool hasExistingValue, JsonSerializer serializer)
+    {
+        if (reader.TokenType == JsonToken.Null) return null;
+        var data = JObject.Load(reader);
+        PreferNative("EncoderDim", "EmbeddingDim");
+        PreferNative("DecoderDim", "MelChannels");
+        PreferNative("HiddenDim", "DecoderPrenetSizes");
+        var heads = data.GetValue("NumHeads", StringComparison.OrdinalIgnoreCase);
+        if (heads?.Type == JTokenType.Integer && (int)heads == 8) heads.Replace(new JValue(1));
+        var options = hasExistingValue && existingValue is not null ? existingValue
+            : serializer.ContractResolver.ResolveContract(objectType).DefaultCreator?.Invoke() as DeepVoice3Options
+                ?? throw new JsonSerializationException($"Cannot construct {objectType.FullName} options.");
+        using var normalized = data.CreateReader();
+        serializer.Populate(normalized, options);
+        return options;
+
+        void PreferNative(string alias, string native)
+        {
+            if (data.GetValue(native, StringComparison.OrdinalIgnoreCase) is null) return;
+            foreach (var property in data.Properties().Where(property => property.Name.Equals(alias, StringComparison.OrdinalIgnoreCase)).ToArray())
+                property.Remove();
+        }
+    }
+
+    public override void WriteJson(JsonWriter writer, DeepVoice3Options? value, JsonSerializer serializer) =>
+        throw new NotSupportedException("This read-only converter uses the default options serializer for writing.");
 }

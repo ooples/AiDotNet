@@ -8,17 +8,42 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>
 /// OuteTTS 1.0's tokenizers. OuteTTS-1.0-0.6B's (Apache-2.0) is built here: Qwen2's byte-level BPE (the vocabulary and
 /// merges the library embeds), its NFC normalizer and split pattern, and the release's added tokens (exported by
-/// <c>tools/reference-data/outetts_tokenizer_reference.py</c>). Llama-OuteTTS-1.0-1B's (CC-BY-NC-SA, as are its weights)
-/// is read from the model's own <c>tokenizer.json</c>.
+/// <c>tools/reference-data/outetts_tokenizer_reference.py</c>). Llama-OuteTTS-1.0-1B reuses the embedded Llama 3
+/// vocabulary and merges with the release's audio and prompt token ids.
 /// </summary>
 internal static class OuteTTSTokenizers
 {
     private const string Qwen2Pattern = @"(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+";
 
     private static readonly Lazy<ByteLevelBpeTokenizer> Qwen3Instance = new(BuildQwen3, isThreadSafe: true);
+    private static readonly Lazy<ByteLevelBpeTokenizer> LlamaInstance = new(BuildLlama, isThreadSafe: true);
 
     /// <summary>OuteTTS-1.0-0.6B's tokenizer.</summary>
     public static ByteLevelBpeTokenizer Qwen3 => Qwen3Instance.Value;
+
+    /// <summary>Llama-OuteTTS-1.0-1B's tokenizer.</summary>
+    public static ByteLevelBpeTokenizer Llama => LlamaInstance.Value;
+
+    private static ByteLevelBpeTokenizer BuildLlama()
+    {
+        // OuteAI/Llama-OuteTTS-1.0-1B, tokenizer.json revision 6cb62a5.
+        // Its base vocabulary, merges and 256 special tokens exactly match Llama3Tokenizers.
+        var added = new List<(string Content, int Id, bool Special)>();
+        void Add(string token) => added.Add((token, Llama3Tokenizers.FirstAddedId + added.Count, true));
+        foreach (string codebook in new[] { "c1", "c2" })
+            for (int i = 0; i <= 1024; i++) Add($"<|{codebook}_{i}|>");
+        foreach (string feature in new[] { "energy", "spectral_centroid", "pitch" })
+            for (int i = 0; i <= 1000; i++) Add($"<|{feature}_{i}|>");
+        foreach (string delimiter in new[]
+        {
+            "im_start", "im_end", "text_start", "text_end", "voice_characteristic_start", "voice_characteristic_end",
+            "emotion_start", "emotion_end", "audio_start", "audio_end", "code", "word_start", "word_end",
+            "features", "global_features_start", "global_features_end",
+        }) Add($"<|{delimiter}|>");
+        for (int i = 0; i <= 1000; i++)
+            Add("<|t_" + (i / 100.0).ToString("F2", System.Globalization.CultureInfo.InvariantCulture) + "|>");
+        return Llama3Tokenizers.Create(added);
+    }
 
     /// <summary>A tokenizer read from a model's <c>tokenizer.json</c> (Llama-OuteTTS-1.0-1B's, or a fine-tune's).</summary>
     public static ByteLevelBpeTokenizer FromFile(string path) => ByteLevelBpeTokenizer.FromJson(File.ReadAllText(path));

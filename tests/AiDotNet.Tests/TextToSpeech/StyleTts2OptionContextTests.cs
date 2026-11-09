@@ -176,6 +176,52 @@ public class StyleTts2OptionContextTests
     }
 
     [Theory]
+    [InlineData(1, true)]
+    [InlineData(2, false)]
+    public void NativeSlmStepUpdatesOnlyTheScheduledCriticAndKeepsWavLmFrozen(int interval, bool updatesCritic)
+    {
+        var options = StyleTts2Fixture.Options();
+        StyleTts2Fixture.PrepareSlmAdversarialOptions(options, "SlmDiscriminatorInterval");
+        options.SlmDiscriminatorInterval = interval;
+        using var model = StyleTts2Fixture.Create(options);
+        model.CurrentStage = StyleTts2TrainingStage.Joint;
+        var critic = model.SlmDiscriminator;
+        var layers = new LayerBase<double>[] { critic.Pre }.Concat(critic.Convs).Append(critic.Post).ToArray();
+        var before = layers.SelectMany(layer => layer.GetParameters()).ToArray();
+        var slmLayers = (IEnumerable<LayerBase<double>>)typeof(StyleTTS2<double>).GetField("_slmLayers",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(model)!;
+        var frozen = slmLayers.SelectMany(layer => layer.GetParameters()).ToArray();
+
+        double loss = model.Train(StyleTts2Fixture.SlmAdversarialSample<double>(options.HopSize));
+
+        Assert.True(TtsPaperNumerics.IsFinite(loss));
+        Assert.Equal(0, model.SkippedSamples);
+        Assert.Equal(1, model.JointUpdates);
+        Assert.Equal(updatesCritic, !before.SequenceEqual(layers.SelectMany(layer => layer.GetParameters())));
+        Assert.Equal(frozen, slmLayers.SelectMany(layer => layer.GetParameters()).ToArray());
+    }
+
+    [Fact]
+    public void SlmThresholdSeparatesNormalizedAndUnscaledActualGeneratorUpdates()
+    {
+        var options = StyleTts2Fixture.Options();
+        StyleTts2Fixture.PrepareSlmAdversarialOptions(options, "SlmGradientThreshold");
+        options.SlmGradientThreshold = 1e-12;
+        using var normalized = StyleTts2Fixture.Create(options);
+        using var unscaled = StyleTts2Fixture.Create(new StyleTTS2Options(options) { SlmGradientThreshold = 1e12 });
+        normalized.CurrentStage = unscaled.CurrentStage = StyleTts2TrainingStage.Joint;
+        Assert.Equal(normalized.GetParameters().ToArray(), unscaled.GetParameters().ToArray());
+        var sample = StyleTts2Fixture.SlmAdversarialSample<double>(options.HopSize);
+
+        Assert.True(TtsPaperNumerics.IsFinite(normalized.Train(sample)));
+        Assert.True(TtsPaperNumerics.IsFinite(unscaled.Train(sample)));
+
+        Assert.Equal(1, normalized.JointUpdates);
+        Assert.Equal(1, unscaled.JointUpdates);
+        Assert.False(normalized.GetParameters().SequenceEqual(unscaled.GetParameters()));
+    }
+
+    [Theory]
     [InlineData(StyleTts2TrainingStage.Pretraining)]
     [InlineData(StyleTts2TrainingStage.Joint)]
     public void CompleteNativeStagesUpdateWeightsInsteadOfSkippingShortFixtures(StyleTts2TrainingStage stage)

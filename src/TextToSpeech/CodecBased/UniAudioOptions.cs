@@ -8,6 +8,39 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// </remarks>
 public class UniAudioOptions : CodecTtsOptions
 {
+    private bool _codecGeometryReady;
+    private int[]? _ratiosBeforeDeserialization;
+    private bool _deserializingGeometry;
+    private bool _deserializedHop;
+    private bool _deserializedFrameRate;
+
+    [System.Runtime.Serialization.OnDeserializing]
+    private void BeginDeserialization(System.Runtime.Serialization.StreamingContext context)
+    {
+        base.HopSize = HopSize;
+        base.CodecFrameRate = CodecFrameRate;
+        _ratiosBeforeDeserialization = CodecRatios;
+        _deserializedHop = _deserializedFrameRate = false;
+        _codecGeometryReady = false;
+        _deserializingGeometry = true;
+    }
+
+    [System.Runtime.Serialization.OnDeserialized]
+    private void EndDeserialization(System.Runtime.Serialization.StreamingContext context)
+    {
+        bool explicitRatios = !ReferenceEquals(_ratiosBeforeDeserialization, CodecRatios);
+        bool readHop = _deserializedHop, readFrameRate = _deserializedFrameRate;
+        _ratiosBeforeDeserialization = null;
+        _deserializedHop = _deserializedFrameRate = _deserializingGeometry = false;
+        _codecGeometryReady = true;
+        if (explicitRatios) return;
+        if (readHop && readFrameRate && (base.HopSize <= 0 || SampleRate <= 0
+            || SampleRate % base.HopSize != 0 || SampleRate / base.HopSize != base.CodecFrameRate))
+            throw new ArgumentException("Serialized codec hop and frame rate describe conflicting strides.");
+        if (readHop) HopSize = base.HopSize;
+        else if (readFrameRate) CodecFrameRate = base.CodecFrameRate;
+    }
+
     /// <summary>Creates the paper configuration. Use <see cref="OfficialV1"/> for the released checkpoint.</summary>
     public UniAudioOptions()
     {
@@ -29,6 +62,7 @@ public class UniAudioOptions : CodecTtsOptions
         DropoutRate = 0.0;
         LearningRate = 1e-4;
         WeightDecay = 1e-3;
+        _codecGeometryReady = true;
     }
 
     /// <summary>Initializes an independent copy of another UniAudio configuration.</summary>
@@ -76,6 +110,61 @@ public class UniAudioOptions : CodecTtsOptions
         TrainingComponent = other.TrainingComponent;
         IncludeCodecDiscriminators = other.IncludeCodecDiscriminators;
         CodecTraining = new UniAudioCodecTrainingOptions(other.CodecTraining);
+        _codecGeometryReady = true;
+    }
+
+    /// <summary>
+    /// Gets the product of the native codec strides. Setting it configures those strides,
+    /// retaining later strides where possible. The hop must divide <see cref="TtsModelOptions.SampleRate"/> exactly.
+    /// </summary>
+    public override int HopSize
+    {
+        get => _codecGeometryReady && CodecRatios is { Length: > 0 }
+            ? CodecRatios.Aggregate(1, (product, ratio) => checked(product * ratio)) : base.HopSize;
+        set
+        {
+            if (!_codecGeometryReady)
+            {
+                base.HopSize = value;
+                if (_deserializingGeometry) _deserializedHop = true;
+                return;
+            }
+            if (value <= 0 || SampleRate <= 0 || SampleRate % value != 0)
+                throw new ArgumentException("The codec hop must be positive and divide the sample rate exactly.", nameof(value));
+            if (CodecRatios is null || CodecRatios.Length == 0 || CodecRatios.Any(ratio => ratio <= 0))
+                throw new InvalidOperationException("Configure positive codec strides before setting the hop.");
+            var ratios = (int[])CodecRatios.Clone();
+            int remaining = value;
+            for (int i = ratios.Length - 1; i > 0; i--)
+            {
+                int a = remaining, b = ratios[i];
+                while (b != 0) { int remainder = a % b; a = b; b = remainder; }
+                ratios[i] = a;
+                remaining /= a;
+            }
+            ratios[0] = remaining;
+            CodecRatios = ratios;
+            base.HopSize = value;
+        }
+    }
+
+    /// <summary>Gets the native codec's frames per second; setting it configures the hop and codec strides.</summary>
+    public override int CodecFrameRate
+    {
+        get => _codecGeometryReady ? (HopSize > 0 ? SampleRate / HopSize : 0) : base.CodecFrameRate;
+        set
+        {
+            if (!_codecGeometryReady)
+            {
+                base.CodecFrameRate = value;
+                if (_deserializingGeometry) _deserializedFrameRate = true;
+                return;
+            }
+            if (value <= 0 || SampleRate <= 0 || SampleRate % value != 0)
+                throw new ArgumentException("The codec frame rate must be positive and divide the sample rate exactly.", nameof(value));
+            HopSize = SampleRate / value;
+            base.CodecFrameRate = value;
+        }
     }
 
     /// <summary>Gets or sets the global Transformer's feed-forward width (6,144).</summary>

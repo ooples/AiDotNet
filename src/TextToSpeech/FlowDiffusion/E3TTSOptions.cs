@@ -9,6 +9,27 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </remarks>
 public class E3TTSOptions : EndToEndTtsOptions
 {
+    private bool _channelWidthReady;
+    private int[]? _channelsBeforeDeserialization;
+
+    [System.Runtime.Serialization.OnDeserializing]
+    private void BeginDeserialization(System.Runtime.Serialization.StreamingContext context)
+    {
+        base.HiddenDim = HiddenDim;
+        _channelsBeforeDeserialization = BlockChannels;
+        _channelWidthReady = false;
+    }
+
+    [System.Runtime.Serialization.OnDeserialized]
+    private void EndDeserialization(System.Runtime.Serialization.StreamingContext context)
+    {
+        bool explicitChannels = !ReferenceEquals(_channelsBeforeDeserialization, BlockChannels);
+        _channelsBeforeDeserialization = null;
+        _channelWidthReady = true;
+        // Explicit stages also preserve archives written when shared width metadata was independent.
+        if (!explicitChannels) HiddenDim = base.HiddenDim;
+    }
+
     /// <summary>Number of layers in the BERT text encoder. Shares the setting with <see cref="BertLayers"/>.</summary>
     public override int NumEncoderLayers { get => BertLayers; set => BertLayers = value; }
 
@@ -27,6 +48,7 @@ public class E3TTSOptions : EndToEndTtsOptions
         DecoderDim = 1_024;
         NumDiffusionSteps = 1_000;
         MaxTextLength = 512;
+        _channelWidthReady = true;
     }
 
     /// <summary>Initializes an independent copy.</summary>
@@ -62,6 +84,36 @@ public class E3TTSOptions : EndToEndTtsOptions
         SilenceBlockSize = other.SilenceBlockSize;
         SilenceMagnitudeThreshold = other.SilenceMagnitudeThreshold;
         SamplingSeed = other.SamplingSeed;
+        _channelWidthReady = true;
+    }
+
+    /// <summary>
+    /// Gets the peak U-Net channel width. Setting it scales every stage by the same ratio;
+    /// the resulting widths must be positive integers. Use <see cref="BlockChannels"/> to configure stages independently.
+    /// The default retains the 128/256/512/1024 widths in paper Table 1.
+    /// </summary>
+    public override int HiddenDim
+    {
+        get => _channelWidthReady && BlockChannels is { Length: > 0 } ? BlockChannels.Max() : base.HiddenDim;
+        set
+        {
+            // Base copy constructors assign shared aliases before the stage arrays are copied.
+            if (!_channelWidthReady) { base.HiddenDim = value; return; }
+            if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value), "The U-Net width must be positive.");
+            if (BlockChannels is null || BlockChannels.Length == 0 || BlockChannels.Any(width => width <= 0))
+                throw new InvalidOperationException("Configure positive BlockChannels before scaling the U-Net width.");
+            int peak = BlockChannels.Max();
+            var scaled = new int[BlockChannels.Length];
+            for (int i = 0; i < scaled.Length; i++)
+            {
+                long numerator = (long)BlockChannels[i] * value;
+                if (numerator % peak != 0 || numerator / peak <= 0)
+                    throw new ArgumentException("The width must preserve integral stage proportions; configure BlockChannels for other layouts.", nameof(value));
+                scaled[i] = checked((int)(numerator / peak));
+            }
+            BlockChannels = scaled;
+            base.HiddenDim = value;
+        }
     }
 
     /// <summary>Gets or sets the BERT vocabulary size. Defaults to <c>30_522</c>.</summary>

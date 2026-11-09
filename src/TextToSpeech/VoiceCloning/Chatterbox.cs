@@ -1,6 +1,7 @@
 using AiDotNet.ModelLoading;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Resampling;
+using AiDotNet.Audio.Watermarking;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -20,8 +21,8 @@ namespace AiDotNet.TextToSpeech.VoiceCloning;
 /// <remarks>
 /// <para>This implementation follows the released English model: BPE text, voice-encoder and prompt-token conditioning,
 /// the 520M Llama-based T3 decoder, S3Tokenizer-v2, causal conditional flow matching, CAM++ and HiFT.</para>
-/// <para>The upstream Perth watermark is a post-processing dependency, not part of the neural checkpoint. Set
-/// <see cref="WatermarkProcessor"/> to apply a compatible watermarker to every synthesized waveform.</para>
+/// <para>Like the release, every synthesized waveform carries Resemble's Perth implicit watermark (a frozen PerthNet run
+/// natively; see <see cref="ChatterboxOptions.Watermark"/> and <see cref="ChatterboxOptions.WatermarkModelPath"/>).</para>
 /// </remarks>
 [ModelDomain(ModelDomain.Audio)]
 [ModelCategory(ModelCategory.Transformer)]
@@ -37,6 +38,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     private ChatterboxT3<T>? _t3;
     private ChatterboxVoiceEncoder<T>? _voiceEncoder;
     private ChatterboxTokenizer? _tokenizer;
+    private PerthWatermarker<T>? _watermarker;
     private CosyVoiceFlowConfiguration? _flowConfiguration;
     private readonly ConditionalWeakTable<TtsVoice<T>, T3VoiceCondition> _t3VoiceConditions = new();
     private int _t3WeightsGeneration;
@@ -73,10 +75,30 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         _t3Optimizer = optimizer ?? CreateComponentOptimizer("language model", _options.WarmupSteps);
     }
 
-    /// <summary>
-    /// Optional Perth-compatible postprocessor. The official wrapper applies its implicit watermark after S3Gen.
-    /// </summary>
-    public Func<Tensor<T>, Tensor<T>>? WatermarkProcessor { get; set; }
+    /// <summary>The Perth watermark model, read from <see cref="ChatterboxOptions.WatermarkModelPath"/> on first use.</summary>
+    internal PerthWatermarker<T> Watermarker
+    {
+        get
+        {
+            if (_watermarker is not null) return _watermarker;
+            var path = _options.WatermarkModelPath;
+            if (string.IsNullOrWhiteSpace(path))
+                throw new InvalidOperationException("Chatterbox watermarks its output as the release does: set ChatterboxOptions.WatermarkModelPath to "
+                    + "perth_net_250000.pth.tar (from the resemble-perth package), or set ChatterboxOptions.Watermark to false.");
+            var watermarker = new PerthWatermarker<T>(Engine);
+            watermarker.LoadCheckpoint(path!);
+            return _watermarker = watermarker;
+        }
+        set => _watermarker = value;
+    }
+
+    // The release's generate(): Perth's apply_watermark on S3Gen's (trim-faded) output.
+    internal Tensor<T> Watermarked(Tensor<T> waveform)
+    {
+        if (!_options.Watermark || waveform.Length == 0) return waveform;
+        var marked = Watermarker.Apply(waveform.ToArray().Select(v => NumOps.ToDouble(v)).ToArray(), _options.SampleRate);
+        return new Tensor<T>(new[] { marked.Length }, new Vector<T>(marked.Select(NumOps.FromDouble).ToArray()));
+    }
 
     protected override CosyVoiceFamilyOptions Settings => _options;
     protected override int TextVocabularySize => _options.VocabSize;
@@ -140,8 +162,8 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         ThrowIfDisposed();
         string normalized = NormalizeText(text);
         var input = Ids(Tokenize(normalized));
-        var waveform = IsOnnxMode && OnnxModel is not null ? OnnxModel.Run(input) : Predict(input);
-        return WatermarkProcessor?.Invoke(waveform) ?? waveform;
+        // The native path watermarks in PredictCore.
+        return IsOnnxMode && OnnxModel is not null ? Watermarked(OnnxModel.Run(input)) : Predict(input);
     }
 
     protected override Tensor<T> PredictCore(Tensor<T> input)
@@ -160,7 +182,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
                     : 1.0;
             envelope[i] = NumOps.FromDouble(value);
         }
-        return Engine.TensorMultiply(waveform, envelope);
+        return Watermarked(Engine.TensorMultiply(waveform, envelope));
     }
 
     private protected override S3TokenizerConfiguration SpeechTokenizerConfiguration =>
@@ -338,7 +360,8 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
 
     /// <summary>
     /// Loads the unmodified release directory: <c>t3_cfg.safetensors</c>, <c>s3gen.safetensors</c>,
-    /// <c>ve.safetensors</c> and <c>tokenizer.json</c>.
+    /// <c>ve.safetensors</c> and <c>tokenizer.json</c>; a <c>perth_net_250000.pth.tar</c> beside them becomes the watermark
+    /// model unless <see cref="ChatterboxOptions.WatermarkModelPath"/> is set.
     /// </summary>
     public void LoadPretrainedWeights(string modelDirectory)
     {
@@ -349,6 +372,12 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         string tokenizerPath = Path.Combine(modelDirectory, "tokenizer.json");
         _tokenizer = ChatterboxTokenizer.Load(tokenizerPath);
         _options.TokenizerPath = tokenizerPath;
+        string perth = Path.Combine(modelDirectory, "perth_net_250000.pth.tar");
+        if (_options.WatermarkModelPath is null && File.Exists(perth))
+        {
+            _options.WatermarkModelPath = perth;
+            _watermarker = null;
+        }
 
         // Each file is streamed one tensor at a time and closed after its components load.
         using (var t3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "t3_cfg.safetensors"))) T3.LoadTorchWeights(t3);
@@ -377,7 +406,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         metadata.AdditionalInfo["Mode"] = IsNative ? "Native" : "ONNX";
         metadata.AdditionalInfo["SampleRate"] = _options.SampleRate;
         metadata.AdditionalInfo["SpeechVocabulary"] = _options.SpeechVocabularySize;
-        metadata.AdditionalInfo["WatermarkProcessor"] = WatermarkProcessor is null ? "Not configured" : "Configured";
+        metadata.AdditionalInfo["Watermark"] = _options.Watermark ? "Perth" : "None";
         return metadata;
     }
 

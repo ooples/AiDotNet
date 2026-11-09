@@ -19,8 +19,9 @@ public sealed class CosyVoiceOriginalCheckpointTests
         Assert.NotNull(load);
         // The production loader now owns a streaming reader for the duration of this callback.
         // Exercise that same path so aliases and shape checks are tested while its file is open.
-        Action<Func<string, int[], double[]>> verify = reader =>
+        Action<AiDotNet.ModelLoading.TorchTensorSource> verify = source =>
         {
+            var reader = source.AsFunction();
             foreach (var pair in new[] { ("conv_pre.weight_g", "conv_pre.parametrizations.weight.original0"),
                 ("conv_pre.weight_v", "conv_pre.parametrizations.weight.original1"), ("conv_pre.bias", "conv_pre.bias") })
             {
