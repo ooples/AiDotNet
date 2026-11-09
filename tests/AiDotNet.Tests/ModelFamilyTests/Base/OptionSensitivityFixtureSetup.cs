@@ -41,12 +41,15 @@ internal static class OptionSensitivityFixtureSetup
     internal static long ParameterCountBeforeFitting<T>(INeuralNetworkModel<T> network)
         => network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> kokoro
             ? kokoro.ParameterCount
+            : network is AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T> metaVoice ? MetaVoiceOptionFixture.ParameterCount(metaVoice)
             : network.GetParameters().Length;
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => option == nameof(AiDotNet.Models.Options.ModelOptions.Seed) ? "model-options-seed"
             : network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> ? "kokoro-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T> && TortoiseOptionFixture.Handles(option) ? "tortoise-" + option
+            : network is AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T> && MetaVoiceOptionFixture.Handles(option) ? "metavoice-" + option
+
 
             : network is AiDotNet.TextToSpeech.Classic.DeepVoice3<T> && option == "GradientClipValue" ? "deepvoice-value-clip"
 
@@ -170,6 +173,9 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1B<T> metaVoice && MetaVoiceOptionFixture.Handles(option))
+            return MetaVoiceOptionFixture.Observe(metaVoice, input, option);
+
         if (network is AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T> tortoise && TortoiseOptionFixture.Handles(option)
             && TortoiseOptionFixture.Observe(tortoise, option) is long tortoiseObservation)
             return tortoiseObservation;
@@ -833,6 +839,9 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.VoiceCloning.MetaVoice1BOptions metaVoiceOptions)
+            MetaVoiceOptionFixture.Prepare(metaVoiceOptions, option);
+
         if (options is AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions tortoiseOptions)
             TortoiseOptionFixture.Prepare(tortoiseOptions, option);
 

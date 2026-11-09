@@ -13,6 +13,23 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public sealed class MetaVoicePublicPipelineTests
 {
+    [Fact]
+    public void ModelSeedControlsNativeInitializationBeforeCheckpointLoading()
+    {
+        MetaVoice1B<double> Create(int seed)
+        {
+            var options = Options();
+            options.Seed = seed;
+            return new MetaVoice1B<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+                NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 640), options);
+        }
+        using var first = Create(7);
+        using var repeated = Create(7);
+        using var changed = Create(11);
+        Assert.Equal(first.GetParameters().ToArray(), repeated.GetParameters().ToArray());
+        Assert.True(first.GetParameters().Zip(changed.GetParameters(), (left, right) => left != right).Any(value => value));
+    }
+
     private static string FilePath(string name) => Path.Combine(AppContext.BaseDirectory, "TextToSpeech", "ReferenceData", name);
     private static JsonDocument Reference() => JsonDocument.Parse(File.ReadAllText(FilePath("metavoice_public_reference.json")));
     private static MetaVoice1BOptions Options() => new()

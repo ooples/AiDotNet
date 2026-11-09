@@ -23,6 +23,9 @@ public partial class MetaVoice1B<T>
     internal Func<int[], Tensor<T>>? DiffusionGaussianForAudit { get; set; }
     internal Action<string, Tensor<T>>? ObserveOutputForAudit { get; set; }
 
+    private int InitializationSeed() => (Architecture.HasExplicitRandomSeed
+        ? Architecture.RandomSeed : _options.Seed ?? Architecture.RandomSeed) ?? 2294;
+
     protected override void InitializeLayers()
     {
         if (!_useNativeMode) return;
@@ -33,7 +36,7 @@ public partial class MetaVoice1B<T>
             _options.SecondStageContext <= 0 || _options.NumCodebooks != 8 || _options.FirstStageCodebooks != 2 ||
             _options.CodebookSize != 1024 || _options.CodecLatentDim != 128 || _options.SampleRate != 24000 || _options.HopSize != 320)
             throw new ArgumentException("MetaVoice dimensions must describe its causal/noncausal GPT and released 24 kHz eight-codebook codec.");
-        int seed = Architecture.RandomSeed ?? 2294;
+        int seed = InitializationSeed();
         _first = new MetaVoiceGpt<T>(Engine, new MetaVoiceGptConfiguration
         {
             Dimension = _options.FirstStageDim, Layers = _options.NumFirstStageLayers, Heads = _options.NumHeads,

@@ -35,7 +35,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         : base(architecture)
     {
         _options = options ?? new MetaVoice1BOptions(); Options = _options;
-        _random = new Random(architecture.RandomSeed ?? 2294);
+        _random = new Random(InitializationSeed());
         ConfigureProperties();
         if (string.IsNullOrWhiteSpace(modelPath)) throw new ArgumentException("Model path required.", nameof(modelPath));
         if (!File.Exists(modelPath)) throw new FileNotFoundException("ONNX model not found.", modelPath);
@@ -50,7 +50,7 @@ public partial class MetaVoice1B<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         : base(architecture)
     {
         _options = options ?? new MetaVoice1BOptions(); Options = _options;
-        _useNativeMode = true; _usesDefaultOptimizer = optimizer is null; _random = new Random(architecture.RandomSeed ?? 2294);
+        _useNativeMode = true; _usesDefaultOptimizer = optimizer is null; _random = new Random(InitializationSeed());
         _optimizer = optimizer ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
             ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ConfigureProperties(); InitializeLayers();
