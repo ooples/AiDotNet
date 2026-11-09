@@ -539,17 +539,13 @@ public partial class NaturalSpeech3<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        Func<string, double[]?> Reader(string path)
-        {
-            var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-            return name => file.TryGetValue(name, out var t) ? t.ToVector().Select(v => (double)v).ToArray() : null;
-        }
-        Codec.LoadEncoder(Reader(encoderPath));
-        Codec.LoadDecoder(Reader(decoderPath));
+        using (var encoder = AiDotNet.ModelLoading.TorchCheckpointFile.Open(encoderPath)) Codec.LoadEncoder(encoder);
+        using (var decoder = AiDotNet.ModelLoading.TorchCheckpointFile.Open(decoderPath)) Codec.LoadDecoder(decoder);
         if (redecoderPath is not null)
         {
             if (Codec.RedecoderEmbeddings is null) throw new InvalidOperationException("Build the model with IncludeRedecoder to load the redecoder.");
-            Codec.LoadRedecoder(Reader(redecoderPath));
+            using var redecoder = AiDotNet.ModelLoading.TorchCheckpointFile.Open(redecoderPath);
+            Codec.LoadRedecoder(redecoder);
         }
     }
 }

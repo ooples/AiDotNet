@@ -137,13 +137,8 @@ public partial class UniAudio<T>
     {
         RequirePipeline();
         EnsureCodecGan();
-        var state = new ComputerVision.Weights.WeightLoader().LoadWeights(path,
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path, strictAxes: true,
             name => name.StartsWith("mfd.discriminators.", StringComparison.Ordinal));
-        _codecGan!.LoadTorchWeights((name, shape) =>
-        {
-            if (!state.TryGetValue(name, out var value) || !value.Shape.ToArray().SequenceEqual(shape))
-                throw new InvalidDataException($"Missing or incompatible universal-codec critic tensor '{name}'.");
-            return value.ToArray().Select(x => (double)x).ToArray();
-        });
+        _codecGan!.LoadTorchWeights(file);
     }
 }

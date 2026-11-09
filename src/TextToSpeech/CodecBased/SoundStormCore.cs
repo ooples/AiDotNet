@@ -450,18 +450,20 @@ internal sealed class SoundStormCore<T>
 
     /// <summary>Loads the network from a PyTorch state dict laid out as Pheme's <c>TTSConformer</c>
     /// (<c>embedding.{l}</c>, the conditioning table, the global projection, <c>conformer</c>, <c>heads.{l}</c>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string conditioningName, string globalName)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string conditioningName, string globalName) =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), conditioningName, globalName);
+
+    /// <summary>Loads the network from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string conditioningName, string globalName)
     {
         int dim = _c.Conformer.Dim;
         for (int l = 0; l < LevelEmbeddings.Count; l++)
-            LevelEmbeddings[l].LoadTable(read($"embedding.{l}.weight", new[] { _c.EmbeddingRows, dim }));
-        ConditioningEmbedding.LoadTable(read($"{conditioningName}.weight", new[] { _c.ConditioningCodes, dim }));
+            LevelEmbeddings[l].LoadTable(source, $"embedding.{l}.weight");
+        ConditioningEmbedding.LoadTable(source, $"{conditioningName}.weight");
         if (GlobalProjection is not null)
-            TorchParameters.Linear(_engine, GlobalProjection, _c.GlobalConditioningDim, dim,
-                read($"{globalName}.weight", new[] { dim, _c.GlobalConditioningDim }), read($"{globalName}.bias", new[] { dim }));
-        Conformer.LoadTorchWeights(_engine, "conformer", read);
+            TorchParameters.Linear(_engine, GlobalProjection, _c.GlobalConditioningDim, dim, source, $"{globalName}.weight", $"{globalName}.bias");
+        Conformer.LoadTorchWeights(_engine, "conformer", source);
         for (int l = 0; l < Heads.Count; l++)
-            TorchParameters.Linear(_engine, Heads[l], dim, _c.HeadOutputs, read($"heads.{l}.weight", new[] { _c.HeadOutputs, dim }),
-                read($"heads.{l}.bias", new[] { _c.HeadOutputs }));
+            TorchParameters.Linear(_engine, Heads[l], dim, _c.HeadOutputs, source, $"heads.{l}.weight", $"heads.{l}.bias");
     }
 }

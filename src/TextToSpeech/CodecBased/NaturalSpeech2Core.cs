@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
 
@@ -167,20 +168,19 @@ internal sealed class NaturalSpeech2Core<T>
     }
 
     /// <summary>Loads Amphion's <c>NaturalSpeech2</c> state dict (all but the codec's quantizer).</summary>
-    public void Load(Func<string, double[]?> read)
+    internal void Load(TorchTensorSource source)
     {
-        var r = Ns2Ops.Required(read, "NaturalSpeech 2");
-        PhonemeEncoder.Load(r, "prior_encoder.encoder.");
-        DurationPredictor.Load(r, "prior_encoder.duration_predictor.");
-        PitchPredictor.Load(r, "prior_encoder.pitch_predictor.");
-        PitchEmbedding.LoadLeadingRows(r("prior_encoder.pitch_embedding.weight"));
-        if (read("prior_encoder.pitch_bins") is { } bins) SetPitchBins(bins);
+        PhonemeEncoder.Load(source, "prior_encoder.encoder.");
+        DurationPredictor.Load(source, "prior_encoder.duration_predictor.");
+        PitchPredictor.Load(source, "prior_encoder.pitch_predictor.");
+        PitchEmbedding.LoadLeadingRows(source, "prior_encoder.pitch_embedding.weight");
+        if (source.TryRead("prior_encoder.pitch_bins") is { } bins) SetPitchBins(bins);
         if (PromptProjection is not null)
-            TorchParameters.Linear(_engine, PromptProjection, _c.Latent, _c.Hidden, r("prompt_lin.weight"), r("prompt_lin.bias"));
-        PromptEncoder.Load(r, "prompt_encoder.");
-        QueryEmbedding.LoadLeadingRows(r("query_emb.weight"));
-        QueryAttention.Load(r, "query_attn.");
-        Denoiser.Load(r, "diffusion.diff_estimator.");
+            TorchParameters.Linear(_engine, PromptProjection, _c.Latent, _c.Hidden, source, "prompt_lin.weight", "prompt_lin.bias");
+        PromptEncoder.Load(source, "prompt_encoder.");
+        QueryEmbedding.LoadLeadingRows(source, "query_emb.weight");
+        QueryAttention.Load(source, "query_attn.");
+        Denoiser.Load(source, "diffusion.diff_estimator.");
     }
 
     // ---------------------------------------------------------------- the diffusion (Eqs. 2-5)

@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.EndToEnd;
 using AiDotNet.TextToSpeech.Latest;
@@ -52,6 +53,9 @@ internal static class Ns2Ops
 
     public static void SetConv<T>(NormedConv1DLayer<T> conv, double[] weight, double[] bias) =>
         conv.LoadTorchWeights(weight, null, bias);
+
+    public static void SetConv<T>(NormedConv1DLayer<T> conv, TorchTensorSource source, string weightName, string biasName) =>
+        conv.LoadTorchWeights(source, weightName, conv.TorchWeightShape, null, biasName);
 
     /// <summary><c>[1, C, T]</c> → rows <c>[T, C]</c>.</summary>
     public static Tensor<T> Rows<T>(IEngine engine, Tensor<T> x) => engine.TensorTranspose(engine.Reshape(x, new[] { x.Shape[1], x.Shape[2] }));
@@ -114,9 +118,6 @@ internal static class Ns2Ops
 
     public static Tensor<T> Dropout<T>(IEngine engine, Tensor<T> x, double rate, bool training, Random? random) =>
         training && rate > 0 && random is not null ? T5Seq2Seq<T>.Dropout(engine, x, rate, random) : x;
-
-    public static Func<string, double[]> Required(Func<string, double[]?> read, string model) =>
-        name => read(name) ?? throw new KeyNotFoundException($"{model}'s checkpoint has no '{name}'.");
 }
 
 /// <summary>
@@ -157,10 +158,10 @@ internal sealed class Ns2Attention<T>
         return OutProjection.Forward(IndexTtsOps.MergeHeads(_engine, _engine.BatchMatMul(weights, v)));
     }
 
-    public void Load(Func<string, double[]> read, string prefix)
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        TorchParameters.Linear(_engine, InProjection, _dim, 3 * _dim, read(prefix + "in_proj_weight"), read(prefix + "in_proj_bias"));
-        TorchParameters.Linear(_engine, OutProjection, _dim, _dim, read(prefix + "out_proj.weight"), read(prefix + "out_proj.bias"));
+        TorchParameters.Linear(_engine, InProjection, _dim, 3 * _dim, source, prefix + "in_proj_weight", prefix + "in_proj_bias");
+        TorchParameters.Linear(_engine, OutProjection, _dim, _dim, source, prefix + "out_proj.weight", prefix + "out_proj.bias");
     }
 }
 
@@ -204,9 +205,9 @@ internal sealed class Ns2Norm<T>
         return _engine.TensorAdd(_engine.TensorMultiply(normed, _engine.TensorBroadcastTo(gamma, normed._shape)), _engine.TensorBroadcastTo(beta, normed._shape));
     }
 
-    public void Load(Func<string, double[]> read, string prefix)
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        if (Plain is not null) TorchParameters.LayerNorm(_engine, Plain, read(prefix + "weight"), read(prefix + "bias"));
-        else TorchParameters.Linear(_engine, Style!, _dim, 2 * _dim, read(prefix + "style.weight"), read(prefix + "style.bias"));
+        if (Plain is not null) TorchParameters.LayerNorm(_engine, Plain, source, prefix + "weight", prefix + "bias");
+        else TorchParameters.Linear(_engine, Style!, _dim, 2 * _dim, source, prefix + "style.weight", prefix + "style.bias");
     }
 }

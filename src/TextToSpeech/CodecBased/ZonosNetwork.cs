@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -454,19 +455,23 @@ internal sealed class ZonosNetwork<T>
 
     /// <summary>Loads the release's backbone, tables and heads (names after the model: <c>backbone.layers.{i}.*</c>,
     /// <c>backbone.norm_f</c>, <c>embeddings.{k}</c>, <c>heads.{k}</c>); returns the names read.</summary>
-    public HashSet<string> LoadTorchWeights(Func<string, int[], double[]> read)
+    public HashSet<string> LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads the release's backbone, tables and heads from <paramref name="source"/>, each tensor copied straight
+    /// into its layer; returns the names read.</summary>
+    internal HashSet<string> LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
         var used = new HashSet<string>(StringComparer.Ordinal);
-        double[] Read(string name, int[] shape)
+        var s = source.WithNames(name =>
         {
             used.Add(name);
-            return read(name, shape);
-        }
+            return name;
+        });
         void Linear(BiasFreeLinearLayer<T> layer, string name, int inputs, int outputs) =>
-            TorchParameters.Linear(layer, inputs, outputs, Read(name, new[] { outputs, inputs }));
+            TorchParameters.Linear(layer, inputs, outputs, s, name);
         void Vector(BiasFreeLinearLayer<T> holder, string name, int[] shape) =>
-            TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, s) => a * s), Read(name, shape));
+            TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, b) => a * b), s, name, shape);
         void LoadNorm(Norm norm, string name)
         {
             Vector(norm.Weight, $"{name}.weight", new[] { c.Hidden });
@@ -502,10 +507,34 @@ internal sealed class ZonosNetwork<T>
             }
         }
         LoadNorm(FinalNorm, "backbone.norm_f");
-        TorchParameters.Linear(CodeTables, 1, c.Codebooks * c.CodeVocab * c.Hidden,
-            Enumerable.Range(0, c.Codebooks).SelectMany(k => Read($"embeddings.{k}.weight", new[] { c.CodeVocab, c.Hidden })).ToArray());
-        TorchParameters.Linear(Heads, c.Hidden, c.Codebooks * c.HeadVocab,
-            Enumerable.Range(0, c.Codebooks).SelectMany(k => Read($"heads.{k}.weight", new[] { c.HeadVocab, c.Hidden })).ToArray());
+        // The per-codebook tables and heads are stacked into one table and one head.
+        int tableCount = c.CodeVocab * c.Hidden, outputs = c.Codebooks * c.HeadVocab;
+        var tables = CodeTables.Weights;
+        if (tables.Length == c.Codebooks * tableCount && tables.Lifetime != WeightLifetime.Streaming)
+        {
+            for (int k = 0; k < c.Codebooks; k++) s.CopyTo($"embeddings.{k}.weight", new[] { c.CodeVocab, c.Hidden }, tables, k * tableCount);
+            _engine.InvalidatePersistentTensor(tables);
+        }
+        else
+            TorchParameters.Linear(CodeTables, 1, c.Codebooks * tableCount,
+                Enumerable.Range(0, c.Codebooks).SelectMany(k => s.Read($"embeddings.{k}.weight", new[] { c.CodeVocab, c.Hidden })).ToArray());
+        var heads = Heads.Weights;                                                                          // [hidden, codebooks · vocab]
+        if (heads.Length == c.Hidden * outputs && heads.Lifetime != WeightLifetime.Streaming)
+        {
+            var head = new Tensor<T>(new[] { c.Hidden, c.HeadVocab });
+            var span = heads.AsWritableSpan();
+            for (int k = 0; k < c.Codebooks; k++)
+            {
+                s.CopyTransposedTo($"heads.{k}.weight", c.HeadVocab, c.Hidden, head);
+                var rows = head.AsSpan();
+                for (int i = 0; i < c.Hidden; i++)
+                    rows.Slice(i * c.HeadVocab, c.HeadVocab).CopyTo(span.Slice(i * outputs + k * c.HeadVocab, c.HeadVocab));
+            }
+            _engine.InvalidatePersistentTensor(heads);
+        }
+        else
+            TorchParameters.Linear(Heads, c.Hidden, outputs,
+                Enumerable.Range(0, c.Codebooks).SelectMany(k => s.Read($"heads.{k}.weight", new[] { c.HeadVocab, c.Hidden })).ToArray());
         return used;
     }
 }

@@ -1,3 +1,5 @@
+using AiDotNet.ModelLoading;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 public partial class NaturalSpeech2<T>
@@ -12,20 +14,24 @@ public partial class NaturalSpeech2<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        LoadAmphionState(name => file.TryGetValue(name, out var t) ? t.ToVector().Select(v => (double)v).ToArray() : null);
+        using var file = TorchCheckpointFile.Open(path);
+        LoadAmphionState(file);
     }
 
     /// <summary>Loads Amphion's state dict through <paramref name="read"/> (name → values, or null when absent).</summary>
-    internal void LoadAmphionState(Func<string, double[]?> read)
+    internal void LoadAmphionState(Func<string, double[]?> read) => LoadAmphionState(TorchTensorSource.From(read));
+
+    /// <summary>Loads Amphion's state dict from <paramref name="source"/>.</summary>
+    internal void LoadAmphionState(TorchTensorSource source)
     {
-        Core.Load(read);
+        Core.Load(source);
         var quantizer = Quantizer;
         for (int q = 0; q < quantizer.Quantizers; q++)
         {
             string p = $"quantizer.vq.layers.{q}._codebook.";
-            if (read(p + "embed") is not { } embed) continue;
-            quantizer.LoadCodebook(q, embed, read(p + "embed_avg") ?? embed, read(p + "cluster_size") ?? Enumerable.Repeat(1.0, quantizer.Bins).ToArray(), true);
+            if (source.TryRead(p + "embed") is not { } embed) continue;
+            quantizer.LoadCodebook(q, embed, source.TryRead(p + "embed_avg") ?? embed,
+                source.TryRead(p + "cluster_size") ?? Enumerable.Repeat(1.0, quantizer.Bins).ToArray(), true);
         }
     }
 }

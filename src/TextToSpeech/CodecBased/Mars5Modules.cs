@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.EndToEnd;
@@ -58,8 +59,7 @@ internal sealed class Mars5SinePositions<T>
         return _engine.TensorAdd(rows, _engine.TensorMultiply(alpha, Table(length)));
     }
 
-    public void Load(Func<string, double[]?> read, string name) =>
-        TorchParameters.Linear(Alpha, 1, 1, read(name) ?? throw new KeyNotFoundException($"MARS5's checkpoint has no '{name}'."));
+    public void Load(TorchTensorSource source, string name) => TorchParameters.Linear(Alpha, 1, 1, source, name);
 }
 
 /// <summary>
@@ -134,25 +134,25 @@ internal sealed class Mars5SwiGluLayer<T>
         return _engine.TensorAdd(x, Linear2.Forward(gated));
     }
 
-    public void Load(Func<string, double[]?> read, string prefix)
+    public void Load(TorchTensorSource source, string prefix)
     {
-        double[] R(string n) => read(prefix + n) ?? throw new KeyNotFoundException($"MARS5's checkpoint has no '{prefix + n}'.");
+        var s = source.WithPrefix(prefix);
         int ff = GateW.GetParameters().Length / _dim;
-        TorchParameters.LayerNorm(_engine, Norm1, R("norm1.weight"), R("norm1.bias"));
-        TorchParameters.Linear(_engine, SelfIn, _dim, 3 * _dim, R("self_attn.in_proj_weight"), R("self_attn.in_proj_bias"));
-        TorchParameters.Linear(_engine, SelfOut, _dim, _dim, R("self_attn.out_proj.weight"), R("self_attn.out_proj.bias"));
+        TorchParameters.LayerNorm(_engine, Norm1, s, "norm1.weight", "norm1.bias");
+        TorchParameters.Linear(_engine, SelfIn, _dim, 3 * _dim, s, "self_attn.in_proj_weight", "self_attn.in_proj_bias");
+        TorchParameters.Linear(_engine, SelfOut, _dim, _dim, s, "self_attn.out_proj.weight", "self_attn.out_proj.bias");
         string ffNorm = "norm2";
         if (CrossIn is not null)
         {
-            TorchParameters.LayerNorm(_engine, NormCross!, R("norm2.weight"), R("norm2.bias"));
-            TorchParameters.Linear(_engine, CrossIn, _dim, 3 * _dim, R("multihead_attn.in_proj_weight"), R("multihead_attn.in_proj_bias"));
-            TorchParameters.Linear(_engine, CrossOut!, _dim, _dim, R("multihead_attn.out_proj.weight"), R("multihead_attn.out_proj.bias"));
+            TorchParameters.LayerNorm(_engine, NormCross!, s, "norm2.weight", "norm2.bias");
+            TorchParameters.Linear(_engine, CrossIn, _dim, 3 * _dim, s, "multihead_attn.in_proj_weight", "multihead_attn.in_proj_bias");
+            TorchParameters.Linear(_engine, CrossOut!, _dim, _dim, s, "multihead_attn.out_proj.weight", "multihead_attn.out_proj.bias");
             ffNorm = "norm3";
         }
-        TorchParameters.LayerNorm(_engine, NormFeedForward, R(ffNorm + ".weight"), R(ffNorm + ".bias"));
-        TorchParameters.Linear(GateW, _dim, ff, R("activation.W.weight"));
-        TorchParameters.Linear(GateV, _dim, ff, R("activation.V.weight"));
-        TorchParameters.Linear(_engine, Linear2, ff, _dim, R("linear2.weight"), R("linear2.bias"));
+        TorchParameters.LayerNorm(_engine, NormFeedForward, s, ffNorm + ".weight", ffNorm + ".bias");
+        TorchParameters.Linear(GateW, _dim, ff, s, "activation.W.weight");
+        TorchParameters.Linear(GateV, _dim, ff, s, "activation.V.weight");
+        TorchParameters.Linear(_engine, Linear2, ff, _dim, s, "linear2.weight", "linear2.bias");
     }
 }
 
@@ -211,17 +211,15 @@ internal static class Mars5Ops
         return engine.TensorNarrow(norm.Forward(rows), 0, 0, 1);
     }
 
-    public static void LoadTables<T>(Func<string, double[]?> read, IReadOnlyList<TiedEmbeddingLayer<T>> tables, string prefix)
+    public static void LoadTables<T>(TorchTensorSource source, IReadOnlyList<TiedEmbeddingLayer<T>> tables, string prefix)
     {
-        for (int q = 0; q < tables.Count; q++)
-            tables[q].LoadLeadingRows(read($"{prefix}embs.{q}.weight") ?? throw new KeyNotFoundException($"MARS5's checkpoint has no '{prefix}embs.{q}.weight'."));
+        for (int q = 0; q < tables.Count; q++) tables[q].LoadLeadingRows(source, $"{prefix}embs.{q}.weight");
     }
 
-    public static void LoadStack<T>(IEngine engine, Func<string, double[]?> read, IReadOnlyList<Mars5SwiGluLayer<T>> stack, LayerNormalizationLayer<T> norm, string prefix)
+    public static void LoadStack<T>(IEngine engine, TorchTensorSource source, IReadOnlyList<Mars5SwiGluLayer<T>> stack, LayerNormalizationLayer<T> norm, string prefix)
     {
-        for (int i = 0; i < stack.Count; i++) stack[i].Load(read, $"{prefix}layers.{i}.");
-        TorchParameters.LayerNorm(engine, norm, read(prefix + "norm.weight") ?? throw new KeyNotFoundException(prefix + "norm.weight"),
-            read(prefix + "norm.bias") ?? throw new KeyNotFoundException(prefix + "norm.bias"));
+        for (int i = 0; i < stack.Count; i++) stack[i].Load(source, $"{prefix}layers.{i}.");
+        TorchParameters.LayerNorm(engine, norm, source, prefix + "norm.weight", prefix + "norm.bias");
     }
 }
 
@@ -310,51 +308,65 @@ internal sealed class Mars5CodecLm<T>
     /// Loads the AR checkpoint (<c>mars5_ar.safetensors</c>): the Mistral weights renamed to Hugging Face's and their
     /// query and key rows permuted from Mistral's interleaved rotary pairs to the half-split layout the decoder rotates.
     /// </summary>
-    public void Load(Func<string, double[]?> read)
+    public void Load(Func<string, double[]?> read) => Load(TorchTensorSource.From(read));
+
+    internal void Load(TorchTensorSource source)
     {
         var c = Configuration;
-        int headDim = c.HeadDim;
-        double[] Require(string name) => read(name) ?? throw new KeyNotFoundException($"MARS5's AR checkpoint has no '{name}'.");
-        double[] Permute(double[] w)
+        int headDim = c.HeadDim, outputs = c.Heads * headDim;
+        // w.view(heads, hd/2, 2, dim).transpose(1, 2).reshape(heads·hd, dim): torch row `from` becomes row `to`, a column
+        // of the layer's [dim, heads·hd] weight.
+        void Permute(BiasFreeLinearLayer<T> layer)
         {
-            // w.view(heads, hd/2, 2, dim).transpose(1, 2).reshape(heads·hd, dim)
-            var p = new double[w.Length];
+            var weights = layer.Weights;
+            bool stored = weights.Length == c.Dim * outputs && weights.Lifetime != WeightLifetime.Streaming;
+            var values = stored ? null : layer.GetParameters().ToArray();
+            var span = stored ? weights.AsWritableSpan() : values.AsSpan();
+            var row = new T[outputs];
             int half = headDim / 2;
-            for (int h = 0; h < c.Heads; h++)
-                for (int i = 0; i < half; i++)
-                    for (int two = 0; two < 2; two++)
-                    {
-                        int from = h * headDim + 2 * i + two, to = h * headDim + two * half + i;
-                        Array.Copy(w, from * c.Dim, p, to * c.Dim, c.Dim);
-                    }
-            return p;
+            for (int input = 0; input < c.Dim; input++)
+            {
+                var columns = span.Slice(input * outputs, outputs);
+                columns.CopyTo(row);
+                for (int h = 0; h < c.Heads; h++)
+                    for (int i = 0; i < half; i++)
+                        for (int two = 0; two < 2; two++)
+                            columns[h * headDim + two * half + i] = row[h * headDim + 2 * i + two];
+            }
+            if (stored) _engine.InvalidatePersistentTensor(weights);
+            else layer.SetParameters(new Vector<T>(values!));
         }
-        Decoder.LoadTorchWeights((name, _) =>
+        Decoder.LoadTorchWeights(source.WithNames(name =>
         {
-            if (name == "model.embed_tokens.weight") return Require("embed.weight");
-            if (name == "model.norm.weight") return Require("ar.norm.weight");
-            if (name == "lm_head.weight") return Require("ar.output.weight");
+            if (name == "model.embed_tokens.weight") return "embed.weight";
+            if (name == "model.norm.weight") return "ar.norm.weight";
+            if (name == "lm_head.weight") return "ar.output.weight";
             var parts = name.Split('.');                                                            // model.layers.{i}.…
             string n = $"ar.layers.{parts[2]}.";
             string rest = string.Join(".", parts.Skip(3));
             return rest switch
             {
-                "input_layernorm.weight" => Require(n + "attention_norm.weight"),
-                "post_attention_layernorm.weight" => Require(n + "ffn_norm.weight"),
-                "self_attn.q_proj.weight" => Permute(Require(n + "attention.wq.weight")),
-                "self_attn.k_proj.weight" => Permute(Require(n + "attention.wk.weight")),
-                "self_attn.v_proj.weight" => Require(n + "attention.wv.weight"),
-                "self_attn.o_proj.weight" => Require(n + "attention.wo.weight"),
-                "mlp.gate_proj.weight" => Require(n + "feed_forward.w1.weight"),
-                "mlp.up_proj.weight" => Require(n + "feed_forward.w3.weight"),
-                "mlp.down_proj.weight" => Require(n + "feed_forward.w2.weight"),
+                "input_layernorm.weight" => n + "attention_norm.weight",
+                "post_attention_layernorm.weight" => n + "ffn_norm.weight",
+                "self_attn.q_proj.weight" => n + "attention.wq.weight",
+                "self_attn.k_proj.weight" => n + "attention.wk.weight",
+                "self_attn.v_proj.weight" => n + "attention.wv.weight",
+                "self_attn.o_proj.weight" => n + "attention.wo.weight",
+                "mlp.gate_proj.weight" => n + "feed_forward.w1.weight",
+                "mlp.up_proj.weight" => n + "feed_forward.w3.weight",
+                "mlp.down_proj.weight" => n + "feed_forward.w2.weight",
                 _ => throw new KeyNotFoundException($"MARS5's AR decoder has no counterpart of '{name}'."),
             };
-        });
-        Positions.Load(read, "pos_embedding.alpha");
-        Mars5Ops.LoadTables(read, ReferenceTables, "ref_chunked_emb.");
-        TorchParameters.Linear(Identity, 1, c.Dim, Require("spk_identity_emb.weight"));
-        Mars5Ops.LoadStack(_engine, read, SpeakerEncoder, SpeakerNorm, "spk_encoder.");
+        }));
+        foreach (var layer in Decoder.Layers)
+        {
+            Permute(layer.Query);
+            Permute(layer.Key);
+        }
+        Positions.Load(source, "pos_embedding.alpha");
+        Mars5Ops.LoadTables(source, ReferenceTables, "ref_chunked_emb.");
+        TorchParameters.Linear(Identity, 1, c.Dim, source, "spk_identity_emb.weight");
+        Mars5Ops.LoadStack(_engine, source, SpeakerEncoder, SpeakerNorm, "spk_encoder.");
     }
 }
 
@@ -475,28 +487,29 @@ internal sealed class Mars5ResidualTransformer<T>
     }
 
     /// <summary>Loads the NAR checkpoint (<c>mars5_nar.safetensors</c>).</summary>
-    public void Load(Func<string, double[]?> read)
+    public void Load(Func<string, double[]?> read) => Load(TorchTensorSource.From(read));
+
+    internal void Load(TorchTensorSource source)
     {
         var c = Configuration;
-        double[] Require(string name) => read(name) ?? throw new KeyNotFoundException($"MARS5's NAR checkpoint has no '{name}'.");
-        ConditionPositions.Load(read, "cond_pos_embedding.alpha");
-        Positions.Load(read, "pos_embedding.alpha");
-        Mars5Ops.LoadStack(_engine, read, Encoder, EncoderNorm, "tfm.encoder.");
-        Mars5Ops.LoadStack(_engine, read, Decoder, DecoderNorm, "tfm.decoder.");
-        TorchParameters.Linear(_engine, TimeEncoderIn, c.TimeDim, c.Dim, Require("timestep_encoder_emb.0.weight"), Require("timestep_encoder_emb.0.bias"));
-        TorchParameters.Linear(_engine, TimeEncoderOut, c.Dim, c.Dim, Require("timestep_encoder_emb.2.weight"), Require("timestep_encoder_emb.2.bias"));
-        TorchParameters.Linear(_engine, TimeDecoderIn, c.TimeDim, c.Dim, Require("timestep_decoder_emb.0.weight"), Require("timestep_decoder_emb.0.bias"));
-        TorchParameters.Linear(_engine, TimeDecoderOut, c.Dim, c.Dim, Require("timestep_decoder_emb.2.weight"), Require("timestep_decoder_emb.2.bias"));
-        TextEmbedding.LoadLeadingRows(Require("text_embed.weight"));
-        Mars5Ops.LoadTables(read, ReferenceTables, "ref_embedder.");
-        ReferencePositions.Load(read, "ref_pos_embedding.alpha");
-        TorchParameters.Linear(Identity, 1, c.Dim, Require("spk_identity_emb.weight"));
-        Mars5Ops.LoadStack(_engine, read, SpeakerEncoder, SpeakerNorm, "spk_encoder.");
-        Mars5Ops.LoadTables(read, ResidualTables, "residual_encoder.");
+        ConditionPositions.Load(source, "cond_pos_embedding.alpha");
+        Positions.Load(source, "pos_embedding.alpha");
+        Mars5Ops.LoadStack(_engine, source, Encoder, EncoderNorm, "tfm.encoder.");
+        Mars5Ops.LoadStack(_engine, source, Decoder, DecoderNorm, "tfm.decoder.");
+        TorchParameters.Linear(_engine, TimeEncoderIn, c.TimeDim, c.Dim, source, "timestep_encoder_emb.0.weight", "timestep_encoder_emb.0.bias");
+        TorchParameters.Linear(_engine, TimeEncoderOut, c.Dim, c.Dim, source, "timestep_encoder_emb.2.weight", "timestep_encoder_emb.2.bias");
+        TorchParameters.Linear(_engine, TimeDecoderIn, c.TimeDim, c.Dim, source, "timestep_decoder_emb.0.weight", "timestep_decoder_emb.0.bias");
+        TorchParameters.Linear(_engine, TimeDecoderOut, c.Dim, c.Dim, source, "timestep_decoder_emb.2.weight", "timestep_decoder_emb.2.bias");
+        TextEmbedding.LoadLeadingRows(source, "text_embed.weight");
+        Mars5Ops.LoadTables(source, ReferenceTables, "ref_embedder.");
+        ReferencePositions.Load(source, "ref_pos_embedding.alpha");
+        TorchParameters.Linear(Identity, 1, c.Dim, source, "spk_identity_emb.weight");
+        Mars5Ops.LoadStack(_engine, source, SpeakerEncoder, SpeakerNorm, "spk_encoder.");
+        Mars5Ops.LoadTables(source, ResidualTables, "residual_encoder.");
         for (int q = 0; q < Heads.Count; q++)
         {
-            TorchParameters.LayerNorm(_engine, Heads[q].Norm, Require($"residual_decoder.{q}.0.weight"), Require($"residual_decoder.{q}.0.bias"));
-            TorchParameters.Linear(_engine, Heads[q].Linear, c.Dim, c.Classes, Require($"residual_decoder.{q}.1.weight"), Require($"residual_decoder.{q}.1.bias"));
+            TorchParameters.LayerNorm(_engine, Heads[q].Norm, source, $"residual_decoder.{q}.0.weight", $"residual_decoder.{q}.0.bias");
+            TorchParameters.Linear(_engine, Heads[q].Linear, c.Dim, c.Classes, source, $"residual_decoder.{q}.1.weight", $"residual_decoder.{q}.1.bias");
         }
     }
 }

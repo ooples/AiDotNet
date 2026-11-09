@@ -2,6 +2,7 @@ using AiDotNet.ActivationFunctions;
 using AiDotNet.Audio.Codecs;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.FrontEnd;
 using AiDotNet.TextToSpeech.Latest;
@@ -117,16 +118,16 @@ internal sealed class UniAudioTransformerBlock<T>
         return _engine.TensorAdd(x, FeedForwardOut.Forward(hidden));
     }
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix, int feedForward)
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix, int feedForward)
     {
-        IndexTtsOps.LoadNorm(_engine, read, Norm1, prefix + "attn_ln", _dim);
-        IndexTtsOps.LoadNorm(_engine, read, Norm2, prefix + "mlp_ln", _dim);
-        IndexTtsOps.LoadLinear(_engine, read, Query, prefix + "attn.query", _dim, _dim);
-        IndexTtsOps.LoadLinear(read, Key, prefix + "attn.key", _dim, _dim);
-        IndexTtsOps.LoadLinear(_engine, read, Value, prefix + "attn.value", _dim, _dim);
-        IndexTtsOps.LoadLinear(_engine, read, AttentionOut, prefix + "attn.out", _dim, _dim);
-        IndexTtsOps.LoadLinear(_engine, read, FeedForwardIn, prefix + "mlp.0", _dim, feedForward);
-        IndexTtsOps.LoadLinear(_engine, read, FeedForwardOut, prefix + "mlp.2", feedForward, _dim);
+        TorchParameters.LayerNorm(_engine, Norm1, source, prefix + "attn_ln.weight", prefix + "attn_ln.bias");
+        TorchParameters.LayerNorm(_engine, Norm2, source, prefix + "mlp_ln.weight", prefix + "mlp_ln.bias");
+        TorchParameters.Linear(_engine, Query, _dim, _dim, source, prefix + "attn.query.weight", prefix + "attn.query.bias");
+        TorchParameters.Linear(Key, _dim, _dim, source, prefix + "attn.key.weight");
+        TorchParameters.Linear(_engine, Value, _dim, _dim, source, prefix + "attn.value.weight", prefix + "attn.value.bias");
+        TorchParameters.Linear(_engine, AttentionOut, _dim, _dim, source, prefix + "attn.out.weight", prefix + "attn.out.bias");
+        TorchParameters.Linear(_engine, FeedForwardIn, _dim, feedForward, source, prefix + "mlp.0.weight", prefix + "mlp.0.bias");
+        TorchParameters.Linear(_engine, FeedForwardOut, feedForward, _dim, source, prefix + "mlp.2.weight", prefix + "mlp.2.bias");
     }
 }
 
@@ -188,19 +189,21 @@ internal sealed class UniAudioMultiScaleTransformer<T>
     internal int GlobalLayerCount => _global.Blocks.Count;
     internal int LocalLayerCount => _local.Blocks.Count;
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         int d = _options.LLMDim, patch = d / _options.NumCodebooks;
-        _globalEmbedding.SetParameters(new Vector<T>(read("g_emb.weight", new[] { _options.JointVocabularySize, patch }).Select(UniAudioOps<T>.NumOps.FromDouble)));
-        _localEmbedding.SetParameters(new Vector<T>(read("l_emb.weight", new[] { _options.JointVocabularySize, d }).Select(UniAudioOps<T>.NumOps.FromDouble)));
-        _globalPosition.SetParameters(new Vector<T>(read("g_pos.weight", new[] { _options.MaxContextPatches, d }).Select(UniAudioOps<T>.NumOps.FromDouble)));
-        _localPosition.SetParameters(new Vector<T>(read("l_pos.weight", new[] { _options.NumCodebooks, d }).Select(UniAudioOps<T>.NumOps.FromDouble)));
-        IndexTtsOps.LoadNorm(_engine, read, _global.FinalNorm, "g_ln", d);
-        IndexTtsOps.LoadNorm(_engine, read, _local.FinalNorm, "l_ln", d);
-        for (int i = 0; i < _global.Blocks.Count; i++) _global.Blocks[i].LoadTorchWeights(read, $"g_layers.{i}.", _options.GlobalFeedForwardDim);
-        for (int i = 0; i < _local.Blocks.Count; i++) _local.Blocks[i].LoadTorchWeights(read, $"l_layers.{i}.", _options.LocalFeedForwardDim);
-        IndexTtsOps.LoadLinear(_engine, read, _globalToLocal, "g2l_linear", patch, d);
-        IndexTtsOps.LoadLinear(read, _head, "lm_head", d, _options.JointVocabularySize);
+        TorchParameters.Parameters(_globalEmbedding, source, "g_emb.weight", new[] { _options.JointVocabularySize, patch });
+        TorchParameters.Parameters(_localEmbedding, source, "l_emb.weight", new[] { _options.JointVocabularySize, d });
+        TorchParameters.Parameters(_globalPosition, source, "g_pos.weight", new[] { _options.MaxContextPatches, d });
+        TorchParameters.Parameters(_localPosition, source, "l_pos.weight", new[] { _options.NumCodebooks, d });
+        TorchParameters.LayerNorm(_engine, _global.FinalNorm, source, "g_ln.weight", "g_ln.bias");
+        TorchParameters.LayerNorm(_engine, _local.FinalNorm, source, "l_ln.weight", "l_ln.bias");
+        for (int i = 0; i < _global.Blocks.Count; i++) _global.Blocks[i].LoadTorchWeights(source, $"g_layers.{i}.", _options.GlobalFeedForwardDim);
+        for (int i = 0; i < _local.Blocks.Count; i++) _local.Blocks[i].LoadTorchWeights(source, $"l_layers.{i}.", _options.LocalFeedForwardDim);
+        TorchParameters.Linear(_engine, _globalToLocal, patch, d, source, "g2l_linear.weight", "g2l_linear.bias");
+        TorchParameters.Linear(_head, d, _options.JointVocabularySize, source, "lm_head.weight");
     }
 
     /// <summary>Teacher-forced logits <c>[patches*n_q, vocabulary]</c> for every token in <paramref name="sequence"/>.</summary>
@@ -369,8 +372,9 @@ internal sealed class UniAudioCodec<T>
     internal int HopLength => _options.CodecRatios.Aggregate(1, (product, ratio) => product * ratio);
     internal ResidualVectorQuantizerLayer<T> Quantizer => _quantizer;
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "") =>
-        SeanetTorchWeights.Load(read, _encoder, _decoder, _quantizer, _options.CodecTotalQuantizers,
+    // SEANet's loader still takes each tensor's values.
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix = "") =>
+        SeanetTorchWeights.Load(source.AsFunction(), _encoder, _decoder, _quantizer, _options.CodecTotalQuantizers,
             _options.CodebookSize, _options.CodecDimension, prefix);
 
     internal int[,] Encode(Tensor<T> audio)

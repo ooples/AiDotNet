@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.TextToSpeech.Vocoders;
@@ -131,16 +132,19 @@ internal sealed class UniAudioFrequencyDiscriminator<T>
         return value;
     }
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
         for (int i = 0; i < _convolutions.Length; i++)
         {
             var layer = _convolutions[i];
             string name = prefix + $"discriminator.{i}.{(i == 0 ? 1 : 2)}.";
             int output = layer.Kernel.Shape[0];
-            var values = read(name + "weight_v", layer.Kernel.Shape.ToArray())
-                .Concat(read(name + "weight_g", new[] { output, 1, 1, 1 }))
-                .Concat(read(name + "bias", new[] { output }));
+            // The critic's convolutions are small; their parameter vector is direction, gain, then bias.
+            var values = source.Read(name + "weight_v", layer.Kernel.Shape.ToArray())
+                .Concat(source.Read(name + "weight_g", new[] { output, 1, 1, 1 }))
+                .Concat(source.Read(name + "bias", new[] { output }));
             layer.SetParameters(new Vector<T>(values.Select(UniAudioOps<T>.NumOps.FromDouble)));
         }
     }
@@ -246,8 +250,8 @@ internal sealed class UniAudioCodecGan<T>
 
     internal Tensor<T> DiscriminatorObjective(Tensor<T> real, Tensor<T> generated) => DiscriminatorObjective(Forward(real), Forward(generated));
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "mfd.")
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix = "mfd.")
     {
-        for (int i = 0; i < _critics.Length; i++) _critics[i].LoadTorchWeights(read, prefix + $"discriminators.{i}.");
+        for (int i = 0; i < _critics.Length; i++) _critics[i].LoadTorchWeights(source, prefix + $"discriminators.{i}.");
     }
 }

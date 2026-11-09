@@ -702,31 +702,27 @@ public partial class Pheme<T> : TtsModelBase<T>, ITtsModel<T>
     /// model with the matching options (<see cref="PhemeOptions.OfficialSmallCheckpoint"/> or
     /// <see cref="PhemeOptions.OfficialLargeCheckpoint"/>).</summary>
     public void LoadTextToSemanticWeights(string path) =>
-        TextToSemantic.LoadHuggingFaceWeights(Reader(path, prefix: ""));
+        LoadCheckpoint(path, prefix: "", source => TextToSemantic.LoadHuggingFaceWeights(source));
 
     /// <summary>Loads the released acoustic model: the <c>state_dict</c> of <c>s2a.ckpt</c> (its <c>model.*</c>
     /// tensors) saved as safetensors or <c>.pt</c>; the Lightning checkpoint itself also holds optimizer state and is
     /// not read directly.</summary>
     public void LoadSemanticToAcousticWeights(string path) =>
-        Acoustic.LoadTorchWeights(Reader(path, prefix: "model."), conditioningName: "semantic_embedding", globalName: "spkr_linear");
+        LoadCheckpoint(path, prefix: "model.", source => Acoustic.LoadTorchWeights(source, conditioningName: "semantic_embedding", globalName: "spkr_linear"));
 
     /// <summary>Loads the pyannote/embedding speaker model's state dictionary (safetensors or <c>.pt</c>).</summary>
-    public void LoadSpeakerEncoderWeights(string path) =>
-        (_speakerEncoder ?? throw new InvalidOperationException("This Pheme has no speaker embedding.")).LoadTorchWeights(Reader(path, prefix: ""));
-
-    private static Func<string, int[], double[]> Reader(string path, string prefix)
+    public void LoadSpeakerEncoderWeights(string path)
     {
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        return (name, shape) =>
-        {
-            if (!file.TryGetValue(prefix + name, out var tensor) && !file.TryGetValue(name, out tensor))
-                throw new InvalidDataException($"The checkpoint has no tensor '{prefix + name}'.");
-            var actual = tensor.Shape.ToArray();
-            if (!actual.SequenceEqual(shape))
-                throw new InvalidDataException($"'{name}' is [{string.Join(", ", actual)}] in the checkpoint but [{string.Join(", ", shape)}] " +
-                    "in this model; build the model with the checkpoint's configuration.");
-            return tensor.ToVector().Select(v => (double)v).ToArray();
-        };
+        var encoder = _speakerEncoder ?? throw new InvalidOperationException("This Pheme has no speaker embedding.");
+        LoadCheckpoint(path, prefix: "", source => encoder.LoadTorchWeights(source));
+    }
+
+    /// <summary>Opens a checkpoint, each tensor's axes checked, and loads from it: a name is read after
+    /// <paramref name="prefix"/>, else as it is.</summary>
+    private static void LoadCheckpoint(string path, string prefix, Action<AiDotNet.ModelLoading.TorchTensorSource> load)
+    {
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path, strictAxes: true);
+        load(prefix.Length == 0 ? file : file.WithNames(name => file.Contains(prefix + name) ? prefix + name : name));
     }
 
     // ---------------------------------------------------------------- housekeeping

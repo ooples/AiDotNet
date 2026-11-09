@@ -401,40 +401,43 @@ internal sealed class VallECore<T>
     // ---------------------------------------------------------------- weights
 
     /// <summary>Loads the reference's <c>VALLE</c> state dictionary.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads the reference's <c>VALLE</c> state dictionary from <paramref name="source"/>, each tensor copied
+    /// straight into its layer.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         var c = Configuration;
         int d = c.ModelDim;
-        ArTextEmbedding.LoadTable(read("ar_text_embedding.word_embeddings.weight", new[] { c.TextTokens, d }));
-        ArAudioEmbedding.LoadTable(read("ar_audio_embedding.word_embeddings.weight", new[] { c.AudioTokens + (c.PrependBos ? 2 : 1), d }));
-        ArTextPosition.Alpha!.LoadTable(read("ar_text_position.alpha", new[] { 1 }));
-        ArAudioPosition.Alpha!.LoadTable(read("ar_audio_position.alpha", new[] { 1 }));
-        ArDecoder.LoadTorchWeights(_engine, "ar_decoder", read);
-        TorchParameters.Linear(ArPredict, d, c.AudioTokens + 1, read("ar_predict_layer.weight", new[] { c.AudioTokens + 1, d }));
-        NarTextEmbedding.LoadTable(read("nar_text_embedding.word_embeddings.weight", new[] { c.TextTokens, d }));
+        ArTextEmbedding.LoadTable(source, "ar_text_embedding.word_embeddings.weight");
+        ArAudioEmbedding.LoadTable(source, "ar_audio_embedding.word_embeddings.weight");
+        ArTextPosition.Alpha!.LoadTable(source.Read("ar_text_position.alpha", new[] { 1 }));
+        ArAudioPosition.Alpha!.LoadTable(source.Read("ar_audio_position.alpha", new[] { 1 }));
+        ArDecoder.LoadTorchWeights(_engine, "ar_decoder", source);
+        TorchParameters.Linear(ArPredict, d, c.AudioTokens + 1, source, "ar_predict_layer.weight");
+        NarTextEmbedding.LoadTable(source, "nar_text_embedding.word_embeddings.weight");
         // The NAR's positional scales are frozen at 1 (requires_grad=False) but stored.
         foreach (var name in new[] { "nar_text_position.alpha", "nar_audio_position.alpha" })
-            if (read(name, new[] { 1 })[0] != 1.0)
+            if (source.Read(name, new[] { 1 })[0] != 1.0)
                 throw new InvalidDataException($"'{name}' is not 1; the NAR model's positional scale is fixed.");
         for (int j = 0; j < c.Codebooks; j++)
-            NarAudioEmbeddings[j].LoadTable(read($"nar_audio_embeddings.{j}.word_embeddings.weight",
-                new[] { c.AudioTokens + (j == 0 ? 1 : 0), d }));
-        NarDecoder.LoadTorchWeights(_engine, "nar_decoder", read);
+            NarAudioEmbeddings[j].LoadTable(source, $"nar_audio_embeddings.{j}.word_embeddings.weight");
+        NarDecoder.LoadTorchWeights(_engine, "nar_decoder", source);
         for (int j = 0; j < c.Codebooks - 1; j++)
         {
-            NarStageEmbeddings[j].LoadTable(read($"nar_stage_embeddings.{j}.word_embeddings.weight", new[] { 1, d }));
+            NarStageEmbeddings[j].LoadTable(source, $"nar_stage_embeddings.{j}.word_embeddings.weight");
             if (NarOwnHeads[j] is { } head)
-                TorchParameters.Linear(head, d, c.AudioTokens, read($"nar_predict_layers.{j}.weight", new[] { c.AudioTokens, d }));
+                TorchParameters.Linear(head, d, c.AudioTokens, source, $"nar_predict_layers.{j}.weight");
             else
             {
-                var output = read($"nar_predict_layers.{j}.weight", new[] { c.AudioTokens, d });
-                var embedding = read($"nar_audio_embeddings.{j + 2}.word_embeddings.weight", new[] { c.AudioTokens, d });
+                var output = source.Read($"nar_predict_layers.{j}.weight", new[] { c.AudioTokens, d });
+                var embedding = source.Read($"nar_audio_embeddings.{j + 2}.word_embeddings.weight", new[] { c.AudioTokens, d });
                 if (!output.SequenceEqual(embedding))
                     throw new InvalidDataException($"NAR head {j} differs from its tied acoustic embedding.");
             }
         }
         // Plachtaa/VALL-E-X's names for VALL-E X's language tables.
-        ArLanguageEmbedding?.LoadTable(read("ar_language_embedding.word_embeddings.weight", new[] { c.Languages, d }));
-        NarLanguageEmbedding?.LoadTable(read("nar_language_embedding.word_embeddings.weight", new[] { c.Languages, d }));
+        ArLanguageEmbedding?.LoadTable(source, "ar_language_embedding.word_embeddings.weight");
+        NarLanguageEmbedding?.LoadTable(source, "nar_language_embedding.word_embeddings.weight");
     }
 }

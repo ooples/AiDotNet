@@ -1,5 +1,6 @@
 using AiDotNet.Audio.Codecs;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
 
@@ -252,16 +253,21 @@ internal sealed class FACodecModel<T>
     // ---------------------------------------------------------------- weights
 
     /// <summary>Loads the release's encoder state dict.</summary>
-    public void LoadEncoder(Func<string, double[]?> read)
+    public void LoadEncoder(Func<string, double[]?> read) => LoadEncoder(TorchTensorSource.From(read));
+
+    /// <summary>Loads the release's encoder state dict from <paramref name="source"/>.</summary>
+    internal void LoadEncoder(TorchTensorSource source)
     {
-        Encoder.Load(Ns2Ops.Required(read, "FACodec"), read, "");
-        if (_c.MelProsody && read("mel_transform.mel_basis") is { } basis && read("mel_transform.hann_window") is { } window) SetMel(basis, window);
+        Encoder.Load(source, "");
+        if (_c.MelProsody && source.TryRead("mel_transform.mel_basis") is { } basis && source.TryRead("mel_transform.hann_window") is { } window) SetMel(basis, window);
     }
 
     /// <summary>Loads the release's decoder state dict (v1 or v2).</summary>
-    public void LoadDecoder(Func<string, double[]?> read)
+    public void LoadDecoder(Func<string, double[]?> read) => LoadDecoder(TorchTensorSource.From(read));
+
+    /// <summary>Loads the release's decoder state dict from <paramref name="source"/>.</summary>
+    internal void LoadDecoder(TorchTensorSource source)
     {
-        var r = Ns2Ops.Required(read, "FACodec");
         int d = _c.Dim;
         for (int g = 0; g < Quantizers.Length; g++)
         {
@@ -270,43 +276,44 @@ internal sealed class FACodecModel<T>
             for (int k = 0; k < n; k++)
             {
                 string p = $"quantizer.{g}.layers.{k}.";
-                FACodecWeights.Conv(r, q.InProjection(k), p + "in_proj");
-                FACodecWeights.Conv(r, q.OutProjection(k), p + "out_proj");
+                FACodecWeights.Conv(source, q.InProjection(k), p + "in_proj");
+                FACodecWeights.Conv(source, q.OutProjection(k), p + "out_proj");
                 var book = q.Codebook(k);
-                var values = r(p + "_codebook.weight");
-                for (int i = 0; i < values.Length; i++) book.SetFlat(i, NumOps.FromDouble(values[i]));
+                source.CopyTo(p + "_codebook.weight", book.Shape.ToArray(), book);
                 _engine.InvalidatePersistentTensor(book);
             }
         }
-        TimbreEncoder.Load(r, "timbre_encoder.");
-        TorchParameters.Linear(_engine, TimbreLinear, d, 2 * d, r("timbre_linear.weight"), r("timbre_linear.bias"));
-        Decoder.Load(r, read, "model.");
+        TimbreEncoder.Load(source, "timbre_encoder.");
+        TorchParameters.Linear(_engine, TimbreLinear, d, 2 * d, source, "timbre_linear.weight", "timbre_linear.bias");
+        Decoder.Load(source, "model.");
         if (MelLinear is not null)
         {
-            TorchParameters.Linear(_engine, MelLinear, _c.ProsodyMels, d, r("melspec_linear.weight"), r("melspec_linear.bias"));
-            MelEncoder!.Load(r, "melspec_encoder.");
+            TorchParameters.Linear(_engine, MelLinear, _c.ProsodyMels, d, source, "melspec_linear.weight", "melspec_linear.bias");
+            MelEncoder!.Load(source, "melspec_encoder.");
         }
-        F0Predictor.Load(r, read, "f0_predictor.");
-        PhonePredictor.Load(r, read, "phone_predictor.");
-        DetailF0Predictor?.Load(r, read, "res_f0_predictor.1.");
-        DetailPhonePredictor?.Load(r, read, "res_phone_predictor.1.");
-        ContentF0Predictor?.Load(r, read, "content_f0_predictor.1.");
-        ProsodyPhonePredictor?.Load(r, read, "prosody_phone_predictor.1.");
-        TimbrePredictor?.Load(r, read, "x_timbre_predictor.1.");
+        F0Predictor.Load(source, "f0_predictor.");
+        PhonePredictor.Load(source, "phone_predictor.");
+        DetailF0Predictor?.Load(source, "res_f0_predictor.1.");
+        DetailPhonePredictor?.Load(source, "res_phone_predictor.1.");
+        ContentF0Predictor?.Load(source, "content_f0_predictor.1.");
+        ProsodyPhonePredictor?.Load(source, "prosody_phone_predictor.1.");
+        TimbrePredictor?.Load(source, "x_timbre_predictor.1.");
     }
 
     /// <summary>Loads the release's redecoder state dict.</summary>
-    public void LoadRedecoder(Func<string, double[]?> read)
+    public void LoadRedecoder(Func<string, double[]?> read) => LoadRedecoder(TorchTensorSource.From(read));
+
+    /// <summary>Loads the release's redecoder state dict from <paramref name="source"/>.</summary>
+    internal void LoadRedecoder(TorchTensorSource source)
     {
-        var r = Ns2Ops.Required(read, "FACodec's redecoder");
         int d = _c.Dim, p = _c.ProsodyQuantizers, c = _c.ContentQuantizers;
         for (int k = 0; k < _c.Codebooks; k++)
         {
             string name = k < p ? $"prosody_embs.{k}" : k < p + c ? $"content_embs.{k - p}" : $"residual_embs.{k - p - c}";
-            RedecoderEmbeddings![k].LoadLeadingRows(r(name + ".weight"));
+            RedecoderEmbeddings![k].LoadLeadingRows(source, name + ".weight");
         }
-        RedecoderProsody!.Load(r, "timbre_cond_prosody_enc.");
-        TorchParameters.Linear(_engine, RedecoderTimbreLinear!, d, 2 * d, r("timbre_linear.weight"), r("timbre_linear.bias"));
-        RedecoderStack!.Load(r, read, "model.");
+        RedecoderProsody!.Load(source, "timbre_cond_prosody_enc.");
+        TorchParameters.Linear(_engine, RedecoderTimbreLinear!, d, 2 * d, source, "timbre_linear.weight", "timbre_linear.bias");
+        RedecoderStack!.Load(source, "model.");
     }
 }

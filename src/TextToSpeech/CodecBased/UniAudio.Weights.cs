@@ -8,33 +8,41 @@ public partial class UniAudio<T>
     public void LoadAuthorWeights(string languageModelPath, string codecPath, string codecPrefix = "")
     {
         RequireConvertedCheckpointTarget();
-        Func<string, int[], double[]> Read(string path, string marker)
-        {
-            var state = new ComputerVision.Weights.WeightLoader().LoadWeights(path, name =>
-                name.StartsWith("model.", StringComparison.Ordinal) || name.StartsWith("codec_model.", StringComparison.Ordinal) ||
-                name.StartsWith("g_", StringComparison.Ordinal) || name.StartsWith("l_", StringComparison.Ordinal) ||
-                name.StartsWith("g2l_", StringComparison.Ordinal) || name.StartsWith("lm_head.", StringComparison.Ordinal) ||
-                name.StartsWith("encoder.", StringComparison.Ordinal) || name.StartsWith("decoder.", StringComparison.Ordinal) ||
-                name.StartsWith("quantizer.", StringComparison.Ordinal) ||
-                (!string.IsNullOrEmpty(codecPrefix) && name.StartsWith(codecPrefix, StringComparison.Ordinal)));
-            return AuthorStateReader(state, marker);
-        }
-        _languageModel!.LoadTorchWeights(Read(languageModelPath, "g_emb.weight"));
-        _codec!.LoadTorchWeights(Read(codecPath, codecPrefix + "encoder.model.0.conv.conv.weight_v"), codecPrefix);
+        // A training checkpoint's optimizer and discriminator state is never unpickled.
+        bool Include(string name) =>
+            name.StartsWith("model.", StringComparison.Ordinal) || name.StartsWith("codec_model.", StringComparison.Ordinal) ||
+            name.StartsWith("g_", StringComparison.Ordinal) || name.StartsWith("l_", StringComparison.Ordinal) ||
+            name.StartsWith("g2l_", StringComparison.Ordinal) || name.StartsWith("lm_head.", StringComparison.Ordinal) ||
+            name.StartsWith("encoder.", StringComparison.Ordinal) || name.StartsWith("decoder.", StringComparison.Ordinal) ||
+            name.StartsWith("quantizer.", StringComparison.Ordinal) ||
+            (!string.IsNullOrEmpty(codecPrefix) && name.StartsWith(codecPrefix, StringComparison.Ordinal));
+        using (var lm = AiDotNet.ModelLoading.TorchCheckpointFile.Open(languageModelPath, strictAxes: true, Include))
+            _languageModel!.LoadTorchWeights(AuthorState(lm, "g_emb.weight"));
+        using (var codec = AiDotNet.ModelLoading.TorchCheckpointFile.Open(codecPath, strictAxes: true, Include))
+            _codec!.LoadTorchWeights(AuthorState(codec, codecPrefix + "encoder.model.0.conv.conv.weight_v"), codecPrefix);
     }
 
+    /// <summary>The released state under whichever wrapper (none, <c>model.</c>, <c>codec_model.</c>) holds
+    /// <paramref name="marker"/>.</summary>
+    internal static AiDotNet.ModelLoading.TorchTensorSource AuthorState(AiDotNet.ModelLoading.TorchTensorSource state, string marker)
+    {
+        string prefix = state.Contains(marker) ? string.Empty :
+            state.Contains("model." + marker) ? "model." :
+            state.Contains("codec_model." + marker) ? "codec_model." : string.Empty;
+        return state.WithPrefix(prefix);
+    }
+
+    /// <summary><see cref="AuthorState"/> over an already loaded state dict, read through the allocating form with each
+    /// tensor's axes checked.</summary>
     internal static Func<string, int[], double[]> AuthorStateReader(IReadOnlyDictionary<string, Tensor<float>> state, string marker)
     {
-        string prefix = state.ContainsKey(marker) ? string.Empty :
-            state.ContainsKey("model." + marker) ? "model." :
-            state.ContainsKey("codec_model." + marker) ? "codec_model." : string.Empty;
+        var source = AuthorState(AiDotNet.ModelLoading.TorchTensorSource.From(state, "the UniAudio checkpoint"), marker);
         return (name, shape) =>
         {
-            if (!state.TryGetValue(prefix + name, out var tensor))
-                throw new InvalidDataException($"UniAudio checkpoint is missing '{prefix + name}'.");
-            if (!tensor.Shape.ToArray().SequenceEqual(shape))
+            var axes = source.ShapeOf(name) ?? throw new InvalidDataException($"UniAudio checkpoint is missing '{name}'.");
+            if (!axes.SequenceEqual(shape.Select(d => (long)d)))
                 throw new InvalidDataException($"UniAudio tensor '{name}' has an incompatible shape.");
-            return tensor.ToArray().Select(value => (double)value).ToArray();
+            return source.Read(name, shape);
         };
     }
 
@@ -52,23 +60,29 @@ public partial class UniAudio<T>
         RequireConvertedCheckpointTarget();
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Checkpoint path required.", nameof(path));
         if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
-        var state = new ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        LoadConvertedWeights(name => state.TryGetValue(name, out var tensor)
-            ? tensor.ToVector().Select(value => (double)value).ToArray()
-            : null);
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
+        LoadConvertedWeights(file);
     }
 
     internal void LoadConvertedWeights(Func<string, double[]?> read)
     {
         Validation.Guard.NotNull(read);
+        LoadConvertedWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Copies <c>{ConvertedParameterTensor}</c> from <paramref name="source"/> straight into a parameter vector.</summary>
+    internal void LoadConvertedWeights(AiDotNet.ModelLoading.TorchTensorSource source)
+    {
         RequireConvertedCheckpointTarget();
-        var values = read(ConvertedParameterTensor)
-            ?? throw new InvalidDataException($"The checkpoint has no tensor '{ConvertedParameterTensor}'.");
+        if (!source.Contains(ConvertedParameterTensor))
+            throw new InvalidDataException($"The checkpoint has no tensor '{ConvertedParameterTensor}'.");
         int expected = GetParameters().Length;
-        if (values.Length != expected)
+        if (source.ShapeOf(ConvertedParameterTensor) is { } shape && shape.Aggregate(1L, (a, b) => a * b) is var count && count != expected)
             throw new InvalidDataException(
-                $"'{ConvertedParameterTensor}' has {values.Length} values; this UniAudio configuration expects {expected}.");
-        SetParameters(new Vector<T>(Array.ConvertAll(values, NumOps.FromDouble)));
+                $"'{ConvertedParameterTensor}' has {count} values; this UniAudio configuration expects {expected}.");
+        var parameters = new Vector<T>(expected);
+        source.CopyTo(ConvertedParameterTensor, new[] { expected }, new Tensor<T>(new[] { expected }, parameters));
+        SetParameters(parameters);
     }
 
     private void RequireConvertedCheckpointTarget()

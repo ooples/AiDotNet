@@ -3,6 +3,7 @@ using AiDotNet.Audio;
 using AiDotNet.Audio.Codecs;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Vocoders;
 using AiDotNet.TextToSpeech.VoiceCloning;
@@ -115,17 +116,13 @@ internal sealed class TortoiseTransformerLayer<T>
     internal DenseLayer<T> FeedForwardIn { get; }
     internal DenseLayer<T> FeedForwardOut { get; }
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix, int feedForward)
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix, int feedForward)
     {
-        IndexTtsOps.LoadNorm(_engine, read, Norm1, prefix + "ln_1", _dim);
-        IndexTtsOps.LoadNorm(_engine, read, Norm2, prefix + "ln_2", _dim);
-        void ConvLinear(DenseLayer<T> layer, string name, int input, int output)
-        {
-            var values = read(prefix + name + ".weight", new[] { input, output });
-            var transposed = new double[values.Length];
-            for (int i = 0; i < input; i++) for (int o = 0; o < output; o++) transposed[o * input + i] = values[i * output + o];
-            TorchParameters.Linear(_engine, layer, input, output, transposed, read(prefix + name + ".bias", new[] { output }));
-        }
+        TorchParameters.LayerNorm(_engine, Norm1, source, prefix + "ln_1.weight", prefix + "ln_1.bias");
+        TorchParameters.LayerNorm(_engine, Norm2, source, prefix + "ln_2.weight", prefix + "ln_2.bias");
+        // GPT-2's Conv1D stores [in, out], the dense layer's own layout.
+        void ConvLinear(DenseLayer<T> layer, string name, int input, int output) =>
+            TorchParameters.LinearInOut(_engine, layer, input, output, source, prefix + name + ".weight", prefix + name + ".bias");
         ConvLinear(Qkv, "attn.c_attn", _dim, 3 * _dim);
         ConvLinear(AttentionOut, "attn.c_proj", _dim, _dim);
         ConvLinear(FeedForwardIn, "mlp.c_fc", _dim, feedForward);
@@ -201,6 +198,9 @@ internal sealed class TortoiseSpeechTokenizer<T>
 
     internal ResidualVectorQuantizerLayer<T> Quantizer => _codec.Quantizer;
     internal void LoadTorchWeights(Func<string, int[], double[]> read) => _codec.LoadTorchWeights(read);
+
+    // The dVAE's loader still takes each tensor's values.
+    internal void LoadTorchWeights(TorchTensorSource source) => _codec.LoadTorchWeights(source.AsFunction());
     internal Tensor<T> EncodeLatent(Tensor<T> melRows) => _codec.EncodeFeatures(_engine.TensorTranspose(melRows));
     internal Tensor<T> QuantizedLatent(Tensor<T> melRows) => Quantizer.Forward(EncodeLatent(melRows));
     internal int[] Encode(Tensor<T> melRows) => XttsOps<T>.IdsOf(_codec.Encode(_engine.TensorTranspose(melRows)));
@@ -225,23 +225,26 @@ internal sealed class TortoiseAutoregressive<T>
     private readonly LayerNormalizationLayer<T> _finalNorm;
     private readonly DenseLayer<T> _textHead, _speechHead;
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         int d = _options.LLMDim;
+        // XTTS's conditioning modules still take each tensor's values.
+        var read = source.AsFunction();
         XttsOps<T>.LoadConv(read, _conditioningInput, "conditioning_encoder.init", _options.AutoregressiveMelChannels, d, 1);
         for (int i = 0; i < _conditioningEncoder.Length; i++)
             _conditioningEncoder[i].LoadTorchWeights(read, $"conditioning_encoder.attn.{i}.");
-        void Table(LayerBase<T> layer, string name, int rows) => layer.SetParameters(new Vector<T>(read(name,
-            new[] { rows, d }).Select(TortoiseOps<T>.NumOps.FromDouble)));
+        void Table(LayerBase<T> layer, string name, int rows) => TorchParameters.Parameters(layer, source, name, new[] { rows, d });
         Table(_textEmbedding, "text_embedding.weight", _options.VocabSize);
         Table(_speechEmbedding, "mel_embedding.weight", _options.CodebookSize + 2);
         Table(_textPosition, "text_pos_embedding.emb.weight", _options.MaxTextLength + 2);
         Table(_speechPosition, "mel_pos_embedding.emb.weight", _options.MaxCodecFrames + 2 + _options.MaxConditioningInputs);
-        for (int i = 0; i < _gpt.Blocks.Count; i++) _gpt.Blocks[i].LoadTorchWeights(read, $"gpt.h.{i}.", _options.AutoregressiveFeedForwardDim);
-        IndexTtsOps.LoadNorm(_engine, read, _gpt.FinalNorm, "gpt.ln_f", d);
-        IndexTtsOps.LoadNorm(_engine, read, _finalNorm, "final_norm", d);
-        IndexTtsOps.LoadLinear(_engine, read, _textHead, "text_head", d, _options.VocabSize);
-        IndexTtsOps.LoadLinear(_engine, read, _speechHead, "mel_head", d, _options.CodebookSize + 2);
+        for (int i = 0; i < _gpt.Blocks.Count; i++) _gpt.Blocks[i].LoadTorchWeights(source, $"gpt.h.{i}.", _options.AutoregressiveFeedForwardDim);
+        TorchParameters.LayerNorm(_engine, _gpt.FinalNorm, source, "gpt.ln_f.weight", "gpt.ln_f.bias");
+        TorchParameters.LayerNorm(_engine, _finalNorm, source, "final_norm.weight", "final_norm.bias");
+        TorchParameters.Linear(_engine, _textHead, d, _options.VocabSize, source, "text_head.weight", "text_head.bias");
+        TorchParameters.Linear(_engine, _speechHead, d, _options.CodebookSize + 2, source, "mel_head.weight", "mel_head.bias");
     }
 
     internal TortoiseAutoregressive(IEngine engine, List<LayerBase<T>> owner, TortoiseTTSOptions options)
@@ -394,11 +397,13 @@ internal sealed class TortoiseClvp<T>
     internal double Score(IReadOnlyList<int> text, IReadOnlyList<int> speech)
         => TortoiseOps<T>.NumOps.ToDouble(ScoreTensor(text, speech, false, new Random(_options.SamplingSeed))[0]);
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
-        _text.LoadTorchWeights(read, "text_emb", "text_transformer.transformer", "to_text_latent", _options.VocabSize);
-        _speech.LoadTorchWeights(read, "speech_emb", "speech_transformer.transformer", "to_speech_latent", _options.CodebookSize);
-        _temperature.SetParameters(new Vector<T>(read("temperature", Array.Empty<int>()).Select(TortoiseOps<T>.NumOps.FromDouble)));
+        _text.LoadTorchWeights(source, "text_emb", "text_transformer.transformer", "to_text_latent", _options.VocabSize);
+        _speech.LoadTorchWeights(source, "speech_emb", "speech_transformer.transformer", "to_speech_latent", _options.CodebookSize);
+        _temperature.SetParameters(new Vector<T>(source.Read("temperature", Array.Empty<int>()).Select(TortoiseOps<T>.NumOps.FromDouble)));
     }
 
     internal Tensor<T> ContrastiveLoss(IReadOnlyList<int> text, IReadOnlyList<int> speech, Random random)
@@ -436,7 +441,9 @@ internal sealed class TortoiseDiffusion<T>
         _schedule = new TortoiseDiffusionSchedule<T>(engine, options.DiffusionTrainingSteps, options.MelChannels);
     }
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read) => _core.LoadTorchWeights(read);
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    internal void LoadTorchWeights(TorchTensorSource source) => _core.LoadTorchWeights(source);
 
     private Tensor<T> NormalizeMel(Tensor<T> mel) => _engine.TensorAddScalar(
         _engine.TensorMultiplyScalar(_engine.TensorAddScalar(mel, TortoiseOps<T>.NumOps.FromDouble(-MelMinimum)),
@@ -512,7 +519,8 @@ internal sealed class TortoiseUnivNet<T>
     private readonly TortoiseTTSOptions _options;
     private readonly UnivNetGenerator<T> _generator;
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read) => _generator.LoadTorchWeights(read);
+    // UnivNet's loader still takes each tensor's values.
+    internal void LoadTorchWeights(TorchTensorSource source) => _generator.LoadTorchWeights(source.AsFunction());
 
     internal TortoiseUnivNet(IEngine engine, List<LayerBase<T>> owner, TortoiseTTSOptions options)
     {

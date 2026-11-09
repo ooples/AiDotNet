@@ -6,6 +6,7 @@ using AiDotNet.Audio.Foundations;
 using AiDotNet.Diffusion.Audio;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
@@ -237,24 +238,23 @@ internal sealed class SparkVocosBackbone<T>
         return _engine.TensorAdd(_engine.TensorMultiply(normalized, s), b);
     }
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "")
+    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "") => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix = "")
     {
         void Conv(NormedConv1DLayer<T> layer, string name, bool linear = false)
         {
             var shape = layer.TorchWeightShape;
-            layer.LoadTorchWeights(read(prefix + name + ".weight", linear ? shape.Take(2).ToArray() : shape),
-                null, read(prefix + name + ".bias", new[] { layer.OutputChannels }));
+            layer.LoadTorchWeights(source, prefix + name + ".weight", linear ? shape.Take(2).ToArray() : shape, null, prefix + name + ".bias");
         }
         void Norm(LayerNormalizationLayer<T> layer, FullyConnectedLayer<T>? scale, FullyConnectedLayer<T>? shift, string name)
         {
             if (scale is null || shift is null)
-                TorchParameters.LayerNorm(_engine, layer, read(prefix + name + ".weight", new[] { _dim }), read(prefix + name + ".bias", new[] { _dim }));
+                TorchParameters.LayerNorm(_engine, layer, source, prefix + name + ".weight", prefix + name + ".bias");
             else
             {
-                void Linear(FullyConnectedLayer<T> target, string suffix) => target.SetParameters(new Vector<T>(
-                    read(prefix + name + suffix + ".weight", new[] { _dim, _condition })
-                        .Concat(read(prefix + name + suffix + ".bias", new[] { _dim })).Select(NumOps.FromDouble).ToArray()));
-                Linear(scale, ".scale"); Linear(shift, ".shift");
+                SparkTorchWeights<T>.Linear(scale, source, prefix + name + ".scale", _condition, _dim);
+                SparkTorchWeights<T>.Linear(shift, source, prefix + name + ".shift", _condition, _dim);
             }
         }
         Conv(_embed, "embed"); Norm(_inputNorm, _inputScale, _inputShift, "norm");
@@ -263,7 +263,7 @@ internal sealed class SparkVocosBackbone<T>
             var b = _blocks[i]; string p = $"convnext.{i}.";
             Conv(b.Depthwise, p + "dwconv"); Norm(b.Norm, b.Scale, b.Shift, p + "norm");
             Conv(b.Expand, p + "pwconv1", true); Conv(b.Project, p + "pwconv2", true);
-            b.Gamma.SetParameters(new Vector<T>(read(prefix + p + "gamma", new[] { _dim }).Select(NumOps.FromDouble).ToArray()));
+            b.Gamma.SetParameters(new Vector<T>(source.Read(prefix + p + "gamma", new[] { _dim }).Select(NumOps.FromDouble).ToArray()));
         }
         Norm(_finalNorm, null, null, "final_layer_norm");
     }
@@ -322,17 +322,21 @@ internal sealed class SparkSpeakerTokenizer<T>
         return (tokens, Decode(tokens));
     }
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "speaker_encoder.", bool includeEcapa = true)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "speaker_encoder.", bool includeEcapa = true) =>
+        LoadTorchWeights(TorchTensorSource.From(read), prefix, includeEcapa);
+
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix = "speaker_encoder.", bool includeEcapa = true)
     {
         if (includeEcapa)
         {
-            _ecapa.LoadSparkFrameWeights((name, shape) => read(prefix + "speaker_encoder." + name, shape), _options.MelChannels);
-            _ecapa.LoadSparkPoolingWeights((name, shape) => read(prefix + "speaker_encoder." + name, shape));
+            // ECAPA's and the Perceiver's loaders still take each tensor's values.
+            var ecapa = source.WithPrefix(prefix + "speaker_encoder.").AsFunction();
+            _ecapa.LoadSparkFrameWeights(ecapa, _options.MelChannels);
+            _ecapa.LoadSparkPoolingWeights(ecapa);
         }
-        _perceiver.Load(_engine, read, prefix + "perceiver_sampler.");
+        _perceiver.Load(_engine, source.AsFunction(), prefix + "perceiver_sampler.");
         void Linear(FullyConnectedLayer<T> layer, string name, int input, int output)
-            => layer.SetParameters(new Vector<T>(read(prefix + name + ".weight", new[] { output, input })
-                .Concat(read(prefix + name + ".bias", new[] { output })).Select(NumOps.FromDouble).ToArray()));
+            => SparkTorchWeights<T>.Linear(layer, source, prefix + name, input, output);
         Linear(_projectIn, "quantizer.project_in", _options.SpeakerLatentDim, _options.FsqLevels.Length);
         Linear(_projectOut, "quantizer.project_out", _options.FsqLevels.Length, _options.SpeakerLatentDim);
         Linear(_dVector, "project", _options.GlobalTokenCount * _options.SpeakerLatentDim, _options.SpeakerEmbeddingDim);
@@ -511,21 +515,23 @@ internal sealed class SparkWaveGenerator<T>
         return waveform.Length == expected ? waveform : _engine.TensorNarrow(waveform, 0, 0, expected);
     }
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "decoder.")
+    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "decoder.") => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix = "decoder.")
     {
-        SparkTorchWeights<T>.Conv(_first, read, prefix + "model.0");
+        SparkTorchWeights<T>.Conv(_first, source, prefix + "model.0");
         for (int i = 0; i < _blocks.Count; i++)
         {
             var b = _blocks[i]; string p = prefix + $"model.{i + 1}.block.";
-            b.Activation.SetParameters(new Vector<T>(read(p + "0.alpha", new[] { 1, b.Up.InputChannels, 1 })
+            b.Activation.SetParameters(new Vector<T>(source.Read(p + "0.alpha", new[] { 1, b.Up.InputChannels, 1 })
                 .Select(MathHelper.GetNumericOperations<T>().FromDouble).ToArray()));
-            SparkTorchWeights<T>.Conv(b.Up, read, p + "1");
-            for (int j = 0; j < b.Units.Length; j++) b.Units[j].LoadTorchWeights(read, p + $"{j + 2}.block.");
+            SparkTorchWeights<T>.Conv(b.Up, source, p + "1");
+            for (int j = 0; j < b.Units.Length; j++) b.Units[j].LoadTorchWeights(source, p + $"{j + 2}.block.");
         }
         string final = prefix + $"model.{_blocks.Count + 1}";
-        _finalActivation.SetParameters(new Vector<T>(read(final + ".alpha", new[] { 1, _last.InputChannels, 1 })
+        _finalActivation.SetParameters(new Vector<T>(source.Read(final + ".alpha", new[] { 1, _last.InputChannels, 1 })
             .Select(MathHelper.GetNumericOperations<T>().FromDouble).ToArray()));
-        SparkTorchWeights<T>.Conv(_last, read, prefix + $"model.{_blocks.Count + 2}");
+        SparkTorchWeights<T>.Conv(_last, source, prefix + $"model.{_blocks.Count + 2}");
     }
 
     private static NormedConv1DLayer<T> Conv(List<LayerBase<T>> owner, int input, int output, int kernel,
@@ -559,13 +565,13 @@ internal sealed class SparkWaveResidual<T>
     public Tensor<T> Forward(Tensor<T> input)
         => _engine.TensorAdd(input, _conv2.Forward(_activation2.Forward(_conv1.Forward(_activation1.Forward(input)))));
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
         var ops = MathHelper.GetNumericOperations<T>();
-        _activation1.SetParameters(new Vector<T>(read(prefix + "0.alpha", new[] { 1, _conv1.InputChannels, 1 }).Select(ops.FromDouble).ToArray()));
-        SparkTorchWeights<T>.Conv(_conv1, read, prefix + "1");
-        _activation2.SetParameters(new Vector<T>(read(prefix + "2.alpha", new[] { 1, _conv2.InputChannels, 1 }).Select(ops.FromDouble).ToArray()));
-        SparkTorchWeights<T>.Conv(_conv2, read, prefix + "3");
+        _activation1.SetParameters(new Vector<T>(source.Read(prefix + "0.alpha", new[] { 1, _conv1.InputChannels, 1 }).Select(ops.FromDouble).ToArray()));
+        SparkTorchWeights<T>.Conv(_conv1, source, prefix + "1");
+        _activation2.SetParameters(new Vector<T>(source.Read(prefix + "2.alpha", new[] { 1, _conv2.InputChannels, 1 }).Select(ops.FromDouble).ToArray()));
+        SparkTorchWeights<T>.Conv(_conv2, source, prefix + "3");
     }
 
     private static NormedConv1DLayer<T> Conv(List<LayerBase<T>> owner, int channels, int kernel, int dilation, int padding)
@@ -658,32 +664,36 @@ internal sealed class SparkBiCodec<T>
     public Wav2Vec2Network<T> Wav2Vec => _wav2Vec;
     public SparkSpeakerTokenizer<T> Speaker => _speaker;
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, bool includeSpeaker = true)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read, bool includeSpeaker = true) =>
+        LoadTorchWeights(TorchTensorSource.From(read), includeSpeaker);
+
+    internal void LoadTorchWeights(TorchTensorSource source, bool includeSpeaker = true)
     {
-        LoadFeatureWeights(read);
-        SparkTorchWeights<T>.Conv(_semanticQuantizer.InProjection(0), read, "quantizer.in_project");
-        SparkTorchWeights<T>.Conv(_semanticQuantizer.OutProjection(0), read, "quantizer.out_project");
+        LoadFeatureWeights(source);
+        SparkTorchWeights<T>.Conv(_semanticQuantizer.InProjection(0), source, "quantizer.in_project");
+        SparkTorchWeights<T>.Conv(_semanticQuantizer.OutProjection(0), source, "quantizer.out_project");
         var table = _semanticQuantizer.Codebook(0);
-        var values = read("quantizer.codebook.weight", new[] { _options.CodebookSize, _options.SemanticCodeDimension });
-        for (int i = 0; i < table.Length; i++) table[i] = MathHelper.GetNumericOperations<T>().FromDouble(values[i]);
+        source.CopyTo("quantizer.codebook.weight", new[] { _options.CodebookSize, _options.SemanticCodeDimension }, table);
         _engine.InvalidatePersistentTensor(table);
-        _waveGenerator.LoadTorchWeights(read);
-        if (includeSpeaker) _speaker.LoadTorchWeights(read);
+        _waveGenerator.LoadTorchWeights(source);
+        if (includeSpeaker) _speaker.LoadTorchWeights(source);
     }
 
-    internal void LoadFeatureWeights(Func<string, int[], double[]> read)
+    internal void LoadFeatureWeights(Func<string, int[], double[]> read) => LoadFeatureWeights(TorchTensorSource.From(read));
+
+    internal void LoadFeatureWeights(TorchTensorSource source)
     {
-        _semanticBackbone.LoadTorchWeights(read, "encoder.encoder.");
-        _semanticStage1.LoadTorchWeights(read, "encoder.downsample.0.1.");
-        _semanticStage2.LoadTorchWeights(read, "encoder.downsample.1.1.");
-        SparkTorchWeights<T>.Linear(_semanticProjection, read, "encoder.project", _options.VocosDim, _options.BiCodecDim);
+        _semanticBackbone.LoadTorchWeights(source, "encoder.encoder.");
+        _semanticStage1.LoadTorchWeights(source, "encoder.downsample.0.1.");
+        _semanticStage2.LoadTorchWeights(source, "encoder.downsample.1.1.");
+        SparkTorchWeights<T>.Linear(_semanticProjection, source, "encoder.project", _options.VocosDim, _options.BiCodecDim);
         void Decoder(string p, FullyConnectedLayer<T> input, SparkVocosBackbone<T> first, SparkVocosBackbone<T> second,
             SparkVocosBackbone<T> backbone, FullyConnectedLayer<T> output, int outputChannels)
         {
-            SparkTorchWeights<T>.Linear(input, read, p + "linear_pre", _options.BiCodecDim, _options.VocosDim);
-            first.LoadTorchWeights(read, p + "downsample.0.1."); second.LoadTorchWeights(read, p + "downsample.1.1.");
-            backbone.LoadTorchWeights(read, p + "vocos_backbone.");
-            SparkTorchWeights<T>.Linear(output, read, p + "linear", _options.VocosDim, outputChannels);
+            SparkTorchWeights<T>.Linear(input, source, p + "linear_pre", _options.BiCodecDim, _options.VocosDim);
+            first.LoadTorchWeights(source, p + "downsample.0.1."); second.LoadTorchWeights(source, p + "downsample.1.1.");
+            backbone.LoadTorchWeights(source, p + "vocos_backbone.");
+            SparkTorchWeights<T>.Linear(output, source, p + "linear", _options.VocosDim, outputChannels);
         }
         Decoder("prenet.", _preProjection, _preStage1, _preStage2, _conditionalPrenet, _outputProjection, _options.BiCodecDim);
         Decoder("postnet.", _postnetPreProjection, _postnetStage1, _postnetStage2, _postnet, _postnetProjection, _options.Wav2VecHiddenDim);
@@ -824,14 +834,22 @@ internal sealed class SparkBiCodec<T>
 
 internal static class SparkTorchWeights<T>
 {
-    internal static void Conv(NormedConv1DLayer<T> layer, Func<string, int[], double[]> read, string name)
-    {
-        var shape = layer.TorchWeightShape;
-        layer.LoadTorchWeights(read(name + ".weight_v", shape), read(name + ".weight_g", new[] { shape[0], 1, 1 }),
-            read(name + ".bias", new[] { layer.OutputChannels }));
-    }
+    internal static void Conv(NormedConv1DLayer<T> layer, TorchTensorSource source, string name) =>
+        layer.LoadTorchWeights(source, name + ".weight_v", layer.TorchWeightShape, name + ".weight_g", name + ".bias");
 
-    internal static void Linear(FullyConnectedLayer<T> layer, Func<string, int[], double[]> read, string name, int input, int output)
-        => layer.SetParameters(new Vector<T>(read(name + ".weight", new[] { output, input })
-            .Concat(read(name + ".bias", new[] { output })).Select(MathHelper.GetNumericOperations<T>().FromDouble).ToArray()));
+    /// <summary>Loads an <c>nn.Linear</c> (<c>weight [out, in]</c>, <c>bias</c>) into a layer that keeps the torch layout,
+    /// straight into its tensors when they are allocated.</summary>
+    internal static void Linear(FullyConnectedLayer<T> layer, TorchTensorSource source, string name, int input, int output)
+    {
+        if (layer.GetWeights() is { } weights && weights.Length == input * output && layer.GetBiases() is { } biases && biases.Length == output)
+        {
+            source.CopyTo(name + ".weight", new[] { output, input }, weights);
+            source.CopyTo(name + ".bias", new[] { output }, biases);
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(weights);
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(biases);
+            return;
+        }
+        layer.SetParameters(new Vector<T>(source.Read(name + ".weight", new[] { output, input })
+            .Concat(source.Read(name + ".bias", new[] { output })).Select(MathHelper.GetNumericOperations<T>().FromDouble).ToArray()));
+    }
 }

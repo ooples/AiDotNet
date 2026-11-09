@@ -183,6 +183,31 @@ public partial class NormedConv2DLayer<T> : LayerBase<T>, IShapeContract
     internal int[] TorchWeightShape => _kernel.Shape.ToArray();
 
     /// <summary>
+    /// Loads a torch convolution straight from <paramref name="source"/>: the kernel <paramref name="weightName"/> in
+    /// <see cref="TorchWeightShape"/> order (the direction <c>weight_v</c> of a weight-normalized one, with its gain
+    /// <paramref name="gainName"/>, else each row's norm is its gain) and the bias <paramref name="biasName"/>.
+    /// </summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string weightName, string? gainName, string? biasName)
+    {
+        if (_normalization == ConvolutionNormalization.Spectral)
+            throw new ArgumentException("A spectrally normalized convolution loads its weight_u and weight_v too.");
+        if (gainName is not null && _normalization != ConvolutionNormalization.Weight)
+            throw new InvalidOperationException("A weight-norm gain loads only into a weight-normalized convolution.");
+        source.CopyTo(weightName, TorchWeightShape, _kernel);
+        if (biasName is not null)
+        {
+            if (!_useBias) throw new InvalidOperationException("The checkpoint has a bias but this convolution has none.");
+            source.CopyTo(biasName, new[] { _bias.Length }, _bias);
+        }
+        if (gainName is not null) source.CopyTo(gainName, new[] { _out, 1, 1, 1 }, _gain);
+        else
+            for (int r = 0; r < _out; r++) _gain[r] = NumOps.FromDouble(RowNorm(r));
+        Engine.InvalidatePersistentTensor(_kernel);
+        Engine.InvalidatePersistentTensor(_gain);
+        Engine.InvalidatePersistentTensor(_bias);
+    }
+
+    /// <summary>
     /// Loads a PyTorch convolution: the weight in <see cref="TorchWeightShape"/> order (<c>weight_orig</c> for a spectrally
     /// normalized one, <c>weight_v</c> / <c>parametrizations.weight.original1</c> for a weight-normalized one), the bias;
     /// for weight normalization the gain <c>weight_g</c> / <c>original0</c> (one per output channel; without it the gain

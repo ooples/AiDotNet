@@ -1,4 +1,5 @@
 using AiDotNet.LinearAlgebra;
+using AiDotNet.ModelLoading;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
@@ -9,49 +10,61 @@ public partial class SparkTTS<T>
     {
         RequireConvertedCheckpointTarget();
         LoadLanguageModelWeights(languageModelPath);
-        _biCodec!.LoadTorchWeights(ReadAuthorState(biCodecPath));
-        _biCodec.Wav2Vec.LoadTorchWeights(ReadAuthorState(wav2VecPath, "wav2vec2."));
+        LoadAuthorState(biCodecPath, null, source => _biCodec!.LoadTorchWeights(source));
+        // XLSR's loader still takes each tensor's values.
+        LoadAuthorState(wav2VecPath, "wav2vec2.", source => _biCodec!.Wav2Vec.LoadTorchWeights(source.AsFunction()));
     }
 
     /// <summary>Loads the speaker_encoder subtree of the released BiCodec checkpoint, including ECAPA running statistics.</summary>
     public void LoadSpeakerTokenizerWeights(string path, string prefix = "speaker_encoder.")
     {
         RequireConvertedCheckpointTarget();
-        _biCodec!.Speaker.LoadTorchWeights(ReadAuthorState(path), prefix);
+        LoadAuthorState(path, null, source => _biCodec!.Speaker.LoadTorchWeights(source, prefix));
     }
 
     /// <summary>Loads the original Hugging Face Qwen2.5 state dictionary, including its tied output embedding.</summary>
     public void LoadLanguageModelWeights(string path)
     {
         RequireConvertedCheckpointTarget();
-        _languageModel!.Transformer.LoadTorchWeights(ReadAuthorState(path));
+        LoadAuthorState(path, null, source => _languageModel!.Transformer.LoadTorchWeights(source));
     }
 
-    private static Func<string, int[], double[]> ReadAuthorState(string path, string? backbonePrefix = null)
+    /// <summary>Opens a released component's checkpoint, each tensor's axes checked, and loads it with
+    /// <paramref name="load"/>.</summary>
+    private static void LoadAuthorState(string path, string? backbonePrefix, Action<TorchTensorSource> load)
     {
-        var state = new ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        return AuthorStateReader(state, backbonePrefix);
+        using var file = TorchCheckpointFile.Open(path, strictAxes: true);
+        load(AuthorState(file, backbonePrefix));
     }
 
     // HF distributes XLSR as Wav2Vec2ForPreTraining, whose backbone has a wav2vec2. prefix.
     // Also accept a standalone Wav2Vec2Model state; choose one namespace for the whole import.
-    internal static Func<string, int[], double[]> AuthorStateReader(
-        IReadOnlyDictionary<string, Tensor<float>> state, string? backbonePrefix = null)
+    internal static TorchTensorSource AuthorState(TorchTensorSource state, string? backbonePrefix = null)
     {
-        string prefix = backbonePrefix is not null && state.ContainsKey(backbonePrefix + "feature_extractor.conv_layers.0.conv.weight")
+        string prefix = backbonePrefix is not null && state.Contains(backbonePrefix + "feature_extractor.conv_layers.0.conv.weight")
             ? backbonePrefix : string.Empty;
         const string positional = "encoder.pos_conv_embed.conv.";
         bool legacyWeightNorm = backbonePrefix is not null
-            && !state.ContainsKey(prefix + positional + "parametrizations.weight.original1")
-            && state.ContainsKey(prefix + positional + "weight_v");
+            && !state.Contains(prefix + positional + "parametrizations.weight.original1")
+            && state.Contains(prefix + positional + "weight_v");
+        // Original XLSR releases predate torch's parametrizations API. Both layouts store the same g/v tensors.
+        return state.WithNames(name =>
+            legacyWeightNorm && name == positional + "parametrizations.weight.original1" ? prefix + positional + "weight_v"
+            : legacyWeightNorm && name == positional + "parametrizations.weight.original0" ? prefix + positional + "weight_g"
+            : prefix + name);
+    }
+
+    /// <summary><see cref="AuthorState"/> over an already loaded state dict, read through the allocating form with each
+    /// tensor's axes checked.</summary>
+    internal static Func<string, int[], double[]> AuthorStateReader(
+        IReadOnlyDictionary<string, Tensor<float>> state, string? backbonePrefix = null)
+    {
+        var source = AuthorState(TorchTensorSource.From(state, "the Spark checkpoint"), backbonePrefix);
         return (name, shape) =>
         {
-            // Original XLSR releases predate torch's parametrizations API. Both layouts store the same g/v tensors.
-            if (legacyWeightNorm && name == positional + "parametrizations.weight.original1") name = positional + "weight_v";
-            else if (legacyWeightNorm && name == positional + "parametrizations.weight.original0") name = positional + "weight_g";
-            if (!state.TryGetValue(prefix + name, out var tensor)) throw new InvalidDataException($"Spark checkpoint is missing '{prefix + name}'.");
-            if (!tensor.Shape.ToArray().SequenceEqual(shape)) throw new InvalidDataException($"Spark tensor '{name}' has an incompatible shape.");
-            return tensor.ToArray().Select(value => (double)value).ToArray();
+            var axes = source.ShapeOf(name) ?? throw new InvalidDataException($"Spark checkpoint is missing '{name}'.");
+            if (!axes.SequenceEqual(shape.Select(d => (long)d))) throw new InvalidDataException($"Spark tensor '{name}' has an incompatible shape.");
+            return source.Read(name, shape);
         };
     }
 
@@ -67,23 +80,29 @@ public partial class SparkTTS<T>
         RequireConvertedCheckpointTarget();
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Checkpoint path required.", nameof(path));
         if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
-        var state = new ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        LoadConvertedWeights(name => state.TryGetValue(name, out var tensor)
-            ? tensor.ToVector().Select(value => (double)value).ToArray()
-            : null);
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
+        LoadConvertedWeights(file);
     }
 
     internal void LoadConvertedWeights(Func<string, double[]?> read)
     {
         Validation.Guard.NotNull(read);
+        LoadConvertedWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Copies <c>{ConvertedParameterTensor}</c> from <paramref name="source"/> straight into a parameter vector.</summary>
+    internal void LoadConvertedWeights(AiDotNet.ModelLoading.TorchTensorSource source)
+    {
         RequireConvertedCheckpointTarget();
-        var values = read(ConvertedParameterTensor)
-            ?? throw new InvalidDataException($"The checkpoint has no tensor '{ConvertedParameterTensor}'.");
+        if (!source.Contains(ConvertedParameterTensor))
+            throw new InvalidDataException($"The checkpoint has no tensor '{ConvertedParameterTensor}'.");
         int expected = GetParameters().Length;
-        if (values.Length != expected)
+        if (source.ShapeOf(ConvertedParameterTensor) is { } shape && shape.Aggregate(1L, (a, b) => a * b) is var count && count != expected)
             throw new InvalidDataException(
-                $"'{ConvertedParameterTensor}' has {values.Length} values; this Spark-TTS configuration expects {expected}.");
-        SetParameters(new Vector<T>(Array.ConvertAll(values, NumOps.FromDouble)));
+                $"'{ConvertedParameterTensor}' has {count} values; this Spark-TTS configuration expects {expected}.");
+        var parameters = new Vector<T>(expected);
+        source.CopyTo(ConvertedParameterTensor, new[] { expected }, new Tensor<T>(new[] { expected }, parameters));
+        SetParameters(parameters);
     }
 
     private void RequireConvertedCheckpointTarget()

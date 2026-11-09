@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
 
@@ -46,12 +47,12 @@ internal sealed class TortoiseClvpTower<T>
         return _engine.TensorDivide(projected, _engine.TensorTile(norm, new[] { 1, _dim }));
     }
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string embedding, string transformer, string projection, int vocabulary)
+    internal void LoadTorchWeights(TorchTensorSource source, string embedding, string transformer, string projection, int vocabulary)
     {
-        _embedding.SetParameters(new Vector<T>(read(embedding + ".weight", new[] { vocabulary, _dim }).Select(TortoiseOps<T>.NumOps.FromDouble)));
-        IndexTtsOps.LoadNorm(_engine, read, _norm, transformer + ".norm", _dim);
-        IndexTtsOps.LoadLinear(read, _projection, projection, _dim, _dim);
-        for (int i = 0; i < _blocks.Count; i++) _blocks[i].Load(read, transformer + ".attn_layers.layers.", i);
+        TorchParameters.Parameters(_embedding, source, embedding + ".weight", new[] { vocabulary, _dim });
+        TorchParameters.LayerNorm(_engine, _norm, source, transformer + ".norm.weight", transformer + ".norm.bias");
+        TorchParameters.Linear(_projection, _dim, _dim, source, projection + ".weight");
+        for (int i = 0; i < _blocks.Count; i++) _blocks[i].Load(source, transformer + ".attn_layers.layers.", i);
     }
 
     private sealed class Block
@@ -131,17 +132,17 @@ internal sealed class TortoiseClvpTower<T>
             return _engine.TensorAdd(x, _ffOut.Forward(TortoiseOps<T>.Dropout(_engine, hidden, 0.1, training, random)));
         }
 
-        internal void Load(Func<string, int[], double[]> read, string prefix, int index)
+        internal void Load(TorchTensorSource source, string prefix, int index)
         {
             string a = prefix + (2 * index), f = prefix + (2 * index + 1);
-            _norm1.SetParameters(new Vector<T>(read(a + ".0.0.g", new[] { _dim }).Select(TortoiseOps<T>.NumOps.FromDouble)));
-            _norm2.SetParameters(new Vector<T>(read(f + ".0.0.g", new[] { _dim }).Select(TortoiseOps<T>.NumOps.FromDouble)));
-            IndexTtsOps.LoadLinear(read, _query, a + ".1.wrap.to_q", _dim, _heads * HeadDim);
-            IndexTtsOps.LoadLinear(read, _key, a + ".1.wrap.to_k", _dim, _heads * HeadDim);
-            IndexTtsOps.LoadLinear(read, _value, a + ".1.wrap.to_v", _dim, _heads * HeadDim);
-            IndexTtsOps.LoadLinear(_engine, read, _out, a + ".1.wrap.to_out", _heads * HeadDim, _dim);
-            IndexTtsOps.LoadLinear(_engine, read, _ffIn, f + ".1.wrap.net.0.proj", _dim, 4 * _dim);
-            IndexTtsOps.LoadLinear(_engine, read, _ffOut, f + ".1.wrap.net.3", 2 * _dim, _dim);
+            _norm1.SetParameters(new Vector<T>(source.Read(a + ".0.0.g", new[] { _dim }).Select(TortoiseOps<T>.NumOps.FromDouble)));
+            _norm2.SetParameters(new Vector<T>(source.Read(f + ".0.0.g", new[] { _dim }).Select(TortoiseOps<T>.NumOps.FromDouble)));
+            TorchParameters.Linear(_query, _dim, _heads * HeadDim, source, a + ".1.wrap.to_q.weight");
+            TorchParameters.Linear(_key, _dim, _heads * HeadDim, source, a + ".1.wrap.to_k.weight");
+            TorchParameters.Linear(_value, _dim, _heads * HeadDim, source, a + ".1.wrap.to_v.weight");
+            TorchParameters.Linear(_engine, _out, _heads * HeadDim, _dim, source, a + ".1.wrap.to_out.weight", a + ".1.wrap.to_out.bias");
+            TorchParameters.Linear(_engine, _ffIn, _dim, 4 * _dim, source, f + ".1.wrap.net.0.proj.weight", f + ".1.wrap.net.0.proj.bias");
+            TorchParameters.Linear(_engine, _ffOut, 2 * _dim, _dim, source, f + ".1.wrap.net.3.weight", f + ".1.wrap.net.3.bias");
         }
     }
 }

@@ -180,6 +180,37 @@ internal static class TorchParameters
         AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(weights);
     }
 
+    /// <summary>Loads a GPT-2 <c>Conv1D</c> (<c>weight [in, out]</c>, <c>bias [out]</c>) into a dense layer straight from
+    /// <paramref name="source"/>, materializing the layer first; the stored layout is the layer's own.</summary>
+    public static void LinearInOut<T>(IEngine engine, DenseLayer<T> layer, int inputs, int outputs, AiDotNet.ModelLoading.TorchTensorSource source,
+        string weightName, string biasName)
+    {
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            layer.Forward(new Tensor<T>(new[] { 1, inputs }));
+        var w = layer.GetWeights();                                                                       // [in, out]
+        source.CopyTo(weightName, new[] { inputs, outputs }, w);
+        engine.InvalidatePersistentTensor(w);
+        var b = layer.GetBiases();
+        source.CopyTo(biasName, new[] { outputs }, b);
+        engine.InvalidatePersistentTensor(b);
+    }
+
+    /// <summary>Copies the named tensor, as stored, into a layer whose only parameter it is (an embedding table), or
+    /// through <c>SetParameters</c> when that tensor is not allocated.</summary>
+    public static void Parameters<T>(LayerBase<T> layer, AiDotNet.ModelLoading.TorchTensorSource source, string name, int[] shape)
+    {
+        long count = shape.Aggregate(1L, (a, b) => a * b);
+        var tensors = layer.GetTrainableParameters();
+        if (tensors.Count == 1 && tensors[0].Length == count && tensors[0].Lifetime != WeightLifetime.Streaming)
+        {
+            source.CopyTo(name, shape, tensors[0]);
+            AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(tensors[0]);
+            return;
+        }
+        var ops = MathHelper.GetNumericOperations<T>();
+        layer.SetParameters(new Vector<T>(source.Read(name, shape).Select(ops.FromDouble).ToArray()));
+    }
+
     /// <summary>Loads an <c>nn.LayerNorm</c>'s weight and bias straight from <paramref name="source"/>.</summary>
     public static void LayerNorm<T>(IEngine engine, LayerNormalizationLayer<T> layer, AiDotNet.ModelLoading.TorchTensorSource source,
         string weightName, string biasName)
@@ -410,7 +441,11 @@ internal sealed class SoundStormConformer<T>
 
     /// <summary>Loads the Conformer's parameters from a PyTorch state dict under <paramref name="prefix"/>
     /// (for example "model.conformer"); <paramref name="read"/> checks each tensor's shape.</summary>
-    public void LoadTorchWeights(IEngine engine, string prefix, Func<string, int[], double[]> read)
+    public void LoadTorchWeights(IEngine engine, string prefix, Func<string, int[], double[]> read) =>
+        LoadTorchWeights(engine, prefix, AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads the Conformer's parameters from <paramref name="source"/> under <paramref name="prefix"/>.</summary>
+    internal void LoadTorchWeights(IEngine engine, string prefix, AiDotNet.ModelLoading.TorchTensorSource source)
     {
         var c = Configuration;
         int inner = c.Heads * c.HeadDim, hidden = c.Dim * c.FeedForwardMultiplier, convInner = c.Dim * c.ConvExpansion;
@@ -419,25 +454,22 @@ internal sealed class SoundStormConformer<T>
             var b = Blocks[i];
             string p = prefix.Length == 0 ? $"layers.{i}" : $"{prefix}.layers.{i}";
             void Norm(string name, LayerNormalizationLayer<T> layer) =>
-                TorchParameters.LayerNorm(engine, layer, read(name + ".weight", new[] { c.Dim }), read(name + ".bias", new[] { c.Dim }));
+                TorchParameters.LayerNorm(engine, layer, source, name + ".weight", name + ".bias");
             void Dense(string name, DenseLayer<T> layer, int inputs, int outputs) =>
-                TorchParameters.Linear(engine, layer, inputs, outputs, read(name + ".weight", new[] { outputs, inputs }), read(name + ".bias", new[] { outputs }));
+                TorchParameters.Linear(engine, layer, inputs, outputs, source, name + ".weight", name + ".bias");
             Norm($"{p}.ff1.fn.norm", b.Ff1Norm);
             Dense($"{p}.ff1.fn.fn.net.0", b.Ff1In, c.Dim, hidden);
             Dense($"{p}.ff1.fn.fn.net.3", b.Ff1Out, hidden, c.Dim);
             Norm($"{p}.attn.norm", b.AttentionNorm);
-            TorchParameters.Linear(b.ToQuery, c.Dim, inner, read($"{p}.attn.fn.to_q.weight", new[] { inner, c.Dim }));
-            TorchParameters.Linear(b.ToKeyValue, c.Dim, 2 * inner, read($"{p}.attn.fn.to_kv.weight", new[] { 2 * inner, c.Dim }));
+            TorchParameters.Linear(b.ToQuery, c.Dim, inner, source, $"{p}.attn.fn.to_q.weight");
+            TorchParameters.Linear(b.ToKeyValue, c.Dim, 2 * inner, source, $"{p}.attn.fn.to_kv.weight");
             Dense($"{p}.attn.fn.to_out", b.ToOut, inner, c.Dim);
             Norm($"{p}.conv.net.0", b.ConvNorm);
-            b.ConvIn.LoadTorchWeights(read($"{p}.conv.net.2.weight", new[] { 2 * convInner, c.Dim, 1 }), null, read($"{p}.conv.net.2.bias", new[] { 2 * convInner }));
-            b.Depthwise.LoadTorchWeights(read($"{p}.conv.net.4.conv.weight", new[] { convInner, 1, c.ConvKernel }), null,
-                read($"{p}.conv.net.4.conv.bias", new[] { convInner }));
-            var gamma = read($"{p}.conv.net.6.gamma", new[] { 1, convInner, 1 });
-            var ops = MathHelper.GetNumericOperations<T>();
-            for (int k = 0; k < convInner; k++) b.ConvChannelNorm.Gamma[k] = ops.FromDouble(gamma[k]);
+            b.ConvIn.LoadTorchWeights(source, $"{p}.conv.net.2.weight", new[] { 2 * convInner, c.Dim, 1 }, null, $"{p}.conv.net.2.bias");
+            b.Depthwise.LoadTorchWeights(source, $"{p}.conv.net.4.conv.weight", new[] { convInner, 1, c.ConvKernel }, null, $"{p}.conv.net.4.conv.bias");
+            source.CopyTo($"{p}.conv.net.6.gamma", new[] { 1, convInner, 1 }, b.ConvChannelNorm.Gamma);
             engine.InvalidatePersistentTensor(b.ConvChannelNorm.Gamma);
-            b.ConvOut.LoadTorchWeights(read($"{p}.conv.net.7.weight", new[] { c.Dim, convInner, 1 }), null, read($"{p}.conv.net.7.bias", new[] { c.Dim }));
+            b.ConvOut.LoadTorchWeights(source, $"{p}.conv.net.7.weight", new[] { c.Dim, convInner, 1 }, null, $"{p}.conv.net.7.bias");
             Norm($"{p}.ff2.fn.norm", b.Ff2Norm);
             Dense($"{p}.ff2.fn.fn.net.0", b.Ff2In, c.Dim, hidden);
             Dense($"{p}.ff2.fn.fn.net.3", b.Ff2Out, hidden, c.Dim);

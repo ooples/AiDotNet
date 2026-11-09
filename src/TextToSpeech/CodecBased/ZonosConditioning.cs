@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -231,16 +232,21 @@ internal sealed class ZonosPrefixConditioner<T>
     }
 
     /// <summary>Loads the release's <c>prefix_conditioner.*</c> tensors; returns the names read.</summary>
-    public HashSet<string> LoadTorchWeights(Func<string, int[], double[]> read)
+    public HashSet<string> LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads the release's <c>prefix_conditioner.*</c> tensors from <paramref name="source"/>; returns the names
+    /// read.</summary>
+    internal HashSet<string> LoadTorchWeights(TorchTensorSource source)
     {
         var used = new HashSet<string>(StringComparer.Ordinal);
-        double[] Read(string name, int[] shape)
+        var s = source.WithNames(name =>
         {
             used.Add(name);
-            return read(name, shape);
-        }
+            return name;
+        });
+        double[] Read(string name, int[] shape) => s.Read(name, shape);
         void Vector(BiasFreeLinearLayer<T> holder, string name, int[] shape) =>
-            TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, s) => a * s), Read(name, shape));
+            TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, b) => a * b), s, name, shape);
         for (int i = 0; i < Parts.Count; i++)
         {
             var part = Parts[i];
@@ -263,12 +269,12 @@ internal sealed class ZonosPrefixConditioner<T>
             if (part.ProjectWeight is not null)
             {
                 int condDim = part.Spec.CondDim > 0 ? part.Spec.CondDim : _width;
-                TorchParameters.Linear(part.ProjectWeight, condDim, _width, Read($"{n}.project.weight", new[] { _width, condDim }));
+                TorchParameters.Linear(part.ProjectWeight, condDim, _width, s, $"{n}.project.weight");
                 Vector(part.ProjectBias!, $"{n}.project.bias", new[] { _width });
             }
             if (part.Unconditional is not null) Vector(part.Unconditional, $"{n}.uncond_vector", new[] { _width });
         }
-        TorchParameters.Linear(ProjectWeight, _width, _width, Read("prefix_conditioner.project.weight", new[] { _width, _width }));
+        TorchParameters.Linear(ProjectWeight, _width, _width, s, "prefix_conditioner.project.weight");
         Vector(ProjectBias, "prefix_conditioner.project.bias", new[] { _width });
         Vector(NormWeight, "prefix_conditioner.norm.weight", new[] { _width });
         Vector(NormBias, "prefix_conditioner.norm.bias", new[] { _width });

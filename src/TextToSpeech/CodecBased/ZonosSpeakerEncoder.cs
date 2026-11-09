@@ -1,5 +1,6 @@
 using AiDotNet.Audio.Features;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.StyleEmotion;
 using AiDotNet.TextToSpeech.Vocoders;
@@ -179,18 +180,21 @@ internal sealed class ZonosSpeakerEncoder<T>
 
     /// <summary>Loads <c>ResNet293_SimAM_ASP_base.pt</c> (names without a prefix) and the LDA (<c>lda.weight</c>,
     /// <c>lda.bias</c> as passed by the caller); returns the names read.</summary>
-    public HashSet<string> LoadTorchWeights(Func<string, int[], double[]> read)
+    public HashSet<string> LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads the ResNet and the LDA from <paramref name="source"/>, each tensor copied straight into its layer;
+    /// returns the names read.</summary>
+    internal HashSet<string> LoadTorchWeights(TorchTensorSource source)
     {
         var used = new HashSet<string>(StringComparer.Ordinal);
-        double[] Read(string name, int[] shape)
+        var tracked = source.WithNames(name =>
         {
             used.Add(name);
-            return read(name, shape);
-        }
-        void Conv(NormedConv2DLayer<T> conv, string name) => conv.LoadTorchWeights(Read(name + ".weight", conv.TorchWeightShape), null);
-        void Norm(BatchNormalizationLayer<T> norm, string name, int width) => TorchParameters.BatchNorm(norm, Read(name + ".weight", new[] { width }),
-            Read(name + ".bias", new[] { width }), Read(name + ".running_mean", new[] { width }), Read(name + ".running_var", new[] { width }));
-        void Vector(BiasFreeLinearLayer<T> holder, string name, int count) => TorchParameters.Linear(holder, 1, count, Read(name, new[] { count }));
+            return name;
+        });
+        void Conv(NormedConv2DLayer<T> conv, string name) => conv.LoadTorchWeights(tracked, name + ".weight", null, null);
+        void Norm(BatchNormalizationLayer<T> norm, string name, int width) => TorchParameters.BatchNorm(norm, tracked, name + ".", width);
+        void Vector(BiasFreeLinearLayer<T> holder, string name, int count) => TorchParameters.Linear(holder, 1, count, tracked, name, new[] { count });
         Conv(StemConv, "front.conv1");
         Norm(StemNorm, "front.bn1", Channels);
         for (int s = 0; s < Stages.Count; s++)
@@ -210,17 +214,17 @@ internal sealed class ZonosSpeakerEncoder<T>
                 }
             }
         int c = PooledChannels;
-        TorchParameters.Linear(AttentionIn, c, 128, Read("pooling.attention.0.weight", new[] { 128, c, 1 }));
+        TorchParameters.Linear(AttentionIn, c, 128, tracked, "pooling.attention.0.weight", new[] { 128, c, 1 });
         Vector(AttentionInBias, "pooling.attention.0.bias", 128);
         Vector(AttentionNorm.Weight, "pooling.attention.2.weight", 128);
         Vector(AttentionNorm.Bias, "pooling.attention.2.bias", 128);
         Vector(AttentionNorm.Mean, "pooling.attention.2.running_mean", 128);
         Vector(AttentionNorm.Variance, "pooling.attention.2.running_var", 128);
-        TorchParameters.Linear(AttentionOut, 128, c, Read("pooling.attention.3.weight", new[] { c, 128, 1 }));
+        TorchParameters.Linear(AttentionOut, 128, c, tracked, "pooling.attention.3.weight", new[] { c, 128, 1 });
         Vector(AttentionOutBias, "pooling.attention.3.bias", c);
-        TorchParameters.Linear(Bottleneck, 2 * c, EmbeddingDim, Read("bottleneck.weight", new[] { EmbeddingDim, 2 * c }));
+        TorchParameters.Linear(Bottleneck, 2 * c, EmbeddingDim, tracked, "bottleneck.weight");
         Vector(BottleneckBias, "bottleneck.bias", EmbeddingDim);
-        TorchParameters.Linear(Lda, EmbeddingDim, LdaDim, Read("lda.weight", new[] { LdaDim, EmbeddingDim }));
+        TorchParameters.Linear(Lda, EmbeddingDim, LdaDim, tracked, "lda.weight");
         Vector(LdaBias, "lda.bias", LdaDim);
         return used;
     }

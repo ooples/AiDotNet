@@ -18,23 +18,29 @@ public partial class SeedTTS<T>
         RequireConvertedCheckpointTarget();
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Checkpoint path required.", nameof(path));
         if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
-        var state = new ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        LoadConvertedWeights(name => state.TryGetValue(name, out var tensor)
-            ? tensor.ToVector().Select(value => (double)value).ToArray()
-            : null);
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
+        LoadConvertedWeights(file);
     }
 
     internal void LoadConvertedWeights(Func<string, double[]?> read)
     {
         Validation.Guard.NotNull(read);
+        LoadConvertedWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Copies <c>{ConvertedParameterTensor}</c> from <paramref name="source"/> straight into a parameter vector.</summary>
+    internal void LoadConvertedWeights(AiDotNet.ModelLoading.TorchTensorSource source)
+    {
         RequireConvertedCheckpointTarget();
-        var values = read(ConvertedParameterTensor)
-            ?? throw new InvalidDataException($"The checkpoint has no tensor '{ConvertedParameterTensor}'.");
+        if (!source.Contains(ConvertedParameterTensor))
+            throw new InvalidDataException($"The checkpoint has no tensor '{ConvertedParameterTensor}'.");
         int expected = GetParameters().Length;
-        if (values.Length != expected)
+        if (source.ShapeOf(ConvertedParameterTensor) is { } shape && shape.Aggregate(1L, (a, b) => a * b) is var count && count != expected)
             throw new InvalidDataException(
-                $"'{ConvertedParameterTensor}' has {values.Length} values; this Seed-TTS configuration expects {expected}.");
-        SetParameters(new Vector<T>(Array.ConvertAll(values, NumOps.FromDouble)));
+                $"'{ConvertedParameterTensor}' has {count} values; this Seed-TTS configuration expects {expected}.");
+        var parameters = new Vector<T>(expected);
+        source.CopyTo(ConvertedParameterTensor, new[] { expected }, new Tensor<T>(new[] { expected }, parameters));
+        SetParameters(parameters);
     }
 
     private void RequireConvertedCheckpointTarget()

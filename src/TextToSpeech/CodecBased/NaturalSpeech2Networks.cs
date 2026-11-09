@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
 
@@ -68,21 +69,21 @@ internal sealed class Ns2TransformerEncoder<T>
         return LastNorm.Forward(x, condition);
     }
 
-    public void Load(Func<string, double[]> read, string prefix)
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        if (Embedding is not null) Embedding.LoadLeadingRows(read(prefix + "enc_emb_tokens.weight"));
+        if (Embedding is not null) Embedding.LoadLeadingRows(source, prefix + "enc_emb_tokens.weight");
         int filter = Blocks.Count > 0 ? Blocks[0].FeedForward1.OutputChannels : 0;
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
             string p = $"{prefix}layers.{i}.";
-            b.Norm1.Load(read, p + "ln_1.");
-            b.Attention.Load(read, p + "self_attn.");
-            b.Norm2.Load(read, p + "ln_2.");
-            Ns2Ops.SetConv(b.FeedForward1, read(p + "ffn.ffn_1.weight"), read(p + "ffn.ffn_1.bias"));
-            TorchParameters.Linear(_engine, b.FeedForward2, filter, _dim, read(p + "ffn.ffn_2.weight"), read(p + "ffn.ffn_2.bias"));
+            b.Norm1.Load(source, p + "ln_1.");
+            b.Attention.Load(source, p + "self_attn.");
+            b.Norm2.Load(source, p + "ln_2.");
+            Ns2Ops.SetConv(b.FeedForward1, source, p + "ffn.ffn_1.weight", p + "ffn.ffn_1.bias");
+            TorchParameters.Linear(_engine, b.FeedForward2, filter, _dim, source, p + "ffn.ffn_2.weight", p + "ffn.ffn_2.bias");
         }
-        LastNorm.Load(read, prefix + "last_ln.");
+        LastNorm.Load(source, prefix + "last_ln.");
     }
 }
 
@@ -148,19 +149,19 @@ internal sealed class Ns2VariancePredictor<T>
         return _engine.Reshape(output, new[] { output.Shape[0] });
     }
 
-    public void Load(Func<string, double[]> read, string prefix)
+    internal void Load(TorchTensorSource source, string prefix)
     {
         for (int i = 0; i < Convs.Count; i++)
         {
-            Ns2Ops.SetConv(Convs[i], read($"{prefix}conv.{i}.0.weight"), read($"{prefix}conv.{i}.0.bias"));
-            TorchParameters.LayerNorm(_engine, Norms[i], read($"{prefix}conv.{i}.2.weight"), read($"{prefix}conv.{i}.2.bias"));
+            Ns2Ops.SetConv(Convs[i], source, $"{prefix}conv.{i}.0.weight", $"{prefix}conv.{i}.0.bias");
+            TorchParameters.LayerNorm(_engine, Norms[i], source, $"{prefix}conv.{i}.2.weight", $"{prefix}conv.{i}.2.bias");
         }
         for (int a = 0; a < Attentions.Count; a++)
         {
-            Attentions[a].Load(read, $"{prefix}cattn.{a}.0.");
-            TorchParameters.LayerNorm(_engine, AttentionNorms[a], read($"{prefix}cattn.{a}.1.weight"), read($"{prefix}cattn.{a}.1.bias"));
+            Attentions[a].Load(source, $"{prefix}cattn.{a}.0.");
+            TorchParameters.LayerNorm(_engine, AttentionNorms[a], source, $"{prefix}cattn.{a}.1.weight", $"{prefix}cattn.{a}.1.bias");
         }
-        TorchParameters.Linear(_engine, Output, _filter, 1, read(prefix + "linear.weight"), read(prefix + "linear.bias"));
+        TorchParameters.Linear(_engine, Output, _filter, 1, source, prefix + "linear.weight", prefix + "linear.bias");
     }
 }
 
@@ -255,27 +256,27 @@ internal sealed class Ns2WaveNet<T>
         return OutProjection.Forward(_engine.ReLU(SkipProjection.Forward(h)));
     }
 
-    public void Load(Func<string, double[]> read, string prefix)
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        Ns2Ops.SetConv(InProjection, read(prefix + "in_proj.weight"), read(prefix + "in_proj.bias"));
-        TorchParameters.Linear(_engine, Mlp1, _hidden, 4 * _hidden, read(prefix + "mlp.0.weight"), read(prefix + "mlp.0.bias"));
-        TorchParameters.Linear(_engine, Mlp2, 4 * _hidden, _hidden, read(prefix + "mlp.2.weight"), read(prefix + "mlp.2.bias"));
-        TorchParameters.LayerNorm(_engine, ConditionNorm, read(prefix + "cond_ln.weight"), read(prefix + "cond_ln.bias"));
+        Ns2Ops.SetConv(InProjection, source, prefix + "in_proj.weight", prefix + "in_proj.bias");
+        TorchParameters.Linear(_engine, Mlp1, _hidden, 4 * _hidden, source, prefix + "mlp.0.weight", prefix + "mlp.0.bias");
+        TorchParameters.Linear(_engine, Mlp2, 4 * _hidden, _hidden, source, prefix + "mlp.2.weight", prefix + "mlp.2.bias");
+        TorchParameters.LayerNorm(_engine, ConditionNorm, source, prefix + "cond_ln.weight", prefix + "cond_ln.bias");
         for (int i = 0; i < Layers.Count; i++)
         {
             var l = Layers[i];
             string p = $"{prefix}layers.{i}.";
-            Ns2Ops.SetConv(l.DilatedConv, read(p + "dilated_conv.weight"), read(p + "dilated_conv.bias"));
-            TorchParameters.Linear(_engine, l.StepProjection, _hidden, _hidden, read(p + "diffusion_proj.weight"), read(p + "diffusion_proj.bias"));
-            Ns2Ops.SetConv(l.ConditionProjection, read(p + "cond_proj.weight"), read(p + "cond_proj.bias"));
-            Ns2Ops.SetConv(l.OutProjection, read(p + "out_proj.weight"), read(p + "out_proj.bias"));
+            Ns2Ops.SetConv(l.DilatedConv, source, p + "dilated_conv.weight", p + "dilated_conv.bias");
+            TorchParameters.Linear(_engine, l.StepProjection, _hidden, _hidden, source, p + "diffusion_proj.weight", p + "diffusion_proj.bias");
+            Ns2Ops.SetConv(l.ConditionProjection, source, p + "cond_proj.weight", p + "cond_proj.bias");
+            Ns2Ops.SetConv(l.OutProjection, source, p + "out_proj.weight", p + "out_proj.bias");
             if (l.Attention is null) continue;
-            l.Attention.Load(read, p + "attn.");
-            TorchParameters.Linear(_engine, l.FilmGain!, _hidden, 2 * _hidden, read(p + "film.gain.weight"), read(p + "film.gain.bias"));
-            TorchParameters.Linear(_engine, l.FilmBias!, _hidden, 2 * _hidden, read(p + "film.bias.weight"), read(p + "film.bias.bias"));
-            TorchParameters.LayerNorm(_engine, l.Norm!, read(p + "ln.weight"), read(p + "ln.bias"));
+            l.Attention.Load(source, p + "attn.");
+            TorchParameters.Linear(_engine, l.FilmGain!, _hidden, 2 * _hidden, source, p + "film.gain.weight", p + "film.gain.bias");
+            TorchParameters.Linear(_engine, l.FilmBias!, _hidden, 2 * _hidden, source, p + "film.bias.weight", p + "film.bias.bias");
+            TorchParameters.LayerNorm(_engine, l.Norm!, source, p + "ln.weight", p + "ln.bias");
         }
-        Ns2Ops.SetConv(SkipProjection, read(prefix + "skip_proj.weight"), read(prefix + "skip_proj.bias"));
-        Ns2Ops.SetConv(OutProjection, read(prefix + "out_proj.weight"), read(prefix + "out_proj.bias"));
+        Ns2Ops.SetConv(SkipProjection, source, prefix + "skip_proj.weight", prefix + "skip_proj.bias");
+        Ns2Ops.SetConv(OutProjection, source, prefix + "out_proj.weight", prefix + "out_proj.bias");
     }
 }

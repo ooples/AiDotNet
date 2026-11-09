@@ -582,30 +582,23 @@ public partial class SoundStorm<T> : TtsModelBase<T>, ICodecTts<T>
     /// state dict (safetensors or <c>.pt</c>), such as google/byt5-large: its 384 byte embeddings and the encoder.
     /// The decoder, which the paper trains, keeps its values.</summary>
     public void LoadTextEncoderWeights(string path) =>
-        TextToSemantic.LoadHuggingFaceEncoderWeights(Reader(path, prefix: ""), ByteVocabulary);
+        LoadCheckpoint(path, prefix: "", source => TextToSemantic.LoadHuggingFaceEncoderWeights(source, ByteVocabulary));
 
     /// <summary>Loads the whole text-to-semantic model, as this class saves it in Hugging Face's layout.</summary>
     public void LoadTextToSemanticWeights(string path) =>
-        TextToSemantic.LoadHuggingFaceWeights(Reader(path, prefix: ""));
+        LoadCheckpoint(path, prefix: "", source => TextToSemantic.LoadHuggingFaceWeights(source));
 
     /// <summary>Loads the acoustic model from a state dict laid out as Pheme's <c>TTSConformer</c>
     /// (<c>embedding.{l}</c>, <c>semantic_embedding</c>, <c>conformer</c>, <c>heads.{l}</c>).</summary>
     public void LoadSemanticToAcousticWeights(string path) =>
-        Acoustic.LoadTorchWeights(Reader(path, prefix: "model."), conditioningName: "semantic_embedding", globalName: "spkr_linear");
+        LoadCheckpoint(path, prefix: "model.", source => Acoustic.LoadTorchWeights(source, conditioningName: "semantic_embedding", globalName: "spkr_linear"));
 
-    private static Func<string, int[], double[]> Reader(string path, string prefix)
+    /// <summary>Opens a checkpoint, each tensor's axes checked, and loads from it: a name is read after
+    /// <paramref name="prefix"/>, else as it is.</summary>
+    private static void LoadCheckpoint(string path, string prefix, Action<AiDotNet.ModelLoading.TorchTensorSource> load)
     {
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        return (name, shape) =>
-        {
-            if (!file.TryGetValue(prefix + name, out var tensor) && !file.TryGetValue(name, out tensor))
-                throw new InvalidDataException($"The checkpoint has no tensor '{prefix + name}'.");
-            var actual = tensor.Shape.ToArray();
-            if (!actual.SequenceEqual(shape))
-                throw new InvalidDataException($"'{name}' is [{string.Join(", ", actual)}] in the checkpoint but [{string.Join(", ", shape)}] " +
-                    "in this model; build the model with the checkpoint's configuration.");
-            return tensor.ToVector().Select(v => (double)v).ToArray();
-        };
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path, strictAxes: true);
+        load(prefix.Length == 0 ? file : file.WithNames(name => file.Contains(prefix + name) ? prefix + name : name));
     }
 
     // ---------------------------------------------------------------- housekeeping

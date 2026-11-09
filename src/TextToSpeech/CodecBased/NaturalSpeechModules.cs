@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.EndToEnd;
 using AiDotNet.TextToSpeech.Latest;
@@ -64,14 +65,16 @@ internal sealed class NaturalSpeechDurationPredictor<T>
         return Projection.Forward(x);
     }
 
-    public void Load(Func<string, double[]> read, string prefix)
+    public void Load(Func<string, double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    internal void Load(TorchTensorSource source, string prefix)
     {
         for (int i = 0; i < _layers.Count; i++)
         {
-            MeloOps.LoadConv(read, _layers[i].Conv, $"{prefix}conv_{i + 1}");
-            AiDotNet.TextToSpeech.CodecBased.TorchParameters.LayerNorm(_engine, _layers[i].Norm, read($"{prefix}norm_{i + 1}.gamma"), read($"{prefix}norm_{i + 1}.beta"));
+            NaturalSpeechOps.LoadConv(source, _layers[i].Conv, $"{prefix}conv_{i + 1}");
+            TorchParameters.LayerNorm(_engine, _layers[i].Norm, source, $"{prefix}norm_{i + 1}.gamma", $"{prefix}norm_{i + 1}.beta");
         }
-        MeloOps.LoadConv(read, Projection, prefix + "proj");
+        NaturalSpeechOps.LoadConv(source, Projection, prefix + "proj");
     }
 }
 
@@ -249,17 +252,20 @@ internal sealed class NaturalSpeechUpsampler<T>
     }
 
     /// <summary>Loads heatz123/naturalspeech's <c>LearnableUpsampling</c> (names after <paramref name="prefix"/>).</summary>
-    public void LoadHeatz123(Func<string, double[]?> read, string prefix)
+    public void LoadHeatz123(Func<string, double[]?> read, string prefix) => LoadHeatz123(TorchTensorSource.From(read), prefix);
+
+    internal void LoadHeatz123(TorchTensorSource source, string prefix)
     {
-        double[] Require(string n) => read(n) ?? throw new KeyNotFoundException($"The checkpoint has no '{n}'.");
+        double[] Require(string n) => source.Read(n, Array.Empty<int>());
+        string? Optional(string n) => source.Contains(n) ? n : null;
         if (BatchNormW is null) throw new InvalidOperationException("heatz123's checkpoint has its learnable upsampling; build with NaturalSpeechUpsampling.Heatz123.");
         void ConvBlock(string name, NormedConv1DLayer<T> conv, BiasFreeLinearLayer<T> bn, LayerNormalizationLayer<T> norm)
         {
-            MeloOps.LoadConv(Require, conv, name + "conv_layer.0.conv");
+            NaturalSpeechOps.LoadConv(source, conv, name + "conv_layer.0.conv");
             var stats = Require(name + "conv_layer.1.weight").Concat(Require(name + "conv_layer.1.bias"))
                 .Concat(Require(name + "conv_layer.1.running_mean")).Concat(Require(name + "conv_layer.1.running_var")).ToArray();
             TorchParameters.Linear(bn, 1, stats.Length, stats);
-            TorchParameters.LayerNorm(_engine, norm, Require(name + "layer_norm.weight"), Require(name + "layer_norm.bias"));
+            TorchParameters.LayerNorm(_engine, norm, source, name + "layer_norm.weight", name + "layer_norm.bias");
         }
         ConvBlock(prefix + "conv_w.", ConvW, BatchNormW, NormW);
         ConvBlock(prefix + "conv_c.", ConvC, BatchNormC!, NormC);
@@ -274,13 +280,13 @@ internal sealed class NaturalSpeechUpsampler<T>
         }
         Mlp(prefix + "swish_w.", MlpW);
         Mlp(prefix + "swish_c.", MlpC);
-        TorchParameters.Linear(_engine, ProjectionW, _q * _hidden, _hidden, Require(prefix + "linear_w.linear.weight"),
-            Require(prefix + "linear_w.linear.bias"));
-        TorchParameters.Linear(_engine, ProjectionC, _q * _p, _hidden, Require(prefix + "linear_einsum.linear.weight"),
-            read(prefix + "linear_einsum.linear.bias"));
-        TorchParameters.LayerNorm(_engine, OutputNorm!, Require(prefix + "layer_norm.weight"), Require(prefix + "layer_norm.bias"));
-        TorchParameters.Linear(_engine, Stats!, _hidden, 2 * _out, Require(prefix + "proj_o.linear.weight"),
-            read(prefix + "proj_o.linear.bias"));
+        TorchParameters.Linear(_engine, ProjectionW, _q * _hidden, _hidden, source, prefix + "linear_w.linear.weight",
+            prefix + "linear_w.linear.bias");
+        TorchParameters.Linear(_engine, ProjectionC, _q * _p, _hidden, source, prefix + "linear_einsum.linear.weight",
+            Optional(prefix + "linear_einsum.linear.bias"));
+        TorchParameters.LayerNorm(_engine, OutputNorm!, source, prefix + "layer_norm.weight", prefix + "layer_norm.bias");
+        TorchParameters.Linear(_engine, Stats!, _hidden, 2 * _out, source, prefix + "proj_o.linear.weight",
+            Optional(prefix + "proj_o.linear.bias"));
     }
 }
 
@@ -339,19 +345,31 @@ internal sealed class NaturalSpeechMemoryBank<T>
         TorchParameters.Linear(Bank, 1, stored.Length, stored);
     }
 
-    public void Load(Func<string, double[]> read, string prefix)
+    public void Load(Func<string, double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        TorchParameters.Linear(Bank, 1, _hidden * _size, read(prefix + "memory_bank"));
-        MeloOps.LoadConv(read, Query, prefix + "encoder.conv_q");
-        MeloOps.LoadConv(read, Key, prefix + "encoder.conv_k");
-        MeloOps.LoadConv(read, Value, prefix + "encoder.conv_v");
-        MeloOps.LoadConv(read, Output, prefix + "encoder.conv_o");
+        TorchParameters.Linear(Bank, 1, _hidden * _size, source, prefix + "memory_bank", new[] { _hidden * _size });
+        NaturalSpeechOps.LoadConv(source, Query, prefix + "encoder.conv_q");
+        NaturalSpeechOps.LoadConv(source, Key, prefix + "encoder.conv_k");
+        NaturalSpeechOps.LoadConv(source, Value, prefix + "encoder.conv_v");
+        NaturalSpeechOps.LoadConv(source, Output, prefix + "encoder.conv_o");
     }
 }
 
 /// <summary>NaturalSpeech's loss helpers.</summary>
 internal static class NaturalSpeechOps
 {
+    /// <summary>Loads a VITS convolution straight from <paramref name="source"/>: <c>weight_v</c>, <c>weight_g</c> and
+    /// <c>bias</c> when weight-normalized, else <c>weight</c> and (unless <paramref name="bias"/> is false) <c>bias</c>.</summary>
+    public static void LoadConv<T>(TorchTensorSource source, NormedConv1DLayer<T> conv, string name, bool bias = true)
+    {
+        if (conv.Normalization == ConvolutionNormalization.Weight)
+            conv.LoadTorchWeights(source, name + ".weight_v", conv.TorchWeightShape, name + ".weight_g", name + ".bias");
+        else
+            conv.LoadTorchWeights(source, name + ".weight", conv.TorchWeightShape, null, bias ? name + ".bias" : null);
+    }
+
     /// <summary>A channel LayerNorm (VITS's <c>modules.LayerNorm</c>) over <c>[1, C, T]</c>.</summary>
     public static Tensor<T> ChannelNorm<T>(IEngine engine, LayerNormalizationLayer<T> norm, Tensor<T> x)
     {

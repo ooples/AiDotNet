@@ -141,17 +141,14 @@ public partial class VALLE2<T> : VallEModelBase<T>
     /// <c>.pt</c> or safetensors).</summary>
     public void LoadDecoderWeights(string path)
     {
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        (_vocos ?? throw new InvalidOperationException("VALL-E 2's decoder exists in native mode only.")).LoadTorchWeights((name, shape) =>
-        {
-            if (!file.TryGetValue(name, out var tensor))
-                throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            return tensor.ToVector().Select(v => (double)v).ToArray();
-        });
+        var vocos = _vocos ?? throw new InvalidOperationException("VALL-E 2's decoder exists in native mode only.");
+        // Vocos's loader still takes each tensor's values.
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
+        vocos.LoadTorchWeights(file.AsFunction());
     }
 
     /// <inheritdoc />
-    private protected override void LoadNetworkWeights(Func<string, int[], double[]> read) =>
+    private protected override void LoadNetworkWeights(AiDotNet.ModelLoading.TorchTensorSource source) =>
         throw new NotSupportedException("VALL-E 2 has no released checkpoint whose layout could be loaded.");
 
     // Codes clipped at the start to whole groups (§3.1: the clipped codes are the utterance's leading silence).

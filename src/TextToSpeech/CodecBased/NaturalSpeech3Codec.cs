@@ -1,5 +1,6 @@
 using AiDotNet.Audio.Codecs;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
 using AiDotNet.TextToSpeech.Vocoders;
@@ -57,10 +58,10 @@ internal sealed class FACodecActivation<T>
 
     public Tensor<T> Forward(Tensor<T> x) => _filtered.Forward(x);
 
-    public void Load(Func<string, double[]> read, Func<string, double[]?> optional, string name)
+    internal void Load(TorchTensorSource source, string name)
     {
-        Snake.Load(read(name + ".act.alpha"), read(name + ".act.beta"));
-        if (optional(name + ".upsample.filter") is { } up && optional(name + ".downsample.lowpass.filter") is { } down) _filtered.LoadFilters(up, down);
+        Snake.Load(source.Read(name + ".act.alpha", Array.Empty<int>()), source.Read(name + ".act.beta", Array.Empty<int>()));
+        if (source.TryRead(name + ".upsample.filter") is { } up && source.TryRead(name + ".downsample.lowpass.filter") is { } down) _filtered.LoadFilters(up, down);
     }
 }
 
@@ -86,19 +87,19 @@ internal sealed class FACodecResidualUnit<T>
 
     public Tensor<T> Forward(Tensor<T> x) => _engine.TensorAdd(x, Conv2.Forward(Act2.Forward(Conv1.Forward(Act1.Forward(x)))));
 
-    public void Load(Func<string, double[]> read, Func<string, double[]?> optional, string prefix)
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        Act1.Load(read, optional, prefix + ".block.0");
-        FACodecWeights.Conv(read, Conv1, prefix + ".block.1");
-        Act2.Load(read, optional, prefix + ".block.2");
-        FACodecWeights.Conv(read, Conv2, prefix + ".block.3");
+        Act1.Load(source, prefix + ".block.0");
+        FACodecWeights.Conv(source, Conv1, prefix + ".block.1");
+        Act2.Load(source, prefix + ".block.2");
+        FACodecWeights.Conv(source, Conv2, prefix + ".block.3");
     }
 }
 
 internal static class FACodecWeights
 {
-    public static void Conv<T>(Func<string, double[]> read, NormedConv1DLayer<T> conv, string name) =>
-        conv.LoadTorchWeights(read(name + ".weight_v"), read(name + ".weight_g"), read(name + ".bias"));
+    public static void Conv<T>(TorchTensorSource source, NormedConv1DLayer<T> conv, string name) =>
+        conv.LoadTorchWeights(source, name + ".weight_v", conv.TorchWeightShape, name + ".weight_g", name + ".bias");
 
     /// <summary>The gradient reversal layer (Ganin and Lempitsky 2015): the identity forward, the gradient times −α backward,
     /// as <c>(1 + α)·stop(x) − α·x</c>.</summary>
@@ -147,19 +148,19 @@ internal sealed class FACodecEncoder<T>
         return _last.Forward(_act.Forward(x));
     }
 
-    public void Load(Func<string, double[]> read, Func<string, double[]?> optional, string prefix)
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        FACodecWeights.Conv(read, _first, prefix + "block.0");
+        FACodecWeights.Conv(source, _first, prefix + "block.0");
         for (int i = 0; i < _blocks.Count; i++)
         {
             var (units, act, down) = _blocks[i];
             string p = $"{prefix}block.{i + 1}.block";
-            for (int u = 0; u < units.Length; u++) units[u].Load(read, optional, $"{p}.{u}");
-            act.Load(read, optional, $"{p}.{units.Length}");
-            FACodecWeights.Conv(read, down, $"{p}.{units.Length + 1}");
+            for (int u = 0; u < units.Length; u++) units[u].Load(source, $"{p}.{u}");
+            act.Load(source, $"{p}.{units.Length}");
+            FACodecWeights.Conv(source, down, $"{p}.{units.Length + 1}");
         }
-        _act.Load(read, optional, $"{prefix}block.{_blocks.Count + 1}");
-        FACodecWeights.Conv(read, _last, $"{prefix}block.{_blocks.Count + 2}");
+        _act.Load(source, $"{prefix}block.{_blocks.Count + 1}");
+        FACodecWeights.Conv(source, _last, $"{prefix}block.{_blocks.Count + 2}");
     }
 }
 
@@ -206,19 +207,19 @@ internal sealed class FACodecDecoderStack<T>
         return _engine.Tanh(_last.Forward(_act.Forward(x)));
     }
 
-    public void Load(Func<string, double[]> read, Func<string, double[]?> optional, string prefix)
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        FACodecWeights.Conv(read, _first, prefix + "0");
+        FACodecWeights.Conv(source, _first, prefix + "0");
         for (int i = 0; i < _blocks.Count; i++)
         {
             var (act, up, units) = _blocks[i];
             string p = $"{prefix}{i + 1}.block";
-            act.Load(read, optional, $"{p}.0");
-            FACodecWeights.Conv(read, up, $"{p}.1");
-            for (int u = 0; u < units.Length; u++) units[u].Load(read, optional, $"{p}.{u + 2}");
+            act.Load(source, $"{p}.0");
+            FACodecWeights.Conv(source, up, $"{p}.1");
+            for (int u = 0; u < units.Length; u++) units[u].Load(source, $"{p}.{u + 2}");
         }
-        _act.Load(read, optional, $"{prefix}{_blocks.Count + 1}");
-        FACodecWeights.Conv(read, _last, $"{prefix}{_blocks.Count + 2}");
+        _act.Load(source, $"{prefix}{_blocks.Count + 1}");
+        FACodecWeights.Conv(source, _last, $"{prefix}{_blocks.Count + 2}");
     }
 }
 
@@ -257,11 +258,11 @@ internal sealed class FACodecPredictor<T>
         return Heads.Select(h => h.Forward(rows)).ToList();
     }
 
-    public void Load(Func<string, double[]> read, Func<string, double[]?> optional, string prefix)
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        for (int u = 0; u < _units.Length; u++) _units[u].Load(read, optional, $"{prefix}model.{u}");
-        _act.Load(read, optional, $"{prefix}model.3");
+        for (int u = 0; u < _units.Length; u++) _units[u].Load(source, $"{prefix}model.{u}");
+        _act.Load(source, $"{prefix}model.3");
         for (int h = 0; h < Heads.Count; h++)
-            TorchParameters.Linear(_engine, Heads[h], _input, _output, read($"{prefix}heads.{h}.weight"), read($"{prefix}heads.{h}.bias"));
+            TorchParameters.Linear(_engine, Heads[h], _input, _output, source, $"{prefix}heads.{h}.weight", $"{prefix}heads.{h}.bias");
     }
 }

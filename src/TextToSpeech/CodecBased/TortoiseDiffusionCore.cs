@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
 using AiDotNet.TextToSpeech.VoiceCloning;
@@ -38,13 +39,15 @@ internal sealed class TortoiseDiffusionResidual<T>
         return _engine.TensorAdd(input, _output.Forward(_engine.Swish(x)));
     }
 
-    internal void Load(Func<string, int[], double[]> read, string prefix)
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        _inputNorm.LoadAffine(read(prefix + "in_layers.0.weight", new[] { _dim }), read(prefix + "in_layers.0.bias", new[] { _dim }));
-        _outputNorm.LoadAffine(read(prefix + "out_layers.0.weight", new[] { _dim }), read(prefix + "out_layers.0.bias", new[] { _dim }));
+        _inputNorm.LoadAffine(source, prefix + "in_layers.0.weight", prefix + "in_layers.0.bias");
+        _outputNorm.LoadAffine(source, prefix + "out_layers.0.weight", prefix + "out_layers.0.bias");
+        // XTTS's convolution loader still takes each tensor's values.
+        var read = source.AsFunction();
         XttsOps<T>.LoadConv(read, _input, prefix + "in_layers.2", _dim, _dim, 1);
         XttsOps<T>.LoadConv(read, _output, prefix + "out_layers.3", _dim, _dim, 3);
-        IndexTtsOps.LoadLinear(_engine, read, _time, prefix + "emb_layers.1", _dim, 2 * _dim);
+        TorchParameters.Linear(_engine, _time, _dim, 2 * _dim, source, prefix + "emb_layers.1.weight", prefix + "emb_layers.1.bias");
     }
 }
 
@@ -155,33 +158,37 @@ internal sealed class TortoiseDiffusionCore<T>
         return _output.Forward(_engine.Swish(Normalize(_engine, _outputNorm, x)));
     }
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         int d = _options.DiffusionDim, mel = _options.MelChannels;
+        // XTTS's convolution and attention loaders still take each tensor's values.
+        var read = source.AsFunction();
         XttsOps<T>.LoadConv(read, _input, "inp_block", mel, d, 3);
         XttsOps<T>.LoadConv(read, _latentInput, "latent_conditioner.0", _options.LLMDim, d, 3);
         XttsOps<T>.LoadConv(read, _context1, "contextual_embedder.0", mel, d, 3);
         XttsOps<T>.LoadConv(read, _context2, "contextual_embedder.1", d, 2 * d, 3);
-        _codeEmbedding.LoadTable(read("code_embedding.weight", new[] { _options.CodebookSize + 1, d }));
-        _unconditioned.LoadTable(read("unconditioned_embedding", new[] { 1, d, 1 }));
+        _codeEmbedding.LoadTable(source, "code_embedding.weight");
+        _unconditioned.LoadTable(source.Read("unconditioned_embedding", new[] { 1, d, 1 }));
         for (int i = 0; i < _codeAttention.Length; i++) _codeAttention[i].LoadTorchWeights(read, $"code_converter.{i}.");
         for (int i = 0; i < _latentAttention.Length; i++) _latentAttention[i].LoadTorchWeights(read, $"latent_conditioner.{i + 1}.");
         for (int i = 0; i < _contextAttention.Length; i++) _contextAttention[i].LoadTorchWeights(read, $"contextual_embedder.{i + 2}.");
-        _codeNorm.LoadAffine(read("code_norm.weight", new[] { d }), read("code_norm.bias", new[] { d }));
-        _outputNorm.LoadAffine(read("out.0.weight", new[] { d }), read("out.0.bias", new[] { d }));
-        IndexTtsOps.LoadLinear(_engine, read, _time1, "time_embed.0", d, d);
-        IndexTtsOps.LoadLinear(_engine, read, _time2, "time_embed.2", d, d);
+        _codeNorm.LoadAffine(source, "code_norm.weight", "code_norm.bias");
+        _outputNorm.LoadAffine(source, "out.0.weight", "out.0.bias");
+        TorchParameters.Linear(_engine, _time1, d, d, source, "time_embed.0.weight", "time_embed.0.bias");
+        TorchParameters.Linear(_engine, _time2, d, d, source, "time_embed.2.weight", "time_embed.2.bias");
         for (int i = 0; i < _integrators.Length; i++)
         {
-            _integrators[i].Residual.Load(read, $"conditioning_timestep_integrator.{i}.resblk.");
+            _integrators[i].Residual.Load(source, $"conditioning_timestep_integrator.{i}.resblk.");
             _integrators[i].Attention.LoadTorchWeights(read, $"conditioning_timestep_integrator.{i}.attn.");
         }
         for (int i = 0; i < _layers.Length; i++)
         {
-            _layers[i].Residual.Load(read, $"layers.{i}.resblk.");
+            _layers[i].Residual.Load(source, $"layers.{i}.resblk.");
             _layers[i].Attention.LoadTorchWeights(read, $"layers.{i}.attn.");
         }
-        for (int i = 0; i < _finalResiduals.Length; i++) _finalResiduals[i].Load(read, $"layers.{i + _layers.Length}.");
+        for (int i = 0; i < _finalResiduals.Length; i++) _finalResiduals[i].Load(source, $"layers.{i + _layers.Length}.");
         XttsOps<T>.LoadConv(read, _integrating, "integrating_conv", 2 * d, d, 1);
         XttsOps<T>.LoadConv(read, _melHead, "mel_head", d, mel, 3);
         XttsOps<T>.LoadConv(read, _output, "out.2", d, 2 * mel, 3);

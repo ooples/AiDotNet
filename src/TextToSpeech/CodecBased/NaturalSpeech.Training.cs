@@ -551,9 +551,9 @@ public partial class NaturalSpeech<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        Core.LoadHeatz123(name => file.TryGetValue(name, out var t) || file.TryGetValue("model." + name, out t)
-            ? t.ToVector().Select(v => (double)v).ToArray() : null);
-        _memoryInitialized |= file.Keys.Any(k => k.EndsWith("memory_bank.memory_bank", StringComparison.Ordinal));
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
+        var source = file.WithNames(name => file.Contains(name) ? name : "model." + name);
+        Core.LoadHeatz123(source);
+        _memoryInitialized |= source.Contains("memory_bank.memory_bank");
     }
 }

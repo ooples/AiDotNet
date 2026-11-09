@@ -178,37 +178,38 @@ internal sealed class VallETransformer<T>
     }
 
     /// <summary>Loads the reference's parameters under <paramref name="prefix"/> (e.g. <c>ar_decoder</c>).</summary>
-    public void LoadTorchWeights(IEngine engine, string prefix, Func<string, int[], double[]> read)
+    public void LoadTorchWeights(IEngine engine, string prefix, Func<string, int[], double[]> read) =>
+        LoadTorchWeights(engine, prefix, AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads the reference's parameters under <paramref name="prefix"/> from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(IEngine engine, string prefix, AiDotNet.ModelLoading.TorchTensorSource source)
     {
         int d = Configuration.ModelDim, ff = Configuration.FeedForwardDim;
         for (int i = 0; i < Layers.Count; i++)
         {
             var layer = Layers[i];
             string p = $"{prefix}.layers.{i}";
-            TorchParameters.Linear(engine, layer.InProjection, d, 3 * d, read($"{p}.self_attn.in_proj_weight", new[] { 3 * d, d }),
-                read($"{p}.self_attn.in_proj_bias", new[] { 3 * d }));
-            TorchParameters.Linear(engine, layer.OutProjection, d, d, read($"{p}.self_attn.out_proj.weight", new[] { d, d }),
-                read($"{p}.self_attn.out_proj.bias", new[] { d }));
-            TorchParameters.Linear(engine, layer.FeedForwardIn, d, ff, read($"{p}.linear1.weight", new[] { ff, d }), read($"{p}.linear1.bias", new[] { ff }));
-            TorchParameters.Linear(engine, layer.FeedForwardOut, ff, d, read($"{p}.linear2.weight", new[] { d, ff }), read($"{p}.linear2.bias", new[] { d }));
-            LoadNorm(engine, $"{p}.norm1", layer.Norm1, layer.Adaptive1, read);
-            LoadNorm(engine, $"{p}.norm2", layer.Norm2, layer.Adaptive2, read);
+            TorchParameters.Linear(engine, layer.InProjection, d, 3 * d, source, $"{p}.self_attn.in_proj_weight", $"{p}.self_attn.in_proj_bias");
+            TorchParameters.Linear(engine, layer.OutProjection, d, d, source, $"{p}.self_attn.out_proj.weight", $"{p}.self_attn.out_proj.bias");
+            TorchParameters.Linear(engine, layer.FeedForwardIn, d, ff, source, $"{p}.linear1.weight", $"{p}.linear1.bias");
+            TorchParameters.Linear(engine, layer.FeedForwardOut, ff, d, source, $"{p}.linear2.weight", $"{p}.linear2.bias");
+            LoadNorm(engine, $"{p}.norm1", layer.Norm1, layer.Adaptive1, source);
+            LoadNorm(engine, $"{p}.norm2", layer.Norm2, layer.Adaptive2, source);
         }
-        LoadNorm(engine, $"{prefix}.norm", FinalNorm, FinalAdaptive, read);
+        LoadNorm(engine, $"{prefix}.norm", FinalNorm, FinalAdaptive, source);
     }
 
     private void LoadNorm(IEngine engine, string name, LayerNormalizationLayer<T> norm, DenseLayer<T>? adaptive,
-        Func<string, int[], double[]> read)
+        AiDotNet.ModelLoading.TorchTensorSource source)
     {
         int d = Configuration.ModelDim;
         if (adaptive is null)
         {
-            TorchParameters.LayerNorm(engine, norm, read($"{name}.weight", new[] { d }), read($"{name}.bias", new[] { d }));
+            TorchParameters.LayerNorm(engine, norm, source, $"{name}.weight", $"{name}.bias");
             return;
         }
-        TorchParameters.LayerNorm(engine, norm, read($"{name}.norm.weight", new[] { d }), read($"{name}.norm.bias", new[] { d }));
-        TorchParameters.Linear(engine, adaptive, d, 2 * d, read($"{name}.project_layer.weight", new[] { 2 * d, d }),
-            read($"{name}.project_layer.bias", new[] { 2 * d }));
+        TorchParameters.LayerNorm(engine, norm, source, $"{name}.norm.weight", $"{name}.norm.bias");
+        TorchParameters.Linear(engine, adaptive, d, 2 * d, source, $"{name}.project_layer.weight", $"{name}.project_layer.bias");
     }
 }
 

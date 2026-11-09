@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.FrontEnd;
 using AiDotNet.TextToSpeech.Latest;
@@ -156,20 +157,21 @@ internal sealed class VoiceCraftTransformerBlock<T>
         return _engine.TensorAdd(input, output);
     }
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix, int feedForward)
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix, int feedForward)
     {
-        IndexTtsOps.LoadNorm(_engine, read, _norm1, prefix + "norm1", _dimension);
-        IndexTtsOps.LoadNorm(_engine, read, _norm2, prefix + "norm2", _dimension);
-        var weight = read(prefix + "self_attn.in_proj_weight", new[] { 3 * _dimension, _dimension });
-        var bias = read(prefix + "self_attn.in_proj_bias", new[] { 3 * _dimension });
+        TorchParameters.LayerNorm(_engine, _norm1, source, prefix + "norm1.weight", prefix + "norm1.bias");
+        TorchParameters.LayerNorm(_engine, _norm2, source, prefix + "norm2.weight", prefix + "norm2.bias");
+        // The fused query/key/value projection is split three ways.
+        var weight = source.Read(prefix + "self_attn.in_proj_weight", new[] { 3 * _dimension, _dimension });
+        var bias = source.Read(prefix + "self_attn.in_proj_bias", new[] { 3 * _dimension });
         var projections = new[] { _query, _key, _value };
         for (int i = 0; i < projections.Length; i++)
             TorchParameters.Linear(_engine, projections[i], _dimension, _dimension,
                 weight.Skip(i * _dimension * _dimension).Take(_dimension * _dimension).ToArray(),
                 bias.Skip(i * _dimension).Take(_dimension).ToArray());
-        IndexTtsOps.LoadLinear(_engine, read, _attentionOut, prefix + "self_attn.out_proj", _dimension, _dimension);
-        IndexTtsOps.LoadLinear(_engine, read, _ffIn, prefix + "linear1", _dimension, feedForward);
-        IndexTtsOps.LoadLinear(_engine, read, _ffOut, prefix + "linear2", feedForward, _dimension);
+        TorchParameters.Linear(_engine, _attentionOut, _dimension, _dimension, source, prefix + "self_attn.out_proj.weight", prefix + "self_attn.out_proj.bias");
+        TorchParameters.Linear(_engine, _ffIn, _dimension, feedForward, source, prefix + "linear1.weight", prefix + "linear1.bias");
+        TorchParameters.Linear(_engine, _ffOut, feedForward, _dimension, source, prefix + "linear2.weight", prefix + "linear2.bias");
     }
 }
 
@@ -217,23 +219,26 @@ internal sealed class VoiceCraftNetwork<T>
 
     internal int LayerCount => _blocks.Length;
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
-        void Embedding(EmbeddingLayer<T> layer, string name, int rows) => layer.SetParameters(new Vector<T>(
-            read(name, new[] { rows, _options.LLMDim }).Select(VoiceCraftOps<T>.NumOps.FromDouble)));
+        void Embedding(EmbeddingLayer<T> layer, string name, int rows) => TorchParameters.Parameters(layer, source, name, new[] { rows, _options.LLMDim });
         Embedding(_textEmbedding, "text_embedding.word_embeddings.weight", _options.TextVocabularySize + 1);
         Embedding(_maskEmbedding, "mask_embedding", _options.MaxMaskSpans);
         for (int q = 0; q < _audioEmbeddings.Length; q++)
             Embedding(_audioEmbeddings[q], $"audio_embedding.{q}.word_embeddings.weight", _options.AudioVocabularySize);
-        _textPosition.SetParameters(new Vector<T>(read("text_positional_embedding.alpha", new[] { 1 }).Select(VoiceCraftOps<T>.NumOps.FromDouble)));
-        _audioPosition.SetParameters(new Vector<T>(read("audio_positional_embedding.alpha", new[] { 1 }).Select(VoiceCraftOps<T>.NumOps.FromDouble)));
-        for (int i = 0; i < _blocks.Length; i++) _blocks[i].LoadTorchWeights(read, $"decoder.layers.{i}.", _options.FeedForwardDim);
-        IndexTtsOps.LoadNorm(_engine, read, _finalNorm, "decoder.norm", _options.LLMDim);
+        _textPosition.SetParameters(new Vector<T>(source.Read("text_positional_embedding.alpha", new[] { 1 }).Select(VoiceCraftOps<T>.NumOps.FromDouble)));
+        _audioPosition.SetParameters(new Vector<T>(source.Read("audio_positional_embedding.alpha", new[] { 1 }).Select(VoiceCraftOps<T>.NumOps.FromDouble)));
+        for (int i = 0; i < _blocks.Length; i++) _blocks[i].LoadTorchWeights(source, $"decoder.layers.{i}.", _options.FeedForwardDim);
+        TorchParameters.LayerNorm(_engine, _finalNorm, source, "decoder.norm.weight", "decoder.norm.bias");
         for (int q = 0; q < _predictionHeads.Length; q++)
         {
             var head = _predictionHeads[q];
-            IndexTtsOps.LoadLinear(_engine, read, head.Hidden, $"predict_layer.{q}.0", _options.LLMDim, _options.CodebookSize / 2);
-            IndexTtsOps.LoadLinear(_engine, read, head.Output, $"predict_layer.{q}.2", _options.CodebookSize / 2, _options.AudioVocabularySize);
+            TorchParameters.Linear(_engine, head.Hidden, _options.LLMDim, _options.CodebookSize / 2, source,
+                $"predict_layer.{q}.0.weight", $"predict_layer.{q}.0.bias");
+            TorchParameters.Linear(_engine, head.Output, _options.CodebookSize / 2, _options.AudioVocabularySize, source,
+                $"predict_layer.{q}.2.weight", $"predict_layer.{q}.2.bias");
         }
     }
 

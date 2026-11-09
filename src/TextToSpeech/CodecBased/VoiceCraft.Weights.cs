@@ -8,20 +8,26 @@ public partial class VoiceCraft<T>
     public void LoadAuthorWeights(string transformerPath, string codecPath, string codecPrefix = "")
     {
         RequireConvertedCheckpointTarget();
-        var state = new ComputerVision.Weights.WeightLoader().LoadWeights(transformerPath);
-        _network!.LoadTorchWeights(AuthorTransformerReader(state));
+        using (var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(transformerPath, strictAxes: true))
+            _network!.LoadTorchWeights(AuthorTransformer(file));
         _codecNetwork!.LoadAuthorWeights(codecPath, codecPrefix);
     }
 
+    /// <summary>The released Transformer's state, under its <c>model.</c> wrapper when it has one.</summary>
+    internal static AiDotNet.ModelLoading.TorchTensorSource AuthorTransformer(AiDotNet.ModelLoading.TorchTensorSource state) =>
+        state.WithPrefix(state.Contains("model.text_embedding.word_embeddings.weight") ? "model." : string.Empty);
+
+    /// <summary><see cref="AuthorTransformer"/> over an already loaded state dict, read through the allocating form with
+    /// each tensor's axes checked.</summary>
     internal static Func<string, int[], double[]> AuthorTransformerReader(IReadOnlyDictionary<string, Tensor<float>> state)
     {
-        string prefix = state.ContainsKey("model.text_embedding.word_embeddings.weight") ? "model." : string.Empty;
+        var source = AuthorTransformer(AiDotNet.ModelLoading.TorchTensorSource.From(state, "the VoiceCraft checkpoint"));
         return (name, shape) =>
         {
-            if (!state.TryGetValue(prefix + name, out var tensor)) throw new InvalidDataException($"VoiceCraft checkpoint is missing '{prefix + name}'.");
-            if (!tensor.Shape.ToArray().SequenceEqual(shape))
+            var axes = source.ShapeOf(name) ?? throw new InvalidDataException($"VoiceCraft checkpoint is missing '{name}'.");
+            if (!axes.SequenceEqual(shape.Select(d => (long)d)))
                 throw new InvalidDataException($"VoiceCraft tensor '{name}' has an incompatible shape.");
-            return tensor.ToArray().Select(v => (double)v).ToArray();
+            return source.Read(name, shape);
         };
     }
 
@@ -39,23 +45,29 @@ public partial class VoiceCraft<T>
         RequireConvertedCheckpointTarget();
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Checkpoint path required.", nameof(path));
         if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
-        var state = new ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        LoadConvertedWeights(name => state.TryGetValue(name, out var tensor)
-            ? tensor.ToVector().Select(value => (double)value).ToArray()
-            : null);
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
+        LoadConvertedWeights(file);
     }
 
     internal void LoadConvertedWeights(Func<string, double[]?> read)
     {
         Validation.Guard.NotNull(read);
+        LoadConvertedWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Copies <c>{ConvertedParameterTensor}</c> from <paramref name="source"/> straight into a parameter vector.</summary>
+    internal void LoadConvertedWeights(AiDotNet.ModelLoading.TorchTensorSource source)
+    {
         RequireConvertedCheckpointTarget();
-        var values = read(ConvertedParameterTensor)
-            ?? throw new InvalidDataException($"The checkpoint has no tensor '{ConvertedParameterTensor}'.");
+        if (!source.Contains(ConvertedParameterTensor))
+            throw new InvalidDataException($"The checkpoint has no tensor '{ConvertedParameterTensor}'.");
         int expected = GetParameters().Length;
-        if (values.Length != expected)
+        if (source.ShapeOf(ConvertedParameterTensor) is { } shape && shape.Aggregate(1L, (a, b) => a * b) is var count && count != expected)
             throw new InvalidDataException(
-                $"'{ConvertedParameterTensor}' has {values.Length} values; this VoiceCraft configuration expects {expected}.");
-        SetParameters(new Vector<T>(Array.ConvertAll(values, NumOps.FromDouble)));
+                $"'{ConvertedParameterTensor}' has {count} values; this VoiceCraft configuration expects {expected}.");
+        var parameters = new Vector<T>(expected);
+        source.CopyTo(ConvertedParameterTensor, new[] { expected }, new Tensor<T>(new[] { expected }, parameters));
+        SetParameters(parameters);
     }
 
     private void RequireConvertedCheckpointTarget()

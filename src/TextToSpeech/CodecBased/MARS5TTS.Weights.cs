@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using Newtonsoft.Json.Linq;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
@@ -56,27 +57,10 @@ public partial class MARS5TTS<T>
         ThrowIfDisposed();
         if (checkpoints is null) throw new ArgumentNullException(nameof(checkpoints));
         if (!HasPaperLayers) throw NotNative();
-        Func<string, double[]?> Reader(string path)
-        {
-            var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-            return name =>
-            {
-                if (!file.TryGetValue(name, out var tensor)) return null;
-                file.Remove(name);
-                var values = new double[tensor.Length];
-                for (int i = 0; i < values.Length; i++) values[i] = tensor.GetFlat(i);
-                return values;
-            };
-        }
-        Autoregressive.Load(Reader(checkpoints.Autoregressive));
-        NonAutoregressive.Load(Reader(checkpoints.NonAutoregressive));
+        using (var ar = TorchCheckpointFile.Open(checkpoints.Autoregressive)) Autoregressive.Load(ar);
+        using (var nar = TorchCheckpointFile.Open(checkpoints.NonAutoregressive)) NonAutoregressive.Load(nar);
         Codec.LoadPretrainedWeights(checkpoints.Codec);
-        var vocos = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(checkpoints.Vocoder);
-        Vocos.LoadTorchWeights((name, shape) =>
-        {
-            if (!vocos.TryGetValue(name, out var tensor)) throw new InvalidDataException($"Vocos's checkpoint has no tensor '{name}'.");
-            return tensor.ToVector().Select(v => (double)v).ToArray();
-        });
+        using (var vocos = TorchCheckpointFile.Open(checkpoints.Vocoder)) Vocos.LoadTorchWeights(vocos.AsFunction());
         _optimizers.Clear();
     }
 }

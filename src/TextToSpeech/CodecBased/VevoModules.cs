@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.FlowDiffusion;
@@ -102,11 +103,13 @@ internal sealed class VevoContentCodec<T>
 
     /// <summary>Loads the release's <c>encoder.*</c>, <c>projector.*</c> and the codebook
     /// (<c>quantizer.codebook.layers.0.embed</c>, <c>[dim, codes]</c>).</summary>
-    public void Load(Func<string, int[], double[]> read)
+    public void Load(Func<string, int[], double[]> read) => Load(TorchTensorSource.From(read));
+
+    internal void Load(TorchTensorSource source)
     {
         var c = Configuration;
-        void Conv(NormedConv1DLayer<T> conv, string name, bool bias) => conv.LoadTorchWeights(read(name + ".weight", conv.TorchWeightShape), null,
-            bias ? read(name + ".bias", new[] { conv.OutputChannels }) : new double[conv.OutputChannels]);
+        void Conv(NormedConv1DLayer<T> conv, string name, bool bias) =>
+            conv.LoadTorchWeights(source, name + ".weight", conv.TorchWeightShape, null, bias ? name + ".bias" : null);
         Conv(Input, "encoder.conv.conv", false);
         for (int i = 0; i < Blocks.Count; i++)
         {
@@ -119,7 +122,7 @@ internal sealed class VevoContentCodec<T>
             Conv(Blocks[i].Conv, p + "conv.conv", true);
         }
         Conv(Projector, "projector.project.conv", false);
-        TorchParameters.Linear(Codebook, 1, c.CodeDim * c.Codes, read("quantizer.codebook.layers.0.embed", new[] { c.CodeDim, c.Codes }));
+        TorchParameters.Linear(Codebook, 1, c.CodeDim * c.Codes, source, "quantizer.codebook.layers.0.embed", new[] { c.CodeDim, c.Codes });
     }
 }
 
@@ -234,7 +237,9 @@ internal sealed class VevoAutoregressive<T>
     }
 
     /// <summary>Loads the release's <c>model.model.*</c> and <c>model.lm_head.weight</c>.</summary>
-    public void Load(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read, "model.model.", "model.lm_head.weight");
+    public void Load(Func<string, int[], double[]> read) => Load(TorchTensorSource.From(read));
+
+    internal void Load(TorchTensorSource source) => Network.LoadTorchWeights(source, "model.model.", "model.lm_head.weight");
 }
 
 /// <summary>Hugging Face's logits processors and warpers in <c>generate</c>'s order, as Vevo's decoding uses them.</summary>
@@ -417,13 +422,16 @@ internal sealed class VevoFlowMatching<T>
     }
 
     /// <summary>Loads the release's <c>cond_emb</c> and <c>diff_estimator.*</c>.</summary>
-    public void Load(Func<string, int[], double[]> read)
+    public void Load(Func<string, int[], double[]> read) => Load(TorchTensorSource.From(read));
+
+    internal void Load(TorchTensorSource source)
     {
         var c = Configuration;
-        Condition.LoadTable(read("cond_emb.weight", new[] { c.Codes, c.Hidden }));
-        Transformer.LoadTorchWeights((name, shape) => read(name, shape), "diff_estimator.");
+        Condition.LoadTable(source, "cond_emb.weight");
+        // MaskGCT's transformer loader still takes each tensor's values.
+        Transformer.LoadTorchWeights((name, shape) => source.Read(name, shape), "diff_estimator.");
         void Linear(DenseLayer<T> layer, string name, int inputs, int outputs) =>
-            TorchParameters.Linear(_engine, layer, inputs, outputs, read(name + ".weight", new[] { outputs, inputs }), read(name + ".bias", new[] { outputs }));
+            TorchParameters.Linear(_engine, layer, inputs, outputs, source, name + ".weight", name + ".bias");
         Linear(MelIn.In, "diff_estimator.mel_mlp.0", c.MelDim, 4 * c.Hidden);
         Linear(MelIn.Out, "diff_estimator.mel_mlp.2", 4 * c.Hidden, c.Hidden);
         Linear(MelOut.In, "diff_estimator.mel_out_mlp.0", c.Hidden, 4 * c.Hidden);

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 
@@ -567,20 +568,19 @@ internal sealed class T5Seq2Seq<T>
     /// With <paramref name="encoderOnly"/> only the encoder stack is read (not <c>shared</c>, the decoder or
     /// <c>lm_head</c>).
     /// </summary>
-    public void LoadHuggingFaceWeights(Func<string, int[], double[]> read, bool encoderOnly = false)
+    public void LoadHuggingFaceWeights(Func<string, int[], double[]> read, bool encoderOnly = false) =>
+        LoadHuggingFaceWeights(TorchTensorSource.From(read), encoderOnly);
+
+    /// <summary>Loads a Hugging Face <c>T5ForConditionalGeneration</c> state dict from <paramref name="source"/>, each
+    /// tensor copied straight into its layer.</summary>
+    internal void LoadHuggingFaceWeights(TorchTensorSource source, bool encoderOnly = false)
     {
         var c = Configuration;
         int inner = c.Heads * c.KeyValueDim;
-        void Linear(string name, BiasFreeLinearLayer<T> layer, int output, int input)
-        {
-            var values = read(name + ".weight", new[] { output, input });
-            var transposed = new Vector<T>(output * input);
-            for (int o = 0; o < output; o++)
-                for (int i = 0; i < input; i++) transposed[i * output + o] = NumOps.FromDouble(values[o * input + i]);
-            layer.SetParameters(transposed);
-        }
+        void Linear(string name, BiasFreeLinearLayer<T> layer, int output, int input) =>
+            TorchParameters.Linear(layer, input, output, source, name + ".weight");
         void Norm(string name, RMSNormalizationLayer<T> layer) =>
-            layer.SetParameters(new Vector<T>(Array.ConvertAll(read(name + ".weight", new[] { c.ModelDim }), NumOps.FromDouble)));
+            layer.SetParameters(new Vector<T>(Array.ConvertAll(source.Read(name + ".weight", new[] { c.ModelDim }), NumOps.FromDouble)));
         void Attention(string name, T5Attention<T> attention)
         {
             Linear(name + ".q", attention.Query, inner, c.ModelDim);
@@ -603,9 +603,9 @@ internal sealed class T5Seq2Seq<T>
             Norm(name + ".layer_norm", block.FeedForwardNorm);
         }
 
-        if (!encoderOnly) Shared.LoadTable(read("shared.weight", new[] { c.VocabularySize, c.ModelDim }));
+        if (!encoderOnly) Shared.LoadTable(source, "shared.weight");
         if (!encoderOnly && EncoderEmbedding is not null)
-            EncoderEmbedding.LoadTable(read("encoder.embed_tokens.weight", new[] { c.VocabularySize, c.ModelDim }));
+            EncoderEmbedding.LoadTable(source, "encoder.embed_tokens.weight");
         for (int i = 0; i < Encoder.Count; i++)
         {
             string block = $"encoder.block.{i}.layer";
@@ -613,7 +613,7 @@ internal sealed class T5Seq2Seq<T>
             Norm($"{block}.0.layer_norm", Encoder[i].SelfNorm);
             FeedForward($"{block}.1", Encoder[i]);
         }
-        EncoderBias.LoadTable(read("encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight", new[] { c.RelativeBuckets, c.Heads }));
+        EncoderBias.LoadTable(source, "encoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight");
         Norm("encoder.final_layer_norm", EncoderFinalNorm);
         if (encoderOnly) return;
         for (int i = 0; i < Decoder.Count; i++)
@@ -629,7 +629,7 @@ internal sealed class T5Seq2Seq<T>
         }
         if (DecoderBias is not null && DecoderFinalNorm is not null)
         {
-            DecoderBias.LoadTable(read("decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight", new[] { c.RelativeBuckets, c.Heads }));
+            DecoderBias.LoadTable(source, "decoder.block.0.layer.0.SelfAttention.relative_attention_bias.weight");
             Norm("decoder.final_layer_norm", DecoderFinalNorm);
         }
         if (LanguageModelHead is not null) Linear("lm_head", LanguageModelHead, c.VocabularySize, c.ModelDim);
@@ -640,13 +640,17 @@ internal sealed class T5Seq2Seq<T>
     /// <paramref name="pretrainedVocabulary"/> rows of this model's: those rows of <c>shared</c>, the encoder blocks,
     /// its relative bias table and final norm. The decoder and the remaining embedding rows keep their values.
     /// </summary>
-    public void LoadHuggingFaceEncoderWeights(Func<string, int[], double[]> read, int pretrainedVocabulary)
+    public void LoadHuggingFaceEncoderWeights(Func<string, int[], double[]> read, int pretrainedVocabulary) =>
+        LoadHuggingFaceEncoderWeights(TorchTensorSource.From(read), pretrainedVocabulary);
+
+    /// <summary>Loads only the encoder of a Hugging Face T5 checkpoint from <paramref name="source"/>.</summary>
+    internal void LoadHuggingFaceEncoderWeights(TorchTensorSource source, int pretrainedVocabulary)
     {
         var c = Configuration;
         if (pretrainedVocabulary <= 0 || pretrainedVocabulary > c.VocabularySize)
             throw new ArgumentOutOfRangeException(nameof(pretrainedVocabulary));
-        (EncoderEmbedding ?? Shared).LoadLeadingRows(read("shared.weight", new[] { pretrainedVocabulary, c.ModelDim }));
-        LoadHuggingFaceWeights(read, encoderOnly: true);
+        (EncoderEmbedding ?? Shared).LoadLeadingRows(source, "shared.weight", pretrainedVocabulary);
+        LoadHuggingFaceWeights(source, encoderOnly: true);
     }
 }
 

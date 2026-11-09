@@ -562,21 +562,12 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     /// entry). Build the model with the checkpoint's sizes.</summary>
     public void LoadReferenceWeights(string path)
     {
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        LoadNetworkWeights((name, shape) =>
-        {
-            if (!file.TryGetValue(name, out var tensor) && !file.TryGetValue("model." + name, out tensor))
-                throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            var actual = tensor.Shape.ToArray();
-            if (!actual.SequenceEqual(shape))
-                throw new InvalidDataException($"'{name}' is [{string.Join(", ", actual)}] in the checkpoint but [{string.Join(", ", shape)}] " +
-                    "in this model; build the model with the checkpoint's configuration.");
-            return tensor.ToArray().Select(v => (double)v).ToArray();
-        });
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path, strictAxes: true);
+        LoadNetworkWeights(file.WithNames(name => file.Contains(name) ? name : "model." + name));
     }
 
     /// <summary>Loads the AR and NAR models from a reference state dictionary.</summary>
-    private protected virtual void LoadNetworkWeights(Func<string, int[], double[]> read) => PaperCore.LoadTorchWeights(read);
+    private protected virtual void LoadNetworkWeights(AiDotNet.ModelLoading.TorchTensorSource source) => PaperCore.LoadTorchWeights(source);
 
     // ---------------------------------------------------------------- housekeeping
 

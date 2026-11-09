@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
@@ -274,28 +275,30 @@ internal sealed class PyannoteXVector<T>
 
     /// <summary>Loads a pyannote.audio <c>XVectorSincNet</c> state dict (the <c>pyannote/embedding</c> checkpoint's
     /// layout); <paramref name="read"/> checks each tensor's shape.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads a pyannote.audio <c>XVectorSincNet</c> state dict from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
-        void Fill(Tensor<T> target, double[] values)
+        void Fill(Tensor<T> target, string name, int[] shape)
         {
-            for (int i = 0; i < values.Length; i++) target[i] = ops.FromDouble(values[i]);
+            source.CopyTo(name, shape, target);
             _engine.InvalidatePersistentTensor(target);
         }
         void Instance(string name, InstanceNormalizationLayer<T> norm, int channels)
         {
-            Fill(norm.GetGammaTensor(), read(name + ".weight", new[] { channels }));
-            Fill(norm.GetBetaTensor(), read(name + ".bias", new[] { channels }));
+            Fill(norm.GetGammaTensor(), name + ".weight", new[] { channels });
+            Fill(norm.GetBetaTensor(), name + ".bias", new[] { channels });
         }
         void Convolution(string name, NormedConv1DLayer<T> conv, int input, int output, int kernel) =>
-            conv.LoadTorchWeights(read(name + ".weight", new[] { output, input, kernel }), null, read(name + ".bias", new[] { output }));
+            conv.LoadTorchWeights(source, name + ".weight", new[] { output, input, kernel }, null, name + ".bias");
 
         Instance("sincnet.wav_norm1d", WaveNorm, 1);
         // The filterbank's fixed buffers are rebuilt here; they must agree with the checkpoint's.
-        Sinc.CheckBuffers(read("sincnet.conv1d.0.filterbank.window_", new[] { 125 }),
-            read("sincnet.conv1d.0.filterbank.n_", new[] { 1, 125 }));
-        Fill(Sinc.LowHz, read("sincnet.conv1d.0.filterbank.low_hz_", new[] { 40, 1 }));
-        Fill(Sinc.BandHz, read("sincnet.conv1d.0.filterbank.band_hz_", new[] { 40, 1 }));
+        Sinc.CheckBuffers(source.Read("sincnet.conv1d.0.filterbank.window_", new[] { 125 }),
+            source.Read("sincnet.conv1d.0.filterbank.n_", new[] { 1, 125 }));
+        Fill(Sinc.LowHz, "sincnet.conv1d.0.filterbank.low_hz_", new[] { 40, 1 });
+        Fill(Sinc.BandHz, "sincnet.conv1d.0.filterbank.band_hz_", new[] { 40, 1 });
         Instance("sincnet.norm1d.0", SincNorms[0], 80);
         Convolution("sincnet.conv1d.1", SincConvs[0], 80, 60, 5);
         Instance("sincnet.norm1d.1", SincNorms[1], 60);
@@ -309,13 +312,12 @@ internal sealed class PyannoteXVector<T>
             var norm = TdnnNorms[i];
             using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
                 norm.Forward(new Tensor<T>(new[] { 1, channels, 2, 1 }));                                               // allocate the statistics
-            Fill(norm.GetGamma(), read($"tdnns.{3 * i + 2}.weight", new[] { channels }));
-            Fill(norm.GetBeta(), read($"tdnns.{3 * i + 2}.bias", new[] { channels }));
-            Fill(norm.GetRunningMean(), read($"tdnns.{3 * i + 2}.running_mean", new[] { channels }));
-            Fill(norm.GetRunningVariance(), read($"tdnns.{3 * i + 2}.running_var", new[] { channels }));
+            Fill(norm.GetGamma(), $"tdnns.{3 * i + 2}.weight", new[] { channels });
+            Fill(norm.GetBeta(), $"tdnns.{3 * i + 2}.bias", new[] { channels });
+            Fill(norm.GetRunningMean(), $"tdnns.{3 * i + 2}.running_mean", new[] { channels });
+            Fill(norm.GetRunningVariance(), $"tdnns.{3 * i + 2}.running_var", new[] { channels });
             input = channels;
         }
-        TorchParameters.Linear(_engine, Embedding, 2 * input, Dimension,
-            read("embedding.weight", new[] { Dimension, 2 * input }), read("embedding.bias", new[] { Dimension }));
+        TorchParameters.Linear(_engine, Embedding, 2 * input, Dimension, source, "embedding.weight", "embedding.bias");
     }
 }

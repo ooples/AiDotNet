@@ -376,13 +376,8 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (!HasPaperLayers) throw NotNative();
         string tokenizer = Path.Combine(directory, "tokenizer.json");
         if (File.Exists(tokenizer)) LoadTokenizer(tokenizer);
-        var weights = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var file in Directory.GetFiles(directory, "*.safetensors"))
-            foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(file))
-                weights[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        if (weights.Count == 0) throw new FileNotFoundException($"No .safetensors files in {directory}.");
-        LanguageModel.LoadTorchWeights((name, shape) => weights.TryGetValue(name, out var v) ? v
-            : throw new InvalidDataException($"The checkpoint has no tensor '{name}'."));
+        using var weights = AiDotNet.ModelLoading.TorchCheckpointFile.OpenDirectory(directory);
+        LanguageModel.LoadTorchWeights(weights);
     }
 
     /// <summary>Loads SNAC: hubertsiuzdak/snac_24khz's <c>pytorch_model.bin</c>.</summary>
@@ -390,10 +385,10 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path))
-            state[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        LoadCodec(name => state.TryGetValue(name, out var v) ? v : null, state.Keys);
+        // SNAC's loader still takes each tensor's values; they are read one at a time from the unpickled state.
+        var state = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
+        var source = AiDotNet.ModelLoading.TorchTensorSource.From(state, $"the checkpoint {path}");
+        LoadCodec(name => source.TryRead(name), state.Keys);
     }
 
     internal void LoadCodec(Func<string, double[]?> read, IEnumerable<string> names)

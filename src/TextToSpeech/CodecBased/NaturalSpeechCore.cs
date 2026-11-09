@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.EndToEnd;
 using AiDotNet.TextToSpeech.Latest;
@@ -208,24 +209,27 @@ internal sealed class NaturalSpeechCore<T>
     }
 
     /// <summary>Loads heatz123/naturalspeech's generator checkpoint names (for its variants of the modules).</summary>
-    public void LoadHeatz123(Func<string, double[]?> read)
+    public void LoadHeatz123(Func<string, double[]?> read) => LoadHeatz123(TorchTensorSource.From(read));
+
+    /// <summary>Loads heatz123/naturalspeech's generator checkpoint names from <paramref name="source"/>.</summary>
+    internal void LoadHeatz123(TorchTensorSource source)
     {
-        double[] Require(string n) => read(n) ?? throw new KeyNotFoundException($"The checkpoint has no '{n}'.");
-        var c = Configuration;
+        // The VITS modules shared with MeloTTS still take their values as arrays.
+        double[] Require(string n) => source.Read(n, Array.Empty<int>());
         if (VitsEncoder is null) throw new InvalidOperationException("heatz123's checkpoint has the VITS phoneme encoder; build with NaturalSpeechPhonemeEncoder.Vits.");
-        Embedding.LoadLeadingRows(Require("enc_p.emb.weight"));
+        Embedding.LoadLeadingRows(source, "enc_p.emb.weight");
         VitsEncoder.LoadTorch(_engine, Require, "enc_p.encoder.");
-        DurationPredictor.Load(Require, "dp.");
-        Upsampler.LoadHeatz123(read, "learnable_upsampling.");
+        DurationPredictor.Load(source, "dp.");
+        Upsampler.LoadHeatz123(source, "learnable_upsampling.");
         for (int i = 0; i < _couplings.Count; i++)
         {
             var (pre, net, post) = _couplings[i];
-            MeloOps.LoadConv(Require, pre, $"flow.flows.{2 * i}.pre");
+            NaturalSpeechOps.LoadConv(source, pre, $"flow.flows.{2 * i}.pre");
             net.LoadTorch(Require, $"flow.flows.{2 * i}.enc.");
-            MeloOps.LoadConv(Require, post, $"flow.flows.{2 * i}.post");
+            NaturalSpeechOps.LoadConv(source, post, $"flow.flows.{2 * i}.post");
         }
         Posterior.LoadTorch(Require, "enc_q.");
-        Decoder.LoadTorch(read, "dec.");
-        if (read("memory_bank.memory_bank") is not null) Memory.Load(Require, "memory_bank.");
+        Decoder.LoadTorch(n => source.TryRead(n), "dec.");
+        if (source.Contains("memory_bank.memory_bank")) Memory.Load(source, "memory_bank.");
     }
 }
