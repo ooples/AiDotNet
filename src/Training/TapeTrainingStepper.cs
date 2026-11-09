@@ -191,10 +191,11 @@ internal sealed class TapeTrainingStepper<T>
             new EagerStepHooks
             {
                 OnGradients = request.OnGradients,
-                // The fused plan adds the optimizer's L2 to the gradient ahead of its clip; the eager step it falls back
-                // to must too, or a model trains on a different objective whenever compilation declines.
+                // The fused plan adds the optimizer's L2 on the same side of its clip; the eager step it falls back to
+                // must too, or a model trains on a different objective whenever compilation declines.
                 RegularizeGradients = request.RegularizeGradients ?? OptimizerRegularization(request.Optimizer),
                 ModelGradientClip = request.ModelGradientClip,
+                Optimizer = request.Optimizer,
             });
     }
 
@@ -283,6 +284,7 @@ internal sealed class TapeTrainingStepper<T>
                 OnGradients = onGradients,
                 RegularizeGradients = applyOptimizerRegularization ? OptimizerRegularization(optimizer) : null,
                 ModelGradientClip = modelGradientClip,
+                Optimizer = optimizer,
                 BeforeUpdate = beforeUpdate,
             });
     }
@@ -383,7 +385,8 @@ internal sealed class TapeTrainingStepper<T>
 
         T meanLoss = NumOps.FromDouble(lossSum / microBatchCount);
         onGradients?.Invoke(accumulated);
-        if (applyOptimizerRegularization) OptimizerRegularization(optimizer)?.Invoke(reached, accumulated);
+        RegularizeAndClip(optimizer, reached, accumulated,
+            applyOptimizerRegularization ? OptimizerRegularization(optimizer) : null, modelClip: null);
 
         // A line-searching optimizer re-evaluates the batch objective: the mean of the micro-objectives.
         Tensor<T> MeanObjective()
@@ -402,6 +405,40 @@ internal sealed class TapeTrainingStepper<T>
             reached, accumulated, meanLoss, placeholder, placeholder,
             (_, _) => MeanObjective(), (value, _) => value, parameterBuffer: null));
         return meanLoss;
+    }
+
+    /// <summary>
+    /// The one place a training step orders the optimizer's regularization against the clips, between the backward
+    /// and the optimizer's <c>Step</c>. <see cref="Models.Options.RegularizationOrder.RegularizeThenClip"/> adds the
+    /// regularization, then the model's clip, then <c>Step</c> applies the optimizer's own.
+    /// <see cref="Models.Options.RegularizationOrder.ClipThenRegularize"/> (PyTorch: <c>clip_grad_norm_</c>, then
+    /// <c>step()</c> adds <c>weight_decay * theta</c>) runs the model's clip and the optimizer's clip first and adds the
+    /// regularization last; that <c>Step</c> then skips its clip on this dictionary.
+    /// </summary>
+    /// <param name="optimizer">The optimizer about to step, whose options choose the order. An optimizer outside
+    /// <c>GradientBasedOptimizerBase</c> cannot be clipped ahead and keeps regularize-then-clip.</param>
+    /// <param name="parameters">The parameters being stepped.</param>
+    /// <param name="gradients">Their gradients, updated in place (entries may be replaced).</param>
+    /// <param name="regularize">Adds the optimizer's regularization; null when it has none.</param>
+    /// <param name="modelClip">The model's own clip over its gradients (MaxGradNorm); null when it has none.</param>
+    internal static void RegularizeAndClip(
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        IReadOnlyList<Tensor<T>> parameters,
+        Dictionary<Tensor<T>, Tensor<T>> gradients,
+        Action<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>>? regularize,
+        Action<Dictionary<Tensor<T>, Tensor<T>>>? modelClip)
+    {
+        if (regularize is not null
+            && optimizer is Optimizers.GradientBasedOptimizerBase<T, Tensor<T>, Tensor<T>> ordered
+            && ordered.RegularizesAfterClip)
+        {
+            modelClip?.Invoke(gradients);
+            ordered.ClipTapeGradientsAhead(parameters, gradients);
+            regularize(parameters, gradients);
+            return;
+        }
+        regularize?.Invoke(parameters, gradients);
+        modelClip?.Invoke(gradients);
     }
 
     private static Action<TapeStepContext<T>> OptimizerUpdate(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
@@ -431,11 +468,25 @@ internal sealed class TapeTrainingStepper<T>
         /// <summary>Receives the parameters' gradients before clipping (the model's public gradient surface).</summary>
         public Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? OnGradients { get; init; }
 
-        /// <summary>Adds the optimizer's regularization to the reached parameters' gradients, before clipping.</summary>
+        /// <summary>
+        /// Adds the optimizer's regularization to the reached parameters' gradients, on the side of the clips
+        /// <see cref="Optimizer"/>'s options choose (see <see cref="RegularizeAndClip"/>).
+        /// </summary>
         public Action<IReadOnlyList<Tensor<T>>, Dictionary<Tensor<T>, Tensor<T>>>? RegularizeGradients { get; init; }
 
         /// <summary>The model's own global-norm clip (0 = none), applied before the update.</summary>
         public double ModelGradientClip { get; init; }
+
+        /// <summary>The optimizer the update steps, whose options order the regularization against the clips.</summary>
+        public IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? Optimizer { get; init; }
+
+        /// <summary>Regularizes and clips <paramref name="gradients"/> as <see cref="RegularizeAndClip"/> orders it.</summary>
+        internal void RegularizeAndClip(IReadOnlyList<Tensor<T>> parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+        {
+            double modelClip = ModelGradientClip;
+            TapeTrainingStepper<T>.RegularizeAndClip(Optimizer, parameters, gradients, RegularizeGradients,
+                modelClip > 0.0 ? g => ClipByGlobalNorm(g, modelClip) : null);
+        }
 
         /// <summary>Runs after the gradients exist and before the update.</summary>
         public Action? BeforeUpdate { get; init; }
@@ -494,9 +545,7 @@ internal sealed class TapeTrainingStepper<T>
 
         T lossValue = loss.Length > 0 ? loss[0] : NumOps.Zero;
         hooks?.OnGradients?.Invoke(gradients);
-        hooks?.RegularizeGradients?.Invoke(reached, gradients);
-        if (hooks is { ModelGradientClip: > 0.0 })
-            ClipByGlobalNorm(gradients, hooks.ModelGradientClip);
+        hooks?.RegularizeAndClip(reached, gradients);
         hooks?.BeforeUpdate?.Invoke();
 
         update(new TapeStepContext<T>(

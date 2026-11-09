@@ -27,14 +27,12 @@ public class ObjectiveStepRegularizationTests
             {
                 InitialLearningRate = LearningRate,
                 UseAdaptiveLearningRate = false,
-                EnableGradientClipping = false,
                 Regularization = new L2Regularization<double, Tensor<double>, Tensor<double>>(new RegularizationOptions { Strength = Lambda }),
             }
             : new StochasticGradientDescentOptimizerOptions<double, Tensor<double>, Tensor<double>>
             {
                 InitialLearningRate = LearningRate,
                 UseAdaptiveLearningRate = false,
-                EnableGradientClipping = false,
             });
 
     // The objective reaches theta with a zero gradient: 0 * sum(theta).
@@ -89,6 +87,9 @@ public class ObjectiveStepRegularizationTests
                 UseAdaptiveLearningRate = false,
                 EnableGradientClipping = true,
                 MaxGradientNorm = 1.0,
+                // TensorFlow's order: the clip bounds the L2 term. The PyTorch default adds it after the clip
+                // (RegularizationOrderTests covers both).
+                RegularizationOrder = RegularizationOrder.RegularizeThenClip,
                 Regularization = new L2Regularization<double, Tensor<double>, Tensor<double>>(new RegularizationOptions { Strength = Lambda }),
             });
         if (accumulate)

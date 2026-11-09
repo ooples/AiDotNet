@@ -291,6 +291,37 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </summary>
     private protected virtual bool ClipsGradientsInStepCore => false;
 
+    /// <summary>
+    /// True when the regularization goes on after the clip (<see cref="RegularizationOrder.ClipThenRegularize"/>,
+    /// PyTorch's order), false when the clip covers it.
+    /// </summary>
+    internal bool RegularizesAfterClip =>
+        GradientOptions.RegularizationOrder == RegularizationOrder.ClipThenRegularize;
+
+    // The gradient dictionary ClipTapeGradientsAhead clipped, until the Step that consumes it.
+    private Dictionary<Tensor<T>, Tensor<T>>? _gradientsClippedAhead;
+
+    /// <summary>
+    /// True while <see cref="StepCore"/> runs on gradients <see cref="ClipTapeGradientsAhead"/> already clipped (and
+    /// then regularized): the step must not clip them again, or it would scale the regularization after all.
+    /// </summary>
+    private protected bool GradientsClippedAhead { get; private set; }
+
+    /// <summary>
+    /// Applies this optimizer's clipping options to <paramref name="gradients"/> now, ahead of <see cref="Step"/>, so
+    /// the caller can add the regularization after the clip; the next <see cref="Step"/> on the same dictionary then
+    /// skips its own clip. See <c>TapeTrainingStepper.RegularizeAndClip</c>.
+    /// </summary>
+    internal void ClipTapeGradientsAhead(IReadOnlyList<Tensor<T>> parameters, Dictionary<Tensor<T>, Tensor<T>> gradients)
+    {
+        var context = new TapeStepContext<T>(parameters, gradients, NumOps.Zero);
+        // A sparse embedding's rows join the dense dictionary first, so the norm counts them (as Adam's step does).
+        if (GradientOptions.EnableGradientClipping)
+            SparseEmbeddingOptimizerHelpers.MaterializeSparseIntoGradientsDict(context, Engine);
+        ApplyConfiguredTapeGradientClipping(context);
+        _gradientsClippedAhead = gradients;
+    }
+
     // The clipping options on the tape step, as the vector path's ApplyGradientClipping applies them. Every
     // optimizer's tape step used to ignore them except Adam's and AdamW's, so the same options trained clipped
     // through Optimize and unclipped through Train.
@@ -1416,23 +1447,23 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
         // Tensor<T>) — that exception was the root cause of #1380's
         // "BuildAsync produces uniform output" symptom (model never
         // got past its first batch step).
-        if (Regularization is RegularizationNs.RegularizationBase<T, TInput, TOutput> regBase)
+        Vector<T> Regularize(Vector<T> g)
         {
-            gradient = regBase.Regularize(gradient, parameters);
-        }
-        else
-        {
+            if (Regularization is RegularizationNs.RegularizationBase<T, TInput, TOutput> regBase)
+                return regBase.Regularize(g, parameters);
             // External IRegularization implementations: route through the
             // shared Vector↔TOutput bridge so the wrap/unwrap logic stays
             // in one place. RegularizationBase's Vector-direct fallback
             // uses the same bridge — adding a new TOutput shape only
             // requires updating RegularizationVectorBridge.
-            gradient = RegularizationNs.RegularizationVectorBridge<T, TInput, TOutput>
-                .Invoke(Regularization, gradient, parameters);
+            return RegularizationNs.RegularizationVectorBridge<T, TInput, TOutput>
+                .Invoke(Regularization, g, parameters);
         }
 
-        // Apply gradient clipping if enabled
+        // Clip if enabled, on the configured side of the regularization (GradientBasedOptimizerOptions.RegularizationOrder).
+        if (!RegularizesAfterClip) gradient = Regularize(gradient);
         gradient = ApplyGradientClipping(gradient);
+        if (RegularizesAfterClip) gradient = Regularize(gradient);
 
         // Scale gradients for mixed-precision training
         // The gradients will be unscaled in ApplyGradientsWithMixedPrecision before the optimizer step
@@ -3090,17 +3121,22 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     /// </remarks>
     public void Step(TapeStepContext<T> context)
     {
+        // Only the dictionary ClipTapeGradientsAhead clipped counts, so a clip-ahead whose step never ran cannot leave
+        // a later step unclipped.
+        GradientsClippedAhead = _gradientsClippedAhead is not null && ReferenceEquals(_gradientsClippedAhead, context.Gradients);
+        _gradientsClippedAhead = null;
         context = WithSparseLeavesAsValueViews(context);
         var learningRateGroups = CaptureLearningRateGroups(context);
         _stepNoGrad = new NoGradScope<T>();
         try
         {
-            if (!ClipsGradientsInStepCore) ApplyConfiguredTapeGradientClipping(context);
+            if (!ClipsGradientsInStepCore && !GradientsClippedAhead) ApplyConfiguredTapeGradientClipping(context);
             StepCore(context);
             ApplyLearningRateGroups(learningRateGroups);
         }
         finally
         {
+            GradientsClippedAhead = false;
             _stepNoGrad?.Dispose();
             _stepNoGrad = null;
         }
