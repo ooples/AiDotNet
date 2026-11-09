@@ -22,10 +22,11 @@ on:
     branches:
       - master
 
-permissions:
-  actions: write
-  pull-requests: read
+permissions: {}
 
+# A queued sweep waits for the running one. GitHub keeps at most one pending run per group, so a
+# third push can drop the second one's pending sweep; nothing is lost, because every sweep scans
+# all active pull-request runs, not only those of its own push.
 concurrency:
   group: cancel-superseded-merged-runs
   cancel-in-progress: false
@@ -35,31 +36,39 @@ jobs:
     name: Cancel superseded merged-PR runs
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      actions: write        # list the Build & SonarCloud runs and cancel them
+      contents: read        # read master's tip
+      pull-requests: read   # resolve a run's commit to its merged pull request
     steps:
       - name: Cancel runs no master push can reuse
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
-          OWNER: ${{ github.repository_owner }}
           # The workflow master reuses, by file as Resume-DeferredCi.ps1 addresses it.
           WORKFLOW: sonarcloud.yml
         run: |
           set -euo pipefail
           for status in in_progress queued; do
-            gh api "repos/$REPO/actions/workflows/$WORKFLOW/runs?event=pull_request&status=$status&per_page=100" \
-              --jq '.workflow_runs[] | "\(.id) \(.head_sha) \(.head_branch)"' \
-              | while read -r run_id head_sha head_branch; do
-                  # The run's own pull request: the closed one whose head is this branch at this SHA.
-                  pr=$(gh api "repos/$REPO/pulls?state=closed&head=$OWNER:$head_branch&per_page=100" \
-                    --jq "[.[] | select(.head.sha == \"$head_sha\" and .merged_at != null)][0] // empty | \"\(.number) \(.merge_commit_sha)\"")
+            gh api --paginate "repos/$REPO/actions/workflows/$WORKFLOW/runs?event=pull_request&status=$status&per_page=100" \
+              --jq '.workflow_runs[] | "\(.id) \(.head_sha)"' \
+              | while read -r run_id head_sha; do
+                  # The run's own pull request: merged into master with this commit as its head.
+                  pr=$(gh api "repos/$REPO/commits/$head_sha/pulls" \
+                    | jq -r --arg sha "$head_sha" \
+                      '[.[] | select(.head.sha == $sha and .base.ref == "master" and .merged_at != null)][0]
+                       // empty | "\(.number) \(.merge_commit_sha)"')
                   [ -n "$pr" ] || continue
                   read -r pr_number merge_sha <<< "$pr"
                   tip=$(gh api "repos/$REPO/commits/master" --jq .sha)
-                  # The master push runs for the merge commit: active ones, and finished ones not cancelled.
-                  read -r active finished <<< "$(gh api "repos/$REPO/actions/workflows/$WORKFLOW/runs?event=push&head_sha=$merge_sha&per_page=100" \
+                  # The master push runs for the merge commit: active ones, finished ones not cancelled, and all.
+                  read -r active finished total <<< "$(gh api "repos/$REPO/actions/workflows/$WORKFLOW/runs?event=push&head_sha=$merge_sha&per_page=100" \
                     --jq '[([.workflow_runs[] | select(.status != "completed")] | length),
-                           ([.workflow_runs[] | select(.status == "completed" and .conclusion != "cancelled")] | length)] | @tsv')"
-                  if [ "$active" -gt 0 ] || { [ "$merge_sha" = "$tip" ] && [ "$finished" -gt 0 ]; }; then
+                           ([.workflow_runs[] | select(.status == "completed" and .conclusion != "cancelled")] | length),
+                           (.workflow_runs | length)] | @tsv')"
+                  # On the tip a push with no run listed yet is still coming: both workflows start from the
+                  # same push in no guaranteed order, so this sweep can query before that run exists.
+                  if [ "$active" -gt 0 ] || { [ "$merge_sha" = "$tip" ] && { [ "$finished" -gt 0 ] || [ "$total" -eq 0 ]; }; }; then
                     echo "Keeping run $run_id: PR #$pr_number's master push (${merge_sha:0:9}) can still reuse it."
                     continue
                   fi
