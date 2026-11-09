@@ -116,7 +116,8 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames" ? "diffusion-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "InferenceNoiseSchedule" ? "diffusion-fast-sampling"
             : network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option == "AdversarialWeight" ? "multi-band-adversarial"
-            : network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option == "SegmentSize" ? "multi-band-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option is "SegmentSize" or "SamplingSeed" ? "multi-band-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.BigVGAN<T> && option == "SegmentSize" ? "bigvgan-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option is "MelMean" or "MelScale" ? "vocoder-normalization"
             : IsVocoderFrontendOption(option) && network is AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T>
                 or AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T> ? "vocoder-frontend"
@@ -758,7 +759,8 @@ internal static class OptionSensitivityFixtureSetup
             return true;
         }
         if ((network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames"
-                || network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option == "SegmentSize")
+                || network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option is "SegmentSize" or "SamplingSeed"
+                || network is AiDotNet.TextToSpeech.Vocoders.BigVGAN<T> && option == "SegmentSize")
             && network is AiDotNet.TextToSpeech.TtsModelBase<T> vocoder
             && vocoder.GetOptions() is AiDotNet.TextToSpeech.Vocoders.VocoderOptions options)
         {
@@ -973,10 +975,13 @@ internal static class OptionSensitivityFixtureSetup
             if (option == "CropFrames") diffusion.CropFrames = 2;
             if (option == "InferenceNoiseSchedule") diffusion.UseFastSampling = true;
         }
+        if (options is AiDotNet.TextToSpeech.Vocoders.BigVGANOptions bigVgan && option == "SegmentSize")
+            bigVgan.SegmentSize = checked(2 * bigVgan.HopSize);
+
         if (options is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGANOptions gan)
         {
             if (option == "AdversarialWeight") gan.PretrainingSteps = 0;
-            if (option == "SegmentSize") gan.SegmentSize = checked(2 * gan.HopSize);
+            if (option is "SegmentSize" or "SamplingSeed") gan.SegmentSize = checked(2 * gan.HopSize);
         }
         if (options is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGANOptions multiBand && option is "MelMean" or "MelScale")
         {

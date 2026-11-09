@@ -51,6 +51,32 @@ public class VoiceboxPaperTests
     private static Voicebox<double> Create() => new(Architecture(), SmallOptions());
 
     [Fact]
+    public void ConfiguredLearningRateChangesNativeTrainingUpdates()
+    {
+        var slowOptions = SmallOptions();
+        slowOptions.LearningRate = 1e-4;
+        var fastOptions = new VoiceboxOptions(slowOptions) { LearningRate = 1e-3 };
+        var slowArchitecture = Architecture();
+        var fastArchitecture = Architecture();
+        slowArchitecture.RandomSeed = fastArchitecture.RandomSeed = 37;
+        using var slow = new Voicebox<double>(slowArchitecture, slowOptions);
+        using var fast = new Voicebox<double>(fastArchitecture, fastOptions);
+        fast.SetParameters(slow.GetParameters());
+        Assert.Equal(slow.GetParameters().ToArray(), fast.GetParameters().ToArray());
+        var sample = new TtsTrainingSample<double>
+        {
+            Tokens = Ids(2, 3, 4), Mel = Mel(3), Durations = [1, 1, 1],
+        };
+        for (int step = 0; step < 2; step++)
+        {
+            slow.Train(sample);
+            fast.Train(sample);
+        }
+        Assert.True(slow.GetParameters().Zip(fast.GetParameters(),
+            (a, b) => Math.Abs(a - b)).Any(delta => delta > 1e-12));
+    }
+
+    [Fact]
     public void SynthesisReportsInputThatExceedsItsFrameBudget()
     {
         var options = SmallOptions();

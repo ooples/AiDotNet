@@ -74,6 +74,9 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
     private readonly QMIXOptions<T> _options;
 
+    // Preserve caller configuration separately from the optimizer materialized for training.
+    private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _configuredOptimizer;
+
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _jointOptimizer;
 
     // The agent network every agent shares, and the mixing network.
@@ -154,7 +157,8 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         if (options.LearningRate is null || NumOps.Equals(options.LearningRate, NumOps.Zero))
             LearningRate = NumOps.FromDouble(5e-4);
 
-        _jointOptimizer = optimizer ?? options.Optimizer;
+        _configuredOptimizer = optimizer;
+        _jointOptimizer = _configuredOptimizer ?? options.Optimizer;
         if (_jointOptimizer is null && options.OptimizerFactory is null)
             _jointOptimizer = CreatePaperOptimizer();
 
