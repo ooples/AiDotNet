@@ -181,7 +181,7 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
             : AiDotNet.Tensors.Helpers.RandomHelper.CreateSecureRandom();
         List<BoundingBox<T>> anchors = new();
         TrainWithTargets(input, targets,
-            image => ForwardDetection(image, gold, out anchors),
+            image => ForwardDetection(image, gold, out anchors, random),
             (heads, batch) => Engine.TensorAdd(
                 _detectionLoss.ComputeProposalLoss(TwoStageTargets.FirstImage(heads[3]), TwoStageTargets.FirstImage(heads[4]),
                     anchors, gold, _rpn.AnchorsPerLocation, random),
@@ -189,8 +189,16 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
     }
 
     /// <summary>The detection forward, optionally adding boxes to the proposals the detection head classifies.</summary>
+    /// <param name="input">The NCHW image batch.</param>
+    /// <param name="extraProposals">Boxes added to the proposals (the object boxes, in training).</param>
+    /// <param name="anchors">The RPN's anchors, for the proposal loss.</param>
+    /// <param name="sampleRandom">
+    /// In training, the generator the RoI sampler draws from: the head then runs only on the sampled RoIs (64 per
+    /// image by default) instead of every proposal. Running it on all ~1,000 proposals and sampling afterwards, as
+    /// this used to, did 16 times the box-head work and held two ~200 MB RoIAlign intermediates per step.
+    /// </param>
     private List<Tensor<T>> ForwardDetection(Tensor<T> input, IReadOnlyList<double[]>? extraProposals,
-        out List<BoundingBox<T>> anchors)
+        out List<BoundingBox<T>> anchors, Random? sampleRandom = null)
     {
         int imageHeight = input.Shape[2];
         int imageWidth = input.Shape[3];
@@ -220,6 +228,14 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         var proposalBoxes = proposals.Count == 0 ? new Tensor<T>(new[] { 0, 4 }) : proposals[0].boxes;
         if (extraProposals is { Count: > 0 })
             proposalBoxes = TwoStageTargets.AppendBoxes(proposalBoxes, extraProposals);
+
+        if (sampleRandom is not null && extraProposals is not null && proposalBoxes.Shape[0] > 0)
+        {
+            var rows = _detectionLoss.SampleStageRois(proposalBoxes, extraProposals, 0, sampleRandom);
+            proposalBoxes = rows.Length == 0
+                ? new Tensor<T>(new[] { 0, 4 })
+                : CvTensorOps<T>.Select(proposalBoxes, rows, 0);
+        }
 
         if (proposalBoxes.Shape[0] == 0)
         {
