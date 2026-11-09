@@ -46,7 +46,7 @@ public class AudioPaperTrainingRecipeTests
             EncoderDim = 4,
             NumEncoderLayers = 1,
             NumAttentionHeads = 1,
-            NumMels = 4,
+            NumMels = 8, // two stride-2 3x3 subsampling convolutions need at least 7 bins
             VocabSize = 4,
             DropoutRate = 0.0,
         };
