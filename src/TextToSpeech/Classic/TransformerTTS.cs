@@ -103,9 +103,24 @@ public partial class TransformerTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITr
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
+        if (double.IsNaN(_options.LearningRate) || double.IsInfinity(_options.LearningRate) || _options.LearningRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "LearningRate must be finite and positive.");
+        if (double.IsNaN(_options.WeightDecay) || double.IsInfinity(_options.WeightDecay) || _options.WeightDecay < 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "WeightDecay must be finite and nonnegative.");
+        var adamOptions = new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = _options.LearningRate,
+        };
+        if (_options.WeightDecay > 0)
+            adamOptions.Regularization = new AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>>(
+                new AiDotNet.Models.RegularizationOptions
+                {
+                    Type = AiDotNet.Enums.RegularizationType.L2, Strength = _options.WeightDecay, L1Ratio = 0,
+                });
         _optimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+                learningRateOverride: _options.LearningRate, weightDecayOverride: _options.WeightDecay)
+            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOptions);
         InitializeLayers();
     }
 

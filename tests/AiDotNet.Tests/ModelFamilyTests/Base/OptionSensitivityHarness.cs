@@ -838,6 +838,10 @@ public static class OptionSensitivityHarness
         if (IsNumeric(underlying))
         {
             IEnumerable<object> candidates = NumericCandidates(underlying, current);
+            if (option == "SlmGradientThreshold")
+                // Exercise both sides of the actual conditional normalization, rather than eight
+                // nearby thresholds that all leave a compact predictor in the same branch.
+                candidates = new object[] { Convert.ChangeType(1e12, underlying) }.Concat(candidates).Distinct();
             if (option == "ScaleFactor" && current is int scale && scale > 1)
                 // A coprime scale can inflate padding enormously (FlashVSR 4 -> 5 pads LR to 128).
                 // Try the smaller divisor before expanding the same real inference pipeline.

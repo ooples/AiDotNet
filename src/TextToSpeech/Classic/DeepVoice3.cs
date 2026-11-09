@@ -81,7 +81,7 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.DecoderPrenetSizes.LastOrDefault();
+        base.HiddenDim = _options.HiddenDim;
         if (string.IsNullOrWhiteSpace(modelPath))
             throw new ArgumentException("Model path required.", nameof(modelPath));
         if (!File.Exists(modelPath))
@@ -103,7 +103,7 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
-        base.HiddenDim = _options.DecoderPrenetSizes.LastOrDefault();
+        base.HiddenDim = _options.HiddenDim;
         if (!_useNativeMode)
         {
             var modelPath = _options.ModelPath!;
@@ -113,9 +113,16 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
             InitializeLayers();
             return;
         }
+        if (_options.WeightDecay < 0 || double.IsNaN(_options.WeightDecay) || double.IsInfinity(_options.WeightDecay))
+            throw new ArgumentOutOfRangeException(nameof(options), "Weight decay must be finite and nonnegative.");
+        var adamOptions = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        { InitialLearningRate = _options.LearningRate, UseAdaptiveBetas = false };
+        if (_options.WeightDecay > 0)
+            adamOptions.Regularization = new AiDotNet.Regularization.L2Regularization<T, Tensor<T>, Tensor<T>>(
+                new AiDotNet.Models.RegularizationOptions
+                { Type = AiDotNet.Enums.RegularizationType.L2, Strength = _options.WeightDecay, L1Ratio = 0 });
         _optimizer = optimizer ?? PaperOptimizerFactory.VerifyHandBuilt(this,
-            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-                new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = _options.LearningRate, UseAdaptiveBetas = false }));
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, adamOptions));
         MaxGradNorm = NumOps.FromDouble(_options.MaxGradientNorm);
         InitializeLayers();
     }
@@ -154,6 +161,8 @@ public partial class DeepVoice3<T> : TtsModelBase<T>, IAcousticModel<T>
         }
 
         var o = _options;
+        if (o.NumHeads != 1)
+            throw new ArgumentException("Deep Voice 3 uses one dot-product alignment per convolutional attention hop; NumHeads must be one.");
         double p = o.DropoutRate;
         WeightNormConv1DLayer<T> Linear(int input, int output, double stdMul = 1.0)
             => new(input, output, 1, 1, 0, Math.Sqrt(stdMul * (1.0 - p) / input));

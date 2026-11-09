@@ -153,16 +153,14 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
     internal OpenAiWhisperTranscriber<T> Transcriber => _transcriber ?? throw NotNative();
     internal OpenAiWhisperNetwork<T> Aligner => _aligner ?? throw NotNative();
 
-    /// <summary>The language model's tokenizer: built in for the Qwen3 backbone, read by <see cref="LoadReferenceWeights"/>
-    /// (or <see cref="LoadTokenizer"/>) for Llama.</summary>
+    /// <summary>The selected release's tokenizer, or a tokenizer explicitly supplied by <see cref="LoadTokenizer"/>.</summary>
     internal ByteLevelBpeTokenizer Tokenizer
     {
         get
         {
             if (_tokenizer is not null) return _tokenizer;
-            if (_options.Backbone == OuteTTSBackbone.Qwen3_0_6B) return SetTokenizer(OuteTTSTokenizers.Qwen3);
-            throw new InvalidOperationException("Llama-OuteTTS's tokenizer comes with its weights: call LoadReferenceWeights(directory) or " +
-                "LoadTokenizer(tokenizer.json) first.");
+            return SetTokenizer(_options.Backbone == OuteTTSBackbone.Qwen3_0_6B
+                ? OuteTTSTokenizers.Qwen3 : OuteTTSTokenizers.Llama);
         }
     }
 

@@ -3,8 +3,7 @@ namespace AiDotNet.TextToSpeech.Latest;
 /// <summary>The language model OuteTTS 1.0 is built on.</summary>
 public enum OuteTTSBackbone
 {
-    /// <summary>Llama-OuteTTS-1.0-1B: Llama 3.2 1B (CC-BY-NC-SA; its tokenizer is read from the model's
-    /// <c>tokenizer.json</c>).</summary>
+    /// <summary>Llama-OuteTTS-1.0-1B: Llama 3.2 1B (CC-BY-NC-SA model weights).</summary>
     Llama1B,
 
     /// <summary>OuteTTS-1.0-0.6B: Qwen3 0.6B (Apache-2.0; its tokenizer is built in).</summary>

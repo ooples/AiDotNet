@@ -92,6 +92,8 @@ public class ChatterboxOptions : CosyVoiceConformerOptions
         RepetitionPenalty = other.RepetitionPenalty;
         TextLossWeight = other.TextLossWeight;
         SpeechLossWeight = other.SpeechLossWeight;
+        Watermark = other.Watermark;
+        WatermarkModelPath = other.WatermarkModelPath;
     }
 
     /// <summary>Path to the release's <c>tokenizer.json</c>. Loading a model directory sets this automatically.</summary>
@@ -182,4 +184,14 @@ public class ChatterboxOptions : CosyVoiceConformerOptions
     public double TextLossWeight { get; set; } = 1.0;
     /// <summary>Gets or sets the weight of the speech loss. Defaults to <c>1.0</c>.</summary>
     public double SpeechLossWeight { get; set; } = 1.0;
+
+    /// <summary>Whether synthesis puts Resemble's Perth implicit watermark on its output, as the release does (true). The
+    /// watermark model is read from <see cref="WatermarkModelPath"/>; without it synthesis refuses rather than skip the
+    /// watermark.</summary>
+    public bool Watermark { get; set; } = true;
+
+    /// <summary>The Perth model the watermark is read from: <c>perth_net_250000.pth.tar</c>, which ships with the
+    /// resemble-perth package (<c>perth/perth_net/pretrained/implicit/</c>). Loading a model directory that holds that file
+    /// sets this automatically.</summary>
+    public string? WatermarkModelPath { get; set; }
 }
