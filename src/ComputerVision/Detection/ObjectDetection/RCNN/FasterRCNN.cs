@@ -126,6 +126,11 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
     private static int GetRoIOutputSize(ModelSize size) => size == ModelSize.Nano ? 5 : 7;
 
     /// <inheritdoc/>
+    /// <remarks>The forward pass classifies one image's proposals, so each image is detected on its own.</remarks>
+    public override BatchDetectionResult<T> DetectBatch(Tensor<T> images, double confidenceThreshold, double nmsThreshold)
+        => DetectEachImage(images, confidenceThreshold, nmsThreshold);
+
+    /// <inheritdoc/>
     public override DetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold, double nmsThreshold)
     {
         var startTime = DateTime.UtcNow;

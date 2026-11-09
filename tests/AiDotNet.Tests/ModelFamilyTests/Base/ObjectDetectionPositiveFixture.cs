@@ -200,7 +200,9 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         }
 
         int stageCount = profile == HeadProfile.CascadeRcnn ? 3 : 1;
-        int headInput = profile == HeadProfile.CascadeRcnn ? 128 : 256 * 5 * 5;
+        // Each classifier reads the second of its head's two 1024-wide fc layers (the FPN box head, for Faster R-CNN and
+        // every Cascade R-CNN stage); both fc matrices take the [0, 0] route and the unit biases below.
+        int headInput = FasterRCNN<T>.BoxHeadWidth;
         Assert.Equal(stageCount, trainable.Count(chunk => HasMatrixShape(chunk.Tensor, headInput, 3)));
         Assert.Equal(stageCount, trainable.Count(chunk => chunk.Tensor.Rank == 1 && chunk.Tensor.Length == 3));
         foreach (var chunk in trainable)
@@ -216,7 +218,13 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
             else if (tensor.Rank == 2 && tensor.Shape[0] >= 64 && tensor.Shape[1] >= 64)
                 tensor[0, 0] = ToT(1);
             else if (HasMatrixShape(tensor, headInput, 3))
-                tensor[0, 1] = ToT(0.00001);
+            {
+                // The feature unit spans about 10-51 across the proposals, too wide a ratio for one weight to keep every
+                // logit in [3, 5]. Unit 1 of the fc layer has zero weights and a unit bias, so it is exactly 1 after its
+                // ReLU: it carries a constant 3.5, and the feature adds a proposal-dependent 0.2-1.0 that orders them.
+                tensor[1, 1] = ToT(3.5);
+                tensor[0, 1] = ToT(0.02);
+            }
             else if (tensor.Rank == 1 && tensor.Length == 3)
                 tensor[2] = ToT(-20); // R-CNN background is the first class, unlike DETR.
         }
@@ -471,11 +479,13 @@ internal static class ObjectDetectionPositiveFixture<T> where T : struct
         int stageWidth = 3 + deltaWidth;
         Assert.Equal(new[] { 1, proposals * (4 + stageCount * stageWidth) + 1023 * 6 }, raw.Shape.ToArray());
         var expected = new List<ExpectedDetection>();
+        var foregroundLogits = Enumerable.Range(0, proposals).Select(proposal => ToD(raw[0, proposal * 3 + 1])).ToArray();
+        Assert.True(foregroundLogits.Min() >= 3 && foregroundLogits.Max() <= 5,
+            $"Foreground logits span [{foregroundLogits.Min():R}, {foregroundLogits.Max():R}]; the controlled head targets [3, 5].");
         for (int proposal = 0; proposal < proposals; proposal++)
         {
             AssertClose(0, ToD(raw[0, proposal * 3]));
-            double foregroundLogit = ToD(raw[0, proposal * 3 + 1]);
-            Assert.InRange(foregroundLogit, 3, 5);
+            double foregroundLogit = foregroundLogits[proposal];
             AssertClose(-20, ToD(raw[0, proposal * 3 + 2]));
             double score = 1 / (1 + Math.Exp(-foregroundLogit) + Math.Exp(-20 - foregroundLogit));
             int box = proposals * stageWidth + proposal * 4;

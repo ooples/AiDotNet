@@ -1203,3 +1203,6 @@ AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.HasProjectionBiases.ge
 AiDotNet.Attributes.ScalarKernelAttribute
 AiDotNet.Attributes.ScalarKernelAttribute.ScalarKernelAttribute(string! reason) -> void
 AiDotNet.Attributes.ScalarKernelAttribute.Reason.get -> string!
+AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase<T>.DetectEachImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, double confidenceThreshold, double nmsThreshold) -> AiDotNet.ComputerVision.Detection.ObjectDetection.BatchDetectionResult<T>!
+override AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.CascadeRCNN<T>.DetectBatch(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, double confidenceThreshold, double nmsThreshold) -> AiDotNet.ComputerVision.Detection.ObjectDetection.BatchDetectionResult<T>!
+override AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.FasterRCNN<T>.DetectBatch(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, double confidenceThreshold, double nmsThreshold) -> AiDotNet.ComputerVision.Detection.ObjectDetection.BatchDetectionResult<T>!

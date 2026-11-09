@@ -125,6 +125,11 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
     }
 
     /// <inheritdoc/>
+    /// <remarks>The forward pass classifies one image's proposals, so each image is detected on its own.</remarks>
+    public override BatchDetectionResult<T> DetectBatch(Tensor<T> images, double confidenceThreshold, double nmsThreshold)
+        => DetectEachImage(images, confidenceThreshold, nmsThreshold);
+
+    /// <inheritdoc/>
     public override DetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold, double nmsThreshold)
     {
         var startTime = DateTime.UtcNow;
