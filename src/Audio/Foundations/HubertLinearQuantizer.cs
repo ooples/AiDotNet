@@ -95,12 +95,15 @@ internal sealed class HubertLinearQuantizer<T>
     }
 
     /// <summary>Loads the release's <c>model_weight</c> (<c>0.</c>, <c>2.</c>, <c>4.</c> of the encoder Sequential).</summary>
-    public void LoadTorchWeights(Func<string, double[]?> take)
+    public void LoadTorchWeights(Func<string, double[]?> take) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(take));
+
+    /// <summary>Loads the release's <c>model_weight</c> straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
-        double[] Read(string name) => take(name) ?? throw new InvalidDataException($"The quantizer checkpoint has no tensor '{name}'.");
-        TorchParameters.Linear(_engine, Hidden1, Dim, First, Read("0.weight"), Read("0.bias"));
-        TorchParameters.Linear(_engine, Hidden2, First, Second, Read("2.weight"), Read("2.bias"));
-        TorchParameters.Linear(_engine, Output, Second, Units + 1, Read("4.weight"), Read("4.bias"));
+        string Name(string name) => source.Contains(name) ? name : throw new InvalidDataException($"The quantizer checkpoint has no tensor '{name}'.");
+        TorchParameters.Linear(_engine, Hidden1, Dim, First, source, Name("0.weight"), Name("0.bias"));
+        TorchParameters.Linear(_engine, Hidden2, First, Second, source, Name("2.weight"), Name("2.bias"));
+        TorchParameters.Linear(_engine, Output, Second, Units + 1, source, Name("4.weight"), Name("4.bias"));
     }
 
     /// <summary><c>nn.Linear</c>'s default initialization, U(±1/√in) for weights and biases.</summary>

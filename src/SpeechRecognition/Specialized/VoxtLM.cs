@@ -124,14 +124,14 @@ public partial class VoxtLM<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
     {
         ThrowIfDisposed();
         var network = _network ?? throw new NotSupportedException("The speech tokenizer belongs to the native network.");
-        var tensors = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(hubertCheckpoint);
-        network.Units.LoadFairseqWeights(name =>
+        // safetensors and .pt/.pth archives open as a checkpoint; a torch.save archive under another name is unpickled whole.
+        string extension = Path.GetExtension(hubertCheckpoint).ToLowerInvariant();
+        using (var file = extension is ".safetensors" or ".pt" or ".pth" or ".tar" or ".ckpt" ? AiDotNet.ModelLoading.TorchCheckpointFile.Open(hubertCheckpoint) : null)
         {
-            if (!tensors.TryGetValue("model." + name, out var t)) return null;
-            var values = new double[t.Length];
-            for (int i = 0; i < values.Length; i++) values[i] = t.GetFlat(i);
-            return values;
-        });
+            var checkpoint = file ?? AiDotNet.ModelLoading.TorchTensorSource.From(new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(hubertCheckpoint),
+                $"the checkpoint {hubertCheckpoint}");
+            network.Units.LoadFairseqWeights(checkpoint.WithPrefix("model."));
+        }
         var centroids = AiDotNet.Audio.Foundations.JoblibKMeans.ReadClusterCenters(kmeansModel);
         if (centroids.GetLength(0) != _options.NumSpeechUnits || centroids.GetLength(1) != _options.HubertWidth)
             throw new InvalidDataException($"The k-means model is {centroids.GetLength(0)} x {centroids.GetLength(1)}; the tokenizer has {_options.NumSpeechUnits} x {_options.HubertWidth}.");

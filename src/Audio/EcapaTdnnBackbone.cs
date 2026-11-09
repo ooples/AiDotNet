@@ -131,7 +131,11 @@ internal sealed class EcapaTdnnBackbone<T>
     public IReadOnlyList<ILayer<T>> Layers => _layers;
 
     /// <summary>Loads the frame encoder under Spark-TTS's original ECAPA names.</summary>
-    internal void LoadSparkFrameWeights(Func<string, int[], double[]> read, int featureDimension)
+    internal void LoadSparkFrameWeights(Func<string, int[], double[]> read, int featureDimension) =>
+        LoadSparkFrameWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), featureDimension);
+
+    /// <summary>Loads the frame encoder under Spark-TTS's original ECAPA names straight from <paramref name="read"/>.</summary>
+    internal void LoadSparkFrameWeights(AiDotNet.ModelLoading.TorchTensorSource read, int featureDimension)
     {
         if (!_sparkLayout) throw new InvalidOperationException("Spark weights require the Spark ECAPA layout.");
         foreach (var norm in _layers.OfType<BatchNormalizationLayer<T>>()) norm.SetTrainingMode(false);
@@ -150,7 +154,11 @@ internal sealed class EcapaTdnnBackbone<T>
     }
 
     /// <summary>Loads Spark's ASTP attention and optional utterance embedding head.</summary>
-    internal void LoadSparkPoolingWeights(Func<string, int[], double[]> read, bool includeProjection = true, string prefix = "pool.")
+    internal void LoadSparkPoolingWeights(Func<string, int[], double[]> read, bool includeProjection = true, string prefix = "pool.") =>
+        LoadSparkPoolingWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), includeProjection, prefix);
+
+    /// <summary>Loads Spark's ASTP attention and optional utterance embedding head straight from <paramref name="read"/>.</summary>
+    internal void LoadSparkPoolingWeights(AiDotNet.ModelLoading.TorchTensorSource read, bool includeProjection = true, string prefix = "pool.")
     {
         if (!_sparkLayout) throw new InvalidOperationException("Spark weights require the Spark ECAPA layout.");
         int width = _channels[_channels.Length - 1];
@@ -161,22 +169,16 @@ internal sealed class EcapaTdnnBackbone<T>
         LoadConv(read, _attentionScore, prefix + "linear2", _attentionChannels, width, 1);
         if (!includeProjection) return;
         LoadBatchNorm(read, _poolingNorm, "bn", 2 * width);
-        TorchParameters.Linear(AiDotNetEngine.Current, _embedding, 2 * width, _embeddingDimension,
-            read("linear.weight", new[] { _embeddingDimension, 2 * width }), read("linear.bias", new[] { _embeddingDimension }));
+        TorchParameters.Linear(AiDotNetEngine.Current, _embedding, 2 * width, _embeddingDimension, read, "linear.weight", "linear.bias");
     }
 
     internal Tensor<T> PoolStatistics(Tensor<T> features) => AttentiveStatisticsPooling(AiDotNetEngine.Current, features);
 
-    private static void LoadConv(Func<string, int[], double[]> read, Conv1DLayer<T> layer, string name, int input, int output, int kernel)
-    {
-        var num = MathHelper.GetNumericOperations<T>();
-        layer.SetParameters(new Vector<T>(read(name + ".weight", new[] { output, input, kernel })
-            .Concat(read(name + ".bias", new[] { output })).Select(num.FromDouble)));
-    }
+    private static void LoadConv(AiDotNet.ModelLoading.TorchTensorSource read, Conv1DLayer<T> layer, string name, int input, int output, int kernel) =>
+        layer.LoadTorchWeights(read, name + ".weight", new[] { output, input, kernel }, name + ".bias");
 
-    private static void LoadBatchNorm(Func<string, int[], double[]> read, BatchNormalizationLayer<T> layer, string name, int width) =>
-        TorchParameters.BatchNorm(layer, read(name + ".weight", new[] { width }), read(name + ".bias", new[] { width }),
-            read(name + ".running_mean", new[] { width }), read(name + ".running_var", new[] { width }));
+    private static void LoadBatchNorm(AiDotNet.ModelLoading.TorchTensorSource read, BatchNormalizationLayer<T> layer, string name, int width) =>
+        TorchParameters.BatchNorm(layer, read, name + ".", width);
 
     /// <summary>
     /// Points every role at the layers of <paramref name="layers"/>, position for position.
@@ -455,7 +457,7 @@ internal sealed class EcapaTdnnBackbone<T>
             return _norm is null ? convolved : BatchNorm1d(engine, _norm, convolved);
         }
 
-        internal void Load(Func<string, int[], double[]> read, string convName, string? normName, int input, int output, int kernel)
+        internal void Load(AiDotNet.ModelLoading.TorchTensorSource read, string convName, string? normName, int input, int output, int kernel)
         {
             LoadConv(read, _conv, convName, input, output, kernel);
             if (_norm is not null) LoadBatchNorm(read, _norm, normName ?? throw new ArgumentNullException(nameof(normName)), output);
@@ -517,16 +519,14 @@ internal sealed class EcapaTdnnBackbone<T>
             return engine.TensorAdd(h, residual);
         }
 
-        internal void Load(Func<string, int[], double[]> read, string prefix, int input, int width, int kernel, int scale, int seWidth)
+        internal void Load(AiDotNet.ModelLoading.TorchTensorSource read, string prefix, int input, int width, int kernel, int scale, int seWidth)
         {
             _reduce.Load(read, prefix + "0.conv", prefix + "0.bn", input, width, 1);
             for (int i = 0; i < _branches.Length; i++)
                 _branches[i].Load(read, prefix + $"1.convs.{i}", prefix + $"1.bns.{i}", width / scale, width / scale, kernel);
             _expand.Load(read, prefix + "2.conv", prefix + "2.bn", width, width, 1);
-            TorchParameters.Linear(AiDotNetEngine.Current, _squeeze, width, seWidth,
-                read(prefix + "3.linear1.weight", new[] { seWidth, width }), read(prefix + "3.linear1.bias", new[] { seWidth }));
-            TorchParameters.Linear(AiDotNetEngine.Current, _excite, seWidth, width,
-                read(prefix + "3.linear2.weight", new[] { width, seWidth }), read(prefix + "3.linear2.bias", new[] { width }));
+            TorchParameters.Linear(AiDotNetEngine.Current, _squeeze, width, seWidth, read, prefix + "3.linear1.weight", prefix + "3.linear1.bias");
+            TorchParameters.Linear(AiDotNetEngine.Current, _excite, seWidth, width, read, prefix + "3.linear2.weight", prefix + "3.linear2.bias");
         }
     }
 

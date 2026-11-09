@@ -96,21 +96,23 @@ public partial class SpeechGPT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     {
         ThrowIfDisposed();
         if (directory is null) throw new ArgumentNullException(nameof(directory));
-        string index = Path.Combine(directory, "pytorch_model.bin.index.json");
-        if (!File.Exists(index)) index = Path.Combine(directory, "model.safetensors.index.json");
-        var files = File.Exists(index)
-            ? Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(index))["weight_map"]!.Values<string>().Distinct().Select(f => Path.Combine(directory, f!)).ToList()
-            : new List<string> { File.Exists(Path.Combine(directory, "model.safetensors")) ? Path.Combine(directory, "model.safetensors") : Path.Combine(directory, "pytorch_model.bin") };
-        var tensors = new Dictionary<string, Tensor<float>>(StringComparer.Ordinal);
-        foreach (var file in files)
-            foreach (var pair in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(file)) tensors[pair.Key] = pair.Value;
-        _core.LanguageModel.LoadTorchWeights((name, _) =>
+        string binIndex = Path.Combine(directory, "pytorch_model.bin.index.json");
+        if (File.Exists(binIndex) || !File.Exists(Path.Combine(directory, "model.safetensors.index.json")) && !File.Exists(Path.Combine(directory, "model.safetensors")))
         {
-            var t = tensors.TryGetValue(name, out var tensor) ? tensor : throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            var values = new double[t.Length];
-            for (int i = 0; i < values.Length; i++) values[i] = t.GetFlat(i);
-            return values;
-        }, "model.", "lm_head.weight");
+            // torch.save shards are unpickled whole; their tensors are copied from there into the layers.
+            var files = File.Exists(binIndex)
+                ? Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(binIndex))["weight_map"]!.Values<string>().Distinct().Select(f => Path.Combine(directory, f!)).ToList()
+                : new List<string> { Path.Combine(directory, "pytorch_model.bin") };
+            var tensors = new Dictionary<string, Tensor<float>>(StringComparer.Ordinal);
+            foreach (var file in files)
+                foreach (var pair in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(file)) tensors[pair.Key] = pair.Value;
+            _core.LanguageModel.LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(tensors, "the checkpoint"), "model.", "lm_head.weight");
+        }
+        else
+        {
+            using var checkpoint = AiDotNet.ModelLoading.TorchCheckpointFile.OpenDirectory(directory);
+            _core.LanguageModel.LoadTorchWeights(checkpoint, "model.", "lm_head.weight");
+        }
         if (_options.TokenizerDirectory is null && File.Exists(Path.Combine(directory, "tokenizer.model")))
         {
             _options.TokenizerDirectory = directory;
@@ -122,14 +124,14 @@ public partial class SpeechGPT<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
     public void LoadUnitExtractor(string hubertCheckpoint, string kmeansModel)
     {
         ThrowIfDisposed();
-        var tensors = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(hubertCheckpoint);
-        _core.Units.LoadFairseqWeights(name =>
+        // safetensors and .pt/.pth archives open as a checkpoint; a torch.save archive under another name is unpickled whole.
+        string extension = Path.GetExtension(hubertCheckpoint).ToLowerInvariant();
+        using (var file = extension is ".safetensors" or ".pt" or ".pth" or ".tar" or ".ckpt" ? AiDotNet.ModelLoading.TorchCheckpointFile.Open(hubertCheckpoint) : null)
         {
-            if (!tensors.TryGetValue("model." + name, out var t)) return null;
-            var values = new double[t.Length];
-            for (int i = 0; i < values.Length; i++) values[i] = t.GetFlat(i);
-            return values;
-        });
+            var checkpoint = file ?? AiDotNet.ModelLoading.TorchTensorSource.From(new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(hubertCheckpoint),
+                $"the checkpoint {hubertCheckpoint}");
+            _core.Units.LoadFairseqWeights(checkpoint.WithPrefix("model."));
+        }
         _core.Units.Centroids = AiDotNet.Audio.Foundations.JoblibKMeans.ReadClusterCenters(kmeansModel);
     }
 

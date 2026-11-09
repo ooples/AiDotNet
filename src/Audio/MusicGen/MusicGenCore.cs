@@ -365,30 +365,33 @@ internal sealed class MusicGenCore<T>
     }
 
     /// <summary>Loads an audiocraft <c>LMModel</c> state dict (names as in <c>lm.state_dict()</c>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads an audiocraft <c>LMModel</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         var c = Configuration;
         int d = c.ModelDim;
-        for (int q = 0; q < c.Codebooks; q++) Embeddings[q].LoadTable(read($"emb.{q}.weight", new[] { c.CodebookSize + 1, d }));
+        for (int q = 0; q < c.Codebooks; q++) Embeddings[q].LoadTable(source, $"emb.{q}.weight");
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
             string p = $"transformer.layers.{i}";
-            TorchParameters.Linear(b.SelfIn, d, 3 * d, read($"{p}.self_attn.in_proj_weight", new[] { 3 * d, d }));
-            TorchParameters.Linear(b.SelfOut, d, d, read($"{p}.self_attn.out_proj.weight", new[] { d, d }));
+            TorchParameters.Linear(b.SelfIn, d, 3 * d, source, $"{p}.self_attn.in_proj_weight");
+            TorchParameters.Linear(b.SelfOut, d, d, source, $"{p}.self_attn.out_proj.weight");
             if (b.CrossIn is not null && b.CrossOut is not null && b.NormCross is not null)
             {
-                TorchParameters.Linear(b.CrossIn, d, 3 * d, read($"{p}.cross_attention.in_proj_weight", new[] { 3 * d, d }));
-                TorchParameters.Linear(b.CrossOut, d, d, read($"{p}.cross_attention.out_proj.weight", new[] { d, d }));
-                TorchParameters.LayerNorm(_engine, b.NormCross, read($"{p}.norm_cross.weight", new[] { d }), read($"{p}.norm_cross.bias", new[] { d }));
+                TorchParameters.Linear(b.CrossIn, d, 3 * d, source, $"{p}.cross_attention.in_proj_weight");
+                TorchParameters.Linear(b.CrossOut, d, d, source, $"{p}.cross_attention.out_proj.weight");
+                TorchParameters.LayerNorm(_engine, b.NormCross, source, $"{p}.norm_cross.weight", $"{p}.norm_cross.bias");
             }
-            TorchParameters.Linear(b.Linear1, d, c.FeedForwardDim, read($"{p}.linear1.weight", new[] { c.FeedForwardDim, d }));
-            TorchParameters.Linear(b.Linear2, c.FeedForwardDim, d, read($"{p}.linear2.weight", new[] { d, c.FeedForwardDim }));
-            TorchParameters.LayerNorm(_engine, b.Norm1, read($"{p}.norm1.weight", new[] { d }), read($"{p}.norm1.bias", new[] { d }));
-            TorchParameters.LayerNorm(_engine, b.Norm2, read($"{p}.norm2.weight", new[] { d }), read($"{p}.norm2.bias", new[] { d }));
+            TorchParameters.Linear(b.Linear1, d, c.FeedForwardDim, source, $"{p}.linear1.weight");
+            TorchParameters.Linear(b.Linear2, c.FeedForwardDim, d, source, $"{p}.linear2.weight");
+            TorchParameters.LayerNorm(_engine, b.Norm1, source, $"{p}.norm1.weight", $"{p}.norm1.bias");
+            TorchParameters.LayerNorm(_engine, b.Norm2, source, $"{p}.norm2.weight", $"{p}.norm2.bias");
         }
-        TorchParameters.LayerNorm(_engine, OutNorm, read("out_norm.weight", new[] { d }), read("out_norm.bias", new[] { d }));
+        TorchParameters.LayerNorm(_engine, OutNorm, source, "out_norm.weight", "out_norm.bias");
         for (int q = 0; q < c.Codebooks; q++)
-            TorchParameters.Linear(Heads[q], d, c.CodebookSize, read($"linears.{q}.weight", new[] { c.CodebookSize, d }));
+            TorchParameters.Linear(Heads[q], d, c.CodebookSize, source, $"linears.{q}.weight");
     }
 }

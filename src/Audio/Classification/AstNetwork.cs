@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.TextToSpeech.CodecBased;
 
 namespace AiDotNet.Audio.Classification;
@@ -176,19 +177,22 @@ internal sealed class AstNetwork<T>
 
     /// <summary>Loads an official AST state dict (as <c>ASTModel</c> names it, without a DataParallel <c>module.</c>
     /// prefix), given a reader of a named tensor of a given shape.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads an official AST state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
         int d = c.Dim, hidden = (int)(c.Dim * c.MlpRatio), p = c.PatchSize;
-        TorchParameters.Linear(_engine, PatchProjection, p * p, d, read("v.patch_embed.proj.weight", new[] { d, 1, p, p }),
-            read("v.patch_embed.proj.bias", new[] { d }));
-        TorchParameters.Linear(ClassToken, 1, d, read("v.cls_token", new[] { 1, 1, d }));
-        TorchParameters.Linear(DistillationToken, 1, d, read("v.dist_token", new[] { 1, 1, d }));
-        TorchParameters.Linear(PositionTable, 1, (c.Patches + 2) * d, read("v.pos_embed", new[] { 1, c.Patches + 2, d }));
-        LoadBlocks(read, "v.", hidden);
-        Norm(FinalNorm, "v.norm", read);
-        Norm(HeadNorm, "mlp_head.0", read);
-        Linear(Head, "mlp_head.1", d, c.Classes, read);
+        // The [d, 1, p, p] patch convolution is a [d, p·p] linear map.
+        TorchParameters.Linear(_engine, PatchProjection, p * p, d, source, "v.patch_embed.proj.weight", "v.patch_embed.proj.bias");
+        TorchParameters.Linear(ClassToken, 1, d, source, "v.cls_token", new[] { 1, 1, d });
+        TorchParameters.Linear(DistillationToken, 1, d, source, "v.dist_token", new[] { 1, 1, d });
+        TorchParameters.Linear(PositionTable, 1, (c.Patches + 2) * d, source, "v.pos_embed", new[] { 1, c.Patches + 2, d });
+        LoadBlocks(source, "v.", hidden);
+        Norm(FinalNorm, "v.norm", source);
+        Norm(HeadNorm, "mlp_head.0", source);
+        Linear(Head, "mlp_head.1", d, c.Classes, source);
     }
 
     /// <summary>
@@ -199,19 +203,24 @@ internal sealed class AstNetwork<T>
     /// </summary>
     /// <remarks>The official code sums the three channels; the paper averages them, and the paper is followed here
     /// (with inputs normalized to a standard deviation of 0.5, the two differ by a factor of 3 in the first layer).</remarks>
-    public void LoadImageNetDeiT(Func<string, int[], double[]> read, int imageGrid, Random random)
+    public void LoadImageNetDeiT(Func<string, int[], double[]> read, int imageGrid, Random random) =>
+        LoadImageNetDeiT(TorchTensorSource.From(read), imageGrid, random);
+
+    /// <summary>Initializes from a timm DeiT checkpoint read from <paramref name="source"/> (see the other overload).</summary>
+    internal void LoadImageNetDeiT(TorchTensorSource source, int imageGrid, Random random)
     {
         var c = Configuration;
         int d = c.Dim, hidden = (int)(c.Dim * c.MlpRatio), p = c.PatchSize, original = imageGrid * imageGrid;
-        var rgb = read("patch_embed.proj.weight", new[] { d, 3, p, p });
+        // The patch projection and position table are computed on (channel average, grid resize), so they are read.
+        var rgb = source.Read("patch_embed.proj.weight", new[] { d, 3, p, p });
         var mono = new double[d * p * p];
         for (int o = 0; o < d; o++)
             for (int i = 0; i < p * p; i++)
                 mono[o * p * p + i] = (rgb[(o * 3 + 0) * p * p + i] + rgb[(o * 3 + 1) * p * p + i] + rgb[(o * 3 + 2) * p * p + i]) / 3.0;
-        TorchParameters.Linear(_engine, PatchProjection, p * p, d, mono, read("patch_embed.proj.bias", new[] { d }));
-        TorchParameters.Linear(ClassToken, 1, d, read("cls_token", new[] { 1, 1, d }));
-        TorchParameters.Linear(DistillationToken, 1, d, read("dist_token", new[] { 1, 1, d }));
-        var table = read("pos_embed", new[] { 1, original + 2, d });
+        TorchParameters.Linear(_engine, PatchProjection, p * p, d, mono, source.Read("patch_embed.proj.bias", new[] { d }));
+        TorchParameters.Linear(ClassToken, 1, d, source, "cls_token", new[] { 1, 1, d });
+        TorchParameters.Linear(DistillationToken, 1, d, source, "dist_token", new[] { 1, 1, d });
+        var table = source.Read("pos_embed", new[] { 1, original + 2, d });
         var grid = new double[d, imageGrid, imageGrid];
         for (int t = 0; t < original; t++)
             for (int k = 0; k < d; k++) grid[k, t / imageGrid, t % imageGrid] = table[(t + 2) * d + k];
@@ -225,8 +234,8 @@ internal sealed class AstNetwork<T>
             for (int t = 0; t < c.TimePatches; t++)
                 for (int k = 0; k < d; k++) position[(2 + f * c.TimePatches + t) * d + k] = resized[k, f, t];
         TorchParameters.Linear(PositionTable, 1, (c.Patches + 2) * d, position);
-        LoadBlocks(read, "", hidden);
-        Norm(FinalNorm, "norm", read);
+        LoadBlocks(source, "", hidden);
+        Norm(FinalNorm, "norm", source);
         // mlp_head is new: nn.LayerNorm's defaults and nn.Linear's.
         TorchParameters.LayerNorm(_engine, HeadNorm, Enumerable.Repeat(1.0, d).ToArray(), new double[d]);
         TorchParameters.Linear(_engine, Head, d, c.Classes, Uniform(random, c.Classes * d, d), Uniform(random, c.Classes, d));
@@ -288,12 +297,12 @@ internal sealed class AstNetwork<T>
         TorchParameters.Linear(ClassToken, 1, d, Truncated(d));
         TorchParameters.Linear(DistillationToken, 1, d, Truncated(d));
         TorchParameters.Linear(PositionTable, 1, (c.Patches + 2) * d, Truncated((c.Patches + 2) * d));
-        LoadBlocks((name, shape) =>
+        LoadBlocks(TorchTensorSource.From((name, shape) =>
         {
             int count = shape.Aggregate(1, (a, b) => a * b);
             if (name.Contains(".norm")) return name.EndsWith(".weight", StringComparison.Ordinal) ? Enumerable.Repeat(1.0, count).ToArray() : new double[count];
             return name.EndsWith(".weight", StringComparison.Ordinal) ? Truncated(count) : new double[count];
-        }, "v.", hidden);
+        }), "v.", hidden);
         TorchParameters.LayerNorm(_engine, FinalNorm, Enumerable.Repeat(1.0, d).ToArray(), new double[d]);
         TorchParameters.LayerNorm(_engine, HeadNorm, Enumerable.Repeat(1.0, d).ToArray(), new double[d]);
         TorchParameters.Linear(_engine, Head, d, c.Classes, Uniform(random, c.Classes * d, d), Uniform(random, c.Classes, d));
@@ -308,7 +317,7 @@ internal sealed class AstNetwork<T>
         return v;
     }
 
-    private void LoadBlocks(Func<string, int[], double[]> read, string prefix, int hidden)
+    private void LoadBlocks(TorchTensorSource read, string prefix, int hidden)
     {
         int d = Configuration.Dim;
         for (int i = 0; i < Blocks.Count; i++)
@@ -324,12 +333,9 @@ internal sealed class AstNetwork<T>
         }
     }
 
-    private void Linear(DenseLayer<T> layer, string name, int inputs, int outputs, Func<string, int[], double[]> read)
-        => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{name}.weight", new[] { outputs, inputs }), read($"{name}.bias", new[] { outputs }));
+    private void Linear(DenseLayer<T> layer, string name, int inputs, int outputs, TorchTensorSource read)
+        => TorchParameters.Linear(_engine, layer, inputs, outputs, read, $"{name}.weight", $"{name}.bias");
 
-    private void Norm(LayerNormalizationLayer<T> norm, string name, Func<string, int[], double[]> read)
-    {
-        int d = Configuration.Dim;
-        TorchParameters.LayerNorm(_engine, norm, read($"{name}.weight", new[] { d }), read($"{name}.bias", new[] { d }));
-    }
+    private void Norm(LayerNormalizationLayer<T> norm, string name, TorchTensorSource read)
+        => TorchParameters.LayerNorm(_engine, norm, read, $"{name}.weight", $"{name}.bias");
 }

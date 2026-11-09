@@ -405,12 +405,14 @@ public partial class Wav2Vec2Model<T> : AudioNeuralNetworkBase<T>, ISpeechRecogn
     }
 
     /// <summary>Loads a transformers <c>Wav2Vec2ForCTC</c> state dict (<c>wav2vec2.*</c> and <c>lm_head.*</c>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a transformers <c>Wav2Vec2ForCTC</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         if (_network is null || _ctcHead is null) throw new InvalidOperationException("Weights load into the native network.");
-        _network.LoadTorchWeights((name, shape) => read($"wav2vec2.{name}", shape));
-        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, _ctcHead, _options.HiddenDim, _vocabSize,
-            read("lm_head.weight", new[] { _vocabSize, _options.HiddenDim }), read("lm_head.bias", new[] { _vocabSize }));
+        _network.LoadTorchWeights(source.WithPrefix("wav2vec2."));
+        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, _ctcHead, _options.HiddenDim, _vocabSize, source, "lm_head.weight", "lm_head.bias");
     }
 
     private static string[] GetDefaultVocabulary()

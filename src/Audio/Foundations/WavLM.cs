@@ -244,10 +244,14 @@ public partial class WavLM<T> : AudioNeuralNetworkBase<T>, IAudioFoundationModel
     /// <summary>Loads a transformers <c>WavLMModel</c> state dict (its unprefixed names).</summary>
     /// <param name="read">Returns the named tensor's values, row-major, for the shape given.</param>
     /// <param name="has">Whether the state dict holds the named tensor.</param>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, Func<string, bool> has)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, Func<string, bool> has) =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), has);
+
+    /// <summary>Loads a transformers <c>WavLMModel</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, Func<string, bool>? has = null)
     {
         if (_network is null) throw new InvalidOperationException("Weights load into the native WavLM network.");
-        _network.LoadTorchWeights(read, has);
+        _network.LoadTorchWeights(source, has);
     }
 
     // Hidden-state entry `index` per utterance: [frames, hidden] for [samples], [batch, frames, hidden] for [batch, samples].

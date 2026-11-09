@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using AiDotNet.Audio.Codecs;
 using AiDotNet.ComputerVision.Weights;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Audio.Generation;
@@ -21,24 +22,26 @@ public partial class SpeechTokenizer<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw new NotSupportedException("Pretrained weights load into the native encoder, quantizer and decoder.");
-        var file = new WeightLoader().LoadWeights(path);
+        // A .pt state dict is unpickled whole; its tensors are copied from there into the layers.
+        var state = new WeightLoader().LoadWeights(path);
+        var file = TorchTensorSource.From(state, $"the checkpoint {path}");
         var used = new HashSet<string>();
 
-        double[] Read(string name, params int[] shape)
+        // Checks the stored shape and returns the name.
+        string Use(string name, params int[] shape)
         {
-            if (!file.TryGetValue(name, out var tensor)) throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            var actual = tensor.Shape.ToArray();
-            if (!actual.SequenceEqual(shape))
+            var actual = file.ShapeOf(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
+            if (!actual.SequenceEqual(shape.Select(d => (long)d)))
                 throw new InvalidDataException($"'{name}' is [{string.Join(", ", actual)}] in the checkpoint but [{string.Join(", ", shape)}] in this " +
                     "model; build the model with the checkpoint's configuration (SpeechTokenizerOptions.OfficialCheckpoint).");
             used.Add(name);
-            return tensor.ToVector().Select(v => (double)v).ToArray();
+            return name;
         }
 
         void LoadConv(string name, NormedConv1DLayer<T> conv)
         {
             var shape = conv.TorchWeightShape;
-            conv.LoadTorchWeights(Read($"{name}.weight_v", shape), Read($"{name}.weight_g", shape[0], 1, 1), Read($"{name}.bias", conv.OutputChannels));
+            conv.LoadTorchWeights(file, Use($"{name}.weight_v", shape), shape, Use($"{name}.weight_g", shape[0], 1, 1), Use($"{name}.bias", conv.OutputChannels));
         }
 
         void LoadLstm(string name, SeanetLstm<T> lstm)
@@ -51,9 +54,9 @@ public partial class SpeechTokenizer<T>
                 {
                     if (cell is null) continue;
                     int hidden = cell.HiddenSize, input = cell.InputSize;
-                    cell.LoadTorchWeights(Read($"{name}.lstm.weight_ih_l{l}{suffix}", 4 * hidden, input),
-                        Read($"{name}.lstm.weight_hh_l{l}{suffix}", 4 * hidden, hidden),
-                        Read($"{name}.lstm.bias_ih_l{l}{suffix}", 4 * hidden), Read($"{name}.lstm.bias_hh_l{l}{suffix}", 4 * hidden));
+                    cell.LoadTorchWeights(file, Use($"{name}.lstm.weight_ih_l{l}{suffix}", 4 * hidden, input),
+                        Use($"{name}.lstm.weight_hh_l{l}{suffix}", 4 * hidden, hidden),
+                        Use($"{name}.lstm.bias_ih_l{l}{suffix}", 4 * hidden), Use($"{name}.lstm.bias_hh_l{l}{suffix}", 4 * hidden));
                 }
             }
         }
@@ -68,26 +71,15 @@ public partial class SpeechTokenizer<T>
         for (int q = 0; q < o.NumQuantizers; q++)
         {
             string prefix = $"quantizer.vq.layers.{q}._codebook";
-            _quantizer!.LoadCodebook(q, Read($"{prefix}.embed", o.CodebookSize, o.Dimension), Read($"{prefix}.embed_avg", o.CodebookSize, o.Dimension),
-                Read($"{prefix}.cluster_size", o.CodebookSize), Read($"{prefix}.inited", 1)[0] != 0);
+            _quantizer!.LoadCodebook(q, file, Use($"{prefix}.embed", o.CodebookSize, o.Dimension), Use($"{prefix}.embed_avg", o.CodebookSize, o.Dimension),
+                Use($"{prefix}.cluster_size", o.CodebookSize), file.Read(Use($"{prefix}.inited", 1), new[] { 1 })[0] != 0);
         }
 
         // transform: nn.Linear(dimension, semantic_dimension), weight [out, in].
-        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
-            _projection!.Forward(new Tensor<T>(new[] { 1, o.Dimension }));
-        var weight = Read("transform.weight", o.SemanticDimension, o.Dimension);
-        var bias = Read("transform.bias", o.SemanticDimension);
-        var w = _projection!.GetWeights();                                                       // [in, out]
-        var b = _projection.GetBiases();
-        for (int r = 0; r < o.SemanticDimension; r++)
-        {
-            for (int c = 0; c < o.Dimension; c++) w[c, r] = NumOps.FromDouble(weight[r * o.Dimension + c]);
-            b[r] = NumOps.FromDouble(bias[r]);
-        }
-        Engine.InvalidatePersistentTensor(w);
-        Engine.InvalidatePersistentTensor(b);
+        AiDotNet.TextToSpeech.CodecBased.TorchParameters.Linear(Engine, _projection!, o.Dimension, o.SemanticDimension, file,
+            Use("transform.weight", o.SemanticDimension, o.Dimension), Use("transform.bias", o.SemanticDimension));
 
-        var unused = file.Keys.Where(n => !used.Contains(n)).ToList();
+        var unused = state.Keys.Where(n => !used.Contains(n)).ToList();
         if (unused.Count > 0)
             throw new InvalidDataException($"The checkpoint has {unused.Count} tensors this model has no place for (first: '{unused[0]}'); " +
                 "its configuration differs from the model's.");

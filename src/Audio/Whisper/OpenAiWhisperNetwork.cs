@@ -261,13 +261,16 @@ internal sealed class OpenAiWhisperNetwork<T>
     // ---------------------------------------------------------------- weights
 
     /// <summary>Loads an openai-whisper checkpoint's <c>model_state_dict</c> (by name; shapes checked by count).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads an openai-whisper checkpoint's <c>model_state_dict</c> straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         var d = Dimensions;
         void Linear(BiasFreeLinearLayer<T> layer, string name, int inputs, int outputs)
-            => AiDotNet.TextToSpeech.CodecBased.TorchParameters.Linear(layer, inputs, outputs, read(name, new[] { outputs, inputs }));
+            => AiDotNet.TextToSpeech.CodecBased.TorchParameters.Linear(layer, inputs, outputs, source, name);
         void Vector(BiasFreeLinearLayer<T> holder, string name, int[] shape)
-            => AiDotNet.TextToSpeech.CodecBased.TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, s) => a * s), read(name, shape));
+            => AiDotNet.TextToSpeech.CodecBased.TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, s) => a * s), source, name, shape);
         void LoadAttention(Attention a, string n, int width)
         {
             Linear(a.Query, n + ".query.weight", width, width);
@@ -296,8 +299,8 @@ internal sealed class OpenAiWhisperNetwork<T>
             Vector(b.MlpNormWeight, n + ".mlp_ln.weight", new[] { width });
             Vector(b.MlpNormBias, n + ".mlp_ln.bias", new[] { width });
         }
-        Conv1.LoadTorchWeights(read("encoder.conv1.weight", new[] { d.AudioState, d.Mels, 3 }), null, read("encoder.conv1.bias", new[] { d.AudioState }));
-        Conv2.LoadTorchWeights(read("encoder.conv2.weight", new[] { d.AudioState, d.AudioState, 3 }), null, read("encoder.conv2.bias", new[] { d.AudioState }));
+        Conv1.LoadTorchWeights(source, "encoder.conv1.weight", new[] { d.AudioState, d.Mels, 3 }, null, "encoder.conv1.bias");
+        Conv2.LoadTorchWeights(source, "encoder.conv2.weight", new[] { d.AudioState, d.AudioState, 3 }, null, "encoder.conv2.bias");
         Vector(AudioPositions, "encoder.positional_embedding", new[] { d.AudioContext, d.AudioState });
         for (int i = 0; i < EncoderBlocks.Count; i++) LoadBlock(EncoderBlocks[i], $"encoder.blocks.{i}", d.AudioState);
         Vector(PostNormWeight, "encoder.ln_post.weight", new[] { d.AudioState });

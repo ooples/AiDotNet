@@ -212,11 +212,16 @@ public partial class Wav2Vec2<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMo
 
     /// <summary>Loads a transformers <c>Wav2Vec2ForPreTraining</c> state dict (or a <c>Wav2Vec2Model</c>'s, whose keys
     /// have no <c>wav2vec2.</c> prefix and no quantizer).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, bool pretrainingCheckpoint = true)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, bool pretrainingCheckpoint = true) =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), pretrainingCheckpoint);
+
+    /// <summary>Loads a transformers <c>Wav2Vec2ForPreTraining</c> (or <c>Wav2Vec2Model</c>) state dict straight from
+    /// <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, bool pretrainingCheckpoint = true)
     {
         if (_network is null || _pretraining is null) throw new InvalidOperationException("Weights load into the native network.");
-        _network.LoadTorchWeights((name, shape) => read(pretrainingCheckpoint ? $"wav2vec2.{name}" : name, shape));
-        if (pretrainingCheckpoint) _pretraining.LoadTorchWeights(read);
+        _network.LoadTorchWeights(pretrainingCheckpoint ? source.WithPrefix("wav2vec2.") : source);
+        if (pretrainingCheckpoint) _pretraining.LoadTorchWeights(source);
     }
 
     private Wav2Vec2Network<T>.Output Encode(Tensor<T> audio)

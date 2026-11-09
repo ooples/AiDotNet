@@ -104,10 +104,14 @@ public partial class WavLMASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<
     /// <param name="read">Returns the named tensor's values, row-major, for the shape given.</param>
     /// <param name="has">Whether the state dict holds the named tensor (the positional convolution's weight norm comes
     /// under its old or its parametrized names).</param>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, Func<string, bool> has)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, Func<string, bool> has) =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), has);
+
+    /// <summary>Loads a transformers <c>WavLMForCTC</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, Func<string, bool>? has = null)
     {
         if (_stack is null) throw new InvalidOperationException("Weights load into the native network.");
-        _stack.LoadTorchWeights(read, has);
+        _stack.LoadTorchWeights(source, has);
     }
 
     // The network reads the raw waveform, truncated to the longest window a transcription covers.

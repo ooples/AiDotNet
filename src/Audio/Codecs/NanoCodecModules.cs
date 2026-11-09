@@ -436,16 +436,22 @@ internal sealed class NanoCodec<T>
     }
 
     /// <summary>Loads a NeMo NanoCodec state dict (the encoder's and decoder's parameters; the quantizer has none).</summary>
-    public void LoadNemoWeights(Func<string, double[]?> read)
+    public void LoadNemoWeights(Func<string, double[]?> read) => LoadNemoWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a NeMo NanoCodec state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadNemoWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
-        double[] Need(string name) => read(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
+        string Present(string name) => source.Contains(name) ? name : throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
+        double[] Need(string name) => source.TryRead(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
         // torch's weight-norm parametrization (original0 the gain, original1 the direction), or the older weight_norm's
         // weight_g and weight_v, which the released checkpoint uses.
         void Conv(NormedConv1DLayer<T> conv, string prefix)
         {
-            var direction = read($"{prefix}.conv.parametrizations.weight.original1") ?? Need($"{prefix}.conv.weight_v");
-            var gain = read($"{prefix}.conv.parametrizations.weight.original0") ?? Need($"{prefix}.conv.weight_g");
-            conv.LoadTorchWeights(direction, gain, Need($"{prefix}.conv.bias"));
+            string direction = source.Contains($"{prefix}.conv.parametrizations.weight.original1")
+                ? $"{prefix}.conv.parametrizations.weight.original1" : Present($"{prefix}.conv.weight_v");
+            string gain = source.Contains($"{prefix}.conv.parametrizations.weight.original0")
+                ? $"{prefix}.conv.parametrizations.weight.original0" : Present($"{prefix}.conv.weight_g");
+            conv.LoadTorchWeights(source, direction, conv.TorchWeightShape, gain, Present($"{prefix}.conv.bias"));
         }
         void Activation(NanoCodecActivation<T> activation, string prefix)
         {

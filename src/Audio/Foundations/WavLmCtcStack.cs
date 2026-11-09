@@ -103,11 +103,16 @@ internal sealed class WavLmCtcStack<T>
             || Network.ConvNorms.Any(n => ReferenceEquals(n, layer));
 
     /// <summary>Loads a transformers <c>WavLMForCTC</c> state dict: <c>wavlm.*</c> and <c>lm_head.*</c>.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, Func<string, bool> has)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, Func<string, bool> has) =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), has);
+
+    /// <summary>Loads a transformers <c>WavLMForCTC</c> state dict straight from <paramref name="source"/>;
+    /// <paramref name="has"/> defaults to the source's own.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, Func<string, bool>? has = null)
     {
+        has ??= source.Contains;
         int hidden = Network.Configuration.HiddenSize;
-        Network.LoadTorchWeights((name, shape) => read("wavlm." + name, shape), name => has("wavlm." + name));
-        TorchParameters.Linear(_engine, Head, hidden, _vocabSize,
-            read("lm_head.weight", new[] { _vocabSize, hidden }), read("lm_head.bias", new[] { _vocabSize }));
+        Network.LoadTorchWeights(source.WithPrefix("wavlm."), name => has("wavlm." + name));
+        TorchParameters.Linear(_engine, Head, hidden, _vocabSize, source, "lm_head.weight", "lm_head.bias");
     }
 }

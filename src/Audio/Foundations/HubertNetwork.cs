@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -271,11 +272,27 @@ internal sealed class HubertNetwork<T>
         }
     }
 
-    private void Fill(Tensor<T> tensor, double[] values)
+
+
+    // g = ‖v‖ per tap of the loaded direction v [C, C/G, K], as weight_norm initializes it.
+    private void SetPositionalMagnitudeToNorm()
     {
-        if (values.Length != tensor.Length) throw new InvalidDataException($"Expected {tensor.Length} values, got {values.Length}.");
-        for (int i = 0; i < values.Length; i++) tensor[i] = NumOps.FromDouble(values[i]);
-        _engine.InvalidatePersistentTensor(tensor);
+        var c = Configuration;
+        int perGroup = c.HiddenSize / c.PositionalConvGroups, k = c.PositionalConvKernel;
+        var (v, g, _) = PositionalConv.WeightNormParameters;
+        var direction = v.AsSpan();
+        for (int t = 0; t < k; t++)
+        {
+            double sum = 0;
+            for (int o = 0; o < c.HiddenSize; o++)
+                for (int i = 0; i < perGroup; i++)
+                {
+                    double d = NumOps.ToDouble(direction[(o * perGroup + i) * k + t]);
+                    sum += d * d;
+                }
+            g[t] = NumOps.FromDouble(Math.Sqrt(sum));
+        }
+        _engine.InvalidatePersistentTensor(g);
     }
 
     // v [C, C/G, K] and g [K] (null: g = ‖v‖ per tap) and the bias.
@@ -315,61 +332,57 @@ internal sealed class HubertNetwork<T>
     /// returns null for a missing tensor; the masked-frame embedding and the layers past
     /// <see cref="HubertConfiguration.Layers"/> are not read.
     /// </summary>
-    public void LoadTorchWeights(Func<string, double[]?> take)
+    public void LoadTorchWeights(Func<string, double[]?> take) => LoadTorchWeights(TorchTensorSource.From(take));
+
+    /// <summary>Loads transformers' <c>HubertModel</c> names (also under <c>hubert.</c>) straight from
+    /// <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
         int h = c.HiddenSize;
-        double[] Read(string name) => take(name) ?? take("hubert." + name) ?? throw new InvalidDataException($"The HuBERT checkpoint has no tensor '{name}'.");
-        double[] ReadEither(string name, string alternative) =>
-            take(name) ?? take("hubert." + name) ?? take(alternative) ?? take("hubert." + alternative)
+        string? Find(string name) => source.Contains(name) ? name : source.Contains("hubert." + name) ? "hubert." + name : null;
+        string Name(string name) => Find(name) ?? throw new InvalidDataException($"The HuBERT checkpoint has no tensor '{name}'.");
+        string NameEither(string name, string alternative) => Find(name) ?? Find(alternative)
             ?? throw new InvalidDataException($"The HuBERT checkpoint has no tensor '{name}' or '{alternative}'.");
         void Lin(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, Read($"{name}.weight"), Read($"{name}.bias"));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, Name($"{name}.weight"), Name($"{name}.bias"));
         void Norm(LayerNormalizationLayer<T> layer, string name)
-            => TorchParameters.LayerNorm(_engine, layer, Read($"{name}.weight"), Read($"{name}.bias"));
+            => TorchParameters.LayerNorm(_engine, layer, source, Name($"{name}.weight"), Name($"{name}.bias"));
+        void Copy(Tensor<T> tensor, string name)
+        {
+            source.CopyTo(Name(name), new[] { tensor.Length }, tensor);
+            _engine.InvalidatePersistentTensor(tensor);
+        }
         for (int i = 0; i < ConvLayers.Count; i++)
         {
             int inputs = i == 0 ? 1 : c.ConvDims[i - 1], kernel = c.ConvKernels[i], outputs = c.ConvDims[i];
-            var w = Read($"feature_extractor.conv_layers.{i}.conv.weight");
-            // [out, in, k] → columns k·in + c of the unfolded window.
-            var unfolded = new double[outputs * kernel * inputs];
-            for (int o = 0; o < outputs; o++)
-                for (int ch = 0; ch < inputs; ch++)
-                    for (int k = 0; k < kernel; k++) unfolded[o * kernel * inputs + k * inputs + ch] = w[(o * inputs + ch) * kernel + k];
-            TorchParameters.Linear(ConvLayers[i].Conv, kernel * inputs, outputs, unfolded);
+            Wav2Vec2Network<T>.LoadUnfoldedConv(_engine, source, ConvLayers[i].Conv, Name($"feature_extractor.conv_layers.{i}.conv.weight"), null,
+                inputs, kernel, outputs);
             string normName = $"feature_extractor.conv_layers.{i}.layer_norm";
             if (ConvLayers[i].Norm is LayerNormalizationLayer<T> ln) Norm(ln, normName);
-            else if (ConvLayers[i].Norm is GroupNormalizationLayer<T> gn)
-            {
-                var gamma = Read($"{normName}.weight");
-                var beta = Read($"{normName}.bias");
-                var gt = gn.GetGammaTensor();
-                var bt = gn.GetBetaTensor();
-                for (int j = 0; j < outputs; j++)
-                {
-                    gt[j] = NumOps.FromDouble(gamma[j]);
-                    bt[j] = NumOps.FromDouble(beta[j]);
-                }
-                _engine.InvalidatePersistentTensor(gt);
-                _engine.InvalidatePersistentTensor(bt);
-            }
+            else if (ConvLayers[i].Norm is GroupNormalizationLayer<T> gn) gn.LoadAffine(source, Name($"{normName}.weight"), Name($"{normName}.bias"));
         }
         Norm(ProjectionNorm, "feature_projection.layer_norm");
         Lin(Projection, "feature_projection.projection", c.ConvDims[^1], h);
+        var (v, g, b) = PositionalConv.WeightNormParameters;
         if (PositionalNorm is not null)
         {
             // A plain weight: weight norm at g = ‖v‖ per tap reproduces it.
-            LoadPositional(Read("encoder.pos_conv_embed.conv.weight"), null, Read("encoder.pos_conv_embed.conv.bias"));
-            Fill(PositionalNorm.Scale, Read("encoder.pos_conv_embed.batch_norm.weight"));
-            Fill(PositionalNorm.Shift, Read("encoder.pos_conv_embed.batch_norm.bias"));
-            Fill(PositionalNorm.RunningMean, Read("encoder.pos_conv_embed.batch_norm.running_mean"));
-            Fill(PositionalNorm.RunningVariance, Read("encoder.pos_conv_embed.batch_norm.running_var"));
+            Copy(v, "encoder.pos_conv_embed.conv.weight");
+            SetPositionalMagnitudeToNorm();
+            Copy(b, "encoder.pos_conv_embed.conv.bias");
+            Copy(PositionalNorm.Scale, "encoder.pos_conv_embed.batch_norm.weight");
+            Copy(PositionalNorm.Shift, "encoder.pos_conv_embed.batch_norm.bias");
+            Copy(PositionalNorm.RunningMean, "encoder.pos_conv_embed.batch_norm.running_mean");
+            Copy(PositionalNorm.RunningVariance, "encoder.pos_conv_embed.batch_norm.running_var");
         }
         else
         {
-            LoadPositional(ReadEither("encoder.pos_conv_embed.conv.parametrizations.weight.original1", "encoder.pos_conv_embed.conv.weight_v"),
-                ReadEither("encoder.pos_conv_embed.conv.parametrizations.weight.original0", "encoder.pos_conv_embed.conv.weight_g"),
-                Read("encoder.pos_conv_embed.conv.bias"));
+            source.CopyTo(NameEither("encoder.pos_conv_embed.conv.parametrizations.weight.original1", "encoder.pos_conv_embed.conv.weight_v"),
+                new[] { v.Length }, v);
+            _engine.InvalidatePersistentTensor(v);
+            Copy(g, NameEither("encoder.pos_conv_embed.conv.parametrizations.weight.original0", "encoder.pos_conv_embed.conv.weight_g"));
+            Copy(b, "encoder.pos_conv_embed.conv.bias");
         }
         Norm(EncoderNorm, "encoder.layer_norm");
         for (int i = 0; i < EncoderLayers.Count; i++)

@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -387,58 +388,44 @@ internal sealed class WavLmNetwork<T>
 
     /// <summary>Loads a transformers <c>WavLMModel</c> state dict (the position convolution's weight norm under its old
     /// <c>weight_g</c>/<c>weight_v</c> names or the parametrized ones).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, Func<string, bool> has)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, Func<string, bool> has) => LoadTorchWeights(TorchTensorSource.From(read), has);
+
+    /// <summary>Loads a transformers <c>WavLMModel</c> state dict straight from <paramref name="source"/>;
+    /// <paramref name="has"/> (default: the source's own) tells which weight-norm names it holds.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, Func<string, bool>? has = null)
     {
+        has ??= source.Contains;
         var c = Configuration;
         int h = c.HiddenSize, e = h / c.Heads;
         void Lin(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{name}.weight", new[] { outputs, inputs }), read($"{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias");
         void Norm(LayerNormalizationLayer<T> layer, string name, int width)
-            => TorchParameters.LayerNorm(_engine, layer, read($"{name}.weight", new[] { width }), read($"{name}.bias", new[] { width }));
+            => TorchParameters.LayerNorm(_engine, layer, source, $"{name}.weight", $"{name}.bias");
+        void Copy(Tensor<T> tensor, string name, int[] shape)
+        {
+            source.CopyTo(name, shape, tensor);
+            _engine.InvalidatePersistentTensor(tensor);
+        }
         for (int i = 0; i < Convs.Count; i++)
         {
             int inputs = i == 0 ? 1 : c.ConvDims[i - 1], kernel = c.ConvKernels[i], outputs = c.ConvDims[i];
-            var w = read($"feature_extractor.conv_layers.{i}.conv.weight", new[] { outputs, inputs, kernel });
-            // [out, in, k] → columns k·in + c of the unfolded window.
-            var unfolded = new double[outputs * kernel * inputs];
-            for (int o = 0; o < outputs; o++)
-                for (int ch = 0; ch < inputs; ch++)
-                    for (int k = 0; k < kernel; k++) unfolded[o * kernel * inputs + k * inputs + ch] = w[(o * inputs + ch) * kernel + k];
-            TorchParameters.Linear(Convs[i], kernel * inputs, outputs, unfolded);
+            Wav2Vec2Network<T>.LoadUnfoldedConv(_engine, source, Convs[i], $"feature_extractor.conv_layers.{i}.conv.weight", null, inputs, kernel, outputs);
         }
         if (FirstNorm is not null)
-        {
-            var gamma = read("feature_extractor.conv_layers.0.layer_norm.weight", new[] { c.ConvDims[0] });
-            var beta = read("feature_extractor.conv_layers.0.layer_norm.bias", new[] { c.ConvDims[0] });
-            var gt = FirstNorm.GetGammaTensor();
-            var bt = FirstNorm.GetBetaTensor();
-            for (int j = 0; j < gamma.Length; j++)
-            {
-                gt[j] = NumOps.FromDouble(gamma[j]);
-                bt[j] = NumOps.FromDouble(beta[j]);
-            }
-            _engine.InvalidatePersistentTensor(gt);
-            _engine.InvalidatePersistentTensor(bt);
-        }
+            FirstNorm.LoadAffine(source, "feature_extractor.conv_layers.0.layer_norm.weight", "feature_extractor.conv_layers.0.layer_norm.bias");
         for (int i = 0; i < ConvNorms.Count; i++) Norm(ConvNorms[i], $"feature_extractor.conv_layers.{i}.layer_norm", c.ConvDims[i]);
         Norm(ProjectionNorm, "feature_projection.layer_norm", c.ConvDims[^1]);
         Lin(Projection, "feature_projection.projection", c.ConvDims[^1], h);
         int perGroup = h / c.PositionalConvGroups, kernelLength = c.PositionalConvKernel;
         const string positional = "encoder.pos_conv_embed.conv";
         bool parametrized = has($"{positional}.parametrizations.weight.original0");
-        var direction = read(parametrized ? $"{positional}.parametrizations.weight.original1" : $"{positional}.weight_v", new[] { h, perGroup, kernelLength });
-        var magnitude = read(parametrized ? $"{positional}.parametrizations.weight.original0" : $"{positional}.weight_g", new[] { 1, 1, kernelLength });
         var (pv, pg, pb) = PositionalConv.WeightNormParameters;
-        for (int i = 0; i < direction.Length; i++) pv[i] = NumOps.FromDouble(direction[i]);
-        for (int t = 0; t < kernelLength; t++) pg[t] = NumOps.FromDouble(magnitude[t]);
-        var positionalBias = read($"{positional}.bias", new[] { h });
-        for (int i = 0; i < h; i++) pb[i] = NumOps.FromDouble(positionalBias[i]);
-        _engine.InvalidatePersistentTensor(pv);
-        _engine.InvalidatePersistentTensor(pg);
-        _engine.InvalidatePersistentTensor(pb);
+        Copy(pv, parametrized ? $"{positional}.parametrizations.weight.original1" : $"{positional}.weight_v", new[] { h, perGroup, kernelLength });
+        Copy(pg, parametrized ? $"{positional}.parametrizations.weight.original0" : $"{positional}.weight_g", new[] { 1, 1, kernelLength });
+        Copy(pb, $"{positional}.bias", new[] { h });
         Norm(EncoderNorm, "encoder.layer_norm", h);
-        if (MaskEmbedding is not null) TorchParameters.Linear(MaskEmbedding, 1, h, read("masked_spec_embed", new[] { h }));
-        RelativeEmbedding.LoadTable(read("encoder.layers.0.attention.rel_attn_embed.weight", new[] { c.RelativePositionBuckets, c.Heads }));
+        if (MaskEmbedding is not null) TorchParameters.Linear(MaskEmbedding, 1, h, source, "masked_spec_embed", new[] { h });
+        Copy(RelativeEmbedding.Table, "encoder.layers.0.attention.rel_attn_embed.weight", new[] { c.RelativePositionBuckets, c.Heads });
         for (int i = 0; i < EncoderLayers.Count; i++)
         {
             var l = EncoderLayers[i];
@@ -448,7 +435,7 @@ internal sealed class WavLmNetwork<T>
             Lin(l.Value, $"{p}.attention.v_proj", h, h);
             Lin(l.Output, $"{p}.attention.out_proj", h, h);
             Lin(l.Gate, $"{p}.attention.gru_rel_pos_linear", e, 8);
-            l.GateConstant.LoadTable(read($"{p}.attention.gru_rel_pos_const", new[] { 1, c.Heads, 1, 1 }));
+            Copy(l.GateConstant.Table, $"{p}.attention.gru_rel_pos_const", new[] { 1, c.Heads, 1, 1 });
             Norm(l.AttentionNorm, $"{p}.layer_norm", h);
             Lin(l.Intermediate, $"{p}.feed_forward.intermediate_dense", h, c.IntermediateSize);
             Lin(l.FeedForwardOutput, $"{p}.feed_forward.output_dense", c.IntermediateSize, h);

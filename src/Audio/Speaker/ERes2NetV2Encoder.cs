@@ -37,6 +37,14 @@ internal sealed class ERes2NetV2Encoder<T>
     /// (convolutions from U(±1/√fan_in), BatchNorm at γ 1, β 0, mean 0, variance 1) instead of failing.</param>
     public ERes2NetV2Encoder(IEngine engine, Func<string, double[]?> read, int channels = 64, int baseWidth = 24, int scale = 4,
         int expansion = 4, int[]? blocks = null, Random? initialization = null)
+        : this(engine, AiDotNet.ModelLoading.TorchTensorSource.From(read), channels, baseWidth, scale, expansion, blocks, initialization)
+    {
+    }
+
+    /// <summary>Builds the encoder from the checkpoint tensors of <paramref name="read"/>, each convolution kernel copied
+    /// straight into its tensor (see the other constructor).</summary>
+    internal ERes2NetV2Encoder(IEngine engine, AiDotNet.ModelLoading.TorchTensorSource read, int channels = 64, int baseWidth = 24, int scale = 4,
+        int expansion = 4, int[]? blocks = null, Random? initialization = null)
     {
         _engine = engine;
         _initialization = initialization;
@@ -83,22 +91,31 @@ internal sealed class ERes2NetV2Encoder<T>
     /// <summary>The embedding's width: 8·m_channels·expansion channels × 80/8 frequency rows (20,480).</summary>
     public int EmbeddingSize => _channels * 8 * _expansion * 10;
 
-    private void Conv(string name, int outputs, int inputs, int kernel, Func<string, double[]?> read)
+    private void Conv(string name, int outputs, int inputs, int kernel, AiDotNet.ModelLoading.TorchTensorSource read)
     {
         int fanIn = inputs * kernel * kernel;
-        var values = read(name + ".weight")
-            ?? (_initialization is { } random ? AiDotNet.TextToSpeech.Latest.IndexTtsOps.Uniform(random, outputs * fanIn, fanIn) : null)
-            ?? throw new KeyNotFoundException($"The ERes2NetV2 checkpoint has no '{name}.weight'.");
-        if (values.Length != outputs * inputs * kernel * kernel) throw new InvalidDataException($"'{name}.weight' has {values.Length} values.");
-        _weights[name + ".weight"] = new Tensor<T>(new[] { outputs, inputs, kernel, kernel }, new Vector<T>(values.Select(v => NumOps.FromDouble(v)).ToArray()));
-        var bias = read(name + ".bias");
+        var shape = new[] { outputs, inputs, kernel, kernel };
+        Tensor<T> weight;
+        if (read.Contains(name + ".weight"))
+        {
+            weight = new Tensor<T>(shape);
+            read.CopyTo(name + ".weight", shape, weight);
+        }
+        else
+        {
+            var values = (_initialization is { } random ? AiDotNet.TextToSpeech.Latest.IndexTtsOps.Uniform(random, outputs * fanIn, fanIn) : null)
+                ?? throw new KeyNotFoundException($"The ERes2NetV2 checkpoint has no '{name}.weight'.");
+            weight = new Tensor<T>(shape, new Vector<T>(values.Select(v => NumOps.FromDouble(v)).ToArray()));
+        }
+        _weights[name + ".weight"] = weight;
+        var bias = read.TryRead(name + ".bias");
         if (bias is not null) _weights[name + ".bias"] = new Tensor<T>(new[] { 1, outputs, 1, 1 }, new Vector<T>(bias.Select(v => NumOps.FromDouble(v)).ToArray()));
     }
 
     // BatchNorm2d in evaluation: y = (x − mean)/√(var + 1e-5)·γ + β, kept as one scale and shift per channel.
-    private void Norm(string name, int channels, Func<string, double[]?> read)
+    private void Norm(string name, int channels, AiDotNet.ModelLoading.TorchTensorSource read)
     {
-        double[] Require(string field) => read($"{name}.{field}")
+        double[] Require(string field) => read.TryRead($"{name}.{field}")
             ?? (_initialization is not null ? Enumerable.Repeat(field is "weight" or "running_var" ? 1.0 : 0.0, channels).ToArray() : null)
             ?? throw new KeyNotFoundException($"The ERes2NetV2 checkpoint has no '{name}.{field}'.");
         var gamma = Require("weight");
@@ -117,7 +134,7 @@ internal sealed class ERes2NetV2Encoder<T>
         _weights[name + ".shift"] = new Tensor<T>(new[] { 1, channels, 1, 1 }, new Vector<T>(shift));
     }
 
-    private void Fusion(string name, int channels, Func<string, double[]?> read)
+    private void Fusion(string name, int channels, AiDotNet.ModelLoading.TorchTensorSource read)
     {
         int inter = channels / 4;
         Conv($"{name}.local_att.0", inter, 2 * channels, 1, read);

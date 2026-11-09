@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 
@@ -367,36 +368,35 @@ internal sealed class Snac<T>
     /// <c>parametrizations.weight.original0</c> (gain) and <c>original1</c> (direction) or the older <c>weight_g</c> and
     /// <c>weight_v</c>, Snake <c>alpha</c>, and each codebook's <c>codebook.weight</c>. Returns the names it read.
     /// </summary>
-    public HashSet<string> Load(Func<string, double[]?> read)
+    public HashSet<string> Load(Func<string, double[]?> read) => Load(TorchTensorSource.From(read));
+
+    /// <summary>Loads a SNAC state dict straight from <paramref name="source"/>; returns the names it read.</summary>
+    internal HashSet<string> Load(TorchTensorSource source)
     {
         var used = new HashSet<string>(StringComparer.Ordinal);
-        double[]? Read(string name, int count, bool optional = false)
+        string Use(string name)
         {
-            var values = read(name);
-            if (values is null)
-            {
-                if (optional) return null;
-                throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            }
-            if (values.Length != count) throw new InvalidDataException($"'{name}' has {values.Length} values; this model expects {count}.");
+            if (!source.Contains(name)) throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
             used.Add(name);
-            return values;
+            return name;
         }
         foreach (var (name, layer) in Named())
         {
             switch (layer)
             {
                 case NormedConv1DLayer<T> conv:
-                    var shape = conv.TorchWeightShape;
-                    int count = shape.Aggregate(1, (a, b) => a * b);
-                    var direction = Read($"{name}.parametrizations.weight.original1", count, optional: true);
-                    var gain = direction is null ? Read($"{name}.weight_g", shape[0])! : Read($"{name}.parametrizations.weight.original0", shape[0])!;
-                    direction ??= Read($"{name}.weight_v", count)!;
-                    var bias = Read($"{name}.bias", conv.OutputChannels, optional: true) ?? new double[conv.OutputChannels];
-                    conv.LoadTorchWeights(direction, gain, bias);
+                    bool parametrized = source.Contains($"{name}.parametrizations.weight.original1");
+                    string direction = Use(parametrized ? $"{name}.parametrizations.weight.original1" : $"{name}.weight_v");
+                    string gain = Use(parametrized ? $"{name}.parametrizations.weight.original0" : $"{name}.weight_g");
+                    string? bias = source.Contains($"{name}.bias") ? Use($"{name}.bias") : null;
+                    conv.LoadTorchWeights(source, direction, conv.TorchWeightShape, gain, bias);
                     break;
                 case SnakeLayer<T> snake:
-                    snake.LoadAlpha(Read($"{name}.alpha", snake.Channels)!);
+                    var alpha = source.TryRead($"{name}.alpha") ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}.alpha'.");
+                    if (alpha.Length != snake.Channels)
+                        throw new InvalidDataException($"'{name}.alpha' has {alpha.Length} values; this model expects {snake.Channels}.");
+                    used.Add($"{name}.alpha");
+                    snake.LoadAlpha(alpha);
                     break;
                 default:
                     throw new InvalidOperationException($"No loader for {layer.GetType().Name} at '{name}'.");
@@ -404,9 +404,8 @@ internal sealed class Snac<T>
         }
         for (int q = 0; q < _quantizers.Length; q++)
         {
-            var codebook = Read($"quantizer.quantizers.{q}.codebook.weight", Configuration.CodebookSize * Configuration.CodebookDim)!;
             var target = _quantizers[q].Codebook(0);
-            for (int i = 0; i < codebook.Length; i++) target[i] = Ops.FromDouble(codebook[i]);
+            source.CopyTo(Use($"quantizer.quantizers.{q}.codebook.weight"), new[] { Configuration.CodebookSize, Configuration.CodebookDim }, target);
             _engine.InvalidatePersistentTensor(target);
         }
         return used;

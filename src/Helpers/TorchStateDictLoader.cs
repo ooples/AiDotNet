@@ -15,15 +15,21 @@ namespace AiDotNet.Helpers;
 internal sealed class TorchStateDictLoader<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
-    private readonly Func<string, int[], double[]> _read;
+    private readonly AiDotNet.ModelLoading.TorchTensorSource _source;
     private readonly IEngine _engine;
     private readonly HashSet<string> _loaded = new(StringComparer.Ordinal);
 
     public TorchStateDictLoader(Func<string, int[], double[]> read, IEngine engine)
+        : this(AiDotNet.ModelLoading.TorchTensorSource.From(read ?? throw new ArgumentNullException(nameof(read))), engine)
     {
-        Guard.NotNull(read);
+    }
+
+    /// <summary>A loader copying each tensor of <paramref name="source"/> straight into the layers.</summary>
+    public TorchStateDictLoader(AiDotNet.ModelLoading.TorchTensorSource source, IEngine engine)
+    {
+        Guard.NotNull(source);
         Guard.NotNull(engine);
-        _read = read;
+        _source = source;
         _engine = engine;
     }
 
@@ -32,12 +38,12 @@ internal sealed class TorchStateDictLoader<T>
 
     private double[] Read(string name, int[] shape)
     {
-        var values = _read(name, shape);
+        var values = _source.Read(name, shape);
         int expected = 1;
         foreach (int d in shape) expected *= d;
-        if (values is null || values.Length != expected)
+        if (values.Length != expected)
             throw new ArgumentException(
-                $"'{name}' must supply {expected} values for shape [{string.Join(", ", shape)}]; got {values?.Length ?? 0}.");
+                $"'{name}' must supply {expected} values for shape [{string.Join(", ", shape)}]; got {values.Length}.");
         _loaded.Add(name);
         return values;
     }
@@ -50,26 +56,32 @@ internal sealed class TorchStateDictLoader<T>
         _engine.InvalidatePersistentTensor(target);
     }
 
+    // Copies the named tensor of torch shape [shape] into the target in stored order.
+    private void Copy(Tensor<T> target, string name, int[] shape)
+    {
+        _source.CopyTo(name, shape, target);
+        _loaded.Add(name);
+        _engine.InvalidatePersistentTensor(target);
+    }
+
     /// <summary><c>nn.Linear</c>: <c>{prefix}.weight [out, in]</c> and, when the layer has one, <c>{prefix}.bias</c>.</summary>
     public void Linear(DenseLayer<T> layer, string prefix)
     {
         var weights = layer.GetWeights();                                      // [in, out]
         int inputs = weights.Shape[0], outputs = weights.Shape[1];
-        var values = Read(prefix + ".weight", new[] { outputs, inputs });
-        var transposed = new double[values.Length];
-        for (int o = 0; o < outputs; o++)
-            for (int i = 0; i < inputs; i++) transposed[i * outputs + o] = values[o * inputs + i];
-        Fill(weights, transposed, prefix + ".weight");
-        if (layer.UseBias) Fill(layer.GetBiases(), Read(prefix + ".bias", new[] { outputs }), prefix + ".bias");
+        _source.CopyTransposedTo(prefix + ".weight", outputs, inputs, weights);
+        _loaded.Add(prefix + ".weight");
+        _engine.InvalidatePersistentTensor(weights);
+        if (layer.UseBias) Copy(layer.GetBiases(), prefix + ".bias", new[] { outputs });
     }
 
     /// <summary><c>nn.Conv2d</c> with a square kernel: <c>{prefix}.weight [out, in, k, k]</c> and <c>{prefix}.bias</c>.</summary>
     public void Conv2d(ConvolutionalLayer<T> layer, string prefix)
     {
         var kernels = layer.GetFilters();
-        Fill(kernels, Read(prefix + ".weight", kernels.Shape.ToArray()), prefix + ".weight");
+        Copy(kernels, prefix + ".weight", kernels.Shape.ToArray());
         var bias = layer.GetBiases();
-        if (bias is not null) Fill(bias, Read(prefix + ".bias", new[] { bias.Length }), prefix + ".bias");
+        if (bias is not null) Copy(bias, prefix + ".bias", new[] { bias.Length });
     }
 
     /// <summary>A non-overlapping <c>nn.Conv2d</c> (<c>[out, in, kh, kw]</c>, stride = kernel) held as a dense map
@@ -92,8 +104,8 @@ internal sealed class TorchStateDictLoader<T>
     public void LayerNorm(LayerNormalizationLayer<T> layer, string prefix)
     {
         var gamma = layer.GetGammaTensor();
-        Fill(gamma, Read(prefix + ".weight", new[] { gamma.Length }), prefix + ".weight");
-        Fill(layer.GetBetaTensor(), Read(prefix + ".bias", new[] { gamma.Length }), prefix + ".bias");
+        Copy(gamma, prefix + ".weight", new[] { gamma.Length });
+        Copy(layer.GetBetaTensor(), prefix + ".bias", new[] { gamma.Length });
     }
 
     /// <summary><c>nn.BatchNorm*d</c>: affine parameters and the running statistics.</summary>
@@ -101,17 +113,17 @@ internal sealed class TorchStateDictLoader<T>
     {
         var gamma = layer.GetGamma();
         int n = gamma.Length;
-        Fill(gamma, Read(prefix + ".weight", new[] { n }), prefix + ".weight");
-        Fill(layer.GetBeta(), Read(prefix + ".bias", new[] { n }), prefix + ".bias");
-        Fill(layer.GetRunningMean(), Read(prefix + ".running_mean", new[] { n }), prefix + ".running_mean");
-        Fill(layer.GetRunningVariance(), Read(prefix + ".running_var", new[] { n }), prefix + ".running_var");
+        Copy(gamma, prefix + ".weight", new[] { n });
+        Copy(layer.GetBeta(), prefix + ".bias", new[] { n });
+        Copy(layer.GetRunningMean(), prefix + ".running_mean", new[] { n });
+        Copy(layer.GetRunningVariance(), prefix + ".running_var", new[] { n });
     }
 
     /// <summary><c>nn.Embedding</c>: <c>{prefix}.weight [rows, dim]</c>.</summary>
     public void Embedding(EmbeddingLayer<T> layer, string prefix)
     {
         var table = layer.GetMaterializedEmbeddingTable();
-        Fill(table, Read(prefix + ".weight", table.Shape.ToArray()), prefix + ".weight");
+        Copy(table, prefix + ".weight", table.Shape.ToArray());
     }
 
     /// <summary>A 0-dimensional PyTorch parameter (shape <c>[]</c>, e.g. a logit scale) into a one-element tensor.</summary>
@@ -123,6 +135,6 @@ internal sealed class TorchStateDictLoader<T>
     /// <summary>A raw parameter tensor in PyTorch's layout (e.g. a relative-position bias table).</summary>
     public void Tensor(Tensor<T> target, string name)
     {
-        Fill(target, Read(name, target.Shape.ToArray()), name);
+        Copy(target, name, target.Shape.ToArray());
     }
 }

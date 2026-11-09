@@ -277,9 +277,12 @@ public partial class CAMPlusPlus<T> : SpeakerRecognitionBase<T>, ISpeakerVerifie
     /// Loads a 3D-Speaker <c>CAMPPlus</c> state dict (as <c>speech_campplus_sv_zh-cn_16k-common</c> releases it), each
     /// tensor read by name and shape.
     /// </summary>
-    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a 3D-Speaker <c>CAMPPlus</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
-        Encoder.LoadTorchWeights(read);
+        Encoder.LoadTorchWeights(source);
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
 

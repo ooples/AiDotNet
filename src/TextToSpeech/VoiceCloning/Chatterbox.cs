@@ -358,7 +358,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
             Flow.LoadTorchWeights(s3.WithPrefix("flow."), "");
             Hift.LoadTorchWeights(s3.WithPrefix("mel2wav."));
             SpeechTokenizer.LoadTorchWeights(s3.WithPrefix("tokenizer."));
-            SpeakerEncoder.LoadTorchWeights(s3.WithPrefix("speaker_encoder.").AsFunction());
+            SpeakerEncoder.LoadTorchWeights(s3.WithPrefix("speaker_encoder."));
         }
         _t3WeightsGeneration++;
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();

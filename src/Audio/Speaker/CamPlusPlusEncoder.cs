@@ -245,25 +245,25 @@ internal sealed class CamPlusPlusEncoder<T>
     }
 
     /// <summary>Loads a 3D-Speaker <c>CAMPPlus</c> state dict (<c>num_batches_tracked</c> is read and not used).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a 3D-Speaker <c>CAMPPlus</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         var c = Configuration;
         int m = CamPlusPlusConfiguration.HeadChannels;
         void Kernel(BiasFreeLinearLayer<T> holder, string name, int outputs, int inputs, int size)
         {
             int count = outputs * inputs * size * size;
-            TorchParameters.Linear(holder, 1, count, read(name, new[] { outputs, inputs, size, size }));
+            TorchParameters.Linear(holder, 1, count, source, name, new[] { outputs, inputs, size, size });
         }
         void Norm(BatchNormalizationLayer<T> norm, string name, int channels)
         {
-            var shape = new[] { channels };
-            TorchParameters.BatchNorm(norm, read(name + ".weight", shape), read(name + ".bias", shape), read(name + ".running_mean", shape),
-                read(name + ".running_var", shape));
-            read(name + ".num_batches_tracked", Array.Empty<int>());
+            TorchParameters.BatchNorm(norm, source, name + ".", channels);
+            source.Read(name + ".num_batches_tracked", Array.Empty<int>());
         }
         void Conv(NormedConv1DLayer<T> conv, string name, int inputs, int kernel, bool bias) =>
-            conv.LoadTorchWeights(read(name + ".weight", new[] { conv.OutputChannels, inputs, kernel }), null,
-                bias ? read(name + ".bias", new[] { conv.OutputChannels }) : new double[conv.OutputChannels]);
+            conv.LoadTorchWeights(source, name + ".weight", new[] { conv.OutputChannels, inputs, kernel }, null, bias ? name + ".bias" : null);
 
         Kernel(HeadConv1, "head.conv1.weight", m, 1, 3);
         Norm(HeadNorm1, "head.bn1", m);
@@ -315,7 +315,7 @@ internal sealed class CamPlusPlusEncoder<T>
         var e = new[] { c.EmbeddingSize };
         var unit = Enumerable.Repeat(1.0, c.EmbeddingSize).ToArray();
         TorchParameters.BatchNorm(EmbeddingNorm, unit, new double[c.EmbeddingSize],
-            read("xvector.dense.nonlinear.batchnorm.running_mean", e), read("xvector.dense.nonlinear.batchnorm.running_var", e));
-        read("xvector.dense.nonlinear.batchnorm.num_batches_tracked", Array.Empty<int>());
+            source.Read("xvector.dense.nonlinear.batchnorm.running_mean", e), source.Read("xvector.dense.nonlinear.batchnorm.running_var", e));
+        source.Read("xvector.dense.nonlinear.batchnorm.num_batches_tracked", Array.Empty<int>());
     }
 }

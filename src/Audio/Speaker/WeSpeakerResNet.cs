@@ -120,11 +120,13 @@ internal sealed class WeSpeakerResNet<T>
     }
 
     /// <summary>Loads a WeSpeaker ResNet state dict (<c>avg_model.pt</c>'s names, after an optional prefix).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a WeSpeaker ResNet state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
-        void Conv(NormedConv2DLayer<T> conv, string name) => conv.LoadTorchWeights(read(name + ".weight", conv.TorchWeightShape), null);
-        void Norm(BatchNormalizationLayer<T> norm, string name, int width) => TorchParameters.BatchNorm(norm, read(name + ".weight", new[] { width }),
-            read(name + ".bias", new[] { width }), read(name + ".running_mean", new[] { width }), read(name + ".running_var", new[] { width }));
+        void Conv(NormedConv2DLayer<T> conv, string name) => conv.LoadTorchWeights(source, name + ".weight", null);
+        void Norm(BatchNormalizationLayer<T> norm, string name, int width) => TorchParameters.BatchNorm(norm, source, name + ".", width);
         int width = StemConv.TorchWeightShape[0];
         Conv(StemConv, "conv1");
         Norm(StemNorm, "bn1", width);
@@ -145,7 +147,6 @@ internal sealed class WeSpeakerResNet<T>
                 }
             }
         int outputs = EmbeddingDim;
-        TorchParameters.Linear(_engine, Embedding, StatisticsDim, outputs, read("seg_1.weight", new[] { outputs, StatisticsDim }),
-            read("seg_1.bias", new[] { outputs }));
+        TorchParameters.Linear(_engine, Embedding, StatisticsDim, outputs, source, "seg_1.weight", "seg_1.bias");
     }
 }

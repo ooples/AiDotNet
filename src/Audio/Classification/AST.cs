@@ -227,9 +227,16 @@ public partial class AST<T> : AudioClassifierBase<T>, IAudioEventDetector<T>
     /// <summary>Loads an official AST checkpoint's state dict.</summary>
     internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
 
+    /// <summary>Loads an official AST checkpoint's state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source) => Network.LoadTorchWeights(source);
+
     /// <summary>Initializes from an ImageNet DeiT checkpoint with the paper's adaptation (§2.2).</summary>
     internal void LoadImageNetDeiT(Func<string, int[], double[]> read, int imageGrid)
         => Network.LoadImageNetDeiT(read, imageGrid, Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 2));
+
+    /// <summary>Initializes from an ImageNet DeiT checkpoint read from <paramref name="source"/>.</summary>
+    internal void LoadImageNetDeiT(AiDotNet.ModelLoading.TorchTensorSource source, int imageGrid)
+        => Network.LoadImageNetDeiT(source, imageGrid, Tensors.Helpers.RandomHelper.CreateSeededRandom((_options.Seed ?? 42) + 2));
 
     #region IAudioEventDetector Properties
 

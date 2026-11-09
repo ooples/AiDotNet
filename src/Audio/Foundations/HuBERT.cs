@@ -299,10 +299,13 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
 
     /// <summary>Loads a transformers <c>HubertModel</c> state dict (its unprefixed names).</summary>
     /// <param name="read">Returns the named tensor's values, row-major, for the shape given.</param>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a transformers <c>HubertModel</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         if (_network is null) throw new InvalidOperationException("Weights load into the native HuBERT network.");
-        _network.LoadTorchWeights(read);
+        _network.LoadTorchWeights(source);
     }
 
     private Wav2Vec2Network<T>.Output Encode(Tensor<T> audio)

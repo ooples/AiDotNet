@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Audio.Codecs;
@@ -6,23 +7,24 @@ namespace AiDotNet.Audio.Codecs;
 internal static class SeanetTorchWeights
 {
     internal static void Load<T>(Func<string, int[], double[]> read, SeanetEncoder<T> encoder, SeanetDecoder<T> decoder,
+        ResidualVectorQuantizerLayer<T> quantizer, int quantizers, int codes, int dimension, string prefix = "", string sequentialName = "model") =>
+        Load(TorchTensorSource.From(read), encoder, decoder, quantizer, quantizers, codes, dimension, prefix, sequentialName);
+
+    /// <summary>Loads the AudioCraft SEANet names straight from <paramref name="source"/>.</summary>
+    internal static void Load<T>(TorchTensorSource source, SeanetEncoder<T> encoder, SeanetDecoder<T> decoder,
         ResidualVectorQuantizerLayer<T> quantizer, int quantizers, int codes, int dimension, string prefix = "", string sequentialName = "model")
     {
         void Conv(string name, NormedConv1DLayer<T> conv, bool transposed)
         {
             string p = prefix + name + (transposed ? ".convtr.convtr" : ".conv.conv");
-            var shape = conv.TorchWeightShape;
-            conv.LoadTorchWeights(read(p + ".weight_v", shape), read(p + ".weight_g", new[] { shape[0], 1, 1 }),
-                read(p + ".bias", new[] { conv.OutputChannels }));
+            conv.LoadTorchWeights(source, p + ".weight_v", conv.TorchWeightShape, p + ".weight_g", p + ".bias");
         }
         void Lstm(string name, SeanetLstm<T> lstm)
         {
             for (int i = 0; i < lstm.ForwardCells.Count; i++)
             {
                 var cell = lstm.ForwardCells[i]; string p = prefix + name + ".lstm.";
-                cell.LoadTorchWeights(read(p + "weight_ih_l" + i, new[] { 4 * cell.HiddenSize, cell.InputSize }),
-                    read(p + "weight_hh_l" + i, new[] { 4 * cell.HiddenSize, cell.HiddenSize }),
-                    read(p + "bias_ih_l" + i, new[] { 4 * cell.HiddenSize }), read(p + "bias_hh_l" + i, new[] { 4 * cell.HiddenSize }));
+                cell.LoadTorchWeights(source, p + "weight_ih_l" + i, p + "weight_hh_l" + i, p + "bias_ih_l" + i, p + "bias_hh_l" + i);
             }
         }
         foreach (var (name, conv) in encoder.NamedConvolutions("encoder." + sequentialName)) Conv(name, conv.Conv, false);
@@ -33,8 +35,9 @@ internal static class SeanetTorchWeights
         for (int q = 0; q < quantizers; q++)
         {
             string p = prefix + $"quantizer.vq.layers.{q}._codebook.";
-            quantizer.LoadCodebook(q, read(p + "embed", new[] { codes, dimension }), read(p + "embed_avg", new[] { codes, dimension }),
-                read(p + "cluster_size", new[] { codes }), read(p + "inited", new[] { 1 })[0] != 0);
+            if (quantizer.Bins != codes || quantizer.Codebook(q).Length != codes * dimension)
+                throw new ArgumentException($"Expected codebooks [{codes}, {dimension}]; the quantizer's are [{quantizer.Bins}, {quantizer.Codebook(q).Length / quantizer.Bins}].");
+            quantizer.LoadCodebook(q, source, p + "embed", p + "embed_avg", p + "cluster_size", source.Read(p + "inited", new[] { 1 })[0] != 0);
         }
     }
 }

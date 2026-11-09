@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.TextToSpeech.CodecBased;
@@ -694,21 +695,29 @@ internal sealed class Mimi<T>
     /// each codebook's <c>embedding_sum</c> and <c>cluster_usage</c>. Returns the names it read; the codebooks'
     /// <c>_initialized</c> flags are bookkeeping and read as well.
     /// </summary>
-    public HashSet<string> Load(Func<string, double[]?> read)
+    public HashSet<string> Load(Func<string, double[]?> read) => Load(TorchTensorSource.From(read));
+
+    /// <summary>Loads a Mimi state dict straight from <paramref name="source"/>; returns the names it read.</summary>
+    internal HashSet<string> Load(TorchTensorSource source)
     {
         var used = new HashSet<string>(StringComparer.Ordinal);
+        string Use(string name)
+        {
+            if (!source.Contains(name)) throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
+            used.Add(name);
+            return name;
+        }
         double[] Read(string name, int count)
         {
-            var values = read(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
+            var values = source.TryRead(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
             if (values.Length != count) throw new InvalidDataException($"'{name}' has {values.Length} values; this model expects {count}.");
             used.Add(name);
             return values;
         }
         void Conv(string name, NormedConv1DLayer<T> conv)
         {
-            int count = conv.TorchWeightShape.Aggregate(1, (a, b) => a * b);
-            var bias = conv.HasBias ? Read($"{name}.bias", conv.OutputChannels) : new double[conv.OutputChannels];
-            conv.LoadTorchWeights(Read($"{name}.weight", count), null, bias);
+            string weight = Use($"{name}.weight");
+            conv.LoadTorchWeights(source, weight, conv.TorchWeightShape, null, conv.HasBias ? Use($"{name}.bias") : null);
         }
         foreach (var (name, conv) in _encoder.NamedConvolutions("encoder.model")) Conv($"{name}.conv.conv", conv.Conv);
         foreach (var (name, conv) in _decoder.NamedConvolutions("decoder.model")) Conv($"{name}.conv.conv", conv.Conv);
@@ -722,20 +731,19 @@ internal sealed class Mimi<T>
             {
                 var l = transformer.Layers[i];
                 string p = $"{prefix}.transformer.layers.{i}";
-                TorchParameters.LayerNorm(_engine, l.Norm1, Read($"{p}.norm1.weight", d), Read($"{p}.norm1.bias", d));
-                TorchParameters.LayerNorm(_engine, l.Norm2, Read($"{p}.norm2.weight", d), Read($"{p}.norm2.bias", d));
+                TorchParameters.LayerNorm(_engine, l.Norm1, source, Use($"{p}.norm1.weight"), Use($"{p}.norm1.bias"));
+                TorchParameters.LayerNorm(_engine, l.Norm2, source, Use($"{p}.norm2.weight"), Use($"{p}.norm2.bias"));
                 // moshi 0.2.2 and the released checkpoint name them in_proj_weight and out_proj; later moshi in_projs.0 and
                 // out_projs.0.
-                string inProj = read($"{p}.self_attn.in_proj_weight") is not null ? "in_proj_weight" : "in_projs.0.weight";
-                string outProj = read($"{p}.self_attn.out_proj.weight") is not null ? "out_proj.weight" : "out_projs.0.weight";
-                TorchParameters.Linear(l.InProjection, d, 3 * d, Read($"{p}.self_attn.{inProj}", 3 * d * d));
-                TorchParameters.Linear(l.OutProjection, d, d, Read($"{p}.self_attn.{outProj}", d * d));
-                TorchParameters.Linear(l.Linear1, d, f, Read($"{p}.linear1.weight", f * d));
-                TorchParameters.Linear(l.Linear2, f, d, Read($"{p}.linear2.weight", d * f));
+                string inProj = source.Contains($"{p}.self_attn.in_proj_weight") ? "in_proj_weight" : "in_projs.0.weight";
+                string outProj = source.Contains($"{p}.self_attn.out_proj.weight") ? "out_proj.weight" : "out_projs.0.weight";
+                TorchParameters.Linear(l.InProjection, d, 3 * d, source, Use($"{p}.self_attn.{inProj}"));
+                TorchParameters.Linear(l.OutProjection, d, d, source, Use($"{p}.self_attn.{outProj}"));
+                TorchParameters.Linear(l.Linear1, d, f, source, Use($"{p}.linear1.weight"));
+                TorchParameters.Linear(l.Linear2, f, d, source, Use($"{p}.linear2.weight"));
                 foreach (var (scale, key) in new[] { (l.Scale1, "layer_scale_1"), (l.Scale2, "layer_scale_2") })
                 {
-                    var values = Read($"{p}.{key}.scale", d);
-                    for (int c = 0; c < d; c++) scale.Scale[c] = NumOps.FromDouble(values[c]);
+                    source.CopyTo(Use($"{p}.{key}.scale"), new[] { d }, scale.Scale);
                     _engine.InvalidatePersistentTensor(scale.Scale);
                 }
             }

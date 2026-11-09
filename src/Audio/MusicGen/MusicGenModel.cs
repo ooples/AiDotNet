@@ -751,15 +751,20 @@ public partial class MusicGenModel<T> : AudioNeuralNetworkBase<T>, IAudioGenerat
     public void LoadLanguageModelWeights(Func<string, int[], double[]> read)
     {
         Guard.NotNull(read);
-        Core.LoadTorchWeights(read);
+        LoadLanguageModelWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Loads an audiocraft MusicGen language model straight from <paramref name="source"/>.</summary>
+    internal void LoadLanguageModelWeights(AiDotNet.ModelLoading.TorchTensorSource source)
+    {
+        Guard.NotNull(source);
+        Core.LoadTorchWeights(source);
         int d = Dimensions.ModelDim, text = _options.TextModelDim;
-        TorchParameters.Linear(Engine, Projection, text, d,
-            read("condition_provider.conditioners.description.output_proj.weight", new[] { d, text }),
-            read("condition_provider.conditioners.description.output_proj.bias", new[] { d }));
+        TorchParameters.Linear(Engine, Projection, text, d, source,
+            "condition_provider.conditioners.description.output_proj.weight", "condition_provider.conditioners.description.output_proj.bias");
         if (_melodyProjection is not null)
-            TorchParameters.Linear(Engine, _melodyProjection, MusicGenChroma.Bins, d,
-                read("condition_provider.conditioners.self_wav.output_proj.weight", new[] { d, MusicGenChroma.Bins }),
-                read("condition_provider.conditioners.self_wav.output_proj.bias", new[] { d }));
+            TorchParameters.Linear(Engine, _melodyProjection, MusicGenChroma.Bins, d, source,
+                "condition_provider.conditioners.self_wav.output_proj.weight", "condition_provider.conditioners.self_wav.output_proj.bias");
         _ema = null;
     }
 

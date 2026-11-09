@@ -857,7 +857,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>Loads the frozen speaker encoder.</summary>
-    private protected virtual void LoadSpeakerEncoderWeights(TorchTensorSource source) => SpeakerEncoder.LoadTorchWeights(source.AsFunction());
+    private protected virtual void LoadSpeakerEncoderWeights(TorchTensorSource source) => SpeakerEncoder.LoadTorchWeights(source);
 
     /// <summary>Loads the frozen speaker component; releases may provide its original ONNX graph.</summary>
     protected virtual void LoadSpeakerEncoderCheckpoint(string modelDirectory)

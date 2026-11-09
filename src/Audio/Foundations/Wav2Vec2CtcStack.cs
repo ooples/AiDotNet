@@ -104,11 +104,14 @@ internal sealed class Wav2Vec2CtcStack<T>
     /// Loads a transformers <c>*ForCTC</c> state dict: the encoder under <paramref name="encoderPrefix"/> and the head
     /// as <c>lm_head.*</c>.
     /// </summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string encoderPrefix)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string encoderPrefix) =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), encoderPrefix);
+
+    /// <summary>Loads a transformers <c>*ForCTC</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string encoderPrefix)
     {
         int hidden = Network.Configuration.HiddenSize;
-        Network.LoadTorchWeights((name, shape) => read(encoderPrefix + name, shape));
-        TorchParameters.Linear(_engine, Head, hidden, _vocabSize,
-            read("lm_head.weight", new[] { _vocabSize, hidden }), read("lm_head.bias", new[] { _vocabSize }));
+        Network.LoadTorchWeights(source.WithPrefix(encoderPrefix));
+        TorchParameters.Linear(_engine, Head, hidden, _vocabSize, source, "lm_head.weight", "lm_head.bias");
     }
 }

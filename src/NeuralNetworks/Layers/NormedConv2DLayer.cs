@@ -220,6 +220,27 @@ public partial class NormedConv2DLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_bias);
     }
 
+    /// <summary>
+    /// Loads a torch convolution straight from <paramref name="source"/>: the kernel <paramref name="weightName"/> in
+    /// <see cref="TorchWeightShape"/> order (a weight-normalized one takes it as its direction with gain ‖V‖, so W = V) and
+    /// the bias <paramref name="biasName"/> (left as it is without one).
+    /// </summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string weightName, string? biasName)
+    {
+        if (_normalization == ConvolutionNormalization.Spectral)
+            throw new ArgumentException("A spectrally normalized convolution loads its weight_u and weight_v too.");
+        source.CopyTo(weightName, TorchWeightShape, _kernel);
+        if (biasName is not null)
+        {
+            if (!_useBias) throw new InvalidOperationException("The checkpoint has a bias but this convolution has none.");
+            source.CopyTo(biasName, new[] { _bias.Length }, _bias);
+        }
+        for (int r = 0; r < _out; r++) _gain[r] = NumOps.FromDouble(RowNorm(r));
+        Engine.InvalidatePersistentTensor(_kernel);
+        Engine.InvalidatePersistentTensor(_gain);
+        Engine.InvalidatePersistentTensor(_bias);
+    }
+
     /// <summary>The effective kernel W.</summary>
     internal Tensor<T> Kernel()
     {
