@@ -93,34 +93,8 @@ namespace System.Diagnostics.CodeAnalysis
     {
     }
 
-    /// <summary>
-    /// Indicates that the specified parameter will be non-null when the method returns the specified value.
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
-    internal sealed class NotNullWhenAttribute : Attribute
-    {
-        public NotNullWhenAttribute(bool returnValue)
-        {
-            ReturnValue = returnValue;
-        }
-
-        public bool ReturnValue { get; }
-    }
-
-    /// <summary>
-    /// Indicates that an output may be null even if its type does not allow it, when the method returns the
-    /// specified value.
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)]
-    internal sealed class MaybeNullWhenAttribute : Attribute
-    {
-        public MaybeNullWhenAttribute(bool returnValue)
-        {
-            ReturnValue = returnValue;
-        }
-
-        public bool ReturnValue { get; }
-    }
+    // NotNullWhenAttribute and MaybeNullWhenAttribute come from AiDotNet.Tensors (its own internal copies, visible
+    // here through InternalsVisibleTo); a second copy here would conflict with them (CS0436).
 
     /// <summary>
     /// Specifies that the method or property will ensure that the listed field and property members
