@@ -1,4 +1,16 @@
 #nullable enable
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.HopSize.get -> int
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.HopSize.set -> void
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.CodecFrameRate.get -> int
+*REMOVED*AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.CodecFrameRate.set -> void
+virtual AiDotNet.TextToSpeech.TtsModelOptions.HopSize.get -> int
+virtual AiDotNet.TextToSpeech.TtsModelOptions.HopSize.set -> void
+virtual AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.CodecFrameRate.get -> int
+virtual AiDotNet.TextToSpeech.CodecBased.CodecTtsOptions.CodecFrameRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecFrameRate.get -> int
+override AiDotNet.TextToSpeech.CodecBased.UniAudioOptions.CodecFrameRate.set -> void
 *REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.HiddenDim.get -> int
 *REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.HiddenDim.set -> void
 virtual AiDotNet.TextToSpeech.TtsModelOptions.HiddenDim.get -> int

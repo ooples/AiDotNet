@@ -399,10 +399,9 @@ public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
             throw new ArgumentException("UniAudio needs a positive number of RVQ codes per patch.");
         if (options.CodebookSize <= 0 || options.CodecTotalQuantizers < options.NumCodebooks)
             throw new ArgumentException("The codec must provide every configured positive-sized codebook.");
-        if (options.CodecRatios.Length == 0 || options.CodecRatios.Any(ratio => ratio <= 0)
-            || options.CodecRatios.Aggregate(1, (product, ratio) => product * ratio) != options.HopSize
-            || options.SampleRate / options.HopSize != options.CodecFrameRate)
-            throw new ArgumentException("UniAudio's codec ratios, hop and frame rate must describe the same 16 kHz tokenizer.");
+        if (options.CodecRatios is null || options.CodecRatios.Length == 0 || options.CodecRatios.Any(ratio => ratio <= 0)
+            || options.SampleRate <= 0 || options.HopSize <= 0 || options.SampleRate % options.HopSize != 0)
+            throw new ArgumentException("UniAudio's codec strides and sample rate must define a positive integral frame rate.");
         if (options.LLMDim <= 0 || options.LLMDim % options.NumCodebooks != 0
             || options.NumHeads <= 0 || options.LLMDim % options.NumHeads != 0)
             throw new ArgumentException("The Transformer width must divide evenly across codebooks and attention heads.");

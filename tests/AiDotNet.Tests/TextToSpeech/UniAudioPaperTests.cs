@@ -155,6 +155,56 @@ public class UniAudioPaperTests
     }
 
     [Theory]
+    [InlineData("HopSize", 16, 16, 20)]
+    [InlineData("CodecFrameRate", 8, 40, 8)]
+    public void CodecGeometryAliasesConfigureNativeStridesAndIndependentCopies(
+        string property, int value, int expectedHop, int expectedRate)
+    {
+        var options = SmallOptions();
+        if (property == "HopSize") ((AiDotNet.TextToSpeech.TtsModelOptions)options).HopSize = value;
+        else ((CodecTtsOptions)options).CodecFrameRate = value;
+        Assert.Equal(expectedHop, options.HopSize);
+        Assert.Equal(expectedRate, options.CodecFrameRate);
+        Assert.Equal(expectedHop, options.CodecRatios.Aggregate(1, (a, b) => a * b));
+        var copy = new UniAudioOptions(options);
+        using var model = Create(copy);
+        var audio = Audio(expectedHop * 3);
+        var tokens = model.EncodeToTokens(audio);
+        Assert.Equal(9, tokens.Length);
+        var wave = model.DecodeFromTokens(tokens);
+        Assert.Equal(expectedHop * 3, wave.Length);
+        Assert.All(wave.ToArray(), element => Assert.True(TtsPaperNumerics.IsFinite(element)));
+        var sample = new TtsTrainingSample<double>
+        {
+            Text = "hello", Tokens = Ids(1, 2, 3), Audio = audio,
+            SpeakerReference = Audio(expectedHop * 2, 0.4),
+        };
+        var before = model.GetParameters().ToArray();
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(sample)));
+        Assert.True(before.Zip(model.GetParameters().ToArray(), (a, b) => Math.Abs(a - b)).Any(delta => delta > 0));
+        copy.CodecRatios[0] *= 2;
+        Assert.Equal(expectedHop * 2, copy.HopSize);
+        Assert.Equal(expectedHop, options.HopSize);
+    }
+
+    [Theory]
+    [InlineData("HopSize", 0)]
+    [InlineData("HopSize", -1)]
+    [InlineData("HopSize", 33)]
+    [InlineData("CodecFrameRate", 0)]
+    [InlineData("CodecFrameRate", -1)]
+    [InlineData("CodecFrameRate", 11)]
+    public void CodecGeometryAliasesRejectInvalidRatesWithoutChangingStrides(string property, int value)
+    {
+        var options = SmallOptions();
+        var before = (int[])options.CodecRatios.Clone();
+        if (property == "HopSize") Assert.ThrowsAny<ArgumentException>(() => options.HopSize = value);
+        else Assert.ThrowsAny<ArgumentException>(() => options.CodecFrameRate = value);
+        Assert.Equal(before, options.CodecRatios);
+        Assert.Equal((32, 10), (options.HopSize, options.CodecFrameRate));
+    }
+
+    [Theory]
     [InlineData(1)]
     [InlineData(2)]
     [InlineData(3)]
