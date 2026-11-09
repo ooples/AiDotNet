@@ -1,4 +1,8 @@
 #nullable enable
+override AiDotNet.TextToSpeech.Classic.FastSpeechOptions.DecoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.FastSpeechOptions.DecoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.TransformerTTSOptions.DecoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.TransformerTTSOptions.DecoderDim.set -> void
 *REMOVED*AiDotNet.TextToSpeech.Classic.AcousticModelOptions.EncoderDim.get -> int
 *REMOVED*AiDotNet.TextToSpeech.Classic.AcousticModelOptions.EncoderDim.set -> void
 *REMOVED*AiDotNet.TextToSpeech.Classic.AcousticModelOptions.DecoderDim.get -> int
@@ -217,8 +221,10 @@ AiDotNet.Audio.Effects.DACOptions.Channels.get -> int
 AiDotNet.Audio.Effects.DACOptions.Channels.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.HopSize.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.HopSize.set -> void
-AiDotNet.TextToSpeech.Classic.FastSpeech2Options.DecoderDim.get -> int
-AiDotNet.TextToSpeech.Classic.FastSpeech2Options.DecoderDim.set -> void
+*REMOVED*AiDotNet.TextToSpeech.Classic.FastSpeech2Options.DecoderDim.get -> int
+*REMOVED*AiDotNet.TextToSpeech.Classic.FastSpeech2Options.DecoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.FastSpeech2Options.DecoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.FastSpeech2Options.DecoderDim.set -> void
 AiDotNet.TextToSpeech.Vocoders.ISTFTNetOptions.UpsampleKernelSizes.get -> int[]!
 AiDotNet.TextToSpeech.Vocoders.ISTFTNetOptions.UpsampleKernelSizes.set -> void
 AiDotNet.TextToSpeech.Vocoders.HiFiGANOptions.UpsampleKernelSizes.get -> int[]!

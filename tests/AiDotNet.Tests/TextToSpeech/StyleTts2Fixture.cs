@@ -28,6 +28,32 @@ internal static class StyleTts2Fixture
 
     internal static TtsTrainingSample<double> Sample() => Sample<double>();
 
+    internal static bool IsSlmAdversarialOption(string option) => option is
+        "SlmGradientThreshold" or "SlmGradientScale" or "SlmDurationSigma"
+        or "SlmDiscriminatorInterval" or "SlmAdversarialMinFrames" or "SlmAdversarialMaxFrames";
+
+    internal static void PrepareSlmAdversarialOptions(StyleTTS2Options options, string option)
+    {
+        // Keep the native decoder and frozen WavLM. Its 400-sample receptive field must fit
+        // in the resampled predicted crop, rather than silently skipping the adversary.
+        options.UpsampleRates = new[] { 4, 8 };
+        options.UpsampleKernels = new[] { 8, 16 };
+        options.HopSize = 32;
+        options.SlmAdversarialMinFrames = option == "SlmAdversarialMinFrames" ? 80 : 16;
+        options.SlmAdversarialMaxFrames = option == "SlmAdversarialMaxFrames" ? 48 : 128;
+        options.SlmDiscriminatorInterval = 3;
+    }
+
+    internal static TtsTrainingSample<T> SlmAdversarialSample<T>(int hopSize)
+    {
+        var sample = Sample<T>(hopSize);
+        var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+        // Twenty-four phonemes produce long enough predicted durations at six bins/token.
+        var tokens = new Tensor<T>(new[] { 24 });
+        for (int i = 0; i < tokens.Length; i++) tokens[i] = ops.FromDouble(i % 7 + 1);
+        return new TtsTrainingSample<T> { Tokens = tokens, Audio = sample.Audio };
+    }
+
     internal static TtsTrainingSample<T> Sample<T>(int hopSize = 8)
     {
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();

@@ -5,11 +5,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <para>Defaults are the paper's LJSpeech configuration (Ren et al. 2021, App. A, Table 7).</para>
 /// <para><b>For Beginners:</b> These options configure the FastSpeech2 model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(AcousticMelOptionsConverter))]
 public class FastSpeech2Options : AcousticModelOptions
 {
     /// <summary>Decoder output width in mel channels; an alias for <see cref="TtsModelOptions.MelChannels"/>.</summary>
     /// <remarks>FastSpeech 2's FFT width is <see cref="TtsModelOptions.HiddenDim"/>; its final projection emits mel channels.</remarks>
-    public new int DecoderDim { get => MelChannels; set => MelChannels = value; }
+    public override int DecoderDim { get => MelChannels; set => MelChannels = value; }
 
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>

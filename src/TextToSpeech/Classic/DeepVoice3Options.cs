@@ -149,7 +149,9 @@ internal sealed class DeepVoice3OptionsConverter : JsonConverter<DeepVoice3Optio
         PreferNative("HiddenDim", "DecoderPrenetSizes");
         var heads = data.GetValue("NumHeads", StringComparison.OrdinalIgnoreCase);
         if (heads?.Type == JTokenType.Integer && (int)heads == 8) heads.Replace(new JValue(1));
-        var options = hasExistingValue && existingValue is not null ? existingValue : new DeepVoice3Options();
+        var options = hasExistingValue && existingValue is not null ? existingValue
+            : serializer.ContractResolver.ResolveContract(objectType).DefaultCreator?.Invoke() as DeepVoice3Options
+                ?? throw new JsonSerializationException($"Cannot construct {objectType.FullName} options.");
         using var normalized = data.CreateReader();
         serializer.Populate(normalized, options);
         return options;

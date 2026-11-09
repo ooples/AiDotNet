@@ -14,8 +14,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </para>
 /// <para><b>For Beginners:</b> These options configure the TransformerTTS model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(AcousticMelOptionsConverter))]
 public class TransformerTTSOptions : AcousticModelOptions
 {
+    /// <summary>Decoder output width: the mel projection (§3.7), independent of the transformer hidden width.</summary>
+    public override int DecoderDim { get => MelChannels; set => MelChannels = value; }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
@@ -37,6 +41,9 @@ public class TransformerTTSOptions : AcousticModelOptions
     /// <summary>Creates the paper's configuration.</summary>
     public TransformerTTSOptions()
     {
+        // Preserve the native Adam fallback's existing rate and unregularized objective.
+        LearningRate = 1e-3;
+        WeightDecay = 0;
         EncoderDim = 512;
         HiddenDim = 512;
         NumEncoderLayers = 6;

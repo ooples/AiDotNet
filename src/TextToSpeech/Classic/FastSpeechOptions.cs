@@ -7,8 +7,12 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// 256 filters and kernel 3, dropout 0.1.</para>
 /// <para><b>For Beginners:</b> These options configure the FastSpeech model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(AcousticMelOptionsConverter))]
 public class FastSpeechOptions : AcousticModelOptions
 {
+    /// <summary>Decoder output width in mel channels (§4.2), independent of the FFT hidden width.</summary>
+    public override int DecoderDim { get => MelChannels; set => MelChannels = value; }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>

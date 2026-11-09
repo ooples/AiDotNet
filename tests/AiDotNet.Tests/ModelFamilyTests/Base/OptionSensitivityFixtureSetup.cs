@@ -141,6 +141,8 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T>
                 ? option == "DecoderType" ? "styletts2-decoder-switch"
                 : option == "IstftFftSize" ? "styletts2-istft"
+                : option is "MonotonicLossWeight" or "S2sLossWeight" ? "styletts2-active-aligner"
+                : StyleTts2Fixture.IsSlmAdversarialOption(option) ? "styletts2-slm-" + option
                 : IsStyleTts2JointOption(option) ? "styletts2-joint" : "styletts2-pretraining"
             : network is AiDotNet.VisionLanguage.Grounding.GroundedSAM2<T> && option is "MaskThreshold" or "SamDecoderHeads" ? "grounded-sam2-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.CosyVoice<T> && option == "SpeechTokenizerHeads" ? "cosy-native-s3-heads"
@@ -316,6 +318,17 @@ internal static class OptionSensitivityFixtureSetup
             && SpeechT5Fixture.Observe(speechT5, option) is { } speechObservation)
             return speechObservation;
 
+        // Unlike the joint prosody losses, these two objectives belong to stage-1 alignment.
+        // Observe the real objective as well as weights: Adam can absorb a scalar loss rescaling.
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> alignerProbe
+            && option is "MonotonicLossWeight" or "S2sLossWeight")
+        {
+            var settings = (AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options)alignerProbe.GetOptions();
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var objective = alignerProbe.EvaluateTrainingObjective(StyleTts2Fixture.Sample<T>(settings.HopSize), adversarialTerms: true);
+            return OptionSensitivityHarness.Combine(observe(network, input),
+                OptionSensitivityHarness.Fingerprint(new[] { ops.ToDouble(objective) }));
+        }
         if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> styleProbe && IsStyleTts2JointOption(option))
         {
             var stage = styleProbe.CurrentStage;
@@ -649,7 +662,7 @@ internal static class OptionSensitivityFixtureSetup
         or "TimeMaskProbability" or "TimeMaskLength" or "FrequencyMaskProbability" or "FrequencyMaskLength"
         or "Temperature" or "Negatives";
 
-    private static bool IsStyleTts2JointOption(string option) => option is
+    private static bool IsStyleTts2JointOption(string option) => StyleTts2Fixture.IsSlmAdversarialOption(option) || option is
         "DropoutRate" or "EmbeddingMaskProbability" or "FineTuneLearningRate" or "DurationCrossEntropyWeight"
         or "LogSigmaMean" or "LogSigmaStd" or "DiffusionStartStep" or "BertWeightDecay" or "BertLearningRate"
         or "DiffusionLossWeight" or "DurationLossWeight" or "JointStartStep" or "EstimateSigmaData"
@@ -694,6 +707,8 @@ internal static class OptionSensitivityFixtureSetup
             ? Math.Max(4, steps)
             : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> && option is "WarmupSteps" or "TrainingSteps"
             ? Math.Max(4, steps)
+            : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && StyleTts2Fixture.IsSlmAdversarialOption(option)
+            ? Math.Max(3, steps)
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "BertBeta1"
             ? Math.Max(2, steps)
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZS<T> && option == "TmaStartStep"
@@ -791,7 +806,9 @@ internal static class OptionSensitivityFixtureSetup
 
         if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> style)
         {
-            style.Train(StyleTts2Fixture.Sample<T>(((AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options)style.GetOptions()).HopSize));
+            int hop = ((AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options)style.GetOptions()).HopSize;
+            style.Train(StyleTts2Fixture.IsSlmAdversarialOption(option)
+                ? StyleTts2Fixture.SlmAdversarialSample<T>(hop) : StyleTts2Fixture.Sample<T>(hop));
             return true;
         }
         if (network is AiDotNet.TextToSpeech.CodecBased.Zonos<T> zonos && ZonosFixture.TryTrain(zonos, input, option))
@@ -1095,6 +1112,12 @@ internal static class OptionSensitivityFixtureSetup
             dit.DiTTrainingCfgRate = 0.5;
         if (options is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2Options styleDecoder)
         {
+            if (StyleTts2Fixture.IsSlmAdversarialOption(option))
+                StyleTts2Fixture.PrepareSlmAdversarialOptions(styleDecoder, option);
+            // The aligner objectives begin only after the paper's TMA warm-up.
+            // Both the control and variant must train the aligner before probing its loss weights.
+            if (option is "MonotonicLossWeight" or "S2sLossWeight")
+                styleDecoder.TmaStartStep = 0;
             if (option == "DecoderType")
             {
                 styleDecoder.IstftHopSize = 1;
