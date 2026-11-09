@@ -7,6 +7,14 @@ namespace AiDotNet.Models.Options;
 /// <remarks>The defaults are icefall's <c>ScaledAdam</c> (and GPT-SoVITS's copy, <c>AR/modules/optim.py</c>).</remarks>
 public class ScaledAdamOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
+    /// <summary>Initializes a new instance of the ScaledAdamOptimizerOptions class with icefall's defaults.</summary>
+    public ScaledAdamOptimizerOptions()
+    {
+        // icefall's ScaledAdam clips by its own rule (ClippingScale, relative to recent gradient norms) and applies
+        // no fixed gradient-norm clip. Opt in explicitly if wanted.
+        EnableGradientClipping = false;
+    }
+
     /// <summary>Gets or sets the mini-batch size of <c>Optimize</c> (32).</summary>
     public int BatchSize { get; set; } = 32;
 

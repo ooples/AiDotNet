@@ -18,6 +18,16 @@ namespace AiDotNet.Models.Options;
 /// </remarks>
 public class AdafactorOptimizerOptions<T, TInput, TOutput> : GradientBasedOptimizerOptions<T, TInput, TOutput>
 {
+    /// <summary>
+    /// Initializes a new instance of the AdafactorOptimizerOptions class with the paper's defaults.
+    /// </summary>
+    public AdafactorOptimizerOptions()
+    {
+        // Adafactor bounds its updates itself (update clipping, Shazeer and Stern 2018, Sec. 6), in place of
+        // gradient clipping; transformers' Adafactor applies no gradient-norm clip. Opt in explicitly if wanted.
+        EnableGradientClipping = false;
+    }
+
     /// <summary>Samples per optimizer step.</summary>
     public int BatchSize { get; set; } = 32;
 
