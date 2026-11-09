@@ -613,7 +613,7 @@ public partial class DepthwiseSeparableConvolutionalLayer<T> : LayerBase<T>, ISh
     /// </remarks>
     private void InitializeParameters()
     {
-        T depthwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_kernelSize * _kernelSize)));
+        T depthwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble((double)_kernelSize * _kernelSize)));
         T pointwiseScale = NumOps.Sqrt(NumericalStabilityHelper.SafeDiv(NumOps.FromDouble(2.0), NumOps.FromDouble(_inputDepth)));
 
         for (int i = 0; i < _depthwiseKernels.Length; i++)
