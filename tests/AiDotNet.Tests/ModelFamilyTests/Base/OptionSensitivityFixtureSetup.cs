@@ -901,7 +901,7 @@ internal static class OptionSensitivityFixtureSetup
         if (options is AiDotNet.TextToSpeech.DescriptionBased.ParlerTTSOptions parler && option == "CodebookWeights")
             parler.CodebookWeights ??= Enumerable.Repeat(1.0, parler.NumCodebooks).ToArray();
 
-        if (options is AiDotNet.Video.Enhancement.Upscale4KAgentOptions agent && option == "RollbackThreshold")
+        if (options is AiDotNet.Video.Options.Upscale4KAgentOptions agent && option == "RollbackThreshold")
             AiDotNet.Tests.Video.Upscale4KOptionFixture.PrepareOptions(agent);
         if (options is AiDotNet.TextToSpeech.CodecBased.UniAudioOptions uniAudio)
             UniAudioOptionFixture.PrepareOptions(uniAudio, option);

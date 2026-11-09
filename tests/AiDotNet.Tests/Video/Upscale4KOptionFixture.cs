@@ -1,4 +1,5 @@
 using AiDotNet.Video.Enhancement;
+using AiDotNet.Video.Options;
 
 namespace AiDotNet.Tests.Video;
 
