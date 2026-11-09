@@ -734,6 +734,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.UniAudio<T> uniAudio && UniAudioOptionFixture.IsCodebookOption(option))
+        {
+            UniAudioOptionFixture.TrainCodebooks(uniAudio);
+            return true;
+        }
         if (network is AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T> audioPalm)
         {
             AudioPalmAsrOptionFixture.Train(audioPalm);

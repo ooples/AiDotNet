@@ -393,10 +393,12 @@ public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
 
     private static void ValidateOptions(UniAudioOptions options)
     {
-        if (options.NumCodebooks != 3)
-            throw new ArgumentException("UniAudio's released multi-scale model uses exactly three RVQ codes per patch.");
+        // The release uses three codes, while the author's MegaByteModel supports
+        // a configurable na_repeat that divides its Transformer width.
+        if (options.NumCodebooks <= 0)
+            throw new ArgumentException("UniAudio needs a positive number of RVQ codes per patch.");
         if (options.CodebookSize <= 0 || options.CodecTotalQuantizers < options.NumCodebooks)
-            throw new ArgumentException("The codec must provide at least three positive-sized codebooks.");
+            throw new ArgumentException("The codec must provide every configured positive-sized codebook.");
         if (options.CodecRatios.Length == 0 || options.CodecRatios.Any(ratio => ratio <= 0)
             || options.CodecRatios.Aggregate(1, (product, ratio) => product * ratio) != options.HopSize
             || options.SampleRate / options.HopSize != options.CodecFrameRate)

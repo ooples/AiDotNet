@@ -36,6 +36,7 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/OpenVoiceTrainingReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/OpenVoiceOptionAliasesTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/StyleTtsConditioningShapeTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/NormedConvKernelCacheTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/OpenVoiceIpaPriorTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/EmotiVoiceFrontEndTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/MeloRomanceFrontEndTests.cs" />

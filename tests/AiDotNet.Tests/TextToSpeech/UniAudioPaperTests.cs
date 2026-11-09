@@ -154,6 +154,55 @@ public class UniAudioPaperTests
         Assert.All(wave.ToArray(), value => Assert.True(TtsPaperNumerics.IsFinite(value)));
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void ConfiguredPatchWidth_DrivesCodecAndBothLanguageModelScales(int codebooks)
+    {
+        var options = SmallOptions();
+        options.NumCodebooks = codebooks;
+        using var model = Create(options);
+        var tokens = model.EncodeToTokens(Audio());
+        var values = tokens.ToArray();
+        Assert.Equal(3 * codebooks, values.Length);
+        for (int i = 0; i < values.Length; i++)
+        {
+            int q = i % codebooks;
+            Assert.InRange(values[i], q * 8, (q + 1) * 8 - 1);
+        }
+        var wave = model.DecodeFromTokens(tokens);
+        Assert.Equal(96, wave.Length);
+        Assert.All(wave.ToArray(), value => Assert.True(TtsPaperNumerics.IsFinite(value)));
+
+        var sample = new TtsTrainingSample<double>
+        {
+            Text = "hello", Tokens = Ids(1, 2, 3), Audio = Audio(),
+            SpeakerReference = Audio(64, 0.4),
+        };
+        var before = model.GetParameters().ToArray();
+        double loss = model.Train(sample);
+        Assert.True(TtsPaperNumerics.IsFinite(loss));
+        Assert.True(before.Zip(model.GetParameters().ToArray(), (a, b) => Math.Abs(a - b)).Any(delta => delta > 0));
+        model.Voice = model.CreateVoice(Audio(), 320);
+        var generated = model.Synthesize("hello");
+        Assert.NotEmpty(generated.ToArray());
+        Assert.All(generated.ToArray(), value => Assert.True(TtsPaperNumerics.IsFinite(value)));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(4)]
+    [InlineData(5)]
+    public void ConfiguredPatchWidth_RejectsUnavailableOrIndivisibleCodebooks(int codebooks)
+    {
+        var options = SmallOptions();
+        options.NumCodebooks = codebooks;
+        if (codebooks == 5) options.CodecTotalQuantizers = 6;
+        Assert.Throws<ArgumentException>(() => Create(options));
+    }
+
     [Fact]
     public void Synthesis_RequiresSpeakerPromptAndRunsGlobalLocalGenerationAndCodecDecode()
     {
