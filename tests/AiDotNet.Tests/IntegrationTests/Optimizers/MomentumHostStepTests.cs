@@ -63,9 +63,13 @@ public class MomentumHostStepTests
         finally { AiDotNetEngine.Current = saved; }
     }
 
-    [Fact]
+    [SkippableFact]
     public void HostStep_DoesNotAllocateParameterSizedTensors()
     {
+#if !NETCOREAPP3_0_OR_GREATER
+        // net471 has no allocation counter that leaves out parallel tests' allocations.
+        Skip.If(true, "GC.GetTotalAllocatedBytes needs .NET Core 3.0 or later.");
+#else
         var saved = AiDotNetEngine.Current;
         try
         {
@@ -86,5 +90,6 @@ public class MomentumHostStepTests
             Assert.True(allocated < length * sizeof(float) / 4, $"A momentum step allocated {allocated:N0} bytes.");
         }
         finally { AiDotNetEngine.Current = saved; }
+#endif
     }
 }
