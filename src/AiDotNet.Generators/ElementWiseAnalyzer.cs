@@ -80,6 +80,10 @@ public sealed class ElementWiseAnalyzer : DiagnosticAnalyzer
         {
             var firstTree = start.Compilation.SyntaxTrees.FirstOrDefault();
             if (firstTree is null || !firstTree.Options.PreprocessorSymbolNames.Contains("NET10_0_OR_GREATER")) return;
+            // Only a project that sets ElementWiseGate is gated. The test project loads this analyzer too, and its loops
+            // over tensors build fixtures and check results; they are not hot paths and have no baseline.
+            if (!start.Options.AnalyzerConfigOptionsProvider.GlobalOptions.TryGetValue("build_property.ElementWiseGate", out var gate)
+                || !string.Equals(gate, "true", StringComparison.OrdinalIgnoreCase)) return;
 
             var numericOperations = start.Compilation.GetTypeByMetadataName("AiDotNet.Tensors.Interfaces.INumericOperations`1");
             var baseline = LoadBaseline(start.Options, start.CancellationToken);

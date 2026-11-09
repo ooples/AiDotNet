@@ -374,7 +374,12 @@
 	  <!-- The element-wise gate's shrink-only inventory (ADNELEM001-003). ElementWiseRecord=true leaves it out so every
 	       occurrence is reported; tools/ElementWise/Update-ElementWiseBaseline.ps1 rewrites the file from that report. -->
 	  <AdditionalFiles Include="ElementWiseBaseline.txt" Condition="'$(ElementWiseRecord)' != 'true' And Exists('ElementWiseBaseline.txt')" />
+	  <!-- The gate runs only where this is set; other projects that load the generators (the tests) are not gated. -->
+	  <CompilerVisibleProperty Include="ElementWiseGate" />
 	</ItemGroup>
+	<PropertyGroup>
+	  <ElementWiseGate>true</ElementWiseGate>
+	</PropertyGroup>
 
 	<!-- Package validation (#2392): every pack compares the package against the last release on nuget.org and fails on
 	     a binary or source break, and checks that the assets for the different target frameworks are compatible with
