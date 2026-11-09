@@ -50,6 +50,30 @@ public class VoiceboxPaperTests
 
     private static Voicebox<double> Create() => new(Architecture(), SmallOptions());
 
+    [Theory]
+    [InlineData(4, 20, 0.05)]
+    [InlineData(8, 40, 0.4)]
+    [InlineData(5000, 500000, 0.2)]
+    public void ConfiguredTrainingRecipeReachesNativeOptimizer(int warmup, int updates, double clip)
+    {
+        var options = SmallOptions();
+        options.WarmupSteps = warmup;
+        options.TrainingUpdates = updates;
+        options.GradientClipNorm = clip;
+        using var model = new Voicebox<double>(Architecture(), options);
+        var optimizer = Assert.IsAssignableFrom<AiDotNet.Interfaces.IGradientBasedOptimizer<double, Tensor<double>, Tensor<double>>>(
+            typeof(Voicebox<double>).GetField("_optimizer",
+                System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(model));
+        var configured = Assert.IsType<AiDotNet.Models.Options.AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());
+        Assert.Equal(updates, configured.MaxIterations);
+        Assert.True(configured.EnableGradientClipping);
+        Assert.Equal(clip, configured.MaxGradientNorm);
+        var scheduler = Assert.IsType<AiDotNet.LearningRateSchedulers.LinearWarmupScheduler>(configured.LearningRateScheduler);
+        Assert.Equal(warmup, scheduler.WarmupSteps);
+        Assert.Equal(updates, scheduler.TotalSteps);
+        Assert.Equal(AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Linear, scheduler.CurrentDecayMode);
+    }
+
     [Fact]
     public void ConfiguredLearningRateChangesNativeTrainingUpdates()
     {
