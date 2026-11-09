@@ -11,7 +11,6 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/AlignTTSPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/AlignTtsAcousticReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/E3TTSPaperTests.cs" />
-    <Compile Include="../AiDotNet.Tests/TextToSpeech/E3TTSOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/E3UnetReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/NormedConvParameterOwnershipTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/TortoiseTTSPaperTests.cs" />
