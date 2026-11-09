@@ -1262,6 +1262,11 @@ internal static class Program
         return Median(series.Skip(step.BoundaryIndex).Select(point => point.Value).ToList());
     }
 
+    // Floor on a cohort's spread (MAD of log values), so robust z > 6 always means at least twice the cohort median.
+    // Peak working set is mostly the runtime's ~120 MB baseline: a cohort can agree to within a few percent, and
+    // its MAD then made a 7% difference (Emotion2Vec, 131 vs 122 MB among six fixtures) score z = 9.6.
+    private static readonly double MinimumLogSpread = 0.6745 * Math.Log(2.0) / 6.0;
+
     private static void DetectCohortOutliers(
         IReadOnlyList<CensusRecord> records,
         ICollection<Diagnostic> diagnostics)
@@ -1282,6 +1287,7 @@ internal static class Program
             double median = MedianOfSorted(values);
             double mad = MedianOfSorted(values.Select(v => Math.Abs(v - median)).OrderBy(v => v).ToArray());
             if (mad <= 1e-9) continue;
+            mad = Math.Max(mad, MinimumLogSpread);
 
             foreach (CensusRecord record in cohort)
             {
@@ -1305,6 +1311,7 @@ internal static class Program
             double median = MedianOfSorted(values);
             double mad = MedianOfSorted(values.Select(v => Math.Abs(v - median)).OrderBy(v => v).ToArray());
             if (mad <= 1e-9) continue;
+            mad = Math.Max(mad, MinimumLogSpread);
 
             foreach (CensusRecord record in cohort)
             {
@@ -1640,7 +1647,7 @@ internal static class Program
 
             // Expensive models are not training hot-path outliers when their train/forward ratio
             // matches their peers; a cheap-forward model with extreme training amplification is.
-            CensusRecord Synthetic(int index, double trainMs, double forwardMs, long parameters)
+            CensusRecord Synthetic(int index, double trainMs, double forwardMs, long parameters, double? peakMegabytes = null)
                 => new()
                 {
                     Fixture = $"Synthetic{index}",
@@ -1655,7 +1662,7 @@ internal static class Program
                     {
                         ["trainStepMs"] = trainMs,
                         ["steadyForwardMedianMs"] = forwardMs,
-                        ["peakWorkingSetBytes"] = parameters * (20.0 + index * 0.25),
+                        ["peakWorkingSetBytes"] = peakMegabytes * 1024 * 1024 ?? parameters * (20.0 + index * 0.25),
                     },
                 };
 
@@ -1679,6 +1686,21 @@ internal static class Program
             DetectCohortOutliers(amplified, diagnostics);
             if (!diagnostics.Any(d => d.Metric == "trainingAmplification"))
                 return Fail("training amplification detection");
+
+            // Peak working set is mostly the runtime baseline, so a cohort can agree to within a percent. A fixture
+            // 7% above it is not a memory outlier; one at three times the median is.
+            var tight = Enumerable.Range(0, 6).Select(i => Synthetic(i, 100, 50, 100_000_000, 122.0 + i * 0.1)).ToArray();
+            tight[^1] = Synthetic(5, 100, 50, 100_000_000, 131.0);
+            diagnostics.Clear();
+            DetectCohortOutliers(tight, diagnostics);
+            if (diagnostics.Any(d => d.Metric == "peakWorkingSetBytes"))
+                return Fail("a 7% memory difference in a tight cohort remains silent");
+
+            tight[^1] = Synthetic(5, 100, 50, 100_000_000, 366.0);
+            diagnostics.Clear();
+            DetectCohortOutliers(tight, diagnostics);
+            if (!diagnostics.Any(d => d.Metric == "peakWorkingSetBytes"))
+                return Fail("memory at three times the cohort median is an outlier");
             Console.WriteLine("ModelPerfProbe self-test passed.");
             return 0;
         }
