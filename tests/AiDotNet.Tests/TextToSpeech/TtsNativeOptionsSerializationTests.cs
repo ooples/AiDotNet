@@ -83,7 +83,10 @@ public class TtsNativeOptionsSerializationTests
     [Fact]
     public void UniAudioConflictingPartialAliasesAreRejected()
     {
-        Assert.ThrowsAny<Exception>(() => JsonConvert.DeserializeObject<UniAudioOptions>(
+        var error = Record.Exception(() => JsonConvert.DeserializeObject<UniAudioOptions>(
             "{\"SampleRate\":320,\"HopSize\":32,\"CodecFrameRate\":12}"));
+        Assert.NotNull(error);
+        var cause = Assert.IsType<ArgumentException>(error.GetBaseException());
+        Assert.Contains("conflicting strides", cause.Message);
     }
 }

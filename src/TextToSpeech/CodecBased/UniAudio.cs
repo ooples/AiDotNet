@@ -393,6 +393,8 @@ public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
 
     private static void ValidateOptions(UniAudioOptions options)
     {
+        if (options.DropoutRate != 0)
+            throw new ArgumentException("UniAudio's released global/local Transformers have no dropout; DropoutRate must be zero.");
         // The release uses three codes, while the author's MegaByteModel supports
         // a configurable na_repeat that divides its Transformer width.
         if (options.NumCodebooks <= 0)

@@ -32,6 +32,7 @@ public class OpenVoiceV2Options : VoiceCloningOptions
         HiddenDim = 192;
         MinReferenceDurationSec = 3.0;
         NumEncoderLayers = 6;
+        NumDecoderLayers = 4;
         NumLLMLayers = 12;
         NumHeads = 2;
         DropoutRate = 0.1;

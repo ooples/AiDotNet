@@ -43,14 +43,19 @@ public class TtsModelOptions : ModelOptions
     /// <summary>Gets or sets the audio sample rate in Hz.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro's released ISTFTNet renderer is fixed at 24000 Hz; the native constructor rejects other rates.", ModelType = typeof(EndToEnd.Kokoro<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Bark's released EnCodec renderer operates at 24000 Hz; BarkOptions.Validate rejects every other sample rate.", ModelType = typeof(CodecBased.BarkModel<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("The released OpenVoice converter config fixes audio at 22050 Hz; the native constructor rejects other rates (myshell-ai/OpenVoice checkpoints/converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoice<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("The released OpenVoiceV2 converter config fixes audio at 22050 Hz; the native constructor rejects other rates (myshell-ai/OpenVoiceV2 converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoiceV2<>))]
     public int SampleRate { get; set; } = 22050;
 
     /// <summary>Gets or sets the number of mel-spectrogram frequency channels.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro predicts waveform spectra directly with ISTFTNet and has no mel-spectrogram representation.", ModelType = typeof(EndToEnd.Kokoro<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("E3 TTS sections 3.2-3.3 predict the raw waveform with a BERT-conditioned U-Net and have no mel representation (arXiv:2311.00945).", ModelType = typeof(FlowDiffusion.E3TTS<>))]
     public virtual int MelChannels { get; set; } = 80;
 
     /// <summary>Gets or sets the hop size for mel-spectrogram computation.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro has no mel frontend; its released ISTFTNet upsampling and inverse-STFT hop geometry are fixed by the decoder.", ModelType = typeof(EndToEnd.Kokoro<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoice's released HiFi-GAN strides [8,8,2,2] fix its hop at 256; the native constructor rejects other hops (myshell-ai/OpenVoice checkpoints/converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoice<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoiceV2's released HiFi-GAN strides [8,8,2,2] fix its hop at 256; the native constructor rejects other hops (myshell-ai/OpenVoiceV2 converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoiceV2<>))]
     public virtual int HopSize { get; set; } = 256;
 
     /// <summary>Gets or sets the FFT window size.</summary>
@@ -67,6 +72,8 @@ public class TtsModelOptions : ModelOptions
     public virtual int NumEncoderLayers { get; set; } = 6;
 
     /// <summary>Gets or sets the number of decoder layers.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoice's released HiFi-GAN decoder has four upsampling stages [8,8,2,2]; other depths are rejected by the native constructor (myshell-ai/OpenVoice checkpoints/converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoice<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoiceV2's released HiFi-GAN decoder has four upsampling stages [8,8,2,2]; other depths are rejected by the native constructor (myshell-ai/OpenVoiceV2 converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoiceV2<>))]
     public int NumDecoderLayers { get; set; } = 6;
 
     /// <summary>Gets or sets the number of attention heads.</summary>
@@ -94,6 +101,7 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("MetaVoice configures native GPT dropout through TrainingDropout; this inherited generic TTS setting does not configure its actors.", ModelType = typeof(VoiceCloning.MetaVoice1B<>))]
 
     [AiDotNet.Attributes.OptionBehaviourExempt("CSM's native Llama and Mimi blocks use deterministic attention without dropout.", ModelType = typeof(CodecBased.CSM<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("UniAudio's author MegaByteModel and ResidualAttentionBlock contain no dropout (yangdongchao/UniAudio, UniAudio/model.py); native options require zero dropout.", ModelType = typeof(CodecBased.UniAudio<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("MinMo configures dropout on its native Qwen adapters through LoraDropout; its other native blocks do not use this generic setting.", ModelType = typeof(MultiModal.MinMo<>))]
     public virtual double DropoutRate { get; set; } = 0.1;
 
