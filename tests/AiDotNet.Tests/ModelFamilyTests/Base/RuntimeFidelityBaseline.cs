@@ -4152,8 +4152,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.FlowDiffusion.E2TTS`1::NumDecoderLayers", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.FlowDiffusion.E2TTS`1::SampleRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.FlowDiffusion.E2TTS`1::SpeakerEmbeddingDim", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.TextToSpeech.FlowDiffusion.E3TTS`1::DecoderDim", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.TextToSpeech.FlowDiffusion.E3TTS`1::EncoderDim", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.FlowDiffusion.E3TTS`1::FftSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.FlowDiffusion.E3TTS`1::FilterChannels", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.FlowDiffusion.E3TTS`1::HopSize", OptionSensitivityOutcome.Insensitive },
