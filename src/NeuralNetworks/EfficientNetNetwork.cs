@@ -158,7 +158,7 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         // moves every weight by about 3·lr, which the paper's rate does not survive.
         if (optimizer is null && _optimizer.GetOptions() is RootMeanSquarePropagationOptimizerOptions<T, Tensor<T>, Tensor<T>> rmsProp)
         {
-            rmsProp.InitialAccumulatorValue = 1.0;
+            rmsProp.InitialMeanSquare = 1.0;
             rmsProp.EpsilonInsideRoot = true;
         }
 

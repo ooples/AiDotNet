@@ -336,6 +336,21 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
         return InEvaluationMode(() => EmbedAudio(audio));
     }
 
+    /// <summary>
+    /// The audio embedding in training mode: the forward that <see cref="TryApplyLearningRule"/> trains.
+    /// </summary>
+    /// <remarks>
+    /// The base implementation ran <see cref="NeuralNetworkBase{T}.Layers"/> directly on the raw clip and skipped the
+    /// log-mel front end and the fusion views of <see cref="RunAudioTower"/>, so its first batch norm indexed past
+    /// the mel axis (IndexOutOfRangeException) on any public input.
+    /// </remarks>
+    public override Tensor<T> ForwardForTraining(Tensor<T> input)
+    {
+        ThrowIfDisposed();
+        EnsureLayerRandomSeedsWired();
+        return EmbedAudio(input);
+    }
+
     // The audio embedding in the current mode: the training step's forward, and EncodeAudio's body.
     private Tensor<T> EmbedAudio(Tensor<T> audio)
     {

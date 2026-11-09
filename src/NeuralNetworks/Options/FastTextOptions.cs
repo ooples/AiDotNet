@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
@@ -50,6 +51,7 @@ public class FastTextOptions : EmbeddingModelOptions
     /// <para><b>For Beginners:</b> FastText understands a word partly through its pieces, so "where"
     /// also contributes "&lt;wh", "whe", "her" and so on. This is the length of the shortest piece.</para>
     /// </remarks>
+    [PaperDefault(3, Source = "Bojanowski et al. 2017, Sec. 3.2: all n-grams for 3 <= n <= 6")]
     public int MinNgramLength { get; set; }
 
     /// <summary>
@@ -61,6 +63,7 @@ public class FastTextOptions : EmbeddingModelOptions
     /// 0 disables subwords, leaving a plain word-embedding model.
     /// </para>
     /// </remarks>
+    [PaperDefault(6, Source = "Bojanowski et al. 2017, Sec. 3.2: all n-grams for 3 <= n <= 6")]
     public int MaxNgramLength { get; set; }
 
     /// <summary>

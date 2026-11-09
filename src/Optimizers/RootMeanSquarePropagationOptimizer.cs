@@ -42,13 +42,14 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
 {
     /// <summary>
     /// Describes the momentum-free, uncentered RMSProp update supported by the
-    /// fused kernel. The centered Graves variant, momentum, a nonzero starting accumulator and the TensorFlow
+    /// fused kernel. The centered Graves variant, momentum, a nonzero InitialMeanSquare and the TensorFlow
     /// epsilon stay on the eager path because the fused kernel cannot represent them.
     /// </summary>
     bool Fused.IFusedOptimizerSpec.TryGetFusedOptimizerConfig(out Fused.FusedOptimizerConfig config)
     {
         config = default;
-        if (_options.UseAdaptiveLearningRate || RequiresExtendedState)
+        // The fused kernel's mean-square state starts at zero.
+        if (_options.UseAdaptiveLearningRate || RequiresExtendedState || _options.InitialMeanSquare > 0.0)
         {
             return false;
         }
@@ -248,7 +249,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         var bestStepData = new OptimizationStepData<T, TInput, TOutput>();
         var previousStepData = new OptimizationStepData<T, TInput, TOutput>();
 
-        _squaredGradient = new Vector<T>(InterfaceGuard.Parameterizable(currentSolution).GetParameters().Length);
+        _squaredGradient = NewMeanSquare(InterfaceGuard.Parameterizable(currentSolution).GetParameters().Length);
         _t = 0;
         InitializeAdaptiveParameters();
 
@@ -333,7 +334,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
             || (_options.Centered
                 && (_meanGradient.Length != parameters.Length || _velocity.Length != parameters.Length)))
         {
-            _squaredGradient = InitialAccumulator(parameters.Length);
+            _squaredGradient = NewMeanSquare(parameters.Length);
             _meanGradient = _options.Centered ? new Vector<T>(parameters.Length) : Vector<T>.Empty();
             _velocity = RequiresExtendedState ? new Vector<T>(parameters.Length) : Vector<T>.Empty();
         }
@@ -393,10 +394,10 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         return updatedParams;
     }
 
-    /// <summary>Momentum, the TensorFlow accumulator start or the TensorFlow epsilon need the explicit per-parameter
-    /// update; the fused kernels implement only the plain uncentered one.</summary>
-    private bool RequiresExtendedState => _options.Centered || _options.Momentum != 0
-        || _options.InitialAccumulatorValue != 0 || _options.EpsilonInsideRoot;
+    /// <summary>Centering, momentum or the TensorFlow epsilon need the explicit per-parameter update; the GPU and
+    /// sparse kernels implement only the plain uncentered one. A non-zero InitialMeanSquare does not: every kernel
+    /// starts its state there.</summary>
+    private bool RequiresExtendedState => _options.Centered || _options.Momentum != 0 || _options.EpsilonInsideRoot;
 
     /// <summary>The centered update's momentum is the optimizer's InitialMomentum (its historical behaviour); the
     /// uncentered update's is <see cref="RootMeanSquarePropagationOptimizerOptions{T, TInput, TOutput}.Momentum"/>.</summary>
@@ -405,14 +406,6 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
     private T Denominator(T squaredGradient, T epsilon) => _options.EpsilonInsideRoot
         ? NumOps.Sqrt(NumOps.Add(squaredGradient, epsilon))
         : NumOps.Add(NumOps.Sqrt(squaredGradient), epsilon);
-
-    private Vector<T> InitialAccumulator(int length)
-    {
-        var v = new Vector<T>(length);
-        if (_options.InitialAccumulatorValue != 0)
-            v.AsWritableSpan().Fill(NumOps.FromDouble(_options.InitialAccumulatorValue));
-        return v;
-    }
 
     // Per-parameter state for tape-based training. These dictionaries are also
     // captured by the optimizer's tape-state serializer.
@@ -444,7 +437,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
             {
                 if (!_tapeSqGrad.TryGetValue(param, out var sqGradSp))
                 {
-                    sqGradSp = new Tensor<T>(param._shape);
+                    sqGradSp = NewTapeMeanSquare(param._shape, onDevice: false);
                     _tapeSqGrad[param] = sqGradSp;
                 }
 
@@ -462,9 +455,7 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
 
             if (!_tapeSqGrad.TryGetValue(param, out var sqGrad))
             {
-                sqGrad = CreateOptimizerStateTensor(param._shape, gpuRmsProp);
-                if (!gpuRmsProp && _options.InitialAccumulatorValue != 0)
-                    sqGrad.AsWritableSpan().Fill(NumOps.FromDouble(_options.InitialAccumulatorValue));
+                sqGrad = NewTapeMeanSquare(param._shape, gpuRmsProp);
                 _tapeSqGrad[param] = sqGrad;
             }
 
@@ -740,6 +731,33 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         return (Vector<T>)Engine.Add(updatedParameters, update);
     }
 
+    // A fresh running mean of squared gradients, at InitialMeanSquare.
+    private Vector<T> NewMeanSquare(int length)
+    {
+        ValidateInitialMeanSquare();
+        return _options.InitialMeanSquare > 0.0
+            ? Vector<T>.CreateDefault(length, NumOps.FromDouble(_options.InitialMeanSquare))
+            : new Vector<T>(length);
+    }
+
+    private Tensor<T> NewTapeMeanSquare(int[] shape, bool onDevice)
+    {
+        ValidateInitialMeanSquare();
+        var state = CreateOptimizerStateTensor(shape, onDevice);
+        if (_options.InitialMeanSquare > 0.0)
+            Engine.TensorCopy(Engine.TensorAddScalar(state, NumOps.FromDouble(_options.InitialMeanSquare)), state);
+        return state;
+    }
+
+    // The options' setter rejects these values too; this guards an options type that overrides or bypasses it.
+    private void ValidateInitialMeanSquare()
+    {
+        double v = _options.InitialMeanSquare;
+        if (double.IsNaN(v) || v < 0.0 || double.IsInfinity(v))
+            throw new ArgumentOutOfRangeException(nameof(_options.InitialMeanSquare), v,
+                "The initial mean of squared gradients must be finite and zero or positive.");
+    }
+
     #region GPU Optimizer Support
 
     /// <summary>
@@ -761,8 +779,11 @@ public partial class RootMeanSquarePropagationOptimizer<T, TInput, TOutput> : Gr
         if (_gpuStateInitialized && _gpuSquaredAvg != null)
             return;
 
-        var zeros = new float[parameterCount];
-        _gpuSquaredAvg = backend.AllocateBuffer(zeros);
+        ValidateInitialMeanSquare();
+        var initial = new float[parameterCount];
+        if (_options.InitialMeanSquare > 0.0)
+            for (int i = 0; i < initial.Length; i++) initial[i] = (float)_options.InitialMeanSquare;
+        _gpuSquaredAvg = backend.AllocateBuffer(initial);
 
         _gpuStateInitialized = true;
     }

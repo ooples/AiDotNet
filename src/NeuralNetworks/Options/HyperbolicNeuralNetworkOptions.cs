@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
@@ -14,6 +15,7 @@ public class HyperbolicNeuralNetworkOptions : ModelHyperparameterOptions
     /// <remarks>
     /// <para><b>For Beginners:</b> How strongly the space the model works in is curved. Negative is hyperbolic.</para>
     /// </remarks>
+    [PaperDefault(-1.0, Source = "Ganea et al. 2018, Sec. 4 (Hyperparameters): c = 1 for all methods, a curvature of -c")]
     public double Curvature { get; set; } = -1.0;
 
     /// <summary>

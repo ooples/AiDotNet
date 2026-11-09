@@ -295,15 +295,31 @@ public partial class TestScaffoldGenerator
         sb.AppendLine("    public async System.Threading.Tasks.Task Options_EachShouldChangeObservableBehaviour(string option)");
         sb.AppendLine("    {");
         sb.AppendLine("        await System.Threading.Tasks.Task.Yield();");
-        // SkippableTheory does not honor InlineData.Skip for individual data rows.
-        // Enforce the same declared reason before invoking the expensive model probe.
-        foreach (var optionCase in model.OptionSensitivityCases.Where(c => c.SkipReason is not null))
+        // SkippableTheory rebuilds each data row as its own test case and drops the row's InlineData Skip, so the
+        // skipped cases also skip here, by one lookup of the option's reason; without this every ADNOPT001-baselined or
+        // exempt option ran.
+        var skipped = model.OptionSensitivityCases.Where(c => c.SkipReason is not null).ToList();
+        if (skipped.Count > 0)
         {
-            sb.Append("        Xunit.Skip.If(option == \"").Append(optionCase.Property)
-                .Append("\", \"").Append(EscapeString(optionCase.SkipReason!)).AppendLine("\");");
+            sb.AppendLine("        Xunit.Skip.If(OptionSensitivitySkips.TryGetValue(option, out var skipReason), skipReason);");
         }
+
         sb.AppendLine("        AssertOptionChangesObservableBehaviour(option);");
         sb.AppendLine("    }");
+        if (skipped.Count == 0) return;
+
+        sb.AppendLine();
+        sb.AppendLine("    // The skipped options and why, which the theory above reads.");
+        sb.AppendLine("    private static readonly System.Collections.Generic.Dictionary<string, string> OptionSensitivitySkips =");
+        sb.AppendLine("        new System.Collections.Generic.Dictionary<string, string>(System.StringComparer.Ordinal)");
+        sb.AppendLine("        {");
+        foreach (var optionCase in skipped)
+        {
+            sb.Append("            [\"").Append(optionCase.Property).Append("\"] = \"")
+                .Append(EscapeString(optionCase.SkipReason!)).AppendLine("\",");
+        }
+
+        sb.AppendLine("        };");
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -376,8 +392,8 @@ public partial class TestScaffoldGenerator
             bool declares = false;
             for (INamedTypeSymbol? walk = type; walk is not null && !declares; walk = walk.BaseType)
             {
-                declares = walk.GetMembers().OfType<IPropertySymbol>().Any(p => p.GetAttributes().Any(a =>
-                    a.AttributeClass?.ToDisplayString() == OptionsFidelityAnalyzer.PaperDefaultAttributeName));
+                declares = OptionsFidelityAnalyzer.HasPaperDefault(walk.GetAttributes())
+                    || walk.GetMembers().OfType<IPropertySymbol>().Any(p => OptionsFidelityAnalyzer.HasPaperDefault(p.GetAttributes()));
             }
 
             if (declares) declaring.Add(type);
