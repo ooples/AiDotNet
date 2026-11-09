@@ -27,12 +27,14 @@ public class ObjectiveStepRegularizationTests
             {
                 InitialLearningRate = LearningRate,
                 UseAdaptiveLearningRate = false,
+                EnableGradientClipping = false,
                 Regularization = new L2Regularization<double, Tensor<double>, Tensor<double>>(new RegularizationOptions { Strength = Lambda }),
             }
             : new StochasticGradientDescentOptimizerOptions<double, Tensor<double>, Tensor<double>>
             {
                 InitialLearningRate = LearningRate,
                 UseAdaptiveLearningRate = false,
+                EnableGradientClipping = false,
             });
 
     // The objective reaches theta with a zero gradient: 0 * sum(theta).
@@ -72,5 +74,33 @@ public class ObjectiveStepRegularizationTests
             Sgd(withL2: true));
         Assert.Equal(2.0 * (1 - LearningRate * Lambda), theta[0], 12);
         Assert.Equal(-4.0 * (1 - LearningRate * Lambda), theta[1], 12);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ObjectiveStep_ClipsTheRegularizedGradientWhenConfigured(bool accumulate)
+    {
+        var theta = new Tensor<double>(new[] { 2.0, -4.0 }, new[] { 2 });
+        var optimizer = new StochasticGradientDescentOptimizer<double, Tensor<double>, Tensor<double>>(null,
+            new StochasticGradientDescentOptimizerOptions<double, Tensor<double>, Tensor<double>>
+            {
+                InitialLearningRate = LearningRate,
+                UseAdaptiveLearningRate = false,
+                EnableGradientClipping = true,
+                MaxGradientNorm = 1.0,
+                Regularization = new L2Regularization<double, Tensor<double>, Tensor<double>>(new RegularizationOptions { Strength = Lambda }),
+            });
+        if (accumulate)
+            TapeTrainingStepper<double>.EagerAccumulatedObjectiveStep(new List<Tensor<double>> { theta }, 3,
+                _ => ZeroGradientObjective(theta), optimizer);
+        else
+            TapeTrainingStepper<double>.EagerObjectiveStep(new List<Tensor<double>> { theta },
+                () => ZeroGradientObjective(theta), optimizer);
+
+        // L2 contributes [1, -2]; norm clipping preserves its direction and bounds its length at one.
+        double scale = 1.0 / (System.Math.Sqrt(5.0) + 1e-6);
+        Assert.Equal(2.0 - LearningRate * scale, theta[0], 12);
+        Assert.Equal(-4.0 + LearningRate * 2.0 * scale, theta[1], 12);
     }
 }

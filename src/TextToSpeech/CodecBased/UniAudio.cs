@@ -73,7 +73,8 @@ public partial class UniAudio<T> : TtsModelBase<T>, ICodecTts<T>
         Options = _options;
         _useNativeMode = true;
         _optimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+                learningRateOverride: _options.LearningRate, weightDecayOverride: _options.WeightDecay)
             ?? new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this);
         ConfigureBaseProperties();
         InitializeLayers();

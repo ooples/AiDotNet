@@ -64,11 +64,13 @@ internal static class PaperOptimizerFactory
     /// <param name="component">The declared component, for models that train parts separately.</param>
     /// <param name="warmupStepsOverride">A warmup the model's own options configure, applied to the recipe.</param>
     /// <param name="learningRateOverride">A peak learning rate explicitly configured by the model options.</param>
+    /// <param name="weightDecayOverride">Weight decay explicitly configured by the model options.</param>
     /// <param name="phase">The training phase whose declaration applies (a paper can state one optimizer for
     /// pre-training and another for fine-tuning, as AlignTTS and AdaSpeech do).</param>
     internal static IGradientBasedOptimizer<T, TInput, TOutput>? CreateFor<T, TInput, TOutput>(
         IFullModel<T, TInput, TOutput> model, string component = "", int warmupStepsOverride = 0,
-        TrainingPhase phase = TrainingPhase.PreTraining, double? learningRateOverride = null)
+        TrainingPhase phase = TrainingPhase.PreTraining, double? learningRateOverride = null,
+        double? weightDecayOverride = null)
     {
         if (model is null) return null;
 
@@ -76,7 +78,7 @@ internal static class PaperOptimizerFactory
         // A model whose own options configure a warmup (S4Options.WarmupSteps) applies it to its paper
         // recipe here, so the declared optimizer and the model's configuration agree rather than the
         // configured warmup reaching only the fallback optimizer.
-        if (recipe is not null && (warmupStepsOverride > 0 || learningRateOverride.HasValue))
+        if (recipe is not null && (warmupStepsOverride > 0 || learningRateOverride.HasValue || weightDecayOverride.HasValue))
             recipe = Merge(new PaperOptimizerAttribute(OptimizerKind.Unspecified)
             {
                 Phase = recipe.Phase,
@@ -86,6 +88,7 @@ internal static class PaperOptimizerFactory
                 Source = recipe.Source,
                 WarmupSteps = warmupStepsOverride,
                 LearningRate = learningRateOverride ?? double.NaN,
+                WeightDecay = weightDecayOverride ?? double.NaN,
             }, recipe);
         if (recipe is null)
         {
