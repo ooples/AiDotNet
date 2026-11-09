@@ -185,9 +185,7 @@ public class FPN<T> : NeckBase<T>
     private Tensor<T> Conv3x3(Tensor<T> input, Tensor<T> weights, Tensor<T> bias)
     {
         var output = Engine.Conv2D(input, weights, new[] { 1, 1 }, new[] { 1, 1 }, new[] { 1, 1 });
-        int channels = weights.Shape[0];
-        return Engine.TensorAdd(output,
-            Engine.TensorBroadcastTo(Engine.Reshape(bias, new[] { 1, channels, 1, 1 }), output.Shape.ToArray()));
+        return Engine.TensorChannelBiasAdd(output, bias);
     }
 
     /// <inheritdoc/>
