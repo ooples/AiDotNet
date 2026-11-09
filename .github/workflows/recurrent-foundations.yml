@@ -31,10 +31,11 @@ jobs:
       - name: Read the referenced AiDotNet.Tensors version
         id: tensors
         shell: bash
+        # Runs in the job default working directory, the library checkout.
         run: |
-          version=$(sed -n 's/.*Include="AiDotNet.Tensors" Version="\([^"]*\)".*/\1/p' library/Directory.Packages.props)
+          version=$(sed -n 's/.*Include="AiDotNet.Tensors" Version="\([^"]*\)".*/\1/p' Directory.Packages.props)
           if [ -z "$version" ]; then
-            echo "::error::No AiDotNet.Tensors version in library/Directory.Packages.props."
+            echo "::error::No AiDotNet.Tensors version in Directory.Packages.props."
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
