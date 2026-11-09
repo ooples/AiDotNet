@@ -25,6 +25,8 @@ public class DetectorPaperLayoutTests
         var backbone = new ResNet<double>(options: new ResNetBackboneOptions { Variant = ResNetVariant.ResNet50 });
 
         Assert.Equal(23_508_032L + ResNet50RunningStatistics, backbone.ParameterCount);
+        // The trainable count leaves the running statistics out and is torchvision's exactly.
+        Assert.Equal(23_508_032L, backbone.TrainableParameterCount);
     }
 
     [Fact]
@@ -73,5 +75,6 @@ public class DetectorPaperLayoutTests
         // torchvision's 41,808,406, plus the BatchNorm running statistics, plus 771 for the RPN's 2k-way softmax
         // objectness (Ren et al. 2015) where torchvision uses k sigmoid scores.
         Assert.Equal(41_808_406L + ResNet50RunningStatistics + 771, model.ParameterCount);
+        Assert.Equal(41_808_406L + 771, model.TrainableParameterCount);
     }
 }

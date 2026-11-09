@@ -126,7 +126,7 @@ internal sealed class AiDotNetWhisperTinyModel : IBenchmarkModel
 
         LoadSyntheticBatch(1);
         Forward();
-        ParameterCount = _model.GetParameters().Length;
+        ParameterCount = _model.TrainableParameterCount;
     }
 
     public long ParameterCount { get; }
@@ -196,9 +196,9 @@ internal sealed class AiDotNetFasterRcnnModel : IBenchmarkModel
 
         LoadSyntheticBatch(1);
         Forward();
-        // Trainable parameters, as benchmark.py counts them: BatchNormalizationLayer's ParameterCount also includes
-        // its running mean and variance, two values per normalized channel that no optimizer step touches.
-        ParameterCount = _model.ParameterCount - 2L * 26_560;
+        // Trainable parameters, as benchmark.py counts them: ParameterCount also includes batch normalization's
+        // running statistics, which no optimizer step touches.
+        ParameterCount = _model.TrainableParameterCount;
     }
 
     public long ParameterCount { get; }

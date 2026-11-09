@@ -5175,6 +5175,28 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         return _hasCustomTrainableParameterSelection.Value;
     }
 
+    /// <summary>
+    /// Gets the number of values the optimizer trains: <see cref="ParameterCount"/> without the buffers.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="ParameterCount"/> also counts buffers (<see cref="AiDotNet.Attributes.BufferAttribute"/>), state that
+    /// is saved and restored but never learned, such as batch normalization's running mean and variance. That is the
+    /// size of <see cref="GetParameters"/>; this is the size PyTorch reports as
+    /// <c>sum(p.numel() for p in model.parameters() if p.requires_grad)</c>. For a ResNet-50 the two differ by
+    /// 53,120, the running statistics of its 26,560 normalized channels.
+    /// <para><b>For Beginners:</b> the number of weights training adjusts. The larger <see cref="ParameterCount"/>
+    /// also includes remembered statistics that are saved with the model but never trained.</para>
+    /// </remarks>
+    public long TrainableParameterCount
+    {
+        get
+        {
+            long total = 0;
+            foreach (var tensor in CollectModelTrainableTensors()) total += tensor.Length;
+            return total;
+        }
+    }
+
     /// <summary>Collects every trainable tensor owned by this model in canonical order.</summary>
     protected internal IReadOnlyList<Tensor<T>> CollectModelTrainableTensors()
     {

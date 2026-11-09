@@ -510,7 +510,9 @@ internal abstract class AiDotNetBenchmarkModel : IBenchmarkModel
         // lazy allocation so the recorded count is the real, PyTorch-comparable size.
         LoadSyntheticBatch(1);
         Forward();
-        ParameterCount = Network.GetParameters().Length;
+        // Trainable parameters only, as benchmark.py counts them (requires_grad): GetParameters also carries buffers
+        // such as batch normalization's running statistics, which made every BatchNorm row read larger than PyTorch.
+        ParameterCount = Network.TrainableParameterCount;
     }
 
     public long ParameterCount { get; }
