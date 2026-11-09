@@ -182,7 +182,9 @@ public class EfficientNetReferenceTests
                 });
             return new Unclipped(new NeuralNetworkArchitecture<double>(inputType: InputType.ThreeDimensional,
                 taskType: NeuralNetworkTaskType.MultiClassClassification, inputHeight: 32, inputWidth: 32, inputDepth: 3, outputSize: 10),
-                new EfficientNetConfiguration(EfficientNetVariant.B0, 10), optimizer);
+                // B0's coefficients at the 32x32 image the step trains on: the architecture states the configured size.
+                new EfficientNetConfiguration(EfficientNetVariant.Custom, 10, customInputHeight: 32,
+                    customWidthMultiplier: 1.0, customDepthMultiplier: 1.0), optimizer);
         }
         var weak = Make(1e-4);
         var strong = Make(0.5);
