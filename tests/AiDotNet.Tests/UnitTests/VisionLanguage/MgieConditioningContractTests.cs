@@ -131,7 +131,16 @@ public sealed class MgieConditioningContractTests
         internal RecordingUnet() : base(inputChannels: 8, outputChannels: 4,
             baseChannels: 32, channelMultipliers: new[] { 1 }, numResBlocks: 1,
             attentionResolutions: new[] { 1 }, contextDim: 768, numHeads: 2,
-            inputHeight: 4, seed: 397525) { }
+            inputHeight: 4, seed: 397525)
+        {
+            // A U-Net starts with its output conv and every residual block's second conv at zero (Ho et al.), so
+            // untrained it predicts zero for any input and no conditioning could reach the output. Random weights
+            // stand in for a trained one.
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
+            var parameters = GetParameters();
+            for (int i = 0; i < parameters.Length; i++) parameters[i] = (float)(rng.NextDouble() * 0.4 - 0.2);
+            SetParameters(parameters);
+        }
 
         public override Tensor<float> PredictNoise(Tensor<float> noisySample, int timestep,
             Tensor<float>? conditioning = null)

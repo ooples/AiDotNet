@@ -21,7 +21,9 @@ public sealed class CloneLazyRegistrationTests
         var tryRegister = registrations!.GetMethod("TryRegister", BindingFlags.Static | BindingFlags.NonPublic);
         Assert.NotNull(tryRegister);
 
-        var types = CloneRegistry.VerifiedTypes().ToList();
+        // The registry also holds plans other tests registered by hand for their own fixture types; the generator
+        // never saw those, and which of them are present depends on what ran first in this process.
+        var types = CloneRegistry.VerifiedTypes().Where(type => type.Assembly == typeof(CloneRegistry).Assembly).ToList();
         Assert.NotEmpty(types);
         var missed = types
             .Where(type => !(bool)tryRegister!.Invoke(null, new object[] { type })!)
