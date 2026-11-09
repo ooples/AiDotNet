@@ -1,4 +1,10 @@
 #nullable enable
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.DropoutRate.get -> double
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.DropoutRate.set -> void
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.NumHeads.get -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.NumHeads.set -> void
 *REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.DropoutRate.get -> double
 *REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.DropoutRate.set -> void
 *REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.MelChannels.get -> int
