@@ -6861,17 +6861,15 @@ public static partial class LayerHelper<T>
         double dropoutRate = 0.0)
     {
         IActivationFunction<T> geluActivation = new GELUActivation<T>();
-        IActivationFunction<T> identityActivation = new IdentityActivation<T>();
 
         // === AUDIO ENCODER ===
 
-        // Initial projection from mel spectrogram to model dimension
-        // (Simulating convolutional stem with dense layers for framework compatibility)
-        yield return new DenseLayer<T>(modelDim, geluActivation);
-        yield return new DenseLayer<T>(modelDim, geluActivation);
+        // Convolutional stem (§2.2): Conv1d(k3) + GELU, then Conv1d(k3, stride 2) + GELU, halving the frames. Two
+        // Dense layers used to stand in for it, which kept all 3,000 frames and quadrupled the attention cost.
+        yield return new WhisperConvStemLayer<T>(numMels, modelDim);
 
-        // Positional encoding for encoder
-        yield return new PositionalEncodingLayer<T>(maxFrames, modelDim);
+        // Sinusoidal positions for the encoder, one per stem output.
+        yield return new PositionalEncodingLayer<T>(WhisperConvStemLayer<T>.OutputFrames(maxFrames), modelDim);
 
         if (dropoutRate > 0)
         {
@@ -6897,10 +6895,11 @@ public static partial class LayerHelper<T>
         // === TEXT DECODER ===
 
         // Token embedding (Whisper vocabulary)
-        yield return LayerGraphContract.FromExternalInput(new EmbeddingLayer<T>(vocabSize, modelDim));
+        var tokenEmbedding = new EmbeddingLayer<T>(vocabSize, modelDim);
+        yield return LayerGraphContract.FromExternalInput(tokenEmbedding);
 
-        // Positional encoding for decoder
-        yield return new PositionalEncodingLayer<T>(maxTokens, modelDim);
+        // Learned positions for the decoder (§2.2: "the decoder uses learned position embeddings").
+        yield return new LearnedPositionalEmbeddingLayer<T>(maxTokens, modelDim);
 
         if (dropoutRate > 0)
         {
@@ -6925,8 +6924,9 @@ public static partial class LayerHelper<T>
         // Final decoder layer normalization
         yield return new LayerNormalizationLayer<T>();
 
-        // Output projection to vocabulary logits
-        yield return new DenseLayer<T>(vocabSize, identityActivation);
+        // Output logits through the token embedding (§2.2: "tied input-output token representations"). A separate
+        // biased Dense head added vocabSize x (modelDim + 1) parameters, 19.97M of whisper-tiny's 56.6M.
+        yield return new TiedEmbeddingHeadLayer<T>(tokenEmbedding);
     }
 
     /// <summary>

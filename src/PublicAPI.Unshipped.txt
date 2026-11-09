@@ -1177,3 +1177,18 @@ override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.HasCompleteConst
 override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.HasDeclaredSubLayerStructure.get -> bool
 override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.WriteConstructionObjects(System.Collections.Generic.Dictionary<string!, object!>! __values) -> void
 override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.WriteConstructionState(System.Collections.Generic.Dictionary<string!, string!>! __metadata) -> void
+AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.AppendDeclaredParameterComponents(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>.DeclaredParameterComponent>! components) -> void
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.EnsureInitialized() -> void
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.GetSubLayers() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>!
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.HasCompleteConstructionObjectState.get -> bool
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.HasDeclaredSubLayerStructure.get -> bool
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.WriteConstructionObjects(System.Collections.Generic.Dictionary<string!, object!>! __values) -> void
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.WriteConstructionState(System.Collections.Generic.Dictionary<string!, string!>! __metadata) -> void
+AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.SupportsTraining.get -> bool
+AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.WhisperConvStemLayer(int numMels, int width) -> void
+static AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.OutputFrames(int frames) -> int
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.ForwardTraced(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.UpdateParameters(T learningRate) -> void
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.ResetState() -> void
