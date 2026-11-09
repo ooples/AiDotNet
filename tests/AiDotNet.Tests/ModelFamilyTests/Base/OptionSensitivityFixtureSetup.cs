@@ -46,6 +46,8 @@ internal static class OptionSensitivityFixtureSetup
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => option == nameof(AiDotNet.Models.Options.ModelOptions.Seed) ? "model-options-seed"
             : network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> ? "kokoro-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T> && TortoiseOptionFixture.Handles(option) ? "tortoise-" + option
+
             : network is AiDotNet.TextToSpeech.Classic.DeepVoice3<T> && option == "GradientClipValue" ? "deepvoice-value-clip"
 
             : network is AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS<T> && option is "TextPadId" or "NumHeads" ? "ditto-" + option
@@ -168,6 +170,10 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.CodecBased.TortoiseTTS<T> tortoise && TortoiseOptionFixture.Handles(option)
+            && TortoiseOptionFixture.Observe(tortoise, option) is long tortoiseObservation)
+            return tortoiseObservation;
+
         if (network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> voicebox)
         {
             if (option == "UseNativeEnglishFallback")
@@ -827,6 +833,9 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.TortoiseTTSOptions tortoiseOptions)
+            TortoiseOptionFixture.Prepare(tortoiseOptions, option);
+
         if (options is AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions voiceboxMask && option == "SpectrogramMaskMinimum")
             voiceboxMask.SpectrogramDropProbability = 0;
 
