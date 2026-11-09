@@ -7362,24 +7362,33 @@ public static class StatisticsHelper<T>
     {
         int n = series1.Length;
         int m = series2.Length;
-        var dtw = new T[n + 1, m + 1];
 
-        for (int i = 0; i <= n; i++)
-            for (int j = 0; j <= m; j++)
-                dtw[i, j] = _numOps.MaxValue;
+        // Row i of the cost matrix depends only on row i - 1, so two rows of length m + 1 give the exact same
+        // result as the full (n + 1) x (m + 1) matrix. The full matrix made memory O(n * m): PredictionStats
+        // computes this over every actual/predicted pair, and serializing a model forces those statistics, so
+        // a 70,000-row fit tried to allocate ~20 GB and failed with "Error getting value from
+        // 'PredictionInterval'" when the model was saved.
+        var previous = new T[m + 1];
+        var current = new T[m + 1];
+        for (int j = 0; j <= m; j++)
+            previous[j] = _numOps.MaxValue;
 
-        dtw[0, 0] = _numOps.Zero;
+        previous[0] = _numOps.Zero;
 
         for (int i = 1; i <= n; i++)
         {
+            current[0] = _numOps.MaxValue;
+            var x = series1[i - 1];
             for (int j = 1; j <= m; j++)
             {
-                var cost = _numOps.Abs(_numOps.Subtract(series1[i - 1], series2[j - 1]));
-                dtw[i, j] = _numOps.Add(cost, MathHelper.Min(dtw[i - 1, j], MathHelper.Min(dtw[i, j - 1], dtw[i - 1, j - 1])));
+                var cost = _numOps.Abs(_numOps.Subtract(x, series2[j - 1]));
+                current[j] = _numOps.Add(cost, MathHelper.Min(previous[j], MathHelper.Min(current[j - 1], previous[j - 1])));
             }
+
+            (previous, current) = (current, previous);
         }
 
-        return dtw[n, m];
+        return previous[m];
     }
 
     /// <summary>
