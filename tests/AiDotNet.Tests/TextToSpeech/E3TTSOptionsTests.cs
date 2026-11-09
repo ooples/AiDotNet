@@ -5,6 +5,24 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class E3TTSOptionsTests
 {
+    [Fact]
+    public void CopyPreservesNonuniformChannelsWhosePeakCannotScaleTheDefaultLayout()
+    {
+        var original = E3TTSPaperTests.TinyOptions();
+        original.BlockChannels = [3, 3, 4, 4, 5, 6, 6, 6, 6, 6];
+        var copy = (E3TTSOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(original);
+        Assert.Equal(6, copy.HiddenDim);
+        Assert.Equal(original.BlockChannels, copy.BlockChannels);
+        Assert.NotSame(original.BlockChannels, copy.BlockChannels);
+        using var model = new E3TTS<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 1, outputSize: 1), copy);
+        Assert.Equal(original.BlockChannels,
+            model.WaveformUnet!.DownBlocks.Select(block => block.FirstConvolutions[0].GetOutputShape()[0]));
+        copy.BlockChannels[0] = 2;
+        Assert.Equal(3, original.BlockChannels[0]);
+    }
+
     [Theory]
     [InlineData("HiddenDim")]
     [InlineData("EncoderDim")]

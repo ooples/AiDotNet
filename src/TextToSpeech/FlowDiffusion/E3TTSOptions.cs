@@ -10,6 +10,25 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 public class E3TTSOptions : EndToEndTtsOptions
 {
     private bool _channelWidthReady;
+    private int[]? _channelsBeforeDeserialization;
+
+    [System.Runtime.Serialization.OnDeserializing]
+    private void BeginDeserialization(System.Runtime.Serialization.StreamingContext context)
+    {
+        base.HiddenDim = HiddenDim;
+        _channelsBeforeDeserialization = BlockChannels;
+        _channelWidthReady = false;
+    }
+
+    [System.Runtime.Serialization.OnDeserialized]
+    private void EndDeserialization(System.Runtime.Serialization.StreamingContext context)
+    {
+        bool explicitChannels = !ReferenceEquals(_channelsBeforeDeserialization, BlockChannels);
+        _channelsBeforeDeserialization = null;
+        _channelWidthReady = true;
+        // Explicit stages also preserve archives written when shared width metadata was independent.
+        if (!explicitChannels) HiddenDim = base.HiddenDim;
+    }
 
     /// <summary>Number of layers in the BERT text encoder. Shares the setting with <see cref="BertLayers"/>.</summary>
     public override int NumEncoderLayers { get => BertLayers; set => BertLayers = value; }

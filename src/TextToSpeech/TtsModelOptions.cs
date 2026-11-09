@@ -51,7 +51,7 @@ public class TtsModelOptions : ModelOptions
 
     /// <summary>Gets or sets the hop size for mel-spectrogram computation.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro has no mel frontend; its released ISTFTNet upsampling and inverse-STFT hop geometry are fixed by the decoder.", ModelType = typeof(EndToEnd.Kokoro<>))]
-    public int HopSize { get; set; } = 256;
+    public virtual int HopSize { get; set; } = 256;
 
     /// <summary>Gets or sets the FFT window size.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro has no configurable analysis FFT; its released ISTFTNet synthesis transform has fixed decoder geometry.", ModelType = typeof(EndToEnd.Kokoro<>))]
