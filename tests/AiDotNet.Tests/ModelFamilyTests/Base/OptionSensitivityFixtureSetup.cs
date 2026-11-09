@@ -491,6 +491,13 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> chatter && option == "VoiceEncoderPartialRate")
             return OptionSensitivityHarness.Fingerprint(chatter.VoiceEncoderModel!.Embed(ChatterboxFixture.Recording<T>(2), 24000)
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> marked && option == "Watermark")
+        {
+            // A compact random PerthNet stands in for the released one; the watermark is S3Gen's output's last step.
+            marked.Watermarker = new AiDotNet.Audio.Watermarking.PerthWatermarker<T>(AiDotNet.Tensors.Engines.AiDotNetEngine.Current, hidden: 8);
+            return OptionSensitivityHarness.Fingerprint(marked.Watermarked(ChatterboxFixture.Recording<T>())
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        }
         if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> chunked && option == "StaticChunkSize")
             return OptionSensitivityHarness.Fingerprint(chunked.FlowModel!.Encode(Enumerable.Range(0, 12).ToArray(),
                 training: false, new Random(1337), streaming: true)

@@ -20106,8 +20106,6 @@ AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.TrainingBetaStart.set -> void
 AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.TrainingWaveformSamples.get -> int
 AiDotNet.TextToSpeech.FlowDiffusion.E3TTSOptions.TrainingWaveformSamples.set -> void
 AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.LoadPretrainedWeights(string! modelDirectory) -> void
-AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.WatermarkProcessor.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>?
-AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.WatermarkProcessor.set -> void
 AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.ClassifierFreeGuidanceWeight.get -> double
 AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.ClassifierFreeGuidanceWeight.set -> void
 AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.DecoderReferenceSeconds.get -> int
@@ -22085,6 +22083,10 @@ AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerState.get ->
 AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerState.set -> void
 AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerHeads.get -> int
 AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.SpeechTokenizerHeads.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Watermark.get -> bool
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Watermark.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.WatermarkModelPath.get -> string?
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.WatermarkModelPath.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SampleRate.get -> int
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.SampleRate.set -> void
 AiDotNet.TextToSpeech.CodecBased.CosyVoiceFamilyOptions.CodecFrameRate.get -> int
