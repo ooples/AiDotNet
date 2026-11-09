@@ -79,7 +79,7 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
         _numStages = numStages;
         _iouThresholds = new[] { 0.5, 0.6, 0.7 }; // Progressive IoU thresholds
 
-        var (hiddenDim, roiOutputSize) = GetSizeConfig(options.Size);
+        int roiOutputSize = options.Size == ModelSize.Nano ? 5 : 7;
         _roiOutputSize = roiOutputSize;
 
         // Backbone: ResNet-50 with FPN
@@ -87,7 +87,8 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
         Neck = new FPN<T>(Backbone.OutputChannels.ToArray(), outputChannels: 256);
 
         // Region Proposal Network
-        _rpn = new RPN<T>(256, hiddenDim);
+        // The RPN head's 3x3 conv keeps the pyramid's width, as in FasterRCNN and MaskRCNN.
+        _rpn = new RPN<T>(256, 256);
 
         // RoI feature extraction
         _roiAlign = new RoIAlign<T>(roiOutputSize, samplingRatio: 2);
@@ -97,7 +98,8 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
         _stages = new List<CascadeStage<T>>();
         for (int i = 0; i < numStages; i++)
         {
-            _stages.Add(new CascadeStage<T>(roiFeatureSize, hiddenDim, options.NumClasses + 1));
+            // Each stage's head is two 1,024-wide fully connected layers (Cai & Vasconcelos 2018, on the FPN box head).
+            _stages.Add(new CascadeStage<T>(roiFeatureSize, 1024, options.NumClasses + 1));
         }
 
         _nms = new NMS<T>();
@@ -121,16 +123,6 @@ public partial class CascadeRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingM
         }.Take(numStages).ToArray();
         return options;
     }
-
-    private static (int hiddenDim, int roiOutputSize) GetSizeConfig(ModelSize size) => size switch
-    {
-        ModelSize.Nano => (128, 5),
-        ModelSize.Small => (192, 7),
-        ModelSize.Medium => (256, 7),
-        ModelSize.Large => (384, 7),
-        ModelSize.XLarge => (512, 7),
-        _ => (256, 7)
-    };
 
     /// <inheritdoc/>
     public override DetectionResult<T> Detect(Tensor<T> image, double confidenceThreshold, double nmsThreshold)

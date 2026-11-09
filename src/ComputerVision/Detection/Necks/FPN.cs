@@ -20,8 +20,9 @@ namespace AiDotNet.ComputerVision.Detection.Necks;
 ///
 /// <para>Key features:
 /// - Top-down pathway with lateral connections
-/// - 1x1 convolutions to match channel dimensions
+/// - 1x1 lateral convolutions to match channel dimensions
 /// - Simple element-wise addition for fusion
+/// - A 3x3 convolution on each merged map, with no nonlinearity (Lin et al. 2017, Sec. 3)
 /// - Fast and memory efficient
 /// </para>
 ///
@@ -94,8 +95,9 @@ public class FPN<T> : NeckBase<T>
             _lateralWeights.Add(lateralWeight);
             _lateralBiases.Add(lateralBias);
 
-            // Output convolutions (3x3 for refinement, simplified as 1x1 here)
-            var outputWeight = new Tensor<T>(new[] { outputChannels, outputChannels });
+            // Output convolutions: 3x3 on each merged map "to reduce the aliasing effect of upsampling" (Sec. 3).
+            // They were 1x1, a quarter of a 3x3's context and 2.1M parameters short on a ResNet-50 pyramid.
+            var outputWeight = new Tensor<T>(new[] { outputChannels, outputChannels, 3, 3 });
             var outputBias = new Tensor<T>(new[] { outputChannels });
             InitializeWeights(outputWeight);
             _outputWeights.Add(outputWeight);
@@ -114,8 +116,9 @@ public class FPN<T> : NeckBase<T>
 
     private void InitializeWeights(Tensor<T> weights)
     {
-        // He initialization
-        double scale = Math.Sqrt(2.0 / weights.Shape[1]);
+        // He initialization over the fan-in: input channels times the kernel area.
+        int fanIn = weights.Length / weights.Shape[0];
+        double scale = Math.Sqrt(2.0 / fanIn);
         // Drawn from the model's initialization scope (#2201). A fixed seed of 42 here ignored the configured seed and gave every same-shape tensor identical values.
         var random = AiDotNet.NeuralNetworks.Layers.LayerInitializationSeedScope.NextRandom();
 
@@ -170,13 +173,21 @@ public class FPN<T> : NeckBase<T>
 
             deeperMerged = current;
 
-            // Apply output convolution
-            var output = Conv1x1(current, _outputWeights[i], _outputBiases[i]);
-            output = ApplyReLU(output);
+            // Output convolution, linear: "there are no non-linearities in these extra layers" (Sec. 3).
+            var output = Conv3x3(current, _outputWeights[i], _outputBiases[i]);
             outputFeatures.Insert(0, output);
         }
 
         return outputFeatures;
+    }
+
+    /// <summary>A 3x3 convolution with padding 1, through the engine so the tape records it.</summary>
+    private Tensor<T> Conv3x3(Tensor<T> input, Tensor<T> weights, Tensor<T> bias)
+    {
+        var output = Engine.Conv2D(input, weights, new[] { 1, 1 }, new[] { 1, 1 }, new[] { 1, 1 });
+        int channels = weights.Shape[0];
+        return Engine.TensorAdd(output,
+            Engine.TensorBroadcastTo(Engine.Reshape(bias, new[] { 1, channels, 1, 1 }), output.Shape.ToArray()));
     }
 
     /// <inheritdoc/>
@@ -188,8 +199,8 @@ public class FPN<T> : NeckBase<T>
         {
             // Lateral weights and biases
             count += _inputChannels[i] * _outputChannels + _outputChannels;
-            // Output weights and biases
-            count += _outputChannels * _outputChannels + _outputChannels;
+            // Output weights (3x3) and biases
+            count += _outputChannels * _outputChannels * 9 + _outputChannels;
         }
 
         return count;
@@ -288,17 +299,6 @@ public class FPN<T> : NeckBase<T>
     private Tensor<T> ResizeToMatch(Tensor<T> source, Tensor<T> target)
         // Nearest neighbour, src = min(dst * in / out, in - 1), through tape-visible index gathers.
         => CvTensorOps<T>.ResizeNearest(source, target.Shape[2], target.Shape[3]);
-
-    /// <summary>
-    /// Elementwise ReLU, delegated to the engine.
-    /// </summary>
-    /// <remarks>
-    /// This was a scalar loop that read each element out to <c>double</c> and wrote a fresh
-    /// tensor. Arithmetically identical, but it severed the autodiff tape: the gradient chain
-    /// stopped here, so every trainable layer UPSTREAM of this call received no gradient and
-    /// silently never trained. The engine op records itself on the tape.
-    /// </remarks>
-    private Tensor<T> ApplyReLU(Tensor<T> x) => Engine.ReLU(x);
 
     /// <summary>
     /// Copies every element from <paramref name="src"/> into <paramref name="dst"/> in
