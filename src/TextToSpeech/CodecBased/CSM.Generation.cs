@@ -191,6 +191,9 @@ public partial class CSM<T>
 
     /// <summary>Sees each logit vector generation samples from (for comparing against the release).</summary>
     internal Action<double[]>? SampledLogits { get; set; }
+    /// <summary>Sees normalized probabilities after temperature and top-k filtering.</summary>
+    internal Action<double[]>? SamplingProbabilities { get; set; }
+
 
     /// <summary>
     /// The release's <c>sample_topk</c>: logits over the temperature, everything below the k-th largest removed, then a
@@ -213,6 +216,7 @@ public partial class CSM<T>
             probabilities[i] = scores[i] < kth || double.IsNegativeInfinity(scores[i]) ? 0 : Math.Exp(scores[i] - max);
             sum += probabilities[i];
         }
+        SamplingProbabilities?.Invoke(probabilities.Select(value => value / sum).ToArray());
         int best = 0;
         double bestValue = double.NegativeInfinity;
         for (int i = 0; i < probabilities.Length; i++)

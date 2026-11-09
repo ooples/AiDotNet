@@ -25,7 +25,7 @@ public class SilentCipherReferenceTests
 
     public SilentCipherReferenceTests(ITestOutputHelper output) => _output = output;
 
-    private static JsonElement Load(string name)
+    internal static JsonElement Load(string name)
     {
         string relative = Path.Combine("TextToSpeech", "ReferenceData", name);
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
@@ -34,7 +34,7 @@ public class SilentCipherReferenceTests
         return JsonDocument.Parse(File.ReadAllText(path)).RootElement;
     }
 
-    private static double[] ClosedForm(string name, int[] shape)
+    internal static double[] ClosedForm(string name, int[] shape)
     {
         int count = shape.Aggregate(1, (a, b) => a * b);
         var values = new double[count];

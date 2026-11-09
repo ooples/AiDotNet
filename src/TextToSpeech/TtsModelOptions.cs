@@ -62,12 +62,14 @@ public class TtsModelOptions : ModelOptions
     public int HiddenDim { get; set; } = 256;
 
     /// <summary>Gets or sets the number of encoder layers.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("CSM configures its native Llama layer counts through BackboneLayers and DecoderLayers.", ModelType = typeof(CodecBased.CSM<>))]
     public int NumEncoderLayers { get; set; } = 6;
 
     /// <summary>Gets or sets the number of decoder layers.</summary>
     public int NumDecoderLayers { get; set; } = 6;
 
     /// <summary>Gets or sets the number of attention heads.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("CSM configures native attention heads through BackboneHeads, DecoderHeads and MimiHeads.", ModelType = typeof(CodecBased.CSM<>))]
     public int NumHeads { get; set; } = 8;
 
     /// <summary>Gets or sets the phoneme/text vocabulary size.</summary>
@@ -90,6 +92,7 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("Voicebox configures dropout through AudioAttentionDropout, AudioActivationDropout, DurationAttentionDropout and DurationActivationDropout.", ModelType = typeof(CodecBased.Voicebox<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("MetaVoice configures native GPT dropout through TrainingDropout; this inherited generic TTS setting does not configure its actors.", ModelType = typeof(VoiceCloning.MetaVoice1B<>))]
 
+    [AiDotNet.Attributes.OptionBehaviourExempt("CSM's native Llama and Mimi blocks use deterministic attention without dropout.", ModelType = typeof(CodecBased.CSM<>))]
     public double DropoutRate { get; set; } = 0.1;
 
     /// <summary>Gets or sets the ONNX model path.</summary>
