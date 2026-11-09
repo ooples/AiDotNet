@@ -1,5 +1,6 @@
 <Project>
   <ItemGroup>
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/TtsReleasedConfigurationTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/TtsNativeOptionsSerializationTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Training/SummedTapeObjectiveTests.cs" />
     <Compile Include="../AiDotNet.Tests/Helpers/TtsPaperNumerics.cs" />

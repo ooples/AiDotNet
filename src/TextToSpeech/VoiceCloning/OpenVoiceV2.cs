@@ -159,6 +159,8 @@ public partial class OpenVoiceV2<T> : TtsModelBase<T>, IEndToEndTts<T>, IVoiceCl
         if (!_useNativeMode) return;
         if (_options.SampleRate != 22050 || _options.HopSize != 256)
             throw new ArgumentException("The released OpenVoice converter uses 22050 Hz audio and hop size 256.");
+        if (_options.NumDecoderLayers != 4)
+            throw new ArgumentException("The released OpenVoice HiFi-GAN decoder has four upsampling stages.");
         _native = new OpenVoiceNative<T>(Engine, _options.FftSize, _options.HopSize,
             _options.HiddenDim, _options.DecoderDim, _options.SpeakerEmbeddingDim, true);
         Layers.AddRange(_native.Layers);
