@@ -4099,7 +4099,8 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.DescriptionBased.PromptTTS`1::NumFlowSteps", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.DescriptionBased.PromptTTS`1::SampleRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.DescriptionBased.PromptTTS`1::WeightDecay", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.TextToSpeech.EndToEnd.MeloTTS`1::HopSize", OptionSensitivityOutcome.Insensitive },
+            // A single hop perturbation cannot preserve the configured generator upsampling product.
+            { "AiDotNet.TextToSpeech.EndToEnd.MeloTTS`1::HopSize", OptionSensitivityOutcome.NoValidPerturbation },
             { "AiDotNet.TextToSpeech.EndToEnd.MeloTTS`1::MaxMelLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.EndToEnd.MeloTTS`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.EndToEnd.MeloTTS`1::NumDiffusionSteps", OptionSensitivityOutcome.Insensitive },
@@ -4443,7 +4444,9 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.Vocoders.HiFiGAN`1::WeightDecay", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.ISTFTNet`1::DropoutRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.ISTFTNet`1::HiddenDim", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.TextToSpeech.Vocoders.ISTFTNet`1::HopSize", OptionSensitivityOutcome.Insensitive },
+            // Both hops are constrained by the fixed generator upsampling product.
+            { "AiDotNet.TextToSpeech.Vocoders.ISTFTNet`1::HopSize", OptionSensitivityOutcome.NoValidPerturbation },
+            { "AiDotNet.TextToSpeech.Vocoders.ISTFTNet`1::InverseHopSize", OptionSensitivityOutcome.NoValidPerturbation },
             { "AiDotNet.TextToSpeech.Vocoders.ISTFTNet`1::MaxMelLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.ISTFTNet`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.ISTFTNet`1::NumDecoderLayers", OptionSensitivityOutcome.Insensitive },
