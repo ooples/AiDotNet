@@ -59,7 +59,7 @@ public class TtsModelOptions : ModelOptions
 
     /// <summary>Gets or sets the model hidden dimension.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro's released style and decoder interfaces require hidden width 512; the native constructor rejects other widths.", ModelType = typeof(EndToEnd.Kokoro<>))]
-    public int HiddenDim { get; set; } = 256;
+    public virtual int HiddenDim { get; set; } = 256;
 
     /// <summary>Gets or sets the number of encoder layers.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("CSM configures its native Llama layer counts through BackboneLayers and DecoderLayers.", ModelType = typeof(CodecBased.CSM<>))]
