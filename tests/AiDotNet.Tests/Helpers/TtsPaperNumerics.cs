@@ -15,4 +15,13 @@ internal static class TtsPaperNumerics
         }
         return unchecked((hash ^ count) * (long)0x100000001b3UL);
     }
+
+    /// <summary>Combines fingerprints in order.</summary>
+    internal static long Combine(params long[] parts)
+    {
+        long hash = unchecked((long)0xcbf29ce484222325UL);
+        foreach (long part in parts)
+            hash = unchecked((hash ^ part) * (long)0x100000001b3UL);
+        return unchecked((hash ^ parts.Length) * (long)0x100000001b3UL);
+    }
 }
