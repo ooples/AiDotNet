@@ -1280,6 +1280,19 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
         internal bool DeterministicMemorizationLoss { get; }
     }
 
+    /// <summary>
+    /// Models built on <c>LayerHelper.CreateDefaultConformerLayers</c>, whose convolution subsampling fixes the
+    /// mel width at construction: their fixtures feed [B, frames, NumMels] and vary the frame axis.
+    /// </summary>
+    private static readonly System.Collections.Generic.HashSet<string> ConvSubsamplingAsrClassNames =
+        new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
+        {
+            "Conformer", "FunASRNano", "ConformerCTC", "Branchformer", "CIFDecoder", "CTCSegmentation",
+            "EBranchformer", "InterCTC", "SelfConditionedCTC", "FireRedASR", "Chirp3", "OWSM", "ParakeetCTC",
+            "ESPnetASR", "NoiseRobustASR", "RobustConformer", "SpeechBrain", "CodeSwitchingASR", "MedicalASR",
+            "SpeakerDiarizedASR", "KyutaiMoshi",
+        };
+
     private static readonly System.Collections.Generic.HashSet<string> Fp32TestClassNames =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
     {
@@ -5841,7 +5854,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "BucketSize = 1024, EmbeddingDimension = 16, MaxSequenceLength = 32 })";
             }
             else if (model.ClassName is "FunASRNano" or "HuBERTASR" or "InterCTC" or "RobustConformer" or "SALM"
-                    or "SpeakerDiarizedASR" or "SPIRAL"
+                    or "SpeakerDiarizedASR" or "SpeechBrain" or "SPIRAL"
                     or "StreamingConformer" or "StreamingZipformer" or "TDTDecoder"
                     or "Wav2Vec2ASR" or "WavLMASR" or "WavLMRobust" or "XLSR"
                 && model.TypeParameterCount == 1)
@@ -5859,6 +5872,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "RobustConformer" => "AiDotNet.SpeechRecognition.Robust.RobustConformerOptions",
                     "SALM" => "AiDotNet.SpeechRecognition.LLMIntegrated.SALMOptions",
                     "SpeakerDiarizedASR" => "AiDotNet.SpeechRecognition.Specialized.SpeakerDiarizedASROptions",
+                    "SpeechBrain" => "AiDotNet.SpeechRecognition.Robust.SpeechBrainOptions",
                     "SPIRAL" => "AiDotNet.SpeechRecognition.Foundation.SPIRALOptions",
                     "StreamingConformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingConformerOptions",
                     "StreamingZipformer" => "AiDotNet.SpeechRecognition.Streaming.StreamingZipformerOptions",
@@ -7592,7 +7606,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.MultiClassClassification, " +
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 64), " +
                     "new AiDotNet.SpeechRecognition.Streaming.KyutaiMoshiOptions { EncoderDim = 32, " +
-                    "NumEncoderLayers = 2, NumAttentionHeads = 4, VocabSize = 64 })";
+                    "NumEncoderLayers = 2, NumAttentionHeads = 4, NumMels = 32, VocabSize = 64 })";
             }
             else if (model.ClassName == "MedSAM" && model.TypeParameterCount == 1)
             {
@@ -10087,7 +10101,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                 // 2-vs-5 MoreData), so — as with Chronos — the residual cost is per-step
                 // scale rather than repeat count, and only a fixture bound can address it.
                 // Exercise the same mel projection -> Conformer encoder -> vocabulary head at
-                // CI-smoke scale; NumMels=64 matches the generated [1,64,32] audio fixture.
+                // CI-smoke scale. The fixture is time-major [1, 64 frames, 32 mels], so NumMels=32: the
+                // encoder's convolution subsampling fixes the mel width in its projection.
                 // Production defaults and every customization point are unchanged.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.TwoDimensional, " +
@@ -10095,7 +10110,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.SpeechRecognition.Multilingual.Chirp3Options { SampleRate = 16000, " +
                     "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, FeedForwardExpansionFactor = 2, NumMels = 64, " +
+                    "NumAttentionHeads = 2, FeedForwardExpansionFactor = 2, NumMels = 32, " +
                     "VocabSize = 64, MaxTextLength = 16, DropoutRate = 0.0 })";
             }
             else if (model.ClassName == "APNet" && model.TypeParameterCount == 1)
@@ -10175,7 +10190,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputHeight: 64, inputWidth: 32, inputDepth: 1, outputSize: 4), " +
                     "new AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions { SampleRate = 16000, " +
                     "MaxAudioLengthSeconds = 1, EncoderDim = 32, NumEncoderLayers = 1, " +
-                    "NumAttentionHeads = 2, NumMels = 64, VocabSize = 64, MaxTextLength = 16, " +
+                    "NumAttentionHeads = 2, NumMels = 32, VocabSize = 64, MaxTextLength = 16, " +
                     // The hybrid CTC/attention rebuild (#51) adds an attention decoder and an LID
                     // head alongside the CTC head. DecoderDim must be bounded here too — it
                     // defaults to the paper's 320, which would dwarf the 32-wide smoke encoder.
@@ -16088,6 +16103,15 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             // ECAPATDNNSpeaker takes time-major [B, frames, mels] features: the mel axis is its first
             // convolution's channel count, fixed by the weights, so the variable length is axis 1.
             if (model.ClassName == "ECAPATDNNSpeaker")
+            {
+                sb.AppendLine("    protected override int VariableLengthAxis => 1;");
+            }
+
+            // The Conformer factory's convolution subsampling projects channels x mel bins with fixed weights, so
+            // the mel axis cannot vary either: these models take time-major [B, frames, mels] and vary the frames.
+            if (ConvSubsamplingAsrClassNames.Contains(model.ClassName)
+                && (model.ClassName != "Conformer"
+                    || model.FullyQualifiedName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
             {
                 sb.AppendLine("    protected override int VariableLengthAxis => 1;");
             }

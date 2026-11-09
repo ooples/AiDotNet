@@ -1159,3 +1159,21 @@ AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.ge
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
 override AiDotNet.Diffusion.DDPMModel<T>.CanPredictFromTimestepTensor.get -> bool
 override AiDotNet.Diffusion.DDPMModel<T>.PredictTrainingNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! noisySample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! timesteps, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultConformerLayers(int encoderDim = 512, int numLayers = 18, int numAttentionHeads = 8, int feedForwardExpansionFactor = 4, int numMels = 80, int vocabSize = 5000, double dropoutRate = 0.1, int maxSequenceLength = 750, int convKernelSize = 31) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultConformerLayers(int encoderDim = 512, int numLayers = 18, int numAttentionHeads = 8, int feedForwardExpansionFactor = 4, int numMels = 80, int vocabSize = 5000, double dropoutRate = 0.1, int maxSequenceLength = 750) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>
+const AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.MinimumExtent = 7 -> int
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.SupportsTraining.get -> bool
+AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.ConvSubsamplingLayer(int inputFeatures, int modelDim) -> void
+static AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.Subsampled(int extent) -> int
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.ForwardTraced(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.UpdateParameters(T learningRate) -> void
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.ResetState() -> void
+AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.AppendDeclaredParameterComponents(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>.DeclaredParameterComponent>! components) -> void
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.EnsureInitialized() -> void
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.GetSubLayers() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>!
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.HasCompleteConstructionObjectState.get -> bool
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.HasDeclaredSubLayerStructure.get -> bool
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.WriteConstructionObjects(System.Collections.Generic.Dictionary<string!, object!>! __values) -> void
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.WriteConstructionState(System.Collections.Generic.Dictionary<string!, string!>! __metadata) -> void

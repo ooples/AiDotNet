@@ -189,7 +189,7 @@ public partial class Conformer<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer
             numAttentionHeads: _options.NumAttentionHeads,
             feedForwardExpansionFactor: _options.FeedForwardExpansionFactor,
             numMels: _options.NumMels, vocabSize: _options.VocabSize,
-            dropoutRate: _options.DropoutRate));
+            dropoutRate: _options.DropoutRate, convKernelSize: _options.ConvKernelSize));
     }
 
     /// <inheritdoc />

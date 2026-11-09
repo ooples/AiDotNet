@@ -267,7 +267,6 @@ internal static class OptionsFidelityBaselines
             "AiDotNet.Audio.SpeechRecognition.CanaryOptions.BeamWidth",
             "AiDotNet.Audio.SpeechRecognition.CanaryOptions.SubsamplingFactor",
             "AiDotNet.Audio.SpeechRecognition.CanaryOptions.TargetLanguage",
-            "AiDotNet.Audio.SpeechRecognition.ConformerOptions.ConvKernelSize",
             "AiDotNet.Audio.SpeechRecognition.ConformerOptions.LabelSmoothing",
             "AiDotNet.Audio.SpeechRecognition.ConformerOptions.MaxAudioLengthSeconds",
             "AiDotNet.Audio.SpeechRecognition.ConformerOptions.SubsamplingFactor",
