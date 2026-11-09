@@ -67393,7 +67393,6 @@ AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.ReplaceFfnDown(AiDotNe
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.ReplaceFfnUp(AiDotNet.NeuralNetworks.Layers.LayerBase<T>! replacement) -> void
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.ReplaceSelfAttention(AiDotNet.NeuralNetworks.Layers.LayerBase<T>! replacement) -> void
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.SelfAttentionLayer.get -> AiDotNet.NeuralNetworks.Layers.LayerBase<T>!
-AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0) -> void
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderLayer<T>
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderLayer<T>.AuxiliaryLossWeight.get -> T
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderLayer<T>.AuxiliaryLossWeight.set -> void

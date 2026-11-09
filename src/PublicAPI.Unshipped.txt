@@ -1196,3 +1196,7 @@ static AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>.WithInputDepth(int i
 *REMOVED*static AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>.WithInputDepth(int inputDepth, int outputDepth, int kernelSize, int stride = 1, int padding = 0, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null, AiDotNet.Initialization.IInitializationStrategy<T>? initializationStrategy = null, AiDotNet.Interfaces.IActivationFunction<T>? nonlinearityForInit = null, int groups = 1) -> AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>!
 AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.TrainableParameterCount.get -> long
 AiDotNet.Models.ModelBase<T, TInput, TOutput>.TrainableParameterCount.get -> long
+AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0, AiDotNet.Interfaces.IActivationFunction<T>? ffnActivation = null) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0) -> void
+AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.ConfigureProjectionBiases(bool query, bool value) -> AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>!
+AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.HasProjectionBiases.get -> bool

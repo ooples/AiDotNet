@@ -6881,12 +6881,15 @@ public static partial class LayerHelper<T>
         // flat layers drops both residual paths and is not the paper architecture.
         for (int i = 0; i < numEncoderLayers; i++)
         {
-            yield return new TransformerEncoderBlock<T>(
+            var encoderBlock = new TransformerEncoderBlock<T>(
                 hiddenSize: modelDim,
                 numHeads: numHeads,
                 ffnDim: ffDim,
                 dropoutRate: dropoutRate,
                 ffnActivation: geluActivation);
+            // Whisper's attention biases its query and value projections, not its key (whisper/model.py).
+            ((MultiHeadAttentionLayer<T>)encoderBlock.AttentionLayer).ConfigureProjectionBiases(query: true, value: true);
+            yield return encoderBlock;
         }
 
         // Final encoder layer normalization
@@ -6906,19 +6909,23 @@ public static partial class LayerHelper<T>
             yield return new DropoutLayer<T>(dropoutRate);
         }
 
-        // Decoder transformer layers with cross-attention
+        // Decoder blocks: Whisper's ResidualAttentionBlock is pre-norm (x + attn(ln(x)), then cross-attention, then
+        // the MLP), its self-attention is causal, and its attention biases q and v. TransformerDecoderLayer is
+        // post-norm and was built bidirectional, so teacher-forced training let every position read the token it
+        // was predicting.
         for (int i = 0; i < numDecoderLayers; i++)
         {
-            yield return new TransformerDecoderLayer<T>(
+            var decoderBlock = new TransformerDecoderBlock<T>(
+                hiddenSize: modelDim,
                 numHeads: numHeads,
-                feedForwardDim: ffDim,
-                sequenceLength: maxTokens,
+                ffnDim: ffDim,
+                dropoutRate: dropoutRate,
                 ffnActivation: geluActivation);
-
-            if (dropoutRate > 0 && i < numDecoderLayers - 1)
-            {
-                yield return new DropoutLayer<T>(dropoutRate);
-            }
+            var selfAttention = (MultiHeadAttentionLayer<T>)decoderBlock.SelfAttentionLayer;
+            selfAttention.UseCausalMask = true;
+            selfAttention.ConfigureProjectionBiases(query: true, value: true);
+            decoderBlock.CrossAttentionLayer.ConfigureProjectionBiases(query: true, value: true);
+            yield return decoderBlock;
         }
 
         // Final decoder layer normalization
