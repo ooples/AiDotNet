@@ -1200,3 +1200,6 @@ AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.TransformerDecoderBloc
 *REMOVED*AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0) -> void
 AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.ConfigureProjectionBiases(bool query, bool value) -> AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>!
 AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.HasProjectionBiases.get -> bool
+AiDotNet.Attributes.ScalarKernelAttribute
+AiDotNet.Attributes.ScalarKernelAttribute.ScalarKernelAttribute(string! reason) -> void
+AiDotNet.Attributes.ScalarKernelAttribute.Reason.get -> string!

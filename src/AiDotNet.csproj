@@ -371,6 +371,9 @@
 	<ItemGroup>
 	  <AdditionalFiles Include="PublicAPI\$(TargetFramework)\PublicAPI.Shipped.txt" Condition="Exists('PublicAPI\$(TargetFramework)\PublicAPI.Shipped.txt')" />
 	  <AdditionalFiles Include="PublicAPI\$(TargetFramework)\PublicAPI.Unshipped.txt" Condition="Exists('PublicAPI\$(TargetFramework)\PublicAPI.Unshipped.txt')" />
+	  <!-- The element-wise gate's shrink-only inventory (ADNELEM001-003). ElementWiseRecord=true leaves it out so every
+	       occurrence is reported; tools/ElementWise/Update-ElementWiseBaseline.ps1 rewrites the file from that report. -->
+	  <AdditionalFiles Include="ElementWiseBaseline.txt" Condition="'$(ElementWiseRecord)' != 'true' And Exists('ElementWiseBaseline.txt')" />
 	</ItemGroup>
 
 	<!-- Package validation (#2392): every pack compares the package against the last release on nuget.org and fails on
