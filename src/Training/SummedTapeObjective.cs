@@ -67,9 +67,7 @@ internal static class SummedTapeObjective<T>
         var gradients = new Dictionary<Tensor<T>, Tensor<T>>(TensorReferenceComparer<Tensor<T>>.Instance);
         foreach (var parameter in reached) gradients.Add(parameter, all[parameter]);
         hooks?.OnGradients?.Invoke(gradients);
-        hooks?.RegularizeGradients?.Invoke(reached, gradients);
-        if (hooks is { ModelGradientClip: > 0.0 })
-            TapeTrainingStepper<T>.ClipByGlobalNorm(gradients, hooks.ModelGradientClip);
+        hooks?.RegularizeAndClip(reached, gradients);
         hooks?.BeforeUpdate?.Invoke();
         update(new TapeStepContext<T>(reached, gradients, total, input, target,
             recomputeForward, recomputeLoss, parameterBuffer: null));

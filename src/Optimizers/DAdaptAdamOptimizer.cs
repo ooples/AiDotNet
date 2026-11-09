@@ -48,9 +48,8 @@ public class DAdaptAdamOptimizer<T, TInput, TOutput> : GradientBasedOptimizerBas
     /// <inheritdoc />
     protected override void StepCore(TapeStepContext<T> context)
     {
+        // Step already applied the clipping options (by norm or by value) before this runs.
         PrepareTapeState(context);
-        if (GradientOptions.EnableGradientClipping)
-            ApplyTapeGlobalNormGradientClipping(context, GradientOptions.MaxGradientNorm);
         if (HasAnomalousTapeGradients(context)) return;
         var parameters = new List<Tensor<T>>();
         var groups = new List<(double[] Values, double[] Gradient, (double[] S, double[] M, double[] V) State)>();
