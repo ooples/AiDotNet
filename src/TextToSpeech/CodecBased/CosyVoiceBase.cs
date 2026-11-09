@@ -130,7 +130,8 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
             UpsampleKernels: (int[])o.HiftUpsampleKernels.Clone(), FftSize: 16, HopSize: 4, ResblockKernels: new[] { 3, 7, 11 },
             ResblockDilations: new[] { new[] { 1, 3, 5 }, new[] { 1, 3, 5 }, new[] { 1, 3, 5 } },
             SourceKernels: (int[])o.HiftSourceKernels.Clone(), SourceDilations: Enumerable.Range(0, stages).Select(_ => new[] { 1, 3, 5 }).ToArray(),
-            LeakySlope: 0.1, AudioLimit: 0.99, F0Channels: o.HiftBaseChannels);
+            LeakySlope: 0.1, AudioLimit: 0.99, F0Channels: o.HiftBaseChannels)
+        { OriginalSineGen = HiftUsesOriginalSineGen };
         if (hift.UpsampleScale != o.HopSize)
             throw new ArgumentException($"HiFT gives {hift.UpsampleScale} samples per mel frame; HopSize must be {hift.UpsampleScale}.");
         _hift = new HiftGenerator<T>(Engine, layers, hift, initialization);
@@ -829,13 +830,17 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(modelDirectory)) throw new ArgumentException("The model directory is required.", nameof(modelDirectory));
-        LoadLanguageModel(CheckpointReader(ComponentCheckpoint(modelDirectory, "llm")));
-        LoadFlowWeights(CheckpointReader(ComponentCheckpoint(modelDirectory, "flow")));
-        LoadVocoderWeights(CheckpointReader(ComponentCheckpoint(modelDirectory, "hift")));
+        LoadCheckpoint(ComponentCheckpoint(modelDirectory, "llm"), LoadLanguageModel);
+        LoadCheckpoint(ComponentCheckpoint(modelDirectory, "flow"), LoadFlowWeights);
+        LoadCheckpoint(ComponentCheckpoint(modelDirectory, "hift"), LoadVocoderWeights);
         LoadSpeechTokenizerWeights(modelDirectory, speechTokenizerFile);
         LoadSpeakerEncoderCheckpoint(modelDirectory);
         InvalidateWeightCachesAfterSuccessfulWeightUpdate();
     }
+
+    /// <summary>Whether HiFT's source uses the original <c>SineGen</c> at every rate (false: CosyVoice's choice, SineGen2 away
+    /// from 22.05 kHz).</summary>
+    private protected virtual bool HiftUsesOriginalSineGen => false;
 
     /// <summary>Loads the speech-token-to-mel state.</summary>
     protected virtual void LoadFlowWeights(Func<string, int[], double[]> read) => Flow.LoadTorchWeights(read, "");
@@ -847,7 +852,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     protected virtual void LoadSpeechTokenizerWeights(string modelDirectory, string speechTokenizerFile)
     {
         if (!TryLoadReleasedSpeechTokenizer(modelDirectory, speechTokenizerFile))
-            SpeechTokenizer.LoadTorchWeights(CheckpointReader(Path.Combine(modelDirectory, speechTokenizerFile)));
+            LoadCheckpoint(Path.Combine(modelDirectory, speechTokenizerFile), SpeechTokenizer.LoadTorchWeights);
     }
 
     /// <summary>Loads the frozen speaker encoder.</summary>
@@ -857,7 +862,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     protected virtual void LoadSpeakerEncoderCheckpoint(string modelDirectory)
     {
         if (!TryLoadReleasedSpeakerEncoder(modelDirectory))
-            LoadSpeakerEncoderWeights(CheckpointReader(Path.Combine(modelDirectory, "campplus.safetensors")));
+            LoadCheckpoint(Path.Combine(modelDirectory, "campplus.safetensors"), LoadSpeakerEncoderWeights);
     }
 
     private static string ComponentCheckpoint(string directory, string stem)
@@ -867,39 +872,22 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         return File.Exists(converted) || !File.Exists(original) ? converted : original;
     }
 
-    /// <summary>Reads one original PyTorch state dictionary or converted safetensors file.</summary>
-    protected static Func<string, int[], double[]> CheckpointReader(string path)
+    /// <summary>
+    /// Opens one original PyTorch state dictionary or converted safetensors file and loads from it with
+    /// <paramref name="load"/>: names also try their legacy weight-norm spelling, and each tensor's axes are checked. A
+    /// safetensors file is streamed one tensor at a time and closed afterwards.
+    /// </summary>
+    private static void LoadCheckpoint(string path, Action<Func<string, int[], double[]>> load)
     {
-        if (!File.Exists(path)) throw new FileNotFoundException($"The checkpoint {path} is missing.", path);
-        if (path.EndsWith(".pt", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".pth", StringComparison.OrdinalIgnoreCase))
+        using var file = TorchCheckpointFile.Open(path);
+        load((name, shape) =>
         {
-            var state = new ComputerVision.Weights.WeightLoader().LoadWeights(path);
-            return (name, shape) =>
-            {
-                if (!state.TryGetValue(name, out var tensor) && !state.TryGetValue(LegacyWeightNormName(name), out tensor))
-                    throw new InvalidDataException($"The checkpoint {path} has no tensor '{name}'.");
-                if (shape.Length > 0 && !tensor.Shape.ToArray().SequenceEqual(shape))
-                    throw new InvalidDataException($"'{name}' has incompatible axes in the original checkpoint.");
-                return tensor.ToArray().Select(value => (double)value).ToArray();
-            };
-        }
-        var file = AiDotNet.Agentic.Models.Local.SafetensorsReader.Read(File.ReadAllBytes(path));
-        return (name, shape) =>
-        {
-            string actualName = name;
-            var entry = file.Get(actualName);
-            if (entry is null) { actualName = LegacyWeightNormName(name); entry = file.Get(actualName); }
-            if (entry is null) throw new InvalidDataException($"The checkpoint {path} has no tensor '{name}'.");
-            if (shape.Length > 0 && !entry.Shape.SequenceEqual(shape.Select(dimension => (long)dimension)))
-                throw new InvalidDataException($"'{name}' has incompatible axes in the converted checkpoint.");
-            // num_batches_tracked is an int64 scalar that nothing reads.
-            if (entry.DataType == "I64") return new[] { (double)BitConverter.ToInt64(file.GetRawBytes(actualName), 0) };
-            var values = file.ReadAsDouble(actualName);
-            if (shape.Length > 0 && values.Length != shape.Aggregate(1, (a, b) => a * b))
-                throw new InvalidDataException($"'{name}' has {values.Length} values in the checkpoint but [{string.Join(", ", shape)}] " +
-                    "in this model; build the model with the checkpoint's configuration.");
-            return values;
-        };
+            string actualName = file.Contains(name) ? name : LegacyWeightNormName(name);
+            var axes = file.Shape(actualName) ?? throw new InvalidDataException($"The checkpoint {path} has no tensor '{name}'.");
+            if (shape.Length > 0 && axes.Length > 0 && !axes.SequenceEqual(shape.Select(dimension => (long)dimension)))
+                throw new InvalidDataException($"'{name}' has incompatible axes in the checkpoint.");
+            return file.Read(actualName, shape);
+        });
     }
 
     private static string LegacyWeightNormName(string name) => name
