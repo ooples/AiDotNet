@@ -266,23 +266,26 @@ public abstract partial class SelfSupervisedLearningMethodBase<T> : ModelBase<T,
     protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateOptimizer()
     {
         // The first step's rate; TrainStepCore sets each step's from GetEffectiveLearningRate. SGD and Adam take the
-        // weight decay through the objective (see TrainStepCore).
+        // weight decay through the objective (see TrainStepCore). The SGD, LARS and LAMB recipes these methods follow
+        // do not clip gradients, and LARS and LAMB already rescale each layer's step by its trust ratio; their
+        // options' default norm clip is turned off so the step is the recipe's. Adam and AdamW keep the clip they
+        // have always applied.
         double lr = GetEffectiveLearningRate();
         double wd = _config.WeightDecay ?? 0.0;
         switch (_config.OptimizerType ?? DefaultOptimizerType)
         {
             case SelfSupervisedLearningOptimizerType.SGD:
                 return new AiDotNet.Optimizers.MomentumOptimizer<T, Tensor<T>, Tensor<T>>(null,
-                    new AiDotNet.Models.Options.MomentumOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr });
+                    new AiDotNet.Models.Options.MomentumOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr, EnableGradientClipping = false });
             case SelfSupervisedLearningOptimizerType.Adam:
                 return new AiDotNet.Optimizers.AdamOptimizer<T, Tensor<T>, Tensor<T>>(null,
                     new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr });
             case SelfSupervisedLearningOptimizerType.LARS:
                 return new AiDotNet.Optimizers.LARSOptimizer<T, Tensor<T>, Tensor<T>>(null,
-                    new AiDotNet.Models.Options.LARSOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr, WeightDecay = wd });
+                    new AiDotNet.Models.Options.LARSOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr, WeightDecay = wd, EnableGradientClipping = false });
             case SelfSupervisedLearningOptimizerType.LAMB:
                 return new AiDotNet.Optimizers.LAMBOptimizer<T, Tensor<T>, Tensor<T>>(null,
-                    new AiDotNet.Models.Options.LAMBOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr, WeightDecay = wd });
+                    new AiDotNet.Models.Options.LAMBOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr, WeightDecay = wd, EnableGradientClipping = false });
             default:
                 return new AiDotNet.Optimizers.AdamWOptimizer<T, Tensor<T>, Tensor<T>>(null,
                     new AiDotNet.Models.Options.AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>> { InitialLearningRate = lr, WeightDecay = wd });

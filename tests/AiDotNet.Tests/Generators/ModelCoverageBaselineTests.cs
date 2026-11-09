@@ -17,19 +17,20 @@ namespace AiDotNet.Tests.Generators;
 public class ModelCoverageBaselineTests
 {
     /// <summary>
-    /// Models with model-family test coverage: the recorded measurement is 1687 of 1783 (94.6%)
-    /// from the AiDotNetTests compilation's TestCoverage.g.cs, measured 2026-10-17 on PR #2294 after
-    /// GLaMM's segmentation copy (which had a generated suite) was deleted; 1688 of 1784 was measured
-    /// just before, on the merge 9ca6c969f. The record before that was 1485 of 1816 (81.8%), from commit
-    /// e9d417a583444fc52c33fcb1c495cf1404d73443 (2026-09-09, #2091); the earlier measurements were
-    /// 1466 and 1482. These are generator-attribution counts, not the separate whole-word
+    /// Models with model-family test coverage: the recorded measurement is 1787 of 1787 (100%) from the
+    /// AiDotNetTests compilation's TestCoverage (read by reflection from the built net10.0 assembly), measured
+    /// 2026-11-08 on PR #2294 merged with master at 3ddd0c6b54. Before the merge this branch recorded 1687 of
+    /// 1783 (2026-10-17, after GLaMM's segmentation copy was deleted) and master 1814 of 1820 (2026-11-05); the
+    /// branch deletes duplicate model copies, so its census is smaller. The record before that was 1485 of 1816
+    /// (81.8%), from commit e9d417a583444fc52c33fcb1c495cf1404d73443 (2026-09-09, #2091); the earlier
+    /// measurements were 1466 and 1482. These are generator-attribution counts, not the separate whole-word
     /// reference-count estimate over hand-written and generated tests.
     ///
     /// Record the measured report and its source whenever changing this baseline. LOWERING it
     /// means models that were covered no longer are: establish why before editing this constant,
     /// because the point of the gate is that the number cannot quietly fall.
     /// </summary>
-    private const int BaselineTestedCount = 1687;
+    private const int BaselineTestedCount = 1787;
 
     /// <summary>
     /// Total annotated models at the same measurement. Only a floor: the census grows as models are
@@ -38,7 +39,7 @@ public class ModelCoverageBaselineTests
     /// implementation of the same paper (the TTS, diffusion-audio, video-generation, continual-learning,
     /// probabilistic-forecasting, Grounded SAM 2 and GLaMM copies), while models were added elsewhere.
     /// </summary>
-    private const int BaselineTotalModels = 1783;
+    private const int BaselineTotalModels = 1787;
 
     [Fact]
     public void ThisAssemblyPublishesAMeasuredCoverageFigure()

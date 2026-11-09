@@ -117,7 +117,8 @@ public class SequenceModelOptionsContractTests
     [InlineData(typeof(EagleOptions), 65536, 256, 4, 8, 0, 512, 0, 0, 0.0)]
     [InlineData(typeof(FalconMambaOptions), 65024, 256, 4, 0, 16, 512, 0, 2, 0.0)]
     [InlineData(typeof(FinchOptions), 65536, 256, 4, 8, 0, 512, 0, 0, 0.0)]
-    [InlineData(typeof(GatedDeltaNetOptions), 50277, 256, 4, 8, 0, 512, 0, 0, 0.0)]
+    // Gated DeltaNet's vocabulary is now its paper's (the Llama2 tokenizer, 32,000) rather than the pre-migration 50277.
+    [InlineData(typeof(GatedDeltaNetOptions), 32000, 256, 4, 8, 0, 512, 0, 0, 0.0)]
     [InlineData(typeof(GLAOptions), 50277, 256, 4, 8, 0, 512, 0, 0, 0.0)]
     [InlineData(typeof(GriffinOptions), 256000, 2048, 24, 0, 0, 2048, 0, 0, 0.0)]
     [InlineData(typeof(HawkOptions), 256000, 2048, 24, 0, 0, 2048, 0, 0, 0.0)]

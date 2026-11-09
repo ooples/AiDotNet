@@ -42,6 +42,10 @@ public class TrustRegionOptimizerOptions<T, TInput, TOutput> : GradientBasedOpti
     /// <summary>Initializes a new instance with the documented defaults.</summary>
     public TrustRegionOptimizerOptions()
     {
+        // A second-order or line-search method sizes its step from curvature (a Hessian, curvature pairs, a line
+        // search or a trust radius). Clipping the gradient breaks that: the Newton system and the s/y pairs then
+        // describe a different function. SciPy and torch.optim.LBFGS never clip; opt in explicitly if wanted.
+        EnableGradientClipping = false;
     }
 
     /// <summary>Creates a complete copy of an existing trust-region options instance.</summary>

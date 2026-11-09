@@ -1,10 +1,12 @@
-﻿using AiDotNet.Models.Options;
+﻿using AiDotNet.Attributes;
+using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
 
 /// <summary>
 /// Configuration options for the GatedDeltaNetLanguageModel.
 /// </summary>
+[PaperDefault(nameof(VocabSize), 32000, Source = "Yang et al. 2025, Sec. 4 (Setup): the Llama2 tokenizer, a vocabulary of 32,000")]
 public class GatedDeltaNetOptions : SequenceModelOptions
 {
     /// <summary>
@@ -12,7 +14,7 @@ public class GatedDeltaNetOptions : SequenceModelOptions
     /// </summary>
     public GatedDeltaNetOptions()
     {
-        VocabSize = 50277;
+        VocabSize = 32000;
         ModelDimension = 256;
         NumLayers = 4;
         NumHeads = 8;

@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
@@ -5,6 +6,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// <summary>
 /// Configuration options for the BlipNeuralNetwork.
 /// </summary>
+[PaperDefault(nameof(ImageSize), 384, Source = "Li et al. 2022, Sec. 4.1 and App. A: 384x384 when fine-tuning (224x224 in pre-training)")]
 public class BlipOptions : VisionLanguageModelOptions
 {
     /// <summary>
