@@ -5,6 +5,60 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class E3TTSOptionsTests
 {
+    [Fact]
+    public void CopyPreservesNonuniformChannelsWhosePeakCannotScaleTheDefaultLayout()
+    {
+        var original = E3TTSPaperTests.TinyOptions();
+        original.BlockChannels = [3, 3, 4, 4, 5, 6, 6, 6, 6, 6];
+        var copy = (E3TTSOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(original);
+        Assert.Equal(6, copy.HiddenDim);
+        Assert.Equal(original.BlockChannels, copy.BlockChannels);
+        Assert.NotSame(original.BlockChannels, copy.BlockChannels);
+        using var model = new E3TTS<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 1, outputSize: 1), copy);
+        Assert.Equal(original.BlockChannels,
+            model.WaveformUnet!.DownBlocks.Select(block => block.FirstConvolutions[0].GetOutputShape()[0]));
+        copy.BlockChannels[0] = 2;
+        Assert.Equal(3, original.BlockChannels[0]);
+    }
+
+    [Theory]
+    [InlineData("HiddenDim")]
+    [InlineData("EncoderDim")]
+    [InlineData("DecoderDim")]
+    public void SharedWidthSettingsResizeTheActualUnetAndIndependentCopies(string property)
+    {
+        var options = E3TTSPaperTests.TinyOptions();
+        var originalChannels = (int[])options.BlockChannels.Clone();
+        Assert.Equal(16, options.HiddenDim);
+        typeof(E3TTSOptions).GetProperty(property)!.SetValue(options, 32);
+        Assert.Equal(originalChannels.Select(width => width * 2), options.BlockChannels);
+        var copy = new E3TTSOptions(options);
+        Assert.Equal(32, copy.HiddenDim);
+        Assert.NotSame(options.BlockChannels, copy.BlockChannels);
+        using var model = new E3TTS<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression,
+            inputSize: 1, outputSize: 1), copy);
+        var nativeChannels = model.WaveformUnet!.DownBlocks.Select(block => block.FirstConvolutions[0].GetOutputShape()[0]);
+        Assert.Equal(options.BlockChannels, nativeChannels);
+        ((AiDotNet.TextToSpeech.TtsModelOptions)copy).HiddenDim = 16;
+        Assert.Equal(originalChannels, copy.BlockChannels);
+        Assert.Equal(32, options.HiddenDim);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(15)]
+    public void SharedWidthRejectsInvalidStageScalingWithoutChangingTheLayout(int width)
+    {
+        var options = E3TTSPaperTests.TinyOptions();
+        var before = (int[])options.BlockChannels.Clone();
+        Assert.ThrowsAny<ArgumentException>(() => options.HiddenDim = width);
+        Assert.Equal(before, options.BlockChannels);
+    }
+
     [Theory]
     [InlineData("NumEncoderLayers", "BertLayers", "Layers", 2)]
     [InlineData("NumHeads", "BertHeads", "Heads", 1)]

@@ -40,7 +40,7 @@ public class CodecTtsOptions : TtsModelOptions
     [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]    public int CodebookSize { get; set; } = 1024;
 
     /// <summary>Gets or sets the codec frame rate in Hz.</summary>
-    public int CodecFrameRate { get; set; } = 50;
+    public virtual int CodecFrameRate { get; set; } = 50;
 
     /// <summary>Gets or sets the LLM hidden dimension.</summary>
     public int LLMDim { get; set; } = 1024;
