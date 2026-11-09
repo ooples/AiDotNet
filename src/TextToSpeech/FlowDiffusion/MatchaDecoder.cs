@@ -94,6 +94,14 @@ internal sealed partial class KaimingLinearLayer<T> : LayerBase<T>, IShapeContra
     public override void UpdateParameters(T learningRate) => KaimingInit.Step(this, learningRate, _weight, _bias);
 
     /// <summary>Loads a PyTorch <c>nn.Linear</c>'s weight <c>[out, in]</c> and bias (left at zero when null).</summary>
+    internal void LoadTorch(AiDotNet.ModelLoading.TorchTensorSource source, string weightName, string? biasName)
+    {
+        source.CopyTransposedTo(weightName, _out, _in, _weight);
+        if (biasName is not null) source.CopyTo(biasName, new[] { _out }, _bias);
+        Engine.InvalidatePersistentTensor(_weight);
+        Engine.InvalidatePersistentTensor(_bias);
+    }
+
     internal void LoadTorch(double[] weight, double[]? bias)
     {
         int inputs = _weight.Shape[0], outputs = _weight.Shape[1];
@@ -188,6 +196,14 @@ internal sealed partial class KaimingConv1DLayer<T> : LayerBase<T>, IShapeContra
 
     /// <summary>Loads a PyTorch <c>Conv1d</c> (<c>[out, in, k]</c>) or <c>ConvTranspose1d</c> (<c>[in, out, k]</c>)
     /// weight, which is this layer's in the same order, and its bias.</summary>
+    internal void LoadTorch(AiDotNet.ModelLoading.TorchTensorSource source, string weightName, string biasName)
+    {
+        source.CopyTo(weightName, Array.Empty<int>(), _weight);
+        source.CopyTo(biasName, new[] { _out }, _bias);
+        Engine.InvalidatePersistentTensor(_weight);
+        Engine.InvalidatePersistentTensor(_bias);
+    }
+
     internal void LoadTorch(double[] weight, double[] bias)
     {
         if (weight.Length != _weight.Length) throw new ArgumentException($"Expected {_weight.Length} weights, got {weight.Length}.", nameof(weight));
@@ -254,6 +270,15 @@ internal sealed partial class SnakeBetaLayer<T> : LayerBase<T>, IShapeContract
     internal KaimingLinearLayer<T> Projection => _projection;
 
     /// <summary>Loads Matcha's SnakeBeta: the projection and the log-scale <c>alpha</c> and <c>beta</c>.</summary>
+    internal void LoadTorch(AiDotNet.ModelLoading.TorchTensorSource source, string prefix)
+    {
+        _projection.LoadTorch(source, prefix + "proj.weight", prefix + "proj.bias");
+        source.CopyTo(prefix + "alpha", new[] { _outFeatures }, _logAlpha);
+        source.CopyTo(prefix + "beta", new[] { _outFeatures }, _logBeta);
+        Engine.InvalidatePersistentTensor(_logAlpha);
+        Engine.InvalidatePersistentTensor(_logBeta);
+    }
+
     internal void LoadTorch(double[] weight, double[] bias, double[] alpha, double[] beta)
     {
         _projection.LoadTorch(weight, bias);
@@ -471,12 +496,15 @@ internal sealed class MatchaDecoder<T>
     /// <c>final_block</c> and <c>final_proj</c>. <paramref name="read"/> returns a tensor's values in PyTorch order;
     /// the shape it is given is empty (each layer checks its own size).
     /// </summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix) =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), prefix);
+
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource read, string prefix)
     {
-        _time1.LoadTorch(read(prefix + "time_mlp.linear_1.weight", Array.Empty<int>()), read(prefix + "time_mlp.linear_1.bias", Array.Empty<int>()));
-        _time2.LoadTorch(read(prefix + "time_mlp.linear_2.weight", Array.Empty<int>()), read(prefix + "time_mlp.linear_2.bias", Array.Empty<int>()));
+        _time1.LoadTorch(read, prefix + "time_mlp.linear_1.weight", prefix + "time_mlp.linear_1.bias");
+        _time2.LoadTorch(read, prefix + "time_mlp.linear_2.weight", prefix + "time_mlp.linear_2.bias");
         void Resample(KaimingConv1DLayer<T> conv, string p, bool nested) =>
-            conv.LoadTorch(read(p + (nested ? ".conv" : "") + ".weight", Array.Empty<int>()), read(p + (nested ? ".conv" : "") + ".bias", Array.Empty<int>()));
+            conv.LoadTorch(read, p + (nested ? ".conv" : "") + ".weight", p + (nested ? ".conv" : "") + ".bias");
         for (int i = 0; i < _downs.Count; i++)
         {
             var (resnet, transformers, down) = _downs[i];
@@ -501,7 +529,7 @@ internal sealed class MatchaDecoder<T>
             Resample(up, p + "2", i < _ups.Count - 1);
         }
         _finalBlock.LoadTorch(read, prefix + "final_block.");
-        _finalProjection.LoadTorch(read(prefix + "final_proj.weight", Array.Empty<int>()), read(prefix + "final_proj.bias", Array.Empty<int>()));
+        _finalProjection.LoadTorch(read, prefix + "final_proj.weight", prefix + "final_proj.bias");
     }
 
     // SinusoidalPosEmb(in_channels) of 1000·t: [sin, cos] over in_channels / 2 log-spaced frequencies.
@@ -577,15 +605,13 @@ internal sealed class MatchaDecoder<T>
 
         /// <summary>Loads <c>{p}block.0</c> (the convolution) and <c>{p}block.1</c> (the GroupNorm), or the causal
         /// block's <c>{p}block.2</c> (the LayerNorm, after a transpose).</summary>
-        public void LoadTorch(Func<string, int[], double[]> read, string p)
+        public void LoadTorch(AiDotNet.ModelLoading.TorchTensorSource read, string p)
         {
-            _conv.LoadTorch(read(p + "block.0.weight", Array.Empty<int>()), read(p + "block.0.bias", Array.Empty<int>()));
+            _conv.LoadTorch(read, p + "block.0.weight", p + "block.0.bias");
             if (_layerNorm is not null)
-                CodecBased.TorchParameters.LayerNorm(_owner._engine, _layerNorm, read(p + "block.2.weight", Array.Empty<int>()),
-                    read(p + "block.2.bias", Array.Empty<int>()));
+                CodecBased.TorchParameters.LayerNorm(_owner._engine, _layerNorm, read, p + "block.2.weight", p + "block.2.bias");
             else
-                (_groupNorm ?? throw new InvalidOperationException("A block has a norm.")).LoadAffine(
-                    read(p + "block.1.weight", Array.Empty<int>()), read(p + "block.1.bias", Array.Empty<int>()));
+                (_groupNorm ?? throw new InvalidOperationException("A block has a norm.")).LoadAffine(read, p + "block.1.weight", p + "block.1.bias");
         }
     }
 
@@ -620,12 +646,12 @@ internal sealed class MatchaDecoder<T>
         }
 
         /// <summary>Loads Matcha's <c>ResnetBlock1D</c>: <c>mlp.1</c>, <c>block1</c>, <c>block2</c>, <c>res_conv</c>.</summary>
-        public void LoadTorch(Func<string, int[], double[]> read, string p)
+        public void LoadTorch(AiDotNet.ModelLoading.TorchTensorSource read, string p)
         {
-            _timeProjection.LoadTorch(read(p + "mlp.1.weight", Array.Empty<int>()), read(p + "mlp.1.bias", Array.Empty<int>()));
+            _timeProjection.LoadTorch(read, p + "mlp.1.weight", p + "mlp.1.bias");
             _block1.LoadTorch(read, p + "block1.");
             _block2.LoadTorch(read, p + "block2.");
-            _residual.LoadTorch(read(p + "res_conv.weight", Array.Empty<int>()), read(p + "res_conv.bias", Array.Empty<int>()));
+            _residual.LoadTorch(read, p + "res_conv.weight", p + "res_conv.bias");
         }
     }
 
@@ -720,22 +746,20 @@ internal sealed class MatchaDecoder<T>
         /// <summary>Loads diffusers' <c>BasicTransformerBlock</c> names: <c>norm1</c>, <c>attn1.to_q/k/v</c>,
         /// <c>attn1.to_out.0</c>, <c>norm3</c>, <c>ff.net.0</c> (the GELU's <c>proj</c>, or SnakeBeta) and
         /// <c>ff.net.2</c>.</summary>
-        public void LoadTorch(Func<string, int[], double[]> read, string p)
+        public void LoadTorch(AiDotNet.ModelLoading.TorchTensorSource read, string p)
         {
             var engine = _owner._engine;
-            CodecBased.TorchParameters.LayerNorm(engine, _norm1, read(p + "norm1.weight", Array.Empty<int>()), read(p + "norm1.bias", Array.Empty<int>()));
-            _query.LoadTorch(read(p + "attn1.to_q.weight", Array.Empty<int>()), null);
-            _key.LoadTorch(read(p + "attn1.to_k.weight", Array.Empty<int>()), null);
-            _value.LoadTorch(read(p + "attn1.to_v.weight", Array.Empty<int>()), null);
-            _out.LoadTorch(read(p + "attn1.to_out.0.weight", Array.Empty<int>()), read(p + "attn1.to_out.0.bias", Array.Empty<int>()));
-            CodecBased.TorchParameters.LayerNorm(engine, _norm3, read(p + "norm3.weight", Array.Empty<int>()), read(p + "norm3.bias", Array.Empty<int>()));
+            CodecBased.TorchParameters.LayerNorm(engine, _norm1, read, p + "norm1.weight", p + "norm1.bias");
+            _query.LoadTorch(read, p + "attn1.to_q.weight", null);
+            _key.LoadTorch(read, p + "attn1.to_k.weight", null);
+            _value.LoadTorch(read, p + "attn1.to_v.weight", null);
+            _out.LoadTorch(read, p + "attn1.to_out.0.weight", p + "attn1.to_out.0.bias");
+            CodecBased.TorchParameters.LayerNorm(engine, _norm3, read, p + "norm3.weight", p + "norm3.bias");
             if (_ffGelu is not null)
-                _ffGelu.LoadTorch(read(p + "ff.net.0.proj.weight", Array.Empty<int>()), read(p + "ff.net.0.proj.bias", Array.Empty<int>()));
+                _ffGelu.LoadTorch(read, p + "ff.net.0.proj.weight", p + "ff.net.0.proj.bias");
             else
-                (_ffSnake ?? throw new InvalidOperationException("The block has a feed-forward input.")).LoadTorch(
-                    read(p + "ff.net.0.proj.weight", Array.Empty<int>()), read(p + "ff.net.0.proj.bias", Array.Empty<int>()),
-                    read(p + "ff.net.0.alpha", Array.Empty<int>()), read(p + "ff.net.0.beta", Array.Empty<int>()));
-            _ffOut.LoadTorch(read(p + "ff.net.2.weight", Array.Empty<int>()), read(p + "ff.net.2.bias", Array.Empty<int>()));
+                (_ffSnake ?? throw new InvalidOperationException("The block has a feed-forward input.")).LoadTorch(read, p + "ff.net.0.");
+            _ffOut.LoadTorch(read, p + "ff.net.2.weight", p + "ff.net.2.bias");
         }
     }
 }

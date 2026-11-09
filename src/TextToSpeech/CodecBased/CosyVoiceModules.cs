@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.FlowDiffusion;
@@ -437,29 +438,31 @@ internal sealed class CosyVoiceFlow<T>
 
     /// <summary>Loads <c>flow.pt</c>'s state: <c>input_embedding</c>, <c>spk_embed_affine_layer</c>, <c>encoder.*</c>,
     /// <c>encoder_proj</c>, <c>length_regulator.model.*</c> and <c>decoder.estimator.*</c>.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
         var c = Configuration;
-        InputEmbedding.LoadTable(read(prefix + "input_embedding.weight", new[] { c.VocabSize, c.InputSize }));
-        TorchParameters.Linear(_engine, SpeakerProjection, c.SpeakerDim, c.OutputSize,
-            read(prefix + "spk_embed_affine_layer.weight", new[] { c.OutputSize, c.SpeakerDim }), read(prefix + "spk_embed_affine_layer.bias", new[] { c.OutputSize }));
-        if (UpsampleEncoder is not null) UpsampleEncoder.LoadTorchWeights(read, prefix + "encoder.");
-        else (Encoder ?? throw new InvalidOperationException("The flow has an encoder.")).LoadTorchWeights(read, prefix + "encoder.");
-        TorchParameters.Linear(_engine, EncoderProjection, c.Encoder.OutputSize, c.OutputSize,
-            read(prefix + "encoder_proj.weight", new[] { c.OutputSize, c.Encoder.OutputSize }), read(prefix + "encoder_proj.bias", new[] { c.OutputSize }));
+        InputEmbedding.LoadTable(source, prefix + "input_embedding.weight");
+        TorchParameters.Linear(_engine, SpeakerProjection, c.SpeakerDim, c.OutputSize, source,
+            prefix + "spk_embed_affine_layer.weight", prefix + "spk_embed_affine_layer.bias");
+        if (UpsampleEncoder is not null) UpsampleEncoder.LoadTorchWeights(source, prefix + "encoder.");
+        else (Encoder ?? throw new InvalidOperationException("The flow has an encoder.")).LoadTorchWeights(source, prefix + "encoder.");
+        TorchParameters.Linear(_engine, EncoderProjection, c.Encoder.OutputSize, c.OutputSize, source,
+            prefix + "encoder_proj.weight", prefix + "encoder_proj.bias");
         for (int i = 0; i < RegulatorConvs.Count; i++)
         {
             string p = $"{prefix}length_regulator.model.{3 * i}";
-            RegulatorConvs[i].LoadTorchWeights(read(p + ".weight", new[] { c.OutputSize, c.OutputSize, 3 }), null, read(p + ".bias", new[] { c.OutputSize }));
+            RegulatorConvs[i].LoadTorchWeights(source, p + ".weight", new[] { c.OutputSize, c.OutputSize, 3 }, null, p + ".bias");
             string n = $"{prefix}length_regulator.model.{3 * i + 1}";
-            RegulatorNorms[i].LoadAffine(read(n + ".weight", new[] { c.OutputSize }), read(n + ".bias", new[] { c.OutputSize }));
+            RegulatorNorms[i].LoadAffine(source, n + ".weight", n + ".bias");
         }
         if (RegulatorOut is not null)
         {
             string o = $"{prefix}length_regulator.model.{3 * RegulatorConvs.Count}";
-            RegulatorOut.LoadTorchWeights(read(o + ".weight", new[] { c.OutputSize, c.OutputSize, 1 }), null, read(o + ".bias", new[] { c.OutputSize }));
+            RegulatorOut.LoadTorchWeights(source, o + ".weight", new[] { c.OutputSize, c.OutputSize, 1 }, null, o + ".bias");
         }
-        Decoder.LoadTorchWeights(read, prefix + "decoder.estimator.");
+        Decoder.LoadTorchWeights(source, prefix + "decoder.estimator.");
     }
 }
 
@@ -679,18 +682,20 @@ internal sealed class CosyVoiceLm<T>
 
     /// <summary>Loads <c>llm.pt</c>'s state: <c>text_embedding</c>, <c>text_encoder.*</c>, <c>text_encoder_affine_layer</c>,
     /// <c>llm_embedding</c>, <c>llm.*</c>, <c>llm_decoder</c>, <c>speech_embedding</c>, <c>spk_embed_affine_layer</c>.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
         var c = Configuration;
         void Dense(DenseLayer<T> layer, string name, int inputs, int outputs) =>
-            TorchParameters.Linear(_engine, layer, inputs, outputs, read(name + ".weight", new[] { outputs, inputs }), read(name + ".bias", new[] { outputs }));
-        TextEmbedding.LoadTable(read(prefix + "text_embedding.weight", new[] { c.TextVocabulary, c.TextEncoderInputSize }));
-        TextEncoder.LoadTorchWeights(read, prefix + "text_encoder.");
+            TorchParameters.Linear(_engine, layer, inputs, outputs, source, name + ".weight", name + ".bias");
+        TextEmbedding.LoadTable(source, prefix + "text_embedding.weight");
+        TextEncoder.LoadTorchWeights(source, prefix + "text_encoder.");
         Dense(TextAffine, prefix + "text_encoder_affine_layer", c.TextEncoder.OutputSize, c.LlmSize);
-        LlmEmbedding.LoadTable(read(prefix + "llm_embedding.weight", new[] { 2, c.LlmSize }));
-        Llm.LoadTorchWeights(read, prefix + "llm.");
+        LlmEmbedding.LoadTable(source, prefix + "llm_embedding.weight");
+        Llm.LoadTorchWeights(source, prefix + "llm.");
         Dense(Head, prefix + "llm_decoder", c.Llm.OutputSize, c.SpeechVocabulary + 1);
-        SpeechEmbedding.LoadTable(read(prefix + "speech_embedding.weight", new[] { c.SpeechVocabulary, c.LlmSize }));
+        SpeechEmbedding.LoadTable(source, prefix + "speech_embedding.weight");
         Dense(SpeakerAffine, prefix + "spk_embed_affine_layer", c.SpeakerDim, c.LlmSize);
     }
 }

@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.Audio.Features;
 using AiDotNet.Audio.Speaker;
 using AiDotNet.Helpers;
@@ -150,7 +151,7 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
         bool training, Random random);
 
     /// <summary>Loads the language model from <c>llm.pt</c>'s state.</summary>
-    protected abstract void LoadLanguageModel(Func<string, int[], double[]> read);
+    private protected abstract void LoadLanguageModel(TorchTensorSource source);
 
     /// <summary>Builds the networks and sets the base's audio settings; the leaf constructor calls it last.</summary>
     protected void Initialize()
@@ -843,20 +844,20 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     private protected virtual bool HiftUsesOriginalSineGen => false;
 
     /// <summary>Loads the speech-token-to-mel state.</summary>
-    protected virtual void LoadFlowWeights(Func<string, int[], double[]> read) => Flow.LoadTorchWeights(read, "");
+    private protected virtual void LoadFlowWeights(TorchTensorSource source) => Flow.LoadTorchWeights(source, "");
 
     /// <summary>Loads the mel-to-waveform state.</summary>
-    protected virtual void LoadVocoderWeights(Func<string, int[], double[]> read) => Hift.LoadTorchWeights(read);
+    private protected virtual void LoadVocoderWeights(TorchTensorSource source) => Hift.LoadTorchWeights(source);
 
     /// <summary>Loads or opens the frozen speech tokenizer.</summary>
     protected virtual void LoadSpeechTokenizerWeights(string modelDirectory, string speechTokenizerFile)
     {
         if (!TryLoadReleasedSpeechTokenizer(modelDirectory, speechTokenizerFile))
-            LoadCheckpoint(Path.Combine(modelDirectory, speechTokenizerFile), SpeechTokenizer.LoadTorchWeights);
+            LoadCheckpoint(Path.Combine(modelDirectory, speechTokenizerFile), source => SpeechTokenizer.LoadTorchWeights(source));
     }
 
     /// <summary>Loads the frozen speaker encoder.</summary>
-    protected virtual void LoadSpeakerEncoderWeights(Func<string, int[], double[]> read) => SpeakerEncoder.LoadTorchWeights(read);
+    private protected virtual void LoadSpeakerEncoderWeights(TorchTensorSource source) => SpeakerEncoder.LoadTorchWeights(source.AsFunction());
 
     /// <summary>Loads the frozen speaker component; releases may provide its original ONNX graph.</summary>
     protected virtual void LoadSpeakerEncoderCheckpoint(string modelDirectory)
@@ -874,25 +875,13 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
 
     /// <summary>
     /// Opens one original PyTorch state dictionary or converted safetensors file and loads from it with
-    /// <paramref name="load"/>: names also try their legacy weight-norm spelling, and each tensor's axes are checked. A
-    /// safetensors file is streamed one tensor at a time and closed afterwards.
+    /// <paramref name="load"/>, each tensor's axes checked; the file is closed afterwards.
     /// </summary>
-    private static void LoadCheckpoint(string path, Action<Func<string, int[], double[]>> load)
+    private static void LoadCheckpoint(string path, Action<TorchTensorSource> load)
     {
-        using var file = TorchCheckpointFile.Open(path);
-        load((name, shape) =>
-        {
-            string actualName = file.Contains(name) ? name : LegacyWeightNormName(name);
-            var axes = file.Shape(actualName) ?? throw new InvalidDataException($"The checkpoint {path} has no tensor '{name}'.");
-            if (shape.Length > 0 && axes.Length > 0 && !axes.SequenceEqual(shape.Select(dimension => (long)dimension)))
-                throw new InvalidDataException($"'{name}' has incompatible axes in the checkpoint.");
-            return file.Read(actualName, shape);
-        });
+        using var file = TorchCheckpointFile.Open(path, strictAxes: true);
+        load(file);
     }
-
-    private static string LegacyWeightNormName(string name) => name
-        .Replace(".parametrizations.weight.original0", ".weight_g")
-        .Replace(".parametrizations.weight.original1", ".weight_v");
 
     // ---------------------------------------------------------------- housekeeping
 

@@ -657,13 +657,17 @@ internal sealed class LlamaNetwork<T>
     /// <summary>Loads a Hugging Face <c>LlamaForCausalLM</c> state dict (names after an optional <paramref name="prefix"/>
     /// for the decoder; the head is read as <paramref name="headName"/>).</summary>
     public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "model.", string headName = "lm_head.weight")
+        => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), prefix, headName);
+
+    /// <summary>Loads a Hugging Face state dict from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    public void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string prefix = "model.", string headName = "lm_head.weight")
     {
         var c = Configuration;
         int h = c.Hidden, hd = c.ResolvedHeadDim, kv = c.KeyValueHeads * hd, qd = c.Heads * hd;
         void Linear(BiasFreeLinearLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(layer, inputs, outputs, read(name, new[] { outputs, inputs }));
+            => TorchParameters.Linear(layer, inputs, outputs, source, name);
         void Vector(BiasFreeLinearLayer<T> holder, string name, int[] shape)
-            => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, s) => a * s), read(name, shape));
+            => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, s) => a * s), source, name, shape);
         if (Embeddings is not null) Vector(Embeddings, $"{prefix}embed_tokens.weight", new[] { c.VocabSize, h });
         for (int i = 0; i < Layers.Count; i++)
         {
@@ -720,21 +724,23 @@ internal sealed class LlamaNetwork<T>
     public void InitializeLikeReference(Random random)
     {
         double Normal() => Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble());
-        LoadTorchWeights((name, shape) =>
+        // Generated run by run straight into the layers, in the order the reference draws them.
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.Generated((name, shape, offset, values) =>
         {
-            int count = shape.Aggregate(1, (a, s) => a * s);
-            var values = new double[count];
             // lora_B and the projections' biases start at zero.
-            if (name.EndsWith("lora_B.weight", StringComparison.Ordinal) || name.EndsWith(".bias", StringComparison.Ordinal)) return values;
+            if (name.EndsWith("lora_B.weight", StringComparison.Ordinal) || name.EndsWith(".bias", StringComparison.Ordinal))
+            {
+                values.Clear();
+                return;
+            }
             if (name.EndsWith("lora_A.weight", StringComparison.Ordinal))
             {
                 double bound = 1.0 / Math.Sqrt(shape[1]);
-                for (int i = 0; i < count; i++) values[i] = bound * (2 * random.NextDouble() - 1);
-                return values;
+                for (int i = 0; i < values.Length; i++) values[i] = bound * (2 * random.NextDouble() - 1);
+                return;
             }
             bool norm = name.EndsWith("layernorm.weight", StringComparison.Ordinal) || name.EndsWith("norm.weight", StringComparison.Ordinal);
-            for (int i = 0; i < count; i++) values[i] = norm ? 1.0 : 0.02 * Normal();
-            return values;
-        });
+            for (int i = 0; i < values.Length; i++) values[i] = norm ? 1.0 : 0.02 * Normal();
+        }));
     }
 }

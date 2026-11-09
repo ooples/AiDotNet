@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -207,14 +208,16 @@ internal sealed class WenetEncoder<T>
     /// <summary>Loads a wenet encoder's state (<c>{prefix}embed.out.0/1</c>, <c>{prefix}encoders.{i}.*</c>,
     /// <c>{prefix}after_norm</c>).</summary>
     public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix, string embedName = "embed",
-        string encodersName = "encoders")
+        string encodersName = "encoders") => LoadTorchWeights(TorchTensorSource.From(read), prefix, embedName, encodersName);
+
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix, string embedName = "embed", string encodersName = "encoders")
     {
         var c = Configuration;
         int d = c.OutputSize;
         void Dense(DenseLayer<T> layer, string name, int inputs, int outputs) =>
-            TorchParameters.Linear(_engine, layer, inputs, outputs, read(name + ".weight", new[] { outputs, inputs }), read(name + ".bias", new[] { outputs }));
+            TorchParameters.Linear(_engine, layer, inputs, outputs, source, name + ".weight", name + ".bias");
         void Norm(LayerNormalizationLayer<T> norm, string name) =>
-            TorchParameters.LayerNorm(_engine, norm, read(name + ".weight", new[] { d }), read(name + ".bias", new[] { d }));
+            TorchParameters.LayerNorm(_engine, norm, source, name + ".weight", name + ".bias");
         Dense(EmbedLinear, $"{prefix}{embedName}.out.0", c.InputSize, d);
         Norm(EmbedNorm, $"{prefix}{embedName}.out.1");
         for (int i = 0; i < Blocks.Count; i++)
@@ -228,9 +231,9 @@ internal sealed class WenetEncoder<T>
             Dense(b.Key, p + ".self_attn.linear_k", d, d);
             Dense(b.Value, p + ".self_attn.linear_v", d, d);
             Dense(b.Output, p + ".self_attn.linear_out", d, d);
-            TorchParameters.Linear(b.PositionProjection, d, d, read(p + ".self_attn.linear_pos.weight", new[] { d, d }));
-            TorchParameters.Linear(b.BiasU, 1, d, read(p + ".self_attn.pos_bias_u", new[] { c.Heads, d / c.Heads }));
-            TorchParameters.Linear(b.BiasV, 1, d, read(p + ".self_attn.pos_bias_v", new[] { c.Heads, d / c.Heads }));
+            TorchParameters.Linear(b.PositionProjection, d, d, source, p + ".self_attn.linear_pos.weight");
+            TorchParameters.Linear(b.BiasU, 1, d, source, p + ".self_attn.pos_bias_u", new[] { c.Heads, d / c.Heads });
+            TorchParameters.Linear(b.BiasV, 1, d, source, p + ".self_attn.pos_bias_v", new[] { c.Heads, d / c.Heads });
             Norm(b.NormFeedForward, p + (conformer ? ".norm_ff" : ".norm2"));
             Dense(b.FeedForward1, p + ".feed_forward.w_1", d, c.LinearUnits);
             Dense(b.FeedForward2, p + ".feed_forward.w_2", c.LinearUnits, d);

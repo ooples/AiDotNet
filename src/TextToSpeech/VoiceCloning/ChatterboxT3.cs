@@ -143,22 +143,22 @@ internal sealed class ChatterboxT3<T>
         return predicted.Where(token => token >= 0 && token < _options.CodebookSize).ToArray();
     }
 
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads <c>t3_cfg.safetensors</c> from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    public void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         int h = _options.LLMDim;
-        TextEmbedding.LoadTable(read("text_emb.weight", new[] { _options.VocabSize, h }));
-        SpeechEmbedding.LoadTable(read("speech_emb.weight", new[] { _options.SpeechVocabularySize, h }));
-        TextPositionEmbedding.LoadTable(read("text_pos_emb.emb.weight", new[] { _options.MaxTextLength + 2, h }));
-        SpeechPositionEmbedding.LoadTable(read("speech_pos_emb.emb.weight", new[] { _options.MaxSpeechTokens + 4, h }));
-        TorchParameters.Linear(_engine, SpeakerProjection, _options.T3SpeakerEmbeddingDim, h,
-            read("cond_enc.spkr_enc.weight", new[] { h, _options.T3SpeakerEmbeddingDim }),
-            read("cond_enc.spkr_enc.bias", new[] { h }));
-        TorchParameters.Linear(EmotionProjection, 1, h, read("cond_enc.emotion_adv_fc.weight", new[] { h, 1 }));
-        _perceiver.LoadTorchWeights(read, "cond_enc.perceiver.");
-        TorchParameters.Linear(TextHead, h, _options.VocabSize, read("text_head.weight", new[] { _options.VocabSize, h }));
-        TorchParameters.Linear(SpeechHead, h, _options.SpeechVocabularySize,
-            read("speech_head.weight", new[] { _options.SpeechVocabularySize, h }));
-        _transformer.LoadTorchWeights(read, "tfmr.");
+        TextEmbedding.LoadTable(source, "text_emb.weight");
+        SpeechEmbedding.LoadTable(source, "speech_emb.weight");
+        TextPositionEmbedding.LoadTable(source, "text_pos_emb.emb.weight");
+        SpeechPositionEmbedding.LoadTable(source, "speech_pos_emb.emb.weight");
+        TorchParameters.Linear(_engine, SpeakerProjection, _options.T3SpeakerEmbeddingDim, h, source, "cond_enc.spkr_enc.weight", "cond_enc.spkr_enc.bias");
+        TorchParameters.Linear(EmotionProjection, 1, h, source, "cond_enc.emotion_adv_fc.weight");
+        _perceiver.LoadTorchWeights(source.AsFunction(), "cond_enc.perceiver.");
+        TorchParameters.Linear(TextHead, h, _options.VocabSize, source, "text_head.weight");
+        TorchParameters.Linear(SpeechHead, h, _options.SpeechVocabularySize, source, "speech_head.weight");
+        _transformer.LoadTorchWeights(source, "tfmr.");
     }
 
     private int ConditionLength => 1 + _options.PerceiverQueries + 1;

@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Audio.Features;
 using AiDotNet.NeuralNetworks.Layers;
@@ -353,38 +354,44 @@ internal sealed class S3Tokenizer<T>
 
     /// <summary>Loads an S3Tokenizer state dict (<c>encoder.conv1/2</c>, <c>encoder.positional_embedding</c>,
     /// <c>encoder.blocks.{i}.*</c>, <c>quantizer._codebook.embed</c>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
         int d = c.State;
         void Dense(DenseLayer<T> layer, string name, int inputs, int outputs) =>
-            TorchParameters.Linear(_engine, layer, inputs, outputs, read(name + ".weight", new[] { outputs, inputs }), read(name + ".bias", new[] { outputs }));
+            TorchParameters.Linear(_engine, layer, inputs, outputs, source, name + ".weight", name + ".bias");
         void Norm(LayerNormalizationLayer<T> norm, string name) =>
-            TorchParameters.LayerNorm(_engine, norm, read(name + ".weight", new[] { d }), read(name + ".bias", new[] { d }));
-        Conv1.LoadTorchWeights(read("encoder.conv1.weight", new[] { d, c.Mels, 3 }), null, read("encoder.conv1.bias", new[] { d }));
-        Conv2.LoadTorchWeights(read("encoder.conv2.weight", new[] { d, d, 3 }), null, read("encoder.conv2.bias", new[] { d }));
+            TorchParameters.LayerNorm(_engine, norm, source, name + ".weight", name + ".bias");
+        Conv1.LoadTorchWeights(source, "encoder.conv1.weight", new[] { d, c.Mels, 3 }, null, "encoder.conv1.bias");
+        Conv2.LoadTorchWeights(source, "encoder.conv2.weight", new[] { d, d, 3 }, null, "encoder.conv2.bias");
         if (c.Version == S3TokenizerVersion.V1)
-            _positions = new Tensor<T>(new[] { c.Context, d },
-                new Vector<T>(read("encoder.positional_embedding", new[] { c.Context, d }).Select(NumOps.FromDouble).ToArray()));
+        {
+            _positions = new Tensor<T>(new[] { c.Context, d });
+            source.CopyTo("encoder.positional_embedding", new[] { c.Context, d }, _positions);
+        }
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
             string p = $"encoder.blocks.{i}";
             Norm(b.AttentionNorm, p + ".attn_ln");
             Dense(b.Query, p + ".attn.query", d, d);
-            TorchParameters.Linear(b.Key, d, d, read(p + ".attn.key.weight", new[] { d, d }));
+            TorchParameters.Linear(b.Key, d, d, source, p + ".attn.key.weight");
             Dense(b.Value, p + ".attn.value", d, d);
             Dense(b.Output, p + ".attn.out", d, d);
             Norm(b.MlpNorm, p + ".mlp_ln");
             Dense(b.Mlp1, p + ".mlp.0", d, 4 * d);
             Dense(b.Mlp2, p + ".mlp.2", 4 * d, d);
             if (b.Fsmn is not null)
-                b.Fsmn.LoadTorchWeights(read(p + ".attn.fsmn_block.weight", new[] { d, 1, FsmnKernel }), null, new double[d]);
+                b.Fsmn.LoadTorchWeights(source, p + ".attn.fsmn_block.weight", new[] { d, 1, FsmnKernel }, null, null);
         }
         if (ProjectDown is not null)
             Dense(ProjectDown, "quantizer._codebook.project_down", d, 8);
         else
-            _codebook = new Tensor<T>(new[] { c.CodebookSize, d },
-                new Vector<T>(read("quantizer._codebook.embed", new[] { c.CodebookSize, d }).Select(NumOps.FromDouble).ToArray()));
+        {
+            _codebook = new Tensor<T>(new[] { c.CodebookSize, d });
+            source.CopyTo("quantizer._codebook.embed", new[] { c.CodebookSize, d }, _codebook);
+        }
     }
 }

@@ -143,6 +143,64 @@ internal static class TorchParameters
         norm.SetParameters(v);
     }
 
+    // ---------------------------------------------------------------- from a typed source (no per-tensor arrays)
+
+    /// <summary>Loads <c>weight [out, in]</c> (and <c>bias [out]</c>, zero without a name) into a dense layer straight from
+    /// <paramref name="source"/>, materializing the layer first.</summary>
+    public static void Linear<T>(IEngine engine, DenseLayer<T> layer, int inputs, int outputs, AiDotNet.ModelLoading.TorchTensorSource source,
+        string weightName, string? biasName)
+    {
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+            layer.Forward(new Tensor<T>(new[] { 1, inputs }));
+        var w = layer.GetWeights();                                                                       // [in, out]
+        source.CopyTransposedTo(weightName, outputs, inputs, w);
+        engine.InvalidatePersistentTensor(w);
+        var b = layer.GetBiases();
+        if (biasName is null) b.AsWritableSpan().Clear();
+        else source.CopyTo(biasName, new[] { outputs }, b);
+        engine.InvalidatePersistentTensor(b);
+    }
+
+    /// <summary>Loads <c>weight [out, in]</c> into a bias-free linear layer straight from <paramref name="source"/>; a
+    /// value holder (<c>[1, count]</c>) is <c>inputs = 1</c>; <paramref name="shape"/> is the stored shape when it is not
+    /// <c>[out, in]</c>.</summary>
+    public static void Linear<T>(BiasFreeLinearLayer<T> layer, int inputs, int outputs, AiDotNet.ModelLoading.TorchTensorSource source, string name,
+        int[]? shape = null)
+    {
+        var weights = layer.Weights;
+        if (weights.Length != inputs * outputs || weights.Lifetime == WeightLifetime.Streaming)
+        {
+            // No storage to write into: the SetParameters route.
+            Linear(layer, inputs, outputs, source.Read(name, shape ?? new[] { outputs, inputs }));
+            return;
+        }
+        // A [count] or [1, count] holder is stored in order; a [out, in] matrix transposes into [in, out].
+        if (inputs == 1) source.CopyTo(name, shape ?? new[] { outputs, inputs }, weights);
+        else source.CopyTransposedTo(name, outputs, inputs, weights);
+        AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(weights);
+    }
+
+    /// <summary>Loads an <c>nn.LayerNorm</c>'s weight and bias straight from <paramref name="source"/>.</summary>
+    public static void LayerNorm<T>(IEngine engine, LayerNormalizationLayer<T> layer, AiDotNet.ModelLoading.TorchTensorSource source,
+        string weightName, string biasName)
+    {
+        var gamma = layer.GetGammaTensor();
+        var beta = layer.GetBetaTensor();
+        source.CopyTo(weightName, new[] { gamma.Length }, gamma);
+        source.CopyTo(biasName, new[] { beta.Length }, beta);
+        engine.InvalidatePersistentTensor(gamma);
+        engine.InvalidatePersistentTensor(beta);
+    }
+
+    /// <summary>Loads an <c>nn.BatchNorm</c> (<paramref name="prefix"/><c>weight</c>, <c>bias</c>, <c>running_mean</c>,
+    /// <c>running_var</c>) from <paramref name="source"/>.</summary>
+    public static void BatchNorm<T>(BatchNormalizationLayer<T> norm, AiDotNet.ModelLoading.TorchTensorSource source, string prefix, int channels)
+    {
+        var shape = new[] { channels };
+        BatchNorm(norm, source.Read(prefix + "weight", shape), source.Read(prefix + "bias", shape),
+            source.Read(prefix + "running_mean", shape), source.Read(prefix + "running_var", shape));
+    }
+
     /// <summary>Loads an <c>nn.LayerNorm</c>'s weight and bias.</summary>
     public static void LayerNorm<T>(IEngine engine, LayerNormalizationLayer<T> layer, double[] weight, double[] bias)
     {
