@@ -14007,14 +14007,14 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             else if (model.ClassName == "BiMVFI" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))
             {
-                // The release's network at CI width with its three training levels (64x64 is a multiple of 16). The
-                // one-cycle schedule is shortened to 100 steps so its 1% warm-up ends after the first step; at the
-                // release's length the probes would run entirely at the warm-up's starting rate, max / 25.
+                // The release network at CI width retains all three training levels and the one-cycle schedule.
+                // A 100-step memorization task needs an explicit test-scale peak rate: the release's 1.5e-4
+                // over this short cycle reduced loss by under 1%. Pin the teacher's RNG as well as layer initialization.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.ThreeDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputHeight: 64, inputWidth: 64, inputDepth: 3, outputSize: 3), " +
-                    "options: new AiDotNet.Video.Options.BiMVFIOptions { FeatureChannels = 4, TotalIterations = 100 })";
+                    "options: new AiDotNet.Video.Options.BiMVFIOptions { FeatureChannels = 4, TotalIterations = 100, LearningRate = 1e-3, Seed = 1337 })";
             }
             else if (model.ClassName == "ABME" && model.TypeParameterCount == 1
                      && typeName.StartsWith("AiDotNet.Video.FrameInterpolation.", System.StringComparison.Ordinal))

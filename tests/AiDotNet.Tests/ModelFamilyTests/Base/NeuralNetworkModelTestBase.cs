@@ -7805,13 +7805,17 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                 network.SetTrainingMode(false);
             },
             prepareOptions: options => OptionSensitivityFixtureSetup.PrepareOptions(options, option),
-            describe: network => DescribeNetwork(network, input),
+            describe: network => network is AiDotNet.TextToSpeech.EndToEnd.Kokoro<T> kokoro
+                ? AiDotNet.Tests.TextToSpeech.KokoroOptionFixture.Describe(kokoro, option) : DescribeNetwork(network, input),
             prepareModel: PrepareRebuiltNetwork,
             parameterCount: OptionSensitivityFixtureSetup.ParameterCountBeforeFitting,
             parameterShapes: network => OptionSensitivityFixtureSetup.UsesFittedAssets(network)
                 ? EnumerateParameterChunks(network).Select(chunk => chunk.Shape.ToArray()).ToArray()
                 : Array.Empty<int[]>(),
-            controlGroup: controlGroup);
+            controlGroup: controlGroup,
+            observedParts: controlGroup.StartsWith("kokoro-", StringComparison.Ordinal)
+                ? network => AiDotNet.Tests.TextToSpeech.KokoroOptionFixture.Describe(
+                    (AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>)network, option) : null);
         OptionSensitivityHarness.AssertChangesObservableBehaviour(GetType(), option, probe);
     }
 
