@@ -22220,3 +22220,8 @@ AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.Us
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
+AiDotNet.Models.Options.GradientBasedOptimizerOptions<T, TInput, TOutput>.RegularizationOrder.get -> AiDotNet.Models.Options.RegularizationOrder
+AiDotNet.Models.Options.GradientBasedOptimizerOptions<T, TInput, TOutput>.RegularizationOrder.set -> void
+AiDotNet.Models.Options.RegularizationOrder
+AiDotNet.Models.Options.RegularizationOrder.ClipThenRegularize = 0 -> AiDotNet.Models.Options.RegularizationOrder
+AiDotNet.Models.Options.RegularizationOrder.RegularizeThenClip = 1 -> AiDotNet.Models.Options.RegularizationOrder

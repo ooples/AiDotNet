@@ -726,7 +726,8 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
         // gradients large enough to drive logits past float range in a few
         // iterations — ODISE diverged 770× (initial MSE 0.24 → final 184.69)
         // before clipping was wired into the tape path.
-        if (GradientOptions.EnableGradientClipping)
+        // Gradients clipped ahead of the step (regularization after the clip) are not clipped again.
+        if (GradientOptions.EnableGradientClipping && !GradientsClippedAhead)
         {
             switch (GradientOptions.GradientClippingMethod)
             {
