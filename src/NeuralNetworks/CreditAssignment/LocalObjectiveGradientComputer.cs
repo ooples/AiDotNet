@@ -83,7 +83,10 @@ internal static class LocalObjectiveGradientComputer<T>
             for (int i = 0; i < readoutStart; i++)
             {
                 if (paramsOf[i].Count > 0 && i > 0)
-                    current = Detach(current); // stop-gradient: layer i's params see nothing from below
+                    // stop-gradient: layer i's params see nothing from below. StopGradient is a device copy with no
+                    // backward (torch's detach); the host round-trip it replaces downloaded and re-uploaded every
+                    // hidden activation each step on a GPU engine.
+                    current = engine.StopGradient(current);
                 current = layers[i].Forward(current);
                 if (paramsOf[i].Count > 0) hiddenOut[i] = current;
             }
@@ -163,7 +166,6 @@ internal static class LocalObjectiveGradientComputer<T>
         return engine.ReduceSum(t, axes, keepDims: false);
     }
 
-    private static Tensor<T> Detach(Tensor<T> t) => new Tensor<T>(t.Shape.ToArray(), t.ToVector());
 
     internal static List<Tensor<T>> CollectParameters(ILayer<T> layer)
     {
