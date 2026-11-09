@@ -1713,7 +1713,8 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.Finance.Forecasting.Foundation.YingLong`1::UseIntercept", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Neural.DeepAR`1::AutocorrelationCorrection", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Neural.DeepAR`1::BatchSize", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.Finance.Forecasting.Neural.DeepAR`1::CovariateSize", OptionSensitivityOutcome.Insensitive },
+            // This tensor-facing model has no channel for future covariates; DeepARModel provides that interface.
+            { "AiDotNet.Finance.Forecasting.Neural.DeepAR`1::CovariateSize", OptionSensitivityOutcome.NoValidPerturbation },
             { "AiDotNet.Finance.Forecasting.Neural.DeepAR`1::EarlyStoppingMinDelta", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Neural.DeepAR`1::EarlyStoppingPatience", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Finance.Forecasting.Neural.DeepAR`1::EmbeddingDimension", OptionSensitivityOutcome.Insensitive },
@@ -4299,6 +4300,8 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.MultiModal.SpeechT5`1::NumFlowSteps", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.MultiModal.SpeechT5`1::WeightDecay", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.MultiModal.SpiritLM`1::SampleRate", OptionSensitivityOutcome.Insensitive },
+            // The public audio-token protocol reserves exactly 1024 linguistic codes.
+            { "AiDotNet.TextToSpeech.MultiModal.StepAudio`1::LinguisticCodes", OptionSensitivityOutcome.NoValidPerturbation },
             { "AiDotNet.TextToSpeech.MultiModal.StepAudio`1::CodecFrameRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.MultiModal.StepAudio`1::FftSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.MultiModal.StepAudio`1::FirstPacketLatencyMs", OptionSensitivityOutcome.Insensitive },
@@ -4908,6 +4911,8 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.Video.Enhancement.StableVideoSR`1::MaximumNoiseLevel", OptionSensitivityOutcome.NoValidPerturbation },
             { "AiDotNet.Video.Enhancement.StableVideoSR`1::NumFeatures", OptionSensitivityOutcome.NoValidPerturbation },
             { "AiDotNet.Video.Enhancement.StableVideoSR`1::NumTemporalModules", OptionSensitivityOutcome.NoValidPerturbation },
+            // Compatibility alias of NumTemporalModules, subject to the same nine-module topology.
+            { "AiDotNet.Video.Enhancement.StableVideoSR`1::NumTemporalLayers", OptionSensitivityOutcome.NoValidPerturbation },
             { "AiDotNet.Video.Enhancement.StableVideoSR`1::PropagationSteps", OptionSensitivityOutcome.NoValidPerturbation },
             { "AiDotNet.Video.Enhancement.StableVideoSR`1::ScaleFactor", OptionSensitivityOutcome.NoValidPerturbation },
             { "AiDotNet.Video.Enhancement.StableVideoSR`1::Seed", OptionSensitivityOutcome.Insensitive },

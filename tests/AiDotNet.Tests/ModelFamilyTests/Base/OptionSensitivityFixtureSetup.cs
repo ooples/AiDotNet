@@ -1,5 +1,6 @@
 using AiDotNet.Interfaces;
 using AiDotNet.Tests.TextToSpeech;
+using AiDotNet.Tests.Video;
 
 namespace AiDotNet.Tests.ModelFamilyTests.Base;
 
@@ -46,6 +47,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => option == nameof(AiDotNet.Models.Options.ModelOptions.Seed) ? "model-options-seed"
+            : network is AiDotNet.Video.Enhancement.MGLDVSR<T> && MgldVsrOptionFixture.Handles(option) ? "mgldvsr-" + option
+            : network is AiDotNet.Video.Enhancement.FlashVSR<T> && FlashVsrOptionFixture.Handles(option) ? "flashvsr-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option == "MaximumPhoneDuration" ? "voicebox-duration-cap"
             : network is AiDotNet.TextToSpeech.MultiModal.MinMo<T> && MinMoOptionFixture.Handles(option) ? "minmo-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.CSM<T> && CsmOptionFixture.Handles(option) ? "csm-" + option
@@ -176,6 +179,12 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.Video.Enhancement.MGLDVSR<T> mgldVsr && MgldVsrOptionFixture.Handles(option))
+            return MgldVsrOptionFixture.Observe(mgldVsr, option, () => observe(network, input));
+
+        if (network is AiDotNet.Video.Enhancement.FlashVSR<T> flashVsr && FlashVsrOptionFixture.Handles(option))
+            return FlashVsrOptionFixture.Observe(flashVsr, input, option);
+
         if (network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> durationVoicebox && option == "MaximumPhoneDuration")
             return VoiceboxDurationOptionFixture.Observe(durationVoicebox);
 
@@ -851,6 +860,12 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.Video.Options.MGLDVSROptions mgldVsrOptions)
+            MgldVsrOptionFixture.Prepare(mgldVsrOptions, option);
+
+        if (options is AiDotNet.Video.Options.FlashVSROptions flashVsrOptions)
+            FlashVsrOptionFixture.Prepare(flashVsrOptions, option);
+
         if (options is AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions durationVoiceboxOptions && option == "MaximumPhoneDuration")
             durationVoiceboxOptions.MaximumPhoneDuration = 2;
 
