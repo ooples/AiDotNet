@@ -271,7 +271,7 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
             var norms = Engine.TensorPow(Engine.TensorAddScalar(Engine.ReduceSum(Engine.TensorMultiply(v, v), new[] { 1 }, keepDims: true),
                 NumOps.FromDouble(1e-24)), NumOps.FromDouble(-0.5));                                          // [rows, 1]
             var scale = Engine.TensorTile(Engine.TensorMultiply(Engine.Reshape(_gain, new[] { rows, 1 }), norms), new[] { 1, per });
-            return Engine.Reshape(Engine.TensorMultiply(v, scale), _direction._shape);
+            return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, scale), _direction._shape));
         }
 
         // Miyato et al. 2018, Algorithm 1 (torch.nn.utils.spectral_norm): in training, one power iteration
@@ -313,7 +313,15 @@ public partial class NormedConv1DLayer<T> : LayerBase<T>, IShapeContract
         for (int c = 0; c < per; c++) vT[c, 0] = NumOps.FromDouble(vVec[c]);
         var sigma = Engine.TensorMatMul(Engine.TensorMatMul(uT, v), vT);                                    // [1, 1]
         var inverse = Engine.TensorTile(Engine.TensorPow(sigma, NumOps.FromDouble(-1)), new[] { rows, per });
-        return Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape);
+        return InvalidateComputedKernelCaches(Engine.Reshape(Engine.TensorMultiply(v, inverse), _direction._shape));
+    }
+
+    private Tensor<T> InvalidateComputedKernelCaches(Tensor<T> kernel)
+    {
+        // A recomputed kernel can reuse scratch storage whose array still keys an older
+        // convolution transpose or packed GEMM panel. Consumers must use the current bytes.
+        Engine.InvalidatePersistentTensor(kernel);
+        return kernel;
     }
 
     /// <inheritdoc />
