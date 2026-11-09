@@ -3,7 +3,6 @@ using AiDotNet.Audio.Generation;
 using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
-using AiDotNet.Tests.ModelFamilyTests.Base;
 using AiDotNet.TextToSpeech.VoiceCloning;
 
 namespace AiDotNet.Tests.TextToSpeech;
@@ -43,7 +42,7 @@ internal static class MetaVoiceNativeFixture
         var initial = model.GetParameters();
         var numeric = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         Initial.Remove(model);
-        Initial.Add(model, new InitialWeights { Hash = OptionSensitivityHarness.Fingerprint(
+        Initial.Add(model, new InitialWeights { Hash = TtsPaperNumerics.Fingerprint(
             Enumerable.Range(0, initial.Length).Select(i => numeric.ToDouble(initial[i]))) });
         var engine = AiDotNetEngine.Current;
         model.LoadLanguageModelCheckpoints(FilePath("metavoice_invariant_first.pt"), FilePath("metavoice_invariant_second.pt"));
@@ -119,9 +118,9 @@ internal static class MetaVoiceOptionFixture
         var numeric = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         if (option is "RawDecoderOutput" or "EnhanceOutput")
         {
-            try { return OptionSensitivityHarness.Fingerprint(model.Predict(input).Select(value => numeric.ToDouble(value))); }
+            try { return TtsPaperNumerics.Fingerprint(model.Predict(input).Select(value => numeric.ToDouble(value))); }
             catch (InvalidOperationException error) when (error.Message.StartsWith("Load the original DeepFilterNet3 checkpoint", StringComparison.Ordinal))
-            { return OptionSensitivityHarness.Fingerprint(Array.Empty<double>()); }
+            { return TtsPaperNumerics.Fingerprint(Array.Empty<double>()); }
         }
         var options = (MetaVoice1BOptions)model.GetOptions();
         var audio = new Tensor<T>(new[] { 1280 });
@@ -136,8 +135,8 @@ internal static class MetaVoiceOptionFixture
             var tokenizer = (MetaVoiceTokenizer)modelType.GetField("_secondTokenizer", flags)!.GetValue(model)!;
             var tokens = MetaVoiceGeneration.SecondStageInput(tokenizer.Encode("test"),
                 new[] { new[] { 1, 2, 3, 4 }, new[] { 2, 3, 4, 5 } }, Math.Min(16, options.SecondStageContext));
-            return OptionSensitivityHarness.Combine(decoder.Forward(tokens, speaker).Logits.Select(logits =>
-                OptionSensitivityHarness.Fingerprint(logits.Select(value => numeric.ToDouble(value)))).ToArray());
+            return TtsPaperNumerics.Combine(decoder.Forward(tokens, speaker).Logits.Select(logits =>
+                TtsPaperNumerics.Fingerprint(logits.Select(value => numeric.ToDouble(value)))).ToArray());
         }
         var first = (MetaVoiceGpt<T>)modelType.GetField("_first", flags)!.GetValue(model)!;
         var textTokenizer = (MetaVoiceTokenizer)modelType.GetField("_firstTokenizer", flags)!.GetValue(model)!;
@@ -147,7 +146,7 @@ internal static class MetaVoiceOptionFixture
                 .Logits[0].Select(value => numeric.ToDouble(value)).ToArray(), _ => 0.5, true,
             options.FirstStageTemperature, options.FirstStageTopK, options.FirstStageTopP,
             (options.SpeakerGuidance, options.PromptGuidance),
-            observeProbabilities: (_, probabilities) => observation = OptionSensitivityHarness.Fingerprint(probabilities));
+            observeProbabilities: (_, probabilities) => observation = TtsPaperNumerics.Fingerprint(probabilities));
         return observation;
     }
 }
