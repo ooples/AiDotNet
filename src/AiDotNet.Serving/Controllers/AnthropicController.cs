@@ -382,18 +382,11 @@ public sealed class AnthropicController : ControllerBase
 
     private int ResolveEosTokenId(ITokenizer tokenizer)
     {
+        // Check membership first: a lookup of a token the vocabulary lacks returns the unknown-token id,
+        // which would end generation on every unknown token.
         var eos = tokenizer.SpecialTokens?.EosToken;
-        if (string.IsNullOrEmpty(eos)) return -1;
-        try
-        {
-            var ids = tokenizer.ConvertTokensToIds(new List<string> { eos });
-            return ids.Count > 0 ? ids[0] : -1;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to resolve the EOS token id for the tokenizer.");
-            return -1;
-        }
+        if (string.IsNullOrEmpty(eos) || !tokenizer.Vocabulary.ContainsToken(eos)) return -1;
+        return tokenizer.Vocabulary.GetTokenId(eos);
     }
 
     private void BeginSse()
