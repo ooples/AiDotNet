@@ -13,8 +13,15 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </para>
 /// <para><b>For Beginners:</b> These options configure the F5TTS model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(InfillingOptionsConverter))]
 public class E2TTSOptions : TtsModelOptions
 {
+    /// <summary>The earlier half of the paired U-Net Transformer (12 blocks in E2 TTS Base).</summary>
+    public override int NumEncoderLayers { get => NumLayers / 2; set => NumLayers = checked(2 * value); }
+
+    /// <summary>The later half of the paired U-Net Transformer; changing either half preserves the mirrored skips.</summary>
+    public override int NumDecoderLayers { get => NumLayers / 2; set => NumLayers = checked(2 * value); }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>

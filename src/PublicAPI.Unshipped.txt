@@ -1,4 +1,12 @@
 #nullable enable
+override AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.FlowDiffusion.E2TTSOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.E2TTSOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.FlowDiffusion.E2TTSOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.E2TTSOptions.NumDecoderLayers.set -> void
 override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.HopSize.get -> int
 override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.HopSize.set -> void
 override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.NumDecoderLayers.get -> int

@@ -89,7 +89,7 @@ public partial class E2TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
     {
         _options = options ?? new E2TTSOptions();
         Options = _options;
-        if (_options.NumLayers % 2 != 0)
+        if (_options.NumLayers < 2 || _options.NumLayers % 2 != 0)
             throw new ArgumentException("The U-Net Transformer pairs its layers; NumLayers must be even.", nameof(options));
         _useNativeMode = true;
         SeedTraining(_options.SamplingSeed);
@@ -97,8 +97,9 @@ public partial class E2TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
-        if (_options.MaxGradientNorm > 0)
-            MaxGradNorm = NumOps.FromDouble(_options.MaxGradientNorm);
+        if (double.IsNaN(_options.MaxGradientNorm) || double.IsInfinity(_options.MaxGradientNorm))
+            throw new ArgumentOutOfRangeException(nameof(options), "MaxGradientNorm must be finite.");
+        MaxGradNorm = NumOps.FromDouble(Math.Max(0, _options.MaxGradientNorm));
         _optimizer = optimizer ?? CreateDefaultOptimizer();
         InitializeLayers();
     }
@@ -180,14 +181,13 @@ public partial class E2TTS<T> : FlowMatchingTtsModelBase<T>, IAcousticModel<T>
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
     {
-        int warmup = Math.Max(1, _options.WarmupSteps), total = Math.Max(warmup + 1, _options.TotalSteps);
-        var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(_options.LearningRate,
-            step => step < warmup ? (step + 1.0) / warmup : Math.Max(0.0, (double)(total - step) / (total - warmup)));
+        var scheduler = InfillingTrainingSchedule.Create(_options.LearningRate, _options.WarmupSteps, _options.TotalSteps);
         return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = _options.LearningRate,
                 WeightDecay = _options.WeightDecay,
+                EnableGradientClipping = false, // The model applies the configured norm clip once, before AdamW.
                 LearningRateScheduler = scheduler,
                 SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
             }));

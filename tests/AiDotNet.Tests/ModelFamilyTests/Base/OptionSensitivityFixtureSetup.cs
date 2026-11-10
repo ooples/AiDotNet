@@ -46,6 +46,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.F5TTS<T> or AiDotNet.TextToSpeech.FlowDiffusion.E2TTS<T> ? "infilling-" + option
             : network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> && option == "RollbackThreshold" ? "4k-reflection"
             : network is AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T> && option == "StaticChunkSize" ? "cosy-streaming-flow"
             : network is AiDotNet.TextToSpeech.CodecBased.UniAudio<T> ? "uniaudio-" + option
@@ -792,6 +793,18 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.F5TTS<T> or AiDotNet.TextToSpeech.FlowDiffusion.E2TTS<T>
+            && option == "AudioDropProbability")
+        {
+            var flow = (AiDotNet.TextToSpeech.FlowDiffusion.FlowMatchingTtsModelBase<T>)network;
+            var infillingOptions = (AiDotNet.TextToSpeech.TtsModelOptions)flow.GetOptions();
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            // A real partially observed mel span: the minimum recording may leave no audio condition to drop.
+            var mel = new Tensor<T>(new[] { 16, infillingOptions.MelChannels });
+            for (int i = 0; i < mel.Length; i++) mel[i] = ops.FromDouble(0.4 * Math.Sin(i * 0.17) + 0.2 * Math.Cos(i * 0.31));
+            flow.Train(input, mel);
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.EndToEnd.VITS2<T> alignment && option == "AlignmentNoiseDecay")
         {
             var settings = (AiDotNet.TextToSpeech.EndToEnd.VITS2Options)alignment.GetOptions();
@@ -951,6 +964,30 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions f5)
+        {
+            f5.WarmupSteps = 0;
+            if (option == "TotalSteps") { f5.WarmupSteps = 0; f5.TotalSteps = 6; }
+            if (option == "MaxGradientNorm") f5.MaxGradientNorm = 1e-8;
+            if (option == "AudioDropProbability")
+            {
+                f5.ConditionDropProbability = 0;
+                f5.MaskFractionMin = f5.MaskFractionMax = 0.5;
+                f5.AudioDropProbability = 0;
+            }
+        }
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.E2TTSOptions e2)
+        {
+            e2.WarmupSteps = 0;
+            if (option == "TotalSteps") { e2.WarmupSteps = 0; e2.TotalSteps = 6; }
+            if (option == "MaxGradientNorm") e2.MaxGradientNorm = 1e-8;
+            if (option == "AudioDropProbability")
+            {
+                e2.ConditionDropProbability = 0;
+                e2.MaskFractionMin = e2.MaskFractionMax = 0.5;
+                e2.AudioDropProbability = 0;
+            }
+        }
         if (options is AiDotNet.TextToSpeech.Classic.GradTTSOptions grad && option == "NumDecoderLayers")
         {
             // Three released resolutions and eight mel bins allow a fourth genuine U-Net resolution.
