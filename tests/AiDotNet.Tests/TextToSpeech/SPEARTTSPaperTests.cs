@@ -19,7 +19,7 @@ public class SPEARTTSPaperTests
 {
     private const int Levels = 2, Codes = 16, SemanticCodes = 16;
 
-    private static SPEARTTSOptions Tiny() => new()
+    internal static SPEARTTSOptions Tiny() => new()
     {
         HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 3, NumDecoderLayers = 3, ReadingFeedForwardDim = 32,
         ReadingKeyValueDim = 8, ReadingTrainableEncoderLayers = 1, BacktranslationTrainableDecoderLayers = 1,

@@ -203,6 +203,9 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         var o = _options;
         if (o.SemanticCodes < 1 || o.NumCodebooks < 1 || o.CodebookSize < 1)
             throw new ArgumentException("SPEAR-TTS needs semantic codes, codec levels and codes per level.");
+        if (o.SampleRate <= 0 || o.HopSize <= 0 || o.SampleRate % o.HopSize != 0 || o.SemanticFrameRate <= 0
+            || (o.SampleRate / o.HopSize) % o.SemanticFrameRate != 0)
+            throw new ArgumentException("The native codec clock must be an exact integer multiple of the semantic frame rate.");
         if (o.PretrainingDeletionProbability < 0 || o.PretrainingDeletionProbability >= 1)
             throw new ArgumentOutOfRangeException(nameof(o.PretrainingDeletionProbability), "The deletion probability lies in [0, 1).");
         if (o.ReadingTrainableEncoderLayers < 0 || o.ReadingTrainableEncoderLayers > o.NumEncoderLayers)
@@ -291,7 +294,10 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         }
 
         var o = _options;
-        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.SamplingSeed);
+        // A process-wide fallback reported by RandomSeed is not an explicit architecture override.
+        int? architectureSeed = Architecture.HasExplicitRandomSeed ? Architecture.RandomSeed : null;
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(
+            architectureSeed ?? o.Seed ?? Architecture.RandomSeed ?? o.SamplingSeed);
         // T5-Large as T5 v1.0 defines it: ReLU feed-forward and the decoder's embedding tied to its output. The encoder
         // reads its own table, since finetuning updates "the encoder embeddings" with "the entire decoder" frozen.
         var reading = new T5Configuration(
@@ -315,7 +321,8 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         var codecOptions = (SoundStreamOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(o.SoundStream);
         codecOptions.IncludeDiscriminators = false;
         var codec = new SoundStream<T>(new NeuralNetworkArchitecture<T>(InputType.OneDimensional,
-            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1) { RandomSeed = Architecture.RandomSeed }, codecOptions);
+            NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1)
+            { RandomSeed = architectureSeed ?? codecOptions.Seed ?? o.Seed ?? Architecture.RandomSeed ?? o.SamplingSeed }, codecOptions);
         if (codec.CodebookSize != o.CodebookSize)
             throw new ArgumentException($"SPEAR-TTS's {o.CodebookSize} codes per level must equal the codec's {codec.CodebookSize}.");
         int codecRate = ((IAudioCodec<T>)codec).SampleRate;
@@ -758,7 +765,6 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         if (!HasPaperLayers) return base.PredictCore(input);
-        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         bool wasTraining = IsTrainingMode;
         SetTrainingMode(false);
         try
@@ -792,14 +798,8 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
             prefix.Add(SpeakingSeparator);
             AppendAcoustic(prefix, promptCodes, 0, 0, promptCodes.GetLength(1));
 
-            int levels = o.NumCodebooks, n = o.CodebookSize, offset = AcousticOffset, end = SpeakingEnd;
-            // Each step emits the next level's code; the end may close a frame, but not before the first (ending at once
-            // would render no audio).
-            var generated = Speaking.Generate(prefix, o.Temperature, o.MaxAcousticFrames * levels, (step, v) =>
-            {
-                int level = step % levels;
-                return (v >= offset + level * n && v < offset + (level + 1) * n) || (level == 0 && step > 0 && v == end);
-            }, end, random);
+            int levels = o.NumCodebooks, n = o.CodebookSize, offset = AcousticOffset;
+            var generated = SampleAcousticTokens(prefix);
             int count = generated.Count / levels;
             if (count == 0) throw new InvalidOperationException("S2 generated no acoustic frames.");
             var target = new int[levels, count];
@@ -812,6 +812,20 @@ public partial class SPEARTTS<T> : TtsModelBase<T>, ICodecTts<T>
         {
             SetTrainingMode(wasTraining);
         }
+    }
+
+    // Shared by waveform synthesis and native token-level checks, before codec decoding can hide a sampling change.
+    internal List<int> SampleAcousticTokens(IReadOnlyList<int> prefix)
+    {
+        var o = _options;
+        int levels = o.NumCodebooks, n = o.CodebookSize, offset = AcousticOffset, end = SpeakingEnd;
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed);
+        // The end can close a complete frame, and only after the first frame.
+        return Speaking.Generate(prefix, o.Temperature, o.MaxAcousticFrames * levels, (step, v) =>
+        {
+            int level = step % levels;
+            return (v >= offset + level * n && v < offset + (level + 1) * n) || (level == 0 && step > 0 && v == end);
+        }, end, random);
     }
 
     /// <inheritdoc />

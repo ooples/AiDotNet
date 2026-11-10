@@ -1,4 +1,12 @@
 #nullable enable
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.SampleRate.get -> int
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.SampleRate.set -> void
+virtual AiDotNet.TextToSpeech.TtsModelOptions.SampleRate.get -> int
+virtual AiDotNet.TextToSpeech.TtsModelOptions.SampleRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions.SampleRate.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions.SampleRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions.HopSize.set -> void
 virtual AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T>.RecordingPair(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
 override AiDotNet.TextToSpeech.Vocoders.WaveGlow<T>.RecordingPair(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
 override AiDotNet.TextToSpeech.Vocoders.WaveGlow<T>.TrainingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)

@@ -48,6 +48,7 @@ internal static class OptionSensitivityFixtureSetup
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
             : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? "chatterbox-published-perth"
             : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
+            : network is AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T> && SpearOptionFixture.Handles(option) ? "spear-" + option
             : network is AiDotNet.TextToSpeech.Latest.OuteTTS<T> && OuteOptionFixture.Handles(option) ? "oute-" + option
             : network is AiDotNet.TextToSpeech.FlowDiffusion.F5TTS<T> or AiDotNet.TextToSpeech.FlowDiffusion.E2TTS<T> ? "infilling-" + option
             : network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> && option == "RollbackThreshold" ? "4k-reflection"
@@ -204,6 +205,8 @@ internal static class OptionSensitivityFixtureSetup
             // Run the real final synthesis stage with the hash-verified released checkpoint configured below.
             return OptionSensitivityHarness.Fingerprint(marked.Watermarked(ChatterboxFixture.Recording<T>())
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T> spear && SpearOptionFixture.Handles(option))
+            return OptionSensitivityHarness.Fingerprint(SpearOptionFixture.Observe(spear, option));
         if (network is AiDotNet.TextToSpeech.Latest.OuteTTS<T> oute && OuteOptionFixture.Handles(option))
             return OptionSensitivityHarness.Fingerprint(OuteOptionFixture.Observe(oute, option));
         if (network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> agent && option == "RollbackThreshold")
@@ -742,6 +745,7 @@ internal static class OptionSensitivityFixtureSetup
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? 0
         : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? 0
+        : network is AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T> && SpearOptionFixture.Handles(option) ? 0
         : network is AiDotNet.TextToSpeech.Latest.OuteTTS<T> && OuteOptionFixture.Handles(option) ? 0
         : network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> && option == "RollbackThreshold" ? 0
         // Graph, inference and dropout probes already observe their native path directly; reserve the
@@ -979,6 +983,7 @@ internal static class OptionSensitivityFixtureSetup
             chatterbox.WatermarkModelPath = AiDotNet.Tests.Audio.PerthReleasedCheckpointFixture.CheckpointPath;
         if (options is AiDotNet.TextToSpeech.Vocoders.WaveGlowOptions waveGlow && option == "SegmentSamples")
             waveGlow.SegmentSamples = 4 * waveGlow.HopSize;
+        if (options is AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions spear) SpearOptionFixture.Prepare(spear, option);
         if (options is AiDotNet.TextToSpeech.Latest.OuteTTSOptions oute) OuteOptionFixture.Prepare(oute, option);
         if (options is AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions f5)
         {

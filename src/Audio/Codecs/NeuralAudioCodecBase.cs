@@ -18,6 +18,13 @@ namespace AiDotNet.Audio.Codecs;
 /// <summary>Options shared by the neural audio codecs (encoder → residual vector quantizer → decoder).</summary>
 public class NeuralAudioCodecOptions : ModelOptions
 {
+    // Shared with codec-language-model options so their selected level count uses the codec's exact bitrate rule.
+    internal int QuantizersForBandwidth(double kbps, int hopLength)
+    {
+        double perCodebook = (double)SampleRate / hopLength * Math.Log(CodebookSize, 2) / 1000.0;
+        return Math.Max(1, Math.Min(NumQuantizers, (int)Math.Floor(kbps / perCodebook + 1e-9)));
+    }
+
     /// <summary>Gets or sets the audio sample rate in Hz.</summary>
     public int SampleRate { get; set; } = 24000;
 
@@ -232,10 +239,7 @@ public abstract class NeuralAudioCodecBase<T> : AudioNeuralNetworkBase<T>, IAudi
 
     /// <summary>The number of codebooks for a bandwidth in kbps (each carries frame rate × log2(bins) bits per second).</summary>
     public int QuantizersForBandwidth(double kbps)
-    {
-        double perCodebook = (double)_codec.SampleRate / HopLength * Math.Log(_codec.CodebookSize, 2) / 1000.0;
-        return Math.Max(1, Math.Min(_codec.NumQuantizers, (int)Math.Floor(kbps / perCodebook + 1e-9)));
-    }
+        => _codec.QuantizersForBandwidth(kbps, HopLength);
 
     /// <summary>Encodes, quantizes with <paramref name="quantizers"/> codebooks and decodes <c>[1, channels, samples]</c>.</summary>
     protected virtual Tensor<T> Reconstruct(Tensor<T> audio, int quantizers)
