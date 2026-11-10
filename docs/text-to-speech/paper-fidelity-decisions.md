@@ -204,6 +204,13 @@ derives them.
 | WaveNet | van den Oord et al. 2016 | r9y9/wavenet_vocoder (μ-law preset) | The paper fixes the model's form; the reference supplies the sizes (30 layers in 3 cycles). |
 | WaveRNN | Kalchbrenner et al. 2018 | fatchord/WaveRNN (optimizer only) | WaveRNN-896. The paper conditions on linguistic features without saying how; the mel spectrogram is upsampled WaveNet-style and projected into the gates. Weight pruning (§3) is off unless you set `SparsityTarget`. |
 
+### WaveGrad option and optimizer contracts
+
+[The primary paper](https://arxiv.org/pdf/2009.00713), Appendix A and Figures 4–6, specifies learned strided downsampling, five UBlocks with factors 5/5/3/2/2, dilations 1/2/4/8 in the first three and 1/2/1/2 thereafter, and no dropout. These defaults and the learned DBlocks are preserved. The [LMNT reproduction](https://github.com/lmnt-com/wavegrad/blob/master/src/wavegrad/model.py) uses nearest-neighbor downsampling and a different dilation order; it is used for unstated training choices rather than as authority for those paper architecture details. A nonzero inherited `DropoutRate` is explicitly rejected by the native paper network, with a model-specific applicability annotation and constructor tests.
+
+`HopSize` configures the product of the actual UBlock factors while preserving the number of stages; explicit native factors in saved JSON take precedence over the legacy shared hop. Native Adam now reads configured learning rate and weight decay, with fixed 0.9/0.999 betas and 1e-8 epsilon. The default remains zero weight decay. The [released training loop](https://github.com/lmnt-com/wavegrad/blob/master/src/wavegrad/learner.py) clips the full model gradient once to the configured norm (1 by default); the optimizer's additional clipping is disabled. Tests inspect the cached optimizer after actual recording training and compare updates from identical initial weights with and without configured decay.
+
+
 ## Codec language models
 
 | Model | Paper | Gaps filled from | Choices |

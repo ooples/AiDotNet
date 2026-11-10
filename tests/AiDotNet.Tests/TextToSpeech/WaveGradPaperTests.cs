@@ -20,7 +20,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </remarks>
 public class WaveGradPaperTests
 {
-    private static WaveGradOptions Options(double[]? inference = null) => new()
+    internal static WaveGradOptions Options(double[]? inference = null) => new()
     {
         MelChannels = 8, FftSize = 64, WindowSize = 64, HopSize = 16, SampleRate = 4000, MelMaxFrequency = 2000,
         UpsampleFactors = [2, 2, 2, 2], UpsampleChannels = [8, 8, 8, 8],

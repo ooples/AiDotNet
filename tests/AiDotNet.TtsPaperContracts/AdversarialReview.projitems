@@ -15,6 +15,8 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/InfillingNativeOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/OuteNativeOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/WaveGlowNativeOptionsTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/WaveGradNativeOptionsTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/WaveGradPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/Audio/PerthReleasedCheckpointFixture.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/ChatterboxPublishedWatermarkOptionTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/WaveGlowPaperTests.cs" />

@@ -20,8 +20,31 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// found by a grid search over {1, …, 9} × 10^{−6 … −1} per step (App. B) and its values are not published.</para>
 /// <para><b>For Beginners:</b> These options configure the WaveGrad model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(WaveGradOptionsConverter))]
 public class WaveGradOptions : VocoderOptions
 {
+    /// <summary>The actual product of the UBlock upsampling factors (300 samples in the paper).</summary>
+    public override int HopSize
+    {
+        get => UpsampleFactors.Aggregate(1, (product, factor) => checked(product * factor));
+        set
+        {
+            if (value < 1) throw new ArgumentOutOfRangeException(nameof(value));
+            if (UpsampleFactors.Length == 0 || UpsampleFactors.Any(f => f < 1))
+                throw new ArgumentException("WaveGrad needs positive UBlock factors.");
+            if (value == HopSize) return;
+            int Gcd(int a, int b) { while (b != 0) { int r = a % b; a = b; b = r; } return a; }
+            int remaining = value;
+            var factors = new int[UpsampleFactors.Length];
+            for (int i = 0; i < factors.Length; i++)
+            {
+                factors[i] = i == factors.Length - 1 ? remaining : Gcd(UpsampleFactors[i], remaining);
+                remaining /= factors[i];
+            }
+            UpsampleFactors = factors;
+        }
+    }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
@@ -55,6 +78,8 @@ public class WaveGradOptions : VocoderOptions
         FftSize = 2048;
         LearningRate = 2e-4;
         WeightDecay = 0.0;
+        // Appendix A's convolutional UBlocks, DBlocks and FiLM modules contain no dropout.
+        DropoutRate = 0.0;
         NumDiffusionSteps = 1000;
     }
 

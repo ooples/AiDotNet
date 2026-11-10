@@ -4541,7 +4541,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.Vocoders.WaveGlow`1::VocabSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.WaveGrad`1::FftSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.WaveGrad`1::HiddenDim", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.TextToSpeech.Vocoders.WaveGrad`1::HopSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.WaveGrad`1::MaxMelLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.WaveGrad`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.WaveGrad`1::NumDecoderLayers", OptionSensitivityOutcome.Insensitive },

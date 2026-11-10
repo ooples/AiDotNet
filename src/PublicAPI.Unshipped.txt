@@ -1,4 +1,6 @@
 #nullable enable
+override AiDotNet.TextToSpeech.Vocoders.WaveGradOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.WaveGradOptions.HopSize.set -> void
 *REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.SampleRate.get -> int
 *REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.SampleRate.set -> void
 virtual AiDotNet.TextToSpeech.TtsModelOptions.SampleRate.get -> int
