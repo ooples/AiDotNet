@@ -71,6 +71,22 @@ public class StreamingMoshiPaperTests
         Assert.False(slower.Audio.ToArray().SequenceEqual(faster.Audio.ToArray()));
     }
 
+    [Theory(Timeout = 300000)]
+    [InlineData("TtsTemperature")]
+    [InlineData("TtsPaddingBonus")]
+    public async Task SamplingControls_ChangeActualSpeechBeforeAnyOptimizerUpdate(string option)
+    {
+        await Task.Yield();
+        var options = MoshiFixture.Options(MoshiVariant.Tts);
+        using var model = MoshiFixture.Tts<double>(options);
+        var control = model.Speak("the cat sat");
+        if (option == "TtsTemperature") options.TtsTemperature = 1.2;
+        else options.TtsPaddingBonus = 3;
+        var changed = model.Speak("the cat sat");
+        Assert.Equal(new[] { "the", "cat", "sat" }, changed.Words.Select(word => word.Text).ToArray());
+        Assert.False(control.Audio.ToArray().SequenceEqual(changed.Audio.ToArray()));
+    }
+
     [Fact(Timeout = 300000)]
     public async Task Chat_AnswersOverTheUsersSpan()
     {
