@@ -1209,3 +1209,4 @@ override AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.FasterRCNN<T>.De
 override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
 override AiDotNet.ComputerVision.Detection.Backbones.ResNet<T>.SetTrainingMode(bool isTraining) -> void
+override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.SetTrainingMode(bool training) -> void

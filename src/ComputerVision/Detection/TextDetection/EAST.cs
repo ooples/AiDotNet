@@ -43,6 +43,11 @@ public partial class EAST<T> : TextDetectorBase<T>
     private readonly Conv2D<T> _mergeConv2;
     private readonly Conv2D<T> _mergeConv3;
     private readonly Conv2D<T> _mergeConv4;
+    // The reference merge branch runs every conv under slim's normalizer_fn=batch_norm (argman/EAST model.py).
+    private readonly BatchNorm2D<T> _mergeNorm1;
+    private readonly BatchNorm2D<T> _mergeNorm2;
+    private readonly BatchNorm2D<T> _mergeNorm3;
+    private readonly BatchNorm2D<T> _mergeNorm4;
     private readonly Conv2D<T> _scoreHead;
     private readonly Conv2D<T> _geometryHead;
     private readonly int _hiddenDim;
@@ -75,6 +80,13 @@ public partial class EAST<T> : TextDetectorBase<T>
         _mergeConv2 = new Conv2D<T>(_hiddenDim + stageChannels[^2], _hiddenDim, kernelSize: 3, padding: 1);
         _mergeConv3 = new Conv2D<T>(_hiddenDim + stageChannels[^3], _hiddenDim, kernelSize: 3, padding: 1);
         _mergeConv4 = new Conv2D<T>(_hiddenDim, _hiddenDim / 2, kernelSize: 3, padding: 1);
+        // Without normalization the merge sums hundreds of unit-scale backbone channels (the backbone itself is
+        // batch-normalized), and within three Adam steps the score and angle sigmoids saturate where no gradient
+        // flows: the angle sat at -pi/4 and the loss stopped at 5.69 with H-mean 0.
+        _mergeNorm1 = new BatchNorm2D<T>(_hiddenDim);
+        _mergeNorm2 = new BatchNorm2D<T>(_hiddenDim);
+        _mergeNorm3 = new BatchNorm2D<T>(_hiddenDim);
+        _mergeNorm4 = new BatchNorm2D<T>(_hiddenDim / 2);
 
         // Output heads
         _scoreHead = new Conv2D<T>(_hiddenDim / 2, 1, kernelSize: 1); // Text/non-text score
@@ -82,6 +94,16 @@ public partial class EAST<T> : TextDetectorBase<T>
         // Geometry: 4 distances + 1 angle for RBOX, or 8 coordinates for QUAD
         int geometryChannels = useRotatedBoxes ? 5 : 8;
         _geometryHead = new Conv2D<T>(_hiddenDim / 2, geometryChannels, kernelSize: 1);
+    }
+
+    /// <inheritdoc/>
+    public override void SetTrainingMode(bool training)
+    {
+        base.SetTrainingMode(training);
+        _mergeNorm1.SetTrainingMode(training);
+        _mergeNorm2.SetTrainingMode(training);
+        _mergeNorm3.SetTrainingMode(training);
+        _mergeNorm4.SetTrainingMode(training);
     }
 
     private static int GetHiddenDim(ModelSize size) => size switch
@@ -102,24 +124,24 @@ public partial class EAST<T> : TextDetectorBase<T>
 
         // Feature merging (U-Net style)
         var x = _mergeConv1.Forward(features[^1]);
-        x = ApplyMergeActivation(x);
+        x = ApplyMergeActivation(_mergeNorm1.Forward(x));
 
         if (features.Count > 1)
         {
             x = UpsampleAndConcat(x, features[^2]);
             x = _mergeConv2.Forward(x);
-            x = ApplyMergeActivation(x);
+            x = ApplyMergeActivation(_mergeNorm2.Forward(x));
         }
 
         if (features.Count > 2)
         {
             x = UpsampleAndConcat(x, features[^3]);
             x = _mergeConv3.Forward(x);
-            x = ApplyMergeActivation(x);
+            x = ApplyMergeActivation(_mergeNorm3.Forward(x));
         }
 
         x = _mergeConv4.Forward(x);
-        x = ApplyMergeActivation(x);
+        x = ApplyMergeActivation(_mergeNorm4.Forward(x));
 
         // Predict score and geometry
         var score = _scoreHead.Forward(x);
@@ -474,6 +496,10 @@ public partial class EAST<T> : TextDetectorBase<T>
                _mergeConv2.GetParameterCount() +
                _mergeConv3.GetParameterCount() +
                _mergeConv4.GetParameterCount() +
+               _mergeNorm1.GetParameterCount() +
+               _mergeNorm2.GetParameterCount() +
+               _mergeNorm3.GetParameterCount() +
+               _mergeNorm4.GetParameterCount() +
                _scoreHead.GetParameterCount() +
                _geometryHead.GetParameterCount();
     }
@@ -505,7 +531,7 @@ public partial class EAST<T> : TextDetectorBase<T>
         }
 
         int version = reader.ReadInt32();
-        if (version != 1)
+        if (version != 2)
         {
             throw new InvalidDataException($"Unsupported EAST model version: {version}");
         }
@@ -533,6 +559,10 @@ public partial class EAST<T> : TextDetectorBase<T>
         _mergeConv2.ReadParameters(reader);
         _mergeConv3.ReadParameters(reader);
         _mergeConv4.ReadParameters(reader);
+        _mergeNorm1.ReadParameters(reader);
+        _mergeNorm2.ReadParameters(reader);
+        _mergeNorm3.ReadParameters(reader);
+        _mergeNorm4.ReadParameters(reader);
         _scoreHead.ReadParameters(reader);
         _geometryHead.ReadParameters(reader);
     }
@@ -545,7 +575,7 @@ public partial class EAST<T> : TextDetectorBase<T>
 
         // Write header
         writer.Write(0x45415354); // "EAST" in ASCII
-        writer.Write(1); // Version 1
+        writer.Write(2); // Version 2: the merge branch gained batch normalization
         writer.Write(Name);
         writer.Write(_useRotatedBoxes);
         writer.Write(_hiddenDim);
@@ -556,6 +586,10 @@ public partial class EAST<T> : TextDetectorBase<T>
         _mergeConv2.WriteParameters(writer);
         _mergeConv3.WriteParameters(writer);
         _mergeConv4.WriteParameters(writer);
+        _mergeNorm1.WriteParameters(writer);
+        _mergeNorm2.WriteParameters(writer);
+        _mergeNorm3.WriteParameters(writer);
+        _mergeNorm4.WriteParameters(writer);
         _scoreHead.WriteParameters(writer);
         _geometryHead.WriteParameters(writer);
     }
