@@ -13,6 +13,9 @@ internal sealed class FreGradOptionsConverter : JsonConverter
     {
         if (reader.TokenType == JsonToken.Null) return null;
         var data = JObject.Load(reader);
+        if (data.GetValue("ResChannels", StringComparison.OrdinalIgnoreCase) is not null)
+            foreach (var alias in data.Properties().Where(p => p.Name.Equals("HiddenDim", StringComparison.OrdinalIgnoreCase)).ToArray())
+                alias.Remove();
         if (data.GetValue("UpsampleStrides", StringComparison.OrdinalIgnoreCase) is not null)
             foreach (var alias in data.Properties().Where(p => p.Name.Equals("HopSize", StringComparison.OrdinalIgnoreCase)).ToArray())
                 alias.Remove();

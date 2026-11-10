@@ -20,7 +20,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </remarks>
 public class PriorGradPaperTests
 {
-    private static PriorGradOptions Options(bool fast = false) => new()
+    internal static PriorGradOptions Options(bool fast = false) => new()
     {
         MelChannels = 8, FftSize = 64, WindowSize = 64, HopSize = 16, SampleRate = 4000, UpsampleStrides = [4, 4],
         MelMinFrequency = 0, MelMaxFrequency = 2000,
@@ -150,13 +150,15 @@ public class PriorGradPaperTests
     }
 
     [Fact(Timeout = 60000)]
-    public async Task FitEnergyStatistics_TakesTheTrainingSetsLowestFrameEnergy()
+    public async Task FitEnergyStatistics_TakesTheLowestFrameEnergyAfterPublishedPeakNormalization()
     {
         await Task.Yield();
         var options = Options();
         var model = CreateProbe(options);
         model.FitEnergyStatistics(new[] { Audio(0.4), Audio(0.05) });
-        var lowest = new[] { Audio(0.4), Audio(0.05) }
+        // Both pure sinusoids have a known peak, so the released 0.95 normalization
+        // maps both to this amplitude before fitting; raw quiet audio is not the fitting target.
+        var lowest = new[] { Audio(0.95) }
             .SelectMany(a => { var m = model.ComputeMel(a); return Enumerable.Range(0, m.Shape[2]).Select(f => Math.Sqrt(Enumerable.Range(0, 8).Sum(b => Math.Exp(m[0, b, f])))); })
             .Min();
         Assert.Equal(lowest, options.EnergyMin!.Value, 9);

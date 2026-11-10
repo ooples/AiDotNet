@@ -16,8 +16,42 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// minimum is the energy of silence, √(mel bands · 1e-5).</para>
 /// <para><b>For Beginners:</b> These options configure the PriorGrad model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(PriorGradOptionsConverter))]
 public class PriorGradOptions : DiffWaveOptions
 {
+    /// <summary>The width of the published residual denoiser (64 channels in the base model).</summary>
+    public override int HiddenDim
+    {
+        get => ResChannels;
+        set => ResChannels = value > 0 ? value : throw new ArgumentOutOfRangeException(nameof(value));
+    }
+
+    /// <summary>The waveform hop, given by the actual mel upsampler's even transposed-convolution strides.</summary>
+    public override int HopSize
+    {
+        get => UpsampleStrides.Aggregate(1, (product, stride) => checked(product * stride));
+        set
+        {
+            int stages = UpsampleStrides.Length;
+            if (stages < 1 || stages > 30 || UpsampleStrides.Any(s => s < 2 || s % 2 != 0))
+                throw new ArgumentException("PriorGrad needs positive even transposed-convolution strides.");
+            long divisor = 1L << stages;
+            if (value < divisor || value % divisor != 0)
+                throw new ArgumentOutOfRangeException(nameof(value), "The hop must preserve every even conditioning upsampling stage.");
+            if (value == HopSize) return;
+            int Gcd(int a, int b) { while (b != 0) { int r = a % b; a = b; b = r; } return a; }
+            var strides = new int[stages];
+            int remaining = value;
+            for (int i = 0; i < stages; i++)
+            {
+                int reserve = 1 << (stages - i - 1);
+                strides[i] = i == stages - 1 ? remaining : Gcd(UpsampleStrides[i], remaining / reserve);
+                remaining /= strides[i];
+            }
+            UpsampleStrides = strides;
+        }
+    }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>

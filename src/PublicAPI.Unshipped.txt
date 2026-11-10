@@ -1,4 +1,9 @@
 #nullable enable
+override AiDotNet.TextToSpeech.Vocoders.PriorGradOptions.HiddenDim.get -> int
+override AiDotNet.TextToSpeech.Vocoders.PriorGradOptions.HiddenDim.set -> void
+override AiDotNet.TextToSpeech.Vocoders.PriorGradOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.PriorGradOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.Vocoders.PriorGrad<T>.RecordingPair(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
 virtual AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.RecordingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
 override AiDotNet.TextToSpeech.Vocoders.UnivNet<T>.RecordingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
 override AiDotNet.TextToSpeech.Vocoders.MelGAN<T>.RecordingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)

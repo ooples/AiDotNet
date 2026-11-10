@@ -102,6 +102,7 @@ public class TtsModelOptions : ModelOptions
 
     /// <summary>Gets or sets the dropout rate.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("FreGrad's published frequency-aware residual network has no dropout (Nguyen et al. 2024, Figure 2 and Section 3.2; kaistmm/fregrad model.py); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.FreGrad<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("PriorGrad's published DiffWave vocoder has no dropout (Lee et al. 2022, Section 4.2; Microsoft NeuralSpeech PriorGrad-vocoder/model.py); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.PriorGrad<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("WaveGrad's UBlock, DBlock and FiLM modules have no dropout (Chen et al. 2021, Appendix A, Figures 4-6); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.WaveGrad<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("DiTTo uses this inherited setting only in its frozen SpeechT5 encoder, which always runs in inference mode; its trainable diffusion transformer has no dropout.", ModelType = typeof(FlowDiffusion.DiTToTTS<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("BigVGAN uses deterministic convolutional generator and discriminator blocks, without dropout.", ModelType = typeof(Vocoders.BigVGAN<>))]

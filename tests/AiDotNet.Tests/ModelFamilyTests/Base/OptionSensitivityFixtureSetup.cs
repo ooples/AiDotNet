@@ -737,7 +737,7 @@ internal static class OptionSensitivityFixtureSetup
         "LatentFusionProbability" or "ClassDropout" or "WavenetDropout";
 
     private static bool IsVocoderFrontendOption(string option) => option is
-        "MelMinFrequency" or "MelMaxFrequency" or "WindowSize" or "MelMean" or "MelScale" or "EnergyMin";
+        "MelMinFrequency" or "MelMaxFrequency" or "WindowSize" or "MelMean" or "MelScale" or "EnergyMin" or "EnergyMax";
 
     private static Tensor<T> VocoderRecording<T>(AiDotNet.TextToSpeech.Vocoders.VocoderOptions options)
     {

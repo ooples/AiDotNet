@@ -25,6 +25,8 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/MelGANPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/ParallelWaveGANNativeOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/ParallelWaveGANPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/PriorGradNativeOptionsTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/PriorGradPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/GanVocoderWeights.cs" />
     <Compile Include="../AiDotNet.Tests/Audio/PerthReleasedCheckpointFixture.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/ChatterboxPublishedWatermarkOptionTests.cs" />
