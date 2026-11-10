@@ -31,6 +31,8 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/WaveRNNNativeOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/WaveRNNEquationReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/WaveRNNPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/HiFiGANRecordingReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/HiFiGANPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/DiffWavePaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/GanVocoderWeights.cs" />
     <Compile Include="../AiDotNet.Tests/Audio/PerthReleasedCheckpointFixture.cs" />

@@ -42,7 +42,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2020,
     Authors = "Kong et al."
 )]
-[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, Beta1 = 0.8, Beta2 = 0.99, WeightDecay = 0.01, DecayRate = 0.999,
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, Beta1 = 0.8, Beta2 = 0.99, Epsilon = 1e-8, WeightDecay = 0.01, DecayRate = 0.999,
                 ReferenceBatchSize = 16,
                 Source = "Kong et al. 2020, Sec. 3: AdamW with beta1 0.8, beta2 0.99 and weight decay 0.01, an initial "
                         + "learning rate of 2e-4 decayed by a factor of 0.999 every epoch, batch size 16.")]
@@ -81,8 +81,10 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
         _generator = new HiFiGanGenerator<T>(Engine, o.MelChannels, o.UpsampleInitialChannels, o.UpsampleRates, o.UpsampleKernelSizes,
             o.ResblockKernelSizes, o.ResblockDilationSizes, o.ResblockType == 1,
             initialization: AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7));
-        _inputMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency);
-        _lossMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0);
+        _inputMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency,
+            singlePrecisionBasis: true);
+        _lossMel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0,
+            singlePrecisionBasis: true);
         return _generator.Layers;
     }
 
@@ -104,6 +106,25 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
     {
         var rows = _inputMel!.Forward(audio);
         return Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, PaperOptions.MelChannels, rows.Shape[0] });
+    }
+
+    /// <inheritdoc />
+    protected override (Tensor<T> Mel, Tensor<T> Audio) RecordingPair(Tensor<T> audio, Random random)
+    {
+        // Released MelDataset normalizes the complete recording before its sample crop and padding.
+        var flat = Flat(audio);
+        double peak = 0;
+        for (int i = 0; i < flat.Length; i++)
+        {
+            double value = NumOps.ToDouble(flat[i]);
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new ArgumentException("HiFi-GAN recording samples must be finite.", nameof(audio));
+            peak = Math.Max(peak, Math.Abs(value));
+        }
+        var normalized = new Tensor<T>(new[] { flat.Length });
+        for (int i = 0; i < flat.Length; i++)
+            normalized[i] = NumOps.FromDouble(peak > 0 ? NumOps.ToDouble(flat[i]) / peak * .95 : 0);
+        return base.RecordingPair(normalized, random);
     }
 
     /// <inheritdoc />
@@ -152,16 +173,13 @@ public partial class HiFiGAN<T> : GanVocoderBase<T>
         int perEpoch = Math.Max(1, o.UpdatesPerEpoch);
         var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.LearningRate,
             step => Math.Pow(o.LearningRateDecay, Math.Truncate(step / (double)perEpoch)));
-        return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = o.LearningRate,
-                Beta1 = 0.8,
-                Beta2 = 0.99,
-                WeightDecay = 0.01,
-                LearningRateScheduler = scheduler,
-                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
-            }));
+        var optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, component: group,
+            learningRateOverride: o.LearningRate, weightDecayOverride: o.WeightDecay,
+            learningRateSchedulerOverride: scheduler)
+            ?? throw new InvalidOperationException("HiFi-GAN's native AdamW recipe could not be created.");
+        if (optimizer.GetOptions() is GradientBasedOptimizerOptions<T, Tensor<T>, Tensor<T>> settings)
+            settings.EnableGradientClipping = false;
+        return optimizer;
     }
 
     /// <inheritdoc />

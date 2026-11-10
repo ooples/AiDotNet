@@ -282,6 +282,18 @@ Section 3 prunes each of the three recurrent gate matrices separately using the 
 The [pinned public reproduction's optimizer](https://github.com/fatchord/WaveRNN/blob/83c08fdcd625be56244f4145f41500468974b144/train_wavernn.py) supplies the unspecified optimizer recipe: Adam with fixed default betas/epsilon, learning rate 1e-4, batch size 32 and a single global norm clip of 4. Native Adam honors configured learning rate and decay without adding another optimizer clip. That reproduction's architecture and whole-hop sequence choice do not replace the primary paper's single-GRU dual softmax or exact 960 samples. Shared width/hop configure the real recurrent state and conditioning factors, and saved native dimensions take precedence over legacy aliases.
 
 
+### HiFi-GAN's recording loader and retained filterbank precision
+
+The [released default recording loader](https://github.com/jik876/hifi-gan/blob/4769534d45265d52a904b850da5a622601885777/meldataset.py) peak-normalizes the whole waveform to 0.95, then selects an arbitrary sample crop or zero-pads a short recording, and computes its non-centred mel features. Native recording training now follows that order. The shared GAN base already crops before feature extraction; the correction is the missing whole-recording normalization. Explicitly paired mel/waveform training remains the route for externally prepared inputs.
+
+Both the conditioning and full-band loss filterbanks retain the release's actual float32 librosa coefficients, including when the native model uses double precision. This uses the existing float32-bank implementation rather than changing shared mel mathematics. The released Hann/STFT, magnitude epsilon 1e-9 and log floor 1e-5 are retained. The independent reference generator executes the pinned loader and spectral-function bodies unchanged, with only current librosa/torch API adapters. Its cases cover short padding, an exact segment, silence and a long recording whose global peak lies outside the selected crop. Waveforms must match within 1e-7, complete mels within 2e-6, and both retained filterbanks exactly.
+
+The SegmentSize probe uses genuine long-recording training and its own control-cache group. Native regressions compare the actual paired crops and learned generator/discriminator updates for different segment lengths; they exclude persistent spectral-normalization buffers when checking learned updates. No new baseline waiver supplies the segment effect. The [paper's](https://arxiv.org/pdf/2010.05646) adversarial, feature-matching and mel objectives and AdamW recipe remain in place; the 8192-sample segment and normalization are supplied by the released configuration and loader.
+
+The [released trainer](https://github.com/jik876/hifi-gan/blob/4769534d45265d52a904b850da5a622601885777/train.py) uses fixed AdamW betas 0.8/0.99, default epsilon 1e-8 and decay 0.01, without gradient clipping. Both native optimizers honor configured rate/decay with those fixed betas and without an additional clip. Their actual six-update learning-rate traces are compared against PyTorch ExponentialLR stepping at epoch boundaries. The schedule probes use a short explicit epoch so that their real training updates reach the configured decay boundary.
+
+
+
 ## Codec language models
 
 | Model | Paper | Gaps filled from | Choices |

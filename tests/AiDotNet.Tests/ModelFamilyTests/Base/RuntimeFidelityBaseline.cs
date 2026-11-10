@@ -4412,7 +4412,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.Vocoders.HiFiGAN`1::NumEncoderLayers", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.HiFiGAN`1::NumHeads", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.HiFiGAN`1::VocabSize", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.TextToSpeech.Vocoders.HiFiGAN`1::WeightDecay", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.ISTFTNet`1::DropoutRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.ISTFTNet`1::HiddenDim", OptionSensitivityOutcome.Insensitive },
             // Both hops are constrained by the fixed generator upsampling product.

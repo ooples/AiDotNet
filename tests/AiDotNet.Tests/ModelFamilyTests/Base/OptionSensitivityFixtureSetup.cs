@@ -51,6 +51,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.UnivNet<T> && option == "SegmentSize" ? "univnet-recording-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.MelGAN<T> && option is "SegmentSize" or "SamplingSeed" ? "melgan-recording-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && IsHiFiGanTrainingOption(option) ? "hifigan-recording-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.WaveRNN<T> && IsWaveRnnTrainingOption(option) ? "wavernn-training-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.DiffWave<T> && option is "NumClasses" or "UtteranceSamples" ? "diffwave-task-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option is "AdversarialWeight" or "DiscriminatorGradientClipNorm" or "DiscriminatorLearningRate" ? "parallel-wavegan-adversarial-" + option
@@ -790,6 +791,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? 0
+        : network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && option is "LearningRateDecay" or "UpdatesPerEpoch" ? Math.Max(4, steps)
         : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option == "Epsilon" ? Math.Max(6, steps)
         : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? 0
         : network is AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T> && SpearOptionFixture.Handles(option) ? 0
@@ -1034,6 +1036,7 @@ internal static class OptionSensitivityFixtureSetup
             return true;
         }
         if ((network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames"
+                || network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && IsHiFiGanTrainingOption(option)
                 || network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option is "SegmentSize" or "SamplingSeed"
                 || network is AiDotNet.TextToSpeech.Vocoders.BigVGAN<T> && option == "SegmentSize")
             && network is AiDotNet.TextToSpeech.TtsModelBase<T> vocoder
@@ -1066,6 +1069,9 @@ internal static class OptionSensitivityFixtureSetup
         _ => string.Empty,
     };
 
+    private static bool IsHiFiGanTrainingOption(string option) => option is "SegmentSize" or "LearningRate"
+        or "WeightDecay" or "LearningRateDecay" or "UpdatesPerEpoch";
+
     private static bool IsWaveRnnSparseOption(string option) => option is "SparsityTarget"
         or "PruningSteps" or "PruningStartStep" or "PruningInterval" or "PruneBlockRows" or "PruneBlockColumns";
 
@@ -1074,6 +1080,13 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Vocoders.HiFiGANOptions hiFiGan && IsHiFiGanTrainingOption(option))
+        {
+            // Keep the half-size perturbation frame-aligned and long enough for the released reflect padding.
+            int hiFiCropHop = hiFiGan.HopSize;
+            hiFiGan.SegmentSize = checked(2 * hiFiCropHop * Math.Max(2, (int)Math.Ceiling(hiFiGan.FftSize / (2.0 * hiFiCropHop))));
+            if (option is "LearningRateDecay" or "UpdatesPerEpoch") hiFiGan.UpdatesPerEpoch = 2;
+        }
         if (options is AiDotNet.TextToSpeech.Vocoders.WaveRNNOptions waveRnn)
         {
             waveRnn.MelChannels = 8;
@@ -1516,6 +1529,7 @@ internal static class OptionSensitivityFixtureSetup
         // Cross an epoch boundary within the probe's two training steps.
         var perEpoch = options.GetType().GetProperty("UpdatesPerEpoch");
         if (perEpoch is not null && perEpoch.CanWrite
+            && !(options is AiDotNet.TextToSpeech.Vocoders.HiFiGANOptions && (option is "LearningRateDecay" or "UpdatesPerEpoch"))
             && (perEpoch.PropertyType == typeof(int) || Nullable.GetUnderlyingType(perEpoch.PropertyType) == typeof(int)))
             perEpoch.SetValue(options, 1);
     }
