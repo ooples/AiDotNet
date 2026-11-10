@@ -40,7 +40,7 @@ public class OuteNativeOptionsTests
         var model = Create(options);
         Assert.Equal(heads, model.LanguageModel.Configuration.Heads);
         Assert.Equal(heads * options.HeadDim * options.HiddenDim, model.LanguageModel.Layers[0].Query.ParameterCount);
-        Assert.True(double.IsFinite(Loss(model)));
+        Assert.True(TtsPaperNumerics.IsFinite(Loss(model)));
     }
 
     [Theory]
@@ -51,7 +51,7 @@ public class OuteNativeOptionsTests
         var options = Options(); options.NumDecoderLayers = depth;
         var model = Create(options);
         Assert.Equal(depth, model.LanguageModel.Layers.Count);
-        Assert.True(double.IsFinite(Loss(model)));
+        Assert.True(TtsPaperNumerics.IsFinite(Loss(model)));
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public class OuteNativeOptionsTests
         var stochastic = OuteOptionFixture.Observe(model, "AlignerTemperatures");
         Assert.Equal(1, stochastic[0]);
         Assert.NotEqual(greedy[4], stochastic[4]); // The real sampled timestamp changes the segment end, beyond metadata.
-        Assert.All(greedy.Concat(stochastic), v => Assert.True(double.IsFinite(v)));
+        Assert.All(greedy.Concat(stochastic), v => Assert.True(TtsPaperNumerics.IsFinite(v)));
     }
 
     public sealed class DerivedOptions : OuteTTSOptions { public string Label { get; set; } = "derived"; }

@@ -38,7 +38,7 @@ public class ChatterboxPublishedWatermarkOptionTests
         double difference = Enumerable.Range(0, marked.Length)
             .Max(i => Math.Abs(ops.ToDouble(marked[i]) - ops.ToDouble(clean[i])));
         Assert.True(difference > 1e-8, $"The released Perth checkpoint did not alter the waveform ({difference:R}).");
-        Assert.All(marked, v => Assert.True(double.IsFinite(ops.ToDouble(v))));
+        Assert.All(marked, v => Assert.True(TtsPaperNumerics.IsFinite(ops.ToDouble(v))));
         options.Watermark = false;
         Assert.Equal(recording.ToArray(), model.Watermarked(recording).ToArray());
     }

@@ -72,8 +72,8 @@ public class UnivNetNativeOptionsTests
         var mel = new Tensor<double>(new[] { 1, options.MelChannels, 5 });
         var output = model.Predict(mel);
         Assert.Equal(5 * hop, output.Length);
-        Assert.All(output.ToArray(), x => Assert.True(double.IsFinite(x)));
-        Assert.True(double.IsFinite(model.Train(Sample())));
+        Assert.All(output.ToArray(), x => Assert.True(TtsPaperNumerics.IsFinite(x)));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
     }
 
     [Theory]
@@ -161,7 +161,7 @@ public class UnivNetNativeOptionsTests
         options.SegmentSize = 256; options.LearningRate = 3e-4; options.WeightDecay = decay;
         options.Beta1 = beta1; options.Beta2 = beta2;
         using var model = Create(options);
-        Assert.True(double.IsFinite(model.Train(Sample())));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
         var optimizers = (IDictionary)typeof(GanVocoderBase<double>)
             .GetField("_optimizers", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(model)!;
         Assert.Equal(2, optimizers.Count);

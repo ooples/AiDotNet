@@ -72,8 +72,8 @@ public class WaveGradNativeOptionsTests
         var mel = new Tensor<double>(new[] { 1, options.MelChannels, 4 });
         var output = model.Predict(mel);
         Assert.Equal(4 * hop, output.Length);
-        Assert.All(output.ToArray(), x => Assert.True(double.IsFinite(x)));
-        Assert.True(double.IsFinite(model.Train(Sample())));
+        Assert.All(output.ToArray(), x => Assert.True(TtsPaperNumerics.IsFinite(x)));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
     }
 
     [Theory]
@@ -107,7 +107,7 @@ public class WaveGradNativeOptionsTests
     {
         var options = WaveGradPaperTests.Options(); options.LearningRate = 3e-4; options.WeightDecay = decay;
         using var model = Create(options);
-        Assert.True(double.IsFinite(model.Train(Sample())));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
         var optimizer = Assert.IsType<AdamOptimizer<double, Tensor<double>, Tensor<double>>>(
             typeof(SegmentVocoderBase<double>).GetField("_paperOptimizer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(model));
         var settings = Assert.IsType<AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());

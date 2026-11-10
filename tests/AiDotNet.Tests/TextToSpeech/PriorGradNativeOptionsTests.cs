@@ -72,7 +72,7 @@ public class PriorGradNativeOptionsTests
         }
         using var model = Create(o);
         Assert.Equal(4 * hop, model.Predict(new Tensor<double>(new[] { 1, o.MelChannels, 4 })).Length);
-        Assert.True(double.IsFinite(model.Train(Sample())));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
     }
 
     [Theory]
@@ -89,7 +89,7 @@ public class PriorGradNativeOptionsTests
         var baseline = PriorGradPaperTests.Options(fast: true); baseline.ResChannels = width + 4;
         using var wider = Create(baseline);
         Assert.True(wider.GetParameters().Length > model.GetParameters().Length);
-        Assert.True(double.IsFinite(model.Train(Sample())));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
     }
 
     [Theory]
@@ -207,7 +207,7 @@ public class PriorGradNativeOptionsTests
     public void CachedAdam_HonorsTheActualRateAndDecay_WithoutAdditionalClipping(double decay)
     {
         var o = PriorGradPaperTests.Options(); o.WeightDecay = decay; o.LearningRate = 3e-4;
-        using var model = Create(o); Assert.True(double.IsFinite(model.Train(Sample())));
+        using var model = Create(o); Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
         var optimizer = Assert.IsType<AdamOptimizer<double, Tensor<double>, Tensor<double>>>(typeof(SegmentVocoderBase<double>)
             .GetField("_paperOptimizer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(model));
         var settings = Assert.IsType<AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());

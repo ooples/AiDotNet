@@ -61,7 +61,7 @@ public class InfillingNativeOptionsTests
         var (tokens, mel) = Example();
         var before = model.GetParameters().ToArray();
         model.Train(tokens, mel);
-        Assert.True(double.IsFinite(((ITrainingObjectiveProvider<double>)model).EvaluateTrainingObjective(tokens, mel)));
+        Assert.True(TtsPaperNumerics.IsFinite(((ITrainingObjectiveProvider<double>)model).EvaluateTrainingObjective(tokens, mel)));
         Assert.False(before.SequenceEqual(model.GetParameters().ToArray()));
     }
 
@@ -81,7 +81,7 @@ public class InfillingNativeOptionsTests
         var (tokens, mel) = Example();
         var before = model.GetParameters().ToArray();
         model.Train(tokens, mel);
-        Assert.True(double.IsFinite(((ITrainingObjectiveProvider<double>)model).EvaluateTrainingObjective(tokens, mel)));
+        Assert.True(TtsPaperNumerics.IsFinite(((ITrainingObjectiveProvider<double>)model).EvaluateTrainingObjective(tokens, mel)));
         Assert.False(before.SequenceEqual(model.GetParameters().ToArray()));
     }
 
@@ -124,7 +124,7 @@ public class InfillingNativeOptionsTests
         double conditioned = ((ITrainingObjectiveProvider<double>)model).EvaluateTrainingObjective(tokens, mel);
         if (f5) a.AudioDropProbability = 1; else b.AudioDropProbability = 1;
         double dropped = ((ITrainingObjectiveProvider<double>)model).EvaluateTrainingObjective(tokens, mel);
-        Assert.True(double.IsFinite(conditioned) && double.IsFinite(dropped));
+        Assert.True(TtsPaperNumerics.IsFinite(conditioned) && TtsPaperNumerics.IsFinite(dropped));
         Assert.True(Math.Abs(conditioned - dropped) > 1e-12, $"Audio condition had no effect: {conditioned} vs {dropped}.");
     }
 

@@ -65,7 +65,7 @@ public class WaveGlowNativeOptionsTests
         var objective = (ITrainingObjectiveProvider<double>)model;
         Assert.Equal(meanSquare, objective.EvaluateTrainingObjective(pair.Condition, pair.Audio), 9);
         var before = model.GetParameters().ToArray();
-        Assert.True(double.IsFinite(model.Train(Sample(recording))));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample(recording))));
         Assert.False(before.SequenceEqual(model.GetParameters().ToArray()));
     }
 
@@ -79,7 +79,7 @@ public class WaveGlowNativeOptionsTests
         Assert.All(pair.Audio.Skip(31), v => Assert.Equal(0, v));
         Assert.Equal(model.ComputeMel(pair.Audio).ToArray(), pair.Condition.ToArray());
         Assert.Equal(6, pair.Condition.Shape[2]);
-        Assert.True(double.IsFinite(model.Train(Sample(recording))));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample(recording))));
     }
 
     [Theory]
@@ -99,7 +99,7 @@ public class WaveGlowNativeOptionsTests
         for (int i = 0; i < used; i++) Assert.InRange(Math.Abs(back[i] - pair.Audio[i]), 0, 1e-8);
         double expected = pair.Audio.Take(used).Select(v => v * v).Average();
         Assert.Equal(expected, ((ITrainingObjectiveProvider<double>)model).EvaluateTrainingObjective(pair.Condition, pair.Audio), 9);
-        Assert.True(double.IsFinite(model.Train(Sample(recording))));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample(recording))));
     }
 
     [Theory]
@@ -135,7 +135,7 @@ public class WaveGlowNativeOptionsTests
     {
         var options = Options(); options.LearningRate = 3e-4; options.WeightDecay = decay;
         var model = Create(options);
-        Assert.True(double.IsFinite(model.Train(Sample(Audio(256)))));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample(Audio(256)))));
         var optimizer = Assert.IsType<AdamOptimizer<double, Tensor<double>, Tensor<double>>>(
             typeof(SegmentVocoderBase<double>).GetField("_paperOptimizer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(model));
         var actual = Assert.IsType<AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());

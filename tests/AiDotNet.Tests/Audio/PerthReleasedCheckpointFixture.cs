@@ -68,7 +68,7 @@ internal static class PerthReleasedCheckpointFixture
     {
         using var input = File.OpenRead(path);
         using var sha = SHA256.Create();
-        string actual = Convert.ToHexString(sha.ComputeHash(input));
+        string actual = BitConverter.ToString(sha.ComputeHash(input)).Replace("-", "");
         if (!actual.Equals(expected, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException($"The published Perth test checkpoint/archive SHA-256 differs: {actual}; expected {expected}.");
     }

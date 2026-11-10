@@ -117,7 +117,7 @@ public class MelGANNativeOptionsTests
         var options = MelGANPaperTests.Options(); options.SegmentSize = 128;
         options.LearningRate = 3e-4; options.WeightDecay = decay; options.Beta1 = beta1; options.Beta2 = beta2;
         using var model = new RecordingModel(options);
-        Assert.True(double.IsFinite(model.Train(new TtsTrainingSample<double> { Tokens = new Tensor<double>(new[] { 1 }), Audio = Audio() })));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(new TtsTrainingSample<double> { Tokens = new Tensor<double>(new[] { 1 }), Audio = Audio() })));
         var optimizers = (IDictionary)typeof(GanVocoderBase<double>)
             .GetField("_optimizers", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(model)!;
         Assert.Equal(2, optimizers.Count);

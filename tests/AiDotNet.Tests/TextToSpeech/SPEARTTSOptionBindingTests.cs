@@ -39,7 +39,7 @@ public class SPEARTTSOptionBindingTests
         var ids = new Tensor<double>(new[] { 2, options.NumCodebooks });
         var audio = model.DecodeFromTokens(ids);
         Assert.Equal(2 * options.HopSize, audio.Length);
-        Assert.All(audio.ToArray(), x => Assert.True(double.IsFinite(x)));
+        Assert.All(audio.ToArray(), x => Assert.True(TtsPaperNumerics.IsFinite(x)));
         var copy = new SPEARTTSOptions(options);
         var restored = JsonConvert.DeserializeObject<SPEARTTSOptions>(JsonConvert.SerializeObject(options))!;
         foreach (var result in new[] { copy, restored })
@@ -182,7 +182,7 @@ public class SPEARTTSOptionBindingTests
         using var candidate = Create(b);
         var baseline = SpearOptionFixture.Observe(control, name);
         var changed = SpearOptionFixture.Observe(candidate, name);
-        Assert.All(baseline.Concat(changed), x => Assert.True(double.IsFinite(x)));
+        Assert.All(baseline.Concat(changed), x => Assert.True(TtsPaperNumerics.IsFinite(x)));
         Assert.False(baseline.SequenceEqual(changed), name + " must affect its native task.");
     }
 }

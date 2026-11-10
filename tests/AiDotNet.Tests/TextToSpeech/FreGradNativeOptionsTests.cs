@@ -68,8 +68,8 @@ public class FreGradNativeOptionsTests
         Assert.Equal(new[] { 1, 2, 4 * hop / 2 }, model.PriorStd(mel).Shape.ToArray());
         var waveform = model.Predict(mel);
         Assert.Equal(4 * hop, waveform.Length);
-        Assert.All(waveform.ToArray(), x => Assert.True(double.IsFinite(x)));
-        Assert.True(double.IsFinite(model.Train(Sample())));
+        Assert.All(waveform.ToArray(), x => Assert.True(TtsPaperNumerics.IsFinite(x)));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
     }
 
     [Theory]
@@ -122,7 +122,7 @@ public class FreGradNativeOptionsTests
     {
         var options = FreGradPaperTests.Options(); options.LearningRate = 3e-4; options.WeightDecay = decay;
         using var model = Create(options);
-        Assert.True(double.IsFinite(model.Train(Sample())));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
         var optimizer = Assert.IsType<AdamOptimizer<double, Tensor<double>, Tensor<double>>>(
             typeof(SegmentVocoderBase<double>).GetField("_paperOptimizer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(model));
         var settings = Assert.IsType<AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());

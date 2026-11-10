@@ -74,7 +74,7 @@ public class ParallelWaveGANNativeOptionsTests
         }
         using var model = Create(o);
         Assert.Equal(5 * hop, model.Predict(new Tensor<double>(new[] { 1, o.MelChannels, 5 })).Length);
-        Assert.True(double.IsFinite(model.Train(Sample())));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
         Assert.Equal(5 * hop, model.Predict(new Tensor<double>(new[] { 1, o.MelChannels, 5 })).Length);
     }
 
@@ -131,7 +131,7 @@ public class ParallelWaveGANNativeOptionsTests
             Assert.Equal(expected.Length, actual.Length);
             // Collater explicitly casts the unmodified released features to float32.
             for (int i = 0; i < expected.Length; i++) Assert.InRange(Math.Abs(expected[i] - actual[i]), 0, 2e-6);
-            Assert.True(double.IsFinite(model.Train(Sample())));
+            Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
         }
     }
 
@@ -222,7 +222,7 @@ public class ParallelWaveGANNativeOptionsTests
         var random = new CountingRandom(o.SamplingSeed + 1);
         using var model = new NoiseAuditModel(o) { TrainingRandom = random };
         typeof(ParallelWaveGAN<double>).GetField("_noise", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(model, random);
-        Assert.True(double.IsFinite(model.Train(Sample())));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
         Assert.Equal(new[] { true, true }, model.TrainingModes);
         Assert.False(model.GeneratorWeights[0].SequenceEqual(model.GeneratorWeights[1]));
         Assert.NotNull(model.DiscriminatorWaveform); Assert.NotNull(model.ReplayedWaveform);
@@ -245,7 +245,7 @@ public class ParallelWaveGANNativeOptionsTests
         var rates = Reference()["rates_after_steps"]!;
         for (int step = 0; step < 6; step++)
         {
-            Assert.True(double.IsFinite(model.Train(Sample())));
+            Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
             var optimizers = Optimizers(model); Assert.Equal(2, optimizers.Count);
             foreach (string group in new[] { "generator", "discriminator" })
             {

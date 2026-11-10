@@ -38,7 +38,7 @@ public class OuteRopeAuthorReferenceTests
             // CPU power kernels and rounding through the exponent, wavelength, interpolation and final blend.
             for (int i = 0; i < expected.Length; i++)
             {
-                Assert.True(double.IsFinite(actual[i]));
+                Assert.True(TtsPaperNumerics.IsFinite(actual[i]));
                 Assert.InRange(Math.Abs(actual[i] - expected[i]), 0, 3e-7 * Math.Abs(expected[i]));
             }
         }
