@@ -252,8 +252,12 @@ internal static class OpenAiJson
                         // Label each result with its tool_use_id so parallel results stay separable and
                         // the model can pair each one with the [tool_use: ...] call that produced it. content is
                         // optional in the Anthropic API (an empty or error result may omit it); it renders as empty.
+                        // A failed execution (is_error: true) is labelled "tool_result error" so the model can tell
+                        // it apart from a successful result with the same content.
                         var toolUseId = part["tool_use_id"]?.Value<string>() ?? "unknown";
-                        sb.Append($"[tool_result {toolUseId}: {ContentText(part["content"])}]");
+                        var isError = part["is_error"] is JValue { Type: JTokenType.Boolean } flag && flag.Value<bool>();
+                        var label = isError ? "tool_result error" : "tool_result";
+                        sb.Append($"[{label} {toolUseId}: {ContentText(part["content"])}]");
                     }
                     else if (part["content"] != null)
                     {

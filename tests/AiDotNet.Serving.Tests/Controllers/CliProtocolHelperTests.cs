@@ -52,6 +52,29 @@ public sealed class CliProtocolHelperTests
         Assert.Equal("[tool_result toolu_1: ]", OpenAiJson.ContentText(content));
     }
 
+    [Theory]
+    [InlineData("""[ { "type": "tool_result", "tool_use_id": "toolu_1", "is_error": true, "content": "not found" } ]""",
+        "[tool_result error toolu_1: not found]")]
+    [InlineData("""[ { "type": "tool_result", "tool_use_id": "toolu_1", "is_error": true } ]""",
+        "[tool_result error toolu_1: ]")]
+    [InlineData("""[ { "type": "tool_result", "tool_use_id": "toolu_1", "is_error": false, "content": "not found" } ]""",
+        "[tool_result toolu_1: not found]")]
+    [InlineData("""[ { "type": "tool_result", "tool_use_id": "toolu_1", "is_error": false } ]""",
+        "[tool_result toolu_1: ]")]
+    public void ContentText_ToolResult_MarksFailedExecutions(string json, string expected)
+    {
+        Assert.Equal(expected, OpenAiJson.ContentText(JArray.Parse(json)));
+    }
+
+    [Fact]
+    public void ContentText_ToolResult_FailedAndSuccessfulWithSameContent_Differ()
+    {
+        var failed = JArray.Parse("""[ { "type": "tool_result", "tool_use_id": "toolu_1", "is_error": true, "content": "x" } ]""");
+        var succeeded = JArray.Parse("""[ { "type": "tool_result", "tool_use_id": "toolu_1", "content": "x" } ]""");
+
+        Assert.NotEqual(OpenAiJson.ContentText(failed), OpenAiJson.ContentText(succeeded));
+    }
+
     [Fact]
     public void ChatTemplate_DeveloperRole_IsLabelledSystem()
     {
