@@ -53,6 +53,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.Vocoders.MelGAN<T> && option is "SegmentSize" or "SamplingSeed" ? "melgan-recording-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && IsHiFiGanTrainingOption(option) ? "hifigan-recording-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> && IsWaveNetTrainingOption(option) ? "wavenet-recording-" + option
+            : network is AiDotNet.TextToSpeech.Vocoders.Vocos<T> && IsVocosRecordingOption(option) ? "vocos-recording-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.WaveRNN<T> && IsWaveRnnTrainingOption(option) ? "wavernn-training-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.DiffWave<T> && option is "NumClasses" or "UtteranceSamples" ? "diffwave-task-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option is "AdversarialWeight" or "DiscriminatorGradientClipNorm" or "DiscriminatorLearningRate" ? "parallel-wavegan-adversarial-" + option
@@ -693,6 +694,15 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.Vocoders.Vocos<T> vocos && !IsVocoderFrontendOption(option))
+        {
+            var settings = (AiDotNet.TextToSpeech.Vocoders.VocosOptions)vocos.GetOptions();
+            var mel = new Tensor<T>(new[] { 1, settings.MelChannels, 3 });
+            var vocosOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int c = 0; c < settings.MelChannels; c++) for (int f = 0; f < 3; f++)
+                mel[0, c, f] = vocosOps.FromDouble(.2 * Math.Sin(.3 * c + .2 * f));
+            return mel;
+        }
         if (network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> waveNet && !IsVocoderFrontendOption(option))
         {
             var settings = (AiDotNet.TextToSpeech.Vocoders.WaveNetOptions)waveNet.GetOptions();
@@ -801,6 +811,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? 0
+        : network is AiDotNet.TextToSpeech.Vocoders.Vocos<T> && option == "CosineSteps" ? Math.Max(4, steps)
         : network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> && option == "LearningRateHalvingSteps" ? Math.Max(4, steps)
         : network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && option is "LearningRateDecay" or "UpdatesPerEpoch" ? Math.Max(4, steps)
         : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option == "Epsilon" ? Math.Max(6, steps)
@@ -1047,6 +1058,7 @@ internal static class OptionSensitivityFixtureSetup
             return true;
         }
         if ((network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames"
+                || network is AiDotNet.TextToSpeech.Vocoders.Vocos<T> && IsVocosRecordingOption(option)
                 || network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> && IsWaveNetTrainingOption(option)
                 || network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && IsHiFiGanTrainingOption(option)
                 || network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option is "SegmentSize" or "SamplingSeed"
@@ -1081,6 +1093,9 @@ internal static class OptionSensitivityFixtureSetup
         _ => string.Empty,
     };
 
+    private static bool IsVocosRecordingOption(string option) => option is "SegmentSize" or "SamplingSeed"
+        or "LearningRate" or "WeightDecay" or "Beta1" or "Beta2" or "CosineSteps";
+
     private static bool IsWaveNetTrainingOption(string option) => option is "SegmentSamples" or "LearningRate"
         or "WeightDecay" or "LearningRateHalvingSteps";
 
@@ -1095,6 +1110,14 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Vocoders.VocosOptions vocos)
+        {
+            vocos.MelChannels = 8;
+            // Both the control and its half-length candidate exceed torchaudio's reflection pad.
+            if (IsVocosRecordingOption(option))
+                vocos.SegmentSize = checked(2 * vocos.HopSize * Math.Max(2, 1 + vocos.FftSize / (2 * vocos.HopSize)));
+            if (option == "CosineSteps") vocos.CosineSteps = 4;
+        }
         if (options is AiDotNet.TextToSpeech.Vocoders.WaveNetOptions waveNet)
         {
             waveNet.MelChannels = 8;

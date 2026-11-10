@@ -4500,7 +4500,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.Vocoders.UnivNet`1::UpsampleInitialChannels", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.UnivNet`1::VocabSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.Vocos`1::DropoutRate", OptionSensitivityOutcome.NoValidPerturbation },
-            { "AiDotNet.TextToSpeech.Vocoders.Vocos`1::HiddenDim", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.Vocos`1::MaxMelLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.Vocos`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.Vocos`1::NumDecoderLayers", OptionSensitivityOutcome.Insensitive },

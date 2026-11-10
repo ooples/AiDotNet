@@ -38,7 +38,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2024,
     Authors = "Siuzdak"
 )]
-[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999, WeightDecay = 0.01, ReferenceBatchSize = 16,
+[PaperOptimizer(OptimizerKind.AdamW, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, WeightDecay = 0.01, ReferenceBatchSize = 16,
                 Source = "Siuzdak 2024, Sec. 4.1: AdamW with an initial learning rate of 2e-4 and betas (0.9, 0.999), decayed by "
                         + "a cosine schedule; 1M iterations per network, batch size 16.")]
 public partial class Vocos<T> : GanVocoderBase<T>
@@ -78,10 +78,15 @@ public partial class Vocos<T> : GanVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
         var o = PaperOptions;
+        if (o.DropoutRate != 0)
+            throw new ArgumentException("Vocos's published ConvNeXt backbone has no dropout.", nameof(o.DropoutRate));
+        if (o.HopSize <= 0) throw new ArgumentOutOfRangeException(nameof(o.HopSize));
+        if (o.SegmentSize < o.HopSize || o.SegmentSize % o.HopSize != 0)
+            throw new ArgumentException("Vocos training segments must contain a positive whole number of STFT hops.", nameof(o.SegmentSize));
         _generator = new VocosGenerator<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
             o.MelChannels, o.ConvNeXtDim, o.IntermediateDim, o.NumBackboneBlocks, o.FftSize, o.HopSize);
         _features = new CenteredLogMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.FftSize, o.MelChannels, 0.0, o.SampleRate / 2.0, 1e-7,
-            htkScale: true, naturalLog: true);
+            htkScale: true, naturalLog: true, exactMagnitude: true);
         return _generator.Layers;
     }
 
@@ -108,12 +113,58 @@ public partial class Vocos<T> : GanVocoderBase<T>
     /// normalization) and <c>log(max(x, 1e-7))</c>.</remarks>
     protected override Tensor<T> ComputeInputMel(Tensor<T> audio) => _features!.Forward(audio);
 
+    /// <inheritdoc />
+    /// <remarks>The released dataset applies SoX peak normalization to a random level from -1 to -6 dBFS,
+    /// rounded to two decimal places, before the raw-sample crop. Short recordings repeat instead of zero-padding.</remarks>
+    protected override (Tensor<T> Mel, Tensor<T> Audio) RecordingPair(Tensor<T> audio, Random random)
+    {
+        var flat = Flat(audio);
+        if (flat.Length == 0) throw new ArgumentException("A Vocos recording must contain samples.", nameof(audio));
+        // torchaudio's SoX bridge converts input float32 to signed Q31 samples.
+        const double unit = 2147483648.0;
+        var source = new int[flat.Length];
+        int maximum = 1, minimum = -1; // SoX gain.c initializes its extrema this way, including for silence.
+        for (int i = 0; i < flat.Length; i++)
+        {
+            double value = NumOps.ToDouble(flat[i]);
+            if (double.IsNaN(value) || double.IsInfinity(value))
+                throw new ArgumentException("Vocos recordings must contain finite samples.", nameof(audio));
+            double encoded = (double)(float)value * unit;
+            source[i] = encoded >= unit ? int.MaxValue : encoded <= int.MinValue ? int.MinValue : (int)encoded;
+            maximum = Math.Max(maximum, source[i]); minimum = Math.Min(minimum, source[i]);
+        }
+        string formatted = (-1 - 5 * random.NextDouble()).ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+        double decibels = double.Parse(formatted, System.Globalization.CultureInfo.InvariantCulture);
+        double scale = Math.Min(int.MaxValue / (double)maximum, int.MinValue / (double)minimum) * Math.Pow(10, decibels / 20);
+        int samples = PaperOptions.SegmentSize;
+        int start = flat.Length >= samples ? random.Next(0, flat.Length - samples + 1) : 0;
+        var segment = new Tensor<T>(new[] { samples });
+        for (int i = 0; i < samples; i++)
+        {
+            // SOX_ROUND_CLIP_COUNT, then SOX_SAMPLE_TO_FLOAT_32BIT: discard the low seven Q31 bits
+            // after rounding. This is significant for low-energy log-mel bands, even in a float64 model.
+            long normalized = (long)Math.Round(source[(start + i) % flat.Length] * scale, MidpointRounding.AwayFromZero);
+            double output = normalized > int.MaxValue - 64L ? 1.0 : ((normalized + 64) & ~127L) / unit;
+            segment[i] = NumOps.FromDouble(output);
+        }
+        return (ComputeMel(segment), segment);
+    }
+
     // The generator of F frames produces (F − 1) · hop samples, so a segment's features keep their extra centred frame.
     /// <inheritdoc />
     protected override bool KeepsCentredFrame => true;
 
     private Tensor<T> Hinge(Tensor<T> x, double sign)
         => Mean(Engine.ReLU(Engine.TensorAddScalar(Engine.TensorMultiplyScalar(x, NumOps.FromDouble(sign)), NumOps.One)));
+
+    // Section 3.3 averages over both discriminator k and feature layer l. The released trainer sums over l;
+    // retain the primary paper's 1/L here, independently of the outer family's 1/K.
+    internal Tensor<T> MeanFeatureMatching(IReadOnlyList<Tensor<T>> real, IReadOnlyList<Tensor<T>> fake)
+    {
+        if (fake.Count == 0 || real.Count != fake.Count)
+            throw new ArgumentException("Vocos feature matching needs equal nonempty feature lists.");
+        return Engine.TensorMultiplyScalar(FeatureMatching(real, fake), NumOps.FromDouble(1.0 / fake.Count));
+    }
 
     /// <inheritdoc />
     protected override Tensor<T> DiscriminatorLoss(Tensor<T> real, Tensor<T> generated)
@@ -147,7 +198,7 @@ public partial class Vocos<T> : GanVocoderBase<T>
         {
             var adversarialTerm = Engine.TensorMultiplyScalar(Sum(fake.Select(f => Hinge(f.Score, -1))), NumOps.FromDouble(1.0 / fake.Count));
             var matching = Engine.TensorMultiplyScalar(Sum(Enumerable.Range(0, fake.Count).Select(k =>
-                    FeatureMatching(realOut[k].Features.Skip(skip).ToList(), fake[k].Features.Skip(skip).ToList()))),
+                    MeanFeatureMatching(realOut[k].Features.Skip(skip).ToList(), fake[k].Features.Skip(skip).ToList()))),
                 NumOps.FromDouble(1.0 / fake.Count));
             return (adversarialTerm, matching);
         }
@@ -190,6 +241,9 @@ public partial class Vocos<T> : GanVocoderBase<T>
                 InitialLearningRate = o.LearningRate,
                 Beta1 = o.Beta1,
                 Beta2 = o.Beta2,
+                Epsilon = 1e-8,
+                UseAdaptiveBetas = false,
+                EnableGradientClipping = false,
                 WeightDecay = o.WeightDecay,
                 LearningRateScheduler = scheduler,
                 SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
