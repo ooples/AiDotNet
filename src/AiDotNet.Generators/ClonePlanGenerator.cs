@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
@@ -47,6 +48,9 @@ namespace AiDotNet.Generators;
 [Generator]
 public partial class ClonePlanGenerator : IIncrementalGenerator
 {
+    // Map entries per generated chunk method: 512 x ~38 bytes of IL stays far below the 64 KB tooling bound.
+    private const int RegistrationMapChunkSize = 512;
+
     /// <summary>
     /// Stands in a recorded constructor for "pass this parameter's declared default".
     /// </summary>
@@ -192,7 +196,7 @@ public partial class ClonePlanGenerator : IIncrementalGenerator
         sb.AppendLine();
 
         var registrationMethods = new StringBuilder();
-        var registrationMap = new StringBuilder();
+        var registrationMap = new List<string>();
         int registrationIndex = 0;
         foreach (var type in distinct)
         {
@@ -201,7 +205,7 @@ public partial class ClonePlanGenerator : IIncrementalGenerator
             if (EmitRegistration(registrationMethods, type, registrationIndex))
             {
                 sb.AppendLine($"        Register_{registrationIndex:D6}();");
-                registrationMap.AppendLine($"        map[\"{RuntimeFullName(type)}\"] = Register_{registrationIndex:D6};");
+                registrationMap.Add($"        map[\"{RuntimeFullName(type)}\"] = Register_{registrationIndex:D6};");
                 registrationIndex++;
             }
         }
@@ -225,13 +229,26 @@ public partial class ClonePlanGenerator : IIncrementalGenerator
         sb.AppendLine("        return true;");
         sb.AppendLine("    }");
         sb.AppendLine();
+        // One map entry is about 38 bytes of IL, so the ~3,700 entries are filled in chunks: as one method they came
+        // to 139 KB, which makes coverage control-flow analysis pathological (and nears the JIT's own limits).
+        int chunkCount = (registrationMap.Count + RegistrationMapChunkSize - 1) / RegistrationMapChunkSize;
         sb.AppendLine("    private static Dictionary<string, Action> BuildRegistrationMap()");
         sb.AppendLine("    {");
         sb.AppendLine($"        var map = new Dictionary<string, Action>({registrationIndex}, StringComparer.Ordinal);");
-        sb.Append(registrationMap);
+        for (int chunk = 0; chunk < chunkCount; chunk++)
+            sb.AppendLine($"        AddRegistrations_{chunk:D3}(map);");
         sb.AppendLine("        return map;");
         sb.AppendLine("    }");
         sb.AppendLine();
+        for (int chunk = 0; chunk < chunkCount; chunk++)
+        {
+            sb.AppendLine($"    private static void AddRegistrations_{chunk:D3}(Dictionary<string, Action> map)");
+            sb.AppendLine("    {");
+            int end = Math.Min(registrationMap.Count, (chunk + 1) * RegistrationMapChunkSize);
+            for (int i = chunk * RegistrationMapChunkSize; i < end; i++) sb.AppendLine(registrationMap[i]);
+            sb.AppendLine("    }");
+            sb.AppendLine();
+        }
         sb.Append(registrationMethods);
         sb.AppendLine("    /// <summary>");
         sb.AppendLine("    /// Binds one configuration property, skipping it if the shape changed since generation.");
