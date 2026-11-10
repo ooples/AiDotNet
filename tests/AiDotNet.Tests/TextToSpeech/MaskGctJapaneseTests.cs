@@ -78,7 +78,7 @@ public class MaskGctJapaneseTests
         foreach (var c in Load("maskgct_japanese_reference.json").GetProperty("kakasi").EnumerateArray())
         {
             var expected = c.GetProperty("segments").EnumerateArray().Select(p => (p[0].GetString()!, p[1].GetString()!)).ToList();
-            Assert.Equal(expected, Pykakasi.Default.Convert(c.GetProperty("text").GetString()!));
+            Assert.Equal(expected, Pykakasi.Default.Convert(c.GetProperty("text").GetString()!).Select(s => (s.Orig, s.Kana)).ToList());
         }
     }
 

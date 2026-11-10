@@ -22255,3 +22255,20 @@ AiDotNet.Models.Options.GradientBasedOptimizerOptions<T, TInput, TOutput>.Regula
 AiDotNet.Models.Options.RegularizationOrder
 AiDotNet.Models.Options.RegularizationOrder.ClipThenRegularize = 0 -> AiDotNet.Models.Options.RegularizationOrder
 AiDotNet.Models.Options.RegularizationOrder.RegularizeThenClip = 1 -> AiDotNet.Models.Options.RegularizationOrder
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.CangjieMappingPath.get -> string?
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.CangjieMappingPath.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.ChineseSegmenterPath.get -> string?
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.ChineseSegmenterPath.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.HebrewDiacritizerPath.get -> string?
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.HebrewDiacritizerPath.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.LanguageId.get -> string!
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.LanguageId.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Variant.get -> AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Variant.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant.English = 0 -> AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant.MultilingualV2 = 1 -> AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant.MultilingualV3 = 2 -> AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant
+static AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Multilingual(AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant variant = AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant.MultilingualV2) -> AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions!
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RussianStresserPath.get -> string?
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RussianStresserPath.set -> void

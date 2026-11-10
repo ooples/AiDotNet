@@ -47,4 +47,16 @@ public class ChatterboxWatermarkTests
         var unmarked = ChatterboxFixture.Create<double>();
         Assert.Equal(recording.ToArray(), unmarked.Watermarked(recording).ToArray());
     }
+
+    [Fact]
+    public void WatermarkModelPath_LoadsTheCheckpointWithItsWidth()
+    {
+        var options = ChatterboxFixture.Options();
+        options.Watermark = true;
+        options.WatermarkModelPath = PerthFixture.TinyCheckpointPath;
+        var model = new Chatterbox<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(AiDotNet.Enums.InputType.OneDimensional,
+            AiDotNet.Enums.NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1) { RandomSeed = 7 }, options);
+        Assert.Equal(8, model.Watermarker.Hidden);
+        Assert.NotEqual(ChatterboxFixture.Recording<double>().ToArray(), model.Watermarked(ChatterboxFixture.Recording<double>()).ToArray());
+    }
 }

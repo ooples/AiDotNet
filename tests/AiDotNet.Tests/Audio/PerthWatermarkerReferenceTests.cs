@@ -61,8 +61,7 @@ public class PerthWatermarkerReferenceTests
 
         string? checkpoint = Environment.GetEnvironmentVariable("PERTH_CHECKPOINT");
         if (checkpoint is null || !File.Exists(checkpoint)) return;
-        var released = new PerthWatermarker<double>(AiDotNetEngine.Current);
-        released.LoadCheckpoint(checkpoint);
+        var released = PerthWatermarker<double>.Load(AiDotNetEngine.Current, checkpoint);
         Check(released, f["released"]!, signal, 1e-6, 1e-5);
     }
 }

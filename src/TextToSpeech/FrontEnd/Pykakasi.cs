@@ -149,17 +149,52 @@ internal sealed class Pykakasi
         return Text(codes);
     }
 
+    // IConv.convert's "hira" (K2("H").convert_h over the reading): katakana in hiragana. Half-width kana map through their
+    // compatibility forms (pykakasi's halfkana table), the half-width voicing marks to U+309B/U+309C.
+    private static string ToHiragana(string reading)
+    {
+        var output = new StringBuilder();
+        for (int i = 0; i < reading.Length;)
+        {
+            int c = char.ConvertToUtf32(reading, i);
+            int width = char.IsSurrogatePair(reading, i) ? 2 : 1;
+            if (c >= 0x1B164 && c < 0x1B167) output.Append(char.ConvertFromUtf32(c - (0x1B164 - 0x1B150)));
+            else if (c == 0x1B167) output.Append((char)0x3093);
+            else if (c > 0x30A0 && c < 0x30F7) output.Append((char)(c - (0x30A1 - 0x3041)));
+            else if (c > 0xFF65 && c < 0xFF9F)
+            {
+                if (c == 0xFF9E || c == 0xFF9F)
+                {
+                    output.Append((char)(c == 0xFF9E ? 0x309B : 0x309C));
+                    i += width;
+                    continue;
+                }
+                // A kana and its following voicing mark compose to one letter; otherwise the kana alone.
+                string pair = i + 1 < reading.Length ? reading.Substring(i, 2).Normalize(NormalizationForm.FormKC) : "";
+                bool composed = pair.Length == 1;
+                string full = composed ? pair : reading.Substring(i, 1).Normalize(NormalizationForm.FormKC);
+                int k = full[0];
+                output.Append(k > 0x30A0 && k < 0x30F7 ? (char)(k - (0x30A1 - 0x3041)) : full[0]);
+                i += composed ? 2 : 1;
+                continue;
+            }
+            else output.Append(char.ConvertFromUtf32(c));
+            i += width;
+        }
+        return output.ToString();
+    }
+
     private enum Script { Kanji, Kana, Hiragana, Symbol, Alpha }
 
-    /// <summary><c>kakasi().convert(text)</c>: each segment's original text and katakana reading.</summary>
-    public List<(string Orig, string Kana)> Convert(string input)
+    /// <summary><c>kakasi().convert(text)</c>: each segment's original text and its reading in katakana and hiragana.</summary>
+    public List<(string Orig, string Kana, string Hira)> Convert(string input)
     {
-        if (input.Length == 0) return new List<(string, string)> { ("", "") };
+        if (input.Length == 0) return new List<(string, string, string)> { ("", "", "") };
         var text = CodePoints(input);
-        var result = new List<(string, string)>();
+        var result = new List<(string, string, string)>();
         var original = new StringBuilder();
         var kana = new StringBuilder();
-        void Flush() => result.Add((original.ToString(), ToKatakana(kana.ToString())));
+        void Flush() => result.Add((original.ToString(), ToKatakana(kana.ToString()), ToHiragana(kana.ToString())));
         string Char(int index) => char.ConvertFromUtf32(text[index]);
 
         var previous = Script.Kanji;
@@ -229,7 +264,7 @@ internal sealed class Pykakasi
             else
             {
                 if (original.Length > 0) Flush();
-                result.Add((Char(i), ""));
+                result.Add((Char(i), "", ""));
                 i++;
                 action = "none";
             }
@@ -249,7 +284,7 @@ internal sealed class Pykakasi
                     break;
                 case "output":
                     if (original.Length > 0) Flush();
-                    result.Add((Char(i), ToKatakana(Char(i))));
+                    result.Add((Char(i), ToKatakana(Char(i)), ToHiragana(Char(i))));
                     original.Clear();
                     kana.Clear();
                     i++;

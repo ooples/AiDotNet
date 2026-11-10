@@ -2,6 +2,7 @@ using AiDotNet.ModelLoading;
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Resampling;
 using AiDotNet.Audio.Watermarking;
+using AiDotNet.TextToSpeech.FrontEnd;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
@@ -39,6 +40,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     private ChatterboxVoiceEncoder<T>? _voiceEncoder;
     private ChatterboxTokenizer? _tokenizer;
     private PerthWatermarker<T>? _watermarker;
+    private ChatterboxMultilingualText? _multilingualText;
     private CosyVoiceFlowConfiguration? _flowConfiguration;
     private readonly ConditionalWeakTable<TtsVoice<T>, T3VoiceCondition> _t3VoiceConditions = new();
     private int _t3WeightsGeneration;
@@ -85,9 +87,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
             if (string.IsNullOrWhiteSpace(path))
                 throw new InvalidOperationException("Chatterbox watermarks its output as the release does: set ChatterboxOptions.WatermarkModelPath to "
                     + "perth_net_250000.pth.tar (from the resemble-perth package), or set ChatterboxOptions.Watermark to false.");
-            var watermarker = new PerthWatermarker<T>(Engine);
-            watermarker.LoadCheckpoint(path!);
-            return _watermarker = watermarker;
+            return _watermarker = PerthWatermarker<T>.Load(Engine, path!);
         }
         set => _watermarker = value;
     }
@@ -111,13 +111,18 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     public override int[] Tokenize(string text)
     {
         if (text is null) throw new ArgumentNullException(nameof(text));
-        return Tokenizer.Encode(text);
+        return IsMultilingual ? MultilingualText.Encode(text, _options.LanguageId.ToLowerInvariant()) : Tokenizer.Encode(text);
     }
+
+    private bool IsMultilingual => _options.Variant != ChatterboxVariant.English;
 
     public override string Detokenize(IEnumerable<int> ids) => Tokenizer.Decode(ids);
 
     /// <summary>Applies the release's punctuation cleanup before BPE tokenization.</summary>
-    public static string NormalizeText(string text)
+    public static string NormalizeText(string text) => NormalizeText(text, new[] { ".", "!", "?", "-", "," });
+
+    // punc_norm with its language's sentence enders (the multilingual release also accepts 、，。？！).
+    internal static string NormalizeText(string text, string[] sentenceEnders)
     {
         if (text is null) throw new ArgumentNullException(nameof(text));
         if (text.Length == 0) return "You need to add some text for me to talk.";
@@ -130,7 +135,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         })
             text = text.Replace(replacement.Item1, replacement.Item2);
         text = text.TrimEnd(' ');
-        if (!new[] { ".", "!", "?", "-", "," }.Any(text.EndsWith))
+        if (!sentenceEnders.Any(ender => text.EndsWith(ender, StringComparison.Ordinal)))
             text += ".";
         return text;
     }
@@ -160,7 +165,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
-        string normalized = NormalizeText(text);
+        string normalized = IsMultilingual ? ChatterboxMultilingualText.NormalizePunctuation(text) : NormalizeText(text);
         var input = Ids(Tokenize(normalized));
         // The native path watermarks in PredictCore.
         return IsOnnxMode && OnnxModel is not null ? Watermarked(OnnxModel.Run(input)) : Predict(input);
@@ -359,9 +364,11 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     private protected override bool HiftUsesOriginalSineGen => true;
 
     /// <summary>
-    /// Loads the unmodified release directory: <c>t3_cfg.safetensors</c>, <c>s3gen.safetensors</c>,
-    /// <c>ve.safetensors</c> and <c>tokenizer.json</c>; a <c>perth_net_250000.pth.tar</c> beside them becomes the watermark
-    /// model unless <see cref="ChatterboxOptions.WatermarkModelPath"/> is set.
+    /// Loads the unmodified release directory: for the English model <c>t3_cfg.safetensors</c>, <c>s3gen.safetensors</c>,
+    /// <c>ve.safetensors</c> and <c>tokenizer.json</c>; for a multilingual one <c>t3_mtl23ls_v2</c> (or <c>_v3</c>)
+    /// <c>.safetensors</c>, <c>s3gen.pt</c>, <c>ve.pt</c>, <c>grapheme_mtl_merged_expanded_v1.json</c> and
+    /// <c>Cangjie5_TC.json</c>. A <c>perth_net_250000.pth.tar</c> beside them becomes the watermark model unless
+    /// <see cref="ChatterboxOptions.WatermarkModelPath"/> is set.
     /// </summary>
     public void LoadPretrainedWeights(string modelDirectory)
     {
@@ -369,9 +376,14 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         if (string.IsNullOrWhiteSpace(modelDirectory))
             throw new ArgumentException("The model directory is required.", nameof(modelDirectory));
 
-        string tokenizerPath = Path.Combine(modelDirectory, "tokenizer.json");
+        string tokenizerPath = Path.Combine(modelDirectory, IsMultilingual ? "grapheme_mtl_merged_expanded_v1.json" : "tokenizer.json");
         _tokenizer = ChatterboxTokenizer.Load(tokenizerPath);
         _options.TokenizerPath = tokenizerPath;
+        if (IsMultilingual)
+        {
+            _options.CangjieMappingPath = Path.Combine(modelDirectory, "Cangjie5_TC.json");
+            _multilingualText = null;
+        }
         string perth = Path.Combine(modelDirectory, "perth_net_250000.pth.tar");
         if (_options.WatermarkModelPath is null && File.Exists(perth))
         {
@@ -380,9 +392,17 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         }
 
         // Each file is streamed one tensor at a time and closed after its components load.
-        using (var t3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "t3_cfg.safetensors"))) T3.LoadTorchWeights(t3);
-        using (var ve = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "ve.safetensors"))) VoiceEncoder.LoadTorchWeights(ve.Read);
-        using (var s3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "s3gen.safetensors")))
+        string t3File = _options.Variant switch
+        {
+            ChatterboxVariant.MultilingualV2 => "t3_mtl23ls_v2.safetensors",
+            ChatterboxVariant.MultilingualV3 => "t3_mtl23ls_v3.safetensors",
+            _ => "t3_cfg.safetensors",
+        };
+        // The multilingual release ships its voice encoder and S3Gen as PyTorch state dicts.
+        string extension = IsMultilingual ? ".pt" : ".safetensors";
+        using (var t3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, t3File))) T3.LoadTorchWeights(t3);
+        using (var ve = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "ve" + extension))) VoiceEncoder.LoadTorchWeights(ve.Read);
+        using (var s3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "s3gen" + extension)))
         {
             Flow.LoadTorchWeights(s3.WithPrefix("flow."), "");
             Hift.LoadTorchWeights(s3.WithPrefix("mel2wav."));
@@ -509,6 +529,25 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
 
     private ChatterboxTokenizer Tokenizer => _tokenizer ?? throw new InvalidOperationException(
         "Chatterbox needs its released tokenizer.json. Set ChatterboxOptions.TokenizerPath or call LoadPretrainedWeights.");
+
+    // The multilingual front end, built on first use from the tokenizer and the Cangjie mapping; pkuseg, Dicta and the
+    // Russian stresser load only for text in their languages.
+    private ChatterboxMultilingualText MultilingualText
+    {
+        get
+        {
+            if (_multilingualText is not null) return _multilingualText;
+            var cangjie = _options.CangjieMappingPath;
+            if (string.IsNullOrWhiteSpace(cangjie))
+                throw new InvalidOperationException("A multilingual Chatterbox needs the release's Cangjie5_TC.json: set "
+                    + "ChatterboxOptions.CangjieMappingPath or call LoadPretrainedWeights.");
+            var segmenter = new Lazy<Pkuseg>(() => Pkuseg.Load(_options.ChineseSegmenterPath ?? Pkuseg.DefaultModelDirectory()));
+            var hebrew = new Lazy<DictaDiacritizer>(() => DictaDiacritizer.Load(_options.HebrewDiacritizerPath ?? DictaDiacritizer.DefaultModelDirectory()));
+            var russian = new Lazy<RussianTextStresser>(() => RussianTextStresser.Load(_options.RussianStresserPath ?? RussianTextStresser.DefaultModelDirectory()));
+            return _multilingualText = new ChatterboxMultilingualText(Tokenizer, cangjie!, () => segmenter.Value,
+                text => hebrew.Value.AddDiacritics(text), text => russian.Value.StressText(text));
+        }
+    }
 
     private ChatterboxT3<T> T3 => _t3
         ?? throw new InvalidOperationException("Chatterbox T3 exists in native release mode only.");

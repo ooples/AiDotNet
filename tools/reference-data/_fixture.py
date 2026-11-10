@@ -5,7 +5,10 @@ import os
 import sys
 
 import numpy as np
-import torch
+try:
+    import torch
+except ImportError:  # references that run without torch (spaCy-only venvs)
+    torch = None
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
@@ -28,7 +31,7 @@ def load(relative):
 
 def save(relative, data, script):
     data["generator"] = "tools/reference-data/" + os.path.basename(script)
-    data["torch"] = torch.__version__
+    data["torch"] = torch.__version__ if torch is not None else None
     with open(fixture_path(relative), "w", encoding="utf-8", newline="\n") as handle:
         json.dump(data, handle)
 
