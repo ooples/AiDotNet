@@ -156,9 +156,14 @@ internal static class TensorModelTrainer<T>
         // plain SGD at the given rate or the caller's optimizer, whose state is keyed by these live tensors.
         Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>> checkShapes = gradients => RequireMatchingShapes(model, gradients);
         Tensor<T> Objective() => loss(forward(input), target);
+        // The heads are read only by the loss, which the step consumes before its backward, so each activation can go
+        // back to the arena once backward has used it: the step's memory is then what is live at once, as in PyTorch,
+        // not every activation plus every backward buffer.
         return optimizer is null
-            ? AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(() => parameters, Objective, learningRate, checkShapes)
-            : AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(parameters, Objective, optimizer, checkShapes);
+            ? AiDotNet.Training.TapeTrainingStepper<T>.EagerSgdObjectiveStep(() => parameters, Objective, learningRate, checkShapes,
+                releaseActivations: true)
+            : AiDotNet.Training.TapeTrainingStepper<T>.EagerObjectiveStep(() => parameters, Objective, optimizer, checkShapes,
+                releaseActivations: true);
     }
 
     // A gradient whose shape differs from its tensor means the forward used a reshaped copy or an

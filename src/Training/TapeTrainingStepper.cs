@@ -220,13 +220,17 @@ internal sealed class TapeTrainingStepper<T>
     /// The objective step with the parameters read AFTER the objective has run, for models whose lazy layers allocate
     /// their weights on the first forward.
     /// </summary>
+    /// <param name="releaseActivations">Hand each forward activation back to the step's arena after its last
+    /// backward use. Only when nothing reads the objective's forward tensors after the backward but the loss and the
+    /// gradients (see <see cref="GradientTapeOptions.ReleaseActivationsDuringBackward"/>).</param>
     public static T EagerObjectiveStep(
         Func<IReadOnlyList<Tensor<T>>> parameters,
         Func<Tensor<T>> objective,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer,
         Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null,
         double modelGradientClip = 0.0,
-        Action? beforeUpdate = null)
+        Action? beforeUpdate = null,
+        bool releaseActivations = false)
     {
         Guard.NotNull(parameters);
         Guard.NotNull(objective);
@@ -240,18 +244,24 @@ internal sealed class TapeTrainingStepper<T>
             placeholder,
             (_, _) => objective(),
             (value, _) => value,
-            new EagerStepHooks { OnGradients = onGradients, ModelGradientClip = modelGradientClip, BeforeUpdate = beforeUpdate });
+            new EagerStepHooks
+            {
+                OnGradients = onGradients, ModelGradientClip = modelGradientClip, BeforeUpdate = beforeUpdate,
+                ReleaseActivations = releaseActivations,
+            });
     }
 
     /// <summary>
     /// One eager plain-SGD update (<c>p -= learningRate * grad</c>) of the tensors <paramref name="objective"/>
     /// reaches, for the trainers that have no optimizer object. Parameters are read after the objective runs.
     /// </summary>
+    /// <param name="releaseActivations">As for <c>EagerObjectiveStep</c>.</param>
     public static T EagerSgdObjectiveStep(
         Func<IReadOnlyList<Tensor<T>>> parameters,
         Func<Tensor<T>> objective,
         T learningRate,
-        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null)
+        Action<IReadOnlyDictionary<Tensor<T>, Tensor<T>>>? onGradients = null,
+        bool releaseActivations = false)
     {
         Guard.NotNull(parameters);
         Guard.NotNull(objective);
@@ -270,7 +280,7 @@ internal sealed class TapeTrainingStepper<T>
             placeholder,
             (_, _) => objective(),
             (value, _) => value,
-            new EagerStepHooks { OnGradients = onGradients });
+            new EagerStepHooks { OnGradients = onGradients, ReleaseActivations = releaseActivations });
     }
 
     /// <summary>
@@ -388,6 +398,14 @@ internal sealed class TapeTrainingStepper<T>
 
         /// <summary>Runs after the gradients exist and before the update.</summary>
         public Action? BeforeUpdate { get; init; }
+
+        /// <summary>
+        /// Hands each forward activation back to the step's arena after its last backward use, and the gradients back
+        /// when the step ends instead of a step later (<see cref="GradientTapeOptions.ReleaseActivationsDuringBackward"/>,
+        /// <see cref="GradientTapeOptions.ReleaseResultsAtDispose"/>). Only for an objective whose forward tensors nothing
+        /// reads after the backward but the loss and the gradients, and whose gradient hooks keep none of them.
+        /// </summary>
+        public bool ReleaseActivations { get; init; }
     }
 
     /// <summary>
@@ -414,7 +432,9 @@ internal sealed class TapeTrainingStepper<T>
         Guard.NotNull(objective);
         Guard.NotNull(parameterProvider);
         Guard.NotNull(update);
-        using var tape = new GradientTape<T>();
+        using var tape = new GradientTape<T>(hooks is { ReleaseActivations: true }
+            ? new GradientTapeOptions { ReleaseActivationsDuringBackward = true, ReleaseResultsAtDispose = true }
+            : null);
         var loss = objective();
         if (loss is null)
             throw new InvalidOperationException("A training objective returned null instead of a scalar loss tensor.");
