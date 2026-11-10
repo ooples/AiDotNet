@@ -56,6 +56,14 @@ internal static class WhisperSpeechFixture
             options.Stage = WhisperSpeechTrainingStage.SemanticToAcoustic;
         if (option == "VqMaxGradientNorm") options.VqMaxGradientNorm = .001;
         if (option == "S2AMaxGradientNorm") options.S2AMaxGradientNorm = .001;
+        if (option == "VocosBandwidthId")
+        {
+            // The authentic released norm tensors are [4,384], so retain the complete compatible decoder geometry.
+            options.VocosDim = 384; options.VocosIntermediateDim = 1152; options.VocosLayers = 8; options.HopSize = 320;
+            var codec = (AiDotNet.Audio.Generation.EnCodecOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(options.Codec);
+            codec.Dimension = 128; codec.CodebookSize = 1024; codec.Ratios = new[] { 8, 5, 4, 2 }; codec.TargetBandwidthKbps = 3.0;
+            options.Codec = codec;
+        }
     }
 
     internal static AiDotNet.TextToSpeech.TtsTrainingSample<T> Sample<T>()
@@ -74,6 +82,10 @@ internal static class WhisperSpeechFixture
         var options = (WhisperSpeechOptions)model.GetOptions();
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         using var noGrad = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
+        if (option == "TopK")
+            // Observe the actual trained T2S sampler before the still-untrained S2A heads can hide its changes.
+            return AiDotNet.Tests.ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(
+                model.TextToSemanticTokens("a tone").Select(value => (double)value));
         if (option == "CharactersPerSecond")
         {
             var t2s = model.Core.TextToSemantic;
@@ -96,16 +108,7 @@ internal static class WhisperSpeechFixture
         }
         if (option == "VocosBandwidthId")
         {
-            // Fresh adaptive norms have identical rows. Use distinct learned norm rows so decoding
-            // observes the configured bandwidth rather than that initialization symmetry.
-            foreach (var table in model.Core.Vocos.Layers.OfType<AiDotNet.NeuralNetworks.Layers.TiedEmbeddingLayer<T>>()
-                .Where(table => !ReferenceEquals(table, model.Core.Vocos.Codebooks)))
-            {
-                var values = table.GetParameters();
-                for (int i = 0; i < values.Length; i++)
-                    values[i] = ops.FromDouble(1 + .1 * (i / options.VocosDim) + .01 * (i % options.VocosDim));
-                table.SetParameters(values);
-            }
+            ReleasedVocosBandwidthFixture.Load(model.Core.Vocos);
             var codes = new Tensor<T>(new[] { 4, 3 });
             for (int i = 0; i < codes.Length; i++) codes[i] = ops.FromDouble(i % options.Codec.CodebookSize);
             return AiDotNet.Tests.ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(model.DecodeFromTokens(codes).Select(ops.ToDouble));

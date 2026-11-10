@@ -67,3 +67,4 @@
 # no line-ending conversion.
 ###############################################################################
 src/TextToSpeech/FrontEnd/Resources/** -text
+tests/AiDotNet.Tests/TextToSpeech/ReferenceData/vocos_released_bandwidth_state.json -text
