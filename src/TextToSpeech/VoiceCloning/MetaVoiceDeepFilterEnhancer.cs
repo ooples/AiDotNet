@@ -1,5 +1,5 @@
-using AiDotNet.ComputerVision.Weights;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -16,14 +16,12 @@ internal sealed class MetaVoiceDeepFilterEnhancer<T>
     internal MetaVoiceDeepFilterEnhancer(string checkpoint)
     {
         Network = new MetaVoiceDeepFilterNet<T>();
-        var state = new WeightLoader().LoadWeights(checkpoint); int stored = state.Count;
-        Network.LoadTorch((name, shape) =>
+        using (var file = TorchCheckpointFile.Open(checkpoint, strictAxes: true))
         {
-            if (!state.TryGetValue(name, out var value) || (!value.Shape.ToArray().SequenceEqual(shape) && !(shape.Length == 0 && value.Length == 1)))
-                throw new InvalidDataException("Missing or mismatched released DeepFilterNet3 tensor: " + name);
-            state.Remove(name); return value.ToArray().Select(x => (double)x).ToArray();
-        });
-        if (stored != 133 || state.Count != 0) throw new InvalidDataException("The released DeepFilterNet3 checkpoint requires exactly 133 consumed tensors.");
+            if (file.Names.Count != 133) throw new InvalidDataException("The released DeepFilterNet3 checkpoint requires exactly 133 consumed tensors.");
+            Network.LoadTorch(file);
+            file.RequireAllUsed("released DeepFilterNet3");
+        }
         _frontend = new MetaVoiceDeepFilterFrontend(AiDotNetEngine.Current, Network.ErbWidths());
         Network.SetTrainingMode(false);
     }

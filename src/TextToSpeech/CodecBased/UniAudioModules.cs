@@ -372,9 +372,8 @@ internal sealed class UniAudioCodec<T>
     internal int HopLength => _options.CodecRatios.Aggregate(1, (product, ratio) => product * ratio);
     internal ResidualVectorQuantizerLayer<T> Quantizer => _quantizer;
 
-    // SEANet's loader still takes each tensor's values.
     internal void LoadTorchWeights(TorchTensorSource source, string prefix = "") =>
-        SeanetTorchWeights.Load(source.AsFunction(), _encoder, _decoder, _quantizer, _options.CodecTotalQuantizers,
+        SeanetTorchWeights.Load(source, _encoder, _decoder, _quantizer, _options.CodecTotalQuantizers,
             _options.CodebookSize, _options.CodecDimension, prefix);
 
     internal int[,] Encode(Tensor<T> audio)

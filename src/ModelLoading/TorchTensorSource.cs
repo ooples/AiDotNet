@@ -279,13 +279,29 @@ internal abstract class TorchTensorSource
         private readonly Func<string, int[], double[]?> _read;
         private readonly bool _allNamesPresent;
         public FromFunction(Func<string, int[], double[]?> read, bool allNamesPresent) { _read = read; _allNamesPresent = allNamesPresent; }
+        // The values a probe returned, kept until they are read: a function that hands each tensor out once (and records
+        // or removes it) is called once per tensor however often a loader asks whether it exists.
+        private readonly Dictionary<string, double[]> _probed = new(StringComparer.Ordinal);
         protected override string Description => "the weight source";
         // A throwing function answers absence by throwing on the read itself; the null-returning form is probed.
-        public override bool Contains(string name) => _allNamesPresent || _read(name, Array.Empty<int>()) is not null;
-        public override double[]? TryRead(string name, int[]? shape = null) => _read(name, shape ?? Array.Empty<int>());
+        public override bool Contains(string name)
+        {
+            if (_allNamesPresent || _probed.ContainsKey(name)) return true;
+            var values = _read(name, Array.Empty<int>());
+            if (values is null) return false;
+            _probed[name] = values;
+            return true;
+        }
+        private double[]? Take(string name, int[] shape)
+        {
+            if (!_probed.TryGetValue(name, out var values)) return _read(name, shape);
+            _probed.Remove(name);
+            return values;
+        }
+        public override double[]? TryRead(string name, int[]? shape = null) => Take(name, shape ?? Array.Empty<int>());
         protected override long Decode(string name, int[] shape, SafetensorsFile.DecodedChunk sink)
         {
-            var values = _read(name, shape) ?? throw new InvalidDataException($"The weight source has no tensor '{name}'.");
+            var values = Take(name, shape) ?? throw new InvalidDataException($"The weight source has no tensor '{name}'.");
             sink(0, values);
             return values.Length;
         }

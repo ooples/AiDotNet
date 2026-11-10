@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -35,11 +36,13 @@ internal sealed class StyleTts2SlmDiscriminator<T>
         return _engine.Reshape(y, new[] { 1, y.Shape[2] });
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchReader read, string name) => Load(StyleTtsOps.Source(read), name);
+
+    public void Load(TorchTensorSource source, string name)
     {
-        StyleTtsOps.LoadWeightNorm(Pre, read, name + ".pre");
-        for (int i = 0; i < Convs.Count; i++) StyleTtsOps.LoadWeightNorm(Convs[i], read, $"{name}.convs.{i}");
-        StyleTtsOps.LoadWeightNorm(Post, read, name + ".conv_post");
+        StyleTtsOps.LoadWeightNorm(Pre, source, name + ".pre");
+        for (int i = 0; i < Convs.Count; i++) StyleTtsOps.LoadWeightNorm(Convs[i], source, $"{name}.convs.{i}");
+        StyleTtsOps.LoadWeightNorm(Post, source, name + ".conv_post");
     }
 }
 
@@ -90,19 +93,15 @@ public partial class StyleTTS2<T>
     /// </summary>
     public void LoadSlmWeights(string path)
     {
-        var names = new HashSet<string>(new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path).Keys, StringComparer.Ordinal);
-        var read = StyleTTS<T>.Reader(path, "wavlm.");
-        SlmNetwork.LoadTorchWeights((name, shape) => read(name, shape), name => names.Contains(name) || names.Contains("wavlm." + name));
+        using var file = TorchCheckpointFile.Open(path);
+        SlmNetwork.LoadTorchWeights(StyleTTS<T>.Reader(file, "wavlm."), name => file.Contains(name) || file.Contains("wavlm." + name));
     }
 
     /// <summary>Loads the reference's <c>mpd</c>, <c>msd</c> and <c>wd</c> state (old-style <c>weight_g</c>/<c>weight_v</c>
     /// or parametrized names).</summary>
-    private void LoadDiscriminators(TorchReader read, IReadOnlyDictionary<string, double[]> waveState)
+    private void LoadDiscriminators(TorchTensorSource source, TorchTensorSource waveDiscriminators)
     {
-        // The reference names the spectrogram discriminators msd; CosyVoice's loader reads them as mrd.
-        var renamed = waveState.ToDictionary(kv => kv.Key.StartsWith("msd.", StringComparison.Ordinal) ? "mrd." + kv.Key.Substring(4) : kv.Key,
-            kv => kv.Value);
-        WaveDiscriminators.LoadTorch(renamed);
-        SlmDiscriminator.Load(read, "wd");
+        WaveDiscriminators.LoadTorch(waveDiscriminators);
+        SlmDiscriminator.Load(source, "wd");
     }
 }

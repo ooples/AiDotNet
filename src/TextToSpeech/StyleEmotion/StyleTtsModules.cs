@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -82,36 +83,25 @@ internal static class StyleTtsOps
         return engine.Reshape(engine.TensorTranspose(y), new[] { 1, y.Shape[1], t });
     }
 
+    /// <summary>A source over a reader (test fixtures).</summary>
+    public static TorchTensorSource Source(TorchReader read) => TorchTensorSource.From((name, shape) => read(name, shape));
+
     /// <summary>Loads a PyTorch <c>weight_norm</c> convolution (<c>weight_g</c>, <c>weight_v</c>, <c>bias</c>).</summary>
-    public static void LoadWeightNorm<T>(NormedConv1DLayer<T> conv, TorchReader read, string name, bool bias = true)
-    {
-        var shape = conv.TorchWeightShape;
-        var v = read(name + ".weight_v", shape);
-        var g = read(name + ".weight_g", new[] { shape[0], 1, 1 });
-        conv.LoadTorchWeights(v, g, bias ? read(name + ".bias", new[] { conv.OutputChannels }) : new double[conv.OutputChannels]);
-    }
+    public static void LoadWeightNorm<T>(NormedConv1DLayer<T> conv, TorchTensorSource source, string name, bool bias = true) =>
+        conv.LoadTorchWeights(source, name + ".weight_v", conv.TorchWeightShape, name + ".weight_g", bias ? name + ".bias" : null);
 
     /// <summary>Loads a plain PyTorch convolution (<c>weight</c>, <c>bias</c>).</summary>
-    public static void LoadPlain<T>(NormedConv1DLayer<T> conv, TorchReader read, string name, bool bias = true)
-    {
-        var shape = conv.TorchWeightShape;
-        conv.LoadTorchWeights(read(name + ".weight", shape), null,
-            bias ? read(name + ".bias", new[] { conv.OutputChannels }) : new double[conv.OutputChannels]);
-    }
+    public static void LoadPlain<T>(NormedConv1DLayer<T> conv, TorchTensorSource source, string name, bool bias = true) =>
+        conv.LoadTorchWeights(source, name + ".weight", conv.TorchWeightShape, null, bias ? name + ".bias" : null);
 
     /// <summary>Loads a <c>spectral_norm</c> 2-D convolution (<c>weight_orig</c>, <c>weight_u</c>, <c>weight_v</c>,
     /// <c>bias</c>).</summary>
-    public static void LoadSpectral<T>(NormedConv2DLayer<T> conv, TorchReader read, string name, bool bias = true)
-    {
-        var shape = conv.TorchWeightShape;
-        int per = shape[1] * shape[2] * shape[3];
-        conv.LoadTorchWeights(read(name + ".weight_orig", shape), bias ? read(name + ".bias", new[] { shape[0] }) : null,
-            read(name + ".weight_u", new[] { shape[0] }), read(name + ".weight_v", new[] { per }));
-    }
+    public static void LoadSpectral<T>(NormedConv2DLayer<T> conv, TorchTensorSource source, string name, bool bias = true) =>
+        conv.LoadSpectralTorchWeights(source, name + ".weight_orig", bias ? name + ".bias" : null, name + ".weight_u", name + ".weight_v");
 
     /// <summary>Loads an <c>nn.Linear</c>.</summary>
-    public static void LoadLinear<T>(IEngine engine, DenseLayer<T> layer, TorchReader read, string name, int inputs, int outputs) =>
-        TorchParameters.Linear(engine, layer, inputs, outputs, read(name + ".weight", new[] { outputs, inputs }), read(name + ".bias", new[] { outputs }));
+    public static void LoadLinear<T>(IEngine engine, DenseLayer<T> layer, TorchTensorSource source, string name, int inputs, int outputs) =>
+        TorchParameters.Linear(engine, layer, inputs, outputs, source, name + ".weight", name + ".bias");
 
     /// <summary>Loads an affine normalization's scale and shift.</summary>
     public static void LoadAffine<T>(IEngine engine, Tensor<T> gamma, Tensor<T> beta, double[] weight, double[] bias)
@@ -126,8 +116,19 @@ internal static class StyleTtsOps
         engine.InvalidatePersistentTensor(beta);
     }
 
-    public static void LoadInstanceNorm<T>(IEngine engine, InstanceNormalizationLayer<T> norm, TorchReader read, string name, int channels) =>
-        LoadAffine(engine, norm.GetGammaTensor(), norm.GetBetaTensor(), read(name + ".weight", new[] { channels }), read(name + ".bias", new[] { channels }));
+    /// <summary>Loads an affine normalization's scale and shift (<c>[channels]</c> each) straight from
+    /// <paramref name="source"/>.</summary>
+    public static void LoadAffine<T>(IEngine engine, Tensor<T> gamma, Tensor<T> beta, TorchTensorSource source, string weightName, string biasName,
+        int channels)
+    {
+        source.CopyTo(weightName, new[] { channels }, gamma);
+        source.CopyTo(biasName, new[] { channels }, beta);
+        engine.InvalidatePersistentTensor(gamma);
+        engine.InvalidatePersistentTensor(beta);
+    }
+
+    public static void LoadInstanceNorm<T>(IEngine engine, InstanceNormalizationLayer<T> norm, TorchTensorSource source, string name, int channels) =>
+        LoadAffine(engine, norm.GetGammaTensor(), norm.GetBetaTensor(), source, name + ".weight", name + ".bias", channels);
 
     public static DenseLayer<T> Linear<T>(int outputs) => new(outputs, (IActivationFunction<T>)new IdentityActivation<T>());
 
@@ -179,12 +180,10 @@ internal sealed class StyleTtsBiLstm<T>
     public Tensor<T> Apply(Tensor<T> rows) =>
         _engine.TensorConcatenate(new[] { Run(ForwardCell, rows, false), Run(BackwardCell, rows, true) }, 1);
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
-        int g = 4 * Hidden;
         foreach (var (cell, suffix) in new[] { (ForwardCell, "_l0"), (BackwardCell, "_l0_reverse") })
-            cell.LoadTorchWeights(read($"{name}.weight_ih{suffix}", new[] { g, Input }), read($"{name}.weight_hh{suffix}", new[] { g, Hidden }),
-                read($"{name}.bias_ih{suffix}", new[] { g }), read($"{name}.bias_hh{suffix}", new[] { g }));
+            cell.LoadTorchWeights(source, $"{name}.weight_ih{suffix}", $"{name}.weight_hh{suffix}", $"{name}.bias_ih{suffix}", $"{name}.bias_hh{suffix}");
     }
 }
 
@@ -223,12 +222,12 @@ internal sealed class StyleTtsResBlock2d<T>
         return StyleTtsOps.Scale(_engine, _engine.TensorAdd(shortcut, r), StyleTtsOps.InverseSqrt2);
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
-        StyleTtsOps.LoadSpectral(Conv1, read, name + ".conv1");
-        StyleTtsOps.LoadSpectral(Conv2, read, name + ".conv2");
-        if (DownsampleResidual is not null) StyleTtsOps.LoadSpectral(DownsampleResidual, read, name + ".downsample_res.conv");
-        if (Shortcut is not null) StyleTtsOps.LoadSpectral(Shortcut, read, name + ".conv1x1", bias: false);
+        StyleTtsOps.LoadSpectral(Conv1, source, name + ".conv1");
+        StyleTtsOps.LoadSpectral(Conv2, source, name + ".conv2");
+        if (DownsampleResidual is not null) StyleTtsOps.LoadSpectral(DownsampleResidual, source, name + ".downsample_res.conv");
+        if (Shortcut is not null) StyleTtsOps.LoadSpectral(Shortcut, source, name + ".conv1x1", bias: false);
     }
 }
 
@@ -285,11 +284,11 @@ internal sealed class StyleTtsTrunk2d<T>
         return _engine.Reshape(_engine.ReduceMean(x, new[] { 2, 3 }, keepDims: false), new[] { 1, c, 1, 1 });
     }
 
-    public void Load(TorchReader read, string name, int firstIndex = 0)
+    public void Load(TorchTensorSource source, string name, int firstIndex = 0)
     {
-        StyleTtsOps.LoadSpectral(Input, read, $"{name}.{firstIndex}");
-        for (int i = 0; i < Blocks.Count; i++) Blocks[i].Load(read, $"{name}.{firstIndex + 1 + i}");
-        StyleTtsOps.LoadSpectral(Output, read, $"{name}.{firstIndex + 2 + Blocks.Count}");
+        StyleTtsOps.LoadSpectral(Input, source, $"{name}.{firstIndex}");
+        for (int i = 0; i < Blocks.Count; i++) Blocks[i].Load(source, $"{name}.{firstIndex + 1 + i}");
+        StyleTtsOps.LoadSpectral(Output, source, $"{name}.{firstIndex + 2 + Blocks.Count}");
     }
 }
 
@@ -319,10 +318,10 @@ internal sealed class StyleTtsStyleEncoder<T>
         return Projection.Forward(_engine.Reshape(x, new[] { 1, Trunk.OutputDim }));
     }
 
-    public void Load(IEngine engine, TorchReader read, string name)
+    public void Load(IEngine engine, TorchTensorSource source, string name)
     {
-        Trunk.Load(read, name + ".shared");
-        StyleTtsOps.LoadLinear(engine, Projection, read, name + ".unshared", Trunk.OutputDim, StyleDim);
+        Trunk.Load(source, name + ".shared");
+        StyleTtsOps.LoadLinear(engine, Projection, source, name + ".unshared", Trunk.OutputDim, StyleDim);
     }
 }
 
@@ -356,9 +355,9 @@ internal sealed class StyleTtsDiscriminator<T>
         return (_engine.Reshape(x, new[] { 1 }), features);
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
-        Trunk.Load(read, name + ".main");
-        StyleTtsOps.LoadSpectral(Logit, read, $"{name}.main.{Trunk.Blocks.Count + 5}");
+        Trunk.Load(source, name + ".main");
+        StyleTtsOps.LoadSpectral(Logit, source, $"{name}.main.{Trunk.Blocks.Count + 5}");
     }
 }

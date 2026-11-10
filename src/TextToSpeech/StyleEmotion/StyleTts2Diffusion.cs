@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -76,25 +77,24 @@ internal sealed class StyleTts2DiffusionBlock<T>
         return _engine.TensorAdd(hidden, x);
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
         int f = Features, mid = Heads * HeadFeatures;
         if (StyleNorm is not null)
         {
-            StyleNorm.Load(read, name + ".attention.norm");
-            StyleContextNorm!.Load(read, name + ".attention.norm_context");
+            StyleNorm.Load(source, name + ".attention.norm");
+            StyleContextNorm!.Load(source, name + ".attention.norm_context");
         }
         else
         {
-            TorchParameters.LayerNorm(_engine, Norm!, read(name + ".attention.norm.weight", new[] { f }), read(name + ".attention.norm.bias", new[] { f }));
-            TorchParameters.LayerNorm(_engine, ContextNorm!, read(name + ".attention.norm_context.weight", new[] { f }),
-                read(name + ".attention.norm_context.bias", new[] { f }));
+            TorchParameters.LayerNorm(_engine, Norm!, source, name + ".attention.norm.weight", name + ".attention.norm.bias");
+            TorchParameters.LayerNorm(_engine, ContextNorm!, source, name + ".attention.norm_context.weight", name + ".attention.norm_context.bias");
         }
-        TorchParameters.Linear(Query, f, mid, read(name + ".attention.to_q.weight", new[] { mid, f }));
-        TorchParameters.Linear(KeyValue, f, 2 * mid, read(name + ".attention.to_kv.weight", new[] { 2 * mid, f }));
-        StyleTtsOps.LoadLinear(_engine, Output, read, name + ".attention.attention.to_out", mid, f);
-        StyleTtsOps.LoadLinear(_engine, FeedForward, read, name + ".feed_forward.0", f, f * Multiplier);
-        StyleTtsOps.LoadLinear(_engine, FeedForwardOutput, read, name + ".feed_forward.2", f * Multiplier, f);
+        TorchParameters.Linear(Query, f, mid, source, name + ".attention.to_q.weight");
+        TorchParameters.Linear(KeyValue, f, 2 * mid, source, name + ".attention.to_kv.weight");
+        StyleTtsOps.LoadLinear(_engine, Output, source, name + ".attention.attention.to_out", mid, f);
+        StyleTtsOps.LoadLinear(_engine, FeedForward, source, name + ".feed_forward.0", f, f * Multiplier);
+        StyleTtsOps.LoadLinear(_engine, FeedForwardOutput, source, name + ".feed_forward.2", f * Multiplier, f);
     }
 }
 
@@ -198,17 +198,17 @@ internal sealed class StyleTts2StyleDenoiser<T>
             NumOps.FromDouble(embeddingScale)));
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
         int c = Channels, f = Channels + EmbeddingFeatures;
-        for (int i = 0; i < Blocks.Count; i++) Blocks[i].Load(read, $"{name}.blocks.{i}");
-        TorchParameters.Linear(_engine, Out, f, c, read(name + ".to_out.1.weight", new[] { c, f, 1 }), read(name + ".to_out.1.bias", new[] { c }));
-        StyleTtsOps.LoadLinear(_engine, Mapping, read, name + ".to_mapping.0", f, f);
-        StyleTtsOps.LoadLinear(_engine, MappingOutput, read, name + ".to_mapping.2", f, f);
-        TimeFrequencies.LoadTable(read(name + ".to_time.0.0.weights", new[] { c / 2 }));
-        StyleTtsOps.LoadLinear(_engine, Time, read, name + ".to_time.0.1", c + 1, f);
-        if (StyleFeaturesLayer is not null) StyleTtsOps.LoadLinear(_engine, StyleFeaturesLayer, read, name + ".to_features.0", StyleFeatures!.Value, f);
-        FixedEmbedding.LoadTable(read(name + ".fixed_embedding.embedding.weight", new[] { MaxLength, EmbeddingFeatures }));
+        for (int i = 0; i < Blocks.Count; i++) Blocks[i].Load(source, $"{name}.blocks.{i}");
+        TorchParameters.Linear(_engine, Out, f, c, source, name + ".to_out.1.weight", name + ".to_out.1.bias");
+        StyleTtsOps.LoadLinear(_engine, Mapping, source, name + ".to_mapping.0", f, f);
+        StyleTtsOps.LoadLinear(_engine, MappingOutput, source, name + ".to_mapping.2", f, f);
+        TorchParameters.Parameters(TimeFrequencies, source, name + ".to_time.0.0.weights", new[] { c / 2 });
+        StyleTtsOps.LoadLinear(_engine, Time, source, name + ".to_time.0.1", c + 1, f);
+        if (StyleFeaturesLayer is not null) StyleTtsOps.LoadLinear(_engine, StyleFeaturesLayer, source, name + ".to_features.0", StyleFeatures!.Value, f);
+        TorchParameters.Parameters(FixedEmbedding, source, name + ".fixed_embedding.embedding.weight", new[] { MaxLength, EmbeddingFeatures });
     }
 }
 

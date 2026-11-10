@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
@@ -110,15 +111,20 @@ internal sealed class HiFiGanGenerator<T>
     /// <c>resblocks.{i·K + j}.convs1/convs2.{n}</c> and <c>conv_post</c>, each weight-normalized one as <c>weight_g</c> /
     /// <c>weight_v</c> (or the parametrization's <c>original0</c> / <c>original1</c>).
     /// </summary>
-    internal void LoadTorch(Func<string, double[]?> read, string prefix = "")
+    internal void LoadTorch(Func<string, double[]?> read, string prefix = "") => LoadTorch(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the generator's PyTorch state straight from <paramref name="source"/> (see the function form).</summary>
+    internal void LoadTorch(TorchTensorSource source, string prefix = "")
     {
         void Load(NormedConv1DLayer<T> conv, string name)
         {
-            var v = read(name + ".weight_v") ?? read(name + ".parametrizations.weight.original1");
-            var g = read(name + ".weight_g") ?? read(name + ".parametrizations.weight.original0");
-            var bias = read(name + ".bias") ?? new double[conv.OutputChannels];
-            if (v is not null) conv.LoadTorchWeights(v, g, bias);
-            else conv.LoadTorchWeights(read(name + ".weight") ?? throw new KeyNotFoundException(name + ".weight"), null, bias);
+            string? First(params string[] names) => names.FirstOrDefault(source.Contains);
+            var v = First(name + ".weight_v", name + ".parametrizations.weight.original1");
+            var g = v is null ? null : First(name + ".weight_g", name + ".parametrizations.weight.original0");
+            var bias = First(name + ".bias");
+            if (v is not null) conv.LoadTorchWeights(source, v, conv.TorchWeightShape, g, bias);
+            else if (source.Contains(name + ".weight")) conv.LoadTorchWeights(source, name + ".weight", conv.TorchWeightShape, null, bias);
+            else throw new KeyNotFoundException(name + ".weight");
         }
         Load(_pre, prefix + "conv_pre");
         if (Condition is not null) Load(Condition, prefix + "cond");
@@ -275,14 +281,18 @@ internal sealed class HiFiGanDiscriminators<T>
     /// <c>MultiPeriodDiscriminator</c> list the scale discriminator first (<paramref name="scalesFirst"/>); HiFi-GAN's keeps
     /// separate period and scale modules, which callers address with <paramref name="prefix"/>.
     /// </summary>
-    internal void LoadTorch(Func<string, double[]?> read, string prefix = "", bool scalesFirst = true)
+    internal void LoadTorch(Func<string, double[]?> read, string prefix = "", bool scalesFirst = true) =>
+        LoadTorch(TorchTensorSource.From(read), prefix, scalesFirst);
+
+    /// <summary>Loads the discriminators' PyTorch state straight from <paramref name="source"/> (see the function form).</summary>
+    internal void LoadTorch(TorchTensorSource source, string prefix = "", bool scalesFirst = true)
     {
-        double[] Require(string name) => read(name) ?? throw new KeyNotFoundException(name);
+        string Require(string name) => source.Contains(name) ? name : throw new KeyNotFoundException(name);
         void Load(NormedConv1DLayer<T> conv, string name)
         {
-            var v = read(name + ".weight_v");
-            if (v is null) throw new KeyNotFoundException(name + ".weight_v (only weight-normalized discriminators load)");
-            conv.LoadTorchWeights(v, Require(name + ".weight_g"), Require(name + ".bias"));
+            if (!source.Contains(name + ".weight_v"))
+                throw new KeyNotFoundException(name + ".weight_v (only weight-normalized discriminators load)");
+            conv.LoadTorchWeights(source, name + ".weight_v", conv.TorchWeightShape, Require(name + ".weight_g"), Require(name + ".bias"));
         }
         int k = 0;
         void Scales()

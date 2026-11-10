@@ -1,3 +1,5 @@
+using AiDotNet.ModelLoading;
+
 namespace AiDotNet.TextToSpeech.FlowDiffusion;
 
 /// <summary>
@@ -23,45 +25,41 @@ public partial class DiTToTTS<T>
     public void LoadConvertedWeights(DiTToCheckpointPaths checkpoints)
     {
         Validation.Guard.NotNull(checkpoints); ThrowIfDisposed(); RequirePaperModel();
-        var speech = ReadWeights(checkpoints.SpeechT5);
-        TextEncoder!.LoadHuggingFace(Reader(speech, "SpeechT5"));
-        MelVae!.Load(Reader(ReadWeights(checkpoints.MelVae), "CLaM-TTS Mel-VAE"), "");
-        DiffusionTransformer!.Load(Reader(ReadWeights(checkpoints.DiffusionTransformer), "DiTTo diffusion Transformer"), "");
-        LengthPredictor!.Load(Reader(ReadWeights(checkpoints.LengthPredictor), "DiTTo length predictor"), "");
-        var bigvgan = ReadWeights(checkpoints.BigVgan);
-        BigVgan!.LoadTorch(name => Optional(bigvgan, name) ?? Optional(bigvgan, "generator." + name));
+        WithWeights(checkpoints.SpeechT5, source => TextEncoder!.LoadHuggingFace(source));
+        WithWeights(checkpoints.MelVae, source => MelVae!.Load(source, ""));
+        WithWeights(checkpoints.DiffusionTransformer, source => DiffusionTransformer!.Load(source, ""));
+        WithWeights(checkpoints.LengthPredictor, source => LengthPredictor!.Load(source, ""));
+        WithWeights(checkpoints.BigVgan, source =>
+            BigVgan!.LoadTorch(source.WithNames(name => source.Contains(name) ? name : "generator." + name)));
     }
 
-    private static Dictionary<string, double[]> ReadWeights(string path)
+    // A file, or a directory whose *.safetensors files are one state (a later file's tensor wins a shared name), streamed
+    // into the component and closed.
+    private static void WithWeights(string path, Action<TorchTensorSource> load)
     {
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("A checkpoint path is required.", nameof(path));
-        IEnumerable<string> files;
+        string[] files;
         if (Directory.Exists(path))
         {
             files = Directory.GetFiles(path, "*.safetensors").OrderBy(p => p, StringComparer.Ordinal).ToArray();
-            if (!files.Any()) throw new FileNotFoundException($"No safetensors files were found in {path}.", path);
+            if (files.Length == 0) throw new FileNotFoundException($"No safetensors files were found in {path}.", path);
         }
         else
         {
             if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
             files = new[] { path };
         }
-        var weights = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (string file in files)
-            foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(file))
-                weights[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        return weights;
-    }
-
-    private static Func<string, int[], double[]> Reader(IReadOnlyDictionary<string, double[]> weights, string component) =>
-        (name, shape) =>
+        var opened = new List<TorchCheckpointFile>();
+        try
         {
-            if (!weights.TryGetValue(name, out var values)) throw new InvalidDataException($"The {component} checkpoint has no tensor '{name}'.");
-            int expected = shape.Aggregate(1, (a, b) => checked(a * b));
-            if (values.Length != expected) throw new InvalidDataException($"Tensor '{name}' has {values.Length} values; expected {expected}.");
-            return values;
-        };
-
-    private static double[]? Optional(IReadOnlyDictionary<string, double[]> weights, string name) =>
-        weights.TryGetValue(name, out var values) ? values : null;
+            foreach (string file in files) opened.Add(TorchCheckpointFile.Open(file));
+            TorchTensorSource source = opened[opened.Count - 1];
+            for (int i = opened.Count - 2; i >= 0; i--) source = source.Or(opened[i]);
+            load(source);
+        }
+        finally
+        {
+            foreach (var file in opened) file.Dispose();
+        }
+    }
 }

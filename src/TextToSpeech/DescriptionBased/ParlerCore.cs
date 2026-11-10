@@ -493,22 +493,27 @@ internal sealed class ParlerCore<T>
     /// state dict; <paramref name="read"/> returns a named tensor's row-major values after checking its shape. Separate
     /// or fused (<c>use_fused_lm_heads</c>) heads are both read.
     /// </summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, Func<string, bool> contains)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, Func<string, bool> contains) =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), contains);
+
+    /// <summary>Loads the same tensors straight from <paramref name="source"/>; <paramref name="contains"/> tells which
+    /// head layout it stores.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, Func<string, bool> contains)
     {
         var c = Configuration;
         int d = c.ModelDim, ff = c.FeedForwardDim, vocabulary = c.AudioVocabulary;
         const string decoder = "decoder.model.decoder";
         for (int q = 0; q < c.Codebooks; q++)
-            Embeddings[q].LoadTable(read($"{decoder}.embed_tokens.{q}.weight", new[] { vocabulary + 1, d }));
+            Embeddings[q].LoadTable(source, $"{decoder}.embed_tokens.{q}.weight");
         void Norm(string name, LayerNormalizationLayer<T> norm) =>
-            TorchParameters.LayerNorm(_engine, norm, read(name + ".weight", new[] { d }), read(name + ".bias", new[] { d }));
+            TorchParameters.LayerNorm(_engine, norm, source, name + ".weight", name + ".bias");
         void Attention(string name, ParlerAttention<T> attention)
         {
             int kv = attention.KeyValueWidth;
-            TorchParameters.Linear(attention.Query, d, d, read(name + ".q_proj.weight", new[] { d, d }));
-            TorchParameters.Linear(attention.Key, d, kv, read(name + ".k_proj.weight", new[] { kv, d }));
-            TorchParameters.Linear(attention.Value, d, kv, read(name + ".v_proj.weight", new[] { kv, d }));
-            TorchParameters.Linear(attention.Output, d, d, read(name + ".out_proj.weight", new[] { d, d }));
+            TorchParameters.Linear(attention.Query, d, d, source, name + ".q_proj.weight");
+            TorchParameters.Linear(attention.Key, d, kv, source, name + ".k_proj.weight");
+            TorchParameters.Linear(attention.Value, d, kv, source, name + ".v_proj.weight");
+            TorchParameters.Linear(attention.Output, d, d, source, name + ".out_proj.weight");
         }
         for (int i = 0; i < Layers.Count; i++)
         {
@@ -518,26 +523,25 @@ internal sealed class ParlerCore<T>
             Norm(p + ".self_attn_layer_norm", layer.SelfNorm);
             Attention(p + ".encoder_attn", layer.CrossAttention);
             Norm(p + ".encoder_attn_layer_norm", layer.CrossNorm);
-            TorchParameters.Linear(layer.FeedForwardIn, d, ff, read(p + ".fc1.weight", new[] { ff, d }));
-            TorchParameters.Linear(layer.FeedForwardOut, ff, d, read(p + ".fc2.weight", new[] { d, ff }));
+            TorchParameters.Linear(layer.FeedForwardIn, d, ff, source, p + ".fc1.weight");
+            TorchParameters.Linear(layer.FeedForwardOut, ff, d, source, p + ".fc2.weight");
             Norm(p + ".final_layer_norm", layer.FinalNorm);
         }
         Norm(decoder + ".layer_norm", FinalNorm);
         if (contains("decoder.lm_heads.weight"))
         {
             // One [codebooks · vocabulary, d] projection whose rows are codebook-major.
-            var fused = read("decoder.lm_heads.weight", new[] { c.Codebooks * vocabulary, d });
+            var fused = source.Read("decoder.lm_heads.weight", new[] { c.Codebooks * vocabulary, d });
             for (int q = 0; q < c.Codebooks; q++)
                 TorchParameters.Linear(Heads[q], d, vocabulary, fused.Skip(q * vocabulary * d).Take(vocabulary * d).ToArray());
         }
         else
         {
             for (int q = 0; q < c.Codebooks; q++)
-                TorchParameters.Linear(Heads[q], d, vocabulary, read($"decoder.lm_heads.{q}.weight", new[] { vocabulary, d }));
+                TorchParameters.Linear(Heads[q], d, vocabulary, source, $"decoder.lm_heads.{q}.weight");
         }
-        PromptEmbedding.LoadTable(read("embed_prompts.weight", new[] { c.PromptVocabulary, d }));
+        PromptEmbedding.LoadTable(source, "embed_prompts.weight");
         if (Projection is not null)
-            TorchParameters.Linear(_engine, Projection, c.EncoderDim, d, read("enc_to_dec_proj.weight", new[] { d, c.EncoderDim }),
-                read("enc_to_dec_proj.bias", new[] { d }));
+            TorchParameters.Linear(_engine, Projection, c.EncoderDim, d, source, "enc_to_dec_proj.weight", "enc_to_dec_proj.bias");
     }
 }

@@ -60,35 +60,36 @@ internal sealed class OpenVoiceIpaPrior<T>
         return (hidden, mean, logs);
     }
 
-    internal void LoadTorch(Func<string, int[], double[]> read)
+    internal void LoadTorch(Func<string, int[], double[]> read) => LoadTorch(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads the released TextEncoder straight from <paramref name="source"/>.</summary>
+    internal void LoadTorch(AiDotNet.ModelLoading.TorchTensorSource source)
     {
-        var numeric = MathHelper.GetNumericOperations<T>();
-        _embedding.LoadTable(read("emb.weight", new[] { _vocabulary, _hidden }));
+        _embedding.LoadTable(source, "emb.weight");
         for (int i = 0; i < _blocks.Length; i++)
         {
             var block = _blocks[i]; string attention = "encoder.attn_layers." + i;
+            // The 1x1 convolutions are [out, in, 1]: small, read and transposed into the dense layers.
             void Dense(DenseLayer<T> layer, string name) => TorchParameters.Linear(_engine, layer, _hidden, _hidden,
-                read(attention + "." + name + ".weight", new[] { _hidden, _hidden, 1 }),
-                read(attention + "." + name + ".bias", new[] { _hidden }));
+                source.Read(attention + "." + name + ".weight", new[] { _hidden, _hidden, 1 }),
+                source.Read(attention + "." + name + ".bias", new[] { _hidden }));
             Dense(block.QueryProjection, "conv_q"); Dense(block.KeyProjection, "conv_k");
             Dense(block.ValueProjection, "conv_v"); Dense(block.OutputProjection, "conv_o");
             void Relative(Tensor<T> target, string name)
             {
-                var values = read(attention + "." + name, new[] { 1, 9, _hidden / _heads });
-                for (int n = 0; n < values.Length; n++) target[n] = numeric.FromDouble(values[n]);
+                source.CopyTo(attention + "." + name, new[] { 1, 9, _hidden / _heads }, target);
                 _engine.InvalidatePersistentTensor(target);
             }
             Relative(block.RelativeKeys, "emb_rel_k"); Relative(block.RelativeValues, "emb_rel_v");
-            void Norm(LayerNormalizationLayer<T> layer, string name) => layer.SetParameters(new Vector<T>(
-                read(name + ".gamma", new[] { _hidden }).Concat(read(name + ".beta", new[] { _hidden })).Select(x => numeric.FromDouble(x))));
+            void Norm(LayerNormalizationLayer<T> layer, string name) =>
+                TorchParameters.LayerNorm(_engine, layer, source, name + ".gamma", name + ".beta");
             Norm(block.AttentionNormalization, "encoder.norm_layers_1." + i);
             Norm(block.FeedForwardNormalization, "encoder.norm_layers_2." + i);
-            void Conv(Conv1DLayer<T> layer, string name, int input, int output) => layer.SetParameters(new Vector<T>(
-                read(name + ".weight", new[] { output, input, _kernel }).Concat(read(name + ".bias", new[] { output })).Select(x => numeric.FromDouble(x))));
+            void Conv(Conv1DLayer<T> layer, string name, int input, int output) =>
+                layer.LoadTorchWeights(source, name + ".weight", new[] { output, input, _kernel }, name + ".bias");
             Conv(block.FeedForwardInput, "encoder.ffn_layers." + i + ".conv_1", _hidden, _filter);
             Conv(block.FeedForwardOutput, "encoder.ffn_layers." + i + ".conv_2", _filter, _hidden);
         }
-        _projection.LoadTorchWeights(read("proj.weight", new[] { 2 * _latent, _hidden, 1 }), null,
-            read("proj.bias", new[] { 2 * _latent }));
+        _projection.LoadTorchWeights(source, "proj.weight", new[] { 2 * _latent, _hidden, 1 }, null, "proj.bias");
     }
 }

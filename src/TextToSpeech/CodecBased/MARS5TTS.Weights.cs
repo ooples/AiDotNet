@@ -60,7 +60,7 @@ public partial class MARS5TTS<T>
         using (var ar = TorchCheckpointFile.Open(checkpoints.Autoregressive)) Autoregressive.Load(ar);
         using (var nar = TorchCheckpointFile.Open(checkpoints.NonAutoregressive)) NonAutoregressive.Load(nar);
         Codec.LoadPretrainedWeights(checkpoints.Codec);
-        using (var vocos = TorchCheckpointFile.Open(checkpoints.Vocoder)) Vocos.LoadTorchWeights(vocos.AsFunction());
+        using (var vocos = TorchCheckpointFile.Open(checkpoints.Vocoder)) Vocos.LoadTorchWeights(vocos);
         _optimizers.Clear();
     }
 }

@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using AiDotNet.Attributes;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
@@ -201,20 +202,24 @@ internal sealed class VocosGenerator<T>
 
     /// <summary>Loads the reference's <c>backbone.*</c> and <c>head.*</c> parameters (gemelo-ai/vocos), named
     /// <paramref name="backbone"/> and <paramref name="head"/> (for models that nest them).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, int inputChannels, int intermediate, string backbone = "backbone.", string head = "head.")
+    public void LoadTorchWeights(Func<string, int[], double[]> read, int inputChannels, int intermediate, string backbone = "backbone.", string head = "head.") =>
+        LoadTorchWeights(TorchTensorSource.From(read), inputChannels, intermediate, backbone, head);
+
+    /// <summary>Loads the reference's parameters straight from <paramref name="source"/> (see the function form).</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, int inputChannels, int intermediate, string backbone = "backbone.", string head = "head.")
     {
         int dim = _dim, kernel = 7;
-        _embed.LoadTorchWeights(read(backbone + "embed.weight", new[] { dim, inputChannels, kernel }), null, read(backbone + "embed.bias", new[] { dim }));
+        _embed.LoadTorchWeights(source, backbone + "embed.weight", new[] { dim, inputChannels, kernel }, null, backbone + "embed.bias");
         void LoadNorm(int index, LayerNormalizationLayer<T> norm, string name)
         {
             if (_adaptive.Count > 0)
             {
-                _adaptive[index].Scale.LoadTable(read(name + ".scale.weight", new[] { _adaptive[index].Scale.VocabularySize, dim }));
-                _adaptive[index].Shift.LoadTable(read(name + ".shift.weight", new[] { _adaptive[index].Shift.VocabularySize, dim }));
+                _adaptive[index].Scale.LoadTable(source, name + ".scale.weight");
+                _adaptive[index].Shift.LoadTable(source, name + ".shift.weight");
             }
             else
             {
-                CodecBased.TorchParameters.LayerNorm(_engine, norm, read(name + ".weight", new[] { dim }), read(name + ".bias", new[] { dim }));
+                CodecBased.TorchParameters.LayerNorm(_engine, norm, source, name + ".weight", name + ".bias");
             }
         }
         LoadNorm(0, _norm, backbone + "norm");
@@ -222,17 +227,15 @@ internal sealed class VocosGenerator<T>
         {
             var (depthwise, norm, expand, project, scale) = _blocks[i];
             string p = $"{backbone}convnext.{i}";
-            depthwise.LoadTorchWeights(read(p + ".dwconv.weight", new[] { dim, 1, kernel }), null, read(p + ".dwconv.bias", new[] { dim }));
+            depthwise.LoadTorchWeights(source, p + ".dwconv.weight", new[] { dim, 1, kernel }, null, p + ".dwconv.bias");
             LoadNorm(i + 1, norm, p + ".norm");
             // pwconv1 / pwconv2 are nn.Linear over channels; the 1-wide convolutions take them as [out, in, 1].
-            expand.LoadTorchWeights(read(p + ".pwconv1.weight", new[] { intermediate, dim }), null, read(p + ".pwconv1.bias", new[] { intermediate }));
-            project.LoadTorchWeights(read(p + ".pwconv2.weight", new[] { dim, intermediate }), null, read(p + ".pwconv2.bias", new[] { dim }));
-            var gamma = read(p + ".gamma", new[] { dim });
-            for (int c = 0; c < dim; c++) scale.Scale[c] = NumOps.FromDouble(gamma[c]);
+            expand.LoadTorchWeights(source, p + ".pwconv1.weight", new[] { intermediate, dim }, null, p + ".pwconv1.bias");
+            project.LoadTorchWeights(source, p + ".pwconv2.weight", new[] { dim, intermediate }, null, p + ".pwconv2.bias");
+            source.CopyTo(p + ".gamma", new[] { dim }, scale.Scale);
             _engine.InvalidatePersistentTensor(scale.Scale);
         }
-        CodecBased.TorchParameters.LayerNorm(_engine, _finalNorm, read(backbone + "final_layer_norm.weight", new[] { dim }),
-            read(backbone + "final_layer_norm.bias", new[] { dim }));
-        _head?.LoadTorchWeights(read(head + "out.weight", new[] { _fft + 2, dim }), null, read(head + "out.bias", new[] { _fft + 2 }));
+        CodecBased.TorchParameters.LayerNorm(_engine, _finalNorm, source, backbone + "final_layer_norm.weight", backbone + "final_layer_norm.bias");
+        _head?.LoadTorchWeights(source, head + "out.weight", new[] { _fft + 2, dim }, null, head + "out.bias");
     }
 }

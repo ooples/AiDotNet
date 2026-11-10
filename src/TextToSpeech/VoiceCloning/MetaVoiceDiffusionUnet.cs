@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -168,21 +169,23 @@ internal sealed class MetaVoiceDiffusionUnet<T>
         return Crop(z, waveform.Shape[2]);
     }
 
-    public void LoadTorch(Func<string, int[], double[]> read)
+    public void LoadTorch(Func<string, int[], double[]> read) => LoadTorch(TorchTensorSource.From(read));
+
+    /// <summary>Loads the denoiser's state straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorch(TorchTensorSource source)
     {
         foreach (var entry in _weights)
         {
             var (layer, shape) = entry.Value;
-            var weight = read(entry.Key + ".weight", shape);
+            string weight = entry.Key + ".weight";
             if (layer is GroupNormalizationLayer<T> norm)
-                norm.LoadAffine(weight, read(entry.Key + ".bias", shape));
+                norm.LoadAffine(source, weight, entry.Key + ".bias");
             else if (layer is TiedEmbeddingLayer<T> embedding)
-                embedding.LoadTable(weight);
+                embedding.LoadTable(source, weight);
             else if (layer is NormedConv1DLayer<T> convolution)
             {
-                int channels = entry.Key.EndsWith(".convtr", StringComparison.Ordinal) ? shape[1] : shape[0];
                 bool bias = entry.Key == "conv_codec" || entry.Key.Contains(".res_blocks.");
-                convolution.LoadTorchWeights(weight, null, bias ? read(entry.Key + ".bias", new[] { channels }) : new double[channels]);
+                convolution.LoadTorchWeights(source, weight, shape, null, bias ? entry.Key + ".bias" : null);
             }
         }
     }

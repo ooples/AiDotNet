@@ -3,7 +3,9 @@ using AiDotNet.Audio.Codecs;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.EndToEnd;
 using AiDotNet.TextToSpeech.Latest;
@@ -41,11 +43,13 @@ internal static class XttsOps<T>
         return mask;
     }
 
-    internal static void LoadConv(Func<string, int[], double[]> read, Conv1DLayer<T> layer, string name, int input, int output, int kernel)
-    {
-        var values = read(name + ".weight", new[] { output, input, kernel }).Concat(read(name + ".bias", new[] { output }));
-        layer.SetParameters(new Vector<T>(values.Select(NumOps.FromDouble)));
-    }
+    internal static void LoadConv(Func<string, int[], double[]> read, Conv1DLayer<T> layer, string name, int input, int output, int kernel) =>
+        LoadConv(TorchTensorSource.From(read), layer, name, input, output, kernel);
+
+    /// <summary>Loads an <c>nn.Conv1d</c>'s <c>{name}.weight</c> <c>[out, in, k]</c> and bias straight from
+    /// <paramref name="source"/>.</summary>
+    internal static void LoadConv(TorchTensorSource source, Conv1DLayer<T> layer, string name, int input, int output, int kernel) =>
+        layer.LoadTorchWeights(source, name + ".weight", new[] { output, input, kernel }, name + ".bias");
 }
 
 /// <summary>A GPT-2 pre-norm block (biased projections, causal MHA, GELU MLP, residual dropout).</summary>
@@ -105,30 +109,36 @@ internal sealed class XttsGptBlock<T>
         return _engine.TensorAdd(hidden, feedForward);
     }
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the block's GPT-2 tensors straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
         int d = _dimension;
-        IndexTtsOps.LoadNorm(_engine, read, _norm1, prefix + "ln_1", d);
-        IndexTtsOps.LoadNorm(_engine, read, _norm2, prefix + "ln_2", d);
-        var qkv = read(prefix + "attn.c_attn.weight", new[] { d, 3 * d });
-        var bias = read(prefix + "attn.c_attn.bias", new[] { 3 * d });
+        IndexTtsOps.LoadNorm(_engine, source, _norm1, prefix + "ln_1", d);
+        IndexTtsOps.LoadNorm(_engine, source, _norm2, prefix + "ln_2", d);
+        // The packed c_attn [in, 3 · out] is staged once in the model's element type and split column-wise.
+        var qkv = new Tensor<T>(new[] { d, 3 * d });
+        source.CopyTo(prefix + "attn.c_attn.weight", new[] { d, 3 * d }, qkv);
+        var bias = source.Read(prefix + "attn.c_attn.bias", new[] { 3 * d });
         var projections = new[] { _query, _key, _value };
         for (int p = 0; p < 3; p++)
         {
-            var weight = new double[d * d];
-            for (int i = 0; i < d; i++) for (int o = 0; o < d; o++) weight[o * d + i] = qkv[i * 3 * d + p * d + o];
-            TorchParameters.Linear(_engine, projections[p], d, d, weight, bias.Skip(p * d).Take(d).ToArray());
+            var layer = projections[p];
+            using (new NoGradScope<T>())
+                layer.Forward(new Tensor<T>(new[] { 1, d }));
+            var w = layer.GetWeights();                                                                   // [in, out]
+            var packed = qkv.AsSpan();
+            var span = w.AsWritableSpan();
+            for (int i = 0; i < d; i++) packed.Slice(i * 3 * d + p * d, d).CopyTo(span.Slice(i * d, d));
+            _engine.InvalidatePersistentTensor(w);
+            var b = layer.GetBiases();
+            for (int o = 0; o < d; o++) b[o] = XttsOps<T>.NumOps.FromDouble(bias[p * d + o]);
+            _engine.InvalidatePersistentTensor(b);
         }
-        void Conv1D(DenseLayer<T> layer, string name, int input, int output)
-        {
-            var source = read(prefix + name + ".weight", new[] { input, output });
-            var weight = new double[source.Length];
-            for (int i = 0; i < input; i++) for (int o = 0; o < output; o++) weight[o * input + i] = source[i * output + o];
-            TorchParameters.Linear(_engine, layer, input, output, weight, read(prefix + name + ".bias", new[] { output }));
-        }
-        Conv1D(_attentionOut, "attn.c_proj", d, d);
-        Conv1D(_mlpIn, "mlp.c_fc", d, 4 * d);
-        Conv1D(_mlpOut, "mlp.c_proj", 4 * d, d);
+        TorchParameters.LinearInOut(_engine, _attentionOut, d, d, source, prefix + "attn.c_proj.weight", prefix + "attn.c_proj.bias");
+        TorchParameters.LinearInOut(_engine, _mlpIn, d, 4 * d, source, prefix + "mlp.c_fc.weight", prefix + "mlp.c_fc.bias");
+        TorchParameters.LinearInOut(_engine, _mlpOut, 4 * d, d, source, prefix + "mlp.c_proj.weight", prefix + "mlp.c_proj.bias");
     }
 }
 
@@ -194,12 +204,15 @@ internal sealed class XttsConditioningAttention<T>
         return _engine.TensorAdd(_normalizeResidual ? x : input, _output.Forward(channelsFirst));
     }
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the block straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
-        _norm.LoadAffine(read(prefix + "norm.weight", new[] { _dimension }), read(prefix + "norm.bias", new[] { _dimension }));
-        XttsOps<T>.LoadConv(read, _qkv, prefix + "qkv", _dimension, 3 * _dimension, 1);
-        XttsOps<T>.LoadConv(read, _output, prefix + "proj_out", _dimension, _dimension, 1);
-        _relativeBias?.LoadTable(read(prefix + "relative_pos_embeddings.relative_attention_bias.weight", new[] { 32, _heads }));
+        _norm.LoadAffine(source, prefix + "norm.weight", prefix + "norm.bias");
+        XttsOps<T>.LoadConv(source, _qkv, prefix + "qkv", _dimension, 3 * _dimension, 1);
+        XttsOps<T>.LoadConv(source, _output, prefix + "proj_out", _dimension, _dimension, 1);
+        _relativeBias?.LoadTable(source, prefix + "relative_pos_embeddings.relative_attention_bias.weight");
     }
 }
 
@@ -227,11 +240,11 @@ internal sealed class XttsConditioningEncoder<T>
     internal int AttentionBlocks => _attention.Length;
     internal int Latents => _perceiver.Latents.GetParameters().Length / _dimension;
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
-        XttsOps<T>.LoadConv(read, _input, prefix + "conditioning_encoder.init", _melChannels, _dimension, 1);
-        for (int i = 0; i < _attention.Length; i++) _attention[i].LoadTorchWeights(read, $"{prefix}conditioning_encoder.attn.{i}.");
-        _perceiver.Load(_engine, read, prefix + "conditioning_perceiver.");
+        XttsOps<T>.LoadConv(source, _input, prefix + "conditioning_encoder.init", _melChannels, _dimension, 1);
+        for (int i = 0; i < _attention.Length; i++) _attention[i].LoadTorchWeights(source, $"{prefix}conditioning_encoder.attn.{i}.");
+        _perceiver.Load(_engine, source, prefix + "conditioning_perceiver.");
     }
 
     /// <param name="mel">Normalized log-power mel, <c>[80, frames]</c>.</param>
@@ -279,21 +292,25 @@ internal sealed class XttsLanguageModel<T>
     internal int ConditioningLatents => _conditioning.Latents;
     internal Tensor<T> Condition(Tensor<T> mel) => _conditioning.Forward(mel);
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "gpt.", bool includeConditioning = true)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "gpt.", bool includeConditioning = true) =>
+        LoadTorchWeights(TorchTensorSource.From(read), prefix, includeConditioning);
+
+    /// <summary>Loads the GPT, its heads and (optionally) the conditioning encoder straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix = "gpt.", bool includeConditioning = true)
     {
         int d = _options.LLMDim;
-        void Embedding(EmbeddingLayer<T> layer, string name, int rows) => layer.SetParameters(new Vector<T>(
-            read(prefix + name + ".weight", new[] { rows, d }).Select(XttsOps<T>.NumOps.FromDouble)));
+        void Embedding(EmbeddingLayer<T> layer, string name, int rows) =>
+            TorchParameters.Parameters(layer, source, prefix + name + ".weight", new[] { rows, d });
         Embedding(_textEmbedding, "text_embedding", _options.TextVocabularySize);
         Embedding(_audioEmbedding, "mel_embedding", _options.AudioVocabularySize);
         Embedding(_textPosition, "text_pos_embedding.emb", _options.MaxTextLength + 2);
         Embedding(_audioPosition, "mel_pos_embedding.emb", _options.MaxCodecFrames + 3);
-        for (int i = 0; i < _blocks.Length; i++) _blocks[i].LoadTorchWeights(read, $"{prefix}gpt.h.{i}.");
-        IndexTtsOps.LoadNorm(_engine, read, _gptNorm, prefix + "gpt.ln_f", d);
-        IndexTtsOps.LoadNorm(_engine, read, _finalNorm, prefix + "final_norm", d);
-        IndexTtsOps.LoadLinear(_engine, read, _textHead, prefix + "text_head", d, _options.TextVocabularySize);
-        IndexTtsOps.LoadLinear(_engine, read, _audioHead, prefix + "mel_head", d, _options.AudioVocabularySize);
-        if (includeConditioning) _conditioning.LoadTorchWeights(read, prefix);
+        for (int i = 0; i < _blocks.Length; i++) _blocks[i].LoadTorchWeights(source, $"{prefix}gpt.h.{i}.");
+        IndexTtsOps.LoadNorm(_engine, source, _gptNorm, prefix + "gpt.ln_f", d);
+        IndexTtsOps.LoadNorm(_engine, source, _finalNorm, prefix + "final_norm", d);
+        IndexTtsOps.LoadLinear(_engine, source, _textHead, prefix + "text_head", d, _options.TextVocabularySize);
+        IndexTtsOps.LoadLinear(_engine, source, _audioHead, prefix + "mel_head", d, _options.AudioVocabularySize);
+        if (includeConditioning) _conditioning.LoadTorchWeights(source, prefix);
     }
 
     internal (Tensor<T> Text, Tensor<T> Audio) Forward(
@@ -411,11 +428,11 @@ internal sealed class XttsDvaeResidual<T>
     internal Tensor<T> Forward(Tensor<T> input) => _engine.TensorAdd(input,
         _projection.Forward(_engine.ReLU(_second.Forward(_engine.ReLU(_first.Forward(input))))));
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix, int channels)
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix, int channels)
     {
-        XttsOps<T>.LoadConv(read, _first, prefix + ".net.0", channels, channels, 3);
-        XttsOps<T>.LoadConv(read, _second, prefix + ".net.2", channels, channels, 3);
-        XttsOps<T>.LoadConv(read, _projection, prefix + ".net.4", channels, channels, 1);
+        XttsOps<T>.LoadConv(source, _first, prefix + ".net.0", channels, channels, 3);
+        XttsOps<T>.LoadConv(source, _second, prefix + ".net.2", channels, channels, 3);
+        XttsOps<T>.LoadConv(source, _projection, prefix + ".net.4", channels, channels, 1);
     }
 }
 
@@ -452,27 +469,23 @@ internal sealed class XttsDiscreteVae<T>
     internal int DownsampleFactor => 4;
     internal ResidualVectorQuantizerLayer<T> Quantizer => _codebook;
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads the dVAE straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         int h = _options.DvaeHiddenDim, inner = 2 * h, r = _options.DvaeResidualBlocks, dim = _options.DvaeCodebookDim;
-        XttsOps<T>.LoadConv(read, _encoder1, "encoder.0.0", _options.MelChannels, h, 3);
-        XttsOps<T>.LoadConv(read, _encoder2, "encoder.1.0", h, inner, 3);
-        for (int i = 0; i < r; i++) _encoderResiduals[i].LoadTorchWeights(read, $"encoder.{i + 2}", inner);
-        XttsOps<T>.LoadConv(read, _encoderProjection, $"encoder.{r + 2}", inner, dim, 1);
-        double[] TransposeCodebook(string name)
-        {
-            var source = read(name, new[] { dim, _options.CodebookSize });
-            var table = new double[source.Length];
-            for (int c = 0; c < _options.CodebookSize; c++) for (int d = 0; d < dim; d++) table[c * dim + d] = source[d * _options.CodebookSize + c];
-            return table;
-        }
-        _codebook.LoadCodebook(0, TransposeCodebook("codebook.embed"), TransposeCodebook("codebook.embed_avg"),
-            read("codebook.cluster_size", new[] { _options.CodebookSize }), initialized: true);
-        XttsOps<T>.LoadConv(read, _decoderInput, "decoder.0", dim, inner, 1);
-        for (int i = 0; i < r; i++) _decoderResiduals[i].LoadTorchWeights(read, $"decoder.{i + 1}", inner);
-        XttsOps<T>.LoadConv(read, _decoderUp1, $"decoder.{r + 1}.0.conv", inner, inner, 3);
-        XttsOps<T>.LoadConv(read, _decoderUp2, $"decoder.{r + 2}.0.conv", inner, h, 3);
-        XttsOps<T>.LoadConv(read, _decoderOutput, $"decoder.{r + 3}", h, _options.MelChannels, 1);
+        XttsOps<T>.LoadConv(source, _encoder1, "encoder.0.0", _options.MelChannels, h, 3);
+        XttsOps<T>.LoadConv(source, _encoder2, "encoder.1.0", h, inner, 3);
+        for (int i = 0; i < r; i++) _encoderResiduals[i].LoadTorchWeights(source, $"encoder.{i + 2}", inner);
+        XttsOps<T>.LoadConv(source, _encoderProjection, $"encoder.{r + 2}", inner, dim, 1);
+        // The codebook and its EMA sums are stored [dim, codes].
+        _codebook.LoadTransposedCodebook(0, source, "codebook.embed", "codebook.embed_avg", "codebook.cluster_size", initialized: true);
+        XttsOps<T>.LoadConv(source, _decoderInput, "decoder.0", dim, inner, 1);
+        for (int i = 0; i < r; i++) _decoderResiduals[i].LoadTorchWeights(source, $"decoder.{i + 1}", inner);
+        XttsOps<T>.LoadConv(source, _decoderUp1, $"decoder.{r + 1}.0.conv", inner, inner, 3);
+        XttsOps<T>.LoadConv(source, _decoderUp2, $"decoder.{r + 2}.0.conv", inner, h, 3);
+        XttsOps<T>.LoadConv(source, _decoderOutput, $"decoder.{r + 3}", h, _options.MelChannels, 1);
     }
 
     internal Tensor<T> EncodeFeatures(Tensor<T> mel)
@@ -545,8 +558,11 @@ internal sealed class XttsWaveformDecoder<T>
     internal HiFiGanGenerator<T> Generator => _generator;
 
     /// <summary>Loads Coqui's global cond_layer and per-upsampling conds projections.</summary>
-    internal void LoadTorchWeights(Func<string, double[]?> read) => _generator.LoadTorch(name =>
-        read(name.StartsWith("cond.", StringComparison.Ordinal) ? "cond_layer." + name.Substring(5) : name));
+    internal void LoadTorchWeights(Func<string, double[]?> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads the generator straight from <paramref name="source"/> (see the function form).</summary>
+    internal void LoadTorchWeights(TorchTensorSource source) => _generator.LoadTorch(source.WithNames(name =>
+        name.StartsWith("cond.", StringComparison.Ordinal) ? "cond_layer." + name.Substring(5) : name));
 
     internal Tensor<T> Forward(Tensor<T> latents, Tensor<T> speaker)
     {

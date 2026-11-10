@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -297,23 +298,28 @@ internal sealed class CodeHiFiGan<T>
     /// <summary>Loads a fairseq CodeHiFiGAN generator state (the checkpoint's <c>generator</c> entry: <c>dict</c>,
     /// <c>dur_predictor.*</c> and HiFi-GAN's weight-normalized convolutions); <paramref name="read"/> returns null for a
     /// missing tensor.</summary>
-    public void LoadTorchWeights(Func<string, double[]?> read, string prefix = "")
+    public void LoadTorchWeights(Func<string, double[]?> read, string prefix = "") => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads a fairseq CodeHiFiGAN generator state straight from <paramref name="source"/> (see the function
+    /// form).</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix = "")
     {
         var c = Configuration;
-        double[] Need(string name) => read(prefix + name) ?? throw new InvalidDataException($"The vocoder checkpoint has no tensor '{prefix}{name}'.");
-        Embedding.LoadTable(Need("dict.weight"));
-        if (SpeakerEmbedding is not null) SpeakerEmbedding.LoadTable(Need("spkr.weight"));
-        if (StyleEmbedding is not null) StyleEmbedding.LoadTable(Need("style.weight"));
-        if (PitchEmbedding is not null) PitchEmbedding.LoadTable(Need("f0_dict.weight"));
-        if (StyleTokenEmbedding is not null) StyleTokenEmbedding.LoadTable(Need("style_dict.weight"));
+        var s = source.WithPrefix(prefix);
+        string Need(string name) => s.Contains(name) ? name : throw new InvalidDataException($"The vocoder checkpoint has no tensor '{prefix}{name}'.");
+        Embedding.LoadTable(s, Need("dict.weight"));
+        if (SpeakerEmbedding is not null) SpeakerEmbedding.LoadTable(s, Need("spkr.weight"));
+        if (StyleEmbedding is not null) StyleEmbedding.LoadTable(s, Need("style.weight"));
+        if (PitchEmbedding is not null) PitchEmbedding.LoadTable(s, Need("f0_dict.weight"));
+        if (StyleTokenEmbedding is not null) StyleTokenEmbedding.LoadTable(s, Need("style_dict.weight"));
         if (DurationConv1 is not null && DurationNorm1 is not null && DurationConv2 is not null && DurationNorm2 is not null && DurationProjection is not null)
         {
-            DurationConv1.LoadTorchWeights(Need("dur_predictor.conv1.0.weight"), null, Need("dur_predictor.conv1.0.bias"));
-            TorchParameters.LayerNorm(_engine, DurationNorm1, Need("dur_predictor.ln1.weight"), Need("dur_predictor.ln1.bias"));
-            DurationConv2.LoadTorchWeights(Need("dur_predictor.conv2.0.weight"), null, Need("dur_predictor.conv2.0.bias"));
-            TorchParameters.LayerNorm(_engine, DurationNorm2, Need("dur_predictor.ln2.weight"), Need("dur_predictor.ln2.bias"));
-            TorchParameters.Linear(_engine, DurationProjection, c.DurationHidden, 1, Need("dur_predictor.proj.weight"), Need("dur_predictor.proj.bias"));
+            DurationConv1.LoadTorchWeights(s, Need("dur_predictor.conv1.0.weight"), DurationConv1.TorchWeightShape, null, Need("dur_predictor.conv1.0.bias"));
+            TorchParameters.LayerNorm(_engine, DurationNorm1, s, Need("dur_predictor.ln1.weight"), Need("dur_predictor.ln1.bias"));
+            DurationConv2.LoadTorchWeights(s, Need("dur_predictor.conv2.0.weight"), DurationConv2.TorchWeightShape, null, Need("dur_predictor.conv2.0.bias"));
+            TorchParameters.LayerNorm(_engine, DurationNorm2, s, Need("dur_predictor.ln2.weight"), Need("dur_predictor.ln2.bias"));
+            TorchParameters.Linear(_engine, DurationProjection, c.DurationHidden, 1, s, Need("dur_predictor.proj.weight"), Need("dur_predictor.proj.bias"));
         }
-        Generator.LoadTorch(name => read(prefix + name), "");
+        Generator.LoadTorch(s);
     }
 }

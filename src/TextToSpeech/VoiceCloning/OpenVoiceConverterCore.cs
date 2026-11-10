@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Vocoders;
 
@@ -131,21 +132,33 @@ internal sealed class OpenVoiceConverterCore<T>
         return (_decoder.Forward(segment, condition), posterior.Sampled, prior, posterior.Mean, posterior.LogScale);
     }
 
-    public void LoadTorch(Func<string, int[], double[]> read, Func<string, double[]?> optionalRead)
+    public void LoadTorch(Func<string, int[], double[]> read, Func<string, double[]?> optionalRead) =>
+        LoadTorch(TorchTensorSource.From(read), OnePerName(optionalRead));
+
+    /// <summary>A source over a null-for-absent function that calls it once per name (a source probes a name before
+    /// reading it).</summary>
+    internal static TorchTensorSource OnePerName(Func<string, double[]?> read)
+    {
+        var seen = new Dictionary<string, double[]?>(StringComparer.Ordinal);
+        return TorchTensorSource.From(name => seen.TryGetValue(name, out var values) ? values : seen[name] = read(name));
+    }
+
+    /// <summary>Loads the converter straight from sources: <paramref name="source"/> for the posterior encoder and flow,
+    /// <paramref name="decoder"/> (whose weight-norm names vary) for the HiFi-GAN decoder.</summary>
+    internal void LoadTorch(TorchTensorSource source, TorchTensorSource decoder)
     {
         void PlainLoad(NormedConv1DLayer<T> layer, string prefix, int input, int output)
-            => layer.LoadTorchWeights(read(prefix + ".weight", new[] { output, input, 1 }), null,
-                read(prefix + ".bias", new[] { output }));
+            => layer.LoadTorchWeights(source, prefix + ".weight", new[] { output, input, 1 }, null, prefix + ".bias");
         PlainLoad(_posteriorPre, "enc_q.pre", _spectrogramChannels, _hidden);
-        _posterior.LoadTorch(read, "enc_q.enc.");
+        _posterior.LoadTorch(source, "enc_q.enc.");
         PlainLoad(_posteriorProjection, "enc_q.proj", _hidden, 2 * _latent);
         for (int i = 0; i < _flows.Count; i++)
         {
             string prefix = "flow.flows." + (i * 2);
             PlainLoad(_flows[i].Pre, prefix + ".pre", _latent / 2, _hidden);
-            _flows[i].Encoder.LoadTorch(read, prefix + ".enc.");
+            _flows[i].Encoder.LoadTorch(source, prefix + ".enc.");
             PlainLoad(_flows[i].Post, prefix + ".post", _hidden, _latent / 2);
         }
-        _decoder.LoadTorch(optionalRead, "dec.");
+        _decoder.LoadTorch(decoder, "dec.");
     }
 }

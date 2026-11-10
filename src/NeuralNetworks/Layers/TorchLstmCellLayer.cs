@@ -42,6 +42,23 @@ public sealed partial class TorchLstmCellLayer<T> : LayerBase<T>, IShapeContract
         (Engine.TensorSlice(state, new[] { 0, 0 }, new[] { state.Shape[0], _hiddenSize }),
          Engine.TensorSlice(state, new[] { 0, _hiddenSize }, new[] { state.Shape[0], _hiddenSize }));
 
+    /// <summary>Loads one layer of a PyTorch <c>nn.LSTM</c> (<c>weight_ih [4H, input]</c>, <c>weight_hh [4H, H]</c> and
+    /// both biases <c>[4H]</c>) straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string weightIhName, string weightHhName, string biasIhName,
+        string biasHhName)
+    {
+        int gates = 4 * _hiddenSize;
+        void Load(DenseLayer<T> layer, int input, string weightName, string biasName)
+        {
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>()) layer.Forward(new Tensor<T>(new[] { 1, input }));
+            var w = layer.GetWeights(); var b = layer.GetBiases();
+            source.CopyTransposedTo(weightName, gates, input, w);
+            source.CopyTo(biasName, new[] { gates }, b);
+            Engine.InvalidatePersistentTensor(w); Engine.InvalidatePersistentTensor(b);
+        }
+        Load(_input, _inputSize, weightIhName, biasIhName); Load(_recurrent, _hiddenSize, weightHhName, biasHhName);
+    }
+
     internal void LoadTorchWeights(double[] weightIh, double[] weightHh, double[] biasIh, double[] biasHh)
     {
         int gates = 4 * _hiddenSize;

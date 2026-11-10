@@ -5,6 +5,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.Onnx;
@@ -410,22 +411,16 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
 
     // ---------------------------------------------------------------- pretrained weights
 
-    internal static TorchReader Reader(string path, params string[] prefixes)
-    {
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        return (name, shape) =>
+    /// <summary>The checkpoint's tensors under the reference's names: each is found after one of <paramref name="prefixes"/>
+    /// (or none), with or without DataParallel's <c>module.</c>.</summary>
+    internal static TorchTensorSource Reader(TorchTensorSource file, params string[] prefixes) =>
+        file.WithNames(name =>
         {
-            AiDotNet.Tensors.LinearAlgebra.Tensor<float>? tensor = null;
             foreach (var prefix in prefixes.Append(""))
                 foreach (var candidate in new[] { prefix + name, prefix + "module." + name })
-                    if (tensor is null && file.TryGetValue(candidate, out var found)) tensor = found;
-            if (tensor is null) throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            var actual = tensor.Shape.ToArray();
-            if (actual.Aggregate(1, (a, b) => a * b) != shape.Aggregate(1, (a, b) => a * b) || (actual.Length == shape.Length && !actual.SequenceEqual(shape)))
-                throw new InvalidDataException($"'{name}' is [{string.Join(", ", actual)}] in the checkpoint but [{string.Join(", ", shape)}] in this model.");
-            return tensor.ToVector().Select(v => (double)v).ToArray();
-        };
-    }
+                    if (file.Contains(candidate)) return candidate;
+            return name;
+        });
 
     /// <summary>
     /// Loads a StyleTTS checkpoint flattened to named tensors (safetensors, or a <c>.pt</c> state dict) whose names are
@@ -433,30 +428,44 @@ public partial class StyleTTS<T> : TtsModelBase<T>, IAcousticModel<T>
     /// <c>text_aligner</c>, <c>pitch_extractor</c> and optionally <c>discriminator</c>) and their parameters, with or
     /// without the checkpoint's <c>net.</c> prefix.
     /// </summary>
-    public void LoadReferenceWeights(string path, bool includeDiscriminator = false) =>
-        LoadReferenceWeights(Reader(path, "net."), includeDiscriminator);
-
-    internal void LoadReferenceWeights(TorchReader read, bool includeDiscriminator = false)
+    public void LoadReferenceWeights(string path, bool includeDiscriminator = false)
     {
-        TextEncoderModule.Load(read, "text_encoder");
-        StyleEncoderModule.Load(Engine, read, "style_encoder");
-        DecoderModule.Load(read, "decoder");
-        PredictorModule.Load(read, "predictor");
-        AlignerModule.Load(read, "text_aligner");
-        PitchModule.Load(read, "pitch_extractor");
-        if (includeDiscriminator) DiscriminatorModule.Load(read, "discriminator");
+        using var file = TorchCheckpointFile.Open(path);
+        LoadReferenceWeights(Reader(file, "net."), includeDiscriminator);
+    }
+
+    internal void LoadReferenceWeights(TorchReader read, bool includeDiscriminator = false) =>
+        LoadReferenceWeights(StyleTtsOps.Source(read), includeDiscriminator);
+
+    internal void LoadReferenceWeights(TorchTensorSource source, bool includeDiscriminator = false)
+    {
+        TextEncoderModule.Load(source, "text_encoder");
+        StyleEncoderModule.Load(Engine, source, "style_encoder");
+        DecoderModule.Load(source, "decoder");
+        PredictorModule.Load(source, "predictor");
+        AlignerModule.Load(source, "text_aligner");
+        PitchModule.Load(source, "pitch_extractor");
+        if (includeDiscriminator) DiscriminatorModule.Load(source, "discriminator");
     }
 
     /// <summary>Loads the released text aligner (<c>Utils/ASR/epoch_00080.pth</c>'s <c>model</c> entry, saved as
     /// safetensors or <c>.pt</c>).</summary>
-    public void LoadAlignerWeights(string path) => AlignerModule.Load(StripPrefix(Reader(path, "model."), "text_aligner."), "text_aligner");
+    public void LoadAlignerWeights(string path)
+    {
+        using var file = TorchCheckpointFile.Open(path);
+        AlignerModule.Load(StripPrefix(Reader(file, "model."), "text_aligner."), "text_aligner");
+    }
 
     /// <summary>Loads the released pitch extractor (<c>Utils/JDC/bst.t7</c>'s <c>net</c> entry, saved as safetensors or
     /// <c>.pt</c>).</summary>
-    public void LoadPitchExtractorWeights(string path) => PitchModule.Load(StripPrefix(Reader(path, "net."), "pitch_extractor."), "pitch_extractor");
+    public void LoadPitchExtractorWeights(string path)
+    {
+        using var file = TorchCheckpointFile.Open(path);
+        PitchModule.Load(StripPrefix(Reader(file, "net."), "pitch_extractor."), "pitch_extractor");
+    }
 
-    internal static TorchReader StripPrefix(TorchReader read, string prefix) =>
-        (name, shape) => read(name.StartsWith(prefix, StringComparison.Ordinal) ? name.Substring(prefix.Length) : name, shape);
+    internal static TorchTensorSource StripPrefix(TorchTensorSource source, string prefix) =>
+        source.WithNames(name => name.StartsWith(prefix, StringComparison.Ordinal) ? name.Substring(prefix.Length) : name);
 
     // ---------------------------------------------------------------- housekeeping
 

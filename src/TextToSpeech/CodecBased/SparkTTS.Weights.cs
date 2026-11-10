@@ -11,8 +11,7 @@ public partial class SparkTTS<T>
         RequireConvertedCheckpointTarget();
         LoadLanguageModelWeights(languageModelPath);
         LoadAuthorState(biCodecPath, null, source => _biCodec!.LoadTorchWeights(source));
-        // XLSR's loader still takes each tensor's values.
-        LoadAuthorState(wav2VecPath, "wav2vec2.", source => _biCodec!.Wav2Vec.LoadTorchWeights(source.AsFunction()));
+        LoadAuthorState(wav2VecPath, "wav2vec2.", source => _biCodec!.Wav2Vec.LoadTorchWeights(source));
     }
 
     /// <summary>Loads the speaker_encoder subtree of the released BiCodec checkpoint, including ECAPA running statistics.</summary>

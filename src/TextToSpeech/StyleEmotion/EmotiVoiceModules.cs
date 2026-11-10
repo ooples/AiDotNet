@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -99,24 +100,24 @@ internal sealed class EmotiVoiceEncoder<T>
         return AfterNorm.Forward(x);
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
         int d = Dim;
         void Norm(LayerNormalizationLayer<T> norm, string n) =>
-            TorchParameters.LayerNorm(_engine, norm, read(n + ".weight", new[] { d }), read(n + ".bias", new[] { d }));
-        Alpha.LoadTable(read(name + ".embed.0.alpha", new[] { 1 }));
+            TorchParameters.LayerNorm(_engine, norm, source, n + ".weight", n + ".bias");
+        TorchParameters.Parameters(Alpha, source, name + ".embed.0.alpha", new[] { 1 });
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
             string p = $"{name}.encoders.{i}";
             Norm(b.Norm1, p + ".norm1");
-            StyleTtsOps.LoadLinear(_engine, b.Query, read, p + ".self_attn.linear_q", d, d);
-            StyleTtsOps.LoadLinear(_engine, b.Key, read, p + ".self_attn.linear_k", d, d);
-            StyleTtsOps.LoadLinear(_engine, b.Value, read, p + ".self_attn.linear_v", d, d);
-            StyleTtsOps.LoadLinear(_engine, b.Output, read, p + ".self_attn.linear_out", d, d);
+            StyleTtsOps.LoadLinear(_engine, b.Query, source, p + ".self_attn.linear_q", d, d);
+            StyleTtsOps.LoadLinear(_engine, b.Key, source, p + ".self_attn.linear_k", d, d);
+            StyleTtsOps.LoadLinear(_engine, b.Value, source, p + ".self_attn.linear_v", d, d);
+            StyleTtsOps.LoadLinear(_engine, b.Output, source, p + ".self_attn.linear_out", d, d);
             Norm(b.Norm2, p + ".norm2");
-            StyleTtsOps.LoadPlain(b.FeedForward1, read, p + ".feed_forward.w_1");
-            StyleTtsOps.LoadPlain(b.FeedForward2, read, p + ".feed_forward.w_2");
+            StyleTtsOps.LoadPlain(b.FeedForward1, source, p + ".feed_forward.w_1");
+            StyleTtsOps.LoadPlain(b.FeedForward2, source, p + ".feed_forward.w_2");
         }
         Norm(AfterNorm, name + ".after_norm");
     }
@@ -162,15 +163,14 @@ internal sealed class EmotiVoiceVariancePredictor<T>
         return _engine.Reshape(output, new[] { length });
     }
 
-    public void Load(TorchReader read, string name, int input)
+    public void Load(TorchTensorSource source, string name, int input)
     {
         for (int i = 0; i < Convs.Count; i++)
         {
-            StyleTtsOps.LoadPlain(Convs[i].Conv, read, $"{name}.conv.{i}.0");
-            TorchParameters.LayerNorm(_engine, Convs[i].Norm, read($"{name}.conv.{i}.2.weight", new[] { Channels }),
-                read($"{name}.conv.{i}.2.bias", new[] { Channels }));
+            StyleTtsOps.LoadPlain(Convs[i].Conv, source, $"{name}.conv.{i}.0");
+            TorchParameters.LayerNorm(_engine, Convs[i].Norm, source, $"{name}.conv.{i}.2.weight", $"{name}.conv.{i}.2.bias");
         }
-        StyleTtsOps.LoadLinear(_engine, Linear, read, name + ".linear", Channels, 1);
+        StyleTtsOps.LoadLinear(_engine, Linear, source, name + ".linear", Channels, 1);
     }
 }
 
@@ -354,13 +354,13 @@ internal sealed class EmotiVoiceAlignment<T>
         return _engine.TensorAdd(_engine.TensorLog(sum!), max);
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
-        StyleTtsOps.LoadPlain(TextConv1, read, name + ".t_conv1");
-        StyleTtsOps.LoadPlain(TextConv2, read, name + ".t_conv2");
-        StyleTtsOps.LoadPlain(FeatConv1, read, name + ".f_conv1");
-        StyleTtsOps.LoadPlain(FeatConv2, read, name + ".f_conv2");
-        StyleTtsOps.LoadPlain(FeatConv3, read, name + ".f_conv3");
+        StyleTtsOps.LoadPlain(TextConv1, source, name + ".t_conv1");
+        StyleTtsOps.LoadPlain(TextConv2, source, name + ".t_conv2");
+        StyleTtsOps.LoadPlain(FeatConv1, source, name + ".f_conv1");
+        StyleTtsOps.LoadPlain(FeatConv2, source, name + ".f_conv2");
+        StyleTtsOps.LoadPlain(FeatConv3, source, name + ".f_conv3");
     }
 }
 

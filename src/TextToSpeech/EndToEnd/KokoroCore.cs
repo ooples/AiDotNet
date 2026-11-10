@@ -99,13 +99,12 @@ internal sealed class KokoroCore<T>
         return (audio, durations, bert, projected, logits, pitch, energy, text);
     }
 
-    public void LoadTorch(Func<string, int[], double[]> read)
+    public void LoadTorch(AiDotNet.ModelLoading.TorchTensorSource source)
     {
-        _bert.LoadTorchWeights(read, "bert.");
-        TorchParameters.Linear(_engine, _bertProjection, 768, 512,
-            read("bert_encoder.weight", new[] { 512, 768 }), read("bert_encoder.bias", new[] { 512 }));
-        _prosody.Load((name, shape) => read(name, shape), "predictor");
-        _text.Load((name, shape) => read(name, shape), "text_encoder");
-        _decoder.Load((name, shape) => read(name, shape), "decoder");
+        _bert.LoadTorchWeights(source, "bert.");
+        TorchParameters.Linear(_engine, _bertProjection, 768, 512, source, "bert_encoder.weight", "bert_encoder.bias");
+        _prosody.Load(source, "predictor");
+        _text.Load(source, "text_encoder");
+        _decoder.Load(source, "decoder");
     }
 }

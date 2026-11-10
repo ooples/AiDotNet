@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Latest;
@@ -38,18 +39,16 @@ internal sealed class DiTToTextEncoder<T>
     }
 
     /// <summary>Loads <c>microsoft/speecht5_tts</c>'s Hugging Face text-encoder names.</summary>
-    public void LoadHuggingFace(Func<string, int[], double[]> read)
+    public void LoadHuggingFace(Func<string, int[], double[]> read) => LoadHuggingFace(TorchTensorSource.From(read));
+
+    /// <summary>Loads the same names straight from <paramref name="source"/>.</summary>
+    internal void LoadHuggingFace(TorchTensorSource source)
     {
-        double[] Read(string native, int[] shape)
-        {
-            string name = SpeechT5Core<T>.HuggingFaceName(native)
-                ?? throw new InvalidDataException($"SpeechT5 has no Hugging Face mapping for '{native}'.");
-            return read(name, shape);
-        }
-        var c = _configuration;
-        Embedding.LoadTable(Read("text_encoder_prenet.encoder_prenet.0.weight", new[] { c.TextVocabulary, c.Hidden }));
-        Positions.Load(Read, "text_encoder_prenet.encoder_prenet.1.alpha");
-        Encoder.Load(Read, "encoder.");
+        var mapped = source.WithNames(native => SpeechT5Core<T>.HuggingFaceName(native)
+            ?? throw new InvalidDataException($"SpeechT5 has no Hugging Face mapping for '{native}'."));
+        Embedding.LoadTable(mapped, "text_encoder_prenet.encoder_prenet.0.weight");
+        Positions.Load(mapped, "text_encoder_prenet.encoder_prenet.1.alpha");
+        Encoder.Load(mapped, "encoder.");
     }
 }
 
@@ -200,12 +199,14 @@ internal sealed class DiTToProbabilisticRvq<T>
         return new Tensor<T>(new[] { frames, Dimension }, new Vector<T>(output.Select(NumOps.FromDouble).ToArray()));
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        for (int i = 0; i < Codebooks.Count; i++) Codebooks[i].LoadTable(read($"{prefix}codebooks.{i}.weight", new[] { Vocabulary, Dimension }));
-        TorchParameters.Linear(MaximumScaleLogit, 1, 1, read(prefix + "maximum_scale_logit", new[] { 1 }));
-        TorchParameters.Linear(ScaleLogits, 1, Depth, read(prefix + "scale_logits", new[] { Depth }));
-        TorchParameters.Linear(LogVariance, 1, 1, read(prefix + "log_variance", new[] { 1 }));
+        for (int i = 0; i < Codebooks.Count; i++) Codebooks[i].LoadTable(source, $"{prefix}codebooks.{i}.weight");
+        TorchParameters.Linear(MaximumScaleLogit, 1, 1, source, prefix + "maximum_scale_logit", new[] { 1 });
+        TorchParameters.Linear(ScaleLogits, 1, Depth, source, prefix + "scale_logits", new[] { Depth });
+        TorchParameters.Linear(LogVariance, 1, 1, source, prefix + "log_variance", new[] { 1 });
     }
 }
 
@@ -319,9 +320,11 @@ internal sealed class DiTToMelVae<T>
     }
 
     /// <summary>Loads AiDotNet's documented conversion of the private CLaM-TTS Mel-VAE checkpoint.</summary>
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    internal void Load(TorchTensorSource source, string prefix)
     {
-        void Conv(NormedConv1DLayer<T> layer, string name) => IndexTtsOps.LoadConv(read, layer, prefix + name, layer.OutputChannels);
+        void Conv(NormedConv1DLayer<T> layer, string name) => IndexTtsOps.LoadConv(source, layer, prefix + name, layer.OutputChannels);
         void Block(Residual b, string name)
         {
             Conv(b.First, name + ".first"); Conv(b.Second, name + ".second"); if (b.Shortcut is not null) Conv(b.Shortcut, name + ".shortcut");
@@ -331,9 +334,9 @@ internal sealed class DiTToMelVae<T>
         Conv(ToLatent, "encoder.to_latent"); Conv(FromLatent, "decoder.from_latent");
         for (int i = 0; i < DecoderBlocks.Count; i++) { Block(DecoderBlocks[i], $"decoder.blocks.{i}"); if (i < DecoderUp.Count) Conv(DecoderUp[i], $"decoder.up.{i}"); }
         Conv(DecoderOutput, "decoder.output"); Conv(ConvNeXtDepthwise, "decoder.convnext.depthwise");
-        IndexTtsOps.LoadLinear(_engine, read, ConvNeXtExpand, prefix + "decoder.convnext.expand", Options.MelChannels, 4 * Options.MelChannels);
-        IndexTtsOps.LoadLinear(_engine, read, ConvNeXtProject, prefix + "decoder.convnext.project", 4 * Options.MelChannels, Options.MelChannels);
-        Quantizer.Load(read, prefix + "rvq.");
+        IndexTtsOps.LoadLinear(_engine, source, ConvNeXtExpand, prefix + "decoder.convnext.expand", Options.MelChannels, 4 * Options.MelChannels);
+        IndexTtsOps.LoadLinear(_engine, source, ConvNeXtProject, prefix + "decoder.convnext.project", 4 * Options.MelChannels, Options.MelChannels);
+        Quantizer.Load(source, prefix + "rvq.");
     }
 }
 
@@ -489,19 +492,21 @@ internal sealed class DiTToDiffusionTransformer<T>
         return Output.Forward(FlowMatchingTts.PlainLayerNorm(_engine, x));
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    internal void Load(TorchTensorSource source, string prefix)
     {
         int d = Options.DiTHiddenDim, ff = d * Options.DiTFeedForwardMultiplier;
-        void Linear(DenseLayer<T> l, string n, int i, int o) => IndexTtsOps.LoadLinear(_engine, read, l, prefix + n, i, o);
+        void Linear(DenseLayer<T> l, string n, int i, int o) => IndexTtsOps.LoadLinear(_engine, source, l, prefix + n, i, o);
         Linear(Input, "input", Options.LatentDim + 1, d); Linear(TextKeys, "text_keys", Options.TextHiddenDim, d);
         Linear(TimeIn, "time.0", 256, d); Linear(TimeOut, "time.2", d, d);
         Linear(TextConditionIn, "text_condition.0", Options.TextHiddenDim, d); Linear(TextConditionOut, "text_condition.2", d, d);
         Linear(SharedModulation, "shared_adaln", d, 9 * d);
-        TorchParameters.Linear(NullText, 1, Options.TextHiddenDim, read(prefix + "null_text", new[] { Options.TextHiddenDim }));
+        TorchParameters.Linear(NullText, 1, Options.TextHiddenDim, source, prefix + "null_text", new[] { Options.TextHiddenDim });
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i]; string p = $"blocks.{i}.";
-            TorchParameters.Linear(b.ModulationOffset, 1, 9 * d, read(prefix + p + "adaln_offset", new[] { 9 * d }));
+            TorchParameters.Linear(b.ModulationOffset, 1, 9 * d, source, prefix + p + "adaln_offset", new[] { 9 * d });
             Linear(b.SelfQuery, p + "self.q", d, d); Linear(b.SelfKey, p + "self.k", d, d); Linear(b.SelfValue, p + "self.v", d, d); Linear(b.SelfOutput, p + "self.out", d, d);
             Linear(b.CrossQuery, p + "cross.q", d, d); Linear(b.CrossKey, p + "cross.k", d, d); Linear(b.CrossValue, p + "cross.v", d, d); Linear(b.CrossOutput, p + "cross.out", d, d);
             Linear(b.GegluIn, p + "geglu.in", d, 2 * ff); Linear(b.GegluOut, p + "geglu.out", ff, d);
@@ -612,20 +617,22 @@ internal sealed class DiTToLengthPredictor<T>
         return _engine.TensorMultiplyScalar(total!, NumOps.FromDouble(-1.0 / labels.Count));
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    internal void Load(TorchTensorSource source, string prefix)
     {
         int d = Options.LengthHiddenDim;
-        void Linear(DenseLayer<T> l, string n, int input, int output) => IndexTtsOps.LoadLinear(_engine, read, l, prefix + n, input, output);
+        void Linear(DenseLayer<T> l, string n, int input, int output) => IndexTtsOps.LoadLinear(_engine, source, l, prefix + n, input, output);
         Linear(AudioInput, "audio_input", Options.LatentDim, d); Linear(TextInput, "text_input", Options.TextHiddenDim, d);
-        TorchParameters.Linear(Bos, 1, d, read(prefix + "bos", new[] { d }));
+        TorchParameters.Linear(Bos, 1, d, source, prefix + "bos", new[] { d });
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i]; string p = $"blocks.{i}.";
             Linear(b.SelfQuery, p + "self.q", d, d); Linear(b.SelfKey, p + "self.k", d, d); Linear(b.SelfValue, p + "self.v", d, d); Linear(b.SelfOutput, p + "self.out", d, d);
             Linear(b.CrossQuery, p + "cross.q", d, d); Linear(b.CrossKey, p + "cross.k", d, d); Linear(b.CrossValue, p + "cross.v", d, d); Linear(b.CrossOutput, p + "cross.out", d, d);
-            IndexTtsOps.LoadNorm(_engine, read, b.SelfNorm, prefix + p + "self_norm", d);
-            IndexTtsOps.LoadNorm(_engine, read, b.CrossNorm, prefix + p + "cross_norm", d);
-            IndexTtsOps.LoadNorm(_engine, read, b.FeedForwardNorm, prefix + p + "ff_norm", d);
+            IndexTtsOps.LoadNorm(_engine, source, b.SelfNorm, prefix + p + "self_norm", d);
+            IndexTtsOps.LoadNorm(_engine, source, b.CrossNorm, prefix + p + "cross_norm", d);
+            IndexTtsOps.LoadNorm(_engine, source, b.FeedForwardNorm, prefix + p + "ff_norm", d);
             Linear(b.FeedForward1, p + "ff.0", d, Options.LengthFeedForwardDim); Linear(b.FeedForward2, p + "ff.2", Options.LengthFeedForwardDim, d);
         }
         Linear(Classifier, "classifier", d, Options.MaxLatentLength + 1);

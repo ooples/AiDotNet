@@ -1,6 +1,6 @@
 using AiDotNet.Audio.Generation;
-using AiDotNet.ComputerVision.Weights;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 
@@ -33,17 +33,11 @@ internal sealed class MetaVoiceMultibandDecoder<T>
         if (Convert.ToInt32(metadata["n_bands"]) != 4 || Convert.ToInt32(metadata["sample_rate"]) != 24000)
             throw new InvalidDataException("MetaVoice requires the four-band 24 kHz AudioCraft checkpoint.");
         string prefix = band + ".";
-        var state = new WeightLoader().LoadWeights(checkpoint, name => name.StartsWith(prefix + "model_state.", StringComparison.Ordinal) ||
-            name.StartsWith(prefix + "processor_state.", StringComparison.Ordinal));
-        double[] Read(string name, int[] shape)
-        {
-            if (!state.TryGetValue(name, out var value)) throw new InvalidDataException("Missing MetaVoice MBD tensor: " + name);
-            if (!value.Shape.ToArray().SequenceEqual(shape)) throw new InvalidDataException("MBD tensor dimensions differ: " + name);
-            state.Remove(name);
-            return value.ToArray().Select(x => (double)x).ToArray();
-        }
+        bool Band(string name) => name.StartsWith(prefix + "model_state.", StringComparison.Ordinal) ||
+            name.StartsWith(prefix + "processor_state.", StringComparison.Ordinal);
+        using var file = TorchCheckpointFile.Open(checkpoint, strictAxes: true, include: Band);
         var model = new MetaVoiceDiffusionUnet<T>(_engine);
-        model.LoadTorch((name, shape) => Read(prefix + "model_state." + name, shape));
+        model.LoadTorch(file.WithPrefix(prefix + "model_state."));
         MetaVoiceBandProcessor<T>? processor = null;
         if (band >= 2)
         {
@@ -51,13 +45,13 @@ internal sealed class MetaVoiceMultibandDecoder<T>
             var fitted = new Dictionary<string, double[]>(StringComparer.Ordinal);
             processor.LoadTorch((name, shape) =>
             {
-                var values = Read(prefix + "processor_state." + name, shape);
+                var values = file.Read(prefix + "processor_state." + name, shape);
                 fitted.Add(name, (double[])values.Clone());
                 return values;
             });
             _processorStates[band] = fitted;
         }
-        if (state.Count != 0) throw new InvalidDataException("Unconsumed MetaVoice multiband checkpoint tensors: " + state.Count);
+        file.RequireAllUsed("MetaVoice multiband", name => !Band(name));
         _models[band] = model; _processors[band] = processor;
     }
 

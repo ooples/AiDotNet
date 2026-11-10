@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
@@ -259,21 +260,25 @@ internal sealed class BigVganGenerator<T>
     /// <c>activation_post.act</c> and <c>conv_post</c>; weight-normalized convolutions as <c>weight_g</c>/<c>weight_v</c>
     /// or plain <c>weight</c>. The anti-aliasing filters are fixed and not read.
     /// </summary>
-    internal void LoadTorch(Func<string, double[]?> read)
+    internal void LoadTorch(Func<string, double[]?> read) => LoadTorch(TorchTensorSource.From(read));
+
+    /// <summary>Loads the reference generator's state straight from <paramref name="source"/> (see the function form).</summary>
+    internal void LoadTorch(TorchTensorSource source)
     {
-        double[] Require(string name) => read(name) ?? throw new InvalidDataException($"The BigVGAN checkpoint has no tensor '{name}'.");
+        string Name(string name) => source.Contains(name) ? name : throw new InvalidDataException($"The BigVGAN checkpoint has no tensor '{name}'.");
+        double[] Require(string name) => source.Read(Name(name), Array.Empty<int>());
         void Conv(NormedConv1DLayer<T> conv, string name)
         {
-            var v = read(name + ".weight_v");
-            var bias = conv.HasBias ? Require(name + ".bias") : new double[conv.OutputChannels];
-            if (v is not null) conv.LoadTorchWeights(v, Require(name + ".weight_g"), bias);
-            else conv.LoadTorchWeights(Require(name + ".weight"), null, bias);
+            string? bias = conv.HasBias ? Name(name + ".bias") : null;
+            if (source.Contains(name + ".weight_v"))
+                conv.LoadTorchWeights(source, name + ".weight_v", conv.TorchWeightShape, Name(name + ".weight_g"), bias);
+            else conv.LoadTorchWeights(source, Name(name + ".weight"), conv.TorchWeightShape, null, bias);
         }
         void Act(AntiAliasedSnake<T> activation, string name)
         {
             // name is "{activation}.act"; the stored filters sit beside it when the checkpoint keeps them.
             string root = name.Substring(0, name.Length - ".act".Length);
-            if (read(root + ".upsample.filter") is { } up && read(root + ".downsample.lowpass.filter") is { } down)
+            if (source.TryRead(root + ".upsample.filter") is { } up && source.TryRead(root + ".downsample.lowpass.filter") is { } down)
                 activation.LoadFilters(up, down);
             switch (activation.Activation)
             {

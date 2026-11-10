@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -138,12 +139,14 @@ internal sealed class StyleTtsZsConformer<T>
     }
 
     /// <summary>Loads wenet <c>ConformerEncoderLayer</c>s named <c>{prefix}{i}.*</c>.</summary>
-    public void Load(TorchReader read, string prefix)
+    public void Load(TorchReader read, string prefix) => Load(StyleTtsOps.Source(read), prefix);
+
+    public void Load(TorchTensorSource source, string prefix)
     {
         int d = Dim, f = FeedForwardDim, heads = Heads;
-        void Dense(DenseLayer<T> layer, string name, int inputs, int outputs) => StyleTtsOps.LoadLinear(_engine, layer, read, name, inputs, outputs);
+        void Dense(DenseLayer<T> layer, string name, int inputs, int outputs) => StyleTtsOps.LoadLinear(_engine, layer, source, name, inputs, outputs);
         void Norm(LayerNormalizationLayer<T> norm, string name) =>
-            TorchParameters.LayerNorm(_engine, norm, read(name + ".weight", new[] { d }), read(name + ".bias", new[] { d }));
+            TorchParameters.LayerNorm(_engine, norm, source, name + ".weight", name + ".bias");
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
@@ -156,15 +159,14 @@ internal sealed class StyleTtsZsConformer<T>
             Dense(b.Key, p + ".self_attn.linear_k", d, d);
             Dense(b.Value, p + ".self_attn.linear_v", d, d);
             Dense(b.Output, p + ".self_attn.linear_out", d, d);
-            TorchParameters.Linear(b.PositionProjection, d, d, read(p + ".self_attn.linear_pos.weight", new[] { d, d }));
-            b.BiasU.LoadTable(read(p + ".self_attn.pos_bias_u", new[] { heads, d / heads }));
-            b.BiasV.LoadTable(read(p + ".self_attn.pos_bias_v", new[] { heads, d / heads }));
+            TorchParameters.Linear(b.PositionProjection, d, d, source, p + ".self_attn.linear_pos.weight");
+            TorchParameters.Parameters(b.BiasU, source, p + ".self_attn.pos_bias_u", new[] { heads, d / heads });
+            TorchParameters.Parameters(b.BiasV, source, p + ".self_attn.pos_bias_v", new[] { heads, d / heads });
             Norm(b.NormConv, p + ".norm_conv");
-            StyleTtsOps.LoadPlain(b.Pointwise1, read, p + ".conv_module.pointwise_conv1");
-            StyleTtsOps.LoadPlain(b.Depthwise, read, p + ".conv_module.depthwise_conv");
-            TorchParameters.BatchNorm(b.ConvNorm, read(p + ".conv_module.norm.weight", new[] { d }), read(p + ".conv_module.norm.bias", new[] { d }),
-                read(p + ".conv_module.norm.running_mean", new[] { d }), read(p + ".conv_module.norm.running_var", new[] { d }));
-            StyleTtsOps.LoadPlain(b.Pointwise2, read, p + ".conv_module.pointwise_conv2");
+            StyleTtsOps.LoadPlain(b.Pointwise1, source, p + ".conv_module.pointwise_conv1");
+            StyleTtsOps.LoadPlain(b.Depthwise, source, p + ".conv_module.depthwise_conv");
+            TorchParameters.BatchNorm(b.ConvNorm, source, p + ".conv_module.norm.", d);
+            StyleTtsOps.LoadPlain(b.Pointwise2, source, p + ".conv_module.pointwise_conv2");
             Norm(b.NormFeedForward, p + ".norm_ff");
             Dense(b.FeedForward1, p + ".feed_forward.w_1", d, f);
             Dense(b.FeedForward2, p + ".feed_forward.w_2", f, d);

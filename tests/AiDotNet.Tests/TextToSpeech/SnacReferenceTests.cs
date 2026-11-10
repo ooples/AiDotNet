@@ -35,6 +35,20 @@ public class SnacReferenceTests
             : 0.05 * s;
     }).ToArray();
 
+    /// <summary>With <c>SNAC_24KHZ_DIR</c> (hubertsiuzdak/snac_24khz): the released pytorch_model.bin streams through
+    /// TorchCheckpointFile, as OrpheusTTS.LoadCodecWeights reads it, and every tensor has a place.</summary>
+    [Fact(Timeout = 300000)]
+    public async Task ReleasedCheckpoint_LoadsEveryTensor()
+    {
+        await Task.Yield();
+        string? directory = Environment.GetEnvironmentVariable("SNAC_24KHZ_DIR");
+        if (directory is null || !Directory.Exists(directory)) return;
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(Path.Combine(directory, "pytorch_model.bin"));
+        var snac = new Snac<float>(new CpuEngine(), new SnacConfiguration(), new List<LayerBase<float>>());
+        var used = snac.Load(file);
+        Assert.DoesNotContain(file.Names, n => !used.Contains(n));
+    }
+
     [Fact(Timeout = 300000)]
     public async Task EncodeAndDecode_MatchSnac()
     {

@@ -6,6 +6,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
+using AiDotNet.ModelLoading;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -464,27 +465,6 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
 
     // ---------------------------------------------------------------- weights
 
-    private static Dictionary<string, double[]> ReadState(string path)
-    {
-        var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path))
-            state[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        return state;
-    }
-
-    private static Func<string, int[], double[]?> Reader(Dictionary<string, double[]> state, HashSet<string> used) => (name, _) =>
-    {
-        if (!state.TryGetValue(name, out var value)) return null;
-        used.Add(name);
-        return value;
-    };
-
-    private static void RequireAllUsed(string what, Dictionary<string, double[]> state, HashSet<string> used, Func<string, bool>? unused = null)
-    {
-        var left = state.Keys.Where(k => !used.Contains(k) && (unused is null || !unused(k))).ToList();
-        if (left.Count > 0) throw new InvalidDataException($"The {what} checkpoint has {left.Count} tensors this model has no place for (first: '{left[0]}').");
-    }
-
     /// <summary>
     /// Loads the release: an <c>amphion/MaskGCT</c> directory (<c>semantic_codec/model.safetensors</c>,
     /// <c>acoustic_codec/model.safetensors</c> and <c>model_1.safetensors</c>, <c>t2s_model/model.safetensors</c>,
@@ -498,29 +478,26 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
         if (!HasPaperLayers) throw NotNative();
         LoadSemanticModel(semanticModelPath);
         LoadStatistics(statisticsPath);
-        var semanticCodec = ReadState(Path.Combine(directory, "semantic_codec", "model.safetensors"));
-        var used = new HashSet<string>(StringComparer.Ordinal);
-        var read = Reader(semanticCodec, used);
-        SemanticCodec.Load((name, _) => read(name, Array.Empty<int>()));
-        // RepCodec's decoder reconstructs the features; MaskGCT only quantizes.
-        RequireAllUsed("semantic codec", semanticCodec, used, k => k.StartsWith("decoder.", StringComparison.Ordinal));
-
-        var encoder = ReadState(Path.Combine(directory, "acoustic_codec", "model.safetensors"));
-        var decoder = ReadState(Path.Combine(directory, "acoustic_codec", "model_1.safetensors"));
-        var usedEncoder = new HashSet<string>(StringComparer.Ordinal);
-        var usedDecoder = new HashSet<string>(StringComparer.Ordinal);
-        var readEncoder = Reader(encoder, usedEncoder);
-        var readDecoder = Reader(decoder, usedDecoder);
-        AcousticCodec.Load((name, _) => readEncoder(name, Array.Empty<int>()), (name, _) => readDecoder(name, Array.Empty<int>()));
-        RequireAllUsed("acoustic encoder", encoder, usedEncoder);
-        RequireAllUsed("acoustic decoder", decoder, usedDecoder);
-
-        void Generator(string relative, Action<Func<string, int[], double[]?>> load, Func<string, bool>? unused = null)
+        using (var semanticCodec = TorchCheckpointFile.Open(Path.Combine(directory, "semantic_codec", "model.safetensors")))
         {
-            var state = ReadState(Path.Combine(directory, relative));
-            var usedNames = new HashSet<string>(StringComparer.Ordinal);
-            load(Reader(state, usedNames));
-            RequireAllUsed(relative, state, usedNames, unused);
+            SemanticCodec.Load(semanticCodec);
+            // RepCodec's decoder reconstructs the features; MaskGCT only quantizes.
+            semanticCodec.RequireAllUsed("semantic codec", k => k.StartsWith("decoder.", StringComparison.Ordinal));
+        }
+
+        using (var encoder = TorchCheckpointFile.Open(Path.Combine(directory, "acoustic_codec", "model.safetensors")))
+        using (var decoder = TorchCheckpointFile.Open(Path.Combine(directory, "acoustic_codec", "model_1.safetensors")))
+        {
+            AcousticCodec.Load(encoder, decoder);
+            encoder.RequireAllUsed("acoustic encoder");
+            decoder.RequireAllUsed("acoustic decoder");
+        }
+
+        void Generator(string relative, Action<TorchTensorSource> load, Func<string, bool>? unused = null)
+        {
+            using var state = TorchCheckpointFile.Open(Path.Combine(directory, relative));
+            load(state);
+            state.RequireAllUsed(relative, unused);
         }
         // The acoustic models' DiffLlama is a LlamaModel whose token table its forward never reads (it is given
         // embeddings); the release saves it anyway.
@@ -536,8 +513,8 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var state = ReadState(path);
-        SemanticModel.LoadTorchWeights((name, _) => state.TryGetValue(name, out var v) ? v : throw new InvalidDataException($"The w2v-BERT checkpoint has no tensor '{name}'."));
+        using var file = TorchCheckpointFile.Open(path);
+        SemanticModel.LoadTorchWeights(file);
     }
 
     /// <summary>Loads the semantic feature statistics (<c>wav2vec2bert_stats.pt</c>: per-channel <c>mean</c> and
@@ -546,10 +523,10 @@ public partial class MaskGCT<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var state = ReadState(path);
+        using var file = TorchCheckpointFile.Open(path);
         SemanticCodec.LoadStatistics(
-            state.TryGetValue("mean", out var mean) ? mean : throw new InvalidDataException("The statistics have no 'mean'."),
-            state.TryGetValue("var", out var variance) ? variance : throw new InvalidDataException("The statistics have no 'var'."));
+            file.TryRead("mean") ?? throw new InvalidDataException("The statistics have no 'mean'."),
+            file.TryRead("var") ?? throw new InvalidDataException("The statistics have no 'var'."));
     }
 
     // ---------------------------------------------------------------- housekeeping

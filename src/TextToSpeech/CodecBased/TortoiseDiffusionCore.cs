@@ -43,10 +43,8 @@ internal sealed class TortoiseDiffusionResidual<T>
     {
         _inputNorm.LoadAffine(source, prefix + "in_layers.0.weight", prefix + "in_layers.0.bias");
         _outputNorm.LoadAffine(source, prefix + "out_layers.0.weight", prefix + "out_layers.0.bias");
-        // XTTS's convolution loader still takes each tensor's values.
-        var read = source.AsFunction();
-        XttsOps<T>.LoadConv(read, _input, prefix + "in_layers.2", _dim, _dim, 1);
-        XttsOps<T>.LoadConv(read, _output, prefix + "out_layers.3", _dim, _dim, 3);
+        XttsOps<T>.LoadConv(source, _input, prefix + "in_layers.2", _dim, _dim, 1);
+        XttsOps<T>.LoadConv(source, _output, prefix + "out_layers.3", _dim, _dim, 3);
         TorchParameters.Linear(_engine, _time, _dim, 2 * _dim, source, prefix + "emb_layers.1.weight", prefix + "emb_layers.1.bias");
     }
 }
@@ -163,17 +161,15 @@ internal sealed class TortoiseDiffusionCore<T>
     internal void LoadTorchWeights(TorchTensorSource source)
     {
         int d = _options.DiffusionDim, mel = _options.MelChannels;
-        // XTTS's convolution and attention loaders still take each tensor's values.
-        var read = source.AsFunction();
-        XttsOps<T>.LoadConv(read, _input, "inp_block", mel, d, 3);
-        XttsOps<T>.LoadConv(read, _latentInput, "latent_conditioner.0", _options.LLMDim, d, 3);
-        XttsOps<T>.LoadConv(read, _context1, "contextual_embedder.0", mel, d, 3);
-        XttsOps<T>.LoadConv(read, _context2, "contextual_embedder.1", d, 2 * d, 3);
+        XttsOps<T>.LoadConv(source, _input, "inp_block", mel, d, 3);
+        XttsOps<T>.LoadConv(source, _latentInput, "latent_conditioner.0", _options.LLMDim, d, 3);
+        XttsOps<T>.LoadConv(source, _context1, "contextual_embedder.0", mel, d, 3);
+        XttsOps<T>.LoadConv(source, _context2, "contextual_embedder.1", d, 2 * d, 3);
         _codeEmbedding.LoadTable(source, "code_embedding.weight");
-        _unconditioned.LoadTable(source.Read("unconditioned_embedding", new[] { 1, d, 1 }));
-        for (int i = 0; i < _codeAttention.Length; i++) _codeAttention[i].LoadTorchWeights(read, $"code_converter.{i}.");
-        for (int i = 0; i < _latentAttention.Length; i++) _latentAttention[i].LoadTorchWeights(read, $"latent_conditioner.{i + 1}.");
-        for (int i = 0; i < _contextAttention.Length; i++) _contextAttention[i].LoadTorchWeights(read, $"contextual_embedder.{i + 2}.");
+        _unconditioned.LoadTable(source, "unconditioned_embedding", new[] { 1, d, 1 });
+        for (int i = 0; i < _codeAttention.Length; i++) _codeAttention[i].LoadTorchWeights(source, $"code_converter.{i}.");
+        for (int i = 0; i < _latentAttention.Length; i++) _latentAttention[i].LoadTorchWeights(source, $"latent_conditioner.{i + 1}.");
+        for (int i = 0; i < _contextAttention.Length; i++) _contextAttention[i].LoadTorchWeights(source, $"contextual_embedder.{i + 2}.");
         _codeNorm.LoadAffine(source, "code_norm.weight", "code_norm.bias");
         _outputNorm.LoadAffine(source, "out.0.weight", "out.0.bias");
         TorchParameters.Linear(_engine, _time1, d, d, source, "time_embed.0.weight", "time_embed.0.bias");
@@ -181,16 +177,16 @@ internal sealed class TortoiseDiffusionCore<T>
         for (int i = 0; i < _integrators.Length; i++)
         {
             _integrators[i].Residual.Load(source, $"conditioning_timestep_integrator.{i}.resblk.");
-            _integrators[i].Attention.LoadTorchWeights(read, $"conditioning_timestep_integrator.{i}.attn.");
+            _integrators[i].Attention.LoadTorchWeights(source, $"conditioning_timestep_integrator.{i}.attn.");
         }
         for (int i = 0; i < _layers.Length; i++)
         {
             _layers[i].Residual.Load(source, $"layers.{i}.resblk.");
-            _layers[i].Attention.LoadTorchWeights(read, $"layers.{i}.attn.");
+            _layers[i].Attention.LoadTorchWeights(source, $"layers.{i}.attn.");
         }
         for (int i = 0; i < _finalResiduals.Length; i++) _finalResiduals[i].Load(source, $"layers.{i + _layers.Length}.");
-        XttsOps<T>.LoadConv(read, _integrating, "integrating_conv", 2 * d, d, 1);
-        XttsOps<T>.LoadConv(read, _melHead, "mel_head", d, mel, 3);
-        XttsOps<T>.LoadConv(read, _output, "out.2", d, 2 * mel, 3);
+        XttsOps<T>.LoadConv(source, _integrating, "integrating_conv", 2 * d, d, 1);
+        XttsOps<T>.LoadConv(source, _melHead, "mel_head", d, mel, 3);
+        XttsOps<T>.LoadConv(source, _output, "out.2", d, 2 * mel, 3);
     }
 }

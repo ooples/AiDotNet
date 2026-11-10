@@ -1,18 +1,15 @@
 using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
 internal static class UnivNetTorchWeights
 {
-    internal static void Conv<T>(Func<string, int[], double[]> read, NormedConv1DLayer<T> layer, string name)
-    {
-        var shape = layer.TorchWeightShape;
-        layer.LoadTorchWeights(read(name + ".weight_v", shape), read(name + ".weight_g", new[] { shape[0], 1, 1 }),
-            read(name + ".bias", new[] { layer.OutputChannels }));
-    }
+    internal static void Conv<T>(TorchTensorSource source, NormedConv1DLayer<T> layer, string name) =>
+        layer.LoadTorchWeights(source, name + ".weight_v", layer.TorchWeightShape, name + ".weight_g", name + ".bias");
 }
 
 /// <summary>
@@ -52,16 +49,16 @@ internal sealed class UnivNetKernelPredictor<T>
     }
 
     /// <summary>Loads the original weight-normalized kernel-predictor tensors.</summary>
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
-        UnivNetTorchWeights.Conv(read, _input, prefix + "input_conv.0");
+        UnivNetTorchWeights.Conv(source, _input, prefix + "input_conv.0");
         for (int i = 0; i < _residual.Count; i++)
         {
-            UnivNetTorchWeights.Conv(read, _residual[i].A, $"{prefix}residual_convs.{i}.1");
-            UnivNetTorchWeights.Conv(read, _residual[i].B, $"{prefix}residual_convs.{i}.3");
+            UnivNetTorchWeights.Conv(source, _residual[i].A, $"{prefix}residual_convs.{i}.1");
+            UnivNetTorchWeights.Conv(source, _residual[i].B, $"{prefix}residual_convs.{i}.3");
         }
-        UnivNetTorchWeights.Conv(read, _kernel, prefix + "kernel_conv");
-        UnivNetTorchWeights.Conv(read, _bias, prefix + "bias_conv");
+        UnivNetTorchWeights.Conv(source, _kernel, prefix + "kernel_conv");
+        UnivNetTorchWeights.Conv(source, _bias, prefix + "bias_conv");
     }
 
     /// <summary>The kernels <c>[1, layers · in · out · kernel, frames]</c> and biases <c>[1, layers · out, frames]</c>.</summary>
@@ -143,11 +140,11 @@ internal sealed class UnivNetLvcBlock<T>
         return x;
     }
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
-        _predictor.LoadTorchWeights(read, prefix + "kernel_predictor.");
-        UnivNetTorchWeights.Conv(read, _up, prefix + "convt_pre.1");
-        for (int i = 0; i < _convs.Count; i++) UnivNetTorchWeights.Conv(read, _convs[i], $"{prefix}conv_blocks.{i}.1");
+        _predictor.LoadTorchWeights(source, prefix + "kernel_predictor.");
+        UnivNetTorchWeights.Conv(source, _up, prefix + "convt_pre.1");
+        for (int i = 0; i < _convs.Count; i++) UnivNetTorchWeights.Conv(source, _convs[i], $"{prefix}conv_blocks.{i}.1");
     }
 
     // Reference location_variable_convolution (dilation 1): output sample t of frame l = t / hop is the kernel-k
@@ -204,11 +201,14 @@ internal sealed class UnivNetGenerator<T>
 
     public IReadOnlyList<LayerBase<T>> Layers => _layers;
 
-    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "")
+    internal void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "") => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the weight-normalized generator tensors straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix = "")
     {
-        UnivNetTorchWeights.Conv(read, _pre, prefix + "conv_pre");
-        for (int i = 0; i < _blocks.Count; i++) _blocks[i].LoadTorchWeights(read, $"{prefix}res_stack.{i}.");
-        UnivNetTorchWeights.Conv(read, _post, prefix + "conv_post.1");
+        UnivNetTorchWeights.Conv(source, _pre, prefix + "conv_pre");
+        for (int i = 0; i < _blocks.Count; i++) _blocks[i].LoadTorchWeights(source, $"{prefix}res_stack.{i}.");
+        UnivNetTorchWeights.Conv(source, _post, prefix + "conv_post.1");
     }
 
     /// <summary>A waveform <c>[1, 1, frames · Π s]</c> from a mel spectrogram and noise <c>[1, noiseDim, frames]</c>.</summary>

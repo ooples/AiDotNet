@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.Tensors.LinearAlgebra;
@@ -209,31 +210,44 @@ internal sealed class MetaVoiceGpt<T>
         return selected;
     }
 
-    public void LoadTorch(Func<string, int[], double[]> read)
+    public void LoadTorch(Func<string, int[], double[]> read) => LoadTorch(TorchTensorSource.From(read));
+
+    /// <summary>Loads the actor's state straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorch(TorchTensorSource source)
     {
         int dimension = _config.Dimension;
-        for (int i = 0; i < _embeddings.Count; i++) _embeddings[i].LoadTable(read($"transformer.wtes.{i}.weight", new[] { _config.InputVocabularies[i], dimension }));
-        _positions.LoadTable(read("transformer.wpe.weight", new[] { _config.Context, dimension }));
+        for (int i = 0; i < _embeddings.Count; i++) _embeddings[i].LoadTable(source, $"transformer.wtes.{i}.weight");
+        _positions.LoadTable(source, "transformer.wpe.weight");
         void LinearLoad(BiasFreeLinearLayer<T> layer, string name, int input, int output)
-            => TorchParameters.Linear(layer, input, output, read(name + ".weight", new[] { output, input }));
+            => TorchParameters.Linear(layer, input, output, source, name + ".weight");
         for (int i = 0; i < _blocks.Count; i++)
         {
             var block = _blocks[i]; string prefix = "transformer.h." + i;
-            block.AttentionNorm.Load(read(prefix + ".ln_1.weight", new[] { dimension }));
-            block.FeedForwardNorm.Load(read(prefix + ".ln_2.weight", new[] { dimension }));
+            block.AttentionNorm.Load(source.Read(prefix + ".ln_1.weight", new[] { dimension }));
+            block.FeedForwardNorm.Load(source.Read(prefix + ".ln_2.weight", new[] { dimension }));
             LinearLoad(block.Qkv, prefix + ".attn.c_attn", dimension, 3 * dimension);
             LinearLoad(block.AttentionOutput, prefix + ".attn.c_proj", dimension, dimension);
             LinearLoad(block.FeedForwardInput, prefix + (_config.SwiGlu ? ".mlp.swiglu.w1" : ".mlp.c_fc"), dimension, _feedForward);
             if (block.Gate is not null) LinearLoad(block.Gate, prefix + ".mlp.swiglu.w3", dimension, _feedForward);
             LinearLoad(block.FeedForwardOutput, prefix + ".mlp.c_proj", _feedForward, dimension);
         }
-        _finalNorm.Load(read("transformer.ln_f.weight", new[] { dimension }));
+        _finalNorm.Load(source.Read("transformer.ln_f.weight", new[] { dimension }));
         if (_speaker is not null) LinearLoad(_speaker, "speaker_cond_pos", _config.SpeakerDimension, dimension);
         if (_config.OutputVocabularies is null)
         {
+            var ops = MathHelper.GetNumericOperations<T>();
             for (int i = 0; i < _embeddings.Count; i++)
-                if (!read($"lm_heads.{i}.weight", new[] { _config.InputVocabularies[i], dimension }).SequenceEqual(_embeddings[i].Table.ToArray().Select(value => MathHelper.GetNumericOperations<T>().ToDouble(value))))
-                    throw new InvalidDataException("MetaVoice causal output weights must be tied to their input embeddings.");
+            {
+                // The head must equal the table it is tied to, compared in the table's own precision.
+                var table = _embeddings[i].Table;
+                var head = new Tensor<T>(table.Shape.ToArray());
+                source.CopyTo($"lm_heads.{i}.weight", new[] { _config.InputVocabularies[i], dimension }, head);
+                var stored = head.AsSpan();
+                var tied = table.AsSpan();
+                for (int k = 0; k < stored.Length; k++)
+                    if (ops.ToDouble(stored[k]) != ops.ToDouble(tied[k]))
+                        throw new InvalidDataException("MetaVoice causal output weights must be tied to their input embeddings.");
+            }
         }
         else for (int i = 0; i < _heads.Count; i++) LinearLoad(_heads[i], "lm_heads." + i, dimension, _config.OutputVocabularies[i]);
     }

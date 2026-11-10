@@ -199,8 +199,7 @@ internal sealed class TortoiseSpeechTokenizer<T>
     internal ResidualVectorQuantizerLayer<T> Quantizer => _codec.Quantizer;
     internal void LoadTorchWeights(Func<string, int[], double[]> read) => _codec.LoadTorchWeights(read);
 
-    // The dVAE's loader still takes each tensor's values.
-    internal void LoadTorchWeights(TorchTensorSource source) => _codec.LoadTorchWeights(source.AsFunction());
+    internal void LoadTorchWeights(TorchTensorSource source) => _codec.LoadTorchWeights(source);
     internal Tensor<T> EncodeLatent(Tensor<T> melRows) => _codec.EncodeFeatures(_engine.TensorTranspose(melRows));
     internal Tensor<T> QuantizedLatent(Tensor<T> melRows) => Quantizer.Forward(EncodeLatent(melRows));
     internal int[] Encode(Tensor<T> melRows) => XttsOps<T>.IdsOf(_codec.Encode(_engine.TensorTranspose(melRows)));
@@ -230,11 +229,9 @@ internal sealed class TortoiseAutoregressive<T>
     internal void LoadTorchWeights(TorchTensorSource source)
     {
         int d = _options.LLMDim;
-        // XTTS's conditioning modules still take each tensor's values.
-        var read = source.AsFunction();
-        XttsOps<T>.LoadConv(read, _conditioningInput, "conditioning_encoder.init", _options.AutoregressiveMelChannels, d, 1);
+        XttsOps<T>.LoadConv(source, _conditioningInput, "conditioning_encoder.init", _options.AutoregressiveMelChannels, d, 1);
         for (int i = 0; i < _conditioningEncoder.Length; i++)
-            _conditioningEncoder[i].LoadTorchWeights(read, $"conditioning_encoder.attn.{i}.");
+            _conditioningEncoder[i].LoadTorchWeights(source, $"conditioning_encoder.attn.{i}.");
         void Table(LayerBase<T> layer, string name, int rows) => TorchParameters.Parameters(layer, source, name, new[] { rows, d });
         Table(_textEmbedding, "text_embedding.weight", _options.VocabSize);
         Table(_speechEmbedding, "mel_embedding.weight", _options.CodebookSize + 2);
@@ -519,8 +516,7 @@ internal sealed class TortoiseUnivNet<T>
     private readonly TortoiseTTSOptions _options;
     private readonly UnivNetGenerator<T> _generator;
 
-    // UnivNet's loader still takes each tensor's values.
-    internal void LoadTorchWeights(TorchTensorSource source) => _generator.LoadTorchWeights(source.AsFunction());
+    internal void LoadTorchWeights(TorchTensorSource source) => _generator.LoadTorchWeights(source);
 
     internal TortoiseUnivNet(IEngine engine, List<LayerBase<T>> owner, TortoiseTTSOptions options)
     {

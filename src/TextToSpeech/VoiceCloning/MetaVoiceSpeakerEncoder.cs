@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Vocoders;
@@ -109,17 +110,17 @@ internal sealed class MetaVoiceSpeakerEncoder<T>
         return _engine.TensorConcatenate(partials, 0);
     }
 
-    public void LoadTorch(Func<string, int[], double[]> read)
+    public void LoadTorch(Func<string, int[], double[]> read) => LoadTorch(TorchTensorSource.From(read));
+
+    /// <summary>Loads the LSTM layers and projection straight from <paramref name="source"/>.</summary>
+    internal void LoadTorch(TorchTensorSource source)
     {
         for (int i = 0; i < _input.Length; i++)
         {
             int input = i == 0 ? _melChannels : _hidden;
-            TorchParameters.Linear(_engine, _input[i], input, 4 * _hidden,
-                read($"lstm.weight_ih_l{i}", new[] { 4 * _hidden, input }), read($"lstm.bias_ih_l{i}", new[] { 4 * _hidden }));
-            TorchParameters.Linear(_engine, _recurrent[i], _hidden, 4 * _hidden,
-                read($"lstm.weight_hh_l{i}", new[] { 4 * _hidden, _hidden }), read($"lstm.bias_hh_l{i}", new[] { 4 * _hidden }));
+            TorchParameters.Linear(_engine, _input[i], input, 4 * _hidden, source, $"lstm.weight_ih_l{i}", $"lstm.bias_ih_l{i}");
+            TorchParameters.Linear(_engine, _recurrent[i], _hidden, 4 * _hidden, source, $"lstm.weight_hh_l{i}", $"lstm.bias_hh_l{i}");
         }
-        TorchParameters.Linear(_engine, _projection, _hidden, _dimension,
-            read("linear.weight", new[] { _dimension, _hidden }), read("linear.bias", new[] { _dimension }));
+        TorchParameters.Linear(_engine, _projection, _hidden, _dimension, source, "linear.weight", "linear.bias");
     }
 }

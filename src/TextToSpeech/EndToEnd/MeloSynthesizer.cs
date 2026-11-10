@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.TextToSpeech.Vocoders;
@@ -226,15 +227,17 @@ internal sealed class MeloSynthesizer<T>
     }
 
     /// <summary>Loads a MeloTTS generator checkpoint's state dict (<c>model['net_g']</c>, PyTorch names).</summary>
-    public void LoadTorch(Func<string, double[]?> read)
+    public void LoadTorch(Func<string, double[]?> read) => LoadTorch(TorchTensorSource.From(read));
+
+    /// <summary>Loads a MeloTTS generator state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorch(TorchTensorSource source)
     {
-        double[] Require(string name) => read(name) ?? throw new KeyNotFoundException(name);
-        TextEncoder.LoadTorch(Require, "enc_p.");
-        Generator.LoadTorch(read, "dec.");
-        PosteriorEncoder.LoadTorch(Require, "enc_q.");
-        Flow.LoadTorch(Require, "flow.");
-        StochasticDuration.LoadTorch(Require, "sdp.");
-        Duration.LoadTorch(Require, "dp.");
-        SpeakerEmbedding.LoadTable(Require("emb_g.weight"));
+        TextEncoder.LoadTorch(source, "enc_p.");
+        Generator.LoadTorch(source, "dec.");
+        PosteriorEncoder.LoadTorch(source, "enc_q.");
+        Flow.LoadTorch(source, "flow.");
+        StochasticDuration.LoadTorch(source, "sdp.");
+        Duration.LoadTorch(source, "dp.");
+        SpeakerEmbedding.LoadTable(source, "emb_g.weight");
     }
 }

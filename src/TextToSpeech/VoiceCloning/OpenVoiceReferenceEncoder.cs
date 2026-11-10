@@ -88,28 +88,21 @@ internal sealed class OpenVoiceReferenceEncoder<T>
         return _projection.Forward(state);
     }
 
-    public void LoadTorch(Func<string, int[], double[]> read, string prefix = "ref_enc.")
+    public void LoadTorch(Func<string, int[], double[]> read, string prefix = "ref_enc.") =>
+        LoadTorch(AiDotNet.ModelLoading.TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the reference encoder straight from <paramref name="source"/>.</summary>
+    internal void LoadTorch(AiDotNet.ModelLoading.TorchTensorSource source, string prefix = "ref_enc.")
     {
         if (_normalization is not null)
-            TorchParameters.LayerNorm(_engine, _normalization,
-                read(prefix + "layernorm.weight", new[] { _frequencies }),
-                read(prefix + "layernorm.bias", new[] { _frequencies }));
+            TorchParameters.LayerNorm(_engine, _normalization, source, prefix + "layernorm.weight", prefix + "layernorm.bias");
         for (int i = 0; i < _convolutions.Count; i++)
         {
             string key = prefix + "convs." + i;
-            _convolutions[i].LoadTorchWeights(
-                read(key + ".weight_v", new[] { Filters[i + 1], Filters[i], 3, 3 }),
-                read(key + ".bias", new[] { Filters[i + 1] }),
-                gain: read(key + ".weight_g", new[] { Filters[i + 1], 1, 1, 1 }));
+            _convolutions[i].LoadTorchWeights(source, key + ".weight_v", key + ".weight_g", key + ".bias");
         }
-        TorchParameters.Linear(_engine, _input, _gruInputs, 3 * Hidden,
-            read(prefix + "gru.weight_ih_l0", new[] { 3 * Hidden, _gruInputs }),
-            read(prefix + "gru.bias_ih_l0", new[] { 3 * Hidden }));
-        TorchParameters.Linear(_engine, _recurrent, Hidden, 3 * Hidden,
-            read(prefix + "gru.weight_hh_l0", new[] { 3 * Hidden, Hidden }),
-            read(prefix + "gru.bias_hh_l0", new[] { 3 * Hidden }));
-        TorchParameters.Linear(_engine, _projection, Hidden, _speakerChannels,
-            read(prefix + "proj.weight", new[] { _speakerChannels, Hidden }),
-            read(prefix + "proj.bias", new[] { _speakerChannels }));
+        TorchParameters.Linear(_engine, _input, _gruInputs, 3 * Hidden, source, prefix + "gru.weight_ih_l0", prefix + "gru.bias_ih_l0");
+        TorchParameters.Linear(_engine, _recurrent, Hidden, 3 * Hidden, source, prefix + "gru.weight_hh_l0", prefix + "gru.bias_hh_l0");
+        TorchParameters.Linear(_engine, _projection, Hidden, _speakerChannels, source, prefix + "proj.weight", prefix + "proj.bias");
     }
 }

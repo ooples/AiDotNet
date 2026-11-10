@@ -287,7 +287,7 @@ internal sealed class ChatterboxT3<T>
         TextPositionEmbedding!.LoadTable(source, "text_pos_emb.emb.weight");
         SpeechPositionEmbedding!.LoadTable(source, "speech_pos_emb.emb.weight");
         TorchParameters.Linear(EmotionProjection!, 1, h, source, "cond_enc.emotion_adv_fc.weight");
-        _perceiver!.LoadTorchWeights(source.AsFunction(), "cond_enc.perceiver.");
+        _perceiver!.LoadTorchWeights(source, "cond_enc.perceiver.");
         Llama.LoadTorchWeights(source, "tfmr.");
     }
 
@@ -495,19 +495,20 @@ internal sealed class ChatterboxPerceiver<T>
         return Attention(q, q);
     }
 
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix) =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), prefix);
+
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string prefix)
     {
-        Query.LoadTable(read(prefix + "pre_attention_query", new[] { 1, Query.VocabularySize, _dim }));
-        TorchParameters.LayerNorm(_engine, Norm, read(prefix + "attn.norm.weight", new[] { _dim }),
-            read(prefix + "attn.norm.bias", new[] { _dim }));
+        Query.LoadTable(source, prefix + "pre_attention_query", new[] { 1, Query.VocabularySize, _dim });
+        TorchParameters.LayerNorm(_engine, Norm, source, prefix + "attn.norm.weight", prefix + "attn.norm.bias");
         Load(ToQuery, "to_q");
         Load(ToKey, "to_k");
         Load(ToValue, "to_v");
         Load(Output, "proj_out");
 
-        void Load(DenseLayer<T> layer, string name) => TorchParameters.Linear(_engine, layer, _dim, _dim,
-            read(prefix + $"attn.{name}.weight", new[] { _dim, _dim }),
-            read(prefix + $"attn.{name}.bias", new[] { _dim }));
+        void Load(DenseLayer<T> layer, string name) => TorchParameters.Linear(_engine, layer, _dim, _dim, source,
+            prefix + $"attn.{name}.weight", prefix + $"attn.{name}.bias");
     }
 
     private Tensor<T> Attention(Tensor<T> query, Tensor<T> memory)

@@ -45,7 +45,7 @@ public sealed class KokoroSignalBuffersReferenceTests
         AiDotNetEngine.ResetToCpu(); using var document=Reference(); var root=document.RootElement;
         var engine=AiDotNetEngine.Current; var layers=new List<LayerBase<double>>();
         var source=new StyleTts2Source<double>(engine,layers,24000,300) { UseFloat32NoiseAmplitude=true };
-        source.Load((name,shape) => Values(root.GetProperty(name.EndsWith("weight",StringComparison.Ordinal)?"weight":"bias")),"source");
+        source.Load(AiDotNet.ModelLoading.TorchTensorSource.From((string name,int[] shape) => Values(root.GetProperty(name.EndsWith("weight",StringComparison.Ordinal)?"weight":"bias"))),"source");
         var draws=root.GetProperty("draws").EnumerateArray().ToArray();
         source.InitialPhases=Values(draws.Single(x => x.GetProperty("kind").GetString()=="uniform").GetProperty("values"));
         source.GaussianNoise=Values(draws.Single(x => x.GetProperty("kind").GetString()=="normal" && x.GetProperty("shape").EnumerateArray().Last().GetInt32()==9).GetProperty("values"));

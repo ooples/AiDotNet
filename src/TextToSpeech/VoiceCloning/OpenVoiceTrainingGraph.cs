@@ -28,7 +28,11 @@ internal sealed class OpenVoiceTrainingGraph<T>
     internal int? SegmentStartForAudit { get; set; }
     internal Func<string, int[], double[]>? DropoutMasksForAudit { get; set; }
 
-    internal void LoadAuxiliaryTorch(Func<string, int[], double[]> prior, Func<string, double[]?> discriminator)
+    internal void LoadAuxiliaryTorch(Func<string, int[], double[]> prior, Func<string, double[]?> discriminator) =>
+        LoadAuxiliaryTorch(AiDotNet.ModelLoading.TorchTensorSource.From(prior), OpenVoiceConverterCore<T>.OnePerName(discriminator));
+
+    /// <summary>Loads the IPA prior and the discriminators straight from their sources.</summary>
+    internal void LoadAuxiliaryTorch(AiDotNet.ModelLoading.TorchTensorSource prior, AiDotNet.ModelLoading.TorchTensorSource discriminator)
     {
         _prior.LoadTorch(prior);
         _discriminators.LoadTorch(discriminator);

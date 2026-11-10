@@ -7,6 +7,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -485,28 +486,39 @@ public partial class StyleTTSZS<T> : TtsModelBase<T>, IEndToEndTts<T>
 
     /// <summary>Loads the released PL-BERT (yl4579/PL-BERT's <c>step_1000000.t7</c>, the <c>module.encoder.</c> prefix
     /// removed).</summary>
-    public void LoadBertWeights(string path) =>
-        BertNetwork.LoadTorchWeights((name, shape) => StyleTTS<T>.Reader(path, "module.encoder.", "encoder.")(name, shape));
+    public void LoadBertWeights(string path)
+    {
+        using var file = TorchCheckpointFile.Open(path);
+        BertNetwork.LoadTorchWeights(StyleTTS<T>.Reader(file, "module.encoder.", "encoder."));
+    }
 
     /// <summary>Loads StyleTTS 2's released text aligner (<c>Utils/ASR/epoch_00080.pth</c>'s <c>model</c> entry).</summary>
-    public void LoadAlignerWeights(string path) =>
-        AlignerNetwork.Load(StyleTTS<T>.StripPrefix(StyleTTS<T>.Reader(path, "model."), "text_aligner."), "text_aligner");
+    public void LoadAlignerWeights(string path)
+    {
+        using var file = TorchCheckpointFile.Open(path);
+        AlignerNetwork.Load(StyleTTS<T>.StripPrefix(StyleTTS<T>.Reader(file, "model."), "text_aligner."), "text_aligner");
+    }
 
     /// <summary>Loads StyleTTS 2's released pitch extractor (<c>Utils/JDC/bst.t7</c>'s <c>net</c> entry).</summary>
-    public void LoadPitchExtractorWeights(string path) =>
-        PitchExtractorNetwork.Load(StyleTTS<T>.StripPrefix(StyleTTS<T>.Reader(path, "net."), "pitch_extractor."), "pitch_extractor");
+    public void LoadPitchExtractorWeights(string path)
+    {
+        using var file = TorchCheckpointFile.Open(path);
+        PitchExtractorNetwork.Load(StyleTTS<T>.StripPrefix(StyleTTS<T>.Reader(file, "net."), "pitch_extractor."), "pitch_extractor");
+    }
 
     /// <summary>Loads WavLM-base-plus (a transformers <c>WavLMModel</c> state dict).</summary>
     public void LoadSlmWeights(string path)
     {
-        var names = new HashSet<string>(new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path).Keys, StringComparer.Ordinal);
-        var read = StyleTTS<T>.Reader(path, "wavlm.");
-        SlmNetwork.LoadTorchWeights((name, shape) => read(name, shape), name => names.Contains(name) || names.Contains("wavlm." + name));
+        using var file = TorchCheckpointFile.Open(path);
+        SlmNetwork.LoadTorchWeights(StyleTTS<T>.Reader(file, "wavlm."), name => file.Contains(name) || file.Contains("wavlm." + name));
     }
 
     /// <summary>Loads a WeSpeaker ResNet34 (<c>avg_model.pt</c>, e.g. its VoxCeleb model).</summary>
-    public void LoadSpeakerWeights(string path) =>
-        SpeakerNetwork.LoadTorchWeights((name, shape) => StyleTTS<T>.Reader(path, "model.", "module.")(name, shape));
+    public void LoadSpeakerWeights(string path)
+    {
+        using var file = TorchCheckpointFile.Open(path);
+        SpeakerNetwork.LoadTorchWeights(StyleTTS<T>.Reader(file, "model.", "module."));
+    }
 
     // ---------------------------------------------------------------- housekeeping
 

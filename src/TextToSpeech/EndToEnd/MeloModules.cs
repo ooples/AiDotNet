@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.EndToEnd;
@@ -71,6 +72,23 @@ internal static class MeloOps
 
     public static void LoadLinear<T>(IEngine engine, Func<string, double[]> read, DenseLayer<T> dense, int inputs, int outputs, string name)
         => AiDotNet.TextToSpeech.CodecBased.TorchParameters.Linear(engine, dense, inputs, outputs, read(name + ".weight"), read(name + ".bias"));
+
+    /// <summary>Loads a (weight-normalized) convolution straight from <paramref name="source"/>.</summary>
+    public static void LoadConv<T>(TorchTensorSource source, NormedConv1DLayer<T> conv, string name, bool bias = true)
+    {
+        if (conv.Normalization == ConvolutionNormalization.Weight)
+            conv.LoadTorchWeights(source, name + ".weight_v", conv.TorchWeightShape, name + ".weight_g", name + ".bias");
+        else
+            conv.LoadTorchWeights(source, name + ".weight", conv.TorchWeightShape, null, bias ? name + ".bias" : null);
+    }
+
+    /// <summary>Loads a layer norm straight from <paramref name="source"/>.</summary>
+    public static void LoadNorm<T>(IEngine engine, TorchTensorSource source, LayerNormalizationLayer<T> norm, string name, string weight = "gamma", string bias = "beta")
+        => AiDotNet.TextToSpeech.CodecBased.TorchParameters.LayerNorm(engine, norm, source, $"{name}.{weight}", $"{name}.{bias}");
+
+    /// <summary>Loads an <c>nn.Linear</c> straight from <paramref name="source"/>.</summary>
+    public static void LoadLinear<T>(IEngine engine, TorchTensorSource source, DenseLayer<T> dense, int inputs, int outputs, string name)
+        => AiDotNet.TextToSpeech.CodecBased.TorchParameters.Linear(engine, dense, inputs, outputs, source, name + ".weight", name + ".bias");
 }
 
 /// <summary>
@@ -214,25 +232,27 @@ internal sealed class MeloAttentionEncoder<T>
         return x;
     }
 
-    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix)
+    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix) => LoadTorch(engine, TorchTensorSource.From(read), prefix);
+
+    public void LoadTorch(IEngine engine, TorchTensorSource source, string prefix)
     {
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
             string a = $"{prefix}attn_layers.{i}";
-            MeloOps.LoadConv(read, b.Query, a + ".conv_q");
-            MeloOps.LoadConv(read, b.Key, a + ".conv_k");
-            MeloOps.LoadConv(read, b.Value, a + ".conv_v");
-            MeloOps.LoadConv(read, b.Output, a + ".conv_o");
-            b.RelativeKeys.LoadTable(read(a + ".emb_rel_k"));
-            b.RelativeValues.LoadTable(read(a + ".emb_rel_v"));
-            MeloOps.LoadNorm(engine, read, b.Norm1, $"{prefix}norm_layers_1.{i}");
-            MeloOps.LoadConv(read, b.Ffn1, $"{prefix}ffn_layers.{i}.conv_1");
-            MeloOps.LoadConv(read, b.Ffn2, $"{prefix}ffn_layers.{i}.conv_2");
-            MeloOps.LoadNorm(engine, read, b.Norm2, $"{prefix}norm_layers_2.{i}");
+            MeloOps.LoadConv(source, b.Query, a + ".conv_q");
+            MeloOps.LoadConv(source, b.Key, a + ".conv_k");
+            MeloOps.LoadConv(source, b.Value, a + ".conv_v");
+            MeloOps.LoadConv(source, b.Output, a + ".conv_o");
+            b.RelativeKeys.LoadTable(source, a + ".emb_rel_k");
+            b.RelativeValues.LoadTable(source, a + ".emb_rel_v");
+            MeloOps.LoadNorm(engine, source, b.Norm1, $"{prefix}norm_layers_1.{i}");
+            MeloOps.LoadConv(source, b.Ffn1, $"{prefix}ffn_layers.{i}.conv_1");
+            MeloOps.LoadConv(source, b.Ffn2, $"{prefix}ffn_layers.{i}.conv_2");
+            MeloOps.LoadNorm(engine, source, b.Norm2, $"{prefix}norm_layers_2.{i}");
         }
         if (SpeakerProjection is not null)
-            MeloOps.LoadLinear(engine, read, SpeakerProjection, SpeakerChannels, _hidden, prefix + "spk_emb_linear");
+            MeloOps.LoadLinear(engine, source, SpeakerProjection, SpeakerChannels, _hidden, prefix + "spk_emb_linear");
     }
 }
 
@@ -274,14 +294,14 @@ internal sealed class MeloDdsConv<T>
         return x;
     }
 
-    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix)
+    public void LoadTorch(IEngine engine, TorchTensorSource source, string prefix)
     {
         for (int i = 0; i < _layers.Count; i++)
         {
-            MeloOps.LoadConv(read, _layers[i].Separable, $"{prefix}convs_sep.{i}");
-            MeloOps.LoadNorm(engine, read, _layers[i].Norm1, $"{prefix}norms_1.{i}");
-            MeloOps.LoadConv(read, _layers[i].Pointwise, $"{prefix}convs_1x1.{i}");
-            MeloOps.LoadNorm(engine, read, _layers[i].Norm2, $"{prefix}norms_2.{i}");
+            MeloOps.LoadConv(source, _layers[i].Separable, $"{prefix}convs_sep.{i}");
+            MeloOps.LoadNorm(engine, source, _layers[i].Norm1, $"{prefix}norms_1.{i}");
+            MeloOps.LoadConv(source, _layers[i].Pointwise, $"{prefix}convs_1x1.{i}");
+            MeloOps.LoadNorm(engine, source, _layers[i].Norm2, $"{prefix}norms_2.{i}");
         }
     }
 }
@@ -325,11 +345,11 @@ internal sealed class MeloConvFlow<T>
         return (output, reverse ? null : _engine.ReduceSum(logAbsDet, new[] { 0 }, keepDims: false));
     }
 
-    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix)
+    public void LoadTorch(IEngine engine, TorchTensorSource source, string prefix)
     {
-        MeloOps.LoadConv(read, _pre, prefix + "pre");
-        _convs.LoadTorch(engine, read, prefix + "convs.");
-        MeloOps.LoadConv(read, _proj, prefix + "proj");
+        MeloOps.LoadConv(source, _pre, prefix + "pre");
+        _convs.LoadTorch(engine, source, prefix + "convs.");
+        MeloOps.LoadConv(source, _proj, prefix + "proj");
     }
 }
 
@@ -362,9 +382,9 @@ internal sealed class MeloAffine<T>
         return (_engine.TensorMultiply(_engine.TensorSubtract(x, m), _engine.TensorExp(_engine.TensorNegate(logs))), null);
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(TorchTensorSource source, string prefix)
     {
-        Mean.LoadTable(read(prefix + "m"));
-        LogScale.LoadTable(read(prefix + "logs"));
+        Mean.LoadTable(source, prefix + "m");
+        LogScale.LoadTable(source, prefix + "logs");
     }
 }

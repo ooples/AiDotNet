@@ -173,6 +173,31 @@ internal sealed class HaspSpeakerEncoder<T>
         }
     }
 
+    /// <summary>Loads the same state straight from <paramref name="source"/>, whose stored names are
+    /// <paramref name="storedNames"/> (checked as <see cref="LoadState"/> checks the dictionary's keys).</summary>
+    internal void LoadState(AiDotNet.ModelLoading.TorchTensorSource source, IEnumerable<string> storedNames)
+    {
+        Guard.NotNull(source);
+        foreach (var key in storedNames)
+        {
+            if (key.StartsWith("torch_spec.", StringComparison.Ordinal) || key.EndsWith(".num_batches_tracked", StringComparison.Ordinal))
+                continue;
+            if (!_state.ContainsKey(key))
+                throw new ArgumentException($"Unknown H/ASP parameter '{key}'.", nameof(storedNames));
+        }
+        foreach (var (name, target) in _state)
+        {
+            if (!source.Contains(name))
+                throw new ArgumentException($"The H/ASP state has no '{name}'.", nameof(source));
+            if (source.ShapeOf(name) is { Length: > 0 } shape
+                && (shape.Aggregate(1L, (a, b) => a * b) != target.Length || shape[0] != target.Shape[0]))
+                throw new ArgumentException(
+                    $"H/ASP parameter '{name}' has shape [{string.Join(", ", shape)}]; expected [{string.Join(", ", target.Shape)}].", nameof(source));
+            source.CopyTo(name, Array.Empty<int>(), target);
+            _engine.InvalidatePersistentTensor(target);
+        }
+    }
+
     /// <summary>The L2-normalized embedding <c>[projectionDim]</c> of a 16 kHz waveform <c>[samples]</c> (Coqui
     /// <c>forward(x, l2_norm=True)</c>); differentiable with respect to the waveform.</summary>
     public Tensor<T> Embed(Tensor<T> audio)

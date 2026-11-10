@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Vocoders;
 
@@ -85,16 +86,16 @@ internal sealed class StyleTts2AdaInResBlock<T>
         return x;
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
         for (int i = 0; i < First.Count; i++)
         {
-            StyleTtsOps.LoadWeightNorm(First[i], read, $"{name}.convs1.{i}");
-            StyleTtsOps.LoadWeightNorm(Second[i], read, $"{name}.convs2.{i}");
-            FirstNorm[i].Load(read, $"{name}.adain1.{i}");
-            SecondNorm[i].Load(read, $"{name}.adain2.{i}");
-            FirstAlpha[i].LoadTable(read($"{name}.alpha1.{i}", new[] { 1, Channels, 1 }));
-            SecondAlpha[i].LoadTable(read($"{name}.alpha2.{i}", new[] { 1, Channels, 1 }));
+            StyleTtsOps.LoadWeightNorm(First[i], source, $"{name}.convs1.{i}");
+            StyleTtsOps.LoadWeightNorm(Second[i], source, $"{name}.convs2.{i}");
+            FirstNorm[i].Load(source, $"{name}.adain1.{i}");
+            SecondNorm[i].Load(source, $"{name}.adain2.{i}");
+            CodecBased.TorchParameters.Parameters(FirstAlpha[i], source, $"{name}.alpha1.{i}", new[] { 1, Channels, 1 });
+            CodecBased.TorchParameters.Parameters(SecondAlpha[i], source, $"{name}.alpha2.{i}", new[] { 1, Channels, 1 });
         }
     }
 }
@@ -189,8 +190,8 @@ internal sealed class StyleTts2Source<T>
         return _engine.Reshape(merged, new[] { 1, 1, samples });
     }
 
-    public void Load(TorchReader read, string name) =>
-        StyleTtsOps.LoadLinear(_engine, Merge, read, name + ".l_linear", Harmonics, 1);
+    public void Load(TorchTensorSource source, string name) =>
+        StyleTtsOps.LoadLinear(_engine, Merge, source, name + ".l_linear", Harmonics, 1);
 }
 
 /// <summary>Which waveform generator StyleTTS 2's decoder ends in (the released configurations use iSTFTNet for LJSpeech
@@ -358,19 +359,19 @@ internal sealed class StyleTts2Generator<T>
         return _istft!.Forward(magnitude, phase);
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
-        Source.Load(read, name + ".m_source");
+        Source.Load(source, name + ".m_source");
         for (int i = 0; i < Ups.Count; i++)
         {
-            StyleTtsOps.LoadWeightNorm(Ups[i], read, $"{name}.ups.{i}");
-            StyleTtsOps.LoadPlain(NoiseConvs[i], read, $"{name}.noise_convs.{i}");
-            NoiseRes[i].Load(read, $"{name}.noise_res.{i}");
+            StyleTtsOps.LoadWeightNorm(Ups[i], source, $"{name}.ups.{i}");
+            StyleTtsOps.LoadPlain(NoiseConvs[i], source, $"{name}.noise_convs.{i}");
+            NoiseRes[i].Load(source, $"{name}.noise_res.{i}");
         }
-        for (int i = 0; i < ResBlocks.Count; i++) ResBlocks[i].Load(read, $"{name}.resblocks.{i}");
+        for (int i = 0; i < ResBlocks.Count; i++) ResBlocks[i].Load(source, $"{name}.resblocks.{i}");
         for (int i = 0; i < Alphas.Count; i++)
-            Alphas[i].LoadTable(read($"{name}.alphas.{i}", new[] { 1, Alphas[i].Dimension, 1 }));
-        StyleTtsOps.LoadWeightNorm(Post, read, name + ".conv_post");
+            CodecBased.TorchParameters.Parameters(Alphas[i], source, $"{name}.alphas.{i}", new[] { 1, Alphas[i].Dimension, 1 });
+        StyleTtsOps.LoadWeightNorm(Post, source, name + ".conv_post");
     }
 }
 
@@ -445,13 +446,13 @@ internal sealed class StyleTts2Decoder<T>
         return Generator.Forward(x, style, f0Curve, random);
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
-        Encode.Load(read, name + ".encode");
-        for (int i = 0; i < Decode.Count; i++) Decode[i].Load(read, $"{name}.decode.{i}");
-        StyleTtsOps.LoadWeightNorm(F0Conv, read, name + ".F0_conv");
-        StyleTtsOps.LoadWeightNorm(NConv, read, name + ".N_conv");
-        StyleTtsOps.LoadWeightNorm(AsrResidual, read, name + ".asr_res.0");
-        Generator.Load(read, name + ".generator");
+        Encode.Load(source, name + ".encode");
+        for (int i = 0; i < Decode.Count; i++) Decode[i].Load(source, $"{name}.decode.{i}");
+        StyleTtsOps.LoadWeightNorm(F0Conv, source, name + ".F0_conv");
+        StyleTtsOps.LoadWeightNorm(NConv, source, name + ".N_conv");
+        StyleTtsOps.LoadWeightNorm(AsrResidual, source, name + ".asr_res.0");
+        Generator.Load(source, name + ".generator");
     }
 }

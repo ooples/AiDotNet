@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -173,41 +174,38 @@ internal sealed class StyleTtsTextAligner<T>
         return (_engine.TensorConcatenate(logits.ToArray(), 0), _engine.TensorConcatenate(energies.ToArray(), 0));
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
         // The DCT matrix is a stored buffer (computed by torchaudio in single precision); read it as stored.
-        var dct = read(name + ".to_mfcc.dct_mat", new[] { Mels, Mels / 2 });
-        for (int i = 0; i < dct.Length; i++) _dct[i] = NumOps.FromDouble(dct[i]);
-        StyleTtsOps.LoadPlain(InitialConv, read, name + ".init_cnn.conv");
+        source.CopyTo(name + ".to_mfcc.dct_mat", new[] { Mels, Mels / 2 }, _dct);
+        _engine.InvalidatePersistentTensor(_dct);
+        StyleTtsOps.LoadPlain(InitialConv, source, name + ".init_cnn.conv");
         for (int l = 0; l < ConvBlocks.Count; l++)
         {
             var (block, norm) = ConvBlocks[l];
             for (int i = 0; i < block.Count; i++)
             {
                 string p = $"{name}.cnns.{l}.0.blocks.{i}";
-                StyleTtsOps.LoadPlain(block[i].Dilated, read, p + ".0.conv");
-                StyleTtsOps.LoadAffine(_engine, block[i].Norm.GetGammaTensor(), block[i].Norm.GetBetaTensor(),
-                    read(p + ".2.weight", new[] { Hidden }), read(p + ".2.bias", new[] { Hidden }));
-                StyleTtsOps.LoadPlain(block[i].Second, read, p + ".4.conv");
+                StyleTtsOps.LoadPlain(block[i].Dilated, source, p + ".0.conv");
+                StyleTtsOps.LoadAffine(_engine, block[i].Norm.GetGammaTensor(), block[i].Norm.GetBetaTensor(), source, p + ".2.weight", p + ".2.bias", Hidden);
+                StyleTtsOps.LoadPlain(block[i].Second, source, p + ".4.conv");
             }
-            StyleTtsOps.LoadAffine(_engine, norm.GetGammaTensor(), norm.GetBetaTensor(),
-                read($"{name}.cnns.{l}.1.weight", new[] { Hidden }), read($"{name}.cnns.{l}.1.bias", new[] { Hidden }));
+            StyleTtsOps.LoadAffine(_engine, norm.GetGammaTensor(), norm.GetBetaTensor(), source, $"{name}.cnns.{l}.1.weight", $"{name}.cnns.{l}.1.bias", Hidden);
         }
-        StyleTtsOps.LoadPlain(Projection, read, name + ".projection.conv");
-        StyleTtsOps.LoadLinear(_engine, CtcHidden, read, name + ".ctc_linear.0.linear_layer", Hidden / 2, Hidden);
-        StyleTtsOps.LoadLinear(_engine, CtcOutput, read, name + ".ctc_linear.2.linear_layer", Hidden, Tokens);
+        StyleTtsOps.LoadPlain(Projection, source, name + ".projection.conv");
+        StyleTtsOps.LoadLinear(_engine, CtcHidden, source, name + ".ctc_linear.0.linear_layer", Hidden / 2, Hidden);
+        StyleTtsOps.LoadLinear(_engine, CtcOutput, source, name + ".ctc_linear.2.linear_layer", Hidden, Tokens);
         int d = Hidden / 2;
         string s = name + ".asr_s2s";
-        Embedding.LoadTable(read(s + ".embedding.weight", new[] { Tokens, TokenEmbedding }));
-        StyleTtsOps.LoadLinear(_engine, ToSymbols, read, s + ".project_to_n_symbols", d, Tokens);
-        TorchParameters.Linear(Query, d, d, read(s + ".attention_layer.query_layer.linear_layer.weight", new[] { d, d }));
-        TorchParameters.Linear(Memory, d, d, read(s + ".attention_layer.memory_layer.linear_layer.weight", new[] { d, d }));
-        TorchParameters.Linear(Energy, d, 1, read(s + ".attention_layer.v.linear_layer.weight", new[] { 1, d }));
-        LocationConv.LoadTorchWeights(read(s + ".attention_layer.location_layer.location_conv.conv.weight", new[] { 32, 2, 63 }), null, new double[32]);
-        TorchParameters.Linear(LocationDense, 32, d, read(s + ".attention_layer.location_layer.location_dense.linear_layer.weight", new[] { d, 32 }));
-        DecoderCell.LoadTorchWeights(read(s + ".decoder_rnn.weight_ih", new[] { 4 * d, d + TokenEmbedding }), read(s + ".decoder_rnn.weight_hh", new[] { 4 * d, d }),
-            read(s + ".decoder_rnn.bias_ih", new[] { 4 * d }), read(s + ".decoder_rnn.bias_hh", new[] { 4 * d }));
-        StyleTtsOps.LoadLinear(_engine, ToHidden, read, s + ".project_to_hidden.0.linear_layer", 2 * d, d);
+        TorchParameters.Parameters(Embedding, source, s + ".embedding.weight", new[] { Tokens, TokenEmbedding });
+        StyleTtsOps.LoadLinear(_engine, ToSymbols, source, s + ".project_to_n_symbols", d, Tokens);
+        TorchParameters.Linear(Query, d, d, source, s + ".attention_layer.query_layer.linear_layer.weight");
+        TorchParameters.Linear(Memory, d, d, source, s + ".attention_layer.memory_layer.linear_layer.weight");
+        TorchParameters.Linear(Energy, d, 1, source, s + ".attention_layer.v.linear_layer.weight");
+        LocationConv.LoadTorchWeights(source, s + ".attention_layer.location_layer.location_conv.conv.weight", new[] { 32, 2, 63 }, null, null);
+        TorchParameters.Linear(LocationDense, 32, d, source, s + ".attention_layer.location_layer.location_dense.linear_layer.weight");
+        DecoderCell.LoadTorchWeights(source, s + ".decoder_rnn.weight_ih", s + ".decoder_rnn.weight_hh", s + ".decoder_rnn.bias_ih", s + ".decoder_rnn.bias_hh");
+        StyleTtsOps.LoadLinear(_engine, ToHidden, source, s + ".project_to_hidden.0.linear_layer", 2 * d, d);
     }
 }
 
@@ -290,11 +288,10 @@ internal sealed class StyleTtsPitchExtractor<T>
         return _engine.Reshape(f0, new[] { 1, frames });
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
-        void Conv(NormedConv2DLayer<T> conv, string n) => conv.LoadTorchWeights(read(n + ".weight", conv.TorchWeightShape), null);
-        void Norm(BatchNormalizationLayer<T> norm, string n, int c) => TorchParameters.BatchNorm(norm, read(n + ".weight", new[] { c }),
-            read(n + ".bias", new[] { c }), read(n + ".running_mean", new[] { c }), read(n + ".running_var", new[] { c }));
+        void Conv(NormedConv2DLayer<T> conv, string n) => conv.LoadTorchWeights(source, n + ".weight", null);
+        void Norm(BatchNormalizationLayer<T> norm, string n, int c) => TorchParameters.BatchNorm(norm, source, n + ".", c);
         Conv(Conv1, name + ".conv_block.0");
         Norm(Norm1, name + ".conv_block.1", Channels[0]);
         Conv(Conv2, name + ".conv_block.3");
@@ -309,7 +306,7 @@ internal sealed class StyleTtsPitchExtractor<T>
             Conv(Blocks[i].Shortcut, b + ".conv1by1");
         }
         Norm(PoolNorm, name + ".pool_block.0", Channels[3]);
-        Lstm.Load(read, name + ".bilstm_classifier");
-        StyleTtsOps.LoadLinear(_engine, Classifier, read, name + ".classifier", 2 * Lstm.Hidden, 1);
+        Lstm.Load(source, name + ".bilstm_classifier");
+        StyleTtsOps.LoadLinear(_engine, Classifier, source, name + ".classifier", 2 * Lstm.Hidden, 1);
     }
 }

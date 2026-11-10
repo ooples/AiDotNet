@@ -142,9 +142,8 @@ public partial class VALLE2<T> : VallEModelBase<T>
     public void LoadDecoderWeights(string path)
     {
         var vocos = _vocos ?? throw new InvalidOperationException("VALL-E 2's decoder exists in native mode only.");
-        // Vocos's loader still takes each tensor's values.
         using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
-        vocos.LoadTorchWeights(file.AsFunction());
+        vocos.LoadTorchWeights(file);
     }
 
     /// <inheritdoc />

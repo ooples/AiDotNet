@@ -46,21 +46,12 @@ public partial class Kokoro<T>
     public void LoadAuthorWeights(string checkpoint, string configuration)
     {
         LoadAuthorConfiguration(configuration);
-        var raw = new ComputerVision.Weights.WeightLoader().LoadWeights(checkpoint);
-        var state = raw.ToDictionary(pair => pair.Key.Replace(".module.", "."), pair => pair.Value);
-        var consumed = new HashSet<string>();
-        double[] Read(string name, int[] shape)
-        {
-            if (!state.TryGetValue(name, out var tensor)) throw new InvalidDataException("Missing Kokoro tensor: " + name);
-            if (!tensor.Shape.ToArray().SequenceEqual(shape)) throw new InvalidDataException("Kokoro tensor shape differs: " + name);
-            consumed.Add(name);
-            return tensor.ToArray().Select(value => (double)value).ToArray();
-        }
-        _native!.LoadTorch(Read);
-        var unused = state.Keys.Where(name => !consumed.Contains(name)).ToArray();
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(checkpoint, strictAxes: true);
+        // The released components are DataParallel-wrapped: "bert.module.embeddings..." is the model's "bert.embeddings...".
+        var stored = file.Names.ToDictionary(name => name.Replace(".module.", "."), name => name, StringComparer.Ordinal);
+        _native!.LoadTorch(file.WithNames(name => stored.TryGetValue(name, out var key) ? key : name));
         // CustomAlbert computes a pooler but KModel returns only its last hidden state.
-        if (unused.Any(name => name != "bert.pooler.weight" && name != "bert.pooler.bias"))
-            throw new InvalidDataException("Unexpected Kokoro checkpoint tensors: " + string.Join(", ", unused));
+        file.RequireAllUsed("Kokoro", name => name.Replace(".module.", ".") is "bert.pooler.weight" or "bert.pooler.bias");
     }
 
     /// <summary>Loads an original voice .pt bank [phoneme length, 1, 256]. Each sentence selects its length's style.</summary>

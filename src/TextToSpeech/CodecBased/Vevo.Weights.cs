@@ -56,8 +56,7 @@ public partial class Vevo<T>
         string dir = checkpoints.Directory;
         string Path(params string[] parts) => System.IO.Path.Combine(new[] { dir }.Concat(parts).ToArray());
 
-        // HuBERT's and MaskGCT's codec loaders still take each tensor's values.
-        using (var hubert = TorchCheckpointFile.Open(checkpoints.Hubert)) LoadHubert(name => hubert.TryRead(name));
+        using (var hubert = TorchCheckpointFile.Open(checkpoints.Hubert)) Hubert.LoadTorchWeights(hubert);
         var stats = new Checkpoint(Path("tokenizer", "vq32", "hubert_large_l18_mean_std.npz"));
         var std = stats.Take("std") ?? throw new InvalidDataException("The statistics hold no 'std'.");
         ContentStyleTokenizer.LoadStatistics(stats.Take("mean") ?? throw new InvalidDataException("The statistics hold no 'mean'."),
@@ -75,9 +74,8 @@ public partial class Vevo<T>
         }
         using (var flow = TorchCheckpointFile.Open(Path("acoustic_modeling", "Vq8192ToMels", "model.safetensors"))) Flow.Load(flow);
         var o = _options;
-        // Vocos's loader still takes each tensor's values.
         using (var vocos = TorchCheckpointFile.Open(Path("acoustic_modeling", "Vocoder", "model.safetensors")))
-            Vocoder.LoadTorchWeights(vocos.AsFunction(), o.MelChannels, o.VocoderIntermediate);
+            Vocoder.LoadTorchWeights(vocos, o.MelChannels, o.VocoderIntermediate);
     }
 
     /// <summary>Loads HuBERT from Hugging Face's names; the layers above <see cref="VevoOptions.HubertLayer"/> are not

@@ -517,10 +517,13 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// </summary>
     public void LoadCheckpoint(string path)
     {
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        Synthesizer.LoadTorch(name =>
-            file.TryGetValue(name, out var t) || file.TryGetValue("model." + name, out t) ? t.ToVector().Select(v => (double)v).ToArray() : null);
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
+        Synthesizer.LoadTorch(ModelStateNames(file));
     }
+
+    // A training checkpoint's tensors may sit under "model.".
+    private static AiDotNet.ModelLoading.TorchTensorSource ModelStateNames(AiDotNet.ModelLoading.TorchTensorSource file) =>
+        file.WithNames(name => file.Contains(name) ? name : "model." + name);
 
     /// <summary>
     /// Loads the language's BERT (its Hugging Face <c>BertForMaskedLM</c> or <c>BertModel</c> weights, e.g.
@@ -528,15 +531,8 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// </summary>
     public void LoadBertWeights(string path)
     {
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        Bert.LoadTorchWeights((name, shape) =>
-        {
-            if (!file.TryGetValue("bert." + name, out var tensor) && !file.TryGetValue(name, out tensor))
-                throw new InvalidDataException($"The BERT checkpoint has no tensor '{name}'.");
-            if (!tensor.Shape.ToArray().SequenceEqual(shape))
-                throw new InvalidDataException($"'{name}' is [{string.Join(", ", tensor.Shape.ToArray())}] in the checkpoint but [{string.Join(", ", shape)}] here.");
-            return tensor.ToVector().Select(v => (double)v).ToArray();
-        });
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path, strictAxes: true);
+        Bert.LoadTorchWeights(file.WithNames(name => file.Contains("bert." + name) ? "bert." + name : name));
     }
 
     /// <summary>
@@ -545,19 +541,17 @@ public partial class MeloTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// </summary>
     public void LoadDiscriminatorCheckpoint(string path)
     {
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        (_discriminators ?? throw new InvalidOperationException("MeloTTS's discriminators exist in native mode only.")).LoadTorch(name =>
-            file.TryGetValue(name, out var t) || file.TryGetValue("model." + name, out t) ? t.ToVector().Select(v => (double)v).ToArray() : null);
+        var discriminators = _discriminators ?? throw new InvalidOperationException("MeloTTS's discriminators exist in native mode only.");
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
+        discriminators.LoadTorch(ModelStateNames(file));
     }
 
     /// <summary>Loads a MeloTTS duration discriminator checkpoint (<c>DUR_*.pth</c>'s <c>model</c> state dictionary).</summary>
     public void LoadDurationDiscriminatorCheckpoint(string path)
     {
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        (_durationDiscriminator ?? throw new InvalidOperationException("MeloTTS's duration discriminator exists in native mode only.")).LoadTorch(name =>
-            file.TryGetValue(name, out var t) || file.TryGetValue("model." + name, out t)
-                ? t.ToVector().Select(v => (double)v).ToArray()
-                : throw new InvalidDataException($"The duration discriminator checkpoint has no tensor '{name}'."), "");
+        var discriminator = _durationDiscriminator ?? throw new InvalidOperationException("MeloTTS's duration discriminator exists in native mode only.");
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
+        discriminator.LoadTorch(ModelStateNames(file), "");
     }
 
     // ---------------------------------------------------------------- housekeeping

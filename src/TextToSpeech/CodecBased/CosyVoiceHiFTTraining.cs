@@ -45,12 +45,16 @@ internal sealed class CosyVoiceHiFTDiscriminators<T>
     }
 
     /// <summary>Loads the reference's discriminator state dict (<c>mpd.discriminators.*</c>, <c>mrd.discriminators.*</c>).</summary>
-    public void LoadTorch(IReadOnlyDictionary<string, double[]> state, string prefix = "")
+    public void LoadTorch(IReadOnlyDictionary<string, double[]> state, string prefix = "") =>
+        LoadTorch(AiDotNet.ModelLoading.TorchTensorSource.From(name => state.TryGetValue(name, out var values) ? values : null), prefix);
+
+    /// <summary>Loads the reference's discriminator state straight from <paramref name="source"/>.</summary>
+    internal void LoadTorch(AiDotNet.ModelLoading.TorchTensorSource source, string prefix = "")
     {
-        (double[] V, double[] G, double[] B) Normed(string p) =>
-            state.ContainsKey(p + ".parametrizations.weight.original1")
-                ? (state[p + ".parametrizations.weight.original1"], state[p + ".parametrizations.weight.original0"], state[p + ".bias"])
-                : (state[p + ".weight_v"], state[p + ".weight_g"], state[p + ".bias"]);
+        (string V, string G, string B) Normed(string p) =>
+            source.Contains(p + ".parametrizations.weight.original1")
+                ? (p + ".parametrizations.weight.original1", p + ".parametrizations.weight.original0", p + ".bias")
+                : (p + ".weight_v", p + ".weight_g", p + ".bias");
         var periodLayers = _periods.Layers.Cast<NormedConv1DLayer<T>>().ToList();
         int perDiscriminator = 6;
         for (int d = 0; d < periodLayers.Count / perDiscriminator; d++)
@@ -58,7 +62,8 @@ internal sealed class CosyVoiceHiFTDiscriminators<T>
             {
                 string p = j < 5 ? $"{prefix}mpd.discriminators.{d}.convs.{j}" : $"{prefix}mpd.discriminators.{d}.conv_post";
                 var (v, g, b) = Normed(p);
-                periodLayers[d * perDiscriminator + j].LoadTorchWeights(v, g, b);
+                var layer = periodLayers[d * perDiscriminator + j];
+                layer.LoadTorchWeights(source, v, layer.TorchWeightShape, g, b);
             }
         for (int d = 0; d < _spectrograms.Count; d++)
         {
@@ -66,10 +71,10 @@ internal sealed class CosyVoiceHiFTDiscriminators<T>
             for (int j = 0; j < s.Convs.Count; j++)
             {
                 var (v, g, b) = Normed($"{prefix}mrd.discriminators.{d}.discriminators.{j}");
-                s.Convs[j].LoadTorchWeights(v, b, gain: g);
+                s.Convs[j].LoadTorchWeights(source, v, g, b);
             }
             var (ov, og, ob) = Normed($"{prefix}mrd.discriminators.{d}.out");
-            s.Output.LoadTorchWeights(ov, ob, gain: og);
+            s.Output.LoadTorchWeights(source, ov, og, ob);
         }
     }
 

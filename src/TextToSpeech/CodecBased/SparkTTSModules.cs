@@ -329,12 +329,11 @@ internal sealed class SparkSpeakerTokenizer<T>
     {
         if (includeEcapa)
         {
-            // ECAPA's and the Perceiver's loaders still take each tensor's values.
-            var ecapa = source.WithPrefix(prefix + "speaker_encoder.").AsFunction();
+            var ecapa = source.WithPrefix(prefix + "speaker_encoder.");
             _ecapa.LoadSparkFrameWeights(ecapa, _options.MelChannels);
             _ecapa.LoadSparkPoolingWeights(ecapa);
         }
-        _perceiver.Load(_engine, source.AsFunction(), prefix + "perceiver_sampler.");
+        _perceiver.Load(_engine, source, prefix + "perceiver_sampler.");
         void Linear(FullyConnectedLayer<T> layer, string name, int input, int output)
             => SparkTorchWeights<T>.Linear(layer, source, prefix + name, input, output);
         Linear(_projectIn, "quantizer.project_in", _options.SpeakerLatentDim, _options.FsqLevels.Length);

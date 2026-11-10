@@ -391,15 +391,18 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        // SNAC's loader still takes each tensor's values; they are read one at a time from the unpickled state.
-        var state = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        var source = AiDotNet.ModelLoading.TorchTensorSource.From(state, $"the checkpoint {path}");
-        LoadCodec(name => source.TryRead(name), state.Keys);
+        using var state = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
+        LoadCodec(state, state.Names);
     }
 
-    internal void LoadCodec(Func<string, double[]?> read, IEnumerable<string> names)
+    internal void LoadCodec(Func<string, double[]?> read, IEnumerable<string> names) =>
+        LoadCodec(AiDotNet.ModelLoading.TorchTensorSource.From(read), names);
+
+    /// <summary>Loads SNAC from <paramref name="source"/>, each tensor copied straight into its layer, and checks every one
+    /// of <paramref name="names"/> has a place.</summary>
+    internal void LoadCodec(AiDotNet.ModelLoading.TorchTensorSource source, IEnumerable<string> names)
     {
-        var used = Codec.Load(read);
+        var used = Codec.Load(source);
         var unused = names.Where(n => !used.Contains(n)).ToList();
         if (unused.Count > 0)
             throw new InvalidDataException($"The codec checkpoint has {unused.Count} tensors this model has no place for (first: '{unused[0]}').");

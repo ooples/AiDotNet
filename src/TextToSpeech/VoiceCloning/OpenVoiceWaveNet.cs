@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.VoiceCloning;
@@ -63,11 +64,13 @@ internal sealed class OpenVoiceWaveNet<T>
         return _engine.TensorMultiply(output!, hiddenMask);
     }
 
-    public void LoadTorch(Func<string, int[], double[]> read, string prefix)
+    public void LoadTorch(Func<string, int[], double[]> read, string prefix) => LoadTorch(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the stack's weight-normalized convolutions straight from <paramref name="source"/>.</summary>
+    internal void LoadTorch(TorchTensorSource source, string prefix)
     {
         void Load(NormedConv1DLayer<T> layer, string name, int input, int output, int kernel)
-            => layer.LoadTorchWeights(read(name + ".weight_v", new[] { output, input, kernel }),
-                read(name + ".weight_g", new[] { output, 1, 1 }), read(name + ".bias", new[] { output }));
+            => layer.LoadTorchWeights(source, name + ".weight_v", new[] { output, input, kernel }, name + ".weight_g", name + ".bias");
         Load(_condition, prefix + "cond_layer", _conditionChannels, 2 * _hidden * _inputs.Count, 1);
         for (int i = 0; i < _inputs.Count; i++)
         {

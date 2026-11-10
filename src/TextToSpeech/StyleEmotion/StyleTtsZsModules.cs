@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -86,18 +87,20 @@ internal sealed class StyleTtsZsCrossAttention<T>
     }
 
     /// <summary>Loads <c>nn.MultiheadAttention</c>'s <c>in_proj_weight</c> / <c>in_proj_bias</c> / <c>out_proj</c>.</summary>
-    public void Load(TorchReader read, string name)
+    public void Load(TorchReader read, string name) => Load(StyleTtsOps.Source(read), name);
+
+    public void Load(TorchTensorSource source, string name)
     {
         int d = Dim;
         string Name(string part) => name.Length == 0 ? part : name + "." + part;
-        var weight = read(Name("in_proj_weight"), new[] { 3 * d, d });
-        var bias = read(Name("in_proj_bias"), new[] { 3 * d });
+        var weight = source.Read(Name("in_proj_weight"), new[] { 3 * d, d });
+        var bias = source.Read(Name("in_proj_bias"), new[] { 3 * d });
         for (int part = 0; part < 3; part++)
         {
             var layer = part == 0 ? Query : part == 1 ? Key : Value;
             TorchParameters.Linear(_engine, layer, d, d, weight.Skip(part * d * d).Take(d * d).ToArray(), bias.Skip(part * d).Take(d).ToArray());
         }
-        StyleTtsOps.LoadLinear(_engine, Output, read, Name("out_proj"), d, d);
+        StyleTtsOps.LoadLinear(_engine, Output, source, Name("out_proj"), d, d);
     }
 }
 

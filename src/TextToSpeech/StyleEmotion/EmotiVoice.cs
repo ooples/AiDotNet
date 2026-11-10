@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -467,56 +468,55 @@ public partial class EmotiVoice<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// </summary>
     public void LoadReferenceWeights(string path)
     {
-        var all = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var entry in all)
-        {
-            var name = entry.Key.StartsWith("module.", StringComparison.Ordinal) ? entry.Key.Substring(7) : entry.Key;
-            state[name] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        }
-        LoadReferenceWeights((name, shape) => state.TryGetValue(name, out var v) ? v : throw new InvalidDataException($"The checkpoint has no tensor '{name}'."),
-            name => state.TryGetValue(name, out var v) ? v : null);
+        using var file = TorchCheckpointFile.Open(path);
+        var state = WithoutModulePrefix(file);
+        LoadReferenceWeights(state, state);
     }
 
-    internal void LoadReferenceWeights(TorchReader read, Func<string, double[]?> readOptional)
+    internal void LoadReferenceWeights(TorchReader read, Func<string, double[]?> readOptional) =>
+        LoadReferenceWeights(StyleTtsOps.Source(read), TorchTensorSource.From(readOptional));
+
+    /// <summary>Loads the acoustic model from <paramref name="source"/> and HiFi-GAN from <paramref name="vocoder"/>
+    /// (whose absent tensors are skipped as the generator's loader allows).</summary>
+    internal void LoadReferenceWeights(TorchTensorSource source, TorchTensorSource vocoder)
     {
         var o = _options;
         int d = o.HiddenDim;
-        _wordEmbedding!.LoadTable(read("am.src_word_emb.weight", new[] { o.VocabSize, d }));
-        _speakerEmbedding!.LoadTable(read("am.spk_tokenizer.weight", new[] { o.SpeakerCount, d }));
-        EncoderNetwork.Load(read, "am.encoder");
-        DecoderNetwork.Load(read, "am.decoder");
-        StyleTtsOps.LoadLinear(Engine, _projection!, read, "am.embed_projection1", 2 * d + 2 * o.StyleBert.Hidden, d);
-        DurationPredictor.Load(read, "am.duration_predictor", d);
-        PitchPredictor.Load(read, "am.pitch_predictor", d);
-        EnergyPredictor.Load(read, "am.energy_predictor", d);
-        StyleTtsOps.LoadPlain(_pitchEmbed!, read, "am.pitch_embed.0");
-        StyleTtsOps.LoadPlain(_energyEmbed!, read, "am.energy_embed.0");
-        AlignmentNetwork.Load(read, "am.alignment_module");
-        StyleTtsOps.LoadLinear(Engine, _toMel!, read, "am.to_mel", d, o.MelChannels);
-        Vocoder.LoadTorch(readOptional, "generator.");
+        TorchParameters.Parameters(_wordEmbedding!, source, "am.src_word_emb.weight", new[] { o.VocabSize, d });
+        TorchParameters.Parameters(_speakerEmbedding!, source, "am.spk_tokenizer.weight", new[] { o.SpeakerCount, d });
+        EncoderNetwork.Load(source, "am.encoder");
+        DecoderNetwork.Load(source, "am.decoder");
+        StyleTtsOps.LoadLinear(Engine, _projection!, source, "am.embed_projection1", 2 * d + 2 * o.StyleBert.Hidden, d);
+        DurationPredictor.Load(source, "am.duration_predictor", d);
+        PitchPredictor.Load(source, "am.pitch_predictor", d);
+        EnergyPredictor.Load(source, "am.energy_predictor", d);
+        StyleTtsOps.LoadPlain(_pitchEmbed!, source, "am.pitch_embed.0");
+        StyleTtsOps.LoadPlain(_energyEmbed!, source, "am.energy_embed.0");
+        AlignmentNetwork.Load(source, "am.alignment_module");
+        StyleTtsOps.LoadLinear(Engine, _toMel!, source, "am.to_mel", d, o.MelChannels);
+        Vocoder.LoadTorch(vocoder, "generator.");
     }
+
+    // A DataParallel checkpoint's names, with their module. prefix removed.
+    private static TorchTensorSource WithoutModulePrefix(TorchTensorSource file) =>
+        file.WithNames(name => file.Contains("module." + name) ? "module." + name : name);
 
     /// <summary>Loads the style encoder (SimBERT and the four prompt classifiers; the released <c>style_encoder</c>
     /// checkpoint's <c>model</c> entry: <c>bert.*</c>, <c>pitch_clf</c>, <c>speed_clf</c>, <c>energy_clf</c>,
     /// <c>emotion_clf</c>), or a plain SimBERT checkpoint when it has no classifiers.</summary>
     public void LoadStyleEncoderWeights(string path)
     {
-        var all = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var entry in all)
-        {
-            var name = entry.Key.StartsWith("module.", StringComparison.Ordinal) ? entry.Key.Substring(7) : entry.Key;
-            state[name] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        }
-        string prefix = state.Keys.Any(k => k.StartsWith("bert.", StringComparison.Ordinal)) ? "bert." : "";
-        _styleBert!.LoadTorchWeights((name, shape) => state[name], prefix);
+        using var file = TorchCheckpointFile.Open(path);
+        var state = WithoutModulePrefix(file);
+        string prefix = file.Names.Any(k => k.StartsWith("bert.", StringComparison.Ordinal) || k.StartsWith("module.bert.", StringComparison.Ordinal))
+            ? "bert." : "";
+        _styleBert!.LoadTorchWeights(state, prefix);
         int h = _options.StyleBert.Hidden;
-        TorchParameters.Linear(Engine, _pooler!, h, h, state[prefix + "pooler.dense.weight"], state[prefix + "pooler.dense.bias"]);
+        TorchParameters.Linear(Engine, _pooler!, h, h, state, prefix + "pooler.dense.weight", prefix + "pooler.dense.bias");
         void Head(DenseLayer<T> head, string name, int labels)
         {
-            if (state.TryGetValue(name + ".classifier.weight", out var w))
-                TorchParameters.Linear(Engine, head, h, labels, w, state[name + ".classifier.bias"]);
+            if (state.Contains(name + ".classifier.weight"))
+                TorchParameters.Linear(Engine, head, h, labels, state, name + ".classifier.weight", name + ".classifier.bias");
         }
         Head(_pitchHead!, "pitch_clf", _options.PitchLabels);
         Head(_speedHead!, "speed_clf", _options.SpeedLabels);

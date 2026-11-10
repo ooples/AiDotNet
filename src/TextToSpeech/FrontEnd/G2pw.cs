@@ -173,17 +173,19 @@ internal sealed class G2pwModel<T>
     /// Loads a G2PW state dict: <c>bert.*</c>, <c>classifier</c>, <c>pos_classifier</c> and the descriptors (from the
     /// released ONNX model, read with the weights PyTorch's exporter left unnamed named after their biases).
     /// </summary>
-    public void Load(Func<string, int[], double[]> read)
+    public void Load(Func<string, int[], double[]> read) => Load(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a G2PW state dict straight from <paramref name="source"/> (see the function form).</summary>
+    internal void Load(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         var c = Configuration;
         int h = c.Bert.Hidden;
-        Bert.LoadTorchWeights(read, "bert.");
-        TorchParameters.Linear(_engine, Classifier, h, c.Labels, read("classifier.weight", new[] { c.Labels, h }), read("classifier.bias", new[] { c.Labels }));
-        TorchParameters.Linear(_engine, PosClassifier, h, c.PosTags, read("pos_classifier.weight", new[] { c.PosTags, h }),
-            read("pos_classifier.bias", new[] { c.PosTags }));
+        Bert.LoadTorchWeights(source, "bert.");
+        TorchParameters.Linear(_engine, Classifier, h, c.Labels, source, "classifier.weight", "classifier.bias");
+        TorchParameters.Linear(_engine, PosClassifier, h, c.PosTags, source, "pos_classifier.weight", "pos_classifier.bias");
         void Table(BiasFreeLinearLayer<T>? holder, string name, int rows)
         {
-            if (holder is not null) TorchParameters.Linear(holder, 1, rows * Target, read($"{name}.weight", new[] { rows, Target }));
+            if (holder is not null) TorchParameters.Linear(holder, 1, rows * Target, source, $"{name}.weight", new[] { rows, Target });
         }
         Table(DescriptorBias, "descriptor_bias", 1);
         Table(CharDescriptor, "char_descriptor", c.Chars);

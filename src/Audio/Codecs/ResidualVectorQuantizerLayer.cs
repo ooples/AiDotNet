@@ -125,6 +125,18 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
         Invalidate(q);
     }
 
+    /// <summary>Loads codebook <paramref name="q"/>'s state from tensors stored <c>[dim, bins]</c> (Tortoise/XTTS
+    /// <c>Quantize</c>), each transposed straight into the <c>[bins, dim]</c> codebook.</summary>
+    internal void LoadTransposedCodebook(int q, AiDotNet.ModelLoading.TorchTensorSource source, string embedName, string embedAverageName,
+        string clusterSizeName, bool initialized)
+    {
+        source.CopyTransposedTo(embedName, _dim, _bins, _embed[q]);
+        source.CopyTransposedTo(embedAverageName, _dim, _bins, _embedAverage[q]);
+        source.CopyTo(clusterSizeName, new[] { _bins }, _clusterSize[q]);
+        _initialized[q][0] = initialized ? NumOps.One : NumOps.Zero;
+        Invalidate(q);
+    }
+
     /// <summary>Loads codebook <paramref name="q"/>'s state from arrays (see the other overload).</summary>
     internal void LoadCodebook(int q, double[] embed, double[] embedAverage, double[] clusterSize, bool initialized)
     {

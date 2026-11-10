@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
@@ -95,10 +96,13 @@ internal sealed class VocosEncodecDecoder<T>
     }
 
     /// <summary>Loads the released model's state dictionary (<c>pytorch_model.bin</c> of charactr/vocos-encodec-24khz).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads the released model's state straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
-        Codebooks.LoadTable(read("feature_extractor.codebook_weights", new[] { c.MaxCodebooks * c.CodebookSize, c.LatentDim }));
-        _generator.LoadTorchWeights(read, c.LatentDim, c.IntermediateDim);
+        Codebooks.LoadTable(source, "feature_extractor.codebook_weights");
+        _generator.LoadTorchWeights(source, c.LatentDim, c.IntermediateDim);
     }
 }

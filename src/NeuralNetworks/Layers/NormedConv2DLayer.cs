@@ -253,6 +253,31 @@ public partial class NormedConv2DLayer<T> : LayerBase<T>, IShapeContract
     internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string weightName, string? biasName) =>
         LoadTorchWeights(source, weightName, null, biasName);
 
+    /// <summary>
+    /// Loads a <c>spectral_norm</c> convolution straight from <paramref name="source"/>: the kernel
+    /// <paramref name="weightName"/> (<c>weight_orig</c>), the bias <paramref name="biasName"/> (left as it is without one)
+    /// and the stored singular-vector estimates <paramref name="uName"/> <c>[out]</c> and <paramref name="vName"/>
+    /// <c>[in/groups · kh · kw]</c>.
+    /// </summary>
+    internal void LoadSpectralTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string weightName, string? biasName, string uName,
+        string vName)
+    {
+        source.CopyTo(weightName, TorchWeightShape, _kernel);
+        if (biasName is not null)
+        {
+            if (!_useBias) throw new InvalidOperationException("The checkpoint has a bias but this convolution has none.");
+            source.CopyTo(biasName, new[] { _bias.Length }, _bias);
+        }
+        source.CopyTo(uName, new[] { _u.Length }, _u);
+        source.CopyTo(vName, new[] { _v.Length }, _v);
+        for (int r = 0; r < _out; r++) _gain[r] = NumOps.FromDouble(RowNorm(r));
+        Engine.InvalidatePersistentTensor(_u);
+        Engine.InvalidatePersistentTensor(_v);
+        Engine.InvalidatePersistentTensor(_kernel);
+        Engine.InvalidatePersistentTensor(_gain);
+        Engine.InvalidatePersistentTensor(_bias);
+    }
+
     /// <summary>The effective kernel W.</summary>
     internal Tensor<T> Kernel()
     {

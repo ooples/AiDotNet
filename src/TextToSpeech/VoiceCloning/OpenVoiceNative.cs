@@ -83,24 +83,19 @@ internal sealed class OpenVoiceNative<T>
 
     public void LoadCheckpoint(string path)
     {
-        var raw = new ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        var state = raw.Keys.Any(name => name.StartsWith("model.", StringComparison.Ordinal))
-            ? raw.Where(p => p.Key.StartsWith("model.", StringComparison.Ordinal)).ToDictionary(p => p.Key.Substring(6), p => p.Value)
-            : raw;
-        double[]? Optional(string name) => state.TryGetValue(name, out var tensor)
-            ? tensor.ToArray().Select(x => (double)x).ToArray() : null;
-        double[] Read(string name, int[] shape)
-        {
-            if (!state.TryGetValue(name, out var tensor)) throw new InvalidDataException("OpenVoice checkpoint lacks " + name);
-            if (!tensor.Shape.ToArray().SequenceEqual(shape)) throw new InvalidDataException("OpenVoice checkpoint shape differs: " + name);
-            return Optional(name)!;
-        }
-        LoadTorch(Read, Optional);
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path, strictAxes: true);
+        var state = file.Names.Any(name => name.StartsWith("model.", StringComparison.Ordinal)) ? file.WithPrefix("model.") : file;
+        LoadTorch(state, state);
     }
 
-    internal void LoadTorch(Func<string, int[], double[]> read, Func<string, double[]?> optional)
+    internal void LoadTorch(Func<string, int[], double[]> read, Func<string, double[]?> optional) =>
+        LoadTorch(AiDotNet.ModelLoading.TorchTensorSource.From(read), OpenVoiceConverterCore<T>.OnePerName(optional));
+
+    /// <summary>Loads the reference encoder and converter straight from <paramref name="source"/>, the decoder from
+    /// <paramref name="decoder"/>.</summary>
+    internal void LoadTorch(AiDotNet.ModelLoading.TorchTensorSource source, AiDotNet.ModelLoading.TorchTensorSource decoder)
     {
-        _reference.LoadTorch(read); _converter.LoadTorch(read, optional);
+        _reference.LoadTorch(source); _converter.LoadTorch(source, decoder);
     }
 
     internal static Tensor<T> Resample(Tensor<T> audio, int inputRate)

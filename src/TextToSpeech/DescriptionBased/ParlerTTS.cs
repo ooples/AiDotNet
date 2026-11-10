@@ -531,24 +531,19 @@ public partial class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
     /// </summary>
     public void LoadReferenceWeights(string path)
     {
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        LoadReferenceWeights((name, shape) =>
-        {
-            if (!file.TryGetValue(name, out var tensor))
-                throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            var actual = tensor.Shape.ToArray();
-            if (!actual.SequenceEqual(shape))
-                throw new InvalidDataException($"'{name}' is [{string.Join(", ", actual)}] in the checkpoint but [{string.Join(", ", shape)}] " +
-                    "in this model; build the model with the checkpoint's configuration.");
-            return tensor.ToVector().Select(v => (double)v).ToArray();
-        }, file.ContainsKey);
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path, strictAxes: true);
+        LoadReferenceWeights(file, file.Contains);
     }
 
     /// <summary>Loads the weights from a reader of named tensors.</summary>
-    internal void LoadReferenceWeights(Func<string, int[], double[]> read, Func<string, bool> contains)
+    internal void LoadReferenceWeights(Func<string, int[], double[]> read, Func<string, bool> contains) =>
+        LoadReferenceWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), contains);
+
+    /// <summary>Loads the weights straight from <paramref name="source"/>.</summary>
+    internal void LoadReferenceWeights(AiDotNet.ModelLoading.TorchTensorSource source, Func<string, bool> contains)
     {
-        Core.LoadTorchWeights(read, contains);
-        DescriptionEncoder.LoadHuggingFaceEncoderWeights((name, shape) => read("text_encoder." + name, shape), _options.TextEncoderVocabulary);
+        Core.LoadTorchWeights(source, contains);
+        DescriptionEncoder.LoadHuggingFaceEncoderWeights(source.WithPrefix("text_encoder."), _options.TextEncoderVocabulary);
     }
 
     // ---------------------------------------------------------------- housekeeping

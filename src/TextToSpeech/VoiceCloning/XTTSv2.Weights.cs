@@ -8,28 +8,28 @@ public partial class XTTSv2<T>
     public void LoadAuthorWeights(string modelCheckpoint, string dvaeCheckpoint, string tokenizerPath, string melStatsPath)
     {
         RequireConvertedCheckpointTarget();
-        var loader = new ComputerVision.Weights.WeightLoader();
-        var model = UnwrapAuthorState(loader.LoadWeights(modelCheckpoint));
-        var dvae = UnwrapAuthorState(loader.LoadWeights(dvaeCheckpoint));
-        Func<string, int[], double[]> Reader(IReadOnlyDictionary<string, Tensor<float>> state) => (name, shape) =>
-        {
-            if (!state.TryGetValue(name, out var tensor)) throw new InvalidDataException($"XTTS checkpoint is missing '{name}'.");
-            var values = tensor.ToVector().Select(v => (double)v).ToArray();
-            if (!tensor.Shape.ToArray().SequenceEqual(shape))
-                throw new InvalidDataException($"XTTS tensor '{name}' has an incompatible shape.");
-            return values;
-        };
-        _languageModel!.LoadTorchWeights(Reader(model));
-        _dvae!.LoadTorchWeights(Reader(dvae));
-        _decoder!.LoadTorchWeights(name => model.TryGetValue("hifigan_decoder.waveform_decoder." + name, out var value)
-            ? value.ToVector().Select(v => (double)v).ToArray() : null);
+        using var modelFile = AiDotNet.ModelLoading.TorchCheckpointFile.Open(modelCheckpoint, strictAxes: true);
+        using var dvaeFile = AiDotNet.ModelLoading.TorchCheckpointFile.Open(dvaeCheckpoint, strictAxes: true);
+        var (model, modelNames) = UnwrapAuthorState(modelFile);
+        var (dvae, _) = UnwrapAuthorState(dvaeFile);
+        _languageModel!.LoadTorchWeights(model);
+        _dvae!.LoadTorchWeights(dvae);
+        _decoder!.LoadTorchWeights(model.WithPrefix("hifigan_decoder.waveform_decoder."));
         const string speakerPrefix = "hifigan_decoder.speaker_encoder.";
-        var speaker = model.Where(kv => kv.Key.StartsWith(speakerPrefix, StringComparison.Ordinal)).ToDictionary(
-            kv => kv.Key.Substring(speakerPrefix.Length), kv => new Tensor<T>(kv.Value.Shape.ToArray(),
-                new Vector<T>(kv.Value.ToVector().Select(v => NumOps.FromDouble(v)))));
-        _speakerEncoder!.LoadState(speaker);
+        _speakerEncoder!.LoadState(model.WithPrefix(speakerPrefix),
+            modelNames.Where(name => name.StartsWith(speakerPrefix, StringComparison.Ordinal)).Select(name => name.Substring(speakerPrefix.Length)));
         LoadTokenizer(tokenizerPath);
         LoadMelStats(melStatsPath);
+    }
+
+    // The checkpoint's tensors under its "model" root when it has one (see the dictionary form), and their names there.
+    private static (AiDotNet.ModelLoading.TorchTensorSource Source, IReadOnlyList<string> Names) UnwrapAuthorState(
+        AiDotNet.ModelLoading.TorchCheckpointFile file)
+    {
+        var names = file.Names;
+        if (!names.Any(name => name.StartsWith("model.", StringComparison.Ordinal))) return (file, names.ToList());
+        return (file.WithPrefix("model."), names.Where(name => name.StartsWith("model.", StringComparison.Ordinal))
+            .Select(name => name.Substring(6)).ToList());
     }
 
     // Original model.pth stores its state under "model" alongside non-neural trainer/config metadata.
@@ -90,23 +90,30 @@ public partial class XTTSv2<T>
         RequireConvertedCheckpointTarget();
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Checkpoint path required.", nameof(path));
         if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
-        var state = new ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        LoadConvertedWeights(name => state.TryGetValue(name, out var tensor)
-            ? tensor.ToVector().Select(value => (double)value).ToArray()
-            : null);
+        // NumPy and ONNX files have no streaming reader; they load whole as before.
+        using var file = Path.GetExtension(path).ToLowerInvariant() is ".npy" or ".onnx" ? null : AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
+        LoadConvertedWeights(file ?? AiDotNet.ModelLoading.TorchTensorSource.From(new ComputerVision.Weights.WeightLoader().LoadWeights(path), $"the checkpoint {path}"));
     }
 
     internal void LoadConvertedWeights(Func<string, double[]?> read)
     {
         Validation.Guard.NotNull(read);
+        LoadConvertedWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Copies <c>{ConvertedParameterTensor}</c> from <paramref name="source"/> straight into a parameter vector.</summary>
+    internal void LoadConvertedWeights(AiDotNet.ModelLoading.TorchTensorSource source)
+    {
         RequireConvertedCheckpointTarget();
-        var values = read(ConvertedParameterTensor)
-            ?? throw new InvalidDataException($"The checkpoint has no tensor '{ConvertedParameterTensor}'.");
+        if (!source.Contains(ConvertedParameterTensor))
+            throw new InvalidDataException($"The checkpoint has no tensor '{ConvertedParameterTensor}'.");
         int expected = GetParameters().Length;
-        if (values.Length != expected)
+        if (source.ShapeOf(ConvertedParameterTensor) is { } shape && shape.Aggregate(1L, (a, b) => a * b) is var count && count != expected)
             throw new InvalidDataException(
-                $"'{ConvertedParameterTensor}' has {values.Length} values; this XTTS-v2 configuration expects {expected}.");
-        SetParameters(new Vector<T>(Array.ConvertAll(values, NumOps.FromDouble)));
+                $"'{ConvertedParameterTensor}' has {count} values; this XTTS-v2 configuration expects {expected}.");
+        var parameters = new Vector<T>(expected);
+        source.CopyTo(ConvertedParameterTensor, new[] { expected }, new Tensor<T>(new[] { expected }, parameters));
+        SetParameters(parameters);
     }
 
     /// <summary>Loads a converted official graph plus its unmodified tokenizer and mel statistics.</summary>

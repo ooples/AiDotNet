@@ -1,3 +1,5 @@
+using AiDotNet.ModelLoading;
+
 namespace AiDotNet.TextToSpeech.FlowDiffusion;
 
 /// <summary>Checkpoint inputs for E3's public BERT dependency and AiDotNet-converted private U-Net weights.</summary>
@@ -10,9 +12,9 @@ public partial class E3TTS<T>
     {
         ThrowIfDisposed();
         RequirePaperModel();
-        var state = LoadState(path);
-        string prefix = state.ContainsKey("bert.embeddings.word_embeddings.weight") ? "bert." : string.Empty;
-        TextEncoder!.LoadHuggingFace(Reader(state, path), prefix);
+        using var file = Open(path);
+        string prefix = file.Contains("bert.embeddings.word_embeddings.weight") ? "bert." : string.Empty;
+        TextEncoder!.LoadHuggingFace(file, prefix);
     }
 
     /// <summary>
@@ -30,8 +32,8 @@ public partial class E3TTS<T>
     {
         ThrowIfDisposed();
         RequirePaperModel();
-        var state = LoadState(path);
-        WaveformUnet!.Load(Reader(state, path), "unet.");
+        using var file = Open(path);
+        WaveformUnet!.Load(file, "unet.");
     }
 
     public void LoadCheckpoints(E3TTSCheckpointPaths checkpoints)
@@ -41,20 +43,10 @@ public partial class E3TTS<T>
         LoadConvertedWeights(checkpoints.ConvertedUnet);
     }
 
-    private static Dictionary<string, Tensor<float>> LoadState(string path)
+    private static TorchCheckpointFile Open(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Checkpoint path required.", nameof(path));
         if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
-        return new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
+        return TorchCheckpointFile.Open(path);
     }
-
-    private static Func<string, int[], double[]> Reader(IReadOnlyDictionary<string, Tensor<float>> state, string path) =>
-        (name, shape) =>
-        {
-            if (!state.TryGetValue(name, out var tensor)) throw new InvalidDataException($"'{path}' has no tensor '{name}'.");
-            int expected = shape.Aggregate(1, (a, b) => checked(a * b));
-            if (tensor.Length != expected)
-                throw new InvalidDataException($"'{name}' has {tensor.Length} values; expected {expected} for [{string.Join(",", shape)}].");
-            return tensor.ToVector().Select(v => (double)v).ToArray();
-        };
 }

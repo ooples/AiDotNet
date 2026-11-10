@@ -21,24 +21,30 @@ public partial class AlignTTS<T>
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Checkpoint path required.", nameof(path));
         if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
 
-        var state = new ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        LoadConvertedWeights(name => state.TryGetValue(name, out var tensor)
-            ? tensor.ToVector().Select(value => (double)value).ToArray()
-            : null);
+        // NumPy and ONNX files have no streaming reader; they load whole as before.
+        using var file = Path.GetExtension(path).ToLowerInvariant() is ".npy" or ".onnx" ? null : AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
+        LoadConvertedWeights(file ?? AiDotNet.ModelLoading.TorchTensorSource.From(new ComputerVision.Weights.WeightLoader().LoadWeights(path), $"the checkpoint {path}"));
     }
 
     /// <summary>Loads the documented converted tensor through an in-memory reader.</summary>
     internal void LoadConvertedWeights(Func<string, double[]?> read)
     {
         Validation.Guard.NotNull(read);
-        RequirePaperCheckpointTarget();
-        var values = read(ConvertedParameterTensor)
-            ?? throw new InvalidDataException($"The checkpoint has no tensor '{ConvertedParameterTensor}'.");
-        int expected = GetParameters().Length;
-        if (values.Length != expected)
-            throw new InvalidDataException($"'{ConvertedParameterTensor}' has {values.Length} values; this AlignTTS configuration expects {expected}.");
+        LoadConvertedWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
 
-        SetParameters(new Vector<T>(Array.ConvertAll(values, NumOps.FromDouble)));
+    /// <summary>Copies <c>{ConvertedParameterTensor}</c> from <paramref name="source"/> straight into a parameter vector.</summary>
+    internal void LoadConvertedWeights(AiDotNet.ModelLoading.TorchTensorSource source)
+    {
+        RequirePaperCheckpointTarget();
+        if (!source.Contains(ConvertedParameterTensor))
+            throw new InvalidDataException($"The checkpoint has no tensor '{ConvertedParameterTensor}'.");
+        int expected = GetParameters().Length;
+        if (source.ShapeOf(ConvertedParameterTensor) is { } shape && shape.Aggregate(1L, (a, b) => a * b) is var count && count != expected)
+            throw new InvalidDataException($"'{ConvertedParameterTensor}' has {count} values; this AlignTTS configuration expects {expected}.");
+        var parameters = new Vector<T>(expected);
+        source.CopyTo(ConvertedParameterTensor, new[] { expected }, new Tensor<T>(new[] { expected }, parameters));
+        SetParameters(parameters);
     }
 
     private void RequirePaperCheckpointTarget()

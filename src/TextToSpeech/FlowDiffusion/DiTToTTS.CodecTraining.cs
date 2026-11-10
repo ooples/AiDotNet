@@ -48,13 +48,8 @@ public partial class DiTToTTS<T>
             Freeze(_codecTrainer.DecoderLayers);
         }
         EnsureLayerRandomSeedsWired();
-        var state = new ComputerVision.Weights.WeightLoader().LoadWeights(checkpoint);
-        _codecTrainer.SemanticDecoder!.LoadHuggingFaceWeights((name, shape) =>
-        {
-            if (!state.TryGetValue(name, out var tensor)) throw new InvalidDataException($"ByT5 checkpoint is missing '{name}'.");
-            if (!tensor.Shape.ToArray().SequenceEqual(shape)) throw new InvalidDataException($"ByT5 tensor '{name}' has an incompatible shape.");
-            return tensor.ToArray().Select(value => (double)value).ToArray();
-        });
+        using (var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(checkpoint, strictAxes: true))
+            _codecTrainer.SemanticDecoder!.LoadHuggingFaceWeights(file);
         _codecTrainer.DecoderWeightsLoaded = true;
     }
 

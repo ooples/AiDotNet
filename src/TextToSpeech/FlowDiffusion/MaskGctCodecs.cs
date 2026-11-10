@@ -1,5 +1,6 @@
 using AiDotNet.Audio.Codecs;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.TextToSpeech.CodecBased;
@@ -11,31 +12,39 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 internal static class MaskGctLoad
 {
     /// <summary>A weight-normalized convolution under <c>weight_g</c>/<c>weight_v</c> or the parametrized names.</summary>
-    public static void WeightNormConv<T>(NormedConv1DLayer<T> conv, string name, Func<string, int, double[]?> read)
+    /// <summary>A source over a reader that returns null for an absent tensor (the probing loaders' form; the count it is
+    /// given is not known here and passed as 0).</summary>
+    public static TorchTensorSource Optional(Func<string, int, double[]?> read) => TorchTensorSource.From(name => read(name, 0));
+
+    /// <summary>A source over a reader whose every tensor is required (null is a missing-tensor error).</summary>
+    public static TorchTensorSource Required(Func<string, int[], double[]?> read) =>
+        TorchTensorSource.From((name, shape) => read(name, shape) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'."));
+
+    /// <summary>A weight-normalized convolution under <c>weight_g</c>/<c>weight_v</c> or the parametrized names, copied
+    /// straight from <paramref name="source"/>.</summary>
+    public static void WeightNormConv<T>(NormedConv1DLayer<T> conv, string name, TorchTensorSource source)
     {
-        var shape = conv.TorchWeightShape;
-        int count = shape.Aggregate(1, (a, b) => a * b);
-        var direction = read($"{name}.parametrizations.weight.original1", count);
-        var gain = direction is null ? read($"{name}.weight_g", shape[0]) : read($"{name}.parametrizations.weight.original0", shape[0]);
-        direction ??= read($"{name}.weight_v", count);
-        if (direction is null || gain is null) throw new InvalidDataException($"The checkpoint has no weight-normalized convolution '{name}'.");
-        conv.LoadTorchWeights(direction, gain, read($"{name}.bias", conv.OutputChannels) ?? throw new InvalidDataException($"The checkpoint has no '{name}.bias'."));
+        bool parametrized = source.Contains($"{name}.parametrizations.weight.original1");
+        string direction = parametrized ? $"{name}.parametrizations.weight.original1" : $"{name}.weight_v";
+        string gain = parametrized ? $"{name}.parametrizations.weight.original0" : $"{name}.weight_g";
+        if (!source.Contains(direction) || !source.Contains(gain)) throw new InvalidDataException($"The checkpoint has no weight-normalized convolution '{name}'.");
+        if (!source.Contains($"{name}.bias")) throw new InvalidDataException($"The checkpoint has no '{name}.bias'.");
+        conv.LoadTorchWeights(source, direction, conv.TorchWeightShape, gain, $"{name}.bias");
     }
 
     /// <summary>Amphion's <c>ResidualVQ</c> of factorized quantizers (<c>quantizer.quantizers.{q}.in_project</c>,
     /// <c>out_project</c>, <c>codebook.weight</c>).</summary>
     public static void Quantizer<T>(IEngine engine, FactorizedVectorQuantizerLayer<T> vq, int quantizers, int codes, int codeDim, string prefix,
-        Func<string, int, double[]?> read)
+        TorchTensorSource source)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
         for (int q = 0; q < quantizers; q++)
         {
             string p = $"{prefix}quantizers.{q}";
-            WeightNormConv(vq.InProjection(q), $"{p}.in_project", read);
-            WeightNormConv(vq.OutProjection(q), $"{p}.out_project", read);
-            var codebook = read($"{p}.codebook.weight", codes * codeDim) ?? throw new InvalidDataException($"The checkpoint has no '{p}.codebook.weight'.");
+            WeightNormConv(vq.InProjection(q), $"{p}.in_project", source);
+            WeightNormConv(vq.OutProjection(q), $"{p}.out_project", source);
+            if (!source.Contains($"{p}.codebook.weight")) throw new InvalidDataException($"The checkpoint has no '{p}.codebook.weight'.");
             var target = vq.Codebook(q);
-            for (int i = 0; i < codebook.Length; i++) target[i] = ops.FromDouble(codebook[i]);
+            source.CopyTo($"{p}.codebook.weight", new[] { codes, codeDim }, target);
             engine.InvalidatePersistentTensor(target);
         }
     }
@@ -125,12 +134,14 @@ internal sealed class MaskGctSemanticCodec<T>
 
     /// <summary>Loads Amphion's <c>RepCodec</c> encoder and quantizer (<c>encoder.0.*</c>, <c>encoder.1.*</c>,
     /// <c>quantizer.*</c>); the decoder is not read.</summary>
-    public void Load(Func<string, int, double[]?> read)
+    public void Load(Func<string, int, double[]?> read) => Load(MaskGctLoad.Optional(read));
+
+    /// <summary>Loads the encoder and quantizer straight from <paramref name="source"/>.</summary>
+    internal void Load(TorchTensorSource source)
     {
-        double[] Need(string name, int count) => read(name, count) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-        _encoder.LoadTorchWeights((name, shape) => Need(name, shape.Aggregate(1, (a, b) => a * b)), _hidden, _intermediate, "encoder.0.", "");
-        TorchParameters.Linear(_engine, _project, _dim, _hidden, Need("encoder.1.weight", _dim * _hidden), Need("encoder.1.bias", _hidden));
-        MaskGctLoad.Quantizer(_engine, _quantizer, 1, _codes, _codeDim, "quantizer.", read);
+        _encoder.LoadTorchWeights(source, _hidden, _intermediate, "encoder.0.", "");
+        TorchParameters.Linear(_engine, _project, _dim, _hidden, source, "encoder.1.weight", "encoder.1.bias");
+        MaskGctLoad.Quantizer(_engine, _quantizer, 1, _codes, _codeDim, "quantizer.", source);
     }
 }
 
@@ -211,7 +222,12 @@ internal sealed class MaskGctAcousticCodec<T>
     /// <summary>Loads the release's encoder (<c>acoustic_codec/model.safetensors</c>: <c>block.*</c>) through
     /// <paramref name="readEncoder"/>, and its quantizer and Vocos decoder (<c>model_1.safetensors</c>: <c>quantizer.*</c>,
     /// <c>model.backbone.*</c>, <c>model.head.*</c>) through <paramref name="readDecoder"/>.</summary>
-    public void Load(Func<string, int, double[]?> readEncoder, Func<string, int, double[]?> readDecoder)
+    public void Load(Func<string, int, double[]?> readEncoder, Func<string, int, double[]?> readDecoder) =>
+        Load(MaskGctLoad.Optional(readEncoder), MaskGctLoad.Optional(readDecoder));
+
+    /// <summary>Loads the encoder from <paramref name="encoder"/> and the quantizer and decoder from
+    /// <paramref name="decoder"/>, straight into the layers.</summary>
+    internal void Load(TorchTensorSource encoder, TorchTensorSource decoder)
     {
         foreach (var (name, layer) in _encoder.SequentialNamed(""))
         {
@@ -219,17 +235,16 @@ internal sealed class MaskGctAcousticCodec<T>
             switch (layer)
             {
                 case NormedConv1DLayer<T> conv:
-                    MaskGctLoad.WeightNormConv(conv, key, readEncoder);
+                    MaskGctLoad.WeightNormConv(conv, key, encoder);
                     break;
                 case SnakeLayer<T> snake:
-                    snake.LoadAlpha(readEncoder($"{key}.alpha", snake.Channels) ?? throw new InvalidDataException($"The checkpoint has no '{key}.alpha'."));
+                    snake.LoadAlpha(encoder.TryRead($"{key}.alpha") ?? throw new InvalidDataException($"The checkpoint has no '{key}.alpha'."));
                     break;
             }
         }
-        MaskGctLoad.Quantizer(_engine, _quantizer, _quantizers, _codes, _codeDim, "quantizer.", readDecoder);
-        double[] Need(string name, int count) => readDecoder(name, count) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-        _decoder.LoadTorchWeights((name, shape) => Need(name, shape.Aggregate(1, (a, b) => a * b)), _latent, _intermediate, "model.backbone.", "model.head.");
-        var window = readDecoder("model.head.istft.window", _fft);
+        MaskGctLoad.Quantizer(_engine, _quantizer, _quantizers, _codes, _codeDim, "quantizer.", decoder);
+        _decoder.LoadTorchWeights(decoder, _latent, _intermediate, "model.backbone.", "model.head.");
+        var window = decoder.TryRead("model.head.istft.window");
         if (window is not null) _decoder.Istft!.LoadWindow(window);
     }
 }

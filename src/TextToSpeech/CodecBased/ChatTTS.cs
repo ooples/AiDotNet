@@ -809,7 +809,7 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
         using (var decoder = TorchCheckpointFile.Open(Path.Combine(assetDirectory, "Decoder.safetensors")))
             (_hiddenDecoder ?? throw new InvalidOperationException("native model")).LoadTorchWeights(decoder, "");
         using (var vocos = TorchCheckpointFile.Open(Path.Combine(assetDirectory, "Vocos.safetensors")))
-            (_vocos ?? throw new InvalidOperationException("native model")).LoadTorchWeights(vocos.AsFunction(), o.MelChannels, o.VocosIntermediate);
+            (_vocos ?? throw new InvalidOperationException("native model")).LoadTorchWeights(vocos, o.MelChannels, o.VocosIntermediate);
     }
 
     /// <summary>Loads <c>Embed</c>'s state: <c>emb_text</c>, <c>emb_code.{q}</c>, and the heads' weight-norm

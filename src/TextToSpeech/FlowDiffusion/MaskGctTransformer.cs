@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -198,13 +199,17 @@ internal sealed class MaskGctTransformer<T>
 
     /// <summary>Loads the transformer's parameters (transformers' Llama names under <paramref name="prefix"/>, Amphion's
     /// <c>diff_step_mlp</c>, <c>cond_mlp</c> and adaptive norms' <c>to_weight</c>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]?> read, string prefix)
+    public void LoadTorchWeights(Func<string, int[], double[]?> read, string prefix) =>
+        LoadTorchWeights(MaskGctLoad.Required(read), prefix);
+
+    /// <summary>Loads the transformer's parameters straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
         int h = _c.Hidden;
-        double[] Need(string name, int[] shape) => read(prefix + name, shape) ?? throw new InvalidDataException($"The checkpoint has no tensor '{prefix}{name}'.");
-        void Lin(BiasFreeLinearLayer<T> layer, string name, int inputs, int outputs) => TorchParameters.Linear(layer, inputs, outputs, Need(name + ".weight", new[] { outputs, inputs }));
+        var s = source.WithPrefix(prefix);
+        void Lin(BiasFreeLinearLayer<T> layer, string name, int inputs, int outputs) => TorchParameters.Linear(layer, inputs, outputs, s, name + ".weight");
         void Dense(DenseLayer<T> layer, string name, int inputs, int outputs) =>
-            TorchParameters.Linear(_engine, layer, inputs, outputs, Need(name + ".weight", new[] { outputs, inputs }), Need(name + ".bias", new[] { outputs }));
+            TorchParameters.Linear(_engine, layer, inputs, outputs, s, name + ".weight", name + ".bias");
         for (int i = 0; i < Layers.Count; i++)
         {
             var l = Layers[i];

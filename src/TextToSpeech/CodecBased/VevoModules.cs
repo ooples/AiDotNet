@@ -428,8 +428,7 @@ internal sealed class VevoFlowMatching<T>
     {
         var c = Configuration;
         Condition.LoadTable(source, "cond_emb.weight");
-        // MaskGCT's transformer loader still takes each tensor's values.
-        Transformer.LoadTorchWeights((name, shape) => source.Read(name, shape), "diff_estimator.");
+        Transformer.LoadTorchWeights(source, "diff_estimator.");
         void Linear(DenseLayer<T> layer, string name, int inputs, int outputs) =>
             TorchParameters.Linear(_engine, layer, inputs, outputs, source, name + ".weight", name + ".bias");
         Linear(MelIn.In, "diff_estimator.mel_mlp.0", c.MelDim, 4 * c.Hidden);

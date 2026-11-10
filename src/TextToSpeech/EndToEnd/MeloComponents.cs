@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using AiDotNet.ActivationFunctions;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.EndToEnd;
@@ -63,15 +64,15 @@ internal sealed class MeloTextEncoder<T>
         return (x, MeloOps.Channels(_engine, stats, 0, _out), MeloOps.Channels(_engine, stats, _out, _out));
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(TorchTensorSource source, string prefix)
     {
-        Symbols.LoadTable(read(prefix + "emb.weight"));
-        Tones.LoadTable(read(prefix + "tone_emb.weight"));
-        Languages.LoadTable(read(prefix + "language_emb.weight"));
-        MeloOps.LoadConv(read, BertProjection, prefix + "bert_proj");
-        MeloOps.LoadConv(read, JaBertProjection, prefix + "ja_bert_proj");
-        Encoder.LoadTorch(_engine, read, prefix + "encoder.");
-        MeloOps.LoadConv(read, Projection, prefix + "proj");
+        Symbols.LoadTable(source, prefix + "emb.weight");
+        Tones.LoadTable(source, prefix + "tone_emb.weight");
+        Languages.LoadTable(source, prefix + "language_emb.weight");
+        MeloOps.LoadConv(source, BertProjection, prefix + "bert_proj");
+        MeloOps.LoadConv(source, JaBertProjection, prefix + "ja_bert_proj");
+        Encoder.LoadTorch(_engine, source, prefix + "encoder.");
+        MeloOps.LoadConv(source, Projection, prefix + "proj");
     }
 }
 
@@ -115,14 +116,14 @@ internal sealed class MeloDurationPredictor<T>
         return Projection.Forward(x);
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(TorchTensorSource source, string prefix)
     {
-        MeloOps.LoadConv(read, Conv1, prefix + "conv_1");
-        MeloOps.LoadNorm(_engine, read, Norm1, prefix + "norm_1");
-        MeloOps.LoadConv(read, Conv2, prefix + "conv_2");
-        MeloOps.LoadNorm(_engine, read, Norm2, prefix + "norm_2");
-        MeloOps.LoadConv(read, Projection, prefix + "proj");
-        if (Condition is not null) MeloOps.LoadConv(read, Condition, prefix + "cond");
+        MeloOps.LoadConv(source, Conv1, prefix + "conv_1");
+        MeloOps.LoadNorm(_engine, source, Norm1, prefix + "norm_1");
+        MeloOps.LoadConv(source, Conv2, prefix + "conv_2");
+        MeloOps.LoadNorm(_engine, source, Norm2, prefix + "norm_2");
+        MeloOps.LoadConv(source, Projection, prefix + "proj");
+        if (Condition is not null) MeloOps.LoadConv(source, Condition, prefix + "cond");
     }
 }
 
@@ -190,19 +191,21 @@ internal sealed class MeloDurationDiscriminator<T>
         return (Probability(realDurations), Probability(generatedDurations));
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(Func<string, double[]> read, string prefix) => LoadTorch(TorchTensorSource.From(read), prefix);
+
+    public void LoadTorch(TorchTensorSource source, string prefix)
     {
-        MeloOps.LoadConv(read, Conv1, prefix + "conv_1");
-        MeloOps.LoadNorm(_engine, read, Norm1, prefix + "norm_1");
-        MeloOps.LoadConv(read, Conv2, prefix + "conv_2");
-        MeloOps.LoadNorm(_engine, read, Norm2, prefix + "norm_2");
-        MeloOps.LoadConv(read, DurationProjection, prefix + "dur_proj");
-        MeloOps.LoadConv(read, PreOut1, prefix + "pre_out_conv_1");
-        MeloOps.LoadNorm(_engine, read, PreOutNorm1, prefix + "pre_out_norm_1");
-        MeloOps.LoadConv(read, PreOut2, prefix + "pre_out_conv_2");
-        MeloOps.LoadNorm(_engine, read, PreOutNorm2, prefix + "pre_out_norm_2");
-        if (Condition is not null) MeloOps.LoadConv(read, Condition, prefix + "cond");
-        MeloOps.LoadLinear(_engine, read, Output, _filter, 1, prefix + "output_layer.0");
+        MeloOps.LoadConv(source, Conv1, prefix + "conv_1");
+        MeloOps.LoadNorm(_engine, source, Norm1, prefix + "norm_1");
+        MeloOps.LoadConv(source, Conv2, prefix + "conv_2");
+        MeloOps.LoadNorm(_engine, source, Norm2, prefix + "norm_2");
+        MeloOps.LoadConv(source, DurationProjection, prefix + "dur_proj");
+        MeloOps.LoadConv(source, PreOut1, prefix + "pre_out_conv_1");
+        MeloOps.LoadNorm(_engine, source, PreOutNorm1, prefix + "pre_out_norm_1");
+        MeloOps.LoadConv(source, PreOut2, prefix + "pre_out_conv_2");
+        MeloOps.LoadNorm(_engine, source, PreOutNorm2, prefix + "pre_out_norm_2");
+        if (Condition is not null) MeloOps.LoadConv(source, Condition, prefix + "cond");
+        MeloOps.LoadLinear(_engine, source, Output, _filter, 1, prefix + "output_layer.0");
     }
 }
 
@@ -334,19 +337,19 @@ internal sealed class MeloStochasticDurationPredictor<T>
         return MeloOps.Channels(_engine, z, 0, 1);
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(TorchTensorSource source, string prefix)
     {
-        Affine.LoadTorch(read, prefix + "flows.0.");
-        for (int i = 0; i < Flows.Count; i++) Flows[i].LoadTorch(_engine, read, $"{prefix}flows.{1 + 2 * i}.");
-        MeloOps.LoadConv(read, PostPre, prefix + "post_pre");
-        MeloOps.LoadConv(read, PostProjection, prefix + "post_proj");
-        PostConvs.LoadTorch(_engine, read, prefix + "post_convs.");
-        PostAffine.LoadTorch(read, prefix + "post_flows.0.");
-        for (int i = 0; i < PostFlows.Count; i++) PostFlows[i].LoadTorch(_engine, read, $"{prefix}post_flows.{1 + 2 * i}.");
-        MeloOps.LoadConv(read, Pre, prefix + "pre");
-        MeloOps.LoadConv(read, Projection, prefix + "proj");
-        Convs.LoadTorch(_engine, read, prefix + "convs.");
-        if (Condition is not null) MeloOps.LoadConv(read, Condition, prefix + "cond");
+        Affine.LoadTorch(source, prefix + "flows.0.");
+        for (int i = 0; i < Flows.Count; i++) Flows[i].LoadTorch(_engine, source, $"{prefix}flows.{1 + 2 * i}.");
+        MeloOps.LoadConv(source, PostPre, prefix + "post_pre");
+        MeloOps.LoadConv(source, PostProjection, prefix + "post_proj");
+        PostConvs.LoadTorch(_engine, source, prefix + "post_convs.");
+        PostAffine.LoadTorch(source, prefix + "post_flows.0.");
+        for (int i = 0; i < PostFlows.Count; i++) PostFlows[i].LoadTorch(_engine, source, $"{prefix}post_flows.{1 + 2 * i}.");
+        MeloOps.LoadConv(source, Pre, prefix + "pre");
+        MeloOps.LoadConv(source, Projection, prefix + "proj");
+        Convs.LoadTorch(_engine, source, prefix + "convs.");
+        if (Condition is not null) MeloOps.LoadConv(source, Condition, prefix + "cond");
     }
 }
 
@@ -400,13 +403,15 @@ internal sealed class MeloWaveNet<T>
         return output!;
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(Func<string, double[]> read, string prefix) => LoadTorch(TorchTensorSource.From(read), prefix);
+
+    public void LoadTorch(TorchTensorSource source, string prefix)
     {
-        if (_condition is not null) MeloOps.LoadConv(read, _condition, prefix + "cond_layer");
+        if (_condition is not null) MeloOps.LoadConv(source, _condition, prefix + "cond_layer");
         for (int i = 0; i < _in.Count; i++)
         {
-            MeloOps.LoadConv(read, _in[i], $"{prefix}in_layers.{i}");
-            MeloOps.LoadConv(read, _resSkip[i], $"{prefix}res_skip_layers.{i}");
+            MeloOps.LoadConv(source, _in[i], $"{prefix}in_layers.{i}");
+            MeloOps.LoadConv(source, _resSkip[i], $"{prefix}res_skip_layers.{i}");
         }
     }
 }
@@ -439,11 +444,13 @@ internal sealed class MeloPosteriorEncoder<T>
         return (_engine.TensorAdd(m, _engine.TensorMultiply(noise, _engine.TensorExp(logs))), m, logs);
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(Func<string, double[]> read, string prefix) => LoadTorch(TorchTensorSource.From(read), prefix);
+
+    public void LoadTorch(TorchTensorSource source, string prefix)
     {
-        MeloOps.LoadConv(read, Pre, prefix + "pre");
-        Net.LoadTorch(read, prefix + "enc.");
-        MeloOps.LoadConv(read, Projection, prefix + "proj");
+        MeloOps.LoadConv(source, Pre, prefix + "pre");
+        Net.LoadTorch(source, prefix + "enc.");
+        MeloOps.LoadConv(source, Projection, prefix + "proj");
     }
 }
 
@@ -503,14 +510,14 @@ internal sealed class MeloTransformerFlow<T>
         return x;
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(TorchTensorSource source, string prefix)
     {
         for (int i = 0; i < _couplings.Count; i++)
         {
             string p = $"{prefix}flows.{2 * i}.";
-            MeloOps.LoadConv(read, _couplings[i].Pre, p + "pre");
-            _couplings[i].Encoder.LoadTorch(_engine, read, p + "enc.");
-            MeloOps.LoadConv(read, _couplings[i].Post, p + "post");
+            MeloOps.LoadConv(source, _couplings[i].Pre, p + "pre");
+            _couplings[i].Encoder.LoadTorch(_engine, source, p + "enc.");
+            MeloOps.LoadConv(source, _couplings[i].Post, p + "post");
         }
     }
 }

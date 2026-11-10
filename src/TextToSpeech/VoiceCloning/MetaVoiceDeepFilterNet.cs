@@ -110,14 +110,15 @@ internal sealed partial class MetaVoiceDeepFilterNet<T> : LayerBase<T>, IShapeCo
     private static int GreatestCommonDivisor(int a, int b)
     { while (b != 0) { int remainder = a % b; a = b; b = remainder; } return a; }
 
-    internal void LoadTorch(Func<string, int[], double[]> read)
+    internal void LoadTorch(Func<string, int[], double[]> read) => LoadTorch(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Copies every parameter and buffer straight from <paramref name="source"/> into its tensor.</summary>
+    internal void LoadTorch(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         foreach (string name in _names.Concat(_bufferNames))
         {
             var target = _indices.TryGetValue(name, out int index) ? _learnedTensors[index] : _buffers[_bufferIndices[name]];
-            var values = read(name, target.Shape.ToArray());
-            if (values.Length != target.Length) throw new InvalidDataException("DeepFilterNet tensor length differs: " + name);
-            for (int i = 0; i < values.Length; i++) target[i] = NumOps.FromDouble(values[i]);
+            source.CopyTo(name, target.Shape.ToArray(), target);
             Engine.InvalidatePersistentTensor(target);
         }
         _loaded = true;

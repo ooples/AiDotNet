@@ -4,6 +4,7 @@ using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Onnx;
 using AiDotNet.Optimizers;
@@ -470,52 +471,65 @@ public partial class StyleTTS2<T> : TtsModelBase<T>, IEndToEndTts<T>
     /// </summary>
     public void LoadReferenceWeights(string path, bool includeDiscriminators = false)
     {
-        IReadOnlyDictionary<string, double[]>? waveState = null;
+        using var file = TorchCheckpointFile.Open(path);
+        TorchTensorSource? waveDiscriminators = null;
         if (includeDiscriminators)
         {
-            // The mpd and msd tensors, keyed as the reference names them (prefixes net. and module. removed).
-            var state = new Dictionary<string, double[]>();
-            foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path))
+            // The mpd and msd tensors under the names the reference gives them (prefixes net. and module. removed), msd
+            // read as CosyVoice's mrd.
+            var stored = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var key in file.Names)
             {
-                var name = entry.Key.StartsWith("net.", StringComparison.Ordinal) ? entry.Key.Substring(4) : entry.Key;
+                var name = key.StartsWith("net.", StringComparison.Ordinal) ? key.Substring(4) : key;
                 name = name.Replace(".module.", ".");
-                if (name.StartsWith("mpd.", StringComparison.Ordinal) || name.StartsWith("msd.", StringComparison.Ordinal))
-                    state[name] = entry.Value.ToVector().Select(v => (double)v).ToArray();
+                if (name.StartsWith("mpd.", StringComparison.Ordinal)) stored[name] = key;
+                else if (name.StartsWith("msd.", StringComparison.Ordinal)) stored["mrd." + name.Substring(4)] = key;
             }
-            waveState = state;
+            waveDiscriminators = file.WithNames(name => stored.TryGetValue(name, out var key) ? key : name);
         }
-        LoadReferenceWeights(StyleTTS<T>.Reader(path, "net."), waveState);
+        LoadReferenceWeights(StyleTTS<T>.Reader(file, "net."), waveDiscriminators);
     }
 
-    /// <summary>Loads the generator's modules from <paramref name="read"/> and, given their state, the discriminators.</summary>
-    internal void LoadReferenceWeights(TorchReader read, IReadOnlyDictionary<string, double[]>? waveDiscriminatorState = null)
+    internal void LoadReferenceWeights(TorchReader read) => LoadReferenceWeights(StyleTtsOps.Source(read));
+
+    /// <summary>Loads the generator's modules from <paramref name="source"/> and, given theirs, the discriminators.</summary>
+    internal void LoadReferenceWeights(TorchTensorSource source, TorchTensorSource? waveDiscriminators = null)
     {
         var o = _options;
-        BertNetwork.LoadTorchWeights((name, shape) => read(name, shape), "bert.");
-        StyleTtsOps.LoadLinear(Engine, BertEncoderLayer, read, "bert_encoder", o.Bert.Hidden, o.HiddenDim);
-        TextEncoderNetwork.Load(read, "text_encoder");
-        StyleEncoderNetwork.Load(Engine, read, "style_encoder");
-        PredictorEncoderNetwork.Load(Engine, read, "predictor_encoder");
-        PredictorNetwork.Load(read, "predictor");
-        DecoderNetwork.Load(read, "decoder");
-        DiffusionNetwork.Denoiser.Load(read, "diffusion.diffusion.net");
-        AlignerNetwork.Load(read, "text_aligner");
-        PitchExtractorNetwork.Load(read, "pitch_extractor");
-        if (waveDiscriminatorState is not null) LoadDiscriminators(read, waveDiscriminatorState);
+        BertNetwork.LoadTorchWeights(source, "bert.");
+        StyleTtsOps.LoadLinear(Engine, BertEncoderLayer, source, "bert_encoder", o.Bert.Hidden, o.HiddenDim);
+        TextEncoderNetwork.Load(source, "text_encoder");
+        StyleEncoderNetwork.Load(Engine, source, "style_encoder");
+        PredictorEncoderNetwork.Load(Engine, source, "predictor_encoder");
+        PredictorNetwork.Load(source, "predictor");
+        DecoderNetwork.Load(source, "decoder");
+        DiffusionNetwork.Denoiser.Load(source, "diffusion.diffusion.net");
+        AlignerNetwork.Load(source, "text_aligner");
+        PitchExtractorNetwork.Load(source, "pitch_extractor");
+        if (waveDiscriminators is not null) LoadDiscriminators(source, waveDiscriminators);
     }
 
     /// <summary>Loads the released PL-BERT (<c>Utils/PLBERT/step_1000000.t7</c>'s <c>net</c> entry with the
     /// <c>module.encoder.</c> prefix removed, as <c>load_plbert</c> does, saved as safetensors or <c>.pt</c>).</summary>
-    public void LoadBertWeights(string path) =>
-        BertNetwork.LoadTorchWeights((name, shape) => StyleTTS<T>.Reader(path, "module.encoder.", "encoder.")(name, shape));
+    public void LoadBertWeights(string path)
+    {
+        using var file = TorchCheckpointFile.Open(path);
+        BertNetwork.LoadTorchWeights(StyleTTS<T>.Reader(file, "module.encoder.", "encoder."));
+    }
 
     /// <summary>Loads the released text aligner (<c>Utils/ASR/epoch_00080.pth</c>'s <c>model</c> entry).</summary>
-    public void LoadAlignerWeights(string path) =>
-        AlignerNetwork.Load(StyleTTS<T>.StripPrefix(StyleTTS<T>.Reader(path, "model."), "text_aligner."), "text_aligner");
+    public void LoadAlignerWeights(string path)
+    {
+        using var file = TorchCheckpointFile.Open(path);
+        AlignerNetwork.Load(StyleTTS<T>.StripPrefix(StyleTTS<T>.Reader(file, "model."), "text_aligner."), "text_aligner");
+    }
 
     /// <summary>Loads the released pitch extractor (<c>Utils/JDC/bst.t7</c>'s <c>net</c> entry).</summary>
-    public void LoadPitchExtractorWeights(string path) =>
-        PitchExtractorNetwork.Load(StyleTTS<T>.StripPrefix(StyleTTS<T>.Reader(path, "net."), "pitch_extractor."), "pitch_extractor");
+    public void LoadPitchExtractorWeights(string path)
+    {
+        using var file = TorchCheckpointFile.Open(path);
+        PitchExtractorNetwork.Load(StyleTTS<T>.StripPrefix(StyleTTS<T>.Reader(file, "net."), "pitch_extractor."), "pitch_extractor");
+    }
 
     // ---------------------------------------------------------------- housekeeping
 

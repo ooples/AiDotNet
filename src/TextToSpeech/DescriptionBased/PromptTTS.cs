@@ -498,19 +498,11 @@ public partial class PromptTTS<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
     /// one) into the style encoder, with its pooler.</summary>
     public void LoadStyleEncoderWeights(string path)
     {
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        string prefix = file.ContainsKey("bert.embeddings.word_embeddings.weight") ? "bert." : "";
-        double[] Read(string name, int[] shape)
-        {
-            if (!file.TryGetValue(name, out var tensor))
-                throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            if (!tensor.Shape.ToArray().SequenceEqual(shape))
-                throw new InvalidDataException($"'{name}' is [{string.Join(", ", tensor.Shape.ToArray())}] in the checkpoint but [{string.Join(", ", shape)}] in this model.");
-            return tensor.ToVector().Select(v => (double)v).ToArray();
-        }
-        StyleEncoder.LoadTorchWeights(Read, prefix);
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path, strictAxes: true);
+        string prefix = file.Contains("bert.embeddings.word_embeddings.weight") ? "bert." : "";
+        StyleEncoder.LoadTorchWeights(file, prefix);
         int h = _options.StyleHiddenDim;
-        TorchParameters.Linear(Engine, _pooler!, h, h, Read(prefix + "pooler.dense.weight", new[] { h, h }), Read(prefix + "pooler.dense.bias", new[] { h }));
+        TorchParameters.Linear(Engine, _pooler!, h, h, file, prefix + "pooler.dense.weight", prefix + "pooler.dense.bias");
     }
 
     /// <summary>
@@ -518,27 +510,28 @@ public partial class PromptTTS<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
     /// (<c>bert.*</c>), the prefix encoder (<c>prefix_encoder.*</c>) and its classifier (<c>classifier.*</c>) as the one
     /// style factor's head. <paramref name="read"/> returns a named tensor's row-major values after checking its shape.
     /// </summary>
-    internal void LoadPTuningWeights(Func<string, int[], double[]> read)
+    internal void LoadPTuningWeights(Func<string, int[], double[]> read) => LoadPTuningWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a P-tuning v2 state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadPTuningWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         var o = _options;
         if (_factorHeads.Count != 1)
             throw new InvalidOperationException("A P-tuning v2 classifier has one head; build the model with one style factor.");
         int h = o.StyleHiddenDim, prefixWidth = o.StyleLayers * 2 * h, classes = o.StyleFactorClasses[0];
-        StyleEncoder.LoadTorchWeights(read, "bert.");
-        TorchParameters.Linear(Engine, _pooler!, h, h, read("bert.pooler.dense.weight", new[] { h, h }), read("bert.pooler.dense.bias", new[] { h }));
+        StyleEncoder.LoadTorchWeights(source, "bert.");
+        TorchParameters.Linear(Engine, _pooler!, h, h, source, "bert.pooler.dense.weight", "bert.pooler.dense.bias");
         if (_prefixHidden is null)
         {
-            _prefixEmbedding!.LoadTable(read("prefix_encoder.embedding.weight", new[] { o.PrefixLength, prefixWidth }));
+            _prefixEmbedding!.LoadTable(source, "prefix_encoder.embedding.weight");
         }
         else
         {
-            _prefixEmbedding!.LoadTable(read("prefix_encoder.embedding.weight", new[] { o.PrefixLength, h }));
-            TorchParameters.Linear(Engine, _prefixHidden, h, o.PrefixHiddenSize, read("prefix_encoder.trans.0.weight", new[] { o.PrefixHiddenSize, h }),
-                read("prefix_encoder.trans.0.bias", new[] { o.PrefixHiddenSize }));
-            TorchParameters.Linear(Engine, _prefixOutput!, o.PrefixHiddenSize, prefixWidth,
-                read("prefix_encoder.trans.2.weight", new[] { prefixWidth, o.PrefixHiddenSize }), read("prefix_encoder.trans.2.bias", new[] { prefixWidth }));
+            _prefixEmbedding!.LoadTable(source, "prefix_encoder.embedding.weight");
+            TorchParameters.Linear(Engine, _prefixHidden, h, o.PrefixHiddenSize, source, "prefix_encoder.trans.0.weight", "prefix_encoder.trans.0.bias");
+            TorchParameters.Linear(Engine, _prefixOutput!, o.PrefixHiddenSize, prefixWidth, source, "prefix_encoder.trans.2.weight", "prefix_encoder.trans.2.bias");
         }
-        TorchParameters.Linear(Engine, _factorHeads[0], h, classes, read("classifier.weight", new[] { classes, h }), read("classifier.bias", new[] { classes }));
+        TorchParameters.Linear(Engine, _factorHeads[0], h, classes, source, "classifier.weight", "classifier.bias");
     }
 
     /// <summary>BERT's [CLS] state <c>[1, StyleHiddenDim]</c> for a style prompt, without dropout.</summary>

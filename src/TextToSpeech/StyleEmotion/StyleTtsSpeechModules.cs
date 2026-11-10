@@ -1,5 +1,6 @@
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -57,14 +58,14 @@ internal sealed class StyleTtsResBlock1d<T>
         return StyleTtsOps.Scale(_engine, _engine.TensorAdd(shortcut, r), StyleTtsOps.InverseSqrt2);
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
-        StyleTtsOps.LoadWeightNorm(Conv1, read, name + ".conv1");
-        StyleTtsOps.LoadWeightNorm(Conv2, read, name + ".conv2");
-        if (Norm1 is not null) StyleTtsOps.LoadInstanceNorm(_engine, Norm1, read, name + ".norm1", DimIn);
-        if (Norm2 is not null) StyleTtsOps.LoadInstanceNorm(_engine, Norm2, read, name + ".norm2", DimIn);
-        if (Shortcut is not null) StyleTtsOps.LoadWeightNorm(Shortcut, read, name + ".conv1x1", bias: false);
-        if (Pool is not null) StyleTtsOps.LoadWeightNorm(Pool, read, name + ".pool");
+        StyleTtsOps.LoadWeightNorm(Conv1, source, name + ".conv1");
+        StyleTtsOps.LoadWeightNorm(Conv2, source, name + ".conv2");
+        if (Norm1 is not null) StyleTtsOps.LoadInstanceNorm(_engine, Norm1, source, name + ".norm1", DimIn);
+        if (Norm2 is not null) StyleTtsOps.LoadInstanceNorm(_engine, Norm2, source, name + ".norm2", DimIn);
+        if (Shortcut is not null) StyleTtsOps.LoadWeightNorm(Shortcut, source, name + ".conv1x1", bias: false);
+        if (Pool is not null) StyleTtsOps.LoadWeightNorm(Pool, source, name + ".pool");
     }
 }
 
@@ -100,8 +101,8 @@ internal sealed class StyleTtsAdaIn<T>
         return _engine.TensorAdd(_engine.TensorMultiply(_engine.TensorAddScalar(gamma, ops.One), Norm.Forward(x)), beta);
     }
 
-    public void Load(TorchReader read, string name) =>
-        StyleTtsOps.LoadLinear(_engine, Style, read, name + ".fc", StyleDim, 2 * Channels);
+    public void Load(TorchTensorSource source, string name) =>
+        StyleTtsOps.LoadLinear(_engine, Style, source, name + ".fc", StyleDim, 2 * Channels);
 }
 
 /// <summary>
@@ -149,14 +150,14 @@ internal sealed class StyleTtsAdaInResBlock<T>
         return StyleTtsOps.Scale(_engine, _engine.TensorAdd(r, shortcut), StyleTtsOps.InverseSqrt2);
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
-        StyleTtsOps.LoadWeightNorm(Conv1, read, name + ".conv1");
-        StyleTtsOps.LoadWeightNorm(Conv2, read, name + ".conv2");
-        Norm1.Load(read, name + ".norm1");
-        Norm2.Load(read, name + ".norm2");
-        if (Shortcut is not null) StyleTtsOps.LoadWeightNorm(Shortcut, read, name + ".conv1x1", bias: false);
-        if (Pool is not null) StyleTtsOps.LoadWeightNorm(Pool, read, name + ".pool");
+        StyleTtsOps.LoadWeightNorm(Conv1, source, name + ".conv1");
+        StyleTtsOps.LoadWeightNorm(Conv2, source, name + ".conv2");
+        Norm1.Load(source, name + ".norm1");
+        Norm2.Load(source, name + ".norm2");
+        if (Shortcut is not null) StyleTtsOps.LoadWeightNorm(Shortcut, source, name + ".conv1x1", bias: false);
+        if (Pool is not null) StyleTtsOps.LoadWeightNorm(Pool, source, name + ".pool");
     }
 }
 
@@ -227,19 +228,19 @@ internal sealed class StyleTtsDecoder<T>
         return ToOut.Forward(x);
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
-        for (int i = 0; i < Encode.Count; i++) Encode[i].Load(read, $"{name}.encode.{i}");
-        for (int i = 0; i < Decode.Count; i++) Decode[i].Load(read, $"{name}.decode.{i}");
-        F0Block.Load(read, name + ".F0_conv.0");
-        StyleTtsOps.LoadWeightNorm(F0Projection, read, name + ".F0_conv.1");
-        StyleTtsOps.LoadInstanceNorm(_engine, F0Norm, read, name + ".F0_conv.2", 1);
-        NBlock.Load(read, name + ".N_conv.0");
-        StyleTtsOps.LoadWeightNorm(NProjection, read, name + ".N_conv.1");
-        StyleTtsOps.LoadInstanceNorm(_engine, NNorm, read, name + ".N_conv.2", 1);
-        StyleTtsOps.LoadWeightNorm(AsrResidual, read, name + ".asr_res.0");
-        StyleTtsOps.LoadInstanceNorm(_engine, AsrNorm, read, name + ".asr_res.1", ResidualDim);
-        StyleTtsOps.LoadWeightNorm(ToOut, read, name + ".to_out.0");
+        for (int i = 0; i < Encode.Count; i++) Encode[i].Load(source, $"{name}.encode.{i}");
+        for (int i = 0; i < Decode.Count; i++) Decode[i].Load(source, $"{name}.decode.{i}");
+        F0Block.Load(source, name + ".F0_conv.0");
+        StyleTtsOps.LoadWeightNorm(F0Projection, source, name + ".F0_conv.1");
+        StyleTtsOps.LoadInstanceNorm(_engine, F0Norm, source, name + ".F0_conv.2", 1);
+        NBlock.Load(source, name + ".N_conv.0");
+        StyleTtsOps.LoadWeightNorm(NProjection, source, name + ".N_conv.1");
+        StyleTtsOps.LoadInstanceNorm(_engine, NNorm, source, name + ".N_conv.2", 1);
+        StyleTtsOps.LoadWeightNorm(AsrResidual, source, name + ".asr_res.0");
+        StyleTtsOps.LoadInstanceNorm(_engine, AsrNorm, source, name + ".asr_res.1", ResidualDim);
+        StyleTtsOps.LoadWeightNorm(ToOut, source, name + ".to_out.0");
     }
 }
 
@@ -284,16 +285,15 @@ internal sealed class StyleTtsTextEncoder<T>
         return _engine.Reshape(_engine.TensorTranspose(output), new[] { 1, Channels, length });
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
-        Embedding.LoadTable(read(name + ".embedding.weight", new[] { Symbols, Channels }));
+        TorchParameters.Parameters(Embedding, source, name + ".embedding.weight", new[] { Symbols, Channels });
         for (int i = 0; i < Blocks.Count; i++)
         {
-            StyleTtsOps.LoadWeightNorm(Blocks[i].Conv, read, $"{name}.cnn.{i}.0");
-            TorchParameters.LayerNorm(_engine, Blocks[i].Norm, read($"{name}.cnn.{i}.1.gamma", new[] { Channels }),
-                read($"{name}.cnn.{i}.1.beta", new[] { Channels }));
+            StyleTtsOps.LoadWeightNorm(Blocks[i].Conv, source, $"{name}.cnn.{i}.0");
+            TorchParameters.LayerNorm(_engine, Blocks[i].Norm, source, $"{name}.cnn.{i}.1.gamma", $"{name}.cnn.{i}.1.beta");
         }
-        Lstm.Load(read, name + ".lstm");
+        Lstm.Load(source, name + ".lstm");
     }
 }
 
@@ -332,8 +332,8 @@ internal sealed class StyleTtsAdaLayerNorm<T>
         return _engine.TensorAdd(_engine.TensorMultiply(_engine.TensorAddScalar(gamma, ops.One), normed), beta);
     }
 
-    public void Load(TorchReader read, string name) =>
-        StyleTtsOps.LoadLinear(_engine, Style, read, name + ".fc", StyleDim, 2 * Channels);
+    public void Load(TorchTensorSource source, string name) =>
+        StyleTtsOps.LoadLinear(_engine, Style, source, name + ".fc", StyleDim, 2 * Channels);
 }
 
 /// <summary>
@@ -429,19 +429,19 @@ internal sealed class StyleTtsProsodyPredictor<T>
         return (Run(F0, F0Projection), Run(N, NProjection));
     }
 
-    public void Load(TorchReader read, string name)
+    public void Load(TorchTensorSource source, string name)
     {
         for (int i = 0; i < EncoderLayers.Count; i++)
         {
-            EncoderLayers[i].Lstm.Load(read, $"{name}.text_encoder.lstms.{2 * i}");
-            EncoderLayers[i].Norm.Load(read, $"{name}.text_encoder.lstms.{2 * i + 1}");
+            EncoderLayers[i].Lstm.Load(source, $"{name}.text_encoder.lstms.{2 * i}");
+            EncoderLayers[i].Norm.Load(source, $"{name}.text_encoder.lstms.{2 * i + 1}");
         }
-        Lstm.Load(read, name + ".lstm");
-        StyleTtsOps.LoadLinear(_engine, DurationProjection, read, name + ".duration_proj.linear_layer", Hidden, DurationBins);
-        Shared.Load(read, name + ".shared");
-        for (int i = 0; i < F0.Count; i++) F0[i].Load(read, $"{name}.F0.{i}");
-        for (int i = 0; i < N.Count; i++) N[i].Load(read, $"{name}.N.{i}");
-        StyleTtsOps.LoadPlain(F0Projection, read, name + ".F0_proj");
-        StyleTtsOps.LoadPlain(NProjection, read, name + ".N_proj");
+        Lstm.Load(source, name + ".lstm");
+        StyleTtsOps.LoadLinear(_engine, DurationProjection, source, name + ".duration_proj.linear_layer", Hidden, DurationBins);
+        Shared.Load(source, name + ".shared");
+        for (int i = 0; i < F0.Count; i++) F0[i].Load(source, $"{name}.F0.{i}");
+        for (int i = 0; i < N.Count; i++) N[i].Load(source, $"{name}.N.{i}");
+        StyleTtsOps.LoadPlain(F0Projection, source, name + ".F0_proj");
+        StyleTtsOps.LoadPlain(NProjection, source, name + ".N_proj");
     }
 }

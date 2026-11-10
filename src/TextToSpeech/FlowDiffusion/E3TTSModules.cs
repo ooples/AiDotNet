@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
@@ -36,6 +37,8 @@ internal sealed class E3BertTextEncoder<T>
 
     public void LoadHuggingFace(Func<string, int[], double[]> read, string prefix = "bert.") =>
         Network.LoadTorchWeights(read, prefix);
+
+    internal void LoadHuggingFace(TorchTensorSource source, string prefix = "bert.") => Network.LoadTorchWeights(source, prefix);
 }
 
 /// <summary>
@@ -211,30 +214,31 @@ internal sealed class E3WaveBlock<T>
         return Channels(rows);
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix, int textDim, int conditionDim)
+    public void Load(Func<string, int[], double[]> read, string prefix, int textDim, int conditionDim) =>
+        Load(TorchTensorSource.From(read), prefix, textDim, conditionDim);
+
+    internal void Load(TorchTensorSource source, string prefix, int textDim, int conditionDim)
     {
         for (int i = 0; i < FirstConvolutions.Count; i++)
-            IndexTtsOps.LoadConv(read, FirstConvolutions[i], $"{prefix}first.{i}", _outputChannels);
+            IndexTtsOps.LoadConv(source, FirstConvolutions[i], $"{prefix}first.{i}", _outputChannels);
         for (int i = 0; i < SecondConvolutions.Count; i++)
-            IndexTtsOps.LoadConv(read, SecondConvolutions[i], AdaptiveKernelCount > 0 ? $"{prefix}second.{i}" : prefix + "second", _outputChannels);
-        if (Shortcut is not null) IndexTtsOps.LoadConv(read, Shortcut, prefix + "shortcut", _outputChannels);
-        StyleTtsOps.LoadAffine(_engine, FirstNorm.GetGammaTensor(), FirstNorm.GetBetaTensor(),
-            read(prefix + "norm1.weight", new[] { _outputChannels }), read(prefix + "norm1.bias", new[] { _outputChannels }));
-        StyleTtsOps.LoadAffine(_engine, SecondNorm.GetGammaTensor(), SecondNorm.GetBetaTensor(),
-            read(prefix + "norm2.weight", new[] { _outputChannels }), read(prefix + "norm2.bias", new[] { _outputChannels }));
-        if (AdaptiveLogits is not null) IndexTtsOps.LoadLinear(_engine, read, AdaptiveLogits, prefix + "adaptive_logits", conditionDim, AdaptiveKernelCount);
-        if (Film is not null) IndexTtsOps.LoadLinear(_engine, read, Film, prefix + "film", conditionDim, 4 * _outputChannels);
+            IndexTtsOps.LoadConv(source, SecondConvolutions[i], AdaptiveKernelCount > 0 ? $"{prefix}second.{i}" : prefix + "second", _outputChannels);
+        if (Shortcut is not null) IndexTtsOps.LoadConv(source, Shortcut, prefix + "shortcut", _outputChannels);
+        FirstNorm.LoadAffine(source, prefix + "norm1.weight", prefix + "norm1.bias");
+        SecondNorm.LoadAffine(source, prefix + "norm2.weight", prefix + "norm2.bias");
+        if (AdaptiveLogits is not null) IndexTtsOps.LoadLinear(_engine, source, AdaptiveLogits, prefix + "adaptive_logits", conditionDim, AdaptiveKernelCount);
+        if (Film is not null) IndexTtsOps.LoadLinear(_engine, source, Film, prefix + "film", conditionDim, 4 * _outputChannels);
         if (AttentionHeads == 0) return;
-        IndexTtsOps.LoadNorm(_engine, read, SelfNorm!, prefix + "self.norm", _outputChannels);
-        IndexTtsOps.LoadLinear(_engine, read, SelfQuery!, prefix + "self.q", _outputChannels, _outputChannels);
-        IndexTtsOps.LoadLinear(_engine, read, SelfKey!, prefix + "self.k", _outputChannels, _outputChannels);
-        IndexTtsOps.LoadLinear(_engine, read, SelfValue!, prefix + "self.v", _outputChannels, _outputChannels);
-        IndexTtsOps.LoadLinear(_engine, read, SelfOutput!, prefix + "self.out", _outputChannels, _outputChannels);
-        IndexTtsOps.LoadNorm(_engine, read, CrossNorm!, prefix + "cross.norm", _outputChannels);
-        IndexTtsOps.LoadLinear(_engine, read, CrossQuery!, prefix + "cross.q", _outputChannels, _outputChannels);
-        IndexTtsOps.LoadLinear(_engine, read, CrossKey!, prefix + "cross.k", textDim, _outputChannels);
-        IndexTtsOps.LoadLinear(_engine, read, CrossValue!, prefix + "cross.v", textDim, _outputChannels);
-        IndexTtsOps.LoadLinear(_engine, read, CrossOutput!, prefix + "cross.out", _outputChannels, _outputChannels);
+        IndexTtsOps.LoadNorm(_engine, source, SelfNorm!, prefix + "self.norm", _outputChannels);
+        IndexTtsOps.LoadLinear(_engine, source, SelfQuery!, prefix + "self.q", _outputChannels, _outputChannels);
+        IndexTtsOps.LoadLinear(_engine, source, SelfKey!, prefix + "self.k", _outputChannels, _outputChannels);
+        IndexTtsOps.LoadLinear(_engine, source, SelfValue!, prefix + "self.v", _outputChannels, _outputChannels);
+        IndexTtsOps.LoadLinear(_engine, source, SelfOutput!, prefix + "self.out", _outputChannels, _outputChannels);
+        IndexTtsOps.LoadNorm(_engine, source, CrossNorm!, prefix + "cross.norm", _outputChannels);
+        IndexTtsOps.LoadLinear(_engine, source, CrossQuery!, prefix + "cross.q", _outputChannels, _outputChannels);
+        IndexTtsOps.LoadLinear(_engine, source, CrossKey!, prefix + "cross.k", textDim, _outputChannels);
+        IndexTtsOps.LoadLinear(_engine, source, CrossValue!, prefix + "cross.v", textDim, _outputChannels);
+        IndexTtsOps.LoadLinear(_engine, source, CrossOutput!, prefix + "cross.out", _outputChannels, _outputChannels);
     }
 }
 
@@ -350,22 +354,23 @@ internal sealed class E3WaveformUnet<T>
         return (epsilon, VarianceHead.Forward(time));
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    internal void Load(TorchTensorSource source, string prefix)
     {
         var o = Options;
-        IndexTtsOps.LoadLinear(_engine, read, TimeInput, prefix + "time.0", o.TimeEmbeddingDim, o.ConditionDim);
-        IndexTtsOps.LoadLinear(_engine, read, TimeOutput, prefix + "time.2", o.ConditionDim, o.ConditionDim);
-        var speaker = read(prefix + "speaker_embedding.weight", new[] { o.SpeakerCount, o.ConditionDim });
-        SpeakerEmbedding.SetParameters(new Vector<T>(speaker.Select(MathHelper.GetNumericOperations<T>().FromDouble)));
-        IndexTtsOps.LoadLinear(_engine, read, VarianceHead, prefix + "variance", o.ConditionDim, 1);
-        for (int i = 0; i < DownBlocks.Count; i++) DownBlocks[i].Load(read, $"{prefix}down.{i}.", o.BertHiddenDim, o.ConditionDim);
-        for (int i = 0; i < UpBlocks.Count; i++) UpBlocks[i].Load(read, $"{prefix}up.{i}.", o.BertHiddenDim, o.ConditionDim);
+        IndexTtsOps.LoadLinear(_engine, source, TimeInput, prefix + "time.0", o.TimeEmbeddingDim, o.ConditionDim);
+        IndexTtsOps.LoadLinear(_engine, source, TimeOutput, prefix + "time.2", o.ConditionDim, o.ConditionDim);
+        SpeakerEmbedding.LoadTable(source, prefix + "speaker_embedding.weight");
+        IndexTtsOps.LoadLinear(_engine, source, VarianceHead, prefix + "variance", o.ConditionDim, 1);
+        for (int i = 0; i < DownBlocks.Count; i++) DownBlocks[i].Load(source, $"{prefix}down.{i}.", o.BertHiddenDim, o.ConditionDim);
+        for (int i = 0; i < UpBlocks.Count; i++) UpBlocks[i].Load(source, $"{prefix}up.{i}.", o.BertHiddenDim, o.ConditionDim);
         for (int i = 0; i < DownResiduals.Count; i++)
             for (int j = 0; j < DownResiduals[i].Count; j++)
-                DownResiduals[i][j].Load(read, $"{prefix}down.{i}.residual.{j}.", o.BertHiddenDim, o.ConditionDim);
+                DownResiduals[i][j].Load(source, $"{prefix}down.{i}.residual.{j}.", o.BertHiddenDim, o.ConditionDim);
         for (int i = 0; i < UpResiduals.Count; i++)
             for (int j = 0; j < UpResiduals[i].Count; j++)
-                UpResiduals[i][j].Load(read, $"{prefix}up.{i}.residual.{j}.", o.BertHiddenDim, o.ConditionDim);
-        IndexTtsOps.LoadConv(read, Output, prefix + "output", 1);
+                UpResiduals[i][j].Load(source, $"{prefix}up.{i}.residual.{j}.", o.BertHiddenDim, o.ConditionDim);
+        IndexTtsOps.LoadConv(source, Output, prefix + "output", 1);
     }
 }

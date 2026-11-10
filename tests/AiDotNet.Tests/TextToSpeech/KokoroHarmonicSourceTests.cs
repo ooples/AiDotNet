@@ -19,8 +19,8 @@ public sealed class KokoroHarmonicSourceTests
         var layers = new List<LayerBase<double>>();
         var engine = AiDotNetEngine.Current;
         var source = new StyleTts2Source<double>(engine, layers, 24000, 300);
-        source.Load((name, shape) => name.EndsWith("weight", StringComparison.Ordinal)
-            ? Values(root.GetProperty("weight")) : Values(root.GetProperty("bias")), "source");
+        source.Load(AiDotNet.ModelLoading.TorchTensorSource.From((string name, int[] shape) => name.EndsWith("weight", StringComparison.Ordinal)
+            ? Values(root.GetProperty("weight")) : Values(root.GetProperty("bias"))), "source");
         var draws = root.GetProperty("draws").EnumerateArray().ToArray();
         source.InitialPhases = Values(draws.Single(x => x.GetProperty("kind").GetString() == "uniform").GetProperty("values"));
         source.GaussianNoise = Values(draws.Single(x => x.GetProperty("kind").GetString() == "normal" &&

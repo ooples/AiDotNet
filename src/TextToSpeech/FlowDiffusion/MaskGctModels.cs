@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -243,15 +244,17 @@ internal sealed class MaskGctTextToSemantic<T>
     }
 
     /// <summary>Loads Amphion's <c>MaskGCT_T2S</c> state dict.</summary>
-    public void Load(Func<string, int[], double[]?> read)
+    public void Load(Func<string, int[], double[]?> read) => Load(MaskGctLoad.Required(read));
+
+    /// <summary>Loads Amphion's <c>MaskGCT_T2S</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void Load(TorchTensorSource source)
     {
         int h = Mask.Table.Shape[1];
-        double[] Need(string name, int[] shape) => read(name, shape) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-        Mask.LoadTable(Need("mask_emb.weight", new[] { 1, h }));
-        Semantic.LoadTable(Need("cond_emb.weight", new[] { SemanticCodes, h }));
-        Phone.LoadTable(Need("phone_emb.weight", new[] { Phones, h }));
-        TorchParameters.Linear(_engine, Head, h, SemanticCodes, Need("to_logit.weight", new[] { SemanticCodes, h }), Need("to_logit.bias", new[] { SemanticCodes }));
-        Backbone.LoadTorchWeights(read, "diff_estimator.");
+        Mask.LoadTable(source, "mask_emb.weight");
+        Semantic.LoadTable(source, "cond_emb.weight");
+        Phone.LoadTable(source, "phone_emb.weight");
+        TorchParameters.Linear(_engine, Head, h, SemanticCodes, source, "to_logit.weight", "to_logit.bias");
+        Backbone.LoadTorchWeights(source, "diff_estimator.");
     }
 }
 
@@ -403,18 +406,20 @@ internal sealed class MaskGctSemanticToAcoustic<T>
     }
 
     /// <summary>Loads Amphion's <c>MaskGCT_S2A</c> state dict.</summary>
-    public void Load(Func<string, int[], double[]?> read)
+    public void Load(Func<string, int[], double[]?> read) => Load(MaskGctLoad.Required(read));
+
+    /// <summary>Loads Amphion's <c>MaskGCT_S2A</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void Load(TorchTensorSource source)
     {
         int h = Mask.Table.Shape[1];
-        double[] Need(string name, int[] shape) => read(name, shape) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-        LayerEmbedding.LoadTable(Need("layer_emb.weight", new[] { Quantizers, h }));
-        Mask.LoadTable(Need("mask_emb.weight", new[] { 1, h }));
+        LayerEmbedding.LoadTable(source, "layer_emb.weight");
+        Mask.LoadTable(source, "mask_emb.weight");
         for (int q = 0; q < Quantizers; q++)
         {
-            Tokens[q].LoadTable(Need($"token_emb.{q}.weight", new[] { CodebookSize, h }));
-            TorchParameters.Linear(_engine, Heads[q], h, CodebookSize, Need($"to_logits.{q}.weight", new[] { CodebookSize, h }), Need($"to_logits.{q}.bias", new[] { CodebookSize }));
+            Tokens[q].LoadTable(source, $"token_emb.{q}.weight");
+            TorchParameters.Linear(_engine, Heads[q], h, CodebookSize, source, $"to_logits.{q}.weight", $"to_logits.{q}.bias");
         }
-        Semantic.LoadTable(Need("cond_emb.weight", new[] { Semantic.Table.Shape[0], h }));
-        Backbone.LoadTorchWeights(read, "diff_estimator.");
+        Semantic.LoadTable(source, "cond_emb.weight");
+        Backbone.LoadTorchWeights(source, "diff_estimator.");
     }
 }

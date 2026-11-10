@@ -1,6 +1,6 @@
 using AiDotNet.Audio.Generation;
-using AiDotNet.ComputerVision.Weights;
 using AiDotNet.Enums;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -60,15 +60,12 @@ public partial class MetaVoice1B<T>
             !Convert.ToBoolean(meta["speaker_cond"]) || Convert.ToInt32(meta["speaker_emb_size"]) != SpeakerEmbeddingDim ||
             (first && Convert.ToDouble(args["rmsnorm_eps"]) != 1e-5))
             throw new InvalidDataException("Checkpoint GPT normalization, positions or speaker-conditioning contract differs.");
-        var raw = new WeightLoader().LoadWeights(checkpoint, name => name.StartsWith("model.", StringComparison.Ordinal));
-        var state = raw.ToDictionary(pair => pair.Key.Substring(6).Replace("_orig_mod.", ""), pair => pair.Value);
-        model.LoadTorch((name, shape) =>
-        {
-            if (!state.TryGetValue(name, out var tensor) || !tensor.Shape.ToArray().SequenceEqual(shape))
-                throw new InvalidDataException("MetaVoice GPT tensor missing or incompatible: " + name);
-            state.Remove(name); return tensor.ToArray().Select(x => (double)x).ToArray();
-        });
-        if (state.Count != 0) throw new InvalidDataException("Unconsumed MetaVoice GPT tensors: " + state.Count);
+        bool Actor(string name) => name.StartsWith("model.", StringComparison.Ordinal);
+        using var file = TorchCheckpointFile.Open(checkpoint, strictAxes: true, include: Actor);
+        // The model's names are the stored ones after "model.", without torch.compile's "_orig_mod.".
+        var stored = file.Names.Where(Actor).ToDictionary(name => name.Substring(6).Replace("_orig_mod.", ""), name => name, StringComparer.Ordinal);
+        model.LoadTorch(file.WithNames(name => stored.TryGetValue(name, out var key) ? key : "model." + name));
+        file.RequireAllUsed("MetaVoice GPT", name => !Actor(name));
     }
 
     /// <summary>Loads all 14 active speaker tensors; the author's two unused similarity scalars are explicitly recognized.</summary>
@@ -76,21 +73,14 @@ public partial class MetaVoice1B<T>
     {
         ThrowIfDisposed();
         if (_speaker is null) throw new NotSupportedException("The native speaker encoder is unavailable.");
-        var raw = new WeightLoader().LoadWeights(checkpoint, name => name.StartsWith("model_state.", StringComparison.Ordinal));
-        var state = raw.ToDictionary(pair => pair.Key.Substring(12), pair => pair.Value);
-        _speaker.LoadTorch((name, shape) =>
-        {
-            if (!state.TryGetValue(name, out var tensor) || !tensor.Shape.ToArray().SequenceEqual(shape))
-                throw new InvalidDataException("MetaVoice speaker tensor missing or incompatible: " + name);
-            state.Remove(name); return tensor.ToArray().Select(x => (double)x).ToArray();
-        });
-        foreach (string unused in new[] { "similarity_weight", "similarity_bias" })
-            if (state.TryGetValue(unused, out var tensor))
-            {
-                if (tensor.Length != 1) throw new InvalidDataException("Unused author similarity scalar has incompatible axes.");
-                state.Remove(unused);
-            }
-        if (state.Count != 0) throw new InvalidDataException("Unconsumed active speaker tensors: " + state.Count);
+        const string Prefix = "model_state.";
+        using var file = TorchCheckpointFile.Open(checkpoint, strictAxes: true, include: name => name.StartsWith(Prefix, StringComparison.Ordinal));
+        _speaker.LoadTorch(file.WithPrefix(Prefix));
+        var unused = new[] { Prefix + "similarity_weight", Prefix + "similarity_bias" };
+        foreach (string name in unused)
+            if (file.ShapeOf(name) is { } shape && shape.Aggregate(1L, (a, b) => a * b) != 1)
+                throw new InvalidDataException("Unused author similarity scalar has incompatible axes.");
+        file.RequireAllUsed("MetaVoice speaker", name => !name.StartsWith(Prefix, StringComparison.Ordinal) || unused.Contains(name));
         _speakerLoaded = true;
     }
 
