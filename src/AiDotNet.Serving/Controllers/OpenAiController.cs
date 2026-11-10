@@ -399,7 +399,7 @@ public sealed class OpenAiController : ControllerBase
                 break;
             }
 
-            // Hold back the longest suffix that could still begin a stop string (see PendingStopPrefixLen);
+            // Hold back the longest suffix that could still begin a stop string (see StopSequenceMatcher.PendingPrefixLength);
             // streamed content cannot be retracted, so a partial stop prefix must never be emitted early.
             int safeLen = full.Length - StopSequenceMatcher.PendingPrefixLength(full, stops);
             if (safeLen > prev.Length)

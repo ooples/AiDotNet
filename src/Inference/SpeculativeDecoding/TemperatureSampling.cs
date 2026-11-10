@@ -22,13 +22,20 @@ internal static class TemperatureSampling<T>
 
     /// <summary>
     /// Rescales a probability distribution to <paramref name="temperature"/>: <c>p_i^(1/t)</c> renormalized,
-    /// a one-hot at the argmax for <c>t &lt;= 0</c>, and the input unchanged for <c>t == 1</c>.
+    /// a one-hot at the argmax for <c>t &lt;= 0</c>, and a copy of the input for <c>t == 1</c>.
     /// </summary>
     public static Vector<T> Apply(Vector<T> distribution, T temperature)
     {
         if (NumOps.Equals(temperature, NumOps.One))
         {
-            return distribution;
+            // A copy, like every other path, so a caller that edits the result never edits its input.
+            var copy = new Vector<T>(distribution.Length);
+            for (int i = 0; i < distribution.Length; i++)
+            {
+                copy[i] = distribution[i];
+            }
+
+            return copy;
         }
 
         var result = new Vector<T>(distribution.Length);
@@ -73,6 +80,16 @@ internal static class TemperatureSampling<T>
     /// </summary>
     public static int Sample(Vector<T> distribution, Random random)
     {
+        if (random is null)
+        {
+            throw new ArgumentNullException(nameof(random));
+        }
+
+        if (distribution.Length == 0)
+        {
+            throw new ArgumentException("The distribution must not be empty.", nameof(distribution));
+        }
+
         T r = NumOps.FromDouble(random.NextDouble());
         T cumulative = NumOps.Zero;
         int lastNonZero = -1;

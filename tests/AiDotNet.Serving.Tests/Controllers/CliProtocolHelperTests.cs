@@ -44,6 +44,15 @@ public sealed class CliProtocolHelperTests
     }
 
     [Fact]
+    public void ContentText_ToolResultWithoutContent_StillMarksTheResult()
+    {
+        // content is optional on a tool_result; the call must still be paired with a (empty) result.
+        var content = JArray.Parse("""[ { "type": "tool_result", "tool_use_id": "toolu_1" } ]""");
+
+        Assert.Equal("[tool_result toolu_1: ]", OpenAiJson.ContentText(content));
+    }
+
+    [Fact]
     public void ChatTemplate_DeveloperRole_IsLabelledSystem()
     {
         string prompt = ChatTemplate.Render(new[] { ("developer", "Be concise."), ("user", "Hi") });

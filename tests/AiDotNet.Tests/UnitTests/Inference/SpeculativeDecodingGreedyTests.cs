@@ -65,6 +65,31 @@ public class SpeculativeDecodingGreedyTests
         Assert.Equal(GreedyReference(prompt, 12), result.NewTokens.ToArray());
     }
 
+    // The tempered-target and residual-sampling path: for a fixed seed the output is reproducible, the requested length,
+    // and in the vocabulary (an all-zero tempered row would collapse every token to the last id instead).
+    [Fact]
+    public async Task SpeculativeDecoder_PositiveTemperature_IsSeededAndInRange()
+    {
+        var prompt = new[] { 4, 9, 2 };
+        async Task<int[]> Run()
+        {
+            var decoder = new SpeculativeDecoder<float>(
+                new NGramDraftModel<float>(ngramSize: 2, vocabSize: Vocab, seed: 7),
+                TargetProbs,
+                new SpeculativeDecodingConfig<float> { NumDraftTokens = 3, Seed = 11 });
+            var result = await decoder.GenerateAsync(new Vector<int>(prompt), maxNewTokens: 12, temperature: 0.7f);
+            return result.NewTokens.ToArray();
+        }
+
+        var first = await Run();
+        var second = await Run();
+
+        Assert.Equal(12, first.Length);
+        Assert.Equal(first, second);
+        Assert.All(first, t => Assert.InRange(t, 0, Vocab - 1));
+        Assert.True(first.Distinct().Count() > 1, "every token is the same id: the tempered distribution collapsed");
+    }
+
     [Fact]
     public async Task TreeSpeculativeDecoder_TemperatureZero_MatchesPlainGreedy()
     {

@@ -140,7 +140,10 @@ public sealed class AnthropicController : ControllerBase
             {
                 ct.ThrowIfCancellationRequested();
                 ServingMetrics.RecordRequest(false, ctx.PromptTokenCount, 0, sw.Elapsed.TotalSeconds);
-                return AnthropicError(StatusCodes.Status500InternalServerError, err, "api_error");
+                // The engine's message can carry internal detail (model names, shapes); log it, return a fixed text,
+                // as the streaming path does.
+                _logger.LogError("Anthropic generation failed for model {ModelName}: {Error}", ctx.ModelName, err);
+                return AnthropicError(StatusCodes.Status500InternalServerError, "Text generation failed.", "api_error");
             }
 
             var genTokens = new List<int>(resp.GeneratedTokens);

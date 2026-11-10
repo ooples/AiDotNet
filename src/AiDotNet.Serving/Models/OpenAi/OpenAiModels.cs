@@ -247,20 +247,17 @@ internal static class OpenAiJson
                     {
                         sb.Append(txt);
                     }
+                    else if (part["type"]?.Value<string>() == "tool_result")
+                    {
+                        // Label each result with its tool_use_id so parallel results stay separable and
+                        // the model can pair each one with the [tool_use: ...] call that produced it. content is
+                        // optional in the Anthropic API (an empty or error result may omit it); it renders as empty.
+                        var toolUseId = part["tool_use_id"]?.Value<string>() ?? "unknown";
+                        sb.Append($"[tool_result {toolUseId}: {ContentText(part["content"])}]");
+                    }
                     else if (part["content"] != null)
                     {
-                        string inner = ContentText(part["content"]);
-                        if (part["type"]?.Value<string>() == "tool_result")
-                        {
-                            // Label each result with its tool_use_id so parallel results stay separable and
-                            // the model can pair each one with the [tool_use: ...] call that produced it.
-                            var toolUseId = part["tool_use_id"]?.Value<string>() ?? "unknown";
-                            sb.Append($"[tool_result {toolUseId}: {inner}]");
-                        }
-                        else
-                        {
-                            sb.Append(inner);
-                        }
+                        sb.Append(ContentText(part["content"]));
                     }
                     else if (part["type"]?.Value<string>() == "tool_use")
                     {
