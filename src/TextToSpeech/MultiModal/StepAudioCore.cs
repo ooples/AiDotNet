@@ -69,8 +69,10 @@ internal sealed class StepAudioCore<T>
         _engine = engine;
         Options = options;
         var o = options;
+        if (o.DropoutRate != 0)
+            throw new ArgumentException("The released Step-1 models do not use attention dropout.", nameof(o.DropoutRate));
         if (o.LinguisticCodes != StepAudioTokens.LinguisticCodes)
-            throw new ArgumentException($"The release's token layout puts the semantic codes after {StepAudioTokens.LinguisticCodes} linguistic ones.");
+            throw new ArgumentException($"The release's token layout puts the semantic codes after {StepAudioTokens.LinguisticCodes} linguistic ones.", nameof(o.LinguisticCodes));
         if (StepAudioTokens.AudioBase + o.LinguisticCodes + o.SemanticCodes > o.VocabSize)
             throw new ArgumentException("The audio tokens must fit in the vocabulary.");
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(seed);

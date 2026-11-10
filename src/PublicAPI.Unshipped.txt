@@ -22457,3 +22457,13 @@ override AiDotNet.TextToSpeech.MultiModal.MoshiOptions.NumEncoderLayers.get -> i
 override AiDotNet.TextToSpeech.MultiModal.MoshiOptions.NumEncoderLayers.set -> void
 override AiDotNet.TextToSpeech.MultiModal.MoshiOptions.NumDecoderLayers.get -> int
 override AiDotNet.TextToSpeech.MultiModal.MoshiOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions.DecoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions.DecoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions.EncoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions.EncoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions.HiddenDim.get -> int
+override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions.HiddenDim.set -> void
+override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.MultiModal.StepAudioOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.MultiModal.StepAudioOptions.NumEncoderLayers.set -> void

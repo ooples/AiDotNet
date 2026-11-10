@@ -86,8 +86,12 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> ? "vevo-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.Llasa<T> && LlasaOptionFixture.Handles(option) ? "llasa-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2<T> && NaturalSpeech2OptionFixture.Handles(option) ? "naturalspeech2-" + option
-            : network is AiDotNet.TextToSpeech.MultiModal.StepAudio<T> && StepAudioFixture.IsChatSamplingOption(option) ? "stepaudio-chat"
-            : network is AiDotNet.TextToSpeech.MultiModal.StepAudio<T> && StepAudioFixture.IsPpoOption(option) ? "stepaudio-ppo-" + option
+            : network is AiDotNet.TextToSpeech.MultiModal.StepAudio<T> && StepAudioOptionFixture.IsChatSamplingOption(option) ? "stepaudio-chat"
+            : network is AiDotNet.TextToSpeech.MultiModal.StepAudio<T> && StepAudioOptionFixture.IsPpoOption(option) ? "stepaudio-ppo-" + option
+            : network is AiDotNet.TextToSpeech.MultiModal.StepAudio<T> && option == "LinguisticDither" ? "stepaudio-linguistic"
+            : network is AiDotNet.TextToSpeech.CodecBased.VALLE<T> && option is "PromptSeconds" or "StopOnMostLikelyEndToken" ? "valle-" + option
+            : network is AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T>
+                && (NonAttentiveTacotronOptionFixture.UsesTraining(option) || option is "MaxMelLength" or "MaxTextLength") ? "nat-" + option
 
             : network is AiDotNet.Finance.Forecasting.StateSpace.Hippo<T> && option == "TimescaleMax" ? "hippo-timescale-clamp"
             : network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> && option == "ConfidenceWindow" ? "ctc-segmentation-confidence"
@@ -309,8 +313,17 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2<T> naturalSpeech2 && NaturalSpeech2OptionFixture.Handles(option))
             return NaturalSpeech2OptionFixture.Observe(naturalSpeech2, option);
         if (network is AiDotNet.TextToSpeech.MultiModal.StepAudio<T> stepAudio
-            && (StepAudioFixture.IsChatSamplingOption(option) || StepAudioFixture.IsPpoOption(option)))
-            return StepAudioFixture.ObserveChat(stepAudio);
+            && (StepAudioOptionFixture.IsChatSamplingOption(option) || StepAudioOptionFixture.IsPpoOption(option)))
+            return StepAudioOptionFixture.ObserveChat(stepAudio);
+        if (network is AiDotNet.TextToSpeech.MultiModal.StepAudio<T> tokenizer && option == "LinguisticDither")
+            return StepAudioOptionFixture.ObserveLinguisticDither(tokenizer);
+        if (network is AiDotNet.TextToSpeech.CodecBased.VALLE<T> vallE && option == "PromptSeconds")
+            return VallEOptionFixture.ObserveTrainingPrompt(vallE);
+        if (network is AiDotNet.TextToSpeech.CodecBased.VALLE<T> endCondition && option == "StopOnMostLikelyEndToken")
+            return VallEOptionFixture.ObserveEndCondition(endCondition);
+        if (network is AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T> nonAttentive
+            && NonAttentiveTacotronOptionFixture.UsesTraining(option))
+            return NonAttentiveTacotronOptionFixture.Observe(nonAttentive);
 
         if (network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> segmentation && option == "ConfidenceWindow")
             return AiDotNet.Tests.Audio.CtcSegmentationOptionFixture.Observe(segmentation);
@@ -1210,8 +1223,12 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
-        if (options is AiDotNet.TextToSpeech.MultiModal.StepAudioOptions stepAudio && StepAudioFixture.IsPpoOption(option))
-            StepAudioFixture.PreparePpoOptions(stepAudio, option);
+        if (options is AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions nonAttentive)
+            NonAttentiveTacotronOptionFixture.Prepare(nonAttentive, option);
+        if (options is AiDotNet.TextToSpeech.CodecBased.VALLEOptions vallE && option == "PromptSeconds")
+            vallE.PromptSeconds = 2.0 * vallE.HopSize / vallE.SampleRate;
+        if (options is AiDotNet.TextToSpeech.MultiModal.StepAudioOptions stepAudio && StepAudioOptionFixture.IsPpoOption(option))
+            StepAudioOptionFixture.PreparePpoOptions(stepAudio, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2Options naturalSpeech2)
             NaturalSpeech2OptionFixture.Prepare(naturalSpeech2, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.LlasaOptions llasa)

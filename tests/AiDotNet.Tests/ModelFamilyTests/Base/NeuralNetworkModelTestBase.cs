@@ -7825,10 +7825,32 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     return;
                 }
                 if (network is AiDotNet.TextToSpeech.MultiModal.StepAudio<T> stepAudio
-                    && AiDotNet.Tests.TextToSpeech.StepAudioFixture.IsPpoOption(option))
+                    && AiDotNet.Tests.TextToSpeech.StepAudioOptionFixture.IsPpoOption(option))
                 {
                     network.SetTrainingMode(true);
-                    AiDotNet.Tests.TextToSpeech.StepAudioFixture.TrainPpo(stepAudio, steps);
+                    AiDotNet.Tests.TextToSpeech.StepAudioOptionFixture.TrainPpo(stepAudio, steps);
+                    network.SetTrainingMode(false);
+                    return;
+                }
+                if (network is AiDotNet.TextToSpeech.CodecBased.VALLE<T> vallE && option == "PromptSeconds")
+                {
+                    network.SetTrainingMode(true);
+                    AiDotNet.Tests.TextToSpeech.VallEOptionFixture.TrainWithPrompt(vallE, steps);
+                    network.SetTrainingMode(false);
+                    return;
+                }
+                if (network is AiDotNet.TextToSpeech.CodecBased.VALLE<T> vallEEnd && option == "StopOnMostLikelyEndToken")
+                {
+                    network.SetTrainingMode(true);
+                    AiDotNet.Tests.TextToSpeech.VallEOptionFixture.TrainEndCondition(vallEEnd);
+                    network.SetTrainingMode(false);
+                    return;
+                }
+                if (network is AiDotNet.TextToSpeech.Classic.NonAttentiveTacotron<T> nonAttentive
+                    && AiDotNet.Tests.TextToSpeech.NonAttentiveTacotronOptionFixture.UsesTraining(option))
+                {
+                    network.SetTrainingMode(true);
+                    AiDotNet.Tests.TextToSpeech.NonAttentiveTacotronOptionFixture.Train(nonAttentive, steps);
                     network.SetTrainingMode(false);
                     return;
                 }

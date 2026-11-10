@@ -105,7 +105,12 @@ public class StepAudioOptions : TtsModelOptions
     /// <inheritdoc cref="ParaformerMels"/>
     public int ParaformerBlocks { get; set; } = 50;
 
+    /// <summary>Gets or sets the linguistic tokenizer's Paraformer encoder block count.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public override int NumEncoderLayers { get => ParaformerBlocks; set => ParaformerBlocks = value; }
+
     /// <inheritdoc cref="ParaformerMels"/>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The released tokenizer fixes the semantic token offset at 1,024 linguistic codes (stepfun-ai/Step-Audio tokenizer.py). The native constructor rejects other counts.")]
     public int LinguisticCodes { get; set; } = 1024;
 
     /// <summary>The filterbanks' Kaldi dither (the release's 1.0; 0 makes the tokens deterministic).</summary>

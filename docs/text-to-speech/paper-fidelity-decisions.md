@@ -424,6 +424,16 @@ Shared `NumEncoderLayers` and `NumDecoderLayers` now address Mimi's actual encod
 
 Step-Audio keeps the behavior-policy log probabilities and advantages fixed for two policy updates on each rollout after critic warm-up. The Step-Audio report specifies the clip threshold but leaves the update count open. Two is the smallest count that exercises the clipped objective on an updated policy. A regression changes the clip threshold after the same reward-model training and verifies that the resulting policy parameters differ. The chat sampling probes exercise the native answer path. [Step-Audio, §5.2.6](https://arxiv.org/html/2502.11946#S5.SS2.SSS6) · [PPO, §5](https://arxiv.org/abs/1707.06347)
 
+The shared encoder count selects the linguistic tokenizer's Paraformer blocks. Saved options use the native block count. The released tokenizer reserves 1,024 linguistic codes before the semantic codes, and the Step-1 decoder runs without attention dropout. Native constructor tests cover both settings. The dither probe compares the Paraformer features before quantization. [Released tokenizer](https://github.com/stepfun-ai/Step-Audio/blob/a52b94d85d418cd5bc736d696d310c990befbc79/tokenizer.py) · [Released decoder](https://huggingface.co/stepfun-ai/Step-Audio-TTS-3B/blob/9ddb7cb28b97bbfceb429f1a2567b30256b7137c/modeling_step1.py)
+
+### VALL-E prompt duration and EOS
+
+The prompt-duration probe trains the native NAR model on waveform-derived EnCodec codes. Its fixture uses a duration small enough to exercise the short-utterance cap from the reference. The EOS probe fits the AR model on two adjacent codec frames, then uses the model's probabilities to sample an ordinary code when EOS has the largest logit. It exercises the reference's optional argmax stop rule with identical weights and draws. [VALL-E, §5.1](https://arxiv.org/html/2301.02111) · [Reference decoder](https://github.com/lifeiteng/vall-e/blob/9c69096d603ce13174fb5cb025f185e2e9b36ac7/valle/models/valle.py)
+
+### Non-Attentive Tacotron supervised variant
+
+The shared width and encoder depth settings configure the native embedding, LSTMs and encoder convolutions. Saved options keep the native dimensions. Native inference caps phoneme input and output frames, and the default Adam recipe reads the configured learning rate and coupled L2 coefficient. The defaults retain Appendix A's learning rate of 0.001 and L2 coefficient of 1e-6. Tests exercise duration-supervised training and the Gaussian-aligned two-layer decoder. Encoder ZoneOut from §3 remains outstanding. [Non-Attentive Tacotron, §3 and Appendix A](https://arxiv.org/html/2010.04301)
+
 ### NaturalSpeech 2 waveform and training controls
 
 NaturalSpeech 2 takes waveform codec latents throughout the native diffusion pipeline. The shared mel-width field defaults to zero and still accepts the inherited value of 80 in older serialized options. The option tests use audio to exercise codec frame rate, prompt cropping, and diffusion-time clipping, and run optimizer updates on a finite cosine schedule to exercise its horizon. The residual cross-entropy comparison fits the native SoundStream codebooks from the test audio before comparing the paper's ground-truth residuals with Amphion's predicted residuals. [NaturalSpeech 2 paper, §§3.1–3.3](https://arxiv.org/html/2304.09116#S3)
