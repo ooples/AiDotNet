@@ -53,7 +53,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 [PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-6, WeightDecay = 1e-6,
                 LearningRate = 0.001, WarmupSteps = 4000,
                 Schedule = LearningRateSchedulerType.Step, StepSize = 50000, DecayRate = 0.5,
-                Source = "Shen et al. 2020, Appendix A, Table 6: Adam(0.9, 0.999, 1e-6) at a learning rate of 0.001, with a linear rampup over 4K steps then halving every 50K steps; L2 regularization 1e-6.")]
+                Source = "Shen et al. 2020, Appendix A: Adam(0.9, 0.999, 1e-6) at a learning rate of 0.001, with a linear rampup over 4K steps then halving every 50K steps; L2 regularization 1e-6.")]
 public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T>
 {
     /// <summary>Calls the fully specified overload with the omitted parameters' defaults.</summary>
@@ -131,7 +131,8 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
         _optimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+                learningRateOverride: _options.LearningRate, weightDecayOverride: _options.WeightDecay)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
@@ -165,6 +166,13 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
         }
 
         var o = _options;
+        // Older saved options can carry the inherited defaults of eight heads and six decoder layers.
+        if (o.NumHeads is not (0 or 8))
+            throw new ArgumentException("Non-Attentive Tacotron's Gaussian alignment has no attention heads.", nameof(o.NumHeads));
+        if (o.NumDecoderLayers is not (2 or 6))
+            throw new ArgumentException("Non-Attentive Tacotron uses two autoregressive decoder LSTMs.", nameof(o.NumDecoderLayers));
+        if (o.MaxTextLength < 1) throw new ArgumentOutOfRangeException(nameof(o.MaxTextLength));
+        if (o.MaxMelLength < 1) throw new ArgumentOutOfRangeException(nameof(o.MaxMelLength));
         IActivationFunction<T> identity = new IdentityActivation<T>();
         _embedding = new EmbeddingLayer<T>(o.VocabSize, o.EmbeddingDim);
         int previous = o.EmbeddingDim;
@@ -246,9 +254,9 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
     /// <c>c_i = d_i / 2 + Σ_{j&lt;i} d_j</c>, followed by the concatenated positional embedding of each frame's index within
     /// its token. Returns <c>[frames, encoder + positional]</c>.
     /// </summary>
-    private Tensor<T> GaussianUpsample(Tensor<T> encoded, int[] durations, Tensor<T> sigma)
+    private Tensor<T> GaussianUpsample(Tensor<T> encoded, int[] durations, Tensor<T> sigma, int? frameLimit = null)
     {
-        int tokens = durations.Length, frames = Math.Max(1, durations.Sum());
+        int tokens = durations.Length, frames = Math.Min(frameLimit ?? int.MaxValue, Math.Max(1, durations.Sum()));
         var centres = new Tensor<T>(new[] { 1, tokens });
         double cumulative = 0;
         for (int i = 0; i < tokens; i++)
@@ -374,11 +382,13 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
     private Tensor<T> SynthesizeOne(Tensor<T> tokens)
     {
         using var _ = new NoGradScope<T>();
+        if (tokens.Shape[0] > _options.MaxTextLength)
+            tokens = Engine.TensorSlice(tokens, new[] { 0 }, new[] { _options.MaxTextLength });
         var encoded = Encode(tokens);
         var seconds = PredictDurationsSeconds(encoded);
         var durations = FramesFromSeconds(seconds);
-        var upsampled = GaussianUpsample(encoded, durations, PredictRanges(encoded, seconds));
-        int r = _options.OutputsPerStep, frames = durations.Sum(), steps = (frames + r - 1) / r;
+        var upsampled = GaussianUpsample(encoded, durations, PredictRanges(encoded, seconds), _options.MaxMelLength);
+        int r = _options.OutputsPerStep, frames = upsampled.Shape[0], steps = (frames + r - 1) / r;
         var before = Decode(upsampled, steps, null);
         var after = Engine.TensorAdd(before, _postnet!.Forward(before));
         return Engine.TensorSlice(after, new[] { 0, 0 }, new[] { frames, _options.MelChannels });

@@ -3,7 +3,7 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// <summary>Options for Non-Attentive Tacotron (supervised-duration variant).</summary>
 /// <remarks>
 /// <para>
-/// Defaults are Table 6 of Shen et al. 2020 (Appendix A): 24 kHz audio, 50 ms Hann frames (1200 samples), 12.5 ms hop
+/// Defaults are Appendix A of Shen et al. 2020: 24 kHz audio, 50 ms Hann frames (1200 samples), 12.5 ms hop
 /// (300), 2048-point FFT, 128 mel channels; token embedding 512; encoder convolutions [512, 512, 512] of kernel 5 with
 /// batch normalization (decay 0.999) and no activation, a 512 × 2 bidirectional LSTM; duration and range predictors of
 /// two 512 × 2 bidirectional LSTMs; positional embedding 32; decoder pre-net [256, 256] with ReLU and dropout 0.5, two
@@ -52,7 +52,36 @@ public class NonAttentiveTacotronOptions : AcousticModelOptions
         PostnetLayers = 5;
         DropoutRate = 0.5;
         LearningRate = 0.001;
+        WeightDecay = 1e-6;
+        NumHeads = 0;
+        NumDecoderLayers = 2;
         UsePostnet = true;
+    }
+
+    /// <summary>Gets or sets the native token embedding width.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public override int HiddenDim { get => EmbeddingDim; set => EmbeddingDim = value; }
+
+    /// <summary>Gets or sets the encoder LSTM width per direction.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public override int EncoderDim { get => EncoderLstmDim; set => EncoderLstmDim = value; }
+
+    /// <summary>Gets or sets the autoregressive decoder LSTM width.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public override int DecoderDim { get => DecoderLstmDim; set => DecoderLstmDim = value; }
+
+    /// <summary>Gets or sets the encoder convolution count, extending the last configured width when needed.</summary>
+    [Newtonsoft.Json.JsonIgnore]
+    public override int NumEncoderLayers
+    {
+        get => EncoderConvChannels.Length;
+        set
+        {
+            if (value < 1) throw new ArgumentOutOfRangeException(nameof(value), "The encoder needs at least one convolution.");
+            var channels = EncoderConvChannels;
+            int fill = channels.Length > 0 ? channels[^1] : EmbeddingDim;
+            EncoderConvChannels = channels.Take(value).Concat(Enumerable.Repeat(fill, Math.Max(0, value - channels.Length))).ToArray();
+        }
     }
 
     /// <summary>Gets or sets the token embedding width (512).</summary>

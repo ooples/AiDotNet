@@ -190,7 +190,7 @@ public abstract partial class VallEModelBase<T> : TtsModelBase<T>, ICodecTts<T>
     internal VallECore<T>? Core => _core;
 
     /// <summary>The core, which exists in native mode.</summary>
-    private protected VallECore<T> PaperCore => _core ?? throw new InvalidOperationException($"{GetType().Name}'s networks exist in native mode only.");
+    internal VallECore<T> PaperCore => _core ?? throw new InvalidOperationException($"{GetType().Name}'s networks exist in native mode only.");
 
     /// <inheritdoc />
     protected override void InitializeLayers()

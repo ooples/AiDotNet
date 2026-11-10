@@ -16,6 +16,30 @@ public class StepAudioTaskTests
     // TtsPaperNumerics.IsFinite is not on .NET Framework.
     private static bool Finite(double x) => !double.IsNaN(x) && !double.IsInfinity(x);
 
+    [Theory]
+    [InlineData("{\"NumEncoderLayers\":6,\"ParaformerBlocks\":2}")]
+    [InlineData("{\"ParaformerBlocks\":2,\"NumEncoderLayers\":6}")]
+    public void SavedParaformerBlocks_DefineTheSharedEncoderCount(string json)
+    {
+        var options = Newtonsoft.Json.JsonConvert.DeserializeObject<StepAudioOptions>(json)!;
+        Assert.Equal(2, options.NumEncoderLayers);
+        options.NumEncoderLayers = 3;
+        Assert.Equal(3, options.ParaformerBlocks);
+    }
+
+    [Theory]
+    [InlineData(true, "DropoutRate")]
+    [InlineData(false, "LinguisticCodes")]
+    public void NativeRelease_RejectsIncompatibleDecoderAndTokenizerOptions(bool changeDropout, string parameter)
+    {
+        var options = StepAudioFixture.Options();
+        if (changeDropout) options.DropoutRate = 0.1;
+        else options.LinguisticCodes = 512;
+        Assert.Throws<ArgumentException>(parameter, () => new StepAudio<double>(
+            new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+                NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options));
+    }
+
     [Fact(Timeout = 300000)]
     public async Task AudioTokens_InterleaveTwoLinguisticThenThreeSemantic()
     {

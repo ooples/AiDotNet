@@ -24,39 +24,6 @@ internal static class StepAudioFixture
 {
     public const int SampleRate = 22050;
 
-    internal static bool IsChatSamplingOption(string option) =>
-        option is "ChatTemperature" or "ChatTopP" or "ChatMaxNewTokens";
-
-    internal static bool IsPpoOption(string option) =>
-        option is "PpoResponseLength" or "PpoClip" or "CriticWarmupSteps" or "Gamma" or "Lambda" or "KlCoefficient";
-
-    internal static void PreparePpoOptions(StepAudioOptions options, string option)
-    {
-        options.IncludeRlhfModels = true;
-        options.CriticWarmupSteps = option == "CriticWarmupSteps" ? 1 : 0;
-        options.WarmupSteps = 0;
-        if (option == "PpoClip") options.PpoClip = 0;
-    }
-
-    internal static long ObserveChat<T>(StepAudio<T> model)
-    {
-        var answers = new[] { model.Answer("你好"), model.Answer("今天是星期几？"), model.Answer("Tell me a story.") };
-        return AiDotNet.Tests.ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(
-            string.Join("\n", answers).Select(character => (double)character));
-    }
-
-    internal static void TrainPpo<T>(StepAudio<T> model, int steps)
-    {
-        var options = (StepAudioOptions)model.GetOptions();
-        var recording = Tones<T>(0.4);
-        options.Stage = StepAudioTrainingStage.RewardModel;
-        model.InitializeRlhfFromChat();
-        model.TrainReward(recording, SampleRate, "好的", "不知道");
-        model.InitializeCriticFromReward();
-        options.Stage = StepAudioTrainingStage.Ppo;
-        for (int step = 0; step < Math.Max(2, steps); step++) model.TrainPpo(recording, SampleRate);
-    }
-
     private static readonly Lazy<string> TokenizerPath = new(() =>
     {
         const string name = "stepaudio_tokenizer_reference.json";

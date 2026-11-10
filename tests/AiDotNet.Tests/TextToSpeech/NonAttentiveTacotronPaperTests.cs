@@ -20,17 +20,21 @@ public class NonAttentiveTacotronPaperTests
 {
     private const int MelBins = 8;
 
-    private static NonAttentiveTacotron<double> CreateModel() => new(
-        new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
-            inputSize: 8, outputSize: MelBins) { RandomSeed = 11 },
-        new NonAttentiveTacotronOptions
+    private static NonAttentiveTacotron<double> CreateModel(Action<NonAttentiveTacotronOptions>? configure = null)
+    {
+        var options = new NonAttentiveTacotronOptions
         {
             SampleRate = 16000, HopSize = 200, FftSize = 64, WindowSize = 64, MelChannels = MelBins, EmbeddingDim = 16,
             EncoderConvChannels = new[] { 16 }, EncoderLstmDim = 8, DurationLstmDim = 8, RangeLstmDim = 8,
             PositionalEmbeddingDim = 4, PrenetSizes = new[] { 8, 8 }, PrenetDropout = 0.0, DecoderLstmDim = 16,
             ZoneoutProbability = 0.0, PostnetDim = 8, PostnetLayers = 2, DropoutRate = 0.0, LearningRate = 2e-3,
-        },
-        new AiDotNet.Optimizers.AdamOptimizer<double, Tensor<double>, Tensor<double>>(null));
+        };
+        configure?.Invoke(options);
+        return new NonAttentiveTacotron<double>(
+            new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
+                inputSize: 8, outputSize: MelBins) { RandomSeed = 11 },
+            options, new AiDotNet.Optimizers.AdamOptimizer<double, Tensor<double>, Tensor<double>>(null));
+    }
 
     private static TtsTrainingSample<double> Sample()
     {
@@ -41,6 +45,62 @@ public class NonAttentiveTacotronPaperTests
         for (int f = 0; f < frames; f++)
             for (int c = 0; c < MelBins; c++) mel[f, c] = Math.Sin(0.4 * f + 0.3 * c);
         return new TtsTrainingSample<double> { Tokens = tokens, Mel = mel, Durations = new[] { 3, 3, 3, 3, 2 } };
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task NativeSynthesis_RespectsTextAndMelCaps()
+    {
+        await Task.Yield();
+        using var model = CreateModel(o =>
+        {
+            o.MaxTextLength = 3;
+            o.DurationLossWeight = 100;
+            o.DurationScale = 8;
+        });
+        var sample = Sample();
+        var tokens = sample.Tokens;
+        var prefix = new Tensor<double>(new[] { 3 }, new Vector<double>(tokens.ToArray().Take(3).ToArray()));
+        var durations = sample.Durations!.Take(3).ToArray();
+        int frames = durations.Sum();
+        var trainingSample = new TtsTrainingSample<double>
+        {
+            Tokens = prefix,
+            Durations = durations,
+            Mel = new Tensor<double>(new[] { frames, MelBins },
+                new Vector<double>(sample.Mel!.ToArray().Take(frames * MelBins).ToArray())),
+        };
+        for (int step = 0; step < 150; step++) model.Train(trainingSample);
+        int uncappedFrames = model.Predict(prefix).Shape[0];
+        Assert.True(uncappedFrames > 2, $"The trained duration predictor yielded {uncappedFrames} frames.");
+        ((NonAttentiveTacotronOptions)model.GetOptions()).MaxMelLength = 2;
+        var output = model.Predict(tokens);
+        Assert.Equal(new[] { 2, MelBins }, output.Shape);
+        Assert.Equal(model.Predict(prefix).ToArray(), output.ToArray());
+    }
+
+    [Fact]
+    public void NativeTopology_RejectsAttentionAndAdditionalDecoderLayers()
+    {
+        Assert.Throws<ArgumentException>("NumHeads", () => CreateModel(o => o.NumHeads = 1));
+        Assert.Throws<ArgumentException>("NumDecoderLayers", () => CreateModel(o => o.NumDecoderLayers = 3));
+        using var legacy = CreateModel(o =>
+        {
+            o.NumHeads = 8;
+            o.NumDecoderLayers = 6;
+        });
+        Assert.True(legacy.ParameterCount > 0);
+    }
+
+    [Fact]
+    public void SavedNativeDimensions_DefineTheSharedOptions()
+    {
+        const string json = "{\"EmbeddingDim\":16,\"EncoderLstmDim\":8,\"DecoderLstmDim\":12,\"EncoderConvChannels\":[16],"
+            + "\"HiddenDim\":256,\"EncoderDim\":256,\"DecoderDim\":80,\"NumEncoderLayers\":6}";
+        var options = Newtonsoft.Json.JsonConvert.DeserializeObject<NonAttentiveTacotronOptions>(json)!;
+        Assert.Equal(16, options.HiddenDim);
+        Assert.Equal(8, options.EncoderDim);
+        Assert.Equal(12, options.DecoderDim);
+        Assert.Equal(1, options.NumEncoderLayers);
     }
 
     [Fact(Timeout = 60000)]
