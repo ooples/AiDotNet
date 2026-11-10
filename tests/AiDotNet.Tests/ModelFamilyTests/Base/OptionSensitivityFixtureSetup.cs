@@ -47,6 +47,7 @@ internal static class OptionSensitivityFixtureSetup
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
             : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? "chatterbox-published-perth"
+            : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "AddBlank" ? "natural-phoneme-frontend"
             : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
             : network is AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T> && SpearOptionFixture.Handles(option) ? "spear-" + option
             : network is AiDotNet.TextToSpeech.Latest.OuteTTS<T> && OuteOptionFixture.Handles(option) ? "oute-" + option

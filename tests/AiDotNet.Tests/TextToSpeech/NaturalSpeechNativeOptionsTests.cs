@@ -17,7 +17,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 
 public class NaturalSpeechNativeOptionsTests
 {
-    private static NaturalSpeechOptions Tiny() => new()
+    internal static NaturalSpeechOptions Tiny() => new()
     {
         HiddenDim = 16, NumHeads = 2, NumEncoderLayers = 1, FilterChannels = 32,
         DurationFilter = 8, DurationDropout = 0, DropoutRate = 0, UpsamplingFilter = 4,
