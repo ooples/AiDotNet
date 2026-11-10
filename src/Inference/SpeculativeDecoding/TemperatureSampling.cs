@@ -48,21 +48,42 @@ internal static class TemperatureSampling<T>
             return result;
         }
 
-        T invTemp = NumOps.Divide(NumOps.One, temperature);
-        T sum = NumOps.Zero;
+        T maxProb = NumOps.Zero;
         for (int i = 0; i < distribution.Length; i++)
         {
-            result[i] = NumOps.Power(distribution[i], invTemp);
-            sum = NumOps.Add(sum, result[i]);
+            if (NumOps.GreaterThan(distribution[i], maxProb))
+            {
+                maxProb = distribution[i];
+            }
         }
 
-        if (NumOps.GreaterThan(sum, NumOps.Zero))
+        if (NumOps.GreaterThan(maxProb, NumOps.Zero))
         {
-            for (int i = 0; i < result.Length; i++)
+            T invTemp = NumOps.Divide(NumOps.One, temperature);
+            T sum = NumOps.Zero;
+            for (int i = 0; i < distribution.Length; i++)
             {
-                result[i] = NumOps.Divide(result[i], sum);
+                if (NumOps.GreaterThan(distribution[i], NumOps.Zero))
+                {
+                    // Normalize by maxProb first so raising to 1/temperature at low positive temperatures
+                    // sets the maximum entry to 1^invTemp = 1 and prevents all entries from underflowing to 0.
+                    result[i] = NumOps.Power(NumOps.Divide(distribution[i], maxProb), invTemp);
+                    sum = NumOps.Add(sum, result[i]);
+                }
+                else
+                {
+                    result[i] = NumOps.Zero;
+                }
             }
-            return result;
+
+            if (NumOps.GreaterThan(sum, NumOps.Zero))
+            {
+                for (int i = 0; i < result.Length; i++)
+                {
+                    result[i] = NumOps.Divide(result[i], sum);
+                }
+                return result;
+            }
         }
 
         // Every entry underflowed (a very low temperature): the limit is the greedy one-hot.

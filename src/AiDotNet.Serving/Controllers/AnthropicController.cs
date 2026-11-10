@@ -37,6 +37,14 @@ public sealed class AnthropicController : ControllerBase
     private readonly ILogger<AnthropicController> _logger;
     private readonly Configuration.ServingLimitsOptions _limits;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AnthropicController"/> class.
+    /// </summary>
+    /// <param name="modelRepository">The serving model repository.</param>
+    /// <param name="tokenizers">The tokenizer registry.</param>
+    /// <param name="textGeneration">The text generation service.</param>
+    /// <param name="logger">The controller logger.</param>
+    /// <param name="limits">Optional per-request generation limits.</param>
     public AnthropicController(
         IModelRepository modelRepository,
         ITokenizerRegistry tokenizers,
@@ -57,7 +65,9 @@ public sealed class AnthropicController : ControllerBase
         _limits = limits ?? new Configuration.ServingLimitsOptions();
     }
 
-    // Enforces the configured per-request generation limits at the HTTP boundary (rejected, not clamped).
+    /// <summary>
+    /// Enforces the configured per-request generation limits at the HTTP boundary (rejected, not clamped).
+    /// </summary>
     private ObjectResult? CheckLimits(int promptTokens, int requestedMaxTokens)
     {
         if (requestedMaxTokens < 1 || requestedMaxTokens > _limits.EffectiveMaxCompletionTokens)
@@ -65,7 +75,7 @@ public sealed class AnthropicController : ControllerBase
             return AnthropicError(StatusCodes.Status400BadRequest,
                 $"'max_tokens' must be between 1 and {_limits.EffectiveMaxCompletionTokens}.");
         }
-        if (promptTokens + requestedMaxTokens > _limits.EffectiveMaxContextTokens)
+        if ((long)promptTokens + requestedMaxTokens > _limits.EffectiveMaxContextTokens)
         {
             return AnthropicError(StatusCodes.Status400BadRequest,
                 $"prompt ({promptTokens} tokens) + max_tokens ({requestedMaxTokens}) exceeds the maximum context length of {_limits.EffectiveMaxContextTokens} tokens.");

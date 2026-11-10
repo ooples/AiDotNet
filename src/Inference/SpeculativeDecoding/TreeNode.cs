@@ -59,4 +59,9 @@ internal class TreeNode<T>
     /// Context tokens up to this node.
     /// </summary>
     public Vector<int>? Context { get; set; }
+
+    /// <summary>
+    /// Full draft probability distribution generated for the children of this node.
+    /// </summary>
+    public Vector<T>? DraftDistribution { get; set; }
 }

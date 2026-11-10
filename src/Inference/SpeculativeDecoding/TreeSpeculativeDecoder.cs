@@ -185,15 +185,18 @@ internal class TreeSpeculativeDecoder<T>
             }
             else
             {
-                // No path accepted - sample from target distribution
+                // No path accepted - sample from the residual max(0, p_target - p_draft), both tempered.
                 if (allTargetProbs.Count > 0)
                 {
                     var targetProbs = allTargetProbs[0];
                     int pos = tokens.Count - 1;
                     if (pos >= 0 && pos < targetProbs.Rows)
                     {
-                        var targetDist = targetProbs.GetRow(pos);
-                        int fallbackToken = TemperatureSampling<T>.Sample(TemperatureSampling<T>.Apply(targetDist, temperature), _random);
+                        var targetDist = TemperatureSampling<T>.Apply(targetProbs.GetRow(pos), temperature);
+                        var sampleDist = tree.Root.DraftDistribution is { } draftDist && draftDist.Length == targetDist.Length
+                            ? ComputeAdjustedDistribution(targetDist, draftDist)
+                            : targetDist;
+                        int fallbackToken = TemperatureSampling<T>.Sample(sampleDist, _random);
                         tokens.Add(fallbackToken);
                         generated++;
 
@@ -281,6 +284,11 @@ internal class TreeSpeculativeDecoder<T>
                 var draft = _draftModel.GenerateDraft(nodeContext, 1, temperature);
                 if (draft.NumTokens == 0) continue;
 
+                if (node.DraftDistribution is null && draft.Probabilities.Rows > 0)
+                {
+                    node.DraftDistribution = draft.Probabilities.GetRow(0);
+                }
+
                 var child = new TreeNode<T>
                 {
                     Token = draft.Tokens[0],
@@ -365,5 +373,38 @@ internal class TreeSpeculativeDecoder<T>
         }
 
         return accepted;
+    }
+
+    /// <summary>
+    /// Computes the adjusted distribution for rejection sampling: normalized <c>max(0, p_target - p_draft)</c>.
+    /// </summary>
+    private static Vector<T> ComputeAdjustedDistribution(Vector<T> targetDist, Vector<T> draftDist)
+    {
+        var adjusted = new Vector<T>(targetDist.Length);
+        T sum = NumOps.Zero;
+
+        for (int i = 0; i < targetDist.Length; i++)
+        {
+            T diff = NumOps.Subtract(targetDist[i], draftDist[i]);
+            adjusted[i] = NumOps.GreaterThan(diff, NumOps.Zero) ? diff : NumOps.Zero;
+            sum = NumOps.Add(sum, adjusted[i]);
+        }
+
+        if (NumOps.GreaterThan(sum, NumOps.Zero))
+        {
+            for (int i = 0; i < adjusted.Length; i++)
+            {
+                adjusted[i] = NumOps.Divide(adjusted[i], sum);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < adjusted.Length; i++)
+            {
+                adjusted[i] = targetDist[i];
+            }
+        }
+
+        return adjusted;
     }
 }
