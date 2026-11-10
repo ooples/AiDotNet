@@ -511,12 +511,9 @@ internal static class OptionSensitivityFixtureSetup
             return OptionSensitivityHarness.Fingerprint(chatter.VoiceEncoderModel!.Embed(ChatterboxFixture.Recording<T>(2), 24000)
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
         if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> marked && option == "Watermark")
-        {
-            // A compact random PerthNet stands in for the released one; the watermark is S3Gen's output's last step.
-            marked.Watermarker = new AiDotNet.Audio.Watermarking.PerthWatermarker<T>(AiDotNet.Tensors.Engines.AiDotNetEngine.Current, hidden: 8);
+            // The watermark is S3Gen's output's last step; Prepare points it at a compact Perth checkpoint.
             return OptionSensitivityHarness.Fingerprint(marked.Watermarked(ChatterboxFixture.Recording<T>())
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
-        }
         if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> chunked && option == "StaticChunkSize")
             return OptionSensitivityHarness.Fingerprint(chunked.FlowModel!.Encode(Enumerable.Range(0, 12).ToArray(),
                 training: false, new Random(1337), streaming: true)
@@ -1171,6 +1168,8 @@ internal static class OptionSensitivityFixtureSetup
         }
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chatter && option == "VoiceEncoderPartialRate")
             chatter.VoiceEncoderPartialFrames = 160;
+        if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions marked && option == "Watermark")
+            marked.WatermarkModelPath = AiDotNet.Tests.TextToSpeech.PerthFixture.TinyCheckpointPath;
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chunked && option == "StaticChunkSize")
             chunked.StaticChunkSize = 2;
         if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions sampling && option == "TopK")

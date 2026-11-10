@@ -2,7 +2,21 @@ using AiDotNet.TextToSpeech.CodecBased;
 
 namespace AiDotNet.TextToSpeech.VoiceCloning;
 
-/// <summary>Options for Resemble AI's original English Chatterbox release.</summary>
+/// <summary>The released Chatterbox checkpoint a model follows.</summary>
+public enum ChatterboxVariant
+{
+    /// <summary>The original English model (<c>t3_cfg</c>, a 704-symbol text vocabulary).</summary>
+    English,
+
+    /// <summary>The 23-language model, version 2 (<c>t3_mtl23ls_v2</c>, the release's default).</summary>
+    MultilingualV2,
+
+    /// <summary>The 23-language model, version 3 (<c>t3_mtl23ls_v3</c>).</summary>
+    MultilingualV3,
+}
+
+/// <summary>Options for Resemble AI's Chatterbox releases (the original English model by default; see
+/// <see cref="Multilingual"/>).</summary>
 /// <remarks>
 /// <para>The defaults reproduce the released 2025 model: the 520M T3 decoder (30 Llama layers, 1,024 channels),
 /// the 25 Hz S3Tokenizer-v2 vocabulary, the causal S3Gen flow, CAM++ and the 24 kHz HiFT vocoder.</para>
@@ -94,7 +108,51 @@ public class ChatterboxOptions : CosyVoiceConformerOptions
         SpeechLossWeight = other.SpeechLossWeight;
         Watermark = other.Watermark;
         WatermarkModelPath = other.WatermarkModelPath;
+        Variant = other.Variant;
+        LanguageId = other.LanguageId;
+        CangjieMappingPath = other.CangjieMappingPath;
+        ChineseSegmenterPath = other.ChineseSegmenterPath;
+        HebrewDiacritizerPath = other.HebrewDiacritizerPath;
+        RussianStresserPath = other.RussianStresserPath;
     }
+
+    /// <summary>Options for the 23-language release (<c>ChatterboxMultilingualTTS</c>): its 2,454-symbol grapheme vocabulary,
+    /// otherwise the English model's sizes.</summary>
+    /// <param name="variant">The multilingual checkpoint (version 2 by default, as the release).</param>
+    public static ChatterboxOptions Multilingual(ChatterboxVariant variant = ChatterboxVariant.MultilingualV2)
+    {
+        if (variant == ChatterboxVariant.English) throw new ArgumentException("Choose a multilingual variant.", nameof(variant));
+        return new ChatterboxOptions { Variant = variant, VocabSize = 2454 };
+    }
+
+    /// <summary>The released checkpoint this model follows: the text front end and the files
+    /// <c>LoadPretrainedWeights</c> reads. Defaults to the original English model.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The variant selects the text front end and the checkpoint files, which token-id inputs never reach. ChatterboxVariantTests checks that multilingual tokenization follows the release's MTLTokenizer and that the English model's does not.")]
+    public ChatterboxVariant Variant { get; set; } = ChatterboxVariant.English;
+
+    /// <summary>The language a multilingual model speaks (one of the release's 23 codes: ar, da, de, el, en, es, fi, fr, he,
+    /// hi, it, ja, ko, ms, nl, no, pl, pt, ru, sv, sw, tr, zh). Defaults to <c>en</c>; the English model ignores it.</summary>
+    public string LanguageId { get; set; } = "en";
+
+    /// <summary>The release's <c>Cangjie5_TC.json</c>, which writes Chinese characters as Cangjie codes. Loading a
+    /// multilingual model directory sets this automatically.</summary>
+    public string? CangjieMappingPath { get; set; }
+
+    /// <summary>The pkuseg model directory (<c>spacy_ontonotes</c>: <c>features.msgpack</c>, <c>weights.npz</c>) Chinese
+    /// text is segmented with. When unset, pkuseg's own cache is used if it holds the model, else the model is downloaded
+    /// once from the release's URL into <c>~/.aidotnet/models/pkuseg</c> and checked against its SHA-256.</summary>
+    public string? ChineseSegmenterPath { get; set; }
+
+    /// <summary>The Dicta diacritizer directory (<c>dicta-il/dictabert-large-char-menaked</c>: <c>config.json</c>,
+    /// <c>tokenizer.json</c>, <c>model.safetensors</c>) Hebrew text gets its niqqud from. When unset, it is downloaded once
+    /// from the Hugging Face Hub into its cache.</summary>
+    public string? HebrewDiacritizerPath { get; set; }
+
+    /// <summary>The Russian stresser directory (russian_text_stresser's <c>russian_dict.db</c>, <c>simple_cases.pkl</c>
+    /// and its spaCy <c>ru_core_news_sm-3.6.0</c> files: <c>tokenizer</c>, <c>tok2vec/model</c>, <c>morphologizer/model</c>,
+    /// <c>morphologizer/cfg</c>) Russian text gets its stress marks from. When unset, they are downloaded once from the
+    /// stresser's release into <c>~/.aidotnet/models/russian-text-stresser</c>.</summary>
+    public string? RussianStresserPath { get; set; }
 
     /// <summary>Path to the release's <c>tokenizer.json</c>. Loading a model directory sets this automatically.</summary>
     public string? TokenizerPath { get; set; }

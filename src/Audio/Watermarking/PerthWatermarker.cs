@@ -21,7 +21,7 @@ namespace AiDotNet.Audio.Watermarking;
 /// (linear stretches), each giving an attention logit and a watermark score as masked means over loud frames; the
 /// softmax-weighted score, clipped to [0, 1]. Watermarked audio scores near 1.</para>
 /// <para>The released weights are MIT-licensed and ship with the resemble-perth package
-/// (<c>perth/perth_net/pretrained/implicit/perth_net_250000.pth.tar</c>); <see cref="LoadCheckpoint"/> reads them. The
+/// (<c>perth/perth_net/pretrained/implicit/perth_net_250000.pth.tar</c>); <see cref="Load"/> reads them. The
 /// network is frozen: its layers belong to it, not to the model that applies it.</para>
 /// </remarks>
 internal sealed class PerthWatermarker<T>
@@ -41,7 +41,7 @@ internal sealed class PerthWatermarker<T>
     private readonly InverseStft<T> _istft;
 
     /// <summary>Creates the watermarker with PerthNet's sizes (hidden 256 for the released model), randomly initialized
-    /// until <see cref="LoadCheckpoint"/> or <see cref="LoadTorchWeights(TorchTensorSource)"/>.</summary>
+    /// until <see cref="LoadTorchWeights(TorchTensorSource)"/> (or use <see cref="Load"/>).</summary>
     public PerthWatermarker(IEngine engine, int hidden = 256)
     {
         if (hidden < 1) throw new ArgumentOutOfRangeException(nameof(hidden));
@@ -276,11 +276,17 @@ internal sealed class PerthWatermarker<T>
         for (int s = 0; s < DecoderNames.Length; s++) Load(_decoder[s], DecoderNames[s]);
     }
 
-    /// <summary>Loads a released checkpoint (<c>perth_net_250000.pth.tar</c>, whose state dict is under <c>model</c>).</summary>
-    public void LoadCheckpoint(string path)
+    /// <summary>A watermarker read from a checkpoint (<c>perth_net_250000.pth.tar</c>, whose state dict is under
+    /// <c>model</c>, or the same tensors in a safetensors file), its hidden width taken from the checkpoint.</summary>
+    public static PerthWatermarker<T> Load(IEngine engine, string path)
     {
         using var file = TorchCheckpointFile.Open(path);
-        LoadTorchWeights(file.Contains("model.encoder.layers.0.conv.weight") ? file.WithPrefix("model.") : file);
+        var source = file.Contains("model.encoder.layers.0.conv.bias") ? file.WithPrefix("model.") : file;
+        var hidden = source.ShapeOf("encoder.layers.0.conv.bias")
+            ?? throw new InvalidDataException($"{path} is not a Perth checkpoint (it has no encoder.layers.0.conv.bias).");
+        var watermarker = new PerthWatermarker<T>(engine, checked((int)hidden[0]));
+        watermarker.LoadTorchWeights(source);
+        return watermarker;
     }
 
     /// <summary>The hidden width (256 for the released model).</summary>
