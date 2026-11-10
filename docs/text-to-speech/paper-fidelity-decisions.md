@@ -420,6 +420,12 @@ Mimi's generator and discriminator disable optimizer clipping explicitly. The [c
 
 Shared `NumEncoderLayers` and `NumDecoderLayers` now address Mimi's actual encoder/decoder Transformer depth through the existing joint `MimiTransformerLayers` setting (§3.3: eight layers on each side). The RQ temporal and depth decoders retain their distinct `Layers` and `DepthLayers` settings. Native saved codec depth takes precedence over conflicting legacy shared counts in either JSON order. Regressions inspect the physical layer arrays, including the existing zero-Transformer codec ablation; the paper defaults and stored/active codebook distinction are preserved.
 
+### Llasa architecture and training controls
+
+The shared encoder layer count selects the X-codec2 Wav2Vec2-BERT read depth. The decoder layer and attention head counts configure the native Llama network. Saved native settings take precedence over the shared aliases. The released Llama configuration specifies zero attention dropout, which the constructors enforce. [Llasa paper](https://arxiv.org/abs/2502.04128) · [Released configuration](https://huggingface.co/HKUSTAudio/Llasa-1B/blob/cef8ce6a6eea3b593c5b28868d2391ec15eb9058/config.json)
+
+The learning-rate probes use a finite schedule and real recording-based updates. A regression checks the scheduler after each of four optimizer updates. The prompt-audio probe uses the prompted synthesis entry point with a recording encoded by the model's X-codec2 network.
+
 ### WhisperSpeech sampling and authentic Vocos conditional state
 
 The top-k probe observes the actual semantic tokens after recording-based T2S training. The downstream acoustic model's zero-initialized output heads can otherwise hide semantic changes in the final waveform. A direct regression compares repeatable semantic sampling across five input texts using the same trained parameters and sampling seed.

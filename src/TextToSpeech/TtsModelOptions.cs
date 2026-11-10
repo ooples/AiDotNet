@@ -115,6 +115,7 @@ public class TtsModelOptions : ModelOptions
     public int MaxMelLength { get; set; } = 2048;
 
     /// <summary>Gets or sets the dropout rate.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Llasa's released Llama config fixes attention_dropout=0 (HKUSTAudio/Llasa-1B cef8ce6); native construction requires DropoutRate=0, and X-codec2's encoders are frozen.", ModelType = typeof(CodecBased.Llasa<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Vevo's released AR and flow Llama configurations use zero dropout, and frozen HuBERT runs in inference mode (Amphion 26f6883); native construction requires DropoutRate=0.", ModelType = typeof(CodecBased.Vevo<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi's released streaming transformer fixes attention dropout to zero (kyutai-labs/moshi e6a55d2 modules/transformer.py); construction requires DropoutRate=0. MimiQuantizerDropout controls codec quantizer dropout separately.", ModelType = typeof(MultiModal.Moshi<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi ASR uses the same zero-dropout streaming transformer (kyutai-labs/moshi e6a55d2 modules/transformer.py); construction requires DropoutRate=0. MimiQuantizerDropout controls codec quantizer dropout separately.", ModelType = typeof(AiDotNet.SpeechRecognition.Streaming.Moshi<>))]

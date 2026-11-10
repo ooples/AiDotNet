@@ -7806,6 +7806,15 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     network.SetTrainingMode(false);
                     return;
                 }
+                if (network is AiDotNet.TextToSpeech.CodecBased.Llasa<T> llasa
+                    && AiDotNet.Tests.TextToSpeech.LlasaOptionFixture.Handles(option))
+                {
+                    network.SetTrainingMode(true);
+                    AiDotNet.Tests.TextToSpeech.LlasaOptionFixture.TrainSchedule(llasa,
+                        OptionSensitivityFixtureSetup.TrainingSteps(network, option, steps));
+                    network.SetTrainingMode(false);
+                    return;
+                }
                 if (AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Handles(network))
                 {
                     AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Train(network);

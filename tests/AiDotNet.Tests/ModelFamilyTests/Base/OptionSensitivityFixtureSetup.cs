@@ -84,6 +84,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.CodecBased.Bark<T> && BarkOptionFixture.Handles(option) ? "bark-" + option
 
             : network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> ? "vevo-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.Llasa<T> && LlasaOptionFixture.Handles(option) ? "llasa-" + option
 
             : network is AiDotNet.Finance.Forecasting.StateSpace.Hippo<T> && option == "TimescaleMax" ? "hippo-timescale-clamp"
             : network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> && option == "ConfidenceWindow" ? "ctc-segmentation-confidence"
@@ -300,6 +301,8 @@ internal static class OptionSensitivityFixtureSetup
 
         if (network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> vevo)
             return VevoOptionFixture.Observe(vevo, option);
+        if (network is AiDotNet.TextToSpeech.CodecBased.Llasa<T> llasa && option == "IncludePromptAudio")
+            return LlasaOptionFixture.ObservePrompt(llasa);
 
         if (network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> segmentation && option == "ConfidenceWindow")
             return AiDotNet.Tests.Audio.CtcSegmentationOptionFixture.Observe(segmentation);
@@ -870,6 +873,8 @@ internal static class OptionSensitivityFixtureSetup
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? 0
         : network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> && MoshiOptionFixture.IsSampling(option) ? 0
         : network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> && VevoOptionFixture.IsSampling(option) ? 0
+        : network is AiDotNet.TextToSpeech.CodecBased.Llasa<T> && option == "IncludePromptAudio" ? 0
+        : network is AiDotNet.TextToSpeech.CodecBased.Llasa<T> && LlasaOptionFixture.IsScheduler(option) ? Math.Max(4, steps)
         : network is AiDotNet.TextToSpeech.Vocoders.Vocos<T> && option == "CosineSteps" ? Math.Max(4, steps)
         : network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> && option == "LearningRateHalvingSteps" ? Math.Max(4, steps)
         : network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && option is "LearningRateDecay" or "UpdatesPerEpoch" ? Math.Max(4, steps)
@@ -1195,6 +1200,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.LlasaOptions llasa)
+            LlasaOptionFixture.Prepare(llasa, option);
         if (options is AiDotNet.TextToSpeech.MultiModal.MoshiOptions moshiOptions)
             MoshiOptionFixture.Prepare(moshiOptions, option);
         if (options is AiDotNet.TextToSpeech.MultiModal.MoshiOptions moshi && option == "TtsPaddingTarget")

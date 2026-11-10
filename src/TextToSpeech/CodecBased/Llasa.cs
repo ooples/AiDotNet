@@ -116,6 +116,8 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
     private void ConfigureBase()
     {
         var o = _options;
+        if (o.DropoutRate != 0)
+            throw new ArgumentException("The released Llasa Llama configuration uses zero attention dropout; X-codec2's encoders are frozen.", nameof(o.DropoutRate));
         base.SampleRate = o.SampleRate;
         base.HopSize = o.CodecEncoderRates.Aggregate(1, (a, b) => a * b);
         base.HiddenDim = o.HiddenDim;
