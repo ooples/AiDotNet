@@ -20,7 +20,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </remarks>
 public class FreGradPaperTests
 {
-    private static FreGradOptions Options(double magnitudeWeight = 0.1) => new()
+    internal static FreGradOptions Options(double magnitudeWeight = 0.1) => new()
     {
         MelChannels = 8, FftSize = 64, WindowSize = 64, HopSize = 16, SampleRate = 4000, UpsampleStrides = [4, 2],
         MelMinFrequency = 0, MelMaxFrequency = 2000,

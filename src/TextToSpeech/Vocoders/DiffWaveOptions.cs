@@ -85,13 +85,16 @@ public class DiffWaveOptions : VocoderOptions
     }
 
     /// <summary>Gets or sets what the noise predictor is conditioned on (the mel spectrogram).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("FreGrad's published two-sub-band energy priors require a mel spectrogram (Nguyen et al. 2024, Sections 3.1 and 3.3); the native constructor rejects other DiffWave tasks.", ModelType = typeof(FreGrad<>))]
     public DiffWaveConditioner Conditioner { get; set; } = DiffWaveConditioner.MelSpectrogram;
 
     /// <summary>Gets or sets the number of labels of the class conditioner (no default: it is the dataset's; SC09 has
     /// 10 digits).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("NumClasses configures DiffWave's discrete-label task; FreGrad's published mel-conditioned network has no label embedding and rejects nonzero NumClasses.", ModelType = typeof(FreGrad<>))]
     public int NumClasses { get; set; }
 
     /// <summary>Gets or sets the length L of a generated utterance without a spectrogram (16,000 in §5.2).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("UtteranceSamples bounds DiffWave's generation without a spectrogram; FreGrad requires a spectrogram and its output length is mel frames times the native waveform hop.", ModelType = typeof(FreGrad<>))]
     public int UtteranceSamples { get; set; } = 16000;
 
     /// <summary>Creates the paper's DiffWave BASE (T = 50) configuration.</summary>

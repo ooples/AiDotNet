@@ -211,6 +211,15 @@ derives them.
 `HopSize` configures the product of the actual UBlock factors while preserving the number of stages; explicit native factors in saved JSON take precedence over the legacy shared hop. Native Adam now reads configured learning rate and weight decay, with fixed 0.9/0.999 betas and 1e-8 epsilon. The default remains zero weight decay. The [released training loop](https://github.com/lmnt-com/wavegrad/blob/master/src/wavegrad/learner.py) clips the full model gradient once to the configured norm (1 by default); the optimizer's additional clipping is disabled. Tests inspect the cached optimizer after actual recording training and compare updates from identical initial weights with and without configured decay.
 
 
+### FreGrad configuration contracts
+
+[The primary paper](https://arxiv.org/pdf/2401.10032), Sections 3.1–3.3 and 4.1, defines a mel-conditioned network with two energy priors and two Haar sub-bands, no class-label conditioner and no dropout. Its feature range remains 80–8000 Hz as stated in Section 4.1; the released `params.py` uses a different lower bound of zero. The inherited DiffWave class/unconditional-task settings are documented as inapplicable to this paper model. Native construction rejects non-mel conditioning, nonzero label counts and nonzero dropout. Output duration follows the supplied mel frame count and waveform hop, independently of DiffWave's inherited unconditional utterance length.
+
+The waveform hop is twice the sub-band upsampler's stride product. Setting it now rebuilds the actual even transposed-convolution strides while keeping every stage; hops which cannot preserve the DWT and that exact geometry are rejected. Explicit native strides in saved JSON take precedence over a legacy shared hop. The two residual sub-band priors and all frequency-aware blocks remain in the native forward and training paths.
+
+The [released learner](https://github.com/kaistmm/fregrad/blob/main/learner.py) uses Adam at 2e-4 with fixed 0.9/0.999 betas and no gradient clipping (`max_grad_norm=None` in its configuration). Native Adam now honors configured learning rate and decay and disables its additional clipping; paper defaults retain zero weight decay. Tests inspect the cached optimizer after recording training, compare actual updates with and without decay from identical weights, and exercise full waveform synthesis and training at different valid hops.
+
+
 ## Codec language models
 
 | Model | Paper | Gaps filled from | Choices |
