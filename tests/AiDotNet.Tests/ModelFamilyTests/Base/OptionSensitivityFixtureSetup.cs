@@ -514,6 +514,33 @@ internal static class OptionSensitivityFixtureSetup
             // The watermark is S3Gen's output's last step; Prepare points it at a compact Perth checkpoint.
             return OptionSensitivityHarness.Fingerprint(marked.Watermarked(ChatterboxFixture.Recording<T>())
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> topK && option == "GenerationTopK")
+        {
+            // Top-k filters the T3 speech-token draw; the fingerprint is the seeded generation itself.
+            var settings = (AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions)topK.GetOptions();
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var speaker = new Tensor<T>(new[] { settings.T3SpeakerEmbeddingDim });
+            for (int i = 0; i < speaker.Length; i++) speaker[i] = ops.FromDouble(Math.Cos(0.5 * i));
+            var condition = new AiDotNet.TextToSpeech.VoiceCloning.ChatterboxT3Condition<T>(speaker, new[] { 2, 4, 6 }, 0.5);
+            var tokens = new List<double>();
+            for (int seed = 0; seed < 4; seed++)
+                tokens.AddRange(topK.T3Model!.Generate(new[] { 1, 3, 5, 7 }, condition, new Random(1337 + seed)).Select(t => (double)t));
+            return OptionSensitivityHarness.Fingerprint(tokens);
+        }
+        if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> distilled && option == "DistillationTeacherSteps")
+        {
+            // Prepare makes the fixture Turbo; the teacher's Euler steps set the student's regression target.
+            var flow = distilled.FlowModel!;
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var speech = Enumerable.Range(0, 6).Select(i => (i * 37) % 50).ToArray();
+            var mel = new Tensor<T>(new[] { 1, flow.Configuration.OutputSize, flow.MelFrames(speech.Length) });
+            for (int i = 0; i < mel.Length; i++) mel[i] = ops.FromDouble(Math.Sin(0.37 * i));
+            var xvector = new Tensor<T>(new[] { flow.Configuration.SpeakerDim });
+            for (int i = 0; i < xvector.Length; i++) xvector[i] = ops.FromDouble(Math.Cos(0.5 * i));
+            var settings = (AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions)distilled.GetOptions();
+            return OptionSensitivityHarness.Fingerprint(flow.DistillationLoss(distilled.TeacherFlow, speech, mel, xvector, false,
+                new Random(1337), settings.DistillationTeacherSteps).Select(ops.ToDouble));
+        }
         if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> chunked && option == "StaticChunkSize")
             return OptionSensitivityHarness.Fingerprint(chunked.FlowModel!.Encode(Enumerable.Range(0, 12).ToArray(),
                 training: false, new Random(1337), streaming: true)
@@ -1170,6 +1197,11 @@ internal static class OptionSensitivityFixtureSetup
             chatter.VoiceEncoderPartialFrames = 160;
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions marked && option == "Watermark")
             marked.WatermarkModelPath = AiDotNet.Tests.TextToSpeech.PerthFixture.TinyCheckpointPath;
+        if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions distilled && option == "DistillationTeacherSteps")
+        {
+            distilled.Variant = AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant.Turbo;
+            distilled.FlowTimesteps = 2;
+        }
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chunked && option == "StaticChunkSize")
             chunked.StaticChunkSize = 2;
         if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions sampling && option == "TopK")

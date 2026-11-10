@@ -22310,3 +22310,13 @@ AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant.MultilingualV3 = 2 -> AiDot
 static AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Multilingual(AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant variant = AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant.MultilingualV2) -> AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions!
 AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RussianStresserPath.get -> string?
 AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.RussianStresserPath.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.DistillationTeacherSteps.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.DistillationTeacherSteps.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.GenerationTopK.get -> int
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.GenerationTopK.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.ReferenceLoudness.get -> double?
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.ReferenceLoudness.set -> void
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant.Nano = 4 -> AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant
+AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant.Turbo = 3 -> AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant
+override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.FlowTrainingLoss(System.Collections.Generic.IReadOnlyList<int>! speech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! xvector, bool training, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Turbo(bool nano = false) -> AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions!

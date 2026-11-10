@@ -51,7 +51,7 @@ internal sealed record CosyVoiceFlowConfiguration(
     int DecoderBlocksPerLevel, int DecoderMidBlocks, double SigmaMin, double TrainingCfgRate, double InferenceCfgRate,
     int Timesteps, CosyVoiceFlowLoss Loss = CosyVoiceFlowLoss.AbsoluteError, bool Causal = false, int TokenMelRatio = 1,
     int Lookahead = 3, CosyVoiceRegulator Regulator = CosyVoiceRegulator.Linear, double PromptRatio = 0.3,
-    bool CosineTrainingTime = false);
+    bool CosineTrainingTime = false, bool MeanFlow = false);
 
 /// <summary>
 /// CosyVoice 1's flow model (FunAudioLLM/CosyVoice <c>cosyvoice/flow</c>: <c>MaskedDiffWithXvec</c>,
@@ -112,7 +112,7 @@ internal sealed class CosyVoiceFlow<T>
         }
         // in_channels: x, μ, the x-vector repeated over frames and the prompt condition, each OutputSize wide.
         Decoder = new MatchaDecoder<T>(engine, 4 * c.OutputSize, c.OutputSize, c.DecoderChannels, 0.0, c.DecoderHeadDim, c.DecoderHeads,
-            c.DecoderMidBlocks, c.DecoderBlocksPerLevel, MatchaFeedForward.Gelu, biasMask: true, causal: c.Causal);
+            c.DecoderMidBlocks, c.DecoderBlocksPerLevel, MatchaFeedForward.Gelu, biasMask: true, causal: c.Causal, meanFlow: c.MeanFlow);
         layers.AddRange(Decoder.Layers);
     }
 
@@ -227,12 +227,12 @@ internal sealed class CosyVoiceFlow<T>
     /// <summary>The estimator on <c>[1, OutputSize, frames]</c> inputs: x, μ, the projected x-vector repeated over the
     /// frames, and the condition, stacked on the channels; returns <c>[1, OutputSize, frames]</c>.</summary>
     public Tensor<T> Field(Tensor<T> x, Tensor<T> mu, Tensor<T> speaker, Tensor<T> condition, double t, Tensor<T> mask,
-        bool streaming = false)
+        bool streaming = false, double? r = null)
     {
         int c = Configuration.OutputSize, frames = x.Shape[2];
         var repeated = _engine.TensorBroadcastTo(_engine.Reshape(speaker, new[] { 1, c, 1 }), new[] { 1, c, frames });
         var stacked = _engine.TensorConcatenate(new[] { x, mu, repeated, condition }, 1);
-        var field = Decoder.EstimateChannels(stacked, t, mask, Chunk(streaming));                         // [frames, C]
+        var field = Decoder.EstimateChannels(stacked, t, mask, Chunk(streaming), r);                      // [frames, C]
         return _engine.Reshape(_engine.TensorTranspose(field), new[] { 1, c, frames });
     }
 
@@ -278,25 +278,13 @@ internal sealed class CosyVoiceFlow<T>
     public Tensor<T> TrainingLoss(IReadOnlyList<int> tokens, Tensor<T> mel, Tensor<T> xvector, bool training, Random random)
     {
         var c = Configuration;
+        if (c.MeanFlow)
+            throw new InvalidOperationException("A mean-flow flow trains by distillation from a teacher flow (DistillationLoss).");
         int frames = mel.Shape[2];
         // CausalMaskedDiffWithXvec draws streaming first (unified training: half the steps chunked).
         bool streaming = c.Causal && random.NextDouble() < 0.5;
-        Tensor<T> mu;
-        if (c.Causal)
-        {
-            if (frames != MelFrames(tokens.Count))
-                throw new ArgumentException($"The causal flow gives {MelFrames(tokens.Count)} mel frames for {tokens.Count} tokens; the mel has {frames}.", nameof(mel));
-            var encoded = Encode(tokens, training, random, streaming);
-            mu = _engine.Reshape(_engine.TensorTranspose(encoded), new[] { 1, c.OutputSize, frames });
-        }
-        else
-        {
-            mu = Stretch(Encode(tokens, training, random), frames);
-        }
-        int prompt = random.NextDouble() < 0.5 ? 0 : random.Next((int)(c.PromptRatio * frames) + 1);
-        var condition = new Tensor<T>(new[] { 1, c.OutputSize, frames });
-        for (int m = 0; m < c.OutputSize; m++)
-            for (int f = 0; f < prompt; f++) condition[0, m, f] = mel[0, m, f];
+        var mu = TrainingMu(tokens, mel, training, random, streaming);
+        var condition = TrainingPrompt(mel, random);
         double t = random.NextDouble();
         if (c.CosineTrainingTime) t = 1 - Math.Cos(t * 0.5 * Math.PI);
         var noise = new Tensor<T>(new[] { 1, c.OutputSize, frames });
@@ -304,6 +292,92 @@ internal sealed class CosyVoiceFlow<T>
             noise[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble()));
         bool drop = !(random.NextDouble() > c.TrainingCfgRate);
         return Loss(mel, mu, ProjectSpeaker(xvector), condition, t, noise, drop, streaming);
+    }
+
+    // μ [1, OutputSize, frames] of the training tokens (the causal flow's frames follow its tokens).
+    private Tensor<T> TrainingMu(IReadOnlyList<int> tokens, Tensor<T> mel, bool training, Random random, bool streaming)
+    {
+        var c = Configuration;
+        int frames = mel.Shape[2];
+        if (!c.Causal) return Stretch(Encode(tokens, training, random), frames);
+        if (frames != MelFrames(tokens.Count))
+            throw new ArgumentException($"The causal flow gives {MelFrames(tokens.Count)} mel frames for {tokens.Count} tokens; the mel has {frames}.", nameof(mel));
+        var encoded = Encode(tokens, training, random, streaming);
+        return _engine.Reshape(_engine.TensorTranspose(encoded), new[] { 1, c.OutputSize, frames });
+    }
+
+    // The training prompt: half the time none, otherwise a prefix of U{0, ..., floor(PromptRatio * frames)} target frames.
+    private Tensor<T> TrainingPrompt(Tensor<T> mel, Random random)
+    {
+        var c = Configuration;
+        int frames = mel.Shape[2];
+        int prompt = random.NextDouble() < 0.5 ? 0 : random.Next((int)(c.PromptRatio * frames) + 1);
+        var condition = new Tensor<T>(new[] { 1, c.OutputSize, frames });
+        for (int m = 0; m < c.OutputSize; m++)
+            for (int f = 0; f < prompt; f++) condition[0, m, f] = mel[0, m, f];
+        return condition;
+    }
+
+    /// <summary>The classifier-free guided field (1 + w)·v(cond) − w·v(uncond), w =
+    /// <see cref="CosyVoiceFlowConfiguration.InferenceCfgRate"/>, as solve_euler estimates it.</summary>
+    public Tensor<T> GuidedField(Tensor<T> x, Tensor<T> mu, Tensor<T> speaker, Tensor<T> condition, double t, Tensor<T> mask, bool streaming = false)
+    {
+        var c = Configuration;
+        var guided = Field(x, mu, speaker, condition, t, mask, streaming);
+        var free = Field(x, _engine.TensorMultiplyScalar(mu, NumOps.Zero), _engine.TensorMultiplyScalar(speaker, NumOps.Zero),
+            _engine.TensorMultiplyScalar(condition, NumOps.Zero), t, mask, streaming);
+        return _engine.TensorSubtract(_engine.TensorMultiplyScalar(guided, NumOps.FromDouble(1 + c.InferenceCfgRate)),
+            _engine.TensorMultiplyScalar(free, NumOps.FromDouble(c.InferenceCfgRate)));
+    }
+
+    /// <summary>
+    /// IntMeanFlow's integral velocity distillation (arXiv 2510.07979, Eq. 4–8) for a mean-flow flow:
+    /// the student's average velocity u(z_t, t, r) regresses (mean squared error) onto the frozen
+    /// <paramref name="teacher"/>'s, (z_r − z_t)/(r − t), where z_r is <paramref name="teacherSteps"/> even Euler steps of the
+    /// teacher's guided field from z_t — classifier-free guidance distilled into the student, which runs unguided.
+    /// </summary>
+    /// <remarks>z_t is the flow-matching interpolant of fresh noise and the target at t; the conditioning (streaming,
+    /// prompt) is drawn as <see cref="TrainingLoss"/> draws it. The paper does not state how t and r are sampled; here
+    /// they are the sorted pair of two U(0, 1) draws, whose gap is triangularly distributed — small intervals emphasized,
+    /// as the paper keeps from MeanFlow.</remarks>
+    public Tensor<T> DistillationLoss(CosyVoiceFlow<T> teacher, IReadOnlyList<int> tokens, Tensor<T> mel, Tensor<T> xvector,
+        bool training, Random random, int teacherSteps)
+    {
+        if (teacher is null) throw new ArgumentNullException(nameof(teacher));
+        var c = Configuration;
+        if (!c.MeanFlow) throw new InvalidOperationException("Only a mean-flow flow is distilled.");
+        if (teacher.Configuration.MeanFlow) throw new ArgumentException("The teacher is an instantaneous-velocity flow.", nameof(teacher));
+        if (teacherSteps < 1) throw new ArgumentOutOfRangeException(nameof(teacherSteps));
+        int frames = mel.Shape[2];
+        bool streaming = c.Causal && random.NextDouble() < 0.5;
+        var mu = TrainingMu(tokens, mel, training, random, streaming);
+        var condition = TrainingPrompt(mel, random);
+        double a = random.NextDouble(), b = random.NextDouble();
+        double t = Math.Min(a, b), r = Math.Max(a, b);
+        if (r - t < 1e-6) r = Math.Min(1.0, t + 1e-6);
+        var noise = new Tensor<T>(new[] { 1, c.OutputSize, frames });
+        for (int i = 0; i < noise.Length; i++)
+            noise[i] = NumOps.FromDouble(Math.Sqrt(-2.0 * Math.Log(1.0 - random.NextDouble())) * Math.Cos(2.0 * Math.PI * random.NextDouble()));
+        double sigma = c.SigmaMin;
+        var z = _engine.TensorAdd(_engine.TensorMultiplyScalar(noise, NumOps.FromDouble(1 - (1 - sigma) * t)),
+            _engine.TensorMultiplyScalar(mel, NumOps.FromDouble(t)));
+        var mask = Ones(frames);
+
+        Tensor<T> target;
+        using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+        {
+            var teacherMu = teacher.TrainingMu(tokens, mel, training: false, random, streaming);
+            var teacherSpeaker = teacher.ProjectSpeaker(xvector);
+            var y = z;
+            double h = (r - t) / teacherSteps;
+            for (int k = 0; k < teacherSteps; k++)
+                y = _engine.TensorAdd(y, _engine.TensorMultiplyScalar(
+                    teacher.GuidedField(y, teacherMu, teacherSpeaker, condition, t + k * h, mask, streaming), NumOps.FromDouble(h)));
+            target = _engine.TensorMultiplyScalar(_engine.TensorSubtract(y, z), NumOps.FromDouble(1.0 / (r - t)));
+        }
+        var difference = _engine.TensorSubtract(Field(z, mu, ProjectSpeaker(xvector), condition, t, mask, streaming, r), target);
+        return _engine.TensorMultiplyScalar(_engine.ReduceSum(_engine.TensorMultiply(difference, difference), new[] { 0, 1, 2 }, false),
+            NumOps.FromDouble(1.0 / ((double)frames * c.OutputSize)));
     }
 
     /// <summary>
@@ -403,13 +477,25 @@ internal sealed class CosyVoiceFlow<T>
 
     /// <summary>
     /// Samples a mel <c>[1, OutputSize, frames]</c> (<c>ConditionalCFM.forward</c> with <c>solve_euler</c>): from
-    /// <paramref name="noise"/>, Euler steps over the cosine schedule with classifier-free guidance.
+    /// <paramref name="noise"/>, Euler steps over the cosine schedule with classifier-free guidance; a mean-flow flow
+    /// (<c>basic_euler</c>) instead steps over an even span, each estimate reading its step's end time, without guidance.
     /// </summary>
     public Tensor<T> Sample(Tensor<T> mu, Tensor<T> speaker, Tensor<T> condition, Tensor<T> noise, bool streaming = false)
     {
         var c = Configuration;
         int frames = mu.Shape[2], steps = c.Timesteps;
         var mask = Ones(frames);
+        if (c.MeanFlow)
+        {
+            var even = Enumerable.Range(0, steps + 1).Select(i => i / (double)steps).ToArray();
+            var y = noise;
+            for (int step = 0; step < steps; step++)
+            {
+                var velocity = Field(y, mu, speaker, condition, even[step], mask, streaming, even[step + 1]);
+                y = _engine.TensorAdd(y, _engine.TensorMultiplyScalar(velocity, NumOps.FromDouble(even[step + 1] - even[step])));
+            }
+            return y;
+        }
         var span = Enumerable.Range(0, steps + 1).Select(i => 1 - Math.Cos(i / (double)steps * 0.5 * Math.PI)).ToArray();
         var x = noise;
         var zeroMu = _engine.TensorMultiplyScalar(mu, NumOps.Zero);

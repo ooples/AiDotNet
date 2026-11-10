@@ -359,6 +359,8 @@ internal sealed class MatchaDecoder<T>
     private readonly int _inChannels;
     private readonly KaimingLinearLayer<T> _time1;
     private readonly KaimingLinearLayer<T> _time2;
+    // Chatterbox Turbo's IntMeanFlow time mixer (Linear(2·time, time), no bias): mixes the start and end times' embeddings.
+    private readonly KaimingLinearLayer<T>? _timeMixer;
     private readonly List<(ResnetBlock Resnet, List<TransformerBlock> Transformers, KaimingConv1DLayer<T> Down)> _downs = new();
     private readonly List<(ResnetBlock Resnet, List<TransformerBlock> Transformers)> _mids = new();
     private readonly List<(ResnetBlock Resnet, List<TransformerBlock> Transformers, KaimingConv1DLayer<T> Up)> _ups = new();
@@ -375,9 +377,11 @@ internal sealed class MatchaDecoder<T>
     /// <param name="biasMask">Mask padded keys with −1e10 (CosyVoice's <c>mask_to_bias</c>) instead of adding the 0/1
     /// frame mask to the logits as Matcha does.</param>
     /// <param name="causal">CosyVoice 2's <c>CausalConditionalDecoder</c> (needs <paramref name="biasMask"/>).</param>
+    /// <param name="meanFlow">Chatterbox Turbo's mean-flow estimator (IntMeanFlow, arXiv 2510.07979): it also reads the
+    /// step's end time r, whose embedding a time mixer combines with t's (initialized to pass t's through, §3.3).</param>
     public MatchaDecoder(IEngine engine, int inChannels, int outChannels, int[] channels, double dropout, int headDim,
         int heads, int midBlocks, int blocksPerLevel = 1, MatchaFeedForward feedForward = MatchaFeedForward.SnakeBeta,
-        bool biasMask = false, bool causal = false)
+        bool biasMask = false, bool causal = false, bool meanFlow = false)
     {
         if (blocksPerLevel < 1) throw new ArgumentOutOfRangeException(nameof(blocksPerLevel), "Each level has at least one Transformer block.");
         if (causal && !biasMask) throw new ArgumentException("The causal decoder masks with mask_to_bias.", nameof(causal));
@@ -398,6 +402,13 @@ internal sealed class MatchaDecoder<T>
         int timeDim = channels[0] * 4;
         _time1 = Add(new KaimingLinearLayer<T>(inChannels, timeDim, true));
         _time2 = Add(new KaimingLinearLayer<T>(timeDim, timeDim, true));
+        if (meanFlow)
+        {
+            _timeMixer = Add(new KaimingLinearLayer<T>(2 * timeDim, timeDim, false));
+            var identity = new double[timeDim * 2 * timeDim];                                    // torch [out, in]
+            for (int i = 0; i < timeDim; i++) identity[i * 2 * timeDim + i] = 1;
+            _timeMixer.LoadTorch(identity, null);
+        }
         int output = inChannels;
         for (int i = 0; i < channels.Length; i++)
         {
@@ -445,12 +456,20 @@ internal sealed class MatchaDecoder<T>
     /// <summary>The vector field <c>[frames, out]</c> of an input already stacked on channels, <c>[1, in, frames]</c>
     /// (CosyVoice stacks x, μ, the speaker embedding repeated over frames, and the prompt condition).</summary>
     /// <param name="chunk">Streaming attention chunk (CosyVoice 2's <c>static_chunk_size</c>); 0 attends everywhere.</param>
-    public Tensor<T> EstimateChannels(Tensor<T> h, double t, Tensor<T> mask, int chunk = 0)
+    /// <param name="r">A mean-flow estimator's step end time (required for one, refused otherwise).</param>
+    public Tensor<T> EstimateChannels(Tensor<T> h, double t, Tensor<T> mask, int chunk = 0, double? r = null)
     {
         if (chunk > 0 && !_biasMask) throw new ArgumentException("Chunked attention needs mask_to_bias masking.", nameof(chunk));
+        if ((_timeMixer is null) != (r is null))
+            throw new ArgumentException(_timeMixer is null ? "Only a mean-flow estimator reads an end time." : "A mean-flow estimator needs the step's end time.", nameof(r));
         int frames = h.Shape[2];
         if (h.Shape[1] != _inChannels) throw new ArgumentException($"Expected {_inChannels} input channels.", nameof(h));
         var time = _time2.Forward(_engine.Swish(_time1.Forward(TimeEmbedding(t))));
+        if (_timeMixer is not null)
+        {
+            var end = _time2.Forward(_engine.Swish(_time1.Forward(TimeEmbedding(r!.Value))));
+            time = _timeMixer.Forward(_engine.TensorConcatenate(new[] { time, end }, 1));
+        }
 
         var masks = new List<Tensor<T>> { mask };
         var hiddens = new List<Tensor<T>>();
@@ -503,6 +522,7 @@ internal sealed class MatchaDecoder<T>
     {
         _time1.LoadTorch(read, prefix + "time_mlp.linear_1.weight", prefix + "time_mlp.linear_1.bias");
         _time2.LoadTorch(read, prefix + "time_mlp.linear_2.weight", prefix + "time_mlp.linear_2.bias");
+        _timeMixer?.LoadTorch(read, prefix + "time_embed_mixer.weight", null);
         void Resample(KaimingConv1DLayer<T> conv, string p, bool nested) =>
             conv.LoadTorch(read, p + (nested ? ".conv" : "") + ".weight", p + (nested ? ".conv" : "") + ".bias");
         for (int i = 0; i < _downs.Count; i++)
