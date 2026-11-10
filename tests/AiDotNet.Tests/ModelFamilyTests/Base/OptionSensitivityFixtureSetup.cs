@@ -138,8 +138,16 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option is "UseNativeEnglishFallback" or "SpectrogramMaskMinimum" ? "voicebox-" + option
 
             : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option == "MaximumAudioFrames" ? "voicebox-audio-chunk"
+            : network is AiDotNet.TextToSpeech.EndToEnd.VITS2<T>
+                && option is "SpeakerEmbeddingDim" or "LanguageEmbeddingDim" or "SpeakerConditionedEncoderBlock"
+                    or "NumSpeakers" or "AlignmentNoiseDecay" ? "vits2-conditioning-" + option
+            : network is AiDotNet.TextToSpeech.EndToEnd.YourTTS<T>
+                && option is "LanguageEmbeddingDim" or "SpeakerConsistencyLossWeight" ? "yourtts-conditioning-" + option
             : network is AiDotNet.TextToSpeech.EndToEnd.VITS<T> or AiDotNet.TextToSpeech.EndToEnd.Piper<T>
                 && option is "SpeakerEmbeddingDim" or "LanguageEmbeddingDim" ? "vits-conditioning-" + option
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech<T>
+                && option is "DistillationSteps" or "EmaDecay" ? "comospeech-distillation"
+            : network is AiDotNet.TextToSpeech.Classic.AlignTTS<T> && option == "LearningRate" ? "aligntts-fixed-rate-training"
             : network is AiDotNet.TextToSpeech.CodecBased.OrpheusTTS<T>
                 && option is "MaxGradNorm" or "RemoveDuplicateFrames" ? "orpheus-training-" + option
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T>
@@ -733,6 +741,8 @@ internal static class OptionSensitivityFixtureSetup
             ? Math.Max(4, steps)
             : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> && option is "WarmupSteps" or "TrainingSteps"
             ? Math.Max(4, steps)
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech<T> && option is "DistillationSteps" or "EmaDecay"
+            ? Math.Max(2, steps)
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "SlmDiscriminatorInterval"
             ? Math.Max(3, steps)
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "BertBeta1"
@@ -747,6 +757,13 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptionTraining<T>(INeuralNetworkModel<T> network, string option)
     {
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech<T> como
+            && option is "DistillationSteps" or "EmaDecay"
+            && como.CurrentPhase == AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeechTrainingPhase.Teacher)
+            como.BeginDistillation();
+
+        if (network is AiDotNet.TextToSpeech.Classic.AlignTTS<T> align && option == "LearningRate")
+            align.CurrentPhase = AiDotNet.TextToSpeech.Classic.AlignTTSTrainingPhase.JointFineTuning;
         if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> style && IsStyleTts2JointOption(option))
             style.CurrentStage = AiDotNet.TextToSpeech.StyleEmotion.StyleTts2TrainingStage.Joint;
         if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosy && IsCosyFlowOption(option))
@@ -768,6 +785,20 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.EndToEnd.VITS2<T> alignment && option == "AlignmentNoiseDecay")
+        {
+            var settings = (AiDotNet.TextToSpeech.EndToEnd.VITS2Options)alignment.GetOptions();
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            // The generic minimum-length recording can give each token exactly one frame:
+            // MAS then has only one valid path, regardless of the actual noise schedule.
+            var tokens = new Tensor<T>(new[] { 4 });
+            for (int i = 0; i < tokens.Length; i++) tokens[i] = ops.FromDouble((i + 1) % settings.VocabSize);
+            int hop = settings.UpsampleRates.Aggregate(1, (a, b) => a * b);
+            var audio = new Tensor<T>(new[] { hop * 4 * tokens.Length });
+            for (int i = 0; i < audio.Length; i++) audio[i] = ops.FromDouble(0.3 * Math.Sin(i * 0.17) + 0.1 * Math.Sin(i * 0.31));
+            alignment.Train(tokens, audio);
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.CodecBased.UniAudio<T> uniAudio && UniAudioOptionFixture.IsCodebookOption(option))
         {
             UniAudioOptionFixture.TrainCodebooks(uniAudio);
@@ -926,6 +957,23 @@ internal static class OptionSensitivityFixtureSetup
             if (option == "SpeakerEmbeddingDim") vits.NumSpeakers = 2;
             if (option == "LanguageEmbeddingDim") vits.NumLanguages = 2;
         }
+        if (options is AiDotNet.TextToSpeech.EndToEnd.VITS2Options vits2)
+        {
+            if (option is "SpeakerEmbeddingDim" or "SpeakerConditionedEncoderBlock") vits2.NumSpeakers = 2;
+            // The paper conditions the third block: retain it when testing multi-speaker configurations.
+            if (option is "SpeakerEmbeddingDim" or "SpeakerConditionedEncoderBlock" or "NumSpeakers")
+                vits2.NumEncoderLayers = 3;
+            if (option == "LanguageEmbeddingDim") vits2.NumLanguages = 2;
+            // At two steps the paper's 0.01-scale noise can leave the discrete MAS path unchanged.
+            // Exercise the same native schedule with noise large enough to alter alignment decisions.
+            if (option == "AlignmentNoiseDecay") vits2.AlignmentNoiseScale = 1.0;
+        }
+        if (options is AiDotNet.TextToSpeech.EndToEnd.YourTTSOptions your)
+        {
+            if (option == "LanguageEmbeddingDim") your.NumLanguages = 2;
+            if (option == "SpeakerConsistencyLossWeight") your.UseSpeakerConsistencyLoss = true;
+        }
+
 
         if (options is AiDotNet.TextToSpeech.CodecBased.VoiceboxOptions durationVoiceboxOptions && option == "MaximumPhoneDuration")
             durationVoiceboxOptions.MaximumPhoneDuration = 2;
@@ -1291,6 +1339,7 @@ internal static class OptionSensitivityFixtureSetup
     internal static void Prepare<T>(INeuralNetworkModel<T> network)
     {
         if (network is AiDotNet.TextToSpeech.EndToEnd.VITS<T> or AiDotNet.TextToSpeech.EndToEnd.Piper<T>
+            or AiDotNet.TextToSpeech.EndToEnd.VITS2<T>
             && ((AiDotNet.TextToSpeech.TtsModelBase<T>)network).GetOptions() is AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions vits
             && (vits.NumSpeakers > 1 || vits.NumLanguages > 1))
             ((AiDotNet.TextToSpeech.TtsModelBase<T>)network).Voice = new AiDotNet.TextToSpeech.TtsVoice<T>

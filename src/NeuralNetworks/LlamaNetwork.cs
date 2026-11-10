@@ -71,6 +71,9 @@ internal sealed record LlamaConfiguration
     /// <summary>Dropout on the LoRA branch's input.</summary>
     public double LoraDropout { get; init; } = 0.05;
 
+    /// <summary>Llama attention-probability dropout (Hugging Face attention_dropout); zero for the released Llama checkpoints.</summary>
+    public double AttentionDropout { get; init; }
+
     /// <summary>The width of one attention head; 0 for <see cref="Hidden"/> / <see cref="Heads"/> (Qwen3-0.6B sets 128
     /// with 16 heads over a width of 1024).</summary>
     public int HeadDim { get; init; }
@@ -173,6 +176,9 @@ internal sealed class LlamaNetwork<T>
         BiasFreeLinearLayer<T> Value, BiasFreeLinearLayer<T> Output, BiasFreeLinearLayer<T> PostNorm, BiasFreeLinearLayer<T> Gate,
         BiasFreeLinearLayer<T> Up, BiasFreeLinearLayer<T> Down, Lora? QueryLora, Lora? ValueLora)
     {
+        /// <summary>Dropout on the softmax attention probabilities; null at the released zero rate.</summary>
+        public DropoutLayer<T>? AttentionDropout { get; init; }
+
         /// <summary>The query, key and value biases, null without <see cref="LlamaConfiguration.AttentionBias"/>.</summary>
         public BiasFreeLinearLayer<T>? QueryBias { get; init; }
         public BiasFreeLinearLayer<T>? KeyBias { get; init; }
@@ -211,6 +217,9 @@ internal sealed class LlamaNetwork<T>
         _engine = engine;
         Configuration = configuration;
         var c = configuration;
+        if (double.IsNaN(c.AttentionDropout) || double.IsInfinity(c.AttentionDropout)
+            || c.AttentionDropout < 0 || c.AttentionDropout >= 1)
+            throw new ArgumentOutOfRangeException(nameof(configuration), "AttentionDropout must be finite and in [0, 1).");
         if ((c.HeadDim <= 0 && c.Hidden % c.Heads != 0) || c.Heads % c.KeyValueHeads != 0)
             throw new ArgumentException("The width must divide by the heads, and the heads by the key-value heads.", nameof(configuration));
         if (!c.SqrtAlibi && (c.RotaryDim % 2 != 0 || c.RotaryDim <= 0 || c.RotaryDim > c.ResolvedHeadDim))
@@ -285,13 +294,23 @@ internal sealed class LlamaNetwork<T>
         FinalNorm = c.IncludeFinalNorm ? Values(c.Hidden) : null;
         FinalNormBias = c.IncludeFinalNorm && c.LayerNorm ? Values(c.Hidden) : null;
         LmHead = c.VocabSize > 0 && c.IncludeHead && !c.TieWordEmbeddings ? Linear(c.Hidden, c.VocabSize) : null;
+        // Register parameter-free dropout after all projections so enabling it does not reorder
+        // initialization of the existing trainable tensors or their checkpoint parameter sequence.
+        if (c.AttentionDropout > 0)
+            for (int i = 0; i < Layers.Count; i++)
+            {
+                var dropout = Add(new DropoutLayer<T>(c.AttentionDropout));
+                dropout.SetTrainingMode(false);
+                _dropouts.Add(dropout);
+                Layers[i] = Layers[i] with { AttentionDropout = dropout };
+            }
     }
 
     public LlamaConfiguration Configuration { get; }
 
     private readonly List<DropoutLayer<T>> _dropouts = new();
 
-    /// <summary>Whether the LoRA dropout is active. A new network starts in inference mode.</summary>
+    /// <summary>Whether attention and LoRA dropout are active. A new network starts in inference mode.</summary>
     public bool Training
     {
         get => _training;
@@ -626,6 +645,9 @@ internal sealed class LlamaNetwork<T>
             NumOps.FromDouble(c.AttentionMultiplier > 0 ? c.AttentionMultiplier : 1.0 / Math.Sqrt(hd)));
         scores = _engine.TensorAdd(_engine.Reshape(scores, new[] { b, c.Heads, l, keys }), _engine.TensorBroadcastTo(bias, new[] { b, c.Heads, l, keys }));
         var probabilities = _engine.Reshape(_engine.Softmax(scores, axis: 3), new[] { b * c.Heads, l, keys });
+        // Hugging Face eager_attention_forward drops softmax weights before the value product.
+        // Dropping the context/residual instead would implement a different attention operation.
+        if (layer.AttentionDropout is { } attentionDropout) probabilities = attentionDropout.Forward(probabilities);
         var context = _engine.Reshape(_engine.TensorPermute(
             _engine.Reshape(_engine.BatchMatMul(probabilities, _engine.Reshape(v, new[] { b * c.Heads, keys, hd })), new[] { b, c.Heads, l, hd }),
             new[] { 0, 2, 1, 3 }), new[] { b, l, c.Heads * hd });

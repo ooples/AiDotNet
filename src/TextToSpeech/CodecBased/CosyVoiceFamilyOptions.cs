@@ -35,10 +35,10 @@ public abstract class CosyVoiceFamilyOptions : ModelOptions
     public double DropoutRate { get; set; } = 0.1;
     /// <summary>Exported graph runtime settings.</summary>
     public OnnxModelOptions OnnxOptions { get; set; } = new();
-    /// <summary>Configured native training learning rate.</summary>
+    /// <summary>Configured language-model and flow learning rate; the GAN retains its separately declared rate.</summary>
     public double LearningRate { get; set; } = 1e-4;
-    /// <summary>Configured native AdamW weight decay.</summary>
-    public double WeightDecay { get; set; } = 0.01;
+    /// <summary>Optional coupled L2 weight decay for native Adam (zero in the released recipes).</summary>
+    public double WeightDecay { get; set; } = 0.0;
     /// <summary>Speech-token vocabulary cardinality.</summary>
     [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]
     public int CodebookSize { get; set; } = 1024;

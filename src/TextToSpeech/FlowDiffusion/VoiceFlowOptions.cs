@@ -7,7 +7,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// <remarks>
 /// <para>
 /// Defaults are the paper's (§3–4.1) with the values it leaves to its reference implementation
-/// (cantabile-kwok/VoiceFlow-TTS, <c>configs/lj_16k_gt_dur.yaml</c>, <c>model/cfm.py</c>): Grad-TTS's encoder (width
+/// (X-LANCE/VoiceFlow-TTS, <c>configs/lj_16k_gt_dur.yaml</c>, <c>model/cfm.py</c>): Grad-TTS's encoder (width
 /// 192, 6 relative-position layers, 2 heads, window 4, filter 768, kernel 3, dropout 0.1, pre-net of 3 kernel-5
 /// convolutions; output projected to the mel width) and duration predictor (filter 256); Grad-TTS's U-Net (base width
 /// 128, multipliers 1, 2, 4, time embedding scale 1000) conditioned on the duplicated encoder output; σ = 0.1; t clamped
@@ -16,8 +16,12 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </para>
 /// <para><b>For Beginners:</b> These options configure the VoiceFlow model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(VoiceFlowOptionsConverter))]
 public class VoiceFlowOptions : EndToEndTtsOptions
 {
+    /// <summary>The vector-field U-Net's base width, independent of the text encoder's width.</summary>
+    public override int DecoderDim { get => FlowDim; set => FlowDim = value; }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>

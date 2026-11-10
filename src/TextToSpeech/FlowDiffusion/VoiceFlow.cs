@@ -46,7 +46,7 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
     Year = 2024,
     Authors = "Guo et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-5, ReferenceBatchSize = 24,
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 5e-5, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, ReferenceBatchSize = 24,
                 Provenance = RecipeProvenance.DerivedFromCitedWork,
                 Source = "The paper does not state its optimizer; the reference implementation trains with "
                         + "torch.optim.Adam at 5e-5 and a batch of 24 (configs/lj_16k_gt_dur.yaml), "
@@ -95,13 +95,18 @@ public partial class VoiceFlow<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticM
         _options = options ?? new VoiceFlowOptions();
         Options = _options;
         _useNativeMode = true;
+        if (_options.LearningRate <= 0 || double.IsNaN(_options.LearningRate) || double.IsInfinity(_options.LearningRate))
+            throw new ArgumentOutOfRangeException(nameof(options), "Learning rate must be finite and positive.");
+        if (_options.WeightDecay < 0 || double.IsNaN(_options.WeightDecay) || double.IsInfinity(_options.WeightDecay))
+            throw new ArgumentOutOfRangeException(nameof(options), "Weight decay must be finite and nonnegative.");
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
         _optimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+                learningRateOverride: _options.LearningRate, weightDecayOverride: _options.WeightDecay)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         InitializeLayers();
     }
