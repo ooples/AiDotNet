@@ -52,6 +52,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.Vocoders.UnivNet<T> && option == "SegmentSize" ? "univnet-recording-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.MelGAN<T> && option is "SegmentSize" or "SamplingSeed" ? "melgan-recording-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && IsHiFiGanTrainingOption(option) ? "hifigan-recording-" + option
+            : network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> && IsWaveNetTrainingOption(option) ? "wavenet-recording-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.WaveRNN<T> && IsWaveRnnTrainingOption(option) ? "wavernn-training-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.DiffWave<T> && option is "NumClasses" or "UtteranceSamples" ? "diffwave-task-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option is "AdversarialWeight" or "DiscriminatorGradientClipNorm" or "DiscriminatorLearningRate" ? "parallel-wavegan-adversarial-" + option
@@ -692,6 +693,15 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> waveNet && !IsVocoderFrontendOption(option))
+        {
+            var settings = (AiDotNet.TextToSpeech.Vocoders.WaveNetOptions)waveNet.GetOptions();
+            var mel = new Tensor<T>(new[] { 1, settings.MelChannels, 1 });
+            var waveNetOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int c = 0; c < settings.MelChannels; c++)
+                mel[0, c, 0] = waveNetOps.FromDouble(.2 * Math.Sin(.3 * c));
+            return mel;
+        }
         if (network is AiDotNet.TextToSpeech.Vocoders.WaveRNN<T> waveRnn && !IsVocoderFrontendOption(option))
         {
             var settings = (AiDotNet.TextToSpeech.Vocoders.WaveRNNOptions)waveRnn.GetOptions();
@@ -791,6 +801,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? 0
+        : network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> && option == "LearningRateHalvingSteps" ? Math.Max(4, steps)
         : network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && option is "LearningRateDecay" or "UpdatesPerEpoch" ? Math.Max(4, steps)
         : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option == "Epsilon" ? Math.Max(6, steps)
         : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? 0
@@ -1036,6 +1047,7 @@ internal static class OptionSensitivityFixtureSetup
             return true;
         }
         if ((network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames"
+                || network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> && IsWaveNetTrainingOption(option)
                 || network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && IsHiFiGanTrainingOption(option)
                 || network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option is "SegmentSize" or "SamplingSeed"
                 || network is AiDotNet.TextToSpeech.Vocoders.BigVGAN<T> && option == "SegmentSize")
@@ -1069,6 +1081,9 @@ internal static class OptionSensitivityFixtureSetup
         _ => string.Empty,
     };
 
+    private static bool IsWaveNetTrainingOption(string option) => option is "SegmentSamples" or "LearningRate"
+        or "WeightDecay" or "LearningRateHalvingSteps";
+
     private static bool IsHiFiGanTrainingOption(string option) => option is "SegmentSize" or "LearningRate"
         or "WeightDecay" or "LearningRateDecay" or "UpdatesPerEpoch";
 
@@ -1080,6 +1095,12 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Vocoders.WaveNetOptions waveNet)
+        {
+            waveNet.MelChannels = 8;
+            if (IsWaveNetTrainingOption(option)) waveNet.SegmentSamples = checked(2 * waveNet.HopSize);
+            if (option == "LearningRateHalvingSteps") waveNet.LearningRateHalvingSteps = 2;
+        }
         if (options is AiDotNet.TextToSpeech.Vocoders.HiFiGANOptions hiFiGan && IsHiFiGanTrainingOption(option))
         {
             // Keep the half-size perturbation frame-aligned and long enough for the released reflect padding.
