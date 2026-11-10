@@ -75,7 +75,7 @@ public class DiffWaveNativeOptionsTests
         }
         using var model = Create(o);
         Assert.Equal(4 * hop, model.Predict(new Tensor<double>(new[] { 1, o.MelChannels, 4 })).Length);
-        Assert.True(double.IsFinite(model.Train(Sample())));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
     }
 
     [Theory]
@@ -106,7 +106,7 @@ public class DiffWaveNativeOptionsTests
         Assert.Equal(12, new DiffWaveOptions(b).HiddenDim);
         using var control = Create(a); using var wider = Create(b);
         Assert.True(wider.GetParameters().Length > control.GetParameters().Length);
-        Assert.True(double.IsFinite(wider.Train(Sample(conditioner == DiffWaveConditioner.ClassLabel ? 0 : null))));
+        Assert.True(TtsPaperNumerics.IsFinite(wider.Train(Sample(conditioner == DiffWaveConditioner.ClassLabel ? 0 : null))));
     }
 
     [Theory]
@@ -145,8 +145,8 @@ public class DiffWaveNativeOptionsTests
         Assert.Equal(control.GetParameters().ToArray(), candidate.GetParameters().ToArray());
         Assert.Equal(128, control.Generate(task == DiffWaveConditioner.ClassLabel ? 0 : null).Length);
         var waveform = candidate.Generate(task == DiffWaveConditioner.ClassLabel ? 0 : null);
-        Assert.Equal(192, waveform.Length); Assert.All(waveform.ToArray(), x => Assert.True(double.IsFinite(x)));
-        Assert.True(double.IsFinite(candidate.Train(Sample(task == DiffWaveConditioner.ClassLabel ? 0 : null))));
+        Assert.Equal(192, waveform.Length); Assert.All(waveform.ToArray(), x => Assert.True(TtsPaperNumerics.IsFinite(x)));
+        Assert.True(TtsPaperNumerics.IsFinite(candidate.Train(Sample(task == DiffWaveConditioner.ClassLabel ? 0 : null))));
     }
 
     [Fact]
@@ -163,7 +163,7 @@ public class DiffWaveNativeOptionsTests
         var embedding = (NormedConv1DLayer<double>)typeof(DiffWaveNetwork<double>)
             .GetField("_labelEmbedding", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(network)!;
         var weights = Assert.Single(embedding.GetTrainableParameters());
-        Assert.Equal(new[] { 128, 2, 1, 1 }, weights.Shape);
+        Assert.Equal(new[] { 128, 2, 1, 1 }, weights.Shape.ToArray());
         var before = weights.ToArray();
         for (int i = 0; i < 3; i++) control.Train(Sample(0));
         var after = Assert.Single(embedding.GetTrainableParameters()).ToArray();
@@ -180,7 +180,7 @@ public class DiffWaveNativeOptionsTests
     public void CachedAdam_UsesThePaperRecipeAndConfiguredDecay_ForEveryTask(DiffWaveConditioner task, double decay)
     {
         var o = Task(task); o.WeightDecay = decay; o.LearningRate = 3e-4;
-        using var model = Create(o); Assert.True(double.IsFinite(model.Train(Sample(task == DiffWaveConditioner.ClassLabel ? 0 : null))));
+        using var model = Create(o); Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample(task == DiffWaveConditioner.ClassLabel ? 0 : null))));
         var optimizer = Assert.IsType<AdamOptimizer<double, Tensor<double>, Tensor<double>>>(typeof(SegmentVocoderBase<double>)
             .GetField("_paperOptimizer", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(model));
         var settings = Assert.IsType<AdamOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());

@@ -96,7 +96,7 @@ public class VitsNativeGeometryOptionsTests
         var latent = new Tensor<double>(new[] { 1, 8, 3 });
         for (int i = 0; i < latent.Length; i++) latent[i] = Math.Sin(i * 0.2);
         var waveform = decoder.Forward(latent);
-        Assert.Equal(new[] { 1, 1, 48 }, waveform.Shape);
+        Assert.Equal(new[] { 1, 1, 48 }, waveform.Shape.ToArray());
         Assert.All(waveform, value => Assert.True(TtsPaperNumerics.IsFinite(value)));
     }
 
