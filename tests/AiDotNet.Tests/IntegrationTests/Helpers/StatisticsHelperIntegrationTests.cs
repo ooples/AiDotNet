@@ -1133,9 +1133,13 @@ public class StatisticsHelperIntegrationTests
         Assert.Equal(full[n, m], StatisticsHelper<double>.CalculateDynamicTimeWarping(a, b));
     }
 
-    [Fact(Timeout = 120000)]
-    public async Task CalculateDynamicTimeWarping_MemoryIsLinearNotQuadratic()
+    [SkippableFact]
+    public void CalculateDynamicTimeWarping_MemoryIsLinearNotQuadratic()
     {
+#if !NETCOREAPP3_0_OR_GREATER
+        // net471 has no per-thread allocation counter, and a process-wide one counts parallel tests too.
+        Skip.If(true, "GC.GetAllocatedBytesForCurrentThread needs .NET Core 3.0 or later.");
+#else
         // PredictionStats runs this over every actual/predicted pair and model serialization forces it, so the old
         // (n + 1) x (m + 1) matrix made saving a 70,000-row model allocate ~20 GB. 3,000 x 3,000 doubles is 72 MB
         // under the old allocation; two rows are 48 KB.
@@ -1149,6 +1153,7 @@ public class StatisticsHelperIntegrationTests
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
 
         Assert.True(allocated < 1_000_000, $"DTW allocated {allocated:N0} bytes for {n} x {n}");
+#endif
     }
 
     #endregion
