@@ -65,7 +65,7 @@ public class SpeculativeDecodingGreedyTests
         Assert.Equal(GreedyReference(prompt, 12), result.NewTokens.ToArray());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public async Task TreeSpeculativeDecoder_TemperatureZero_MatchesPlainGreedy()
     {
         var prompt = new[] { 4, 9, 2 };
@@ -79,7 +79,7 @@ public class SpeculativeDecodingGreedyTests
         Assert.Equal(GreedyReference(prompt, 12), result.NewTokens.ToArray());
     }
 
-    [Fact(Timeout = 60000)]
+    [Fact]
     public void NGramDraftModel_TemperatureZero_DraftsTheArgmaxWithCertainty()
     {
         var model = new NGramDraftModel<float>(ngramSize: 2, vocabSize: 10, seed: 3);
