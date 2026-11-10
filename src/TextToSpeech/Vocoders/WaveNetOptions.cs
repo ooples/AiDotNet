@@ -15,8 +15,38 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// 1e-3 halved every 200k steps, batch 8, 10,240-sample segments, no gradient clipping.</para>
 /// <para><b>For Beginners:</b> These options configure the WaveNet model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(WaveNetOptionsConverter))]
 public class WaveNetOptions : VocoderOptions
 {
+    /// <summary>The channels in the actual residual stream.</summary>
+    public override int HiddenDim
+    {
+        get => ResidualChannels;
+        set => ResidualChannels = value > 0 ? value : throw new ArgumentOutOfRangeException(nameof(value));
+    }
+
+    /// <summary>The product of the actual local-conditioning upsampling factors.</summary>
+    public override int HopSize
+    {
+        get => UpsampleScales.Aggregate(1, (product, scale) => checked(product * scale));
+        set
+        {
+            if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value));
+            if (UpsampleScales.Length == 0 || UpsampleScales.Any(s => s <= 0))
+                throw new ArgumentException("WaveNet needs positive conditioning factors.");
+            if (value == HopSize) return;
+            int Gcd(int a, int b) { while (b != 0) { int r = a % b; a = b; b = r; } return a; }
+            var scales = new int[UpsampleScales.Length];
+            int remaining = value;
+            for (int i = 0; i < scales.Length; i++)
+            {
+                scales[i] = i == scales.Length - 1 ? remaining : Gcd(UpsampleScales[i], remaining);
+                remaining /= scales[i];
+            }
+            UpsampleScales = scales;
+        }
+    }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>

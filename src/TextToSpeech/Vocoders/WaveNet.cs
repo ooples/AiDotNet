@@ -37,7 +37,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2016,
     Authors = "van den Oord et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, Epsilon = 1e-8, ReferenceBatchSize = 8,
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-3, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, ReferenceBatchSize = 8,
                 Source = "The paper states no optimizer; r9y9/wavenet_vocoder mulaw256_wavenet.json: Adam at 1e-3 (eps 1e-8) halved every 200k steps, batch 8.")]
 public partial class WaveNet<T> : SegmentVocoderBase<T>
 {
@@ -76,8 +76,10 @@ public partial class WaveNet<T> : SegmentVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateNetwork()
     {
         var o = PaperOptions;
-        if (UpsampleFactor != o.HopSize)
-            throw new ArgumentException($"The upsampling scales ({string.Join("x", o.UpsampleScales)}) must multiply to the hop ({o.HopSize}).");
+        if (o.DropoutRate != 0)
+            throw new ArgumentException("The selected WaveNet gated residual architecture uses zero dropout.", nameof(o.DropoutRate));
+        if (o.UpsampleScales.Length == 0 || o.UpsampleScales.Any(s => s <= 0))
+            throw new ArgumentException("WaveNet needs positive conditioning factors.", nameof(o.UpsampleScales));
         _network = new WaveNetNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
             o.MuLawLevels, o.MelChannels, o.ResidualChannels, o.GateChannels, o.SkipChannels, o.NumDilatedLayers, o.DilationCycle,
             o.KernelSize, o.UpsampleScales);
@@ -167,16 +169,14 @@ public partial class WaveNet<T> : SegmentVocoderBase<T>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
     {
         var o = PaperOptions;
-        return PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = o.LearningRate,
-                Epsilon = 1e-8,
-                UseAdaptiveBetas = false,
-                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.StepLRScheduler(o.LearningRate,
-                    Math.Max(1, o.LearningRateHalvingSteps), 0.5),
-                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
-            }));
+        var optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+            learningRateOverride: o.LearningRate, weightDecayOverride: o.WeightDecay,
+            learningRateSchedulerOverride: new AiDotNet.LearningRateSchedulers.StepLRScheduler(o.LearningRate,
+                Math.Max(1, o.LearningRateHalvingSteps), 0.5))
+            ?? throw new InvalidOperationException("WaveNet's native Adam recipe could not be created.");
+        if (optimizer.GetOptions() is GradientBasedOptimizerOptions<T, Tensor<T>, Tensor<T>> settings)
+            settings.EnableGradientClipping = false;
+        return optimizer;
     }
 
     /// <inheritdoc />
