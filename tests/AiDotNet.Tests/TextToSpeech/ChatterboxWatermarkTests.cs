@@ -3,6 +3,7 @@ using System.Linq;
 using AiDotNet.Audio.Watermarking;
 using AiDotNet.ModelLoading;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tests.Audio;
 using AiDotNet.TextToSpeech.VoiceCloning;
 using Newtonsoft.Json.Linq;
 using Xunit;
@@ -53,10 +54,10 @@ public class ChatterboxWatermarkTests
     {
         var options = ChatterboxFixture.Options();
         options.Watermark = true;
-        options.WatermarkModelPath = PerthFixture.TinyCheckpointPath;
+        options.WatermarkModelPath = PerthReleasedCheckpointFixture.CheckpointPath;
         var model = new Chatterbox<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(AiDotNet.Enums.InputType.OneDimensional,
             AiDotNet.Enums.NeuralNetworkTaskType.Generative, inputSize: 1, outputSize: 1) { RandomSeed = 7 }, options);
-        Assert.Equal(8, model.Watermarker.Hidden);
+        Assert.Equal(256, model.Watermarker.Hidden);
         Assert.NotEqual(ChatterboxFixture.Recording<double>().ToArray(), model.Watermarked(ChatterboxFixture.Recording<double>()).ToArray());
     }
 }
