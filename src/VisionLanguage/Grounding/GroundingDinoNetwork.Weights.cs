@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.TextToSpeech.CodecBased;
 
 namespace AiDotNet.VisionLanguage.Grounding;
@@ -8,14 +9,18 @@ internal sealed partial class GroundingDinoNetwork<T>
     /// Loads a Hugging Face <c>GroundingDinoForObjectDetection</c> state dict (as converted from the official checkpoints),
     /// given a reader of a named tensor of a given shape.
     /// </summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads a Hugging Face <c>GroundingDinoForObjectDetection</c> state dict straight from
+    /// <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
         int d = c.Dim, half = c.EncoderFfn / 2;
         void Linear(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{name}.weight", new[] { outputs, inputs }), read($"{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias");
         void Norm(LayerNormalizationLayer<T> norm, string name, int dim)
-            => TorchParameters.LayerNorm(_engine, norm, read($"{name}.weight", new[] { dim }), read($"{name}.bias", new[] { dim }));
+            => TorchParameters.LayerNorm(_engine, norm, source, $"{name}.weight", $"{name}.bias");
         void Attention(Attention a, string name)
         {
             Linear(a.Query, $"{name}.query", d, d);
@@ -36,26 +41,20 @@ internal sealed partial class GroundingDinoNetwork<T>
                 Linear(layers[i], $"{name}.layers.{i}", i == 0 ? inputs : d, i == layers.Length - 1 && layers.Length == 3 ? 4 : d);
         }
 
-        Backbone.LoadTorchWeights(read, "model.backbone.conv_encoder.model.");
-        Text.LoadTorchWeights(read, "model.text_backbone.");
+        Backbone.LoadTorchWeights(source, "model.backbone.conv_encoder.model.");
+        Text.LoadTorchWeights(source.AsFunction(), "model.text_backbone.");
         Linear(TextProjection, "model.text_projection", c.Text.Hidden, d);
         var outChannels = Backbone.OutChannels;
         for (int level = 0; level < c.Levels; level++)
         {
             int k = InputKernel[level];
             int inputs = level < outChannels.Length ? outChannels[level] : level == outChannels.Length ? outChannels[^1] : d;
-            TorchParameters.Linear(_engine, InputProjections[level], inputs * k * k, d,
-                read($"model.input_proj_vision.{level}.0.weight", new[] { d, inputs, k, k }), read($"model.input_proj_vision.{level}.0.bias", new[] { d }));
-            var gamma = InputNorms[level].GetGammaTensor();
-            var beta = InputNorms[level].GetBetaTensor();
-            var g = read($"model.input_proj_vision.{level}.1.weight", new[] { d });
-            var bb = read($"model.input_proj_vision.{level}.1.bias", new[] { d });
-            for (int i = 0; i < d; i++) { gamma[i] = NumOps.FromDouble(g[i]); beta[i] = NumOps.FromDouble(bb[i]); }
-            _engine.InvalidatePersistentTensor(gamma);
-            _engine.InvalidatePersistentTensor(beta);
+            TorchParameters.Linear(_engine, InputProjections[level], inputs * k * k, d, source, $"model.input_proj_vision.{level}.0.weight",
+                $"model.input_proj_vision.{level}.0.bias", new[] { d, inputs, k, k });
+            InputNorms[level].LoadAffine(source, $"model.input_proj_vision.{level}.1.weight", $"model.input_proj_vision.{level}.1.bias");
         }
-        TorchParameters.Linear(LevelEmbedding, 1, c.Levels * d, read("model.level_embed", new[] { c.Levels, d }));
-        TorchParameters.Linear(QueryEmbedding, 1, c.Queries * d, read("model.query_position_embeddings.weight", new[] { c.Queries, d }));
+        TorchParameters.Linear(LevelEmbedding, 1, c.Levels * d, source, "model.level_embed", new[] { c.Levels, d });
+        TorchParameters.Linear(QueryEmbedding, 1, c.Queries * d, source, "model.query_position_embeddings.weight", new[] { c.Queries, d });
         for (int i = 0; i < EncoderLayers.Count; i++)
         {
             var e = EncoderLayers[i];
@@ -69,8 +68,8 @@ internal sealed partial class GroundingDinoNetwork<T>
             Linear(f.TextValue, $"{n}.fusion_layer.attn.values_text_proj", d, half);
             Linear(f.VisionOut, $"{n}.fusion_layer.attn.out_vision_proj", half, d);
             Linear(f.TextOut, $"{n}.fusion_layer.attn.out_text_proj", half, d);
-            TorchParameters.Linear(f.VisionGamma, 1, d, read($"{n}.fusion_layer.vision_param", new[] { d }));
-            TorchParameters.Linear(f.TextGamma, 1, d, read($"{n}.fusion_layer.text_param", new[] { d }));
+            TorchParameters.Linear(f.VisionGamma, 1, d, source, $"{n}.fusion_layer.vision_param", new[] { d });
+            TorchParameters.Linear(f.TextGamma, 1, d, source, $"{n}.fusion_layer.text_param", new[] { d });
             Attention(e.TextAttention, $"{n}.text_enhancer_layer.self_attn");
             Linear(e.TextFc1, $"{n}.text_enhancer_layer.fc1", d, half);
             Linear(e.TextFc2, $"{n}.text_enhancer_layer.fc2", half, d);

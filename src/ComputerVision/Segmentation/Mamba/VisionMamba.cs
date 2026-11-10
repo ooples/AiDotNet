@@ -149,6 +149,9 @@ public partial class VisionMamba<T> : Common.SemanticSegmentationBase<T>
     /// <summary>Loads the official model's state dict (<c>backbone.*</c>, <c>decode_head.*</c>, <c>auxiliary_head.*</c>).</summary>
     internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
 
+    /// <summary>The same, straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source) => Network.LoadTorchWeights(source);
+
     /// <summary>The class logits <c>[B, classes, H, W]</c> (or <c>[classes, H, W]</c>) at the image's resolution.</summary>
     /// <remarks>An image whose sides are not multiples of the 16-pixel patch is zero-padded on the bottom and right to the
     /// network's canvas and its logits cropped back, as mmseg pads to the size divisor (pad value 0) and crops.</remarks>

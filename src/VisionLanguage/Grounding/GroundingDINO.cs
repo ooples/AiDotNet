@@ -116,6 +116,9 @@ public partial class GroundingDINO<T> : VisionLanguageModelBase<T>, IVisualGroun
     /// <summary>Loads an official checkpoint's state dict (Hugging Face names).</summary>
     internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
 
+    /// <summary>The same, straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source) => Network.LoadTorchWeights(source);
+
     /// <inheritdoc />
     public override void SetTrainingMode(bool isTraining)
     {

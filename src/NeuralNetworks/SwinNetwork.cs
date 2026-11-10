@@ -280,18 +280,22 @@ internal sealed class SwinNetwork<T>
     }
 
     /// <summary>Loads a Hugging Face <c>SwinBackbone</c> state dict (names after an optional <paramref name="prefix"/>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "")
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "") =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads a Hugging Face <c>SwinBackbone</c> state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string prefix = "")
     {
+        source = source.WithPrefix(prefix);
         var c = Configuration;
         int p = c.PatchSize, ws = c.WindowSize;
         void Linear(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{prefix}{name}.weight", new[] { outputs, inputs }),
-                read($"{prefix}{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias");
         void Norm(LayerNormalizationLayer<T> norm, string name, int dim)
-            => TorchParameters.LayerNorm(_engine, norm, read($"{prefix}{name}.weight", new[] { dim }), read($"{prefix}{name}.bias", new[] { dim }));
-        TorchParameters.Linear(_engine, PatchProjection, c.Channels * p * p, c.EmbedDim,
-            read($"{prefix}swin.embeddings.patch_embeddings.projection.weight", new[] { c.EmbedDim, c.Channels, p, p }),
-            read($"{prefix}swin.embeddings.patch_embeddings.projection.bias", new[] { c.EmbedDim }));
+            => TorchParameters.LayerNorm(_engine, norm, source, $"{name}.weight", $"{name}.bias");
+        TorchParameters.Linear(_engine, PatchProjection, c.Channels * p * p, c.EmbedDim, source,
+            "swin.embeddings.patch_embeddings.projection.weight", "swin.embeddings.patch_embeddings.projection.bias",
+            new[] { c.EmbedDim, c.Channels, p, p });
         Norm(EmbeddingNorm, "swin.embeddings.norm", c.EmbedDim);
         for (int s = 0; s < Stages.Count; s++)
         {
@@ -306,8 +310,8 @@ internal sealed class SwinNetwork<T>
                 Linear(blk.Value, $"{n}.attention.v_proj", dim, dim);
                 Linear(blk.Output, $"{n}.attention.o_proj", dim, dim);
                 int entries = (2 * ws - 1) * (2 * ws - 1) * blk.Heads;
-                TorchParameters.Linear(blk.RelativeBias, 1, entries,
-                    read($"{prefix}{n}.attention.relative_position_bias.relative_position_bias_table", new[] { (2 * ws - 1) * (2 * ws - 1), blk.Heads }));
+                TorchParameters.Linear(blk.RelativeBias, 1, entries, source,
+                    $"{n}.attention.relative_position_bias.relative_position_bias_table", new[] { (2 * ws - 1) * (2 * ws - 1), blk.Heads });
                 Norm(blk.Norm2, $"{n}.layernorm_after", dim);
                 Linear(blk.Fc1, $"{n}.mlp.fc1", dim, (int)(c.MlpRatio * dim));
                 Linear(blk.Fc2, $"{n}.mlp.fc2", (int)(c.MlpRatio * dim), dim);
@@ -315,7 +319,7 @@ internal sealed class SwinNetwork<T>
             if (s < Merges.Count)
             {
                 Norm(Merges[s].Norm, $"swin.encoder.layers.{s}.downsample.norm", 4 * dim);
-                TorchParameters.Linear(Merges[s].Reduction, 4 * dim, 2 * dim, read($"{prefix}swin.encoder.layers.{s}.downsample.reduction.weight", new[] { 2 * dim, 4 * dim }));
+                TorchParameters.Linear(Merges[s].Reduction, 4 * dim, 2 * dim, source, $"swin.encoder.layers.{s}.downsample.reduction.weight");
             }
         }
         for (int i = 0; i < c.OutStages.Length; i++)

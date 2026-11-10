@@ -1,5 +1,5 @@
 using System.IO;
-using AiDotNet.Agentic.Models.Local;
+using AiDotNet.ModelLoading;
 using AiDotNet.TextToSpeech.CodecBased;
 
 namespace AiDotNet.ComputerVision.Segmentation.Foundation;
@@ -435,28 +435,19 @@ internal sealed partial class Sam2Network<T>
     public void LoadSafetensors(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("The checkpoint path is empty.", nameof(path));
-        using var stream = File.OpenRead(path);
-        var file = SafetensorsReader.Read(stream);
-        // An official state dict (facebookresearch/sam2, EfficientTAM, the medical fine-tunes) is read through Hugging
-        // Face's renaming of its keys.
-        bool official = file.Names.Any(n => n.StartsWith("image_encoder.", StringComparison.Ordinal) || n.StartsWith("sam_mask_decoder.", StringComparison.Ordinal));
-        var names = official ? file.Names.ToDictionary(HuggingFaceName, n => n) : file.Names.ToDictionary(n => n, n => n);
-        double[] Read(string name, int[] shape)
+        // A Hugging Face state dict's axes must be this network's; an official one's (facebookresearch/sam2, EfficientTAM,
+        // the medical fine-tunes) only their counts, read through Hugging Face's renaming of its keys.
+        bool official;
+        using (var probe = TorchCheckpointFile.Open(path))
+            official = probe.Names.Any(n => n.StartsWith("image_encoder.", StringComparison.Ordinal) || n.StartsWith("sam_mask_decoder.", StringComparison.Ordinal));
+        using var file = TorchCheckpointFile.Open(path, strictAxes: !official);
+        if (!official)
         {
-            if (official && name == "prompt_encoder.point_embed.weight")
-            {
-                int width = shape[1];
-                return Enumerable.Range(0, shape[0]).SelectMany(i => Read($"prompt_encoder.point_embed.{i}.weight", new[] { 1, width })).ToArray();
-            }
-            if (!names.TryGetValue(name, out var stored) || file.Get(stored) is not { } tensor)
-                throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            var actual = tensor.Shape.Select(d => (int)d).ToArray();
-            if (actual.Aggregate(1, (x, y) => x * y) != shape.Aggregate(1, (x, y) => x * y) || (!official && !actual.SequenceEqual(shape)))
-                throw new InvalidDataException($"'{stored}' is [{string.Join(", ", actual)}] in the checkpoint but [{string.Join(", ", shape)}] in " +
-                    "this model; build the model with the checkpoint's size.");
-            return file.ReadAsDouble(stored);
+            LoadTorchWeights(file);
+            return;
         }
-        LoadTorchWeights(Read);
+        var names = file.Names.ToDictionary(HuggingFaceName, n => n);
+        LoadTorchWeights(file.WithNames(name => names.TryGetValue(name, out var stored) ? stored : name));
     }
 
     private static readonly (string From, string To)[] OfficialRenames =
@@ -534,19 +525,19 @@ internal sealed partial class Sam2Network<T>
     }
 
     /// <summary>Loads the video modules from a Hugging Face <c>Sam2VideoModel</c> state dict.</summary>
-    private void LoadMemoryWeights(Func<string, int[], double[]> read)
+    private void LoadMemoryWeights(TorchTensorSource source)
     {
         var m = MemoryConfiguration;
         int p = Configuration.Dim, md = m.MemoryDim;
         void Linear(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{name}.weight", new[] { outputs, inputs }), read($"{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias");
         void Conv(DenseLayer<T> layer, string name, int inputs, int outputs, int kernel)
-            => TorchParameters.Linear(_engine, layer, inputs * kernel * kernel, outputs, read($"{name}.weight", new[] { outputs, inputs, kernel, kernel }),
-                read($"{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs * kernel * kernel, outputs, source, $"{name}.weight", $"{name}.bias",
+                new[] { outputs, inputs, kernel, kernel });
         void Norm(LayerNormalizationLayer<T> norm, string name, int dim)
-            => TorchParameters.LayerNorm(_engine, norm, read($"{name}.weight", new[] { dim }), read($"{name}.bias", new[] { dim }));
+            => TorchParameters.LayerNorm(_engine, norm, source, $"{name}.weight", $"{name}.bias");
         void Values(BiasFreeLinearLayer<T> holder, string name, int[] shape)
-            => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, b) => a * b), read(name, shape));
+            => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, b) => a * b), source, name, shape);
         void Attention(Attention a, string name, int keyInputs)
         {
             Linear(a.Query, $"{name}.q_proj", p, p);

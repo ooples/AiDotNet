@@ -242,26 +242,25 @@ internal sealed class GlammRegionEncoder<T>
     }
 
     /// <summary>Loads the official module's state dict (names after an optional <paramref name="prefix"/>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "")
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "") =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the official module's state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string prefix = "")
     {
+        source = source.WithPrefix(prefix);
         var c = Configuration;
         int e = c.Embed;
         void Linear(DenseLayer<T> layer, string name, int[] weightShape, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{prefix}{name}.weight", weightShape), read($"{prefix}{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias", weightShape);
         void Norm(LayerNormalizationLayer<T> norm, string name, int dim)
-            => TorchParameters.LayerNorm(_engine, norm, read($"{prefix}{name}.weight", new[] { dim }), read($"{prefix}{name}.bias", new[] { dim }));
+            => TorchParameters.LayerNorm(_engine, norm, source, $"{name}.weight", $"{name}.bias");
         for (int l = 0; l < c.Levels; l++)
             Linear(InputConvs[l], $"mlvl_fuse.input_conv.{l}", new[] { e, e + 2, 1, 1 }, e + 2, e);
         for (int r = 0; r < c.FuseRounds; r++)
         {
-            TorchParameters.Linear(FuseConvs[r].Conv, e * 9, e, read($"{prefix}mlvl_fuse.fuse_convs.{r}.0.weight", new[] { e, e, 3, 3 }));
-            var gamma = read($"{prefix}mlvl_fuse.fuse_convs.{r}.1.weight", new[] { e });
-            var beta = read($"{prefix}mlvl_fuse.fuse_convs.{r}.1.bias", new[] { e });
-            var g = FuseConvs[r].Norm.GetGammaTensor();
-            var bt = FuseConvs[r].Norm.GetBetaTensor();
-            for (int i = 0; i < e; i++) { g[i] = NumOps.FromDouble(gamma[i]); bt[i] = NumOps.FromDouble(beta[i]); }
-            _engine.InvalidatePersistentTensor(g);
-            _engine.InvalidatePersistentTensor(bt);
+            TorchParameters.Linear(FuseConvs[r].Conv, e * 9, e, source, $"mlvl_fuse.fuse_convs.{r}.0.weight", new[] { e, e, 3, 3 });
+            FuseConvs[r].Norm.LoadAffine(source, $"mlvl_fuse.fuse_convs.{r}.1.weight", $"mlvl_fuse.fuse_convs.{r}.1.bias");
         }
         for (int l = 0; l < c.Levels; l++)
             Linear(PConvs[l], $"roi_align.pconvs.{l}", new[] { e, e, 3, 3 }, e * 9, e);

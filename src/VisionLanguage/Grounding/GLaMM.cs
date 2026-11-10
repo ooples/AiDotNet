@@ -185,6 +185,9 @@ public partial class GLaMM<T> : VisionLanguageModelBase<T>, IGroundedConversatio
     /// <summary>Loads a released GLaMM checkpoint's (merged) state dict.</summary>
     internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
 
+    /// <summary>The same, straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source) => Network.LoadTorchWeights(source);
+
     /// <inheritdoc />
     public override void SetTrainingMode(bool isTraining)
     {

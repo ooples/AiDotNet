@@ -163,6 +163,9 @@ public partial class SAM<T> : VisionLanguageModelBase<T>, IVisualEncoder<T>
     /// <summary>Loads an official SAM checkpoint's state dict.</summary>
     internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
 
+    /// <summary>The same, straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source) => Network.LoadTorchWeights(source);
+
     private Tensor<T> Batched(Tensor<T> image) => image.Rank == 3
         ? Engine.Reshape(image, new[] { 1, image.Shape[0], image.Shape[1], image.Shape[2] })
         : image;

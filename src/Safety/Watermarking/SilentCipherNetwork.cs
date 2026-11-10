@@ -85,15 +85,12 @@ internal sealed class SilentCipherGatedLayer<T>
 
     public Tensor<T> Forward(Tensor<T> x) => Norm.Forward(_engine.TensorMultiply(Conv.Forward(x), _engine.Sigmoid(Gate.Forward(x))));
 
-    public void Load(Func<string, double[]?> read, string prefix, Func<string, int, double[]> need)
+    public void Load(AiDotNet.ModelLoading.TorchTensorSource source, string prefix)
     {
-        var shape = Conv.TorchWeightShape;
-        int count = shape.Aggregate(1, (a, b) => a * b), output = shape[0];
-        Conv.LoadTorchWeights(need($"{prefix}.conv.weight", count), need($"{prefix}.conv.bias", output));
-        Gate.LoadTorchWeights(need($"{prefix}.gate.weight", count), need($"{prefix}.gate.bias", output));
-        TorchParameters.BatchNorm(Norm, need($"{prefix}.bn.weight", output), need($"{prefix}.bn.bias", output),
-            need($"{prefix}.bn.running_mean", output), need($"{prefix}.bn.running_var", output));
-        read($"{prefix}.bn.num_batches_tracked");
+        Conv.LoadTorchWeights(source, $"{prefix}.conv.weight", $"{prefix}.conv.bias");
+        Gate.LoadTorchWeights(source, $"{prefix}.gate.weight", $"{prefix}.gate.bias");
+        TorchParameters.BatchNorm(Norm, source, $"{prefix}.bn.", Conv.TorchWeightShape[0]);
+        source.Contains($"{prefix}.bn.num_batches_tracked");
     }
 }
 
@@ -399,55 +396,55 @@ internal sealed class SilentCipherNetwork<T>
     /// <c>module.</c> prefix removed). Returns the names read from each.
     /// </summary>
     public (HashSet<string> Encoder, HashSet<string> CarrierDecoder, HashSet<string> MessageDecoder) Load(
-        Func<string, double[]?> encoder, Func<string, double[]?> carrierDecoder, Func<string, double[]?> messageDecoder)
+        Func<string, double[]?> encoder, Func<string, double[]?> carrierDecoder, Func<string, double[]?> messageDecoder) =>
+        Load(AiDotNet.ModelLoading.TorchTensorSource.From(encoder), AiDotNet.ModelLoading.TorchTensorSource.From(carrierDecoder),
+            AiDotNet.ModelLoading.TorchTensorSource.From(messageDecoder));
+
+    /// <summary>Loads the release's three state dicts straight from their sources into the layers. Returns the names read
+    /// from each.</summary>
+    internal (HashSet<string> Encoder, HashSet<string> CarrierDecoder, HashSet<string> MessageDecoder) Load(
+        AiDotNet.ModelLoading.TorchTensorSource encoder, AiDotNet.ModelLoading.TorchTensorSource carrierDecoder,
+        AiDotNet.ModelLoading.TorchTensorSource messageDecoder)
     {
-        (Func<string, double[]?> Read, Func<string, int, double[]> Need, HashSet<string> Used) Reader(Func<string, double[]?> source)
+        // Every name asked for that the state dict has counts as read.
+        (AiDotNet.ModelLoading.TorchTensorSource Source, HashSet<string> Used) Reader(AiDotNet.ModelLoading.TorchTensorSource source)
         {
             var used = new HashSet<string>(StringComparer.Ordinal);
-            double[]? Read(string name)
+            return (source.WithNames(name =>
             {
-                var values = source(name);
-                if (values is not null) used.Add(name);
-                return values;
-            }
-            double[] Need(string name, int count)
-            {
-                var values = Read(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-                if (values.Length != count) throw new InvalidDataException($"'{name}' has {values.Length} values; this model expects {count}.");
-                return values;
-            }
-            return (Read, Need, used);
+                if (!used.Contains(name) && source.Contains(name)) used.Add(name);
+                return name;
+            }), used);
         }
         var c = Configuration;
         var e = Reader(encoder);
-        for (int i = 0; i < _encoder.Length; i++) _encoder[i].Load(e.Read, $"main.{i}", e.Need);
-        TorchParameters.Linear(_engine, _messageMap, c.MessageDim, c.MessageBandSize, e.Need("linear.weight", c.MessageBandSize * c.MessageDim),
-            e.Need("linear.bias", c.MessageBandSize));
+        for (int i = 0; i < _encoder.Length; i++) _encoder[i].Load(e.Source, $"main.{i}");
+        TorchParameters.Linear(_engine, _messageMap, c.MessageDim, c.MessageBandSize, e.Source, "linear.weight", "linear.bias");
         var d = Reader(carrierDecoder);
-        for (int i = 0; i < _carrierDecoder.Length; i++) _carrierDecoder[i].Load(d.Read, $"main.{i}", d.Need);
+        for (int i = 0; i < _carrierDecoder.Length; i++) _carrierDecoder[i].Load(d.Source, $"main.{i}");
         var m = Reader(messageDecoder);
         // MsgDecoder's Sequential interleaves a Dropout(0) before each layer: the layers sit at odd indices.
-        for (int i = 0; i < _messageDecoder.Length; i++) _messageDecoder[i].Load(m.Read, $"main.{2 * i + 1}", m.Need);
-        TorchParameters.Linear(_engine, _messageReadout, c.MessageBandSize, 1, m.Need("linear.weight", c.MessageBandSize), m.Need("linear.bias", 1));
+        for (int i = 0; i < _messageDecoder.Length; i++) _messageDecoder[i].Load(m.Source, $"main.{2 * i + 1}");
+        TorchParameters.Linear(_engine, _messageReadout, c.MessageBandSize, 1, m.Source, "linear.weight", "linear.bias");
         return (e.Used, d.Used, m.Used);
     }
 
     /// <summary>Loads the release's checkpoint directory (<c>44_1_khz/73999_iteration</c>).</summary>
     public void LoadCheckpointDirectory(string directory)
     {
-        Func<string, double[]?> Open(string file)
+        AiDotNet.ModelLoading.TorchCheckpointFile Open(string file)
         {
             var path = Path.Combine(directory, file);
             if (!File.Exists(path)) throw new FileNotFoundException($"SilentCipher's {file} is missing.", path);
-            var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-            foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path))
-            {
-                string name = entry.Key.StartsWith("module.", StringComparison.Ordinal) ? entry.Key.Substring("module.".Length) : entry.Key;
-                state[name] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-            }
-            return name => state.TryGetValue(name, out var v) ? v : null;
+            return AiDotNet.ModelLoading.TorchCheckpointFile.Open(path);
         }
-        Load(Open("enc_c.ckpt"), Open("dec_c.ckpt"), Open("dec_m_0.ckpt"));
+        // DataParallel saved every name under 'module.'.
+        AiDotNet.ModelLoading.TorchTensorSource Unwrapped(AiDotNet.ModelLoading.TorchCheckpointFile file) =>
+            file.WithNames(name => file.Contains(name) ? name : "module." + name);
+        using var encoder = Open("enc_c.ckpt");
+        using var carrierDecoder = Open("dec_c.ckpt");
+        using var messageDecoder = Open("dec_m_0.ckpt");
+        Load(Unwrapped(encoder), Unwrapped(carrierDecoder), Unwrapped(messageDecoder));
     }
 }
 

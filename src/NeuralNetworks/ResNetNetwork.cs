@@ -292,13 +292,15 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     }
 
     /// <summary>Loads a torchvision ResNet state dict (the trunk, then <c>fc.weight</c> and <c>fc.bias</c>).</summary>
-    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a torchvision ResNet state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
-        Trunk.LoadTorchWeights(read);
+        Trunk.LoadTorchWeights(source);
         if (Classifier is null) return;
         int inputs = _configuration.Trunk.OutputChannels[3], classes = _configuration.NumClasses;
-        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, Classifier, inputs, classes,
-            read("fc.weight", new[] { classes, inputs }), read("fc.bias", new[] { classes }));
+        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, Classifier, inputs, classes, source, "fc.weight", "fc.bias");
     }
 
     /// <inheritdoc />

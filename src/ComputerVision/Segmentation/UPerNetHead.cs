@@ -165,14 +165,11 @@ internal sealed record ConvModule<T>(ConvolutionalLayer<T> Conv, BatchNormalizat
             Enumerable.Repeat(1.0, outputs).ToArray());
     }
 
-    public void Load(Func<string, int[], double[]> read, string name)
+    public void Load(AiDotNet.ModelLoading.TorchTensorSource source, string name)
     {
         int k = Conv.KernelSize, outputs = Conv.OutputDepth;
-        var w = read($"{name}.conv.weight", new[] { outputs, Conv.InputDepth, k, k });
-        Conv.SetParameters(new Vector<T>(Array.ConvertAll(w, MathHelper.GetNumericOperations<T>().FromDouble)));
-        var shape = new[] { outputs };
-        TorchParameters.BatchNorm(Norm, read($"{name}.bn.weight", shape), read($"{name}.bn.bias", shape),
-            read($"{name}.bn.running_mean", shape), read($"{name}.bn.running_var", shape));
+        TorchParameters.Conv2d(Conv, source, $"{name}.conv.weight", new[] { outputs, Conv.InputDepth, k, k }, null);
+        TorchParameters.BatchNorm(Norm, source, $"{name}.bn.", outputs);
     }
 }
 
@@ -216,13 +213,8 @@ internal sealed class SegmentationClassifier<T>
         Conv.SetParameters(full);
     }
 
-    public void Load(Func<string, int[], double[]> read, string name)
-    {
-        int classes = Conv.OutputDepth, inputs = Conv.InputDepth;
-        var w = read($"{name}.weight", new[] { classes, inputs, 1, 1 });
-        var b = read($"{name}.bias", new[] { classes });
-        Conv.SetParameters(new Vector<T>(w.Concat(b).Select(NumOps.FromDouble).ToArray()));
-    }
+    public void Load(AiDotNet.ModelLoading.TorchTensorSource source, string name)
+        => TorchParameters.Conv2d(Conv, source, $"{name}.weight", new[] { Conv.OutputDepth, Conv.InputDepth, 1, 1 }, $"{name}.bias");
 }
 
 /// <summary>
@@ -297,14 +289,14 @@ internal sealed class UPerNetHead<T>
     }
 
     /// <summary>Loads an mmseg <c>UPerHead</c> state dict under <paramref name="prefix"/>.</summary>
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(AiDotNet.ModelLoading.TorchTensorSource source, string prefix)
     {
-        for (int i = 0; i < PoolConvs.Count; i++) PoolConvs[i].Load(read, $"{prefix}.psp_modules.{i}.1");
-        Bottleneck.Load(read, $"{prefix}.bottleneck");
-        for (int i = 0; i < Laterals.Count; i++) Laterals[i].Load(read, $"{prefix}.lateral_convs.{i}");
-        for (int i = 0; i < FpnConvs.Count; i++) FpnConvs[i].Load(read, $"{prefix}.fpn_convs.{i}");
-        FpnBottleneck.Load(read, $"{prefix}.fpn_bottleneck");
-        Classifier.Load(read, $"{prefix}.conv_seg");
+        for (int i = 0; i < PoolConvs.Count; i++) PoolConvs[i].Load(source, $"{prefix}.psp_modules.{i}.1");
+        Bottleneck.Load(source, $"{prefix}.bottleneck");
+        for (int i = 0; i < Laterals.Count; i++) Laterals[i].Load(source, $"{prefix}.lateral_convs.{i}");
+        for (int i = 0; i < FpnConvs.Count; i++) FpnConvs[i].Load(source, $"{prefix}.fpn_convs.{i}");
+        FpnBottleneck.Load(source, $"{prefix}.fpn_bottleneck");
+        Classifier.Load(source, $"{prefix}.conv_seg");
     }
 }
 
@@ -336,9 +328,9 @@ internal sealed class FcnHead<T>
         Classifier.Initialize(random);
     }
 
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(AiDotNet.ModelLoading.TorchTensorSource source, string prefix)
     {
-        Conv.Load(read, $"{prefix}.convs.0");
-        Classifier.Load(read, $"{prefix}.conv_seg");
+        Conv.Load(source, $"{prefix}.convs.0");
+        Classifier.Load(source, $"{prefix}.conv_seg");
     }
 }

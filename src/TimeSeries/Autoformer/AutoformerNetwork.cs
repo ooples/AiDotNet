@@ -390,16 +390,19 @@ internal sealed class AutoformerNetwork<T>
     }
 
     /// <summary>Loads parameters named as the reference's <c>Model</c> state dict.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads the reference's <c>Model</c> state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         var c = Configuration;
         int d = c.ModelDim;
         void Lin(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{name}.weight", new[] { outputs, inputs }), read($"{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias");
         // Conv1d weight [out, in, 3] → the linear map of [x_{t−1}, x_t, x_{t+1}]: column k·in + c.
         void Conv(BiasFreeLinearLayer<T> layer, string name, int inputs, int outputs)
         {
-            var w = read($"{name}.weight", new[] { outputs, inputs, 3 });
+            var w = source.Read($"{name}.weight", new[] { outputs, inputs, 3 });
             var unfolded = new double[outputs * 3 * inputs];
             for (int o = 0; o < outputs; o++)
                 for (int ch = 0; ch < inputs; ch++)
@@ -407,9 +410,9 @@ internal sealed class AutoformerNetwork<T>
             TorchParameters.Linear(layer, 3 * inputs, outputs, unfolded);
         }
         void Pointwise(BiasFreeLinearLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(layer, inputs, outputs, read($"{name}.weight", new[] { outputs, inputs, 1 }));
+            => TorchParameters.Linear(layer, inputs, outputs, source, $"{name}.weight", new[] { outputs, inputs, 1 });
         void Norm(LayerNormalizationLayer<T> layer, string name)
-            => TorchParameters.LayerNorm(_engine, layer, read($"{name}.weight", new[] { d }), read($"{name}.bias", new[] { d }));
+            => TorchParameters.LayerNorm(_engine, layer, source, $"{name}.weight", $"{name}.bias");
         void Corr(Correlation a, string name)
         {
             Lin(a.Query, $"{name}.query_projection", d, d);
@@ -421,7 +424,7 @@ internal sealed class AutoformerNetwork<T>
         {
             Conv(e.Token, $"{name}.value_embedding.tokenConv", channels, d);
             if (e.Time is not null)
-                TorchParameters.Linear(e.Time, c.TimeFeatures, d, read($"{name}.temporal_embedding.embed.weight", new[] { d, c.TimeFeatures }));
+                TorchParameters.Linear(e.Time, c.TimeFeatures, d, source, $"{name}.temporal_embedding.embed.weight");
         }
         Embedding(EncoderEmbedding, "enc_embedding", c.EncoderInputs);
         Embedding(DecoderEmbedding, "dec_embedding", c.DecoderInputs);

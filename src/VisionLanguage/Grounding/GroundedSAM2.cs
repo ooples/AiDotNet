@@ -134,8 +134,14 @@ public partial class GroundedSAM2<T> : VisionLanguageModelBase<T>, IVisualGround
     /// <summary>Loads an official Grounding DINO checkpoint's state dict (Hugging Face names).</summary>
     internal void LoadDetectorWeights(Func<string, int[], double[]> read) => Detector.Network.LoadTorchWeights(read);
 
+    /// <summary>The same, straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadDetectorWeights(AiDotNet.ModelLoading.TorchTensorSource source) => Detector.Network.LoadTorchWeights(source);
+
     /// <summary>Loads an official SAM 2 checkpoint's state dict (Hugging Face names).</summary>
     internal void LoadSegmenterWeights(Func<string, int[], double[]> read) => Segmenter.LoadTorchWeights(read);
+
+    /// <summary>The same, straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadSegmenterWeights(AiDotNet.ModelLoading.TorchTensorSource source) => Segmenter.LoadTorchWeights(source);
 
     /// <inheritdoc />
     public override void SetTrainingMode(bool isTraining)

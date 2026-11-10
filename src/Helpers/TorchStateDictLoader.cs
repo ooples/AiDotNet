@@ -92,12 +92,11 @@ internal sealed class TorchStateDictLoader<T>
         int inputs = weights.Shape[0], outputs = weights.Shape[1];
         if (inputs != inChannels * kernelHeight * kernelWidth)
             throw new InvalidOperationException($"'{prefix}': the dense map reads {inputs} values per patch, not {inChannels * kernelHeight * kernelWidth}.");
-        var values = Read(prefix + ".weight", new[] { outputs, inChannels, kernelHeight, kernelWidth });
-        var transposed = new double[values.Length];
-        for (int o = 0; o < outputs; o++)
-            for (int i = 0; i < inputs; i++) transposed[i * outputs + o] = values[o * inputs + i];
-        Fill(weights, transposed, prefix + ".weight");
-        if (layer.UseBias) Fill(layer.GetBiases(), Read(prefix + ".bias", new[] { outputs }), prefix + ".bias");
+        // [out, in, kh, kw] is [out, in·kh·kw] row-major: the dense map's transpose.
+        _source.CopyTransposedTo(prefix + ".weight", new[] { outputs, inChannels, kernelHeight, kernelWidth }, outputs, inputs, weights);
+        _loaded.Add(prefix + ".weight");
+        _engine.InvalidatePersistentTensor(weights);
+        if (layer.UseBias) Copy(layer.GetBiases(), prefix + ".bias", new[] { outputs });
     }
 
     /// <summary><c>nn.LayerNorm</c>: <c>{prefix}.weight</c> and <c>{prefix}.bias</c>.</summary>

@@ -116,6 +116,9 @@ public partial class MedSAM2<T> : Common.MedicalSegmentationBase<T>, ITrainingOb
     /// <summary>Loads a Hugging Face <c>Sam2VideoModel</c> state dict.</summary>
     internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
 
+    /// <summary>The same, straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source) => Network.LoadTorchWeights(source);
+
     /// <inheritdoc/>
     public override void SetTrainingMode(bool isTraining)
     {

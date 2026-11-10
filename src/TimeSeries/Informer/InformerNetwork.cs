@@ -488,27 +488,30 @@ internal sealed class InformerNetwork<T>
     }
 
     /// <summary>Loads parameters named as the reference's <c>Informer</c> state dict.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads the reference's <c>Informer</c> state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         var c = Configuration;
         int d = c.ModelDim;
         void Lin(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{name}.weight", new[] { outputs, inputs }), read($"{name}.bias", new[] { outputs }));
-        // Conv1d weight [out, in, k] → the linear map of [x_{t−1}, x_t, x_{t+1}]: column k·in + c.
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias");
+        // Conv1d weight [out, in, k] → the linear map of [x_{t−1}, x_t, x_{t+1}]: column k·in + c (rearranged on the way in).
         void Conv(DenseLayer<T> layer, string name, int inputs, int outputs)
         {
-            var w = read($"{name}.weight", new[] { outputs, inputs, 3 });
+            var w = source.Read($"{name}.weight", new[] { outputs, inputs, 3 });
             var unfolded = new double[outputs * 3 * inputs];
             for (int o = 0; o < outputs; o++)
                 for (int ch = 0; ch < inputs; ch++)
                     for (int k = 0; k < 3; k++) unfolded[o * 3 * inputs + k * inputs + ch] = w[(o * inputs + ch) * 3 + k];
-            TorchParameters.Linear(_engine, layer, 3 * inputs, outputs, unfolded, read($"{name}.bias", new[] { outputs }));
+            TorchParameters.Linear(_engine, layer, 3 * inputs, outputs, unfolded, source.Read($"{name}.bias", new[] { outputs }));
         }
         // Kernel-1 Conv1d weight [out, in, 1] is a linear weight.
         void Pointwise(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{name}.weight", new[] { outputs, inputs, 1 }), read($"{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias", new[] { outputs, inputs, 1 });
         void Norm(LayerNormalizationLayer<T> layer, string name)
-            => TorchParameters.LayerNorm(_engine, layer, read($"{name}.weight", new[] { d }), read($"{name}.bias", new[] { d }));
+            => TorchParameters.LayerNorm(_engine, layer, source, $"{name}.weight", $"{name}.bias");
         void Attn(Attention a, string name)
         {
             Lin(a.Query, $"{name}.query_projection", d, d);
@@ -538,7 +541,7 @@ internal sealed class InformerNetwork<T>
             string p = $"encoder.conv_layers.{i}";
             Conv(Distilling[i].Conv, $"{p}.downConv", d, d);
             // The layer's vector is gamma, beta, then the running mean and variance buffers.
-            var parts = new[] { "weight", "bias", "running_mean", "running_var" }.Select(n => read($"{p}.norm.{n}", new[] { d })).ToArray();
+            var parts = new[] { "weight", "bias", "running_mean", "running_var" }.Select(n => source.Read($"{p}.norm.{n}", new[] { d })).ToArray();
             var parameters = new Vector<T>(4 * d);
             for (int part = 0; part < 4; part++)
                 for (int j = 0; j < d; j++) parameters[part * d + j] = NumOps.FromDouble(parts[part][j]);

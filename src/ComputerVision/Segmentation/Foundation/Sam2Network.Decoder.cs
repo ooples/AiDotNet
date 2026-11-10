@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.TextToSpeech.CodecBased;
 
 namespace AiDotNet.ComputerVision.Segmentation.Foundation;
@@ -323,19 +324,22 @@ internal sealed partial class Sam2Network<T>
     }
 
     /// <summary>Loads a Hugging Face <c>Sam2Model</c> state dict (as converted from the official checkpoints).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads a Hugging Face <c>Sam2Model</c> state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
         int p = c.Dim, d0 = c.EmbedDims[0];
         void Linear(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{name}.weight", new[] { outputs, inputs }), read($"{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias");
         void Conv(DenseLayer<T> layer, string name, int inputs, int outputs, int kernel)
-            => TorchParameters.Linear(_engine, layer, inputs * kernel * kernel, outputs, read($"{name}.weight", new[] { outputs, inputs, kernel, kernel }),
-                read($"{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs * kernel * kernel, outputs, source, $"{name}.weight", $"{name}.bias",
+                new[] { outputs, inputs, kernel, kernel });
         void Norm(LayerNormalizationLayer<T> norm, string name, int dim)
-            => TorchParameters.LayerNorm(_engine, norm, read($"{name}.weight", new[] { dim }), read($"{name}.bias", new[] { dim }));
+            => TorchParameters.LayerNorm(_engine, norm, source, $"{name}.weight", $"{name}.bias");
         void Values(BiasFreeLinearLayer<T> holder, string name, int[] shape)
-            => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, b) => a * b), read(name, shape));
+            => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, b) => a * b), source, name, shape);
         void Attention(Attention a, string name, int inner)
         {
             Linear(a.Query, $"{name}.q_proj", p, inner);
@@ -355,9 +359,9 @@ internal sealed partial class Sam2Network<T>
         if (c.PlainVit)
         {
             Values(VitPosition!, $"{backbone}.pos_embed", new[] { 1, c.VitPositionGrid * c.VitPositionGrid + 1, d0 });
-            TorchParameters.Linear(VitNeckConv1!, d0, p, read("vision_encoder.neck.convs.0.conv_1x1.weight", new[] { p, d0, 1, 1 }));
+            TorchParameters.Linear(VitNeckConv1!, d0, p, source, "vision_encoder.neck.convs.0.conv_1x1.weight", new[] { p, d0, 1, 1 });
             Norm(VitNeckNorm1!, "vision_encoder.neck.convs.0.layer_norm_0", p);
-            TorchParameters.Linear(VitNeckConv2!, 9 * p, p, read("vision_encoder.neck.convs.0.conv_3x3.weight", new[] { p, p, 3, 3 }));
+            TorchParameters.Linear(VitNeckConv2!, 9 * p, p, source, "vision_encoder.neck.convs.0.conv_3x3.weight", new[] { p, p, 3, 3 });
             Norm(VitNeckNorm2!, "vision_encoder.neck.convs.0.layer_norm_1", p);
         }
         else
@@ -383,10 +387,18 @@ internal sealed partial class Sam2Network<T>
         if (HighRes1 is not null) Conv(HighRes1, "mask_decoder.conv_s1", p, p / 4, 1);
         Values(NoMemory, "no_memory_embedding", new[] { 1, 1, p });
 
-        var gaussian = read("prompt_encoder.shared_embedding.positional_embedding", new[] { 2, p / 2 });
+        var gaussian = source.Read("prompt_encoder.shared_embedding.positional_embedding", new[] { 2, p / 2 });
         for (int i = 0; i < 2; i++) for (int j = 0; j < p / 2; j++) _gaussian[i, j] = gaussian[i * (p / 2) + j];
-        var points = read("prompt_encoder.point_embed.weight", new[] { 4, p });
-        for (int i = 0; i < 4; i++) TorchParameters.Linear(PointEmbeddings[i], 1, p, points.Skip(i * p).Take(p).ToArray());
+        if (source.Contains("prompt_encoder.point_embed.weight"))
+        {
+            var points = source.Read("prompt_encoder.point_embed.weight", new[] { 4, p });
+            for (int i = 0; i < 4; i++) TorchParameters.Linear(PointEmbeddings[i], 1, p, points.Skip(i * p).Take(p).ToArray());
+        }
+        else
+        {
+            // The official checkpoints keep one table per point label.
+            for (int i = 0; i < 4; i++) Values(PointEmbeddings[i], $"prompt_encoder.point_embed.{i}.weight", new[] { 1, p });
+        }
         Values(NotAPoint, "prompt_encoder.not_a_point_embed.weight", new[] { 1, p });
         Values(NoMask, "prompt_encoder.no_mask_embed.weight", new[] { 1, p });
         Conv(MaskConv1, "prompt_encoder.mask_embed.conv1", 1, c.MaskInChannels / 4, 2);
@@ -415,13 +427,13 @@ internal sealed partial class Sam2Network<T>
         }
         Attention(FinalAttention, "mask_decoder.transformer.final_attn_token_to_image", inner);
         Norm(FinalNorm, "mask_decoder.transformer.layer_norm_final_attn", p);
-        Upscale1.Load(read("mask_decoder.upscale_conv1.weight", new[] { p, p / 4, 2, 2 }), read("mask_decoder.upscale_conv1.bias", new[] { p / 4 }));
+        Upscale1.Load(source, "mask_decoder.upscale_conv1.weight", "mask_decoder.upscale_conv1.bias");
         Norm(UpscaleNorm, "mask_decoder.upscale_layer_norm", p / 4);
-        Upscale2.Load(read("mask_decoder.upscale_conv2.weight", new[] { p / 4, p / 8, 2, 2 }), read("mask_decoder.upscale_conv2.bias", new[] { p / 8 }));
+        Upscale2.Load(source, "mask_decoder.upscale_conv2.weight", "mask_decoder.upscale_conv2.bias");
         for (int i = 0; i < Hypernetworks.Count; i++)
             FeedForward(Hypernetworks[i], $"mask_decoder.output_hypernetworks_mlps.{i}", p, p, p / 8);
         FeedForward(IouHead, "mask_decoder.iou_prediction_head", p, c.IouHidden, c.MaskTokens);
         FeedForward(ObjectHead, "mask_decoder.pred_obj_score_head", p, p, 1);
-        if (c.Memory is not null) LoadMemoryWeights(read);
+        if (c.Memory is not null) LoadMemoryWeights(source);
     }
 }

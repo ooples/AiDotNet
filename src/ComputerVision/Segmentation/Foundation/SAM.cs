@@ -156,6 +156,9 @@ public partial class SAM<T> : Common.PromptableSegmentationBase<T>
     /// <summary>Loads an official SAM checkpoint's state dict.</summary>
     internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
 
+    /// <summary>The same, straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source) => Network.LoadTorchWeights(source);
+
     // ------------------------------------------------------------------ image setting (SamPredictor)
 
     /// <summary>The official ResizeLongestSide: the longer side becomes the encoder size, the other scales with it.</summary>

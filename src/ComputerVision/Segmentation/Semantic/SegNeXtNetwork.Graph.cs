@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -275,24 +276,21 @@ internal sealed class SegNeXtNetwork<T>
         => Logits(Features(images, training, random), training, random, bases);
 
     /// <summary>Loads mmsegmentation's state dict: <c>backbone.*</c> (MSCAN) and <c>decode_head.*</c> (LightHamHead).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads mmsegmentation's state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         void Conv(ConvolutionalLayer<T> conv, string name, bool bias)
         {
             int k = conv.KernelSize;
-            var w = read($"{name}.weight", new[] { conv.OutputDepth, conv.InputDepth, k, k });
-            var values = bias ? w.Concat(read($"{name}.bias", new[] { conv.OutputDepth })).ToArray() : w;
-            conv.SetParameters(new Vector<T>(values.Select(NumOps.FromDouble).ToArray()));
+            TorchParameters.Conv2d(conv, source, $"{name}.weight", new[] { conv.OutputDepth, conv.InputDepth, k, k }, bias ? $"{name}.bias" : null);
         }
-        void Bn(BatchNormalizationLayer<T> norm, string name, int c)
-        {
-            var s = new[] { c };
-            TorchParameters.BatchNorm(norm, read($"{name}.weight", s), read($"{name}.bias", s), read($"{name}.running_mean", s), read($"{name}.running_var", s));
-        }
+        void Bn(BatchNormalizationLayer<T> norm, string name, int c) => TorchParameters.BatchNorm(norm, source, name + ".", c);
         void Dw(StripDepthwiseConvolution<T> conv, string name, int c, int kh, int kw)
-            => conv.Load(read($"{name}.weight", new[] { c, 1, kh, kw }), read($"{name}.bias", new[] { c }));
+            => conv.Load(source.Read($"{name}.weight", new[] { c, 1, kh, kw }), source.Read($"{name}.bias", new[] { c }));
         void Gn(GroupNormalizationLayer<T> norm, string name, int c)
-            => norm.LoadAffine(read($"{name}.weight", new[] { c }), read($"{name}.bias", new[] { c }));
+            => norm.LoadAffine(source, $"{name}.weight", $"{name}.bias");
 
         var cfg = Configuration;
         int d0 = cfg.EmbedDims[0];
@@ -321,15 +319,14 @@ internal sealed class SegNeXtNetwork<T>
                 for (int i = 0; i < 6; i++) Dw(b.Strips[i], $"{p}.attn.spatial_gating_unit.{stripNames[i]}", d, strips[i][0], strips[i][1]);
                 Conv(b.Conv3, $"{p}.attn.spatial_gating_unit.conv3", true);
                 Conv(b.Projection2, $"{p}.attn.proj_2", true);
-                b.Scale1.Load(read($"{p}.layer_scale_1", new[] { d }));
-                b.Scale2.Load(read($"{p}.layer_scale_2", new[] { d }));
+                b.Scale1.Load(source.Read($"{p}.layer_scale_1", new[] { d }));
+                b.Scale2.Load(source.Read($"{p}.layer_scale_2", new[] { d }));
                 Bn(b.Norm2, $"{p}.norm2", d);
                 Conv(b.Fc1, $"{p}.mlp.fc1", true);
                 Dw(b.DepthwiseConv, $"{p}.mlp.dwconv", hidden, 3, 3);
                 Conv(b.Fc2, $"{p}.mlp.fc2", true);
             }
-            TorchParameters.LayerNorm(_engine, StageNorms[stage], read($"backbone.norm{stage + 1}.weight", new[] { d }),
-                read($"backbone.norm{stage + 1}.bias", new[] { d }));
+            TorchParameters.LayerNorm(_engine, StageNorms[stage], source, $"backbone.norm{stage + 1}.weight", $"backbone.norm{stage + 1}.bias");
         }
         Conv(Squeeze.Conv, "decode_head.squeeze.conv", false);
         Gn(Squeeze.Norm, "decode_head.squeeze.gn", cfg.HamChannels);
@@ -338,7 +335,7 @@ internal sealed class SegNeXtNetwork<T>
         Gn(HamOut.Norm, "decode_head.hamburger.ham_out.gn", cfg.HamChannels);
         Conv(Align.Conv, "decode_head.align.conv", false);
         Gn(Align.Norm, "decode_head.align.gn", cfg.HeadChannels);
-        Classifier.Load(read, "decode_head.conv_seg");
+        Classifier.Load(source, "decode_head.conv_seg");
     }
 
     /// <summary>
