@@ -106,7 +106,8 @@ public sealed class AnthropicController : ControllerBase
 
         if (!TryPrepare(request.Model, out var ctx, out var error))
         {
-            return error;
+            // TryPrepare sets error when it returns false ([NotNullWhen(false)]); the fallback only satisfies analyzers.
+            return error ?? AnthropicError(StatusCodes.Status500InternalServerError, "The model could not be prepared.", "api_error");
         }
 
         string prompt = RenderAnthropicPrompt(request);
