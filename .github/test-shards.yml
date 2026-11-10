@@ -1473,6 +1473,7 @@ shard:
     filter: >-
       Category!=GPU&Category!=Stress&Category!=Sweep&(
       FullyQualifiedName~AiDotNet.Tests.Video.UnsharpKernelTests.|
+      FullyQualifiedName~AiDotNet.Tests.Video.NiqeDomainTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.VideoOptionsCopyTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.ShiftNetPaperTests.|
       FullyQualifiedName~AiDotNet.Tests.Video.UDVDPaperTests.|
@@ -1709,6 +1710,7 @@ shard:
       FullyQualifiedName~AiDotNet.Tests.MergedPRBugFixTests.|
       FullyQualifiedName~AiDotNet.Tests.MetaLearning.iMAMLAlgorithmTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.LayerTestBaseHarnessRegressionTests.|
+      FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.NaturalSpeechOptionControlTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Base.LossCompatibleTargetProjectionTests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.Diffusion.MGIETests.|
       FullyQualifiedName~AiDotNet.Tests.ModelFamilyTests.MetaLearning.AdaptedMetaModelTests.|
