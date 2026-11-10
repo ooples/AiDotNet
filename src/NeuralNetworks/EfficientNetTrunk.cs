@@ -294,34 +294,26 @@ internal sealed class EfficientNetTrunk<T>
     }
 
     /// <summary>Loads a timm <c>tf_efficientnet</c> state dict, given a reader of a named tensor of a given shape.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a timm <c>tf_efficientnet</c> state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         foreach (var (name, conv, normName, norm) in NamedConvolutions())
         {
             int k = conv.KernelSize, outputs = conv.OutputDepth;
-            LoadConv(conv, read($"{name}.weight", new[] { outputs, KernelInputs(conv), k, k }));
-            var shape = new[] { outputs };
-            TextToSpeech.CodecBased.TorchParameters.BatchNorm(norm, read($"{normName}.weight", shape), read($"{normName}.bias", shape),
-                read($"{normName}.running_mean", shape), read($"{normName}.running_var", shape));
+            TextToSpeech.CodecBased.TorchParameters.Conv2d(conv, source, $"{name}.weight", new[] { outputs, KernelInputs(conv), k, k }, null);
+            TextToSpeech.CodecBased.TorchParameters.BatchNorm(norm, source, normName + ".", outputs);
         }
         for (int s = 0; s < Stages.Count; s++)
             for (int b = 0; b < Stages[s].Count; b++)
             {
                 var block = Stages[s][b];
                 string p = $"blocks.{s}.{b}.se";
-                TextToSpeech.CodecBased.TorchParameters.Linear(_engine, block.Reduce, block.Hidden, block.Squeezed,
-                    read($"{p}.conv_reduce.weight", new[] { block.Squeezed, block.Hidden, 1, 1 }),
-                    read($"{p}.conv_reduce.bias", new[] { block.Squeezed }));
-                TextToSpeech.CodecBased.TorchParameters.Linear(_engine, block.Excite, block.Squeezed, block.Hidden,
-                    read($"{p}.conv_expand.weight", new[] { block.Hidden, block.Squeezed, 1, 1 }),
-                    read($"{p}.conv_expand.bias", new[] { block.Hidden }));
+                TextToSpeech.CodecBased.TorchParameters.Linear(_engine, block.Reduce, block.Hidden, block.Squeezed, source,
+                    $"{p}.conv_reduce.weight", $"{p}.conv_reduce.bias", new[] { block.Squeezed, block.Hidden, 1, 1 });
+                TextToSpeech.CodecBased.TorchParameters.Linear(_engine, block.Excite, block.Squeezed, block.Hidden, source,
+                    $"{p}.conv_expand.weight", $"{p}.conv_expand.bias", new[] { block.Hidden, block.Squeezed, 1, 1 });
             }
-    }
-
-    private static void LoadConv(ConvolutionalLayer<T> conv, double[] weight)
-    {
-        var v = new Vector<T>(weight.Length);
-        for (int i = 0; i < weight.Length; i++) v[i] = NumOps.FromDouble(weight[i]);
-        conv.SetParameters(v);
     }
 }

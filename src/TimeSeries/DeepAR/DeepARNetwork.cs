@@ -631,18 +631,19 @@ internal sealed class DeepARNetwork<T>
 
     /// <summary>Loads parameters named as a PyTorch <c>nn.LSTM</c> (<c>lstm.weight_ih_l{k}</c>, …) and the head
     /// (<c>head.weight</c>, <c>head.bias</c>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads the <c>nn.LSTM</c> and head parameters straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         int h = Configuration.HiddenSize;
         for (int l = 0; l < Cells.Count; l++)
         {
             int inputs = l == 0 ? InputSize : h;
-            TorchParameters.Linear(_engine, Cells[l].InputToHidden, inputs, 4 * h,
-                read($"lstm.weight_ih_l{l}", new[] { 4 * h, inputs }), read($"lstm.bias_ih_l{l}", new[] { 4 * h }));
-            TorchParameters.Linear(_engine, Cells[l].HiddenToHidden, h, 4 * h,
-                read($"lstm.weight_hh_l{l}", new[] { 4 * h, h }), read($"lstm.bias_hh_l{l}", new[] { 4 * h }));
+            TorchParameters.Linear(_engine, Cells[l].InputToHidden, inputs, 4 * h, source, $"lstm.weight_ih_l{l}", $"lstm.bias_ih_l{l}");
+            TorchParameters.Linear(_engine, Cells[l].HiddenToHidden, h, 4 * h, source, $"lstm.weight_hh_l{l}", $"lstm.bias_hh_l{l}");
         }
         int outputs = ParameterCount(Configuration.Likelihood);
-        TorchParameters.Linear(_engine, Head, h, outputs, read("head.weight", new[] { outputs, h }), read("head.bias", new[] { outputs }));
+        TorchParameters.Linear(_engine, Head, h, outputs, source, "head.weight", "head.bias");
     }
 }

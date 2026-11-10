@@ -31,6 +31,10 @@ internal class Conv2D<T> : IParameterSource<T>, IParameterChunkSource<T>, IParam
     {
         yield return _layer;
     }
+
+    /// <summary>The wrapped convolution, for loaders that copy a checkpoint into its kernel.</summary>
+    internal ConvolutionalLayer<T> Layer => _layer;
+
     private readonly int _inChannels;
     private readonly int _outChannels;
     private readonly int _kernelSize;

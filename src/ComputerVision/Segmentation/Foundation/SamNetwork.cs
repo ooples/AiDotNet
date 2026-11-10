@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
+using AiDotNet.ModelLoading;
 using AiDotNet.TextToSpeech.CodecBased;
 
 namespace AiDotNet.ComputerVision.Segmentation.Foundation;
@@ -524,20 +525,22 @@ internal sealed class SamNetwork<T>
 
     // ------------------------------------------------------------------ parameters
 
-    private static void LoadValues(BiasFreeLinearLayer<T> holder, double[] values) => TorchParameters.Linear(holder, 1, values.Length, values);
-
-    private static void LoadConv(ConvolutionalLayer<T> conv, double[] weight, double[]? bias)
-        => conv.SetParameters(new Vector<T>((bias is null ? weight : weight.Concat(bias).ToArray()).Select(NumOps.FromDouble).ToArray()));
-
     /// <summary>Loads an official Sam state dict, given a reader of a named tensor of a given shape.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads an official Sam state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
         int d = c.EncoderDim, g = c.Grid, hd = d / c.EncoderHeads, p = c.PromptDim;
         void Linear(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{name}.weight", new[] { outputs, inputs }), read($"{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias");
         void Norm(LayerNormalizationLayer<T> norm, string name, int dim)
-            => TorchParameters.LayerNorm(_engine, norm, read($"{name}.weight", new[] { dim }), read($"{name}.bias", new[] { dim }));
+            => TorchParameters.LayerNorm(_engine, norm, source, $"{name}.weight", $"{name}.bias");
+        void Values(BiasFreeLinearLayer<T> holder, string name, int[] shape)
+            => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, b) => a * b), source, name, shape);
+        void Conv(ConvolutionalLayer<T> conv, string name, int[] shape, bool bias = true)
+            => TorchParameters.Conv2d(conv, source, $"{name}.weight", shape, bias ? $"{name}.bias" : null);
         void Attention(Attention a, string name, int downsample)
         {
             Linear(a.Query, $"{name}.q_proj", p, p / downsample);
@@ -545,9 +548,8 @@ internal sealed class SamNetwork<T>
             Linear(a.Value, $"{name}.v_proj", p, p / downsample);
             Linear(a.Output, $"{name}.out_proj", p / downsample, p);
         }
-        LoadConv(PatchProjection, read("image_encoder.patch_embed.proj.weight", new[] { d, c.Channels, c.PatchSize, c.PatchSize }),
-            read("image_encoder.patch_embed.proj.bias", new[] { d }));
-        LoadValues(PositionTable, read("image_encoder.pos_embed", new[] { 1, g, g, d }));
+        Conv(PatchProjection, "image_encoder.patch_embed.proj", new[] { d, c.Channels, c.PatchSize, c.PatchSize });
+        Values(PositionTable, "image_encoder.pos_embed", new[] { 1, g, g, d });
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
@@ -555,34 +557,33 @@ internal sealed class SamNetwork<T>
             Norm(b.Norm1, $"{n}.norm1", d);
             Linear(b.Qkv, $"{n}.attn.qkv", d, 3 * d);
             Linear(b.Projection, $"{n}.attn.proj", d, d);
-            if (b.RelativeHeight is not null) LoadValues(b.RelativeHeight, read($"{n}.attn.rel_pos_h", new[] { 2 * b.Span - 1, hd }));
-            if (b.RelativeWidth is not null) LoadValues(b.RelativeWidth, read($"{n}.attn.rel_pos_w", new[] { 2 * b.Span - 1, hd }));
+            if (b.RelativeHeight is not null) Values(b.RelativeHeight, $"{n}.attn.rel_pos_h", new[] { 2 * b.Span - 1, hd });
+            if (b.RelativeWidth is not null) Values(b.RelativeWidth, $"{n}.attn.rel_pos_w", new[] { 2 * b.Span - 1, hd });
             Norm(b.Norm2, $"{n}.norm2", d);
             int mlp = (int)(d * c.MlpRatio);
             Linear(b.Mlp1, $"{n}.mlp.lin1", d, mlp);
             Linear(b.Mlp2, $"{n}.mlp.lin2", mlp, d);
         }
-        LoadConv(NeckConv1, read("image_encoder.neck.0.weight", new[] { c.OutChannels, d, 1, 1 }), null);
+        Conv(NeckConv1, "image_encoder.neck.0", new[] { c.OutChannels, d, 1, 1 }, bias: false);
         Norm(NeckNorm1, "image_encoder.neck.1", c.OutChannels);
-        LoadConv(NeckConv2, read("image_encoder.neck.2.weight", new[] { c.OutChannels, c.OutChannels, 3, 3 }), null);
+        Conv(NeckConv2, "image_encoder.neck.2", new[] { c.OutChannels, c.OutChannels, 3, 3 }, bias: false);
         Norm(NeckNorm2, "image_encoder.neck.3", c.OutChannels);
 
-        var gaussian = read("prompt_encoder.pe_layer.positional_encoding_gaussian_matrix", new[] { 2, p / 2 });
+        var gaussian = source.Read("prompt_encoder.pe_layer.positional_encoding_gaussian_matrix", new[] { 2, p / 2 });
         for (int r = 0; r < 2; r++)
             for (int j = 0; j < p / 2; j++) _gaussian[r, j] = gaussian[r * (p / 2) + j];
-        for (int i = 0; i < 4; i++) LoadValues(PointEmbeddings[i], read($"prompt_encoder.point_embeddings.{i}.weight", new[] { 1, p }));
-        LoadValues(NotAPoint, read("prompt_encoder.not_a_point_embed.weight", new[] { 1, p }));
-        LoadValues(NoMask, read("prompt_encoder.no_mask_embed.weight", new[] { 1, p }));
+        for (int i = 0; i < 4; i++) Values(PointEmbeddings[i], $"prompt_encoder.point_embeddings.{i}.weight", new[] { 1, p });
+        Values(NotAPoint, "prompt_encoder.not_a_point_embed.weight", new[] { 1, p });
+        Values(NoMask, "prompt_encoder.no_mask_embed.weight", new[] { 1, p });
         int quarter = c.MaskInChannels / 4;
-        LoadConv(MaskConv1, read("prompt_encoder.mask_downscaling.0.weight", new[] { quarter, 1, 2, 2 }), read("prompt_encoder.mask_downscaling.0.bias", new[] { quarter }));
+        Conv(MaskConv1, "prompt_encoder.mask_downscaling.0", new[] { quarter, 1, 2, 2 });
         Norm(MaskNorm1, "prompt_encoder.mask_downscaling.1", quarter);
-        LoadConv(MaskConv2, read("prompt_encoder.mask_downscaling.3.weight", new[] { c.MaskInChannels, quarter, 2, 2 }),
-            read("prompt_encoder.mask_downscaling.3.bias", new[] { c.MaskInChannels }));
+        Conv(MaskConv2, "prompt_encoder.mask_downscaling.3", new[] { c.MaskInChannels, quarter, 2, 2 });
         Norm(MaskNorm2, "prompt_encoder.mask_downscaling.4", c.MaskInChannels);
-        LoadConv(MaskConv3, read("prompt_encoder.mask_downscaling.6.weight", new[] { p, c.MaskInChannels, 1, 1 }), read("prompt_encoder.mask_downscaling.6.bias", new[] { p }));
+        Conv(MaskConv3, "prompt_encoder.mask_downscaling.6", new[] { p, c.MaskInChannels, 1, 1 });
 
-        LoadValues(IouToken, read("mask_decoder.iou_token.weight", new[] { 1, p }));
-        LoadValues(MaskTokenTable, read("mask_decoder.mask_tokens.weight", new[] { c.MaskTokens, p }));
+        Values(IouToken, "mask_decoder.iou_token.weight", new[] { 1, p });
+        Values(MaskTokenTable, "mask_decoder.mask_tokens.weight", new[] { c.MaskTokens, p });
         for (int i = 0; i < TwoWayBlocks.Count; i++)
         {
             var b = TwoWayBlocks[i];
@@ -599,9 +600,9 @@ internal sealed class SamNetwork<T>
         }
         Attention(FinalAttention, "mask_decoder.transformer.final_attn_token_to_image", c.AttentionDownsample);
         Norm(FinalNorm, "mask_decoder.transformer.norm_final_attn", p);
-        Upscale1.Load(read("mask_decoder.output_upscaling.0.weight", new[] { p, p / 4, 2, 2 }), read("mask_decoder.output_upscaling.0.bias", new[] { p / 4 }));
+        Upscale1.Load(source, "mask_decoder.output_upscaling.0.weight", "mask_decoder.output_upscaling.0.bias");
         Norm(UpscaleNorm, "mask_decoder.output_upscaling.1", p / 4);
-        Upscale2.Load(read("mask_decoder.output_upscaling.3.weight", new[] { p / 4, p / 8, 2, 2 }), read("mask_decoder.output_upscaling.3.bias", new[] { p / 8 }));
+        Upscale2.Load(source, "mask_decoder.output_upscaling.3.weight", "mask_decoder.output_upscaling.3.bias");
         for (int i = 0; i < Hypernetworks.Count; i++)
         {
             string n = $"mask_decoder.output_hypernetworks_mlps.{i}.layers";

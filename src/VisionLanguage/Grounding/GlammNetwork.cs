@@ -301,21 +301,20 @@ internal sealed class GlammNetwork<T>
     /// <summary>Loads GLaMM's state dict (the merged released checkpoint's names: <c>model.vision_tower.*</c>,
     /// <c>model.mm_projector.*</c>, <c>model.layers.*</c>, <c>model.region_encoder.*</c>,
     /// <c>model.grounding_encoder.*</c>, <c>model.text_hidden_fcs.0.*</c>, <c>lm_head.weight</c>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads GLaMM's state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         var c = Configuration;
-        Clip.LoadTorchWeights(read, "model.vision_tower.vision_tower.vision_model.");
-        TorchParameters.Linear(_engine, Projector1, c.Clip.Hidden, c.Llm.Hidden, read("model.mm_projector.0.weight", new[] { c.Llm.Hidden, c.Clip.Hidden }),
-            read("model.mm_projector.0.bias", new[] { c.Llm.Hidden }));
-        TorchParameters.Linear(_engine, Projector2, c.Llm.Hidden, c.Llm.Hidden, read("model.mm_projector.2.weight", new[] { c.Llm.Hidden, c.Llm.Hidden }),
-            read("model.mm_projector.2.bias", new[] { c.Llm.Hidden }));
-        Llm.LoadTorchWeights(read, "model.", "lm_head.weight");
-        Region.LoadTorchWeights(read, "model.region_encoder.");
-        Sam.LoadTorchWeights((name, shape) => read("model.grounding_encoder." + name, shape));
-        TorchParameters.Linear(_engine, TextFc1, c.Llm.Hidden, c.Llm.Hidden, read("model.text_hidden_fcs.0.0.weight", new[] { c.Llm.Hidden, c.Llm.Hidden }),
-            read("model.text_hidden_fcs.0.0.bias", new[] { c.Llm.Hidden }));
-        TorchParameters.Linear(_engine, TextFc2, c.Llm.Hidden, c.OutDim, read("model.text_hidden_fcs.0.2.weight", new[] { c.OutDim, c.Llm.Hidden }),
-            read("model.text_hidden_fcs.0.2.bias", new[] { c.OutDim }));
+        Clip.LoadTorchWeights(source, "model.vision_tower.vision_tower.vision_model.");
+        TorchParameters.Linear(_engine, Projector1, c.Clip.Hidden, c.Llm.Hidden, source, "model.mm_projector.0.weight", "model.mm_projector.0.bias");
+        TorchParameters.Linear(_engine, Projector2, c.Llm.Hidden, c.Llm.Hidden, source, "model.mm_projector.2.weight", "model.mm_projector.2.bias");
+        Llm.LoadTorchWeights(source, "model.", "lm_head.weight");
+        Region.LoadTorchWeights(source, "model.region_encoder.");
+        Sam.LoadTorchWeights(source.WithPrefix("model.grounding_encoder."));
+        TorchParameters.Linear(_engine, TextFc1, c.Llm.Hidden, c.Llm.Hidden, source, "model.text_hidden_fcs.0.0.weight", "model.text_hidden_fcs.0.0.bias");
+        TorchParameters.Linear(_engine, TextFc2, c.Llm.Hidden, c.OutDim, source, "model.text_hidden_fcs.0.2.weight", "model.text_hidden_fcs.0.2.bias");
     }
 
     /// <summary>

@@ -53,6 +53,22 @@ internal sealed class TransposedConvolution2x2<T>
         TorchParameters.Linear(Bias, 1, o0, bias);
     }
 
+    /// <summary>Loads PyTorch's <c>[in, out, 2, 2]</c> weight and <c>[out]</c> bias straight from
+    /// <paramref name="source"/>: the stored order is the projection's own <c>[in, out·4]</c> layout.</summary>
+    internal void Load(AiDotNet.ModelLoading.TorchTensorSource source, string weightName, string biasName)
+    {
+        var shape = new[] { Inputs, Outputs, 2, 2 };
+        var weights = Weight.Weights;
+        if (weights.Length == 4 * Inputs * Outputs && weights.Lifetime != WeightLifetime.Streaming)
+        {
+            source.CopyTo(weightName, shape, weights);
+            _engine.InvalidatePersistentTensor(weights);
+            TorchParameters.Linear(Bias, 1, Outputs, source, biasName, new[] { Outputs });
+            return;
+        }
+        Load(source.Read(weightName, shape), source.Read(biasName, new[] { Outputs }));
+    }
+
     /// <summary>PyTorch's default: U(±1/√fan-in) for the weight and the bias, fan-in = out·4 for a transposed
     /// convolution's <c>[in, out, 2, 2]</c> weight.</summary>
     public void Initialize(Random random)

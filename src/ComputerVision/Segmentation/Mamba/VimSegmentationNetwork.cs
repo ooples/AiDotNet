@@ -126,26 +126,22 @@ internal sealed class VimSegmentationNetwork<T>
 
     /// <summary>Loads the official model's state dict: <c>backbone.*</c> (with the neck's <c>fpn*</c>),
     /// <c>decode_head.*</c> and <c>auxiliary_head.*</c>.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads the official model's state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         int d = Configuration.Backbone.Dim;
-        Backbone.LoadTorchWeights(read, "backbone.");
-        var w = new[] { d, d, 2, 2 };
-        var b = new[] { d };
+        Backbone.LoadTorchWeights(source, "backbone.");
+        Up1.Load(source, "backbone.fpn1.0.weight", "backbone.fpn1.0.bias");
         if (Configuration.Backbone.PatchSize == 16)
         {
-            Up1.Load(read("backbone.fpn1.0.weight", w), read("backbone.fpn1.0.bias", b));
-            TorchParameters.BatchNorm(UpNorm!, read("backbone.fpn1.1.weight", b), read("backbone.fpn1.1.bias", b),
-                read("backbone.fpn1.1.running_mean", b), read("backbone.fpn1.1.running_var", b));
-            Up2!.Load(read("backbone.fpn1.3.weight", w), read("backbone.fpn1.3.bias", b));
-            Up3!.Load(read("backbone.fpn2.0.weight", w), read("backbone.fpn2.0.bias", b));
+            TorchParameters.BatchNorm(UpNorm!, source, "backbone.fpn1.1.", d);
+            Up2!.Load(source, "backbone.fpn1.3.weight", "backbone.fpn1.3.bias");
+            Up3!.Load(source, "backbone.fpn2.0.weight", "backbone.fpn2.0.bias");
         }
-        else
-        {
-            Up1.Load(read("backbone.fpn1.0.weight", w), read("backbone.fpn1.0.bias", b));
-        }
-        Head.Load(read, "decode_head");
-        Auxiliary.Load(read, "auxiliary_head");
+        Head.Load(source, "decode_head");
+        Auxiliary.Load(source, "auxiliary_head");
     }
 
     /// <summary>

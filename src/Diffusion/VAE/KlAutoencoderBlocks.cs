@@ -32,13 +32,19 @@ internal abstract class KlModule<T> : LazyWeightModule<T>
     public static IReadOnlyCollection<string> Load(IEnumerable<(string Name, Tensor<T> Tensor)> named, Func<string, int[], double[]> read)
     {
         if (read is null) throw new ArgumentNullException(nameof(read));
+        return Load(named, AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Copies each named weight straight from <paramref name="source"/> into its tensor.</summary>
+    /// <returns>The names read, in order.</returns>
+    internal static IReadOnlyCollection<string> Load(IEnumerable<(string Name, Tensor<T> Tensor)> named, AiDotNet.ModelLoading.TorchTensorSource source)
+    {
+        if (source is null) throw new ArgumentNullException(nameof(source));
         var names = new List<string>();
         foreach (var (name, tensor) in named)
         {
-            var values = read(name, tensor.Shape.ToArray());
-            if (values is null || values.Length != tensor.Length)
-                throw new ArgumentException($"'{name}' needs {tensor.Length} values; {values?.Length ?? 0} were given.", nameof(read));
-            for (int i = 0; i < values.Length; i++) tensor[i] = NumOps.FromDouble(values[i]);
+            source.CopyTo(name, tensor.Shape.ToArray(), tensor);
+            Engine.InvalidatePersistentTensor(tensor);
             names.Add(name);
         }
         return names;

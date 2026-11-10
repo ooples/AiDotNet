@@ -189,24 +189,16 @@ internal sealed class ResNetTrunk<T>
 
     /// <summary>Loads a torchvision ResNet state dict (<c>conv1</c>, <c>bn1</c>, <c>layerN.i.convK</c>,
     /// <c>layerN.i.bnK</c>, <c>layerN.i.downsample.{0,1}</c>), given a reader of a named tensor of a given shape.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a torchvision ResNet state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         foreach (var (name, conv, norm) in Named())
         {
             int outputs = conv.OutputDepth, inputs = conv.InputDepth, k = conv.KernelSize;
-            LoadConv(conv, read($"{name}.weight", new[] { outputs, inputs, k, k }));
-            string n = NormName(name);
-            var shape = new[] { outputs };
-            TextToSpeech.CodecBased.TorchParameters.BatchNorm(norm, read($"{n}.weight", shape), read($"{n}.bias", shape), read($"{n}.running_mean", shape),
-                read($"{n}.running_var", shape));
+            TextToSpeech.CodecBased.TorchParameters.Conv2d(conv, source, $"{name}.weight", new[] { outputs, inputs, k, k }, null);
+            TextToSpeech.CodecBased.TorchParameters.BatchNorm(norm, source, NormName(name) + ".", outputs);
         }
-    }
-
-    private static void LoadConv(ConvolutionalLayer<T> conv, double[] weight)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        var v = new Vector<T>(weight.Length);
-        for (int i = 0; i < weight.Length; i++) v[i] = ops.FromDouble(weight[i]);
-        conv.SetParameters(v);
     }
 }

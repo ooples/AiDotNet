@@ -142,19 +142,24 @@ internal sealed class ClipVisionNetwork<T>
     }
 
     /// <summary>Loads a Hugging Face <c>CLIPVisionModel</c> state dict (names after <paramref name="prefix"/>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "vision_model.")
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "vision_model.") =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads a Hugging Face <c>CLIPVisionModel</c> state dict straight from <paramref name="source"/> into the
+    /// layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string prefix = "vision_model.")
     {
+        source = source.WithPrefix(prefix);
         var c = Configuration;
         int h = c.Hidden;
         void Linear(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{prefix}{name}.weight", new[] { outputs, inputs }),
-                read($"{prefix}{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias");
         void Norm(LayerNormalizationLayer<T> norm, string name)
-            => TorchParameters.LayerNorm(_engine, norm, read($"{prefix}{name}.weight", new[] { h }), read($"{prefix}{name}.bias", new[] { h }));
+            => TorchParameters.LayerNorm(_engine, norm, source, $"{name}.weight", $"{name}.bias");
         int patch = c.Channels * c.PatchSize * c.PatchSize;
-        TorchParameters.Linear(PatchEmbedding, patch, h, read($"{prefix}embeddings.patch_embedding.weight", new[] { h, c.Channels, c.PatchSize, c.PatchSize }));
-        TorchParameters.Linear(ClassEmbedding, 1, h, read($"{prefix}embeddings.class_embedding", new[] { h }));
-        TorchParameters.Linear(PositionEmbedding, 1, (Patches + 1) * h, read($"{prefix}embeddings.position_embedding.weight", new[] { Patches + 1, h }));
+        TorchParameters.Linear(PatchEmbedding, patch, h, source, "embeddings.patch_embedding.weight", new[] { h, c.Channels, c.PatchSize, c.PatchSize });
+        TorchParameters.Linear(ClassEmbedding, 1, h, source, "embeddings.class_embedding", new[] { h });
+        TorchParameters.Linear(PositionEmbedding, 1, (Patches + 1) * h, source, "embeddings.position_embedding.weight", new[] { Patches + 1, h });
         Norm(PreNorm, "pre_layrnorm");
         for (int i = 0; i < Layers.Count; i++)
         {

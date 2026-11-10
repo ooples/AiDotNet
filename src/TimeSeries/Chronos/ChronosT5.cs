@@ -1,5 +1,4 @@
 using System.IO;
-using AiDotNet.Agentic.Models.Local;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
@@ -190,17 +189,8 @@ internal sealed class ChronosT5<T>
     public void LoadPretrainedWeights(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("The checkpoint path is empty.", nameof(path));
-        using var stream = File.OpenRead(path);
-        var file = SafetensorsReader.Read(stream);
-        LoadTorchWeights((name, shape) =>
-        {
-            var tensor = file.Get(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            var actual = tensor.Shape.Select(d => (int)d).ToArray();
-            if (!actual.SequenceEqual(shape))
-                throw new InvalidDataException($"'{name}' is [{string.Join(", ", actual)}] in the checkpoint but [{string.Join(", ", shape)}] in " +
-                    "this model; build the model with the checkpoint's configuration.");
-            return file.ReadAsDouble(name);
-        });
+        using var file = AiDotNet.ModelLoading.TorchCheckpointFile.Open(path, strictAxes: true);
+        Network.LoadHuggingFaceWeights(file);
     }
 
     /// <summary>

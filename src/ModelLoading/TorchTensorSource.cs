@@ -65,13 +65,21 @@ internal abstract class TorchTensorSource
     }
 
     /// <summary>Copies a stored <c>[rows, cols]</c> matrix into <paramref name="destination"/> as <c>[cols, rows]</c>.</summary>
-    public void CopyTransposedTo<T>(string name, int rows, int cols, Tensor<T> destination)
+    public void CopyTransposedTo<T>(string name, int rows, int cols, Tensor<T> destination) =>
+        CopyTransposedTo(name, new[] { rows, cols }, rows, cols, destination);
+
+    /// <summary>Copies a stored tensor of torch shape <paramref name="shape"/>, read as a <c>[rows, cols]</c> matrix (a
+    /// convolution kernel <c>[out, in, kh, kw]</c> as <c>[out, in·kh·kw]</c>), into <paramref name="destination"/> as
+    /// <c>[cols, rows]</c>.</summary>
+    public void CopyTransposedTo<T>(string name, int[] shape, int rows, int cols, Tensor<T> destination)
     {
         if (!Contains(name)) throw Missing(name);
         if (destination.Length != (long)rows * cols)
             throw new ArgumentException($"'{name}' is [{rows}, {cols}]; the destination holds {destination.Length} values.");
+        if (Count(shape) != (long)rows * cols)
+            throw new ArgumentException($"'{name}' is [{string.Join(", ", shape)}], not a [{rows}, {cols}] matrix.");
         var ops = MathHelper.GetNumericOperations<T>();
-        long count = Decode(name, new[] { rows, cols }, (start, values) =>
+        long count = Decode(name, shape, (start, values) =>
         {
             var span = destination.AsWritableSpan();
             // Element k of the stored matrix is (k / cols, k % cols); step the row and column instead of dividing.

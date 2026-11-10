@@ -145,18 +145,22 @@ internal sealed class AlbertNetwork<T>
     }
 
     /// <summary>Loads a Hugging Face <c>AlbertModel</c> state dict (names after an optional <paramref name="prefix"/>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "")
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "") =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads a Hugging Face <c>AlbertModel</c> state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string prefix = "")
     {
+        source = source.WithPrefix(prefix);
         var c = Configuration;
         int h = c.Hidden, e = c.EmbeddingSize;
         void Linear(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{prefix}{name}.weight", new[] { outputs, inputs }),
-                read($"{prefix}{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias");
         void Norm(LayerNormalizationLayer<T> norm, string name, int width)
-            => TorchParameters.LayerNorm(_engine, norm, read($"{prefix}{name}.weight", new[] { width }), read($"{prefix}{name}.bias", new[] { width }));
-        WordEmbeddings.LoadTable(read($"{prefix}embeddings.word_embeddings.weight", new[] { c.VocabSize, e }));
-        PositionEmbeddings.LoadTable(read($"{prefix}embeddings.position_embeddings.weight", new[] { c.MaxPositions, e }));
-        TypeEmbeddings.LoadTable(read($"{prefix}embeddings.token_type_embeddings.weight", new[] { c.TypeVocabSize, e }));
+            => TorchParameters.LayerNorm(_engine, norm, source, $"{name}.weight", $"{name}.bias");
+        WordEmbeddings.LoadTable(source, "embeddings.word_embeddings.weight");
+        PositionEmbeddings.LoadTable(source, "embeddings.position_embeddings.weight");
+        TypeEmbeddings.LoadTable(source, "embeddings.token_type_embeddings.weight");
         Norm(EmbeddingNorm, "embeddings.LayerNorm", e);
         Linear(EmbeddingMapping, "encoder.embedding_hidden_mapping_in", e, h);
         const string layer = "encoder.albert_layer_groups.0.albert_layers.0";

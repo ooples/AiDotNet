@@ -516,7 +516,7 @@ public abstract partial class KaniTTSBase<T> : TtsModelBase<T>, ICodecTts<T>
             }
             double bound = 1.0 / Math.Sqrt(shape[1]);
             for (int i = 0; i < values.Length; i++) values[i] = bound * (2 * random.NextDouble() - 1);
-        })).AsFunction());
+        })));
     }
 
     /// <summary>Loads NanoCodec from NeMo's <c>.nemo</c> archive (<c>nemo-nano-codec-22khz-0.6kbps-12.5fps.nemo</c>) or the

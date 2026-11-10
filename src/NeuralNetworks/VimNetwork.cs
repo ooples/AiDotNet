@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -338,42 +339,40 @@ internal sealed class VimNetwork<T>
 
     /// <summary>Loads an official VisionMamba state dict (its <c>head</c> entries are the owner's), given a reader of a
     /// named tensor of a given shape.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "")
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "") => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads an official VisionMamba state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix = "")
     {
-        var inner0 = read;
-        read = (name, shape) => inner0(prefix + name, shape);
+        source = source.WithPrefix(prefix);
         var c = Configuration;
         int inner = c.InnerDim, n = c.StateDim, k = c.ConvKernel, rank = c.DtRank, projected = rank + 2 * n;
-        var kernel = read("patch_embed.proj.weight", new[] { c.Dim, c.Channels, c.PatchSize, c.PatchSize });
-        var bias = read("patch_embed.proj.bias", new[] { c.Dim });
-        var patch = new Vector<T>(kernel.Length + bias.Length);
-        for (int i = 0; i < kernel.Length; i++) patch[i] = NumOps.FromDouble(kernel[i]);
-        for (int i = 0; i < bias.Length; i++) patch[kernel.Length + i] = NumOps.FromDouble(bias[i]);
-        PatchProjection.SetParameters(patch);
-        if (ClassToken is not null) LoadValues(ClassToken, read("cls_token", new[] { 1, 1, c.Dim }));
-        LoadValues(PositionTable, read("pos_embed", new[] { 1, c.Tokens, c.Dim }));
-        void Norm(RMSNormalizationLayer<T> norm, string name)
-            => norm.SetParameters(new Vector<T>(Array.ConvertAll(read(name, new[] { c.Dim }), NumOps.FromDouble)));
+        void Values(BiasFreeLinearLayer<T> holder, string name, int[] shape)
+            => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (x, y) => x * y), source, name, shape);
+        TorchParameters.Conv2d(PatchProjection, source, "patch_embed.proj.weight", new[] { c.Dim, c.Channels, c.PatchSize, c.PatchSize },
+            "patch_embed.proj.bias");
+        if (ClassToken is not null) Values(ClassToken, "cls_token", new[] { 1, 1, c.Dim });
+        Values(PositionTable, "pos_embed", new[] { 1, c.Tokens, c.Dim });
+        void Norm(RMSNormalizationLayer<T> norm, string name) => TorchParameters.Parameters(norm, source, name, new[] { c.Dim });
         void Direction(Branch branch, string p, string suffix)
         {
-            LoadValues(branch.ConvKernel, read($"{p}.conv1d{suffix}.weight", new[] { inner, 1, k }));
-            LoadValues(branch.ConvBias, read($"{p}.conv1d{suffix}.bias", new[] { inner }));
-            TorchParameters.Linear(branch.XProjection, inner, projected, read($"{p}.x_proj{suffix}.weight", new[] { projected, inner }));
-            TorchParameters.Linear(_engine, branch.DtProjection, rank, inner, read($"{p}.dt_proj{suffix}.weight", new[] { inner, rank }),
-                read($"{p}.dt_proj{suffix}.bias", new[] { inner }));
+            Values(branch.ConvKernel, $"{p}.conv1d{suffix}.weight", new[] { inner, 1, k });
+            Values(branch.ConvBias, $"{p}.conv1d{suffix}.bias", new[] { inner });
+            TorchParameters.Linear(branch.XProjection, inner, projected, source, $"{p}.x_proj{suffix}.weight");
+            TorchParameters.Linear(_engine, branch.DtProjection, rank, inner, source, $"{p}.dt_proj{suffix}.weight", $"{p}.dt_proj{suffix}.bias");
             string a = suffix.Length == 0 ? "A_log" : "A_b_log", d = suffix.Length == 0 ? "D" : "D_b";
-            LoadValues(branch.ALog, read($"{p}.{a}", new[] { inner, n }));
-            LoadValues(branch.Skip, read($"{p}.{d}", new[] { inner }));
+            Values(branch.ALog, $"{p}.{a}", new[] { inner, n });
+            Values(branch.Skip, $"{p}.{d}", new[] { inner });
         }
         for (int i = 0; i < Layers.Count; i++)
         {
             var layer = Layers[i];
             string p = $"layers.{i}.mixer";
             Norm(layer.Norm, $"layers.{i}.norm.weight");
-            TorchParameters.Linear(layer.InputProjection, c.Dim, 2 * inner, read($"{p}.in_proj.weight", new[] { 2 * inner, c.Dim }));
+            TorchParameters.Linear(layer.InputProjection, c.Dim, 2 * inner, source, $"{p}.in_proj.weight");
             Direction(layer.Forward, p, "");
             Direction(layer.Backward, p, "_b");
-            TorchParameters.Linear(layer.OutputProjection, inner, c.Dim, read($"{p}.out_proj.weight", new[] { c.Dim, inner }));
+            TorchParameters.Linear(layer.OutputProjection, inner, c.Dim, source, $"{p}.out_proj.weight");
         }
         Norm(FinalNorm, "norm_f.weight");
     }

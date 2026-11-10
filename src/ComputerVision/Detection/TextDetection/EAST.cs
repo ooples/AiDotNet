@@ -146,21 +146,20 @@ public partial class EAST<T> : TextDetectorBase<T>
     /// <c>stem.features.{i}</c> for torchvision's VGG16, <c>merge.{k}.reduce</c>, <c>.reduce_norm</c>, <c>.fuse</c>,
     /// <c>.fuse_norm</c>, then <c>final</c>, <c>final_norm</c>, <c>score</c> and <c>geometry</c>.
     /// </summary>
-    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads the reference transcription's state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         // The head convolutions size themselves on their first forward.
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             Forward(new Tensor<T>(new[] { 1, 3, 32, 32 }));
-        ((VGG16Backbone<T>)EnsureBackbone).LoadTorchWeights((name, shape) => read("stem." + name, shape));
+        ((VGG16Backbone<T>)EnsureBackbone).LoadTorchWeights(source.WithPrefix("stem."));
         void Conv(Conv2D<T> conv, string name, int outputs, int inputs, int kernel)
-            => conv.SetParameters(new Vector<T>(read(name + ".weight", new[] { outputs, inputs, kernel, kernel })
-                .Concat(read(name + ".bias", new[] { outputs })).Select(NumOps.FromDouble).ToArray()));
+            => AiDotNet.TextToSpeech.CodecBased.TorchParameters.Conv2d(conv.Layer, source, name + ".weight", new[] { outputs, inputs, kernel, kernel },
+                name + ".bias");
         void Norm(BatchNorm2D<T> norm, string name, int channels)
-        {
-            var shape = new[] { channels };
-            AiDotNet.TextToSpeech.CodecBased.TorchParameters.BatchNorm(norm.Layer, read(name + ".weight", shape), read(name + ".bias", shape),
-                read(name + ".running_mean", shape), read(name + ".running_var", shape));
-        }
+            => AiDotNet.TextToSpeech.CodecBased.TorchParameters.BatchNorm(norm.Layer, source, name + ".", channels);
         var f = EnsureBackbone.OutputChannels;
         int previous = f[f.Count - 1];
         for (int i = 0; i < _stages.Length; i++)

@@ -344,12 +344,14 @@ public partial class EfficientNetNetwork<T> : ImageClassifierModelLayoutBase<T>
 
     /// <summary>Loads a timm <c>tf_efficientnet</c> state dict (the trunk, then <c>classifier.weight</c> and
     /// <c>classifier.bias</c>).</summary>
-    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a timm <c>tf_efficientnet</c> state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
-        Trunk.LoadTorchWeights(read);
+        Trunk.LoadTorchWeights(source);
         int inputs = Trunk.Configuration.HeadChannels, classes = _configuration.NumClasses;
-        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, Classifier!, inputs, classes,
-            read("classifier.weight", new[] { classes, inputs }), read("classifier.bias", new[] { classes }));
+        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, Classifier!, inputs, classes, source, "classifier.weight", "classifier.bias");
     }
 
     /// <summary>

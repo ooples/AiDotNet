@@ -133,10 +133,15 @@ internal sealed class DeepAntNetwork<T>
     }
 
     /// <summary>Loads the reference module's state dict (convblock1.0, convblock2.0, denseblock.0 and out).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads the reference module's state dict from <paramref name="source"/> (each weight is small and
+    /// rearranged on the way in).</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         var c = Configuration;
         int flat = c.Filters * c.SecondLength;
+        Func<string, int[], double[]> read = source.Read;
         Load(read("convblock1.0.weight", new[] { c.Filters, 1, c.KernelSize }), read("convblock1.0.bias", new[] { c.Filters }),
             read("convblock2.0.weight", new[] { c.Filters, c.Filters, c.KernelSize }), read("convblock2.0.bias", new[] { c.Filters }),
             read("denseblock.0.weight", new[] { c.HiddenUnits, flat }), read("denseblock.0.bias", new[] { c.HiddenUnits }),

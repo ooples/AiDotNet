@@ -516,19 +516,23 @@ internal sealed class Lfm2Network<T>
 
     /// <summary>Loads a Hugging Face <c>Lfm2ForCausalLM</c> state dict (with peft's <c>lora_A</c> and <c>lora_B</c>
     /// names after each adapted module, without the adapter name).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a Hugging Face <c>Lfm2ForCausalLM</c> state dict straight from <paramref name="source"/> into the
+    /// layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         var c = Configuration;
         int h = c.Hidden, hd = c.HeadDim, ff = c.ResolvedIntermediate;
         void Vector(BiasFreeLinearLayer<T> holder, string name, int[] shape)
-            => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, s) => a * s), read(name, shape));
+            => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, s) => a * s), source, name, shape);
         void Project(Projection p, string name, int inputs, int outputs)
         {
-            TorchParameters.Linear(p.Weight, inputs, outputs, read($"{name}.weight", new[] { outputs, inputs }));
+            TorchParameters.Linear(p.Weight, inputs, outputs, source, $"{name}.weight");
             if (p.Bias is not null) Vector(p.Bias, $"{name}.bias", new[] { outputs });
             if (p.LoraA is null) return;
-            TorchParameters.Linear(p.LoraA, inputs, c.LoraRank, read($"{name}.lora_A.weight", new[] { c.LoraRank, inputs }));
-            TorchParameters.Linear(p.LoraB!, c.LoraRank, outputs, read($"{name}.lora_B.weight", new[] { outputs, c.LoraRank }));
+            TorchParameters.Linear(p.LoraA, inputs, c.LoraRank, source, $"{name}.lora_A.weight");
+            TorchParameters.Linear(p.LoraB!, c.LoraRank, outputs, source, $"{name}.lora_B.weight");
         }
         Vector(Embeddings, "model.embed_tokens.weight", new[] { c.VocabSize, h });
         for (int i = 0; i < Layers.Count; i++)
@@ -560,8 +564,8 @@ internal sealed class Lfm2Network<T>
         }
         Vector(FinalNorm, "model.embedding_norm.weight", new[] { h });
         if (SpeakerProjection is not null)
-            TorchParameters.Linear(SpeakerProjection, c.SpeakerEmbeddingDim, h, read("model.speaker_emb_projection.weight", new[] { h, c.SpeakerEmbeddingDim }));
-        if (LmHead is not null) TorchParameters.Linear(LmHead, h, c.VocabSize, read("lm_head.weight", new[] { c.VocabSize, h }));
+            TorchParameters.Linear(SpeakerProjection, c.SpeakerEmbeddingDim, h, source, "model.speaker_emb_projection.weight");
+        if (LmHead is not null) TorchParameters.Linear(LmHead, h, c.VocabSize, source, "lm_head.weight");
     }
 
     /// <summary>

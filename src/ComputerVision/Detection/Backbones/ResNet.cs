@@ -119,6 +119,9 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
     /// <summary>Loads a torchvision ResNet state dict (its <c>fc</c> entries are not read).</summary>
     internal void LoadTorchWeights(Func<string, int[], double[]> read) => Trunk.LoadTorchWeights(read);
 
+    /// <summary>Loads the trunk straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source) => Trunk.LoadTorchWeights(source);
+
     public void WriteParameters(BinaryWriter writer)
     {
         writer.Write((int)_variant);

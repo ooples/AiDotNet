@@ -163,6 +163,9 @@ public partial class SegNeXt<T> : Common.SemanticSegmentationBase<T>
     /// <summary>Loads an mmsegmentation SegNeXt checkpoint's state dict (<c>backbone.*</c>, <c>decode_head.*</c>).</summary>
     internal void LoadTorchWeights(Func<string, int[], double[]> read) => Network.LoadTorchWeights(read);
 
+    /// <summary>The same, straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source) => Network.LoadTorchWeights(source);
+
     /// <inheritdoc/>
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? Forward(input) : PredictOnnx(input);
 

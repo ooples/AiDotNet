@@ -116,14 +116,14 @@ public partial class VGG16Backbone<T> : NeuralNetworkBase<T>, IDetectionBackbone
 
     /// <summary>Loads torchvision <c>vgg16</c> weights (<c>features.{i}.weight</c> and <c>.bias</c>), given a reader of a
     /// named tensor of a given shape.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads torchvision <c>vgg16</c> weights straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         foreach (var (conv, index, inputs, outputs) in Convolutions())
-        {
-            var weight = read($"features.{index}.weight", new[] { outputs, inputs, 3, 3 });
-            var bias = read($"features.{index}.bias", new[] { outputs });
-            conv.SetParameters(new Vector<T>(weight.Concat(bias).Select(NumOps.FromDouble).ToArray()));
-        }
+            AiDotNet.TextToSpeech.CodecBased.TorchParameters.Conv2d(conv, source, $"features.{index}.weight", new[] { outputs, inputs, 3, 3 },
+                $"features.{index}.bias");
     }
 
     /// <summary>torchvision's VGG initialization: <c>kaiming_normal_(mode="fan_out", nonlinearity="relu")</c>, zero bias.</summary>

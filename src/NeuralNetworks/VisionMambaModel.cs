@@ -113,12 +113,14 @@ public partial class VisionMambaModel<T> : ImageClassifierModelLayoutBase<T>
     }
 
     /// <summary>Loads an official VisionMamba state dict (the network, then <c>head.weight</c> and <c>head.bias</c>).</summary>
-    internal void LoadTorchWeights(Func<string, int[], double[]> read)
+    internal void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads an official VisionMamba state dict straight from <paramref name="source"/> into the layers.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
-        Network.LoadTorchWeights(read);
+        Network.LoadTorchWeights(source);
         int d = _configuration.Dim, classes = _options.NumClasses;
-        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, Classifier!, d, classes,
-            read("head.weight", new[] { classes, d }), read("head.bias", new[] { classes }));
+        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, Classifier!, d, classes, source, "head.weight", "head.bias");
     }
 
     /// <summary>The class probabilities of an image <c>[C, H, W]</c> or a batch <c>[B, C, H, W]</c>.</summary>

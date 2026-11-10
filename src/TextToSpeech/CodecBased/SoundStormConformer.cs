@@ -146,14 +146,15 @@ internal static class TorchParameters
     // ---------------------------------------------------------------- from a typed source (no per-tensor arrays)
 
     /// <summary>Loads <c>weight [out, in]</c> (and <c>bias [out]</c>, zero without a name) into a dense layer straight from
-    /// <paramref name="source"/>, materializing the layer first.</summary>
+    /// <paramref name="source"/>, materializing the layer first; <paramref name="weightShape"/> is the stored shape when it
+    /// is not <c>[out, in]</c> (a convolution kernel <c>[out, in, kh, kw]</c> applied as a dense map).</summary>
     public static void Linear<T>(IEngine engine, DenseLayer<T> layer, int inputs, int outputs, AiDotNet.ModelLoading.TorchTensorSource source,
-        string weightName, string? biasName)
+        string weightName, string? biasName, int[]? weightShape = null)
     {
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
             layer.Forward(new Tensor<T>(new[] { 1, inputs }));
         var w = layer.GetWeights();                                                                       // [in, out]
-        source.CopyTransposedTo(weightName, outputs, inputs, w);
+        source.CopyTransposedTo(weightName, weightShape ?? new[] { outputs, inputs }, outputs, inputs, w);
         engine.InvalidatePersistentTensor(w);
         var b = layer.GetBiases();
         if (biasName is null) b.AsWritableSpan().Clear();
@@ -176,7 +177,7 @@ internal static class TorchParameters
         }
         // A [count] or [1, count] holder is stored in order; a [out, in] matrix transposes into [in, out].
         if (inputs == 1) source.CopyTo(name, shape ?? new[] { outputs, inputs }, weights);
-        else source.CopyTransposedTo(name, outputs, inputs, weights);
+        else source.CopyTransposedTo(name, shape ?? new[] { outputs, inputs }, outputs, inputs, weights);
         AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(weights);
     }
 
@@ -246,6 +247,32 @@ internal static class TorchParameters
         var shape = new[] { channels };
         BatchNorm(norm, source.Read(prefix + "weight", shape), source.Read(prefix + "bias", shape),
             source.Read(prefix + "running_mean", shape), source.Read(prefix + "running_var", shape));
+    }
+
+    /// <summary>Loads an <c>nn.Conv2d</c>'s weight (stored layout, torch shape <paramref name="weightShape"/>) and, when
+    /// named, its bias into a convolution straight from <paramref name="source"/>, materializing the layer first; a
+    /// streamed kernel takes the <c>SetParameters</c> route.</summary>
+    public static void Conv2d<T>(ConvolutionalLayer<T> conv, AiDotNet.ModelLoading.TorchTensorSource source, string weightName, int[] weightShape,
+        string? biasName)
+    {
+        conv.MaterializeParameters();
+        var kernels = conv.GetFilters();
+        var biases = conv.GetBiases();
+        long count = weightShape.Aggregate(1L, (a, b) => a * b);
+        if (kernels.Length != count || kernels.Lifetime == WeightLifetime.Streaming
+            || (biases is not null && biases.Lifetime == WeightLifetime.Streaming) || (biases is null) != (biasName is null))
+        {
+            var ops = MathHelper.GetNumericOperations<T>();
+            var values = source.Read(weightName, weightShape);
+            if (biasName is not null) values = values.Concat(source.Read(biasName, new[] { conv.OutputDepth })).ToArray();
+            conv.SetParameters(new Vector<T>(values.Select(ops.FromDouble).ToArray()));
+            return;
+        }
+        source.CopyTo(weightName, weightShape, kernels);
+        AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(kernels);
+        if (biases is null || biasName is null) return;
+        source.CopyTo(biasName, new[] { biases.Length }, biases);
+        AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(biases);
     }
 
     /// <summary>Loads an <c>nn.LayerNorm</c>'s weight and bias.</summary>
