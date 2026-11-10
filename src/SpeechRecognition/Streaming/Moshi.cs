@@ -64,6 +64,10 @@ public partial class Moshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
     internal MoshiCore<T> Core => _core;
 
     /// <inheritdoc />
+    /// <remarks>The language-model optimizer applies the configured global norm once.</remarks>
+    public override double MaxGradNormValue => 0.0;
+
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedLanguages => new[] { "en" };
 
     /// <inheritdoc />

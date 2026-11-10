@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.TextToSpeech.MultiModal;
 
 /// <summary>Which audio streams Moshi's Depth Transformer predicts.</summary>
@@ -53,6 +55,7 @@ public enum MoshiTrainingStage
 /// <para><b>For Beginners:</b> Moshi listens and speaks at the same time: every 80 ms it reads the user's sound, writes a
 /// token of what it is about to say, and the sound of its own voice. It can talk over you, pause, and be interrupted.</para>
 /// </remarks>
+[JsonConverter(typeof(MoshiOptionsConverter))]
 public class MoshiOptions : TtsModelOptions
 {
     /// <summary>Creates the paper's Moshi.</summary>
@@ -72,6 +75,22 @@ public class MoshiOptions : TtsModelOptions
     /// <summary>The released kyutai/moshiko-pytorch-bf16: the Depth Transformer predicts Moshi's streams only, behind a
     /// 2816-wide gate (feed-forward 4224).</summary>
     public static MoshiOptions Release() => new() { DepthLayout = MoshiDepthLayout.MoshiStreams, DepthFeedForward = 4224 };
+
+    /// <summary>The shared encoder depth maps to Mimi's encoder Transformer. Mimi
+    /// configures the encoder and decoder with the same depth (§3.3).</summary>
+    public override int NumEncoderLayers
+    {
+        get => MimiTransformerLayers;
+        set => MimiTransformerLayers = value >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(value));
+    }
+
+    /// <summary>The shared decoder depth maps to Mimi's decoder Transformer, with
+    /// the same depth as its encoder. The RQ decoders use Layers and DepthLayers.</summary>
+    public override int NumDecoderLayers
+    {
+        get => MimiTransformerLayers;
+        set => MimiTransformerLayers = value >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(value));
+    }
 
     // ---------------------------------------------------------------- the RQ-Transformer
 

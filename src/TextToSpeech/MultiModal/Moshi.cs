@@ -56,7 +56,7 @@ namespace AiDotNet.TextToSpeech.MultiModal;
                 Source = "Défossez et al. 2024 §4.4 and Table 1: AdamW (0.9, 0.95) with weight decay 0.1; pre-training at 3e-5 for the "
                         + "Temporal Transformer and 2e-4 for the Depth Transformer, cosine with linear warmup, the text embedding and "
                         + "linear at 0.75 on audio batches; post-training 3e-6/5e-5, Fisher 2e-6/4e-6, instruct 2e-6, fixed.")]
-[PaperOptimizer(OptimizerKind.AdamW, Component = "mimi", LearningRate = 8e-4, Beta1 = 0.5, Beta2 = 0.9, WeightDecay = 5e-2,
+[PaperOptimizer(OptimizerKind.AdamW, Component = "mimi", LearningRate = 8e-4, Beta1 = 0.5, Beta2 = 0.9, WeightDecay = 5e-2, MaxGradientNorm = 0.0,
                 Source = "Défossez et al. 2024 §3.3: Mimi trains with AdamW at 8e-4, betas (0.5, 0.9), weight decay 5e-2 on the "
                         + "Transformers only, and an exponential moving average of the weights at 0.99.")]
 public partial class Moshi<T> : TtsModelBase<T>, ICodecTts<T>
@@ -127,6 +127,11 @@ public partial class Moshi<T> : TtsModelBase<T>, ICodecTts<T>
     public override int CodecTokenVocabulary => _options.CodebookSize;
 
     private bool HasPaperLayers => _core is not null;
+    /// <inheritdoc />
+    /// <remarks>The native stage optimizers own clipping. A second fixed base-model
+    /// clip would override a configured language-model norm greater than one.</remarks>
+    public override double MaxGradNormValue => HasPaperLayers ? 0.0 : base.MaxGradNormValue;
+
     private int SeedValue => _options.Seed ?? 42;
     private InvalidOperationException NotNative() => new($"{GetType().Name}'s networks exist in native mode only.");
     internal MoshiCore<T> Core => _core ?? throw NotNative();
