@@ -53,11 +53,38 @@ public sealed class ApiKeyAuthenticationHandlerTests
         Assert.Equal(new[] { ValidKey }, presented);
     }
 
-    private static async Task<(AuthenticateResult Result, List<string> Presented)> AuthenticateAsync(Action<HttpContext> arrange)
+    [Fact]
+    public async Task XApiKey_TakesPrecedenceOver_QueryString()
+    {
+        var (result, presented) = await AuthenticateAsync(ctx =>
+        {
+            ctx.Request.Headers["x-api-key"] = ValidKey;
+            ctx.Request.QueryString = new QueryString("?api_key=from-the-query");
+        }, new ApiKeyAuthenticationOptions { AllowQueryString = true });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new[] { ValidKey }, presented);
+    }
+
+    [Fact]
+    public async Task WhitespaceXApiKey_FallsThroughTo_QueryString()
+    {
+        var (result, presented) = await AuthenticateAsync(ctx =>
+        {
+            ctx.Request.Headers["x-api-key"] = "   ";
+            ctx.Request.QueryString = new QueryString("?api_key=" + ValidKey);
+        }, new ApiKeyAuthenticationOptions { AllowQueryString = true });
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(new[] { ValidKey }, presented);
+    }
+
+    private static async Task<(AuthenticateResult Result, List<string> Presented)> AuthenticateAsync(Action<HttpContext> arrange,
+        ApiKeyAuthenticationOptions? options = null)
     {
         var service = new RecordingApiKeyService();
         var handler = new ApiKeyAuthenticationHandler(
-            new StaticOptionsMonitor(new ApiKeyAuthenticationOptions()),
+            new StaticOptionsMonitor(options ?? new ApiKeyAuthenticationOptions()),
             NullLoggerFactory.Instance,
             UrlEncoder.Default,
             service);
