@@ -5,6 +5,8 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/OrpheusNativeOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/LlamaAttentionDropoutReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/AcousticMelOptionAliasesTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/AlignVoiceFlowOptimizerTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/VoiceFlowPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/Audio/PerthWatermarkerReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/WhisperSpeechT2SReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/ChatterboxWatermarkTests.cs" />

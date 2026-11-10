@@ -7,12 +7,17 @@ on:
       - 'src/Audio/**'
       - 'src/NeuralNetworks/Layers/**'
       - 'src/NeuralNetworks/NeuralNetworkBase.cs'
+      - 'src/NeuralNetworks/LlamaNetwork.cs'
+      - 'src/Optimizers/**'
+      - 'src/LearningRateSchedulers/**'
       - 'src/Training/**'
       - 'src/Tokenization/**'
       - 'tests/AiDotNet.Tests/TextToSpeech/**'
+      - 'tests/AiDotNet.Tests/Audio/PerthWatermarkerReferenceTests.cs'
       - 'tests/AiDotNet.Tests/UnitTests/Training/**'
       - 'tests/AiDotNet.TtsPaperContracts/**'
       - 'tools/TtsCheckpointAudit/review-filter.txt'
+      - 'tools/reference-data/**'
   workflow_dispatch:
     inputs:
       family:
@@ -53,7 +58,7 @@ jobs:
         run: |
           $reviewFilter = (Get-Content tools/TtsCheckpointAudit/review-filter.txt -Raw).Trim()
           $filter = if ($env:TTS_FAMILY -eq 'All') {
-            "$reviewFilter|FullyQualifiedName~AiDotNet.Tests.TextToSpeech"
+            "$reviewFilter|FullyQualifiedName~AiDotNet.Tests.TextToSpeech|FullyQualifiedName~PerthWatermarkerReferenceTests"
           } elseif ($env:TTS_FAMILY -eq 'AdversarialReview') {
             $reviewFilter
           } else {

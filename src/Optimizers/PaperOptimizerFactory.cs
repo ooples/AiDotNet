@@ -65,12 +65,14 @@ internal static class PaperOptimizerFactory
     /// <param name="warmupStepsOverride">A warmup the model's own options configure, applied to the recipe.</param>
     /// <param name="learningRateOverride">A peak learning rate explicitly configured by the model options.</param>
     /// <param name="weightDecayOverride">Weight decay explicitly configured by the model options.</param>
+    /// <param name="modelDimensionOverride">The native Transformer width needed by dimension-scaled schedules.</param>
+    /// <param name="trainingStepsOverride">The model's actual step budget, instead of the generic optimizer loop default.</param>
     /// <param name="phase">The training phase whose declaration applies (a paper can state one optimizer for
     /// pre-training and another for fine-tuning, as AlignTTS and AdaSpeech do).</param>
     internal static IGradientBasedOptimizer<T, TInput, TOutput>? CreateFor<T, TInput, TOutput>(
         IFullModel<T, TInput, TOutput> model, string component = "", int warmupStepsOverride = 0,
         TrainingPhase phase = TrainingPhase.PreTraining, double? learningRateOverride = null,
-        double? weightDecayOverride = null)
+        double? weightDecayOverride = null, int modelDimensionOverride = 0, int trainingStepsOverride = 0)
     {
         if (model is null) return null;
 
@@ -102,7 +104,8 @@ internal static class PaperOptimizerFactory
         var unhonoured = new List<string>();
         var cautions = new List<string>();
 
-        var optimizer = Build<T, TInput, TOutput>(model, recipe, adaptations, unhonoured, cautions);
+        var optimizer = Build<T, TInput, TOutput>(model, recipe, adaptations, unhonoured, cautions,
+            modelDimensionOverride, trainingStepsOverride, scaleLearningRateToBatch: !learningRateOverride.HasValue);
 
         if (optimizer is null)
         {
@@ -170,7 +173,8 @@ internal static class PaperOptimizerFactory
         PaperOptimizerAttribute recipe,
         List<RecipeAdaptation> adaptations,
         List<string> unhonoured,
-        List<string> cautions)
+        List<string> cautions, int modelDimensionOverride = 0, int trainingStepsOverride = 0,
+        bool scaleLearningRateToBatch = true)
     {
         _pendingAdaptations.Value = adaptations;
         _pendingUnhonoured.Value = unhonoured;
@@ -186,6 +190,7 @@ internal static class PaperOptimizerFactory
         TOptions Configured<TOptions>(TOptions options)
             where TOptions : GradientBasedOptimizerOptions<T, TInput, TOutput>
         {
+            if (trainingStepsOverride > 0) options.MaxIterations = trainingStepsOverride;
             if (!double.IsNaN(recipe.LearningRate)) options.InitialLearningRate = recipe.LearningRate;
 
             // Adafactor normally derives its own step size. A paper that states a rate -- AudioPaLM
@@ -291,8 +296,8 @@ internal static class PaperOptimizerFactory
                 });
 
             ReportUnsupportedElements(recipe);
-            ScaleToConfiguredRun(options, recipe);
-            ConfigureScheduleAndClipping(options, recipe);
+            ScaleToConfiguredRun(options, recipe, scaleLearningRateToBatch);
+            ConfigureScheduleAndClipping(options, recipe, modelDimensionOverride);
             return options;
         }
 
@@ -754,9 +759,11 @@ internal static class PaperOptimizerFactory
     /// gets the paper's numbers unmodified.
     /// </para>
     /// </remarks>
-    private static void ScaleToConfiguredRun(object options, PaperOptimizerAttribute recipe)
+    private static void ScaleToConfiguredRun(object options, PaperOptimizerAttribute recipe, bool scaleLearningRateToBatch)
     {
-        if (recipe.ReferenceBatchSize > 0 && !double.IsNaN(recipe.LearningRate))
+        // A rate supplied by the caller is already the configured rate. In particular, the optimizer's
+        // generic default BatchSize is not the batch used by a model's own Train(sample) path.
+        if (scaleLearningRateToBatch && recipe.ReferenceBatchSize > 0 && !double.IsNaN(recipe.LearningRate))
         {
             int batch = GetInt(options, "BatchSize");
             int reference = EffectiveReferenceBatch(recipe);
@@ -1065,7 +1072,7 @@ internal static class PaperOptimizerFactory
     }
 
     /// <summary>Applies schedule and gradient-clipping settings, which live on the gradient-based base.</summary>
-    private static void ConfigureScheduleAndClipping(object options, PaperOptimizerAttribute recipe)
+    private static void ConfigureScheduleAndClipping(object options, PaperOptimizerAttribute recipe, int modelDimensionOverride)
     {
         if (!double.IsNaN(recipe.MaxGradientNorm))
         {
@@ -1086,7 +1093,8 @@ internal static class PaperOptimizerFactory
         int totalSteps = GetInt(options, "MaxIterations");
 
         ILearningRateScheduler? scheduler = BuildScheduler(
-            recipe, baseRate, warmupSteps, totalSteps, ModelDimension(options));
+            recipe, baseRate, warmupSteps, totalSteps,
+            modelDimensionOverride > 0 ? modelDimensionOverride : ModelDimension(options));
         scheduler = ComposeWarmup(scheduler, recipe, baseRate, warmupSteps, totalSteps);
         if (scheduler is not null)
         {

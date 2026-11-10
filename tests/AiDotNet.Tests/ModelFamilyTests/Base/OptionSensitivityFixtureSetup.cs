@@ -140,6 +140,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.CodecBased.Voicebox<T> && option == "MaximumAudioFrames" ? "voicebox-audio-chunk"
             : network is AiDotNet.TextToSpeech.EndToEnd.VITS<T> or AiDotNet.TextToSpeech.EndToEnd.Piper<T>
                 && option is "SpeakerEmbeddingDim" or "LanguageEmbeddingDim" ? "vits-conditioning-" + option
+            : network is AiDotNet.TextToSpeech.Classic.AlignTTS<T> && option == "LearningRate" ? "aligntts-fixed-rate-training"
             : network is AiDotNet.TextToSpeech.CodecBased.OrpheusTTS<T>
                 && option is "MaxGradNorm" or "RemoveDuplicateFrames" ? "orpheus-training-" + option
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T>
@@ -747,6 +748,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptionTraining<T>(INeuralNetworkModel<T> network, string option)
     {
+        if (network is AiDotNet.TextToSpeech.Classic.AlignTTS<T> align && option == "LearningRate")
+            align.CurrentPhase = AiDotNet.TextToSpeech.Classic.AlignTTSTrainingPhase.JointFineTuning;
         if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> style && IsStyleTts2JointOption(option))
             style.CurrentStage = AiDotNet.TextToSpeech.StyleEmotion.StyleTts2TrainingStage.Joint;
         if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosy && IsCosyFlowOption(option))

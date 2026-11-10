@@ -53,5 +53,5 @@ public class EndToEndTtsOptions : TtsModelOptions
 
     /// <summary>Gets or sets the shared encoder/decoder width through <see cref="TtsModelOptions.HiddenDim"/>.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("This aliases HiddenDim; Kokoro's released decoder interfaces require width 512, enforced by the native constructor.", ModelType = typeof(Kokoro<>))]
-    public int DecoderDim { get => HiddenDim; set => HiddenDim = value; }
+    public virtual int DecoderDim { get => HiddenDim; set => HiddenDim = value; }
 }

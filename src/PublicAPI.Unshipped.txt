@@ -1,4 +1,12 @@
 #nullable enable
+*REMOVED*AiDotNet.TextToSpeech.EndToEnd.EndToEndTtsOptions.DecoderDim.get -> int
+*REMOVED*AiDotNet.TextToSpeech.EndToEnd.EndToEndTtsOptions.DecoderDim.set -> void
+virtual AiDotNet.TextToSpeech.EndToEnd.EndToEndTtsOptions.DecoderDim.get -> int
+virtual AiDotNet.TextToSpeech.EndToEnd.EndToEndTtsOptions.DecoderDim.set -> void
+override AiDotNet.TextToSpeech.FlowDiffusion.VoiceFlowOptions.DecoderDim.get -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.VoiceFlowOptions.DecoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.AlignTTSOptions.DecoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.AlignTTSOptions.DecoderDim.set -> void
 *REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.NumDecoderLayers.get -> int
 *REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.NumDecoderLayers.set -> void
 virtual AiDotNet.TextToSpeech.TtsModelOptions.NumDecoderLayers.get -> int
