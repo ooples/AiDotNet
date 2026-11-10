@@ -220,6 +220,15 @@ The waveform hop is twice the sub-band upsampler's stride product. Setting it no
 The [released learner](https://github.com/kaistmm/fregrad/blob/main/learner.py) uses Adam at 2e-4 with fixed 0.9/0.999 betas and no gradient clipping (`max_grad_norm=None` in its configuration). Native Adam now honors configured learning rate and decay and disables its additional clipping; paper defaults retain zero weight decay. Tests inspect the cached optimizer after recording training, compare actual updates with and without decay from identical weights, and exercise full waveform synthesis and training at different valid hops.
 
 
+### UnivNet geometry and recording-training fidelity
+
+[The paper](https://arxiv.org/pdf/2106.07889), Sections 3.1 and 4.3, remains authoritative for the three location-variable convolution stacks, kernel predictors, multi-resolution/period critics, 200k generator-only steps, and Adam at 1e-4 with betas 0.5/0.9. The [released trainer](https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/utils/train.py) uses AdamW instead; the library preserves the paper's Adam, with default zero decay. Configured learning rate, betas and coupled L2 decay now reach both separate native optimizers, and additional optimizer clipping is disabled.
+
+The waveform hop configures the product of the actual LVC strides while keeping every stage. A hop which cannot be factored into the required upsampling stages is rejected, and training segments must contain a positive whole number of hops, as the released configuration requires. Native stride arrays win over legacy shared hops in saved JSON. Copies own independent stride arrays; the shared TTS copy constructor copies its base hop slot without calling a derived setter before that derived object's native geometry is restored.
+
+Recording training follows the [released dataset](https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/datasets/dataloader.py): zero-pad short audio to segment length plus 2000, compute the whole mel spectrogram, then choose aligned audio/mel crops while leaving the final context frame out of the start range. The [released STFT](https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/utils/stft.py) explicitly retains librosa's float32 mel bank; those constants are preserved for double-precision inference too. `univnet_recording_reference.py` checks three Git blobs and executes the unmodified loader/STFT bodies, with API compatibility adapters and double-precision comparison inputs. Its long- and short-recording fixtures check exact waveform crops and mel values at 1e-10, including the boundary context lost by recomputing features after cropping. Runtime segment-size checks train on longer real recordings with an independent control-cache group.
+
+
 ## Codec language models
 
 | Model | Paper | Gaps filled from | Choices |

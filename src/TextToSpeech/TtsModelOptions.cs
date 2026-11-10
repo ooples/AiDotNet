@@ -24,7 +24,9 @@ public class TtsModelOptions : ModelOptions
 
         SampleRate = other.SampleRate;
         MelChannels = other.MelChannels;
-        HopSize = other.HopSize;
+        // Derived options restore their own native stride arrays after this base constructor.
+        // Copy the shared slot without dispatching a derived setter against not-yet-restored geometry.
+        _hopSize = other.HopSize;
         FftSize = other.FftSize;
         HiddenDim = other.HiddenDim;
         NumEncoderLayers = other.NumEncoderLayers;
@@ -56,7 +58,8 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro has no mel frontend; its released ISTFTNet upsampling and inverse-STFT hop geometry are fixed by the decoder.", ModelType = typeof(EndToEnd.Kokoro<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoice's released HiFi-GAN strides [8,8,2,2] fix its hop at 256; the native constructor rejects other hops (myshell-ai/OpenVoice checkpoints/converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoice<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoiceV2's released HiFi-GAN strides [8,8,2,2] fix its hop at 256; the native constructor rejects other hops (myshell-ai/OpenVoiceV2 converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoiceV2<>))]
-    public virtual int HopSize { get; set; } = 256;
+    public virtual int HopSize { get => _hopSize; set => _hopSize = value; }
+    private int _hopSize = 256;
 
     /// <summary>Gets or sets the FFT window size.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro has no configurable analysis FFT; its released ISTFTNet synthesis transform has fixed decoder geometry.", ModelType = typeof(EndToEnd.Kokoro<>))]

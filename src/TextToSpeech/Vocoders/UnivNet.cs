@@ -5,6 +5,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Regularization;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
@@ -83,11 +84,18 @@ public partial class UnivNet<T> : GanVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
         var o = PaperOptions;
+        if (o.UpsampleRates.Length < 1 || o.UpsampleRates.Any(rate => rate < 2))
+            throw new ArgumentException("Each UnivNet LVC stage needs an upsampling stride of at least two.", nameof(o.UpsampleRates));
+        if (o.SegmentSize < o.HopSize || o.SegmentSize % o.HopSize != 0)
+            throw new ArgumentException("UnivNet's training segment must contain a positive whole number of mel hops.", nameof(o.SegmentSize));
+        if (o.WeightDecay < 0 || double.IsNaN(o.WeightDecay) || double.IsInfinity(o.WeightDecay))
+            throw new ArgumentOutOfRangeException(nameof(o.WeightDecay));
         if (UpsampleFactor != o.HopSize)
             throw new ArgumentException($"The strides ({string.Join("x", o.UpsampleRates)}) must multiply to the hop ({o.HopSize}).");
         _generator = new UnivNetGenerator<T>(Engine, o.MelChannels, o.NoiseDim, o.ChannelSize, o.UpsampleRates, o.Dilations,
             o.LeakyReluSlope, o.KernelPredictorHidden, o.KernelPredictorConvSize);
-        _features = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0, o.MelMaxFrequency);
+        _features = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, 0.0,
+            o.MelMaxFrequency, singlePrecisionBasis: true);
         _stftLoss = new MultiResolutionStftLoss<T>(Engine, o.StftFftSizes, o.StftHopSizes, o.StftWindowSizes);
         return _generator.Layers;
     }
@@ -181,14 +189,45 @@ public partial class UnivNet<T> : GanVocoderBase<T>
 
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(string group)
-        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = PaperOptions.LearningRate,
-                Beta1 = PaperOptions.Beta1,
-                Beta2 = PaperOptions.Beta2,
-                UseAdaptiveBetas = false,
-            }));
+    {
+        // Section 4.3 specifies Adam; the released trainer's later AdamW choice does not replace that recipe.
+        var settings = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = PaperOptions.LearningRate,
+            Beta1 = PaperOptions.Beta1,
+            Beta2 = PaperOptions.Beta2,
+            Epsilon = 1e-8,
+            UseAdaptiveBetas = false,
+            EnableGradientClipping = false,
+        };
+        if (PaperOptions.WeightDecay > 0)
+            settings.Regularization = new L2Regularization<T, Tensor<T>, Tensor<T>>(
+                new RegularizationOptions { Strength = PaperOptions.WeightDecay, L1Ratio = 0.0 });
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, settings), group);
+    }
+
+    /// <inheritdoc />
+    protected override (Tensor<T> Mel, Tensor<T> Audio) RecordingPair(Tensor<T> audio, Random random)
+        => PrepareRecording(audio, random);
+
+    // datasets/dataloader.py: pad first, compute the entire mel, then crop aligned mel/audio windows.
+    internal (Tensor<T> Mel, Tensor<T> Audio) PrepareRecording(Tensor<T> audio, Random random)
+    {
+        var o = PaperOptions;
+        var flat = Flat(audio);
+        int minimum = checked(o.SegmentSize + 2000);
+        var padded = flat.Length >= minimum ? flat
+            : Engine.TensorConcatenate(new[] { flat, new Tensor<T>(new[] { minimum - flat.Length }) }, 0);
+        var mel = ComputeMel(padded);
+        int frames = o.SegmentSize / o.HopSize;
+        int maximumStart = mel.Shape[2] - frames - 1;
+        if (maximumStart < 0)
+            throw new ArgumentException("UnivNet's recording must leave one mel frame beyond its training segment.", nameof(audio));
+        int start = random.Next(0, maximumStart + 1);
+        return (Engine.TensorSlice(mel, new[] { 0, 0, start }, new[] { 1, o.MelChannels, frames }),
+            Engine.TensorSlice(padded, new[] { start * o.HopSize }, new[] { o.SegmentSize }));
+    }
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()

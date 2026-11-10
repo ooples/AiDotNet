@@ -271,9 +271,16 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         var audio = sample.Audio ?? throw new ArgumentException($"{GetType().Name} trains on recordings; set Audio.", nameof(sample));
-        var segment = Segment(audio, _trainingRandom);
-        TrainStep(FramesOf(segment), segment);
+        var pair = RecordingPair(audio, _trainingRandom);
+        TrainStep(pair.Mel, pair.Audio);
         return LastLoss ?? NumOps.Zero;
+    }
+
+    /// <summary>The real recording segment and its input mel features for a training step.</summary>
+    protected virtual (Tensor<T> Mel, Tensor<T> Audio) RecordingPair(Tensor<T> audio, Random random)
+    {
+        var segment = Segment(audio, random);
+        return (FramesOf(segment), segment);
     }
 
     // The input features of a segment, one frame per hop: a centred STFT's extra last frame is dropped, so frame f

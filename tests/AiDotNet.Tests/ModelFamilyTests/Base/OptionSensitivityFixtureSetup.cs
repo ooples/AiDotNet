@@ -49,6 +49,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? "chatterbox-published-perth"
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "AddBlank" ? "natural-phoneme-frontend"
             : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.UnivNet<T> && option == "SegmentSize" ? "univnet-recording-crop"
             : network is AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T> && SpearOptionFixture.Handles(option) ? "spear-" + option
             : network is AiDotNet.TextToSpeech.Latest.OuteTTS<T> && OuteOptionFixture.Handles(option) ? "oute-" + option
             : network is AiDotNet.TextToSpeech.FlowDiffusion.F5TTS<T> or AiDotNet.TextToSpeech.FlowDiffusion.E2TTS<T> ? "infilling-" + option
@@ -802,6 +803,13 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.Vocoders.UnivNet<T> univNet && option == "SegmentSize")
+        {
+            var settings = (AiDotNet.TextToSpeech.Vocoders.UnivNetOptions)univNet.GetOptions();
+            univNet.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+            { Tokens = new Tensor<T>(new[] { 1 }), Audio = VocoderRecording<T>(settings) });
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> waveGlow && option == "SegmentSamples")
         {
             var settings = (AiDotNet.TextToSpeech.Vocoders.WaveGlowOptions)waveGlow.GetOptions();
@@ -980,6 +988,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Vocoders.UnivNetOptions univNet && option == "SegmentSize")
+            univNet.SegmentSize = checked(4 * univNet.HopSize);
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chatterbox && option == "Watermark")
             chatterbox.WatermarkModelPath = AiDotNet.Tests.Audio.PerthReleasedCheckpointFixture.CheckpointPath;
         if (options is AiDotNet.TextToSpeech.Vocoders.WaveGlowOptions waveGlow && option == "SegmentSamples")

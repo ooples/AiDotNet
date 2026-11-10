@@ -1,4 +1,8 @@
 #nullable enable
+virtual AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.RecordingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.UnivNet<T>.RecordingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.UnivNetOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.UnivNetOptions.HopSize.set -> void
 override AiDotNet.TextToSpeech.Vocoders.FreGradOptions.HopSize.get -> int
 override AiDotNet.TextToSpeech.Vocoders.FreGradOptions.HopSize.set -> void
 override AiDotNet.TextToSpeech.Vocoders.WaveGradOptions.HopSize.get -> int
