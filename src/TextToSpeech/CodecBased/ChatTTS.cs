@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -798,44 +799,35 @@ public partial class ChatTTS<T> : TtsModelBase<T>, ICodecTts<T>
         ThrowIfDisposed();
         if (string.IsNullOrWhiteSpace(assetDirectory)) throw new ArgumentException("The asset directory is required.", nameof(assetDirectory));
         var o = _options;
-        Gpt.LoadTorchWeights(Reader(Path.Combine(assetDirectory, "gpt", "model.safetensors")), prefix: "");
-        LoadEmbedWeights(Reader(Path.Combine(assetDirectory, "Embed.safetensors")));
-        var dvae = Reader(Path.Combine(assetDirectory, "DVAE.safetensors"));
-        (_dvaeEncoder ?? throw new InvalidOperationException("native model")).LoadTorchWeights(dvae, "");
-        (_dvaeDecoder ?? throw new InvalidOperationException("native model")).LoadTorchWeights(dvae, "");
-        (_hiddenDecoder ?? throw new InvalidOperationException("native model")).LoadTorchWeights(Reader(Path.Combine(assetDirectory, "Decoder.safetensors")), "");
-        (_vocos ?? throw new InvalidOperationException("native model")).LoadTorchWeights(Reader(Path.Combine(assetDirectory, "Vocos.safetensors")),
-            o.MelChannels, o.VocosIntermediate);
+        using (var gpt = TorchCheckpointFile.Open(Path.Combine(assetDirectory, "gpt", "model.safetensors"))) Gpt.LoadTorchWeights(gpt, prefix: "");
+        using (var embed = TorchCheckpointFile.Open(Path.Combine(assetDirectory, "Embed.safetensors"))) LoadEmbedWeights(embed);
+        using (var dvae = TorchCheckpointFile.Open(Path.Combine(assetDirectory, "DVAE.safetensors")))
+        {
+            (_dvaeEncoder ?? throw new InvalidOperationException("native model")).LoadTorchWeights(dvae, "");
+            (_dvaeDecoder ?? throw new InvalidOperationException("native model")).LoadTorchWeights(dvae, "");
+        }
+        using (var decoder = TorchCheckpointFile.Open(Path.Combine(assetDirectory, "Decoder.safetensors")))
+            (_hiddenDecoder ?? throw new InvalidOperationException("native model")).LoadTorchWeights(decoder, "");
+        using (var vocos = TorchCheckpointFile.Open(Path.Combine(assetDirectory, "Vocos.safetensors")))
+            (_vocos ?? throw new InvalidOperationException("native model")).LoadTorchWeights(vocos.AsFunction(), o.MelChannels, o.VocosIntermediate);
     }
 
     /// <summary>Loads <c>Embed</c>'s state: <c>emb_text</c>, <c>emb_code.{q}</c>, and the heads' weight-norm
     /// parametrizations (<c>original0</c> the gain, <c>original1</c> the direction).</summary>
-    internal void LoadEmbedWeights(Func<string, int[], double[]> read)
+    internal void LoadEmbedWeights(Func<string, int[], double[]> read) => LoadEmbedWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads <c>Embed</c>'s state from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    internal void LoadEmbedWeights(TorchTensorSource source)
     {
         var o = _options;
         int d = o.HiddenDim, codes = CodebookSize + 1;
-        (_textTable ?? throw new InvalidOperationException("native model")).LoadTable(read("emb_text.weight", new[] { TextVocabulary, d }));
-        for (int q = 0; q < o.NumVq; q++) _codeTables[q].LoadTable(read($"emb_code.{q}.weight", new[] { codes, d }));
+        (_textTable ?? throw new InvalidOperationException("native model")).LoadTable(source, "emb_text.weight");
+        for (int q = 0; q < o.NumVq; q++) _codeTables[q].LoadTable(source, $"emb_code.{q}.weight");
         void Head(NormedConv1DLayer<T> head, string name, int outputs) =>
-            head.LoadTorchWeights(read(name + ".parametrizations.weight.original1", new[] { outputs, d }),
-                read(name + ".parametrizations.weight.original0", new[] { outputs, 1 }), new double[outputs]);
+            head.LoadTorchWeights(source, name + ".parametrizations.weight.original1", new[] { outputs, d },
+                name + ".parametrizations.weight.original0", null);
         Head(_textHead ?? throw new InvalidOperationException("native model"), "head_text", TextVocabulary);
         for (int q = 0; q < o.NumVq; q++) Head(_codeHeads[q], $"head_code.{q}", codes);
-    }
-
-    private static Func<string, int[], double[]> Reader(string path)
-    {
-        var file = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        return (name, shape) =>
-        {
-            if (!file.TryGetValue(name, out var tensor))
-                throw new InvalidDataException($"The checkpoint {path} has no tensor '{name}'.");
-            var actual = tensor.Shape.ToArray();
-            if (actual.Aggregate(1, (a, b) => a * b) != shape.Aggregate(1, (a, b) => a * b))
-                throw new InvalidDataException($"'{name}' is [{string.Join(", ", actual)}] in the checkpoint but [{string.Join(", ", shape)}] " +
-                    "in this model; build the model with the checkpoint's configuration.");
-            return tensor.ToVector().Select(v => (double)v).ToArray();
-        };
     }
 
     // ---------------------------------------------------------------- housekeeping

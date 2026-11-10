@@ -232,18 +232,24 @@ internal sealed class BertNetwork<T>
     }
 
     /// <summary>Loads a Hugging Face <c>BertModel</c> state dict (names after an optional <paramref name="prefix"/>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "")
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "") =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads a Hugging Face <c>BertModel</c> state dict from <paramref name="source"/>, each tensor copied straight
+    /// into its layer.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string prefix = "")
     {
         var c = Configuration;
         int h = c.Hidden;
         void Linear(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{prefix}{name}.weight", new[] { outputs, inputs }),
-                read($"{prefix}{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{prefix}{name}.weight", $"{prefix}{name}.bias");
         void Norm(LayerNormalizationLayer<T> norm, string name)
-            => TorchParameters.LayerNorm(_engine, norm, read($"{prefix}{name}.weight", new[] { h }), read($"{prefix}{name}.bias", new[] { h }));
-        TorchParameters.Linear(WordEmbeddings, 1, c.VocabSize * h, read($"{prefix}embeddings.word_embeddings.weight", new[] { c.VocabSize, h }));
-        TorchParameters.Linear(PositionEmbeddings, 1, c.MaxPositions * h, read($"{prefix}embeddings.position_embeddings.weight", new[] { c.MaxPositions, h }));
-        TorchParameters.Linear(TypeEmbeddings, 1, c.TypeVocabSize * h, read($"{prefix}embeddings.token_type_embeddings.weight", new[] { c.TypeVocabSize, h }));
+            => TorchParameters.LayerNorm(_engine, norm, source, $"{prefix}{name}.weight", $"{prefix}{name}.bias");
+        void Table(BiasFreeLinearLayer<T> table, string name, int rows)
+            => TorchParameters.Linear(table, 1, rows * h, source, $"{prefix}{name}", new[] { rows, h });
+        Table(WordEmbeddings, "embeddings.word_embeddings.weight", c.VocabSize);
+        Table(PositionEmbeddings, "embeddings.position_embeddings.weight", c.MaxPositions);
+        Table(TypeEmbeddings, "embeddings.token_type_embeddings.weight", c.TypeVocabSize);
         Norm(EmbeddingNorm, "embeddings.LayerNorm");
         for (int i = 0; i < Layers.Count; i++)
         {

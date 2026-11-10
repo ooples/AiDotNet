@@ -1,9 +1,36 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.EndToEnd;
 using AiDotNet.TextToSpeech.Latest;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
+
+/// <summary>GPT-SoVITS's loaders over a <see cref="TorchTensorSource"/>: <see cref="MeloOps"/>' layouts, each tensor
+/// copied straight into its layer.</summary>
+internal static class GptSoVitsWeights
+{
+    /// <summary>A weight-normalized convolution's <c>weight_v</c>, <c>weight_g</c> and <c>bias</c>, else its <c>weight</c>
+    /// and bias (zero without one).</summary>
+    public static void Conv<T>(TorchTensorSource source, NormedConv1DLayer<T> conv, string name, bool bias = true)
+    {
+        if (conv.Normalization == ConvolutionNormalization.Weight)
+            conv.LoadTorchWeights(source, name + ".weight_v", conv.TorchWeightShape, name + ".weight_g", name + ".bias");
+        else
+            conv.LoadTorchWeights(source, name + ".weight", conv.TorchWeightShape, null, bias ? name + ".bias" : null);
+    }
+
+    /// <summary>A layer norm's <c>{name}.{weight}</c> and <c>{name}.{bias}</c>.</summary>
+    public static void Norm<T>(IEngine engine, TorchTensorSource source, LayerNormalizationLayer<T> norm, string name, string weight = "gamma",
+        string bias = "beta") => TorchParameters.LayerNorm(engine, norm, source, $"{name}.{weight}", $"{name}.{bias}");
+
+    /// <summary>An <c>nn.Linear</c>'s <c>weight [out, in]</c> and <c>bias</c>.</summary>
+    public static void Linear<T>(IEngine engine, TorchTensorSource source, DenseLayer<T> dense, int inputs, int outputs, string name) =>
+        TorchParameters.Linear(engine, dense, inputs, outputs, source, name + ".weight", name + ".bias");
+
+    /// <summary>The reader a loader that still takes values per name needs (allocates each tensor).</summary>
+    public static Func<string, double[]> Values(TorchTensorSource source) => name => source.Read(name, Array.Empty<int>());
+}
 
 /// <summary>The sizes of GPT-SoVITS's v3/v4/V5 DiT (<c>DiT(dim=1024, depth=22, heads=16, ff_mult=2, text_dim=512,
 /// conv_layers=4)</c>).</summary>
@@ -294,16 +321,20 @@ internal sealed class GptSoVitsDiT<T>
     }
 
     /// <summary>Loads peft's adapter weights (<c>...attn.to_q.lora_A.weight</c>, with or without <c>.default</c>).</summary>
-    public void LoadLora(Func<string, double[]?> read, string prefix, int rank)
+    public void LoadLora(Func<string, double[]?> read, string prefix, int rank) => LoadLora(TorchTensorSource.From(read), prefix, rank);
+
+    /// <summary>Loads peft's adapter weights from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    internal void LoadLora(TorchTensorSource source, string prefix, int rank)
     {
         var c = Configuration;
         int inner = c.Heads * c.HeadDim;
         void Load(Lora lora, string name, int inputs, int outputs)
         {
-            double[] Read(string part) => read($"{name}.{part}.weight") ?? read($"{name}.{part}.default.weight")
-                ?? throw new KeyNotFoundException($"The LoRA checkpoint has no '{name}.{part}.weight'.");
-            TorchParameters.Linear(lora.A, inputs, rank, Read("lora_A"));
-            TorchParameters.Linear(lora.B, rank, outputs, Read("lora_B"));
+            string Name(string part) => source.Contains($"{name}.{part}.weight") ? $"{name}.{part}.weight"
+                : source.Contains($"{name}.{part}.default.weight") ? $"{name}.{part}.default.weight"
+                : throw new KeyNotFoundException($"The LoRA checkpoint has no '{name}.{part}.weight'.");
+            TorchParameters.Linear(lora.A, inputs, rank, source, Name("lora_A"));
+            TorchParameters.Linear(lora.B, rank, outputs, source, Name("lora_B"));
         }
         for (int i = 0; i < _lora.Count; i++)
         {
@@ -359,11 +390,14 @@ internal sealed class GptSoVitsDiT<T>
     }
 
     /// <summary>Loads <c>cfm.estimator.*</c> (names after the prefix).</summary>
-    public void Load(Func<string, double[]> read, string prefix)
+    public void Load(Func<string, double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads <c>cfm.estimator.*</c> from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
         var c = Configuration;
         int inner = c.Heads * c.HeadDim;
-        void Linear(DenseLayer<T> layer, string name, int inputs, int outputs) => MeloOps.LoadLinear(_engine, read, layer, inputs, outputs, prefix + name);
+        void Linear(DenseLayer<T> layer, string name, int inputs, int outputs) => GptSoVitsWeights.Linear(_engine, source, layer, inputs, outputs, prefix + name);
         Linear(TimeIn, "time_embed.time_mlp.0", 256, c.Dim);
         Linear(TimeOut, "time_embed.time_mlp.2", c.Dim, c.Dim);
         if (StepIn is not null)
@@ -375,16 +409,16 @@ internal sealed class GptSoVitsDiT<T>
         {
             var b = TextBlocks[i];
             string n = $"text_embed.text_blocks.{i}";
-            MeloOps.LoadConv(read, b.Depthwise, prefix + n + ".dwconv");
-            MeloOps.LoadNorm(_engine, read, b.Norm, prefix + n + ".norm", "weight", "bias");
+            GptSoVitsWeights.Conv(source, b.Depthwise, prefix + n + ".dwconv");
+            GptSoVitsWeights.Norm(_engine, source, b.Norm, prefix + n + ".norm", "weight", "bias");
             Linear(b.Expand, n + ".pwconv1", c.TextDim, 2 * c.TextDim);
-            TorchParameters.Linear(b.GrnGamma, 1, 2 * c.TextDim, read(prefix + n + ".grn.gamma"));
-            TorchParameters.Linear(b.GrnBeta, 1, 2 * c.TextDim, read(prefix + n + ".grn.beta"));
+            TorchParameters.Linear(b.GrnGamma, 1, 2 * c.TextDim, source, prefix + n + ".grn.gamma", new[] { 1, 1, 2 * c.TextDim });
+            TorchParameters.Linear(b.GrnBeta, 1, 2 * c.TextDim, source, prefix + n + ".grn.beta", new[] { 1, 1, 2 * c.TextDim });
             Linear(b.Project, n + ".pwconv2", 2 * c.TextDim, c.TextDim);
         }
         Linear(InputProjection, "input_embed.proj", 2 * c.MelDim + c.TextDim + c.SpeakerDim, c.Dim);
-        MeloOps.LoadConv(read, PositionConv1, prefix + (c.CausalPosition ? "input_embed.conv_pos_embed.conv1.0" : "input_embed.conv_pos_embed.conv1d.0"));
-        MeloOps.LoadConv(read, PositionConv2, prefix + (c.CausalPosition ? "input_embed.conv_pos_embed.conv2.0" : "input_embed.conv_pos_embed.conv1d.2"));
+        GptSoVitsWeights.Conv(source, PositionConv1, prefix + (c.CausalPosition ? "input_embed.conv_pos_embed.conv1.0" : "input_embed.conv_pos_embed.conv1d.0"));
+        GptSoVitsWeights.Conv(source, PositionConv2, prefix + (c.CausalPosition ? "input_embed.conv_pos_embed.conv2.0" : "input_embed.conv_pos_embed.conv1d.2"));
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
@@ -581,15 +615,15 @@ internal sealed class GptSoVitsMaskedEncoder<T>
         return Mask(Projection.Forward(Mask(output!, length)), length);
     }
 
-    public void Load(Func<string, double[]> read, string prefix)
+    public void Load(TorchTensorSource source, string prefix)
     {
-        MeloOps.LoadConv(read, Pre, prefix + "pre");
-        MeloOps.LoadConv(read, Condition, prefix + "enc.cond_layer");
+        GptSoVitsWeights.Conv(source, Pre, prefix + "pre");
+        GptSoVitsWeights.Conv(source, Condition, prefix + "enc.cond_layer");
         for (int i = 0; i < _in.Count; i++)
         {
-            MeloOps.LoadConv(read, _in[i], $"{prefix}enc.in_layers.{i}");
-            MeloOps.LoadConv(read, _resSkip[i], $"{prefix}enc.res_skip_layers.{i}");
+            GptSoVitsWeights.Conv(source, _in[i], $"{prefix}enc.in_layers.{i}");
+            GptSoVitsWeights.Conv(source, _resSkip[i], $"{prefix}enc.res_skip_layers.{i}");
         }
-        MeloOps.LoadConv(read, Projection, prefix + "proj");
+        GptSoVitsWeights.Conv(source, Projection, prefix + "proj");
     }
 }

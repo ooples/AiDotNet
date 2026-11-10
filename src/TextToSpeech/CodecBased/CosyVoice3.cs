@@ -248,7 +248,7 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
         _options.SpeechTokenizerPath = path;
     }
 
-    private protected override void LoadFlowWeights(TorchTensorSource source) => DiTFlow.LoadTorchWeights(source.AsFunction());
+    private protected override void LoadFlowWeights(TorchTensorSource source) => DiTFlow.LoadTorchWeights(source);
     private protected override void LoadVocoderWeights(TorchTensorSource source) => CausalHift.LoadTorchWeights(source);
 
     private void OpenSpeakerEncoder(string path)

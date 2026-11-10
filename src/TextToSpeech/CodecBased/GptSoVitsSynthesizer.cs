@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.EndToEnd;
 using AiDotNet.TextToSpeech.Latest;
@@ -247,15 +248,16 @@ internal sealed class GptSoVitsQuantizer<T>
     }
 
     /// <summary>Loads <c>quantizer.vq.layers.0._codebook.*</c>.</summary>
-    public void Load(Func<string, double[]?> read, string prefix)
+    public void Load(TorchTensorSource source, string prefix)
     {
-        var embed = read(prefix + "embed") ?? throw new KeyNotFoundException(prefix + "embed");
-        Array.Copy(embed, Embed, Embed.Length);
-        var average = read(prefix + "embed_avg");
-        Array.Copy(average ?? embed, EmbedAverage, EmbedAverage.Length);
-        var sizes = read(prefix + "cluster_size");
-        if (sizes is not null) Array.Copy(sizes, ClusterSize, ClusterSize.Length);
-        var inited = read(prefix + "inited");
+        void Copy(string name, double[] destination) =>
+            source.ReadChunks(name, new[] { destination.Length }, (start, values) => values.CopyTo(new Span<double>(destination, start, values.Length)));
+        if (!source.Contains(prefix + "embed")) throw new KeyNotFoundException(prefix + "embed");
+        Copy(prefix + "embed", Embed);
+        if (source.Contains(prefix + "embed_avg")) Copy(prefix + "embed_avg", EmbedAverage);
+        else Array.Copy(Embed, EmbedAverage, EmbedAverage.Length);
+        if (source.Contains(prefix + "cluster_size")) Copy(prefix + "cluster_size", ClusterSize);
+        var inited = source.TryRead(prefix + "inited");
         Initialized = inited is null || inited[0] != 0;
     }
 }
@@ -299,12 +301,12 @@ internal sealed class GptSoVitsCrossAttention<T>
         return Output.Forward(output);
     }
 
-    public void Load(Func<string, double[]> read, string prefix)
+    public void Load(TorchTensorSource source, string prefix)
     {
-        MeloOps.LoadConv(read, Query, prefix + "conv_q");
-        MeloOps.LoadConv(read, Key, prefix + "conv_k");
-        MeloOps.LoadConv(read, Value, prefix + "conv_v");
-        MeloOps.LoadConv(read, Output, prefix + "conv_o");
+        GptSoVitsWeights.Conv(source, Query, prefix + "conv_q");
+        GptSoVitsWeights.Conv(source, Key, prefix + "conv_k");
+        GptSoVitsWeights.Conv(source, Value, prefix + "conv_v");
+        GptSoVitsWeights.Conv(source, Output, prefix + "conv_o");
     }
 }
 
@@ -386,17 +388,17 @@ internal sealed class GptSoVitsMelStyleEncoder<T>
         return _engine.Reshape(pooled, new[] { 1, _out, 1 });
     }
 
-    public void Load(IEngine engine, Func<string, double[]> read, string prefix)
+    public void Load(IEngine engine, TorchTensorSource source, string prefix)
     {
-        MeloOps.LoadLinear(engine, read, Spectral1, _in, _hidden, prefix + "spectral.0.fc");
-        MeloOps.LoadLinear(engine, read, Spectral2, _hidden, _hidden, prefix + "spectral.3.fc");
-        MeloOps.LoadConv(read, Temporal1, prefix + "temporal.0.conv1.conv");
-        MeloOps.LoadConv(read, Temporal2, prefix + "temporal.1.conv1.conv");
-        MeloOps.LoadLinear(engine, read, Query, _hidden, _hidden, prefix + "slf_attn.w_qs");
-        MeloOps.LoadLinear(engine, read, Key, _hidden, _hidden, prefix + "slf_attn.w_ks");
-        MeloOps.LoadLinear(engine, read, Value, _hidden, _hidden, prefix + "slf_attn.w_vs");
-        MeloOps.LoadLinear(engine, read, AttentionOutput, _hidden, _hidden, prefix + "slf_attn.fc");
-        MeloOps.LoadLinear(engine, read, Projection, _hidden, _out, prefix + "fc.fc");
+        GptSoVitsWeights.Linear(engine, source, Spectral1, _in, _hidden, prefix + "spectral.0.fc");
+        GptSoVitsWeights.Linear(engine, source, Spectral2, _hidden, _hidden, prefix + "spectral.3.fc");
+        GptSoVitsWeights.Conv(source, Temporal1, prefix + "temporal.0.conv1.conv");
+        GptSoVitsWeights.Conv(source, Temporal2, prefix + "temporal.1.conv1.conv");
+        GptSoVitsWeights.Linear(engine, source, Query, _hidden, _hidden, prefix + "slf_attn.w_qs");
+        GptSoVitsWeights.Linear(engine, source, Key, _hidden, _hidden, prefix + "slf_attn.w_ks");
+        GptSoVitsWeights.Linear(engine, source, Value, _hidden, _hidden, prefix + "slf_attn.w_vs");
+        GptSoVitsWeights.Linear(engine, source, AttentionOutput, _hidden, _hidden, prefix + "slf_attn.fc");
+        GptSoVitsWeights.Linear(engine, source, Projection, _hidden, _out, prefix + "fc.fc");
     }
 }
 
@@ -617,28 +619,32 @@ internal sealed class GptSoVitsSynthesizer<T>
     // ---------------------------------------------------------------- weights
 
     /// <summary>Loads the s2 generator's state (the checkpoint's <c>weight</c>).</summary>
-    public void Load(Func<string, double[]?> read)
+    public void Load(Func<string, double[]?> read) => Load(TorchTensorSource.From(read));
+
+    /// <summary>Loads the s2 generator's state from <paramref name="source"/>, each tensor copied straight into its layer
+    /// (the Melo and HiFi-GAN modules read theirs per tensor).</summary>
+    internal void Load(TorchTensorSource source)
     {
         var c = Configuration;
-        double[] Require(string name) => read(name) ?? throw new KeyNotFoundException($"The SoVITS checkpoint has no '{name}'.");
-        MeloOps.LoadConv(Require, SslProjection, "ssl_proj");
-        Quantizer.Load(read, "quantizer.vq.layers.0._codebook.");
-        TextEncoder.Load(Require, "enc_p.");
+        var values = GptSoVitsWeights.Values(source);
+        GptSoVitsWeights.Conv(source, SslProjection, "ssl_proj");
+        Quantizer.Load(source, "quantizer.vq.layers.0._codebook.");
+        TextEncoder.Load(source, "enc_p.");
         for (int i = 0; i < _couplings.Count; i++)
         {
             var (pre, net, post) = _couplings[i];
-            MeloOps.LoadConv(Require, pre, $"flow.flows.{2 * i}.pre");
-            net.LoadTorch(Require, $"flow.flows.{2 * i}.enc.");
-            MeloOps.LoadConv(Require, post, $"flow.flows.{2 * i}.post");
+            GptSoVitsWeights.Conv(source, pre, $"flow.flows.{2 * i}.pre");
+            net.LoadTorch(values, $"flow.flows.{2 * i}.enc.");
+            GptSoVitsWeights.Conv(source, post, $"flow.flows.{2 * i}.post");
         }
-        Generator.LoadTorch(read, "dec.");
-        if (read("enc_q.pre.weight") is not null) Posterior.LoadTorch(Require, "enc_q.");
-        ReferenceEncoder.Load(_engine, Require, "ref_enc.");
+        Generator.LoadTorch(name => source.TryRead(name), "dec.");
+        if (source.Contains("enc_q.pre.weight")) Posterior.LoadTorch(values, "enc_q.");
+        ReferenceEncoder.Load(_engine, source, "ref_enc.");
         if (c.IsV2Pro)
         {
-            MeloOps.LoadLinear(_engine, Require, SvProjection!, c.SvDim, c.Gin, "sv_emb");
-            TorchParameters.Linear(Prelu!, 1, c.Gin, Require("prelu.weight"));
-            MeloOps.LoadLinear(_engine, Require, GeTo512!, c.Gin, c.MrteChannels, "ge_to512");
+            GptSoVitsWeights.Linear(_engine, source, SvProjection!, c.SvDim, c.Gin, "sv_emb");
+            TorchParameters.Linear(Prelu!, 1, c.Gin, source, "prelu.weight");
+            GptSoVitsWeights.Linear(_engine, source, GeTo512!, c.Gin, c.MrteChannels, "ge_to512");
         }
     }
 }
@@ -744,17 +750,18 @@ internal sealed class GptSoVitsTextEncoder<T>
     }
 
     /// <summary>Loads <c>enc_p.*</c> (names after the prefix).</summary>
-    public void Load(Func<string, double[]> read, string prefix)
+    public void Load(TorchTensorSource source, string prefix)
     {
-        MeloOps.LoadConv(read, SslProjection, prefix + "ssl_proj");
-        EncoderSsl.LoadTorch(_engine, read, prefix + "encoder_ssl.");
-        EncoderText.LoadTorch(_engine, read, prefix + "encoder_text.");
-        Embedding.LoadLeadingRows(read(prefix + "text_embedding.weight"));
-        MeloOps.LoadConv(read, MrteContent, prefix + "mrte.c_pre");
-        MeloOps.LoadConv(read, MrteText, prefix + "mrte.text_pre");
-        MrteAttention.Load(read, prefix + "mrte.cross_attention.");
-        MeloOps.LoadConv(read, MrtePost, prefix + "mrte.c_post");
-        Encoder2.LoadTorch(_engine, read, prefix + "encoder2.");
-        MeloOps.LoadConv(read, Projection, prefix + "proj");
+        var values = GptSoVitsWeights.Values(source);
+        GptSoVitsWeights.Conv(source, SslProjection, prefix + "ssl_proj");
+        EncoderSsl.LoadTorch(_engine, values, prefix + "encoder_ssl.");
+        EncoderText.LoadTorch(_engine, values, prefix + "encoder_text.");
+        Embedding.LoadLeadingRows(source, prefix + "text_embedding.weight");
+        GptSoVitsWeights.Conv(source, MrteContent, prefix + "mrte.c_pre");
+        GptSoVitsWeights.Conv(source, MrteText, prefix + "mrte.text_pre");
+        MrteAttention.Load(source, prefix + "mrte.cross_attention.");
+        GptSoVitsWeights.Conv(source, MrtePost, prefix + "mrte.c_post");
+        Encoder2.LoadTorch(_engine, values, prefix + "encoder2.");
+        GptSoVitsWeights.Conv(source, Projection, prefix + "proj");
     }
 }

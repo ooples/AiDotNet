@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
 
@@ -431,27 +432,29 @@ internal sealed class GptSoVitsT2S<T>
     // ---------------------------------------------------------------- weights
 
     /// <summary>Loads the s1 checkpoint's state (names after <c>model.</c>).</summary>
-    public void Load(Func<string, int[], double[]> read)
+    public void Load(Func<string, int[], double[]> read) => Load(TorchTensorSource.From(read));
+
+    /// <summary>Loads the s1 checkpoint's state from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source)
     {
         var c = Configuration;
         int d = c.Hidden;
-        IndexTtsOps.LoadLinear(_engine, read, BertProjection, "bert_proj", c.BertDim, d);
-        TextEmbedding.LoadLeadingRows(read("ar_text_embedding.word_embeddings.weight", new[] { c.PhonemeVocab, d }));
-        AudioEmbedding.LoadLeadingRows(read("ar_audio_embedding.word_embeddings.weight", new[] { c.Vocab, d }));
-        TorchParameters.Linear(TextAlpha, 1, 1, read("ar_text_position.alpha", new[] { 1 }));
-        TorchParameters.Linear(AudioAlpha, 1, 1, read("ar_audio_position.alpha", new[] { 1 }));
+        IndexTtsOps.LoadLinear(_engine, source, BertProjection, "bert_proj", c.BertDim, d);
+        TextEmbedding.LoadLeadingRows(source, "ar_text_embedding.word_embeddings.weight", c.PhonemeVocab);
+        AudioEmbedding.LoadLeadingRows(source, "ar_audio_embedding.word_embeddings.weight", c.Vocab);
+        TorchParameters.Linear(TextAlpha, 1, 1, source, "ar_text_position.alpha", new[] { 1 });
+        TorchParameters.Linear(AudioAlpha, 1, 1, source, "ar_audio_position.alpha", new[] { 1 });
         for (int i = 0; i < c.Layers; i++)
         {
             var block = Blocks[i];
             string n = $"h.layers.{i}";
-            TorchParameters.Linear(_engine, block.InProjection, d, 3 * d, read($"{n}.self_attn.in_proj_weight", new[] { 3 * d, d }),
-                read($"{n}.self_attn.in_proj_bias", new[] { 3 * d }));
-            IndexTtsOps.LoadLinear(_engine, read, block.OutProjection, $"{n}.self_attn.out_proj", d, d);
-            IndexTtsOps.LoadLinear(_engine, read, block.Linear1, $"{n}.linear1", d, 4 * d);
-            IndexTtsOps.LoadLinear(_engine, read, block.Linear2, $"{n}.linear2", 4 * d, d);
-            IndexTtsOps.LoadNorm(_engine, read, block.Norm1, $"{n}.norm1", d);
-            IndexTtsOps.LoadNorm(_engine, read, block.Norm2, $"{n}.norm2", d);
+            TorchParameters.Linear(_engine, block.InProjection, d, 3 * d, source, $"{n}.self_attn.in_proj_weight", $"{n}.self_attn.in_proj_bias");
+            IndexTtsOps.LoadLinear(_engine, source, block.OutProjection, $"{n}.self_attn.out_proj", d, d);
+            IndexTtsOps.LoadLinear(_engine, source, block.Linear1, $"{n}.linear1", d, 4 * d);
+            IndexTtsOps.LoadLinear(_engine, source, block.Linear2, $"{n}.linear2", 4 * d, d);
+            IndexTtsOps.LoadNorm(_engine, source, block.Norm1, $"{n}.norm1", d);
+            IndexTtsOps.LoadNorm(_engine, source, block.Norm2, $"{n}.norm2", d);
         }
-        IndexTtsOps.LoadLinear(read, Head, "ar_predict_layer", d, c.Vocab);
+        IndexTtsOps.LoadLinear(source, Head, "ar_predict_layer", d, c.Vocab);
     }
 }

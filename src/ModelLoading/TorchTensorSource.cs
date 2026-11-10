@@ -89,6 +89,18 @@ internal abstract class TorchTensorSource
         CheckCount(name, new[] { rows, cols }, count);
     }
 
+    /// <summary>Decodes the named tensor in stored order, chunk by chunk, into <paramref name="sink"/> (each run of values and
+    /// the index of its first element), for a loader that scatters a stored layout into its storage itself; the count is
+    /// checked against <paramref name="shape"/> when one is given.</summary>
+    /// <returns>The number of values decoded.</returns>
+    public long ReadChunks(string name, int[] shape, SafetensorsFile.DecodedChunk sink)
+    {
+        if (!Contains(name)) throw Missing(name);
+        long count = Decode(name, shape, sink);
+        CheckCount(name, shape, count);
+        return count;
+    }
+
     // A float or double destination is written directly; other numeric types go through their operations.
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     private static void Store<T>(Span<T> span, int index, double value, INumericOperations<T> ops)

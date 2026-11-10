@@ -1,48 +1,15 @@
+using AiDotNet.ModelLoading;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 public partial class FireRedTTS<T>
 {
-    /// <summary>A checkpoint read once: each tensor becomes doubles when it is read and is then released.</summary>
-    private sealed class Checkpoint
+    /// <summary>The prefix a checkpoint's state sits under (the GPT's file wraps it in <c>model</c>).</summary>
+    private static string Prefix(TorchTensorSource checkpoint, string probe)
     {
-        private readonly Dictionary<string, Tensor<float>> _tensors;
-
-        public Checkpoint(string path)
-        {
-            if (!File.Exists(path)) throw new FileNotFoundException($"The checkpoint '{path}' does not exist.", path);
-            _tensors = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-            Keys = new HashSet<string>(_tensors.Keys, StringComparer.Ordinal);
-        }
-
-        public HashSet<string> Keys { get; }
-        private HashSet<string> Used { get; } = new(StringComparer.Ordinal);
-
-        /// <summary>The prefix the state sits under (the GPT's file wraps it in <c>model</c>).</summary>
-        public string Prefix(string probe)
-        {
-            foreach (var prefix in new[] { "", "model.", "state_dict.", "module." })
-                if (Keys.Contains(prefix + probe)) return prefix;
-            throw new InvalidDataException($"The checkpoint has no tensor '{probe}' under any known prefix.");
-        }
-
-        public double[]? Take(string name)
-        {
-            if (!_tensors.TryGetValue(name, out var tensor)) return null;
-            _tensors.Remove(name);
-            Used.Add(name);
-            var values = new double[tensor.Length];
-            for (int i = 0; i < values.Length; i++) values[i] = tensor.GetFlat(i);
-            return values;
-        }
-
-        public Func<string, int[], double[]> Reader(string prefix, string what) => (name, _) =>
-            Take(prefix + name) ?? throw new InvalidDataException($"The {what} checkpoint has no tensor '{prefix + name}'.");
-
-        public void RequireAllUsed(string what, Func<string, bool> unused)
-        {
-            var left = Keys.Where(k => !Used.Contains(k) && !unused(k)).ToList();
-            if (left.Count > 0) throw new InvalidDataException($"The {what} checkpoint has {left.Count} tensors this model has no place for (first: '{left[0]}').");
-        }
+        foreach (var prefix in new[] { "", "model.", "state_dict.", "module." })
+            if (checkpoint.Contains(prefix + probe)) return prefix;
+        throw new InvalidDataException($"The checkpoint has no tensor '{probe}' under any known prefix.");
     }
 
     /// <summary>
@@ -57,30 +24,38 @@ public partial class FireRedTTS<T>
         if (directory is null) throw new ArgumentNullException(nameof(directory));
         if (!HasPaperLayers) throw NotNative();
 
-        var gpt = new Checkpoint(Path.Combine(directory, "fireredtts_gpt.pt"));
-        string prefix = gpt.Prefix("mel_head.weight");
-        Gpt.Load(gpt.Reader(prefix, "GPT"), FireRedTtsGpt<T>.ReleaseTextTokenCount);
-        // GPT-2's causal-mask buffers are not weights; the training step counter is not state.
-        gpt.RequireAllUsed("GPT", k => k.EndsWith("attn.bias", StringComparison.Ordinal) || k.EndsWith("attn.masked_bias", StringComparison.Ordinal)
-            || k == "step");
+        using (var gpt = TorchCheckpointFile.Open(Path.Combine(directory, "fireredtts_gpt.pt")))
+        {
+            Gpt.Load(gpt.WithPrefix(Prefix(gpt, "mel_head.weight")), FireRedTtsGpt<T>.ReleaseTextTokenCount);
+            // GPT-2's causal-mask buffers are not weights; the training step counter is not state.
+            gpt.RequireAllUsed("GPT", k => k.EndsWith("attn.bias", StringComparison.Ordinal) || k.EndsWith("attn.masked_bias", StringComparison.Ordinal)
+                || k == "step");
+        }
 
-        var token2wav = new Checkpoint(Path.Combine(directory, "fireredtts_token2wav.pt"));
-        LoadToken2Wav(token2wav.Take);
-        token2wav.RequireAllUsed("token2wav", k => k.EndsWith(".filter", StringComparison.Ordinal));
+        using (var token2wav = TorchCheckpointFile.Open(Path.Combine(directory, "fireredtts_token2wav.pt")))
+        {
+            LoadToken2Wav(token2wav);
+            token2wav.RequireAllUsed("token2wav", k => k.EndsWith(".filter", StringComparison.Ordinal));
+        }
 
-        var speaker = new Checkpoint(Path.Combine(directory, "fireredtts_speaker.bin"));
-        SpeakerEncoder.Load(EcapaReader(speaker.Reader("", "speaker")), "");
-        speaker.RequireAllUsed("speaker", k => k.EndsWith("num_batches_tracked", StringComparison.Ordinal));
+        using (var speaker = TorchCheckpointFile.Open(Path.Combine(directory, "fireredtts_speaker.bin")))
+        {
+            SpeakerEncoder.Load(EcapaSource(speaker), "");
+            speaker.RequireAllUsed("speaker", k => k.EndsWith("num_batches_tracked", StringComparison.Ordinal));
+        }
     }
 
     /// <summary>Loads <c>fireredtts_token2wav.pt</c>'s state (<c>flow.*</c> with the codebooks, <c>generator.*</c>).</summary>
-    internal void LoadToken2Wav(Func<string, double[]?> take)
+    internal void LoadToken2Wav(TorchTensorSource source)
     {
         for (int b = 0; b < 2; b++)
-            SpeechTokenizer.Quantizer.LoadCodebook(b, take($"flow.input_embedding.codebook.{b}.weight")
-                ?? throw new InvalidDataException("The token2wav checkpoint has no flow codebooks."));
-        Flow.Load((name, _) => take(name) ?? throw new InvalidDataException($"The token2wav checkpoint has no tensor '{name}'."), "flow.");
-        Vocoder.LoadTorch(name => take("generator." + name));
+        {
+            string name = $"flow.input_embedding.codebook.{b}.weight";
+            if (!source.Contains(name)) throw new InvalidDataException("The token2wav checkpoint has no flow codebooks.");
+            SpeechTokenizer.Quantizer.LoadCodebook(b, source, name);
+        }
+        Flow.Load(source, "flow.");
+        Vocoder.LoadTorch(name => source.TryRead("generator." + name));
     }
 
     /// <summary>
@@ -95,11 +70,14 @@ public partial class FireRedTTS<T>
         if (codecPath is null) throw new ArgumentNullException(nameof(codecPath));
         if (hubertPath is null) throw new ArgumentNullException(nameof(hubertPath));
         if (!HasPaperLayers) throw NotNative();
-        var codec = new Checkpoint(codecPath);
-        SpeechTokenizer.Load(codec.Reader("", "speech tokenizer"), k => codec.Keys.Contains(k));
-        SpeakerEncoder.Load(EcapaReader(codec.Reader("speaker_encoder.", "speech tokenizer")), "");
-        codec.RequireAllUsed("speech tokenizer", k => k.EndsWith("num_batches_tracked", StringComparison.Ordinal) || k.EndsWith(".inited", StringComparison.Ordinal));
-        var hubert = new Checkpoint(hubertPath);
-        SpeechTokenizer.Hubert.LoadTorchWeights(hubert.Take);
+        if (!File.Exists(hubertPath)) throw new FileNotFoundException($"The checkpoint '{hubertPath}' does not exist.", hubertPath);
+        using (var codec = TorchCheckpointFile.Open(codecPath))
+        {
+            SpeechTokenizer.Load(codec);
+            SpeakerEncoder.Load(EcapaSource(codec.WithPrefix("speaker_encoder.")), "");
+            codec.RequireAllUsed("speech tokenizer", k => k.EndsWith("num_batches_tracked", StringComparison.Ordinal) || k.EndsWith(".inited", StringComparison.Ordinal));
+        }
+        using var hubert = TorchCheckpointFile.Open(hubertPath);
+        SpeechTokenizer.Hubert.LoadTorchWeights(hubert);
     }
 }

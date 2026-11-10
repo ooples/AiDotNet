@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
 
@@ -277,13 +278,17 @@ internal sealed class FishDualAr<T>
     }
 
     /// <summary>Loads the release's <c>model.pth</c> names.</summary>
-    public void Load(Func<string, int[], double[]> read)
+    public void Load(Func<string, int[], double[]> read) => Load(TorchTensorSource.From(read));
+
+    /// <summary>Loads the release's <c>model.pth</c> names from <paramref name="source"/>, each tensor copied straight into
+    /// its layer.</summary>
+    internal void Load(TorchTensorSource source)
     {
         var c = Configuration;
         int hd = c.Dim / c.Heads;
         void Linear(BiasFreeLinearLayer<T> layer, string name, int inputs, int outputs) =>
-            TorchParameters.Linear(layer, inputs, outputs, read(name + ".weight", new[] { outputs, inputs }));
-        void Vector(BiasFreeLinearLayer<T> holder, string name, int width) => TorchParameters.Linear(holder, 1, width, read(name, new[] { width }));
+            TorchParameters.Linear(layer, inputs, outputs, source, name + ".weight");
+        void Vector(BiasFreeLinearLayer<T> holder, string name, int width) => TorchParameters.Linear(holder, 1, width, source, name, new[] { width });
         void Blocks(List<Block> blocks, string prefix)
         {
             for (int i = 0; i < blocks.Count; i++)
@@ -299,12 +304,12 @@ internal sealed class FishDualAr<T>
                 Linear(b.Down, p + "feed_forward.w2", c.Intermediate, c.Dim);
             }
         }
-        Embeddings.LoadTable(read("embeddings.weight", new[] { c.Vocabulary, c.Dim }));
-        CodebookEmbeddings.LoadTable(read("codebook_embeddings.weight", new[] { c.CodebookSize * c.Codebooks, c.Dim }));
+        Embeddings.LoadTable(source, "embeddings.weight");
+        CodebookEmbeddings.LoadTable(source, "codebook_embeddings.weight");
         Blocks(Slow, "layers");
         Vector(SlowNorm, "norm.weight", c.Dim);
         Linear(TokenOutput, "output", c.Dim, c.Vocabulary);
-        FastEmbeddings.LoadTable(read("fast_embeddings.weight", new[] { c.CodebookSize, c.Dim }));
+        FastEmbeddings.LoadTable(source, "fast_embeddings.weight");
         Blocks(Fast, "fast_layers");
         Vector(FastNorm, "fast_norm.weight", c.Dim);
         Linear(FastOutput, "fast_output", c.Dim, c.CodebookSize);

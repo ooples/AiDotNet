@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.EndToEnd;
 using AiDotNet.TextToSpeech.Latest;
@@ -171,17 +172,19 @@ internal sealed class CosyVoice3Flow<T>
             NumOps.FromDouble(1.0 / difference.Length));
     }
 
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads the flow's state from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         int input = Options.DiTInputDim, look = Options.PreLookaheadChannels;
-        InputEmbedding.LoadTable(read("input_embedding.weight", new[] { Options.CodebookSize, input }));
-        TorchParameters.Linear(_engine, SpeakerProjection, Options.SpeakerEmbeddingDim, input,
-            read("spk_embed_affine_layer.weight", new[] { input, Options.SpeakerEmbeddingDim }),
-            read("spk_embed_affine_layer.bias", new[] { input }));
-        LookaheadConv1.LoadTorchWeights(read("pre_lookahead_layer.conv1.weight", new[] { look, input, Options.Lookahead + 1 }), null,
-            read("pre_lookahead_layer.conv1.bias", new[] { look }));
-        LookaheadConv2.LoadTorchWeights(read("pre_lookahead_layer.conv2.weight", new[] { input, look, 3 }), null,
-            read("pre_lookahead_layer.conv2.bias", new[] { input }));
-        Estimator.Load(name => read(name, Array.Empty<int>()), "decoder.estimator.");
+        InputEmbedding.LoadTable(source, "input_embedding.weight");
+        TorchParameters.Linear(_engine, SpeakerProjection, Options.SpeakerEmbeddingDim, input, source,
+            "spk_embed_affine_layer.weight", "spk_embed_affine_layer.bias");
+        LookaheadConv1.LoadTorchWeights(source, "pre_lookahead_layer.conv1.weight", new[] { look, input, Options.Lookahead + 1 }, null,
+            "pre_lookahead_layer.conv1.bias");
+        LookaheadConv2.LoadTorchWeights(source, "pre_lookahead_layer.conv2.weight", new[] { input, look, 3 }, null,
+            "pre_lookahead_layer.conv2.bias");
+        Estimator.Load(source, "decoder.estimator.");
     }
 }

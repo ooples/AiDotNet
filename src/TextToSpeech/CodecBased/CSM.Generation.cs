@@ -1,6 +1,7 @@
 using AiDotNet.Audio.Codecs;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -268,13 +269,13 @@ public partial class CSM<T>
                 ?? throw new FileNotFoundException($"No model.safetensors or ckpt.pt in {path}.");
             path = file;
         }
-        // Each tensor is widened when it is read: the 1B checkpoint held whole in double would be another 12 GB.
-        var state = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        var used = LoadTorchWeights(name => state.TryGetValue(name, out var v) ? Array.ConvertAll(v.ToArray(), x => (double)x) : null);
+        // Each tensor is copied straight into its layer as it is read.
+        using var state = TorchCheckpointFile.Open(path);
+        var used = LoadTorchWeights(state);
         // Causal masks and key-value caches are buffers of a model whose caches were set up; they are recomputed. A
         // transformers checkpoint also carries its Mimi (codec_model.*), in transformers' own names: the codec is loaded
         // from the release's Mimi by LoadCodecWeights.
-        var unused = state.Keys.Where(k => !used.Contains(k) && !k.EndsWith("causal_mask", StringComparison.Ordinal) && !k.Contains(".kv_cache.")
+        var unused = state.Names.Where(k => !used.Contains(k) && !k.EndsWith("causal_mask", StringComparison.Ordinal) && !k.Contains(".kv_cache.")
             && !k.StartsWith("codec_model.", StringComparison.Ordinal)).ToList();
         if (unused.Count > 0) throw new InvalidDataException($"The checkpoint has {unused.Count} tensors this model has no place for (first: '{unused[0]}').");
     }
@@ -284,24 +285,26 @@ public partial class CSM<T>
     /// dimensions where the Llama decoder here rotates its two halves; the query and key rows are reordered to match, which
     /// leaves every attention score unchanged. Returns the names read.
     /// </summary>
-    internal HashSet<string> LoadTorchWeights(Func<string, double[]?> read)
+    internal HashSet<string> LoadTorchWeights(Func<string, double[]?> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads a state dict with the release's names from <paramref name="source"/>, each tensor copied straight into
+    /// its layer; returns the names read.</summary>
+    internal HashSet<string> LoadTorchWeights(TorchTensorSource source)
     {
         var used = new HashSet<string>(StringComparer.Ordinal);
-        double[] Need(string name, int count)
+        // The loaders below look up only the names they read, so every name looked up through this view is recorded.
+        var read = source.WithNames(name =>
         {
-            var values = read(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            if (values.Length != count) throw new InvalidDataException($"'{name}' has {values.Length} values; this model expects {count}.");
             used.Add(name);
-            return values;
-        }
+            return name;
+        });
         void LoadDecoder(LlamaNetwork<T> network, string prefix)
         {
             var c = network.Configuration;
             int hd = c.ResolvedHeadDim;
-            network.LoadTorchWeights((name, shape) =>
+            string Release(string name)
             {
-                int count = shape.Aggregate(1, (a, s) => a * s);
-                if (name == "norm.weight") return Need($"{prefix}norm.scale", count);
+                if (name == "norm.weight") return $"{prefix}norm.scale";
                 // layers.{i}.<module>
                 int dot = name.IndexOf('.', "layers.".Length);
                 string layer = name.Substring(0, dot), module = name.Substring(dot + 1);
@@ -318,17 +321,22 @@ public partial class CSM<T>
                     "mlp.down_proj.weight" => "mlp.w2.weight",
                     _ => throw new InvalidOperationException($"No release name for '{name}'."),
                 };
-                var values = Need($"{prefix}{layer}.{tune}", count);
-                return module is "self_attn.q_proj.weight" or "self_attn.k_proj.weight" ? HalvesFromPairs(values, shape[0] / hd, hd, shape[1]) : values;
-            }, prefix: "", headName: "");
+                return $"{prefix}{layer}.{tune}";
+            }
+            network.LoadTorchWeights(read.WithNames(Release), prefix: "", headName: "");
+            foreach (var layer in network.Layers)
+            {
+                HalvesFromPairs(layer.Query, c.Hidden, c.Heads * hd, hd);
+                HalvesFromPairs(layer.Key, c.Hidden, c.KeyValueHeads * hd, hd);
+            }
         }
         var o = _options;
         // Hugging Face's CsmForConditionalGeneration names (transformers' port): Llama names, the rotary halves layout.
-        bool port = read("backbone_model.norm.weight") is not null;
+        bool port = source.Contains("backbone_model.norm.weight");
         if (port)
         {
-            Backbone.LoadTorchWeights((name, shape) => Need(name, shape.Aggregate(1, (a, s) => a * s)), prefix: "backbone_model.", headName: "");
-            AudioDecoder.LoadTorchWeights((name, shape) => Need(name, shape.Aggregate(1, (a, s) => a * s)), prefix: "depth_decoder.model.", headName: "");
+            Backbone.LoadTorchWeights(read, prefix: "backbone_model.", headName: "");
+            AudioDecoder.LoadTorchWeights(read, prefix: "depth_decoder.model.", headName: "");
         }
         else
         {
@@ -336,50 +344,71 @@ public partial class CSM<T>
             LoadDecoder(AudioDecoder, "decoder.");
         }
         string Name(string release, string transformers) => port ? transformers : release;
-        TorchParameters.Linear(_textEmbeddings!, 1, o.VocabSize * o.HiddenDim, Need(Name("text_embeddings.weight", "embed_text_tokens.weight"), o.VocabSize * o.HiddenDim));
+        TorchParameters.Linear(_textEmbeddings!, 1, o.VocabSize * o.HiddenDim, read, Name("text_embeddings.weight", "embed_text_tokens.weight"));
         int audioCount = o.AudioVocabSize * o.AudioCodebooks * o.HiddenDim;
-        var audioTable = Need(Name("audio_embeddings.weight", "backbone_model.embed_tokens.embed_audio_tokens.weight"), audioCount);
-        TorchParameters.Linear(_audioEmbeddings!, 1, audioCount, audioTable);
-        if (port)
+        TorchParameters.Linear(_audioEmbeddings!, 1, audioCount, read, Name("audio_embeddings.weight", "backbone_model.embed_tokens.embed_audio_tokens.weight"));
+        const string Tied = "depth_decoder.model.embed_tokens.weight";
+        if (port && source.Contains(Tied))
         {
             // The decoder's code table is tied to the backbone's (tie_codebooks_embeddings); a saved copy must agree.
-            var tied = read("depth_decoder.model.embed_tokens.weight");
-            if (tied is not null)
+            var table = _audioEmbeddings!.Weights;
+            var copy = table.Lifetime == WeightLifetime.Streaming || table.Length != audioCount ? _audioEmbeddings!.GetParameters().ToArray() : null;
+            bool differs = false;
+            long count = read.ReadChunks(Tied, Array.Empty<int>(), (start, values) =>
             {
-                if (tied.Length != audioCount || !tied.SequenceEqual(audioTable))
-                    throw new InvalidDataException("The checkpoint's decoder code table differs from the backbone's; CSM ties them.");
-                used.Add("depth_decoder.model.embed_tokens.weight");
-            }
+                ReadOnlySpan<T> loaded = copy is null ? table.AsSpan() : copy;
+                for (int i = 0; i < values.Length && !differs; i++)
+                    differs = start + i >= loaded.Length || !EqualityComparer<T>.Default.Equals(loaded[start + i], NumOps.FromDouble(values[i]));
+            });
+            if (differs || count != audioCount)
+                throw new InvalidDataException("The checkpoint's decoder code table differs from the backbone's; CSM ties them.");
         }
-        TorchParameters.Linear(_projection!, o.HiddenDim, o.DecoderHidden,
-            Need(Name("projection.weight", "depth_decoder.model.inputs_embeds_projector.weight"), o.DecoderHidden * o.HiddenDim));
-        TorchParameters.Linear(_codebook0Head!, o.HiddenDim, o.AudioVocabSize, Need(Name("codebook0_head.weight", "lm_head.weight"), o.AudioVocabSize * o.HiddenDim));
-        // audio_head [codebooks − 1, decoder hidden, vocabulary] is applied as h @ W; a linear layer takes Wᵀ.
+        TorchParameters.Linear(_projection!, o.HiddenDim, o.DecoderHidden, read, Name("projection.weight", "depth_decoder.model.inputs_embeds_projector.weight"));
+        TorchParameters.Linear(_codebook0Head!, o.HiddenDim, o.AudioVocabSize, read, Name("codebook0_head.weight", "lm_head.weight"));
+        // audio_head [codebooks − 1, decoder hidden, vocabulary] is applied as h @ W: each codebook's slice is a linear layer's
+        // [in, out] weights as stored.
         int per = o.DecoderHidden * o.AudioVocabSize;
-        var heads = Need(Name("audio_head", "depth_decoder.codebooks_head.weight"), (o.AudioCodebooks - 1) * per);
-        for (int k = 0; k < _audioHeads.Length; k++)
-        {
-            var transposed = new double[per];
-            for (int i = 0; i < o.DecoderHidden; i++)
-                for (int j = 0; j < o.AudioVocabSize; j++) transposed[j * o.DecoderHidden + i] = heads[k * per + i * o.AudioVocabSize + j];
-            TorchParameters.Linear(_audioHeads[k], o.DecoderHidden, o.AudioVocabSize, transposed);
-        }
+        var heads = _audioHeads.Select(h => TorchParameters.WeightsToWrite(h, o.DecoderHidden, o.AudioVocabSize)).ToArray();
+        read.ReadChunks(Name("audio_head", "depth_decoder.codebooks_head.weight"), new[] { _audioHeads.Length, o.DecoderHidden, o.AudioVocabSize },
+            (start, values) =>
+            {
+                for (int i = 0; i < values.Length;)
+                {
+                    int at = start + i, k = at / per, offset = at % per, n = Math.Min(per - offset, values.Length - i);
+                    var span = heads[k].AsWritableSpan();
+                    for (int j = 0; j < n; j++) span[offset + j] = NumOps.FromDouble(values[i + j]);
+                    i += n;
+                }
+            });
+        for (int k = 0; k < _audioHeads.Length; k++) TorchParameters.Commit(_audioHeads[k], heads[k]);
         return used;
     }
 
-    // Reorders each head's rows from torchtune's interleaved pairs (0, 1), (2, 3), … to the halves layout: the even dimensions
-    // first, then the odd ones.
-    private static double[] HalvesFromPairs(double[] weight, int heads, int headDim, int inputs)
+    // Reorders each head's outputs of a query or key projection from torchtune's interleaved pairs (0, 1), (2, 3), … to the
+    // halves layout (the even dimensions first, then the odd ones), in the layer's [in, out] weights.
+    private static void HalvesFromPairs(BiasFreeLinearLayer<T> layer, int inputs, int outputs, int headDim)
     {
-        var result = new double[weight.Length];
+        var weights = TorchParameters.WeightsToWrite(layer, inputs, outputs);
+        if (!ReferenceEquals(weights, layer.Weights))
+        {
+            var current = layer.GetParameters();
+            var span = weights.AsWritableSpan();
+            for (int i = 0; i < span.Length; i++) span[i] = current[i];
+        }
+        var all = weights.AsWritableSpan();
+        var row = new T[outputs];
         int half = headDim / 2;
-        for (int head = 0; head < heads; head++)
-            for (int j = 0; j < headDim; j++)
+        for (int i = 0; i < inputs; i++)
+        {
+            var line = all.Slice(i * outputs, outputs);
+            line.CopyTo(row);
+            for (int o = 0; o < outputs; o++)
             {
-                int source = head * headDim + (j < half ? 2 * j : 2 * (j - half) + 1), target = head * headDim + j;
-                Array.Copy(weight, source * inputs, result, target * inputs, inputs);
+                int j = o % headDim;
+                line[o] = row[o - j + (j < half ? 2 * j : 2 * (j - half) + 1)];
             }
-        return result;
+        }
+        TorchParameters.Commit(layer, weights);
     }
 
     /// <summary>Loads Mimi: <c>kyutai/moshiko-pytorch-bf16</c>'s <c>tokenizer-e351c8d8-checkpoint125.safetensors</c>, as the
@@ -388,11 +417,9 @@ public partial class CSM<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path))
-            state[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        var used = Codec.Load(name => state.TryGetValue(name, out var v) ? v : null);
-        var unused = state.Keys.Where(k => !used.Contains(k)).ToList();
+        using var state = TorchCheckpointFile.Open(path);
+        var used = Codec.Load(state);
+        var unused = state.Names.Where(k => !used.Contains(k)).ToList();
         if (unused.Count > 0) throw new InvalidDataException($"The codec checkpoint has {unused.Count} tensors this model has no place for (first: '{unused[0]}').");
     }
 

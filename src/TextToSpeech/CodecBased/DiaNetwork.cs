@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 
@@ -292,19 +293,24 @@ internal sealed class DiaNetwork<T>
 
     /// <summary>Loads a state dict in transformers' names (<c>DiaForConditionalGeneration</c>, after <paramref name="prefix"/>
     /// for the model and with the head at <c>logits_dense.weight</c>); returns the names read.</summary>
-    public HashSet<string> LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "model.")
+    public HashSet<string> LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "model.") =>
+        LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads a state dict in transformers' names from <paramref name="source"/>, each tensor copied straight into
+    /// its layer; returns the names read.</summary>
+    internal HashSet<string> LoadTorchWeights(TorchTensorSource source, string prefix = "model.")
     {
         var c = Configuration;
         var used = new HashSet<string>(StringComparer.Ordinal);
-        double[] Read(string name, int[] shape)
+        string Use(string name)
         {
             used.Add(name);
-            return read(name, shape);
+            return name;
         }
         void Linear(BiasFreeLinearLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(layer, inputs, outputs, Read(name, new[] { outputs, inputs }));
+            => TorchParameters.Linear(layer, inputs, outputs, source, Use(name));
         void Vector(BiasFreeLinearLayer<T> holder, string name, int[] shape)
-            => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, s) => a * s), Read(name, shape));
+            => TorchParameters.Linear(holder, 1, shape.Aggregate(1, (a, s) => a * s), source, Use(name), shape);
         void Attention(Attention a, string name, int queryWidth, int keyWidth, int outWidth)
         {
             Linear(a.Query, $"{name}.q_proj.weight", queryWidth, a.Heads * a.HeadDim);
@@ -315,9 +321,29 @@ internal sealed class DiaNetwork<T>
         void Mlp(FeedForward f, string name, int width, int intermediate)
         {
             // gate_up_proj [2 · intermediate, width]: the gate's rows, then the up projection's.
-            var fused = Read($"{name}.gate_up_proj.weight", new[] { 2 * intermediate, width });
-            TorchParameters.Linear(f.Gate, width, intermediate, fused.Take(intermediate * width).ToArray());
-            TorchParameters.Linear(f.Up, width, intermediate, fused.Skip(intermediate * width).ToArray());
+            // Each stored row r is an output of the gate (r < intermediate) or of the up projection, written into that
+            // layer's [in, out] weights.
+            var gate = TorchParameters.WeightsToWrite(f.Gate, width, intermediate);
+            var up = TorchParameters.WeightsToWrite(f.Up, width, intermediate);
+            source.ReadChunks(Use($"{name}.gate_up_proj.weight"), new[] { 2 * intermediate, width }, (start, values) =>
+            {
+                var gateSpan = gate.AsWritableSpan();
+                var upSpan = up.AsWritableSpan();
+                int r = start / width, k = start % width;
+                for (int i = 0; i < values.Length; i++)
+                {
+                    var value = NumOps.FromDouble(values[i]);
+                    if (r < intermediate) gateSpan[k * intermediate + r] = value;
+                    else upSpan[k * intermediate + r - intermediate] = value;
+                    if (++k == width)
+                    {
+                        k = 0;
+                        r++;
+                    }
+                }
+            });
+            TorchParameters.Commit(f.Gate, gate);
+            TorchParameters.Commit(f.Up, up);
             Linear(f.Down, $"{name}.down_proj.weight", intermediate, width);
         }
         Vector(TextEmbeddings, $"{prefix}encoder.embedding.weight", new[] { c.TextVocab, c.EncoderHidden });

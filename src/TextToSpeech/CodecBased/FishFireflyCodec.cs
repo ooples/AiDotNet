@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
 
@@ -323,27 +324,34 @@ internal sealed class FishFireflyCodec<T>
 
     /// <summary>Loads the release's generator checkpoint names (<c>backbone.*</c>, <c>quantizer.*</c>, <c>head.*</c>; weight
     /// norm as parametrizations or <c>weight_g</c>/<c>weight_v</c>).</summary>
-    public void Load(Func<string, double[]?> take)
+    public void Load(Func<string, double[]?> take) => Load(TorchTensorSource.From(take));
+
+    /// <summary>Loads the release's generator checkpoint names from <paramref name="source"/>, each tensor copied straight
+    /// into its layer.</summary>
+    internal void Load(TorchTensorSource source)
     {
-        double[] Need(string name) => take(name) ?? throw new InvalidDataException($"The Firefly checkpoint has no tensor '{name}'.");
+        string Need(string name) => source.Contains(name) ? name : throw new InvalidDataException($"The Firefly checkpoint has no tensor '{name}'.");
         void Conv(NormedConv1DLayer<T> conv, string name)
         {
-            var bias = Need(name + ".bias");
-            var v = take(name + ".parametrizations.weight.original1") ?? take(name + ".weight_v");
+            string bias = Need(name + ".bias");
+            string? v = new[] { name + ".parametrizations.weight.original1", name + ".weight_v" }.FirstOrDefault(source.Contains);
             if (v is not null)
-                conv.LoadTorchWeights(v, take(name + ".parametrizations.weight.original0") ?? Need(name + ".weight_g"), bias);
+            {
+                string gain = source.Contains(name + ".parametrizations.weight.original0") ? name + ".parametrizations.weight.original0" : Need(name + ".weight_g");
+                conv.LoadTorchWeights(source, v, conv.TorchWeightShape, gain, bias);
+            }
             else
-                conv.LoadTorchWeights(Need(name + ".weight"), null, bias);
+                conv.LoadTorchWeights(source, Need(name + ".weight"), conv.TorchWeightShape, null, bias);
         }
-        void LayerNorm(LayerNormalizationLayer<T> norm, string name) => TorchParameters.LayerNorm(_engine, norm, Need(name + ".weight"), Need(name + ".bias"));
+        void LayerNorm(LayerNormalizationLayer<T> norm, string name) => TorchParameters.LayerNorm(_engine, norm, source, Need(name + ".weight"), Need(name + ".bias"));
         void Block(ConvNeXt block, string name)
         {
             Conv(block.Depthwise.Conv, name + ".dwconv.conv");
             LayerNorm(block.Norm, name + ".norm");
             int d = block.Depthwise.Conv.OutputChannels;
-            TorchParameters.Linear(_engine, block.Expand, d, 4 * d, Need(name + ".pwconv1.weight"), Need(name + ".pwconv1.bias"));
-            TorchParameters.Linear(_engine, block.Project, 4 * d, d, Need(name + ".pwconv2.weight"), Need(name + ".pwconv2.bias"));
-            TorchParameters.Linear(block.Gamma, 1, d, Need(name + ".gamma"));
+            TorchParameters.Linear(_engine, block.Expand, d, 4 * d, source, Need(name + ".pwconv1.weight"), Need(name + ".pwconv1.bias"));
+            TorchParameters.Linear(_engine, block.Project, 4 * d, d, source, Need(name + ".pwconv2.weight"), Need(name + ".pwconv2.bias"));
+            TorchParameters.Linear(block.Gamma, 1, d, source, Need(name + ".gamma"));
         }
         Conv(Stem.Conv, "backbone.downsample_layers.0.0.conv");
         LayerNorm(StemNorm, "backbone.downsample_layers.0.1");
@@ -360,7 +368,7 @@ internal sealed class FishFireflyCodec<T>
             Conv(QuantizerDown[i].Conv.Conv, $"quantizer.downsample.{i}.0.conv");
             Block(QuantizerDown[i].Block, $"quantizer.downsample.{i}.1");
         }
-        Quantizer.LoadTorchWeights((name, _) => Need(name.Replace("quantizer.rvqs.", "quantizer.residual_fsq.rvqs.")), "");
+        Quantizer.LoadTorchWeights(source.WithNames(name => Need(name.Replace("quantizer.rvqs.", "quantizer.residual_fsq.rvqs."))), "");
         for (int i = 0; i < QuantizerUp.Count; i++)
         {
             Conv(QuantizerUp[i].Conv.Conv, $"quantizer.upsample.{i}.0.conv");

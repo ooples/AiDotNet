@@ -3,6 +3,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Audio.Foundations;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
@@ -348,13 +349,18 @@ public partial class FireRedTTS<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     /// <summary>A reader of ECAPA-TDNN names that maps the release's <c>Fp32BatchNorm</c> (<c>….norm.bn.*</c>).</summary>
-    internal static Func<string, int[], double[]> EcapaReader(Func<string, int[], double[]> read) => (name, shape) =>
+    internal static Func<string, int[], double[]> EcapaReader(Func<string, int[], double[]> read) => (name, shape) => read(EcapaName(name), shape);
+
+    /// <summary>The same view of <paramref name="source"/>.</summary>
+    internal static TorchTensorSource EcapaSource(TorchTensorSource source) => source.WithNames(EcapaName);
+
+    private static string EcapaName(string name)
     {
         foreach (var field in new[] { "weight", "bias", "running_mean", "running_var" })
             if (name.EndsWith("norm." + field, StringComparison.Ordinal))
-                return read(name.Substring(0, name.Length - field.Length) + "bn." + field, shape);
-        return read(name, shape);
-    };
+                return name.Substring(0, name.Length - field.Length) + "bn." + field;
+        return name;
+    }
 
     // ---------------------------------------------------------------- codec tokens
 

@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.FlowDiffusion;
 using AiDotNet.TextToSpeech.Latest;
@@ -332,13 +333,17 @@ internal sealed class FireRedTtsFlow<T>
     }
 
     /// <summary>Loads the release's <c>flow.*</c> names (the codebooks belong to the speech tokenizer).</summary>
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the release's <c>flow.*</c> names from <paramref name="source"/>, each tensor copied straight into its
+    /// layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
         var c = Configuration;
         int d = c.Dim, h = c.PromptHidden;
-        void Lin(DenseLayer<T> layer, string name, int inputs, int outputs) => IndexTtsOps.LoadLinear(_engine, read, layer, prefix + name, inputs, outputs);
-        void Norm(LayerNormalizationLayer<T> norm, string name, int dim) => IndexTtsOps.LoadNorm(_engine, read, norm, prefix + name, dim);
-        void Conv(NormedConv1DLayer<T> conv, string name, int outputs) => IndexTtsOps.LoadConv(read, conv, prefix + name, outputs);
+        void Lin(DenseLayer<T> layer, string name, int inputs, int outputs) => IndexTtsOps.LoadLinear(_engine, source, layer, prefix + name, inputs, outputs);
+        void Norm(LayerNormalizationLayer<T> norm, string name, int dim) => IndexTtsOps.LoadNorm(_engine, source, norm, prefix + name, dim);
+        void Conv(NormedConv1DLayer<T> conv, string name, int outputs) => IndexTtsOps.LoadConv(source, conv, prefix + name, outputs);
         if (InputProjection is not null) Lin(InputProjection, "input_embedding.proj", 2 * c.CodebookDim, d);
         Lin(EmbedLinear, "encoder.embed.out.0", d, d);
         Norm(EmbedNorm, "encoder.embed.out.1", d);
@@ -351,9 +356,9 @@ internal sealed class FireRedTtsFlow<T>
             Lin(b.Key, p + "self_attn.linear_k", d, d);
             Lin(b.Value, p + "self_attn.linear_v", d, d);
             Lin(b.Output, p + "self_attn.linear_out", d, d);
-            IndexTtsOps.LoadLinear(read, b.PositionProjection, prefix + p + "self_attn.linear_pos", d, d);
-            TorchParameters.Linear(b.BiasU, 1, d, read(prefix + p + "self_attn.pos_bias_u", new[] { c.Heads, d / c.Heads }));
-            TorchParameters.Linear(b.BiasV, 1, d, read(prefix + p + "self_attn.pos_bias_v", new[] { c.Heads, d / c.Heads }));
+            IndexTtsOps.LoadLinear(source, b.PositionProjection, prefix + p + "self_attn.linear_pos", d, d);
+            TorchParameters.Linear(b.BiasU, 1, d, source, prefix + p + "self_attn.pos_bias_u", new[] { c.Heads, d / c.Heads });
+            TorchParameters.Linear(b.BiasV, 1, d, source, prefix + p + "self_attn.pos_bias_v", new[] { c.Heads, d / c.Heads });
             if (b.CrossQuery is not null)
             {
                 Norm(b.NormCross!, p + "norm_mha2", d);
@@ -370,8 +375,8 @@ internal sealed class FireRedTtsFlow<T>
         for (int i = 0; i < Regulator.Count; i++)
         {
             Conv(Regulator[i].Conv, $"length_regulator.model.{3 * i}", d);
-            Regulator[i].Norm.LoadAffine(read($"{prefix}length_regulator.model.{3 * i + 1}.weight", new[] { d }),
-                read($"{prefix}length_regulator.model.{3 * i + 1}.bias", new[] { d }));
+            Regulator[i].Norm.LoadAffine(source, $"{prefix}length_regulator.model.{3 * i + 1}.weight",
+                $"{prefix}length_regulator.model.{3 * i + 1}.bias");
         }
         Conv(RegulatorOutput, $"length_regulator.model.{3 * Regulator.Count}", d);
         Lin(EncoderProjection, "encoder_proj", d, c.MelChannels);
@@ -390,6 +395,6 @@ internal sealed class FireRedTtsFlow<T>
         Conv(PromptReduce, "prompt_prenet.encoder.middle_layer", h);
         Stack(PromptAfter, "conv2");
         if (PromptOut is not null) Conv(PromptOut, "prompt_prenet.encoder.out_proj", d);
-        Estimator.LoadTorchWeights(read, prefix + "decoder.estimator.");
+        Estimator.LoadTorchWeights(source, prefix + "decoder.estimator.");
     }
 }
