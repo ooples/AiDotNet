@@ -6,9 +6,10 @@ Small random models: Llama width 32, two layers of four query heads and two key-
 base 500000 with rope_type "llama3" (factor 32, low/high frequency factors 1 and 4, original context 16 so that the
 scaling's three bands all occur at these sizes); Qwen3 width 32, two layers of four query heads of width 16 (64 in all)
 and two key-value heads, base 1000000. Both tie the head to the token table. The reference computes RMSNorm and the
-rotary tables in float32 and softmaxes attention in float32; these are patched to float64 (the rotary frequencies with
-Llama 3's scaling re-derived in float64 and checked against the reference's float32 values), as the C# side computes
-them. For two sequences of seven tokens (the second right-padded by two) the fixture records the final hidden states,
+rotary tables in float32 and softmaxes attention in float32; these are patched to float64, as the C# side computes them,
+except Llama 3's scaled rotary frequencies: like the release (_compute_llama3_parameters builds them in float32), the
+C# side keeps their float32 values, so the patch takes the reference's own and widens only the angles and tables (the
+float64 re-derivation is kept as a check). For two sequences of seven tokens (the second right-padded by two) the fixture records the final hidden states,
 the logits and the causal language-model loss; and, for the first sequence, the logits of its last position computed
 one position at a time with the model's KV cache (DynamicCache), which the C# cache must reproduce.
 Default: verify; --write: regenerate tests/AiDotNet.Tests/NeuralNetworks/ReferenceData/llama3_qwen3_reference.json.
@@ -54,6 +55,8 @@ def patch_float64(module, prefix):
         scaling = LLAMA3 if rp.get("rope_type") == "llama3" else None
         inv = inverse_frequencies(self.inv_freq.shape[0] * 2, rp["rope_theta"], scaling)
         assert torch.allclose(inv.float(), self.inv_freq.float().cpu(), rtol=1e-6), "the float64 frequencies differ from the reference's"
+        if scaling is not None:
+            inv = self.inv_freq.float().cpu().double()
         freqs = position_ids[:, :, None].double() * inv[None, None, :]
         emb = torch.cat((freqs, freqs), dim=-1)
         return emb.cos().to(x.dtype), emb.sin().to(x.dtype)
