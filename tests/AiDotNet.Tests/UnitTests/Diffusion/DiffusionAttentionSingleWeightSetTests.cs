@@ -18,7 +18,7 @@ public class DiffusionAttentionSingleWeightSetTests
     public void ShortAndLongSequences_ShareOneWeightSet()
     {
         var attention = new DiffusionAttention<float>(Channels, Heads, spatialSize: 16);
-        var random = new Random(7);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
 
         // 16x16 = 256 positions and 4x4 = 16 positions: the old layer sent these to different weights.
         _ = attention.Forward(RandomImage(random, 16));
@@ -38,14 +38,17 @@ public class DiffusionAttentionSingleWeightSetTests
         // whatever the sequence length, as long as the same weights compute it.
         var attention = new DiffusionAttention<float>(Channels, Heads, spatialSize: 16);
         var pixel = new float[Channels];
-        var random = new Random(11);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(11);
         for (int c = 0; c < Channels; c++) pixel[c] = (float)(random.NextDouble() * 2 - 1);
 
         var small = attention.Forward(UniformImage(pixel, 2));
         var large = attention.Forward(UniformImage(pixel, 16));
 
+        // An absolute bound, not Assert.Equal's decimal-places overload: that rounds each value first, so two
+        // results 1.4e-6 apart straddling 0.50675 compared unequal. float32 sums over 256 positions against 4
+        // differ in the last few ulps; 1e-5 allows that and nothing a second weight set could produce.
         for (int c = 0; c < Channels; c++)
-            Assert.Equal(large[0, c, 0, 0], small[0, c, 0, 0], 4);
+            Assert.Equal(large[0, c, 0, 0], small[0, c, 0, 0], 1e-5f);
     }
 
     private static Tensor<float> RandomImage(Random random, int size)
