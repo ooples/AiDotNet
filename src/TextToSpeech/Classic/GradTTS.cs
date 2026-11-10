@@ -47,7 +47,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2021,
     Authors = "Popov et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0001,
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 0.0001, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8,
                 Source = "Popov et al. 2021, Sec. 4: Adam with the learning rate set to 0.0001.")]
 public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingObjectiveProvider<T>
 {
@@ -102,10 +102,19 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
-        _optimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _optimizer = optimizer ?? CreateNativeOptimizer();
         InitializeLayers();
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateNativeOptimizer()
+    {
+        var optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+            learningRateOverride: _options.LearningRate, weightDecayOverride: _options.WeightDecay)
+            ?? throw new InvalidOperationException("Grad-TTS's native Adam recipe could not be created.");
+        // train.py clips the encoder and decoder independently; a second global clip changes that update.
+        if (optimizer.GetOptions() is GradientBasedOptimizerOptions<T, Tensor<T>, Tensor<T>> settings)
+            settings.EnableGradientClipping = false;
+        return optimizer;
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
@@ -128,6 +137,12 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         }
 
         var o = _options;
+        if (o.DecoderDimMultipliers is null || o.DecoderDimMultipliers.Length < 1 || o.DecoderDimMultipliers.Length > 8
+            || o.DecoderDimMultipliers[0] != 1 || o.DecoderDimMultipliers.Any(m => m <= 0))
+            throw new ArgumentException("The U-Net needs one to eight positive resolution multipliers starting with 1.", nameof(o.DecoderDimMultipliers));
+        int downsample = 1 << (o.DecoderDimMultipliers.Length - 1);
+        if (o.MelChannels % downsample != 0)
+            throw new ArgumentException("MelChannels must be divisible by the U-Net's downsampling factor.", nameof(o.MelChannels));
         int h = o.HiddenDim;
         _embedding = new EmbeddingLayer<T>(o.VocabSize, h);
         _prenet = new ResidualConvReluNormLayer<T>(h, o.PrenetKernelSize, o.PrenetLayers, o.PrenetDropout);
@@ -178,8 +193,12 @@ public partial class GradTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
     private double CumulativeNoise(double t) => _options.BetaMin * t + 0.5 * (_options.BetaMax - _options.BetaMin) * t * t;
     private double Noise(double t) => _options.BetaMin + (_options.BetaMax - _options.BetaMin) * t;
 
-    /// <summary>Smallest multiple of 4 (two U-Net downsamplings) not below <paramref name="length"/>.</summary>
-    private static int CompatibleLength(int length) => (length + 3) / 4 * 4;
+    /// <summary>Pads to the configured U-Net's actual downsampling factor (4 in the released three-resolution model).</summary>
+    private int CompatibleLength(int length)
+    {
+        int factor = 1 << (_options.DecoderDimMultipliers.Length - 1);
+        return (length + factor - 1) / factor * factor;
+    }
 
     private Tensor<T> FrameMask(int frames, int padded)
     {

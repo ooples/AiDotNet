@@ -147,6 +147,8 @@ internal static class OptionSensitivityFixtureSetup
                 && option is "SpeakerEmbeddingDim" or "LanguageEmbeddingDim" ? "vits-conditioning-" + option
             : network is AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech<T>
                 && option is "DistillationSteps" or "EmaDecay" ? "comospeech-distillation"
+            : network is AiDotNet.TextToSpeech.Classic.GradTTS<T> && option == "NumDecoderLayers" ? "gradtts-native-depth"
+
             : network is AiDotNet.TextToSpeech.Classic.AlignTTS<T> && option == "LearningRate" ? "aligntts-fixed-rate-training"
             : network is AiDotNet.TextToSpeech.CodecBased.OrpheusTTS<T>
                 && option is "MaxGradNorm" or "RemoveDuplicateFrames" ? "orpheus-training-" + option
@@ -944,6 +946,13 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Classic.GradTTSOptions grad && option == "NumDecoderLayers")
+        {
+            // Three released resolutions and eight mel bins allow a fourth genuine U-Net resolution.
+            grad.MelChannels = 8;
+            grad.DecoderDimMultipliers = new[] { 1, 2, 4 };
+        }
+
         if (options is AiDotNet.TextToSpeech.CodecBased.OrpheusTTSOptions orpheus && option == "MaxGradNorm")
             // Bind the actual optimizer clip in the compact LM; the release threshold can exceed every test gradient.
             orpheus.MaxGradNorm = 1e-12;

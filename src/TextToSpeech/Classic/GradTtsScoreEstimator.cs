@@ -52,11 +52,11 @@ internal sealed partial class TorchConv2DLayer<T> : LayerBase<T>, IShapeContract
             ? new Tensor<T>(new[] { inChannels, outChannels, kernelSize, kernelSize })
             : new Tensor<T>(new[] { outChannels, inChannels, kernelSize, kernelSize });
         for (int i = 0; i < _weight.Length; i++) _weight[i] = NumOps.FromDouble((2 * random.NextDouble() - 1) * bound);
-        _bias = new Tensor<T>(new[] { outChannels });
+        _bias = new Tensor<T>(new[] { useBias ? outChannels : 0 });
         if (useBias)
             for (int i = 0; i < outChannels; i++) _bias[i] = NumOps.FromDouble((2 * random.NextDouble() - 1) * bound);
         RegisterTrainableParameter(_weight, PersistentTensorRole.Weights);
-        RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
+        if (useBias) RegisterTrainableParameter(_bias, PersistentTensorRole.Biases);
     }
 
     public IReadOnlyList<OutputAxisContract>? OutputAxesFor(int inputRank) => null;
@@ -264,9 +264,13 @@ internal sealed class GradTtsScoreEstimator<T>
         int half = _dim / 2;
         double step = Math.Log(10000) / (half - 1);
         var embedding = new Tensor<T>(new[] { 1, _dim });
+        var scaledTime = NumOps.Multiply(NumOps.FromDouble(_positionScale), NumOps.FromDouble(t));
         for (int i = 0; i < half; i++)
         {
-            double angle = _positionScale * t * Math.Exp(-step * i);
+            // The author's SinusoidalPosEmb explicitly builds arange/exp in float32, including in a double model.
+            float exponent = i * (float)-step;
+            float frequency = (float)Math.Exp(exponent);
+            double angle = NumOps.ToDouble(NumOps.Multiply(scaledTime, NumOps.FromDouble(frequency)));
             embedding[0, i] = NumOps.FromDouble(Math.Sin(angle));
             embedding[0, half + i] = NumOps.FromDouble(Math.Cos(angle));
         }

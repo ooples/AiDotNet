@@ -1,4 +1,16 @@
 #nullable enable
+override AiDotNet.TextToSpeech.Classic.GradTTSOptions.EncoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.GradTTSOptions.EncoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.GradTTSOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.Classic.GradTTSOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.EncoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.EncoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.DecoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.DecoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.Classic.GlowTTS<T>.GradientValueClip.get -> double
+
 override AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.NumDecoderLayers.get -> int
 override AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.NumDecoderLayers.set -> void
 *REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.SpeakerEmbeddingDim.get -> int
