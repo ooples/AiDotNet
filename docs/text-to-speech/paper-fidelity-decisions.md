@@ -240,6 +240,17 @@ Native tests verify reproducible real generator/discriminator updates, changed c
 
 
 
+### Parallel WaveGAN conditioning and training contracts
+
+The [primary paper](https://arxiv.org/pdf/1910.11480), Sections 3 and 4.1, remains authoritative for the noncausal Gaussian-noise WaveNet, multi-resolution STFT and least-squares adversarial objectives, weight 4, first 100k generator-only updates, RAdam epsilon 1e-6, separate 1e-4/5e-5 rates and halving every 200k updates. Its 24 kHz, 300-sample hop and 70–8000 Hz features are preserved; the released LJSpeech configuration uses a different sample rate and hop.
+
+The shared hop now configures the actual nearest-neighbor/smoothing stages, keeping every learned stage even when its scale becomes one. Copies own their native scale arrays, and explicit native scales in saved JSON take precedence over a legacy shared hop. The released [upsampler](https://github.com/kan-bayashi/ParallelWaveGAN/blob/86740373ec609cb9fb192d472d2aea125041491a/parallel_wavegan/layers/upsample.py) retains a learned three-tap convolution at scale one.
+
+Recording training follows the released [Collater](https://github.com/kan-bayashi/ParallelWaveGAN/blob/86740373ec609cb9fb192d472d2aea125041491a/parallel_wavegan/bin/train.py): round segment length down to complete hops, select an interior frame, and retain true left/right mel context from the full recording. The native conditioning convolution consumes that context directly. Inference still pads its supplied mel boundaries; a short recording which the author's length filter removes is explicitly rejected. `parallel_wavegan_recording_reference.py` verifies two Git blobs and executes the unmodified collater and [frontend](https://github.com/kan-bayashi/ParallelWaveGAN/blob/86740373ec609cb9fb192d472d2aea125041491a/parallel_wavegan/bin/preprocess.py), including zero/two-frame context, nonaligned lengths and fitted normalization. Original float32 collater features are compared within 2e-6; waveform crops are exact. Normalization requires complete finite fitted per-band means and positive scales, rather than silently ignoring one half of the supplied statistics.
+
+Both RAdam optimizers honor configured decay without an additional optimizer clip. The released generator/discriminator global clips remain 10/1. A native update test exposed that default GAN clipping omitted discriminator component layers; clipping now selects the active training group's actual tensors while preserving paper-specific subgroups. The unchanged discriminator-update assertion detects this bug. The reference also records the actual Torch StepLR sequence after six updates. The released trainer recomputes the discriminator's generated waveform after the generator update with the same batch Gaussian input. Native step preparation retains that input across both objectives, restores training mode for the detached generation, and releases it even on failure. A native replay regression checks the real updated generator weights and exact second waveform against the first forward's actual Gaussian draws; synthesis remains repeatable and does not consume training draws. Option probes enable the adversarial phase for discriminator controls, run enough real updates for RAdam epsilon to apply, and give recording/normalization probes independent control-cache groups. Paper defaults remain unchanged.
+
+
 ## Codec language models
 
 | Model | Paper | Gaps filled from | Choices |

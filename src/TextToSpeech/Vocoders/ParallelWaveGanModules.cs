@@ -84,10 +84,10 @@ internal sealed class ParallelWaveGanGenerator<T>
     }
 
     /// <summary>The local condition <c>[1, mel, frames · Π s]</c> for a mel spectrogram <c>[1, mel, frames]</c>.</summary>
-    private Tensor<T> Upsample(Tensor<T> mel)
+    private Tensor<T> Upsample(Tensor<T> mel, bool hasContext)
     {
         int c = mel.Shape[1];
-        var x = _convIn.Forward(ReplicatePad(mel, _auxContext));
+        var x = _convIn.Forward(hasContext ? mel : ReplicatePad(mel, _auxContext));
         foreach (var (s, smooth) in _upsample)
         {
             int t = x.Shape[2];
@@ -113,9 +113,9 @@ internal sealed class ParallelWaveGanGenerator<T>
 
     /// <summary>A waveform <c>[1, 1, samples]</c> from Gaussian noise <c>[1, 1, samples]</c> and a mel spectrogram
     /// <c>[1, mel, samples / hop]</c>.</summary>
-    public Tensor<T> Forward(Tensor<T> noise, Tensor<T> mel)
+    public Tensor<T> Forward(Tensor<T> noise, Tensor<T> mel, bool hasContext = false)
     {
-        var c = Upsample(mel);
+        var c = Upsample(mel, hasContext);
         var x = _first.Forward(noise);
         Tensor<T>? skips = null;
         int half = _gate / 2;

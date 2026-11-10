@@ -75,7 +75,7 @@ public partial class MelGAN<T> : GanVocoderBase<T>
         _generator = new MelGanGenerator<T>(Engine, o.MelChannels, o.Ngf * (1 << o.UpsampleRates.Length), o.UpsampleRates, o.ResidualLayers);
         if (o.SegmentSize <= 0)
             throw new ArgumentOutOfRangeException(nameof(o.SegmentSize));
-        if (!double.IsFinite(o.WeightDecay) || o.WeightDecay < 0)
+        if (double.IsNaN(o.WeightDecay) || double.IsInfinity(o.WeightDecay) || o.WeightDecay < 0)
             throw new ArgumentOutOfRangeException(nameof(o.WeightDecay));
         _mel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, UpsampleFactor, o.WindowSize, o.MelChannels,
             0.0, o.SampleRate / 2.0, singlePrecisionBasis: true);

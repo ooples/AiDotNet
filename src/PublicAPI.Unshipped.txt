@@ -4,6 +4,14 @@ override AiDotNet.TextToSpeech.Vocoders.UnivNet<T>.RecordingPair(AiDotNet.Tensor
 override AiDotNet.TextToSpeech.Vocoders.MelGAN<T>.RecordingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
 override AiDotNet.TextToSpeech.Vocoders.UnivNetOptions.HopSize.get -> int
 override AiDotNet.TextToSpeech.Vocoders.UnivNetOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.Vocoders.ParallelWaveGANOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.ParallelWaveGANOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T>.RecordingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+virtual AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.PrepareTrainingStep(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> void
+virtual AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.CompleteTrainingStep() -> void
+override AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T>.PrepareTrainingStep(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> void
+override AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T>.CompleteTrainingStep() -> void
 override AiDotNet.TextToSpeech.Vocoders.FreGradOptions.HopSize.get -> int
 override AiDotNet.TextToSpeech.Vocoders.FreGradOptions.HopSize.set -> void
 override AiDotNet.TextToSpeech.Vocoders.WaveGradOptions.HopSize.get -> int

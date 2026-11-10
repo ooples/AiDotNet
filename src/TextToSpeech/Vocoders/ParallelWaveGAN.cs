@@ -5,6 +5,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Regularization;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
@@ -48,6 +49,8 @@ public partial class ParallelWaveGAN<T> : GanVocoderBase<T>
     private CenteredLogMel<T>? _features;
     private MultiResolutionStftLoss<T>? _stftLoss;
     private Random _noise;
+    private bool _recordingContext;
+    private Tensor<T>? _trainingNoise;
 
     /// <summary>Creates a Parallel WaveGAN that runs an exported ONNX graph.</summary>
     public ParallelWaveGAN(NeuralNetworkArchitecture<T> architecture, string modelPath, ParallelWaveGANOptions? options = null)
@@ -87,8 +90,20 @@ public partial class ParallelWaveGAN<T> : GanVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateGenerator()
     {
         var o = PaperOptions;
-        if (UpsampleFactor != o.HopSize)
-            throw new ArgumentException($"The upsampling scales ({string.Join("x", o.UpsampleRates)}) must multiply to the hop ({o.HopSize}).");
+        if (o.UpsampleRates.Length == 0 || o.UpsampleRates.Any(s => s < 1))
+            throw new ArgumentException("Conditioning upsampling scales must be positive.", nameof(o.UpsampleRates));
+        if (o.SegmentSize < o.HopSize) throw new ArgumentOutOfRangeException(nameof(o.SegmentSize));
+        if (o.AuxContextWindow < 0) throw new ArgumentOutOfRangeException(nameof(o.AuxContextWindow));
+        if (double.IsNaN(o.WeightDecay) || double.IsInfinity(o.WeightDecay) || o.WeightDecay < 0)
+            throw new ArgumentOutOfRangeException(nameof(o.WeightDecay));
+        if (double.IsNaN(o.Epsilon) || double.IsInfinity(o.Epsilon) || o.Epsilon <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.Epsilon));
+        if ((o.MelMean is null) != (o.MelScale is null))
+            throw new ArgumentException("Mel normalization requires both fitted means and scales.");
+        if (o.MelMean is not null && (o.MelMean.Length != o.MelChannels || o.MelMean.Any(x => double.IsNaN(x) || double.IsInfinity(x))))
+            throw new ArgumentException("Each mel channel needs a finite fitted mean.", nameof(o.MelMean));
+        if (o.MelScale is not null && (o.MelScale.Length != o.MelChannels || o.MelScale.Any(x => double.IsNaN(x) || double.IsInfinity(x) || x <= 0)))
+            throw new ArgumentException("Each mel channel needs a positive finite fitted scale.", nameof(o.MelScale));
         var init = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 2);
         _generator = new ParallelWaveGanGenerator<T>(Engine, init, o.MelChannels, o.UpsampleRates, o.AuxContextWindow,
             o.NumLayers, o.NumStacks, o.ResidualChannels, o.GateChannels, o.SkipChannels, o.KernelSize);
@@ -107,19 +122,61 @@ public partial class ParallelWaveGAN<T> : GanVocoderBase<T>
     }
 
     /// <inheritdoc />
-    /// <remarks>Fresh Gaussian noise at every training forward; at synthesis, noise seeded by
+    /// <remarks>One Gaussian input per training batch, reused for the post-update discriminator generation;
+    /// at synthesis, noise seeded by
     /// <see cref="ParallelWaveGANOptions.SamplingSeed"/> so a mel spectrogram always gives the same waveform.</remarks>
     protected override Tensor<T> Generate(Tensor<T> mel)
     {
-        int samples = mel.Shape[2] * UpsampleFactor;
-        var random = IsTrainingMode ? _noise : AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(PaperOptions.SamplingSeed);
+        int frames = mel.Shape[2] - (_recordingContext ? 2 * PaperOptions.AuxContextWindow : 0);
+        int samples = frames * UpsampleFactor;
+        var noise = IsTrainingMode && _trainingNoise is not null ? _trainingNoise
+            : DrawNoise(samples, IsTrainingMode ? _noise : AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(PaperOptions.SamplingSeed));
+        return _generator!.Forward(noise, mel, hasContext: _recordingContext);
+    }
+
+    private Tensor<T> DrawNoise(int samples, Random random)
+    {
         var noise = new Tensor<T>(new[] { 1, 1, samples });
         for (int i = 0; i < samples; i++)
         {
             double u1 = 1.0 - random.NextDouble(), u2 = random.NextDouble();
             noise[i] = NumOps.FromDouble(Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2));
         }
-        return _generator!.Forward(noise, mel);
+        return noise;
+    }
+
+    /// <inheritdoc />
+    protected override void PrepareTrainingStep(Tensor<T> mel, Tensor<T> audio)
+        => _trainingNoise = DrawNoise((mel.Shape[2] - (_recordingContext ? 2 * PaperOptions.AuxContextWindow : 0)) * UpsampleFactor, _noise);
+
+    /// <inheritdoc />
+    protected override void CompleteTrainingStep() => _trainingNoise = null;
+
+    /// <inheritdoc />
+    protected override T TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T> sample)
+    {
+        bool previous = _recordingContext;
+        _recordingContext = true;
+        try { return base.TrainOnSample(sample); }
+        finally { _recordingContext = previous; }
+    }
+
+    /// <inheritdoc />
+    protected override (Tensor<T> Mel, Tensor<T> Audio) RecordingPair(Tensor<T> audio, Random random)
+        => PrepareRecording(audio, random);
+
+    // Released Collater: round the segment down to complete hops, choose a frame in the
+    // interior, retain real left/right conditioning context, and crop its aligned waveform.
+    internal (Tensor<T> Mel, Tensor<T> Audio) PrepareRecording(Tensor<T> audio, Random random)
+    {
+        var o = PaperOptions;
+        var mel = ComputeMel(audio);
+        int frames = o.SegmentSize / o.HopSize, context = o.AuxContextWindow;
+        if (mel.Shape[2] <= frames + 2 * context)
+            throw new ArgumentException("The recording is too short for the training segment and its real conditioning context.", nameof(audio));
+        int start = random.Next(context, mel.Shape[2] - frames - context);
+        return (Engine.TensorSlice(mel, new[] { 0, 0, start - context }, new[] { 1, o.MelChannels, frames + 2 * context }),
+            Engine.TensorSlice(Flat(audio), new[] { start * o.HopSize }, new[] { frames * o.HopSize }));
     }
 
     /// <inheritdoc />
@@ -162,13 +219,18 @@ public partial class ParallelWaveGAN<T> : GanVocoderBase<T>
         double rate = group == "discriminator" ? o.DiscriminatorLearningRate : o.LearningRate;
         int halving = Math.Max(1, o.LearningRateHalvingSteps);
         var scheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(rate, step => Math.Pow(0.5, Math.Truncate(step / (double)halving)));
-        var optimizer = new RAdamOptimizer<T, Tensor<T>, Tensor<T>>(this, new RAdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        var settings = new RAdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
         {
             InitialLearningRate = rate,
             Epsilon = o.Epsilon,
+            EnableGradientClipping = false,
             LearningRateScheduler = scheduler,
             SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
-        });
+        };
+        if (o.WeightDecay > 0)
+            settings.Regularization = new L2Regularization<T, Tensor<T>, Tensor<T>>(
+                new RegularizationOptions { Strength = o.WeightDecay, L1Ratio = 0.0 });
+        var optimizer = new RAdamOptimizer<T, Tensor<T>, Tensor<T>>(this, settings);
         // The declared recipe is the generator's; the discriminator's rate is the paper's other one.
         return group == "discriminator" ? optimizer : PaperOptimizerFactory.VerifyHandBuilt(this, optimizer);
     }
