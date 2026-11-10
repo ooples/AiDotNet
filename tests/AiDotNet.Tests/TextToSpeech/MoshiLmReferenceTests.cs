@@ -221,6 +221,32 @@ public class MoshiLmReferenceTests
             MimiDiscriminatorWindows = new[] { 256, 128 }, MimiDiscriminatorFilters = 4,
         };
 
+    [Fact]
+    public void StoredCodecQuantizers_ChangeFullCapacityTokensWithoutChangingLmSubset()
+    {
+        var audio = Enumerable.Range(0, 512).Select(i => .4 * Math.Sin(2 * Math.PI * 90 * i / 1600)).ToArray();
+        foreach (int stored in new[] { 4, 5 })
+        {
+            var options = TinyCodecOptions(); options.MimiCodebooks = stored;
+            var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+                AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
+            using var model = new Moshi<double>(architecture, options);
+            var wave = new Tensor<double>(new[] { 1, 1, audio.Length }, new Vector<double>(audio));
+            var random = new Random(3);
+            using (var scope = new NoGradScope<double>())
+                for (int pass = 0; pass <= stored; pass++)
+                    model.Core.Mimi.TrainingForward(wave, stored - 1, true, true, random);
+            var full = model.Core.Mimi.Encode(audio);
+            var active = model.Core.Mimi.Encode(audio, options.Codebooks);
+            Assert.Equal(stored, full.GetLength(1));
+            Assert.Equal(3, active.GetLength(1));
+            Assert.Equal(full.GetLength(0), active.GetLength(0));
+            for (int frame = 0; frame < active.GetLength(0); frame++)
+                for (int quantizer = 0; quantizer < active.GetLength(1); quantizer++)
+                    Assert.Equal(full[frame, quantizer], active[frame, quantizer]);
+        }
+    }
+
     [Theory]
     [InlineData(true, 0)]
     [InlineData(true, 2)]
@@ -293,6 +319,78 @@ public class MoshiLmReferenceTests
             Assert.False(actual.EnableGradientClipping, $"{component} applies unrequested optimizer clipping.");
             Assert.Equal(0, actual.MaxGradientNorm);
         }
+    }
+
+    [Theory]
+    [InlineData("MelChannels", -1)]
+    [InlineData("MelChannels", 1)]
+    [InlineData("MelChannels", 80)]
+    [InlineData("HopSize", -1)]
+    [InlineData("HopSize", 1)]
+    [InlineData("HopSize", 256)]
+    [InlineData("FftSize", -1)]
+    [InlineData("FftSize", 1)]
+    [InlineData("FftSize", 1024)]
+    [InlineData("MaxMelLength", -1)]
+    [InlineData("MaxMelLength", 1)]
+    [InlineData("MaxMelLength", 2048)]
+    public void NativeCodecTasks_RejectNonzeroMelFrontendSettings(string option, int value)
+    {
+        foreach (bool recognizer in new[] { false, true })
+        {
+            var options = TinyCodecOptions();
+            options.MelChannels = 0; options.HopSize = 0; options.FftSize = 0; options.MaxMelLength = 0;
+            typeof(MoshiOptions).GetProperty(option)!.SetValue(options, value);
+            var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+                AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
+            Assert.Throws<ArgumentException>(() =>
+            {
+                using IDisposable model = recognizer ? new AiDotNet.SpeechRecognition.Streaming.Moshi<double>(architecture, options)
+                    : new Moshi<double>(architecture, options);
+            });
+        }
+    }
+
+    [Theory]
+    [InlineData(.1)]
+    [InlineData(-.1)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void NativeCodecTasks_RejectTransformerDropout(double rate)
+    {
+        foreach (bool recognizer in new[] { false, true })
+        {
+            var options = TinyCodecOptions(); options.DropoutRate = rate;
+            var architecture = new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+                AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1);
+            Assert.Throws<ArgumentException>(() =>
+            {
+                using IDisposable model = recognizer ? new AiDotNet.SpeechRecognition.Streaming.Moshi<double>(architecture, options)
+                    : new Moshi<double>(architecture, options);
+            });
+        }
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void NativeTextLimit_RequiresAPositiveTokenCount(int maximum)
+    {
+        var options = TinyCodecOptions(); options.MaxTextLength = maximum;
+        Assert.Throws<ArgumentException>(() =>
+        {
+            using var model = new Moshi<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+                AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
+        });
+    }
+
+    [Fact]
+    public void TimedTranscript_EnforcesActualInputTokenLimit()
+    {
+        var options = TinyCodecOptions(); options.MaxTextLength = 1;
+        using var model = new Moshi<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(
+            AiDotNet.Enums.InputType.OneDimensional, AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
+        Assert.Throws<ArgumentException>(() => model.Core.TextStream(new[] { new MoshiTokenSpan(new[] { 5, 7 }, 0, .1) }, 32, 0));
     }
 
     [Theory(Timeout = 120000)]

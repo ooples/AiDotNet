@@ -62,6 +62,11 @@ public class MoshiOptions : TtsModelOptions
     public MoshiOptions()
     {
         SampleRate = 24000;
+        // Mimi encodes waveforms directly; these inherited mel-front-end slots are absent.
+        MelChannels = 0;
+        HopSize = 0;
+        FftSize = 0;
+        MaxMelLength = 0;
         HiddenDim = 4096;
         NumHeads = 32;
         VocabSize = 32000;

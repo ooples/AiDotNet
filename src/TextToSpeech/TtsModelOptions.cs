@@ -52,17 +52,23 @@ public class TtsModelOptions : ModelOptions
     /// <summary>Gets or sets the number of mel-spectrogram frequency channels.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro predicts waveform spectra directly with ISTFTNet and has no mel-spectrogram representation.", ModelType = typeof(EndToEnd.Kokoro<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("E3 TTS sections 3.2-3.3 predict the raw waveform with a BERT-conditioned U-Net and have no mel representation (arXiv:2311.00945).", ModelType = typeof(FlowDiffusion.E3TTS<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Moshi uses Mimi's waveform SEANet/RVQ, not mel channels (Defossez et al. 2024 section 3.3); native construction requires MelChannels=0.", ModelType = typeof(MultiModal.Moshi<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Moshi ASR uses Mimi waveform codes, not mel channels; native construction requires MelChannels=0 (Defossez et al. 2024 section 3.3).", ModelType = typeof(AiDotNet.SpeechRecognition.Streaming.Moshi<>))]
     public virtual int MelChannels { get; set; } = 80;
 
     /// <summary>Gets or sets the hop size for mel-spectrogram computation.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro has no mel frontend; its released ISTFTNet upsampling and inverse-STFT hop geometry are fixed by the decoder.", ModelType = typeof(EndToEnd.Kokoro<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoice's released HiFi-GAN strides [8,8,2,2] fix its hop at 256; the native constructor rejects other hops (myshell-ai/OpenVoice checkpoints/converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoice<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoiceV2's released HiFi-GAN strides [8,8,2,2] fix its hop at 256; the native constructor rejects other hops (myshell-ai/OpenVoiceV2 converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoiceV2<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Moshi has no mel-analysis hop; Mimi's actual codec strides are MimiRatios (Defossez et al. 2024 section 3.3); native construction requires HopSize=0.", ModelType = typeof(MultiModal.Moshi<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Moshi ASR has no mel-analysis hop; Mimi's codec strides are MimiRatios; native construction requires HopSize=0 (Defossez et al. 2024 section 3.3).", ModelType = typeof(AiDotNet.SpeechRecognition.Streaming.Moshi<>))]
     public virtual int HopSize { get => _hopSize; set => _hopSize = value; }
     private int _hopSize = 256;
 
     /// <summary>Gets or sets the FFT window size.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro has no configurable analysis FFT; its released ISTFTNet synthesis transform has fixed decoder geometry.", ModelType = typeof(EndToEnd.Kokoro<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Moshi has no analysis FFT; its optional Mimi STFT critics use MimiDiscriminatorWindows (Defossez et al. 2024 section 3.3); native construction requires FftSize=0.", ModelType = typeof(MultiModal.Moshi<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Moshi ASR has no analysis FFT; its native constructor requires FftSize=0 (Defossez et al. 2024 section 3.3).", ModelType = typeof(AiDotNet.SpeechRecognition.Streaming.Moshi<>))]
     public int FftSize { get; set; } = 1024;
 
     /// <summary>Gets or sets the model hidden dimension.</summary>
@@ -103,9 +109,13 @@ public class TtsModelOptions : ModelOptions
 
     /// <summary>Gets or sets the maximum output audio length in mel frames.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro emits waveforms rather than mel frames; duration logits and Speed determine its output length.", ModelType = typeof(EndToEnd.Kokoro<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Moshi generates codec audio rather than mel frames (Defossez et al. 2024 sections 3.3-3.4); native construction requires MaxMelLength=0.", ModelType = typeof(MultiModal.Moshi<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Moshi ASR produces text from waveform codes, not mel frames; native construction requires MaxMelLength=0 (Defossez et al. 2024 section 3.3 and Appendix C).", ModelType = typeof(AiDotNet.SpeechRecognition.Streaming.Moshi<>))]
     public int MaxMelLength { get; set; } = 2048;
 
     /// <summary>Gets or sets the dropout rate.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Moshi's released streaming transformer fixes attention dropout to zero (kyutai-labs/moshi e6a55d2 modules/transformer.py); construction requires DropoutRate=0. MimiQuantizerDropout controls codec quantizer dropout separately.", ModelType = typeof(MultiModal.Moshi<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Moshi ASR uses the same zero-dropout streaming transformer (kyutai-labs/moshi e6a55d2 modules/transformer.py); construction requires DropoutRate=0. MimiQuantizerDropout controls codec quantizer dropout separately.", ModelType = typeof(AiDotNet.SpeechRecognition.Streaming.Moshi<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Vocos's published ConvNeXt backbone has no dropout (Siuzdak 2024, Figure 2 and Section 3.2; gemelo-ai/vocos ConvNeXtBlock); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.Vocos<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("WaveNet's selected gated residual architecture and the r9y9 mulaw256 reference preset use zero dropout (van den Oord et al. 2016, Figure 4 and Equation 2); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.WaveNet<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("WaveRNN's published recurrent equations and dual-softmax architecture have no dropout (Kalchbrenner et al. 2018, Equation 2 and Figure 1); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.WaveRNN<>))]

@@ -47,7 +47,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
-            : network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> && MoshiOptionFixture.Handles(option) ? "moshi-" + option
+            : network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> ? "moshi-" + option
             : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? "chatterbox-published-perth"
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "AddBlank" ? "natural-phoneme-frontend"
             : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
@@ -214,7 +214,7 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
-        if (network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> moshi && MoshiOptionFixture.Handles(option))
+        if (network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> moshi)
             return MoshiOptionFixture.Observe(moshi, option);
         if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> marked && option == "Watermark")
             // Run the real final synthesis stage with the hash-verified released checkpoint configured below.
@@ -926,8 +926,6 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
-        if (network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> moshi && MoshiOptionFixture.Train(moshi, option))
-            return true;
         if (network is AiDotNet.TextToSpeech.Vocoders.WaveRNN<T> waveRnn && IsWaveRnnTrainingOption(option))
         {
             var audio = new Tensor<T>(new[] { 4096 });

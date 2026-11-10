@@ -52,6 +52,12 @@ internal sealed class MoshiCore<T>
 
     private static void Validate(MoshiOptions o)
     {
+        if (o.DropoutRate != 0)
+            throw new ArgumentException("Moshi's released streaming transformers use zero dropout; configure codec quantizer dropout with MimiQuantizerDropout.", nameof(o.DropoutRate));
+        if (o.MelChannels != 0 || o.HopSize != 0 || o.FftSize != 0 || o.MaxMelLength != 0)
+            throw new ArgumentException("Moshi uses Mimi waveform codes, not a mel frontend; MelChannels, HopSize, FftSize and MaxMelLength must be zero.");
+        if (o.MaxTextLength <= 0)
+            throw new ArgumentException("The input text token limit must be positive.", nameof(o.MaxTextLength));
         if (o.HiddenDim <= 0 || o.NumHeads <= 0 || o.HiddenDim % o.NumHeads != 0 || o.DepthDim % o.DepthHeads != 0)
             throw new ArgumentException("Each Transformer's width must divide into its heads.");
         if (o.Codebooks < 2 || o.Codebooks > o.MimiCodebooks) throw new ArgumentException($"Moshi models 2 … {o.MimiCodebooks} Mimi codebooks.");
@@ -125,6 +131,12 @@ internal sealed class MoshiCore<T>
     /// <summary>A word's tokens as the release's interleaver writes them (<c>tokenize(word.strip(), bos=False)</c>).</summary>
     public int[] WordTokens(string word) => Tokenizer.Encode(word.Trim());
 
+    private void RequireTextFits(int tokenCount, string parameter)
+    {
+        if (tokenCount > Options.MaxTextLength)
+            throw new ArgumentException($"The input contains {tokenCount} text tokens; the configured limit is {Options.MaxTextLength}.", parameter);
+    }
+
     private bool IsPadding(int token) => token == Options.TextPadding || token == Options.TextEndPadding;
 
     /// <summary>The text of tokens, padding and the zero token dropped.</summary>
@@ -150,6 +162,7 @@ internal sealed class MoshiCore<T>
             .Select(w => (w.Tokens, Start: w.Start - audioDelay, End: w.End - audioDelay))
             .Where(w => audioDelay == 0 || w.End > 0)
             .ToList();
+        RequireTextFits(aligned.Sum(word => word.Tokens.Length), nameof(words));
         var text = Enumerable.Repeat(Options.TextPadding, frames).ToArray();
         var pending = new Queue<int>();
         int i = 0, lastWordEnd = -1;
@@ -270,6 +283,12 @@ internal sealed class MoshiCore<T>
         var words = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         if (words.Length == 0) throw new ArgumentException("There is no text.", nameof(text));
         var o = Options;
+        int textTokens = 0;
+        foreach (string word in words)
+        {
+            textTokens = checked(textTokens + WordTokens(word).Length);
+            RequireTextFits(textTokens, nameof(text));
+        }
         var streamer = Streamer(new MoshiSampling
         {
             AudioTemperature = o.TtsTemperature, AudioTopK = o.AudioTopK, TextTemperature = o.TtsTemperature, TextTopK = o.TextTopK,
@@ -520,7 +539,9 @@ internal sealed class MoshiCore<T>
     /// stream the zero token.</summary>
     public int[,] TextOnlySequence(string text)
     {
-        var ids = new[] { Tokenizer.BosId }.Concat(Tokenizer.Encode(text)).ToArray();
+        var content = Tokenizer.Encode(text);
+        RequireTextFits(content.Length, nameof(text));
+        var ids = new[] { Tokenizer.BosId }.Concat(content).ToArray();
         var codes = new int[1 + 2 * Codebooks, ids.Length];
         for (int t = 0; t < ids.Length; t++)
         {

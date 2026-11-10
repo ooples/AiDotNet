@@ -10,7 +10,7 @@ internal static class MoshiOptionFixture
 {
     internal static bool IsSampling(string option) => option is
         "AudioTemperature" or "AudioTopK" or "TextTemperature" or "TextTopK"
-        or "TtsTemperature" or "TtsPaddingTarget" or "TtsPaddingBonus" or "SamplingSeed";
+        or "TtsTemperature" or "TtsPaddingTarget" or "TtsPaddingBonus";
 
     private static bool IsChat(string option) => option is
         "AudioTemperature" or "AudioTopK" or "TextTemperature" or "TextTopK";
@@ -21,8 +21,6 @@ internal static class MoshiOptionFixture
         "MimiLearningRate" or "MimiWeightDecay" or "MimiWeightAverageDecay"
         or "MimiQuantizationRate" or "MimiQuantizerDropout" or "MimiAdversarialWeight"
         or "MimiFeatureWeight" or "MimiDistillationWeight" or "MimiDiscriminatorWindows" or "MimiDiscriminatorFilters";
-
-    internal static bool Handles(string option) => IsSampling(option) || IsConversation(option) || IsMimi(option);
 
     internal static void Prepare(MoshiOptions options, string option)
     {
@@ -41,6 +39,13 @@ internal static class MoshiOptionFixture
     internal static long Observe<T>(Moshi<T> model, string option)
     {
         var ops = MathHelper.GetNumericOperations<T>();
+        if (option == "MimiCodebooks")
+        {
+            // The codec stores more quantizers than the LM's active subset (32 versus 8 in the release).
+            // Observe real full-capacity encoded tokens, including the extra residual quantizers.
+            var codes = model.Core.Mimi.Encode(MoshiFixture.Tones<T>(.32).Select(ops.ToDouble).ToArray());
+            return OptionSensitivityHarness.Fingerprint(codes.Cast<int>().Select(code => (double)code));
+        }
         if (IsChat(option))
         {
             var result = model.Chat(MoshiFixture.Tones<T>(.32));
@@ -55,14 +60,14 @@ internal static class MoshiOptionFixture
             OptionSensitivityHarness.Fingerprint(spoken.Words.Select(word => word.Time)));
     }
 
-    internal static bool Train<T>(Moshi<T> model, string option)
+    internal static void Train<T>(Moshi<T> model, string option)
     {
         if (IsMimi(option))
         {
             model.TrainMimi(MoshiFixture.Tones<T>(1.0));
-            return true;
+            return;
         }
-        if (!IsConversation(option)) return false;
+        if (IsSampling(option)) throw new InvalidOperationException("Sampling settings are observed without optimizer updates.");
         bool jitter = option == "TextDelaySeconds";
         var words = jitter
             ? new[] { new MoshiWord("the", .65, .75), new MoshiWord("cat", .8, .9), new MoshiWord("sat", .95, 1.05) }
@@ -71,6 +76,5 @@ internal static class MoshiOptionFixture
         {
             Moshi = MoshiFixture.Tones<T>(jitter ? 1.5 : .32), Words = words,
         });
-        return true;
     }
 }

@@ -88,6 +88,30 @@ public class StreamingMoshiPaperTests
     }
 
     [Fact(Timeout = 300000)]
+    public async Task NativeTextLimit_RejectsOversizedSpeechAndTextTraining()
+    {
+        await Task.Yield();
+        var options = MoshiFixture.Options(MoshiVariant.Tts);
+        options.MaxTextLength = 1;
+        using var model = MoshiFixture.Tts<double>(options);
+        Assert.Throws<ArgumentException>(() => model.Speak("the cat sat"));
+        Assert.Throws<ArgumentException>(() => model.TrainText("the cat sat"));
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task NativeTextLimit_AllowsTheExactTokenBoundary()
+    {
+        await Task.Yield();
+        var options = MoshiFixture.Options(MoshiVariant.Tts);
+        using var model = MoshiFixture.Tts<double>(options);
+        options.MaxTextLength = model.Core.WordTokens("the").Length;
+        var result = model.Speak("the");
+        Assert.Equal(new[] { "the" }, result.Words.Select(word => word.Text).ToArray());
+        Assert.True(result.Audio.Length > 0);
+        Assert.True(Finite(model.TrainText("the")));
+    }
+
+    [Fact(Timeout = 300000)]
     public async Task Chat_AnswersOverTheUsersSpan()
     {
         await Task.Yield();
