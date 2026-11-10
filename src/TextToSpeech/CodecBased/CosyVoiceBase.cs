@@ -157,8 +157,16 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     protected void Initialize()
     {
         var o = Settings;
+        if (o.LearningRate <= 0 || double.IsNaN(o.LearningRate) || double.IsInfinity(o.LearningRate))
+            throw new ArgumentOutOfRangeException(nameof(o.LearningRate), "Learning rate must be finite and positive.");
+        if (o.WeightDecay < 0 || double.IsNaN(o.WeightDecay) || double.IsInfinity(o.WeightDecay))
+            throw new ArgumentOutOfRangeException(nameof(o.WeightDecay), "Weight decay must be finite and nonnegative.");
+        if (o.WarmupSteps < 0)
+            throw new ArgumentOutOfRangeException(nameof(o.WarmupSteps), "Warmup steps cannot be negative.");
         if (o.NumCodebooks != 1)
             throw new ArgumentException("CosyVoice speaks one stream of S3 tokens; NumCodebooks must be 1.", nameof(o.NumCodebooks));
+        // The model's tape clip runs before the optimizer's clip: both must use the released norm of 5.
+        MaxGradNorm = NumOps.FromDouble(5.0);
         base.SampleRate = o.SampleRate;
         base.MelChannels = o.MelChannels;
         base.HopSize = o.HopSize;
@@ -678,8 +686,30 @@ public abstract partial class CosyVoiceBase<T> : TtsModelBase<T>, ICodecTts<T>
     /// <summary>Creates the optimizer declared for one native component; inference-only releases can supply a configured training rule.</summary>
     /// <param name="component">The language model, flow, vocoder or discriminator component.</param>
     /// <param name="warmupSteps">The number of warmup updates.</param>
-    protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateComponentOptimizer(string component, int warmupSteps) =>
-        PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, component, warmupSteps);
+    protected virtual IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? CreateComponentOptimizer(string component, int warmupSteps)
+    {
+        bool languageOrFlow = component is "language model" or "flow";
+        var recipe = PaperOptimizerFactory.Find(this, component);
+        AiDotNet.LearningRateSchedulers.ILearningRateScheduler? schedule = null;
+        if (languageOrFlow && recipe?.Schedule == AiDotNet.LearningRateSchedulers.LearningRateSchedulerType.NoamHoldAnnealing
+            && recipe.HoldFraction == 0 && recipe.DecayRate == 0.5)
+        {
+            // cosyvoice/utils/scheduler.py WarmupLR: lr * sqrt(w) * min(t^-0.5, t*w^-1.5).
+            // Its update count is independent of the generic optimizer's MaxIterations default.
+            int warmup = Math.Max(1, warmupSteps);
+            schedule = new AiDotNet.LearningRateSchedulers.NoamSchedule(1, warmup, Settings.LearningRate * Math.Sqrt(warmup));
+        }
+        else if (languageOrFlow && warmupSteps > 0 && recipe?.Schedule == AiDotNet.LearningRateSchedulers.LearningRateSchedulerType.Constant)
+        {
+            // An explicitly requested warmup on the constant-rate v2/v3 recipe, with t=step+1.
+            schedule = new AiDotNet.LearningRateSchedulers.LinearWarmupScheduler(Settings.LearningRate,
+                warmupSteps - 1, warmupInitLr: Settings.LearningRate / warmupSteps,
+                decayMode: AiDotNet.LearningRateSchedulers.LinearWarmupScheduler.DecayMode.Constant);
+        }
+        return PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, component, warmupSteps,
+            learningRateOverride: languageOrFlow ? Settings.LearningRate : null,
+            weightDecayOverride: Settings.WeightDecay, learningRateSchedulerOverride: schedule);
+    }
 
     private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? VocoderOptimizer(string component)
     {

@@ -16,8 +16,48 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// <para><b>For Beginners:</b> These options configure a VITS-style model. Default values follow the original paper settings.</para>
 /// </remarks>
 [AiDotNet.Attributes.DimensionDivisibility(nameof(UpsampleInitialChannels), nameof(UpsampleChannelDivisor))]
+[Newtonsoft.Json.JsonConverter(typeof(VitsOptionsConverter))]
 public abstract class VitsModelOptions : EndToEndTtsOptions
 {
+    private bool _nativeGeometryReady;
+
+    /// <summary>The number of HiFi-GAN upsampling stages in the native waveform decoder.</summary>
+    /// <remarks>Changing the stage count preserves the product of the native upsampling rates (the audio hop).
+    /// Each stage halves the channels, so the initial width must be divisible by 2 to this power.</remarks>
+    public override int NumDecoderLayers
+    {
+        get => UpsampleRates?.Length ?? 0;
+        set
+        {
+            // The base copy constructor visits shared aliases before the native arrays are copied.
+            if (!_nativeGeometryReady) return;
+            if (value <= 0 || value > 30 || UpsampleInitialChannels <= 0
+                || UpsampleInitialChannels % (1L << value) != 0)
+                throw new ArgumentOutOfRangeException(nameof(value), "Each decoder stage halves a positive initial channel width.");
+            if (value == UpsampleRates.Length) return;
+            int hop = 1;
+            foreach (int rate in UpsampleRates)
+            {
+                if (rate <= 0) throw new InvalidOperationException("Native upsampling rates must be positive.");
+                hop = checked(hop * rate);
+            }
+            var rates = new int[value];
+            var kernels = new int[value];
+            int remaining = hop;
+            for (int i = 0; i < value; i++)
+            {
+                int rate = i == value - 1 ? remaining
+                    : i < UpsampleRates.Length && remaining % UpsampleRates[i] == 0 ? UpsampleRates[i] : 1;
+                rates[i] = rate;
+                remaining /= rate;
+                kernels[i] = i < UpsampleRates.Length && rate == UpsampleRates[i] && i < UpsampleKernelSizes.Length
+                    ? UpsampleKernelSizes[i] : rate == 1 ? 1 : checked(2 * rate);
+            }
+            UpsampleRates = rates;
+            UpsampleKernelSizes = kernels;
+        }
+    }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
@@ -57,6 +97,7 @@ public abstract class VitsModelOptions : EndToEndTtsOptions
         NoiseScale = other.NoiseScale;
         LengthScale = other.LengthScale;
         SamplingSeed = other.SamplingSeed;
+        _nativeGeometryReady = true;
     }
 
     /// <summary>Creates the shared VITS configuration.</summary>
@@ -75,6 +116,7 @@ public abstract class VitsModelOptions : EndToEndTtsOptions
         NumFlowSteps = 4;
         LearningRate = 2e-4;
         WeightDecay = 0.01;
+        _nativeGeometryReady = true;
     }
 
     /// <summary>Gets or sets AdamW's β₁ (0.8).</summary>
@@ -162,10 +204,11 @@ public abstract class VitsModelOptions : EndToEndTtsOptions
 
     /// <summary>Gets or sets the number of speakers; above one, a speaker table conditions the model and every training
     /// sample and synthesis names its speaker (0: a single-speaker model).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("YourTTS uses external H/ASP speaker embeddings for zero-shot voices, not a learned speaker-ID table; its constructor requires NumSpeakers=0.", ModelType = typeof(YourTTS<>))]
     public int NumSpeakers { get; set; }
 
     /// <summary>Gets or sets the width of the speaker embedding (256, the reference's <c>gin_channels</c> for VCTK).</summary>
-    public int SpeakerEmbeddingDim { get; set; } = 256;
+    public virtual int SpeakerEmbeddingDim { get; set; } = 256;
 
     /// <summary>Gets or sets the number of languages; above one, a language embedding is concatenated to every character
     /// embedding and conditions the duration predictor, and every training sample and synthesis names its language

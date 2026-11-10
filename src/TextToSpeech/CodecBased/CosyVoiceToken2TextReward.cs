@@ -99,7 +99,13 @@ public sealed class CosyVoiceToken2TextReward<T> : ICosyVoiceTokenReward<T>
     public void LoadWeights(Func<string, int[], double[]> read)
     {
         if (read is null) throw new ArgumentNullException(nameof(read));
-        _speechEmbedding.LoadTable(read("speech_embedding.weight", new[] { SpeechVocabularySize, _network.Configuration.ModelDim }));
-        _network.LoadHuggingFaceWeights(read);
+        LoadWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Loads the reward's weights from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    internal void LoadWeights(AiDotNet.ModelLoading.TorchTensorSource source)
+    {
+        _speechEmbedding.LoadTable(source, "speech_embedding.weight");
+        _network.LoadHuggingFaceWeights(source);
     }
 }

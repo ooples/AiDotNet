@@ -1,5 +1,6 @@
 using AiDotNet.Audio.MusicGen;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
 
@@ -133,10 +134,14 @@ internal sealed class FireRedTtsMelCodec<T>
     /// <summary>Loads SoCodec's names (<c>{encoder}layers.*</c>, <c>{decoder}layers.*</c>, <c>{quantizer}quantizers.0.*</c>):
     /// in an encoder, conv, Swish, then per stride a block (unit, norm, Swish, unit, norm, Swish, strided conv), norm and
     /// Swish, then the last conv; a decoder mirrors it with transposed convolutions; a unit is conv, norm, Swish, conv.</summary>
-    public void Load(Func<string, int[], double[]> read, Func<string, bool> has, string encoder, string decoder, string quantizer)
+    public void Load(Func<string, int[], double[]> read, Func<string, bool> has, string encoder, string decoder, string quantizer) =>
+        Load(TorchTensorSource.From(name => has(name) ? read(name, Array.Empty<int>()) : null), encoder, decoder, quantizer);
+
+    /// <summary>Loads SoCodec's names from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string encoder, string decoder, string quantizer)
     {
         void Conv(NormedConv1DLayer<T> conv, string name) =>
-            conv.LoadTorchWeights(read(name + ".weight", conv.TorchWeightShape), null, read(name + ".bias", new[] { conv.OutputChannels }));
+            conv.LoadTorchWeights(source, name + ".weight", conv.TorchWeightShape, null, name + ".bias");
         void LoadUnit(Unit unit, string name)
         {
             Conv(unit.A, name + ".layers.0");
@@ -160,7 +165,7 @@ internal sealed class FireRedTtsMelCodec<T>
             LoadUnit(DecoderBlocks[i].Second, p + "6");
         }
         Conv(DecoderOut, $"{decoder}layers.{2 + 3 * DecoderBlocks.Count}");
-        Quantizer.Load(read, has, quantizer + "quantizers.0.");
+        Quantizer.Load(source, quantizer + "quantizers.0.");
     }
 }
 

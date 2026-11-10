@@ -1,3 +1,5 @@
+using AiDotNet.ModelLoading;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 public partial class Dia<T>
@@ -12,36 +14,21 @@ public partial class Dia<T>
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
         if (path is null) throw new ArgumentNullException(nameof(path));
-        var files = new List<string>();
+        string file = path;
         if (Directory.Exists(path))
         {
-            string index = Path.Combine(path, "model.safetensors.index.json");
-            if (File.Exists(index))
-            {
-                using var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(index));
-                files.AddRange(document.RootElement.GetProperty("weight_map").EnumerateObject().Select(p => p.Value.GetString()!).Distinct()
-                    .Select(f => Path.Combine(path, f)));
-            }
-            else
-            {
-                var file = new[] { "model.safetensors", "dia-v1.pth" }.Select(f => Path.Combine(path, f)).FirstOrDefault(File.Exists)
+            if (!File.Exists(Path.Combine(path, "model.safetensors.index.json")))
+                file = new[] { "model.safetensors", "dia-v1.pth" }.Select(f => Path.Combine(path, f)).FirstOrDefault(File.Exists)
                     ?? throw new FileNotFoundException($"No model.safetensors, model.safetensors.index.json or dia-v1.pth in {path}.");
-                files.Add(file);
-            }
         }
-        else files.Add(path);
-        var missing = files.FirstOrDefault(f => !File.Exists(f));
-        if (missing is not null) throw new FileNotFoundException($"The checkpoint file {missing} does not exist.", missing);
+        else if (!File.Exists(path)) throw new FileNotFoundException($"The checkpoint file {path} does not exist.", path);
 
-        var state = new Dictionary<string, Tensor<float>>(StringComparer.Ordinal);
-        foreach (var file in files)
-            foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(file)) state[entry.Key] = entry.Value;
-        // Each tensor is widened when it is read rather than the whole checkpoint at once.
-        double[]? Read(string name) => state.TryGetValue(name, out var v) ? Array.ConvertAll(v.ToArray(), x => (double)x) : null;
-        var used = state.ContainsKey("logits_dense.weight")
-            ? Network.LoadTorchWeights((name, shape) => Need(Read, name, shape))
-            : LoadReleaseWeights(Read);
-        var unused = state.Keys.Where(k => !used.Contains(k)).ToList();
+        // A transformers checkpoint is copied straight into the layers; the release's kernels are rearranged one by one.
+        using var state = Directory.Exists(file) ? TorchCheckpointFile.OpenDirectory(file) : TorchCheckpointFile.Open(file);
+        var used = state.Contains("logits_dense.weight")
+            ? Network.LoadTorchWeights(state)
+            : LoadReleaseWeights(name => state.TryRead(name));
+        var unused = state.Names.Where(k => !used.Contains(k)).ToList();
         if (unused.Count > 0) throw new InvalidDataException($"The checkpoint has {unused.Count} tensors this model has no place for (first: '{unused[0]}').");
     }
 

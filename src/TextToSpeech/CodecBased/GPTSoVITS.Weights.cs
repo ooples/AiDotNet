@@ -1,4 +1,5 @@
 using AiDotNet.Audio.Speaker;
+using AiDotNet.ModelLoading;
 
 namespace AiDotNet.TextToSpeech.CodecBased;
 
@@ -37,36 +38,18 @@ public sealed class GptSoVitsCheckpoints
 
 public partial class GPTSoVITS<T>
 {
-    /// <summary>A checkpoint read once, its tensors released as they are read; nested dictionaries (the release's
-    /// <c>weight</c>, the GPT's <c>model.</c>) are found by trying the prefixes.</summary>
-    private sealed class Checkpoint
+    /// <summary>Opens a checkpoint whose state sits under the first of <paramref name="prefixes"/> (or none) that holds
+    /// <paramref name="probe"/> (the release's <c>weight</c>, the GPT's <c>model.</c>); returns the file and that prefix.</summary>
+    private static (TorchCheckpointFile File, string Prefix) OpenCheckpoint(string path, string probe, params string[] prefixes)
     {
-        private readonly Dictionary<string, Tensor<float>> _tensors;
-        private readonly string _prefix;
-
-        public Checkpoint(string path, string probe, params string[] prefixes)
+        var file = TorchCheckpointFile.Open(path);
+        var prefix = prefixes.Concat(new[] { "" }).FirstOrDefault(p => file.Contains(p + probe));
+        if (prefix is null)
         {
-            _tensors = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-            _prefix = prefixes.Concat(new[] { "" }).FirstOrDefault(p => _tensors.ContainsKey(p + probe))
-                ?? throw new InvalidDataException($"'{path}' has no tensor '{probe}' under any of the release's prefixes.");
-            Keys = new HashSet<string>(_tensors.Keys.Where(k => k.StartsWith(_prefix, StringComparison.Ordinal)).Select(k => k.Substring(_prefix.Length)),
-                StringComparer.Ordinal);
+            file.Dispose();
+            throw new InvalidDataException($"'{path}' has no tensor '{probe}' under any of the release's prefixes.");
         }
-
-        public HashSet<string> Keys { get; }
-
-        public double[]? Take(string name)
-        {
-            if (!_tensors.TryGetValue(_prefix + name, out var tensor)) return null;
-            _tensors.Remove(_prefix + name);
-            var values = new double[tensor.Length];
-            for (int i = 0; i < values.Length; i++) values[i] = tensor.GetFlat(i);
-            return values;
-        }
-
-        public int Length(string name) => _tensors[_prefix + name].Length;
-
-        public double[] Require(string name) => Take(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{_prefix + name}'.");
+        return (file, prefix);
     }
 
     /// <summary>
@@ -81,52 +64,47 @@ public partial class GPTSoVITS<T>
         if (!HasPaperLayers) throw NotNative();
         var o = _options;
 
-        var gpt = new Checkpoint(checkpoints.TextToSemantic, "bert_proj.weight", "weight.model.", "model.", "weight.");
-        TextToSemantic.Load((name, _) => gpt.Require(name));
+        var (gpt, gptPrefix) = OpenCheckpoint(checkpoints.TextToSemantic, "bert_proj.weight", "weight.model.", "model.", "weight.");
+        using (gpt) TextToSemantic.Load(gpt.WithPrefix(gptPrefix));
 
         if (IsCfm) LoadFlowSynthesizer(checkpoints);
         else
         {
-            var s2 = new Checkpoint(checkpoints.Synthesizer, "ssl_proj.weight", "weight.");
-            SoVits.Load(s2.Take);
+            var (s2, s2Prefix) = OpenCheckpoint(checkpoints.Synthesizer, "ssl_proj.weight", "weight.");
+            using (s2) SoVits.Load(s2.WithPrefix(s2Prefix));
             if (checkpoints.Discriminator is { } d)
             {
-                var discriminator = new Checkpoint(d, "discriminators.0.convs.0.weight_v", "weight.", "model.");
-                _discriminators!.LoadTorch(discriminator.Take, "discriminators.");
+                var (discriminator, prefix) = OpenCheckpoint(d, "discriminators.0.convs.0.weight_v", "weight.", "model.");
+                using (discriminator)
+                {
+                    var source = discriminator.WithPrefix(prefix);
+                    _discriminators!.LoadTorch(name => source.TryRead(name), "discriminators.");
+                }
             }
         }
 
-        var hubert = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(checkpoints.Hubert);
-        Hubert.LoadTorchWeights(name => hubert.TryGetValue(name, out var t) ? t.ToVector().Select(v => (double)v).ToArray() : null);
+        using (var hubert = TorchCheckpointFile.Open(checkpoints.Hubert)) Hubert.LoadTorchWeights(hubert);
 
         if (checkpoints.Bert is { } bertPath)
         {
-            var bert = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(bertPath);
-            Bert.LoadTorchWeights((name, shape) =>
-            {
-                if (!bert.TryGetValue("bert." + name, out var tensor) && !bert.TryGetValue(name, out tensor))
-                    throw new InvalidDataException($"The BERT checkpoint has no tensor '{name}'.");
-                if (!tensor.Shape.ToArray().SequenceEqual(shape))
-                    throw new InvalidDataException($"'{name}' is [{string.Join(", ", tensor.Shape.ToArray())}] in the checkpoint but [{string.Join(", ", shape)}] here.");
-                return tensor.ToVector().Select(v => (double)v).ToArray();
-            });
+            using var bert = TorchCheckpointFile.Open(bertPath, strictAxes: true);
+            Bert.LoadTorchWeights(bert.WithNames(name => bert.Contains("bert." + name) ? "bert." + name : name));
         }
 
         if (IsV2Pro)
         {
             string path = checkpoints.SpeakerVerification
                 ?? throw new ArgumentException($"{VersionName} needs ERes2NetV2's weights (SpeakerVerification).", nameof(checkpoints));
-            var sv = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-            _speaker = new ERes2NetV2Encoder<T>(Engine, name => sv.TryGetValue(name, out var t) ? t.ToVector().Select(v => (double)v).ToArray() : null,
-                o.SpeakerChannels, blocks: o.SpeakerBlocks);
+            using var sv = TorchCheckpointFile.Open(path);
+            _speaker = new ERes2NetV2Encoder<T>(Engine, sv, o.SpeakerChannels, blocks: o.SpeakerBlocks);
         }
 
         if (IsCfm)
         {
             string path = checkpoints.Vocoder ?? throw new ArgumentException($"{VersionName} needs its vocoder's weights (Vocoder).", nameof(checkpoints));
-            var vocoder = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-            string prefix = vocoder.Keys.Any(k => k.StartsWith("generator.", StringComparison.Ordinal)) ? "generator." : "";
-            Func<string, double[]?> read = name => vocoder.TryGetValue(prefix + name, out var t) ? t.ToVector().Select(v => (double)v).ToArray() : null;
+            using var vocoder = TorchCheckpointFile.Open(path);
+            string prefix = vocoder.Names.Any(k => k.StartsWith("generator.", StringComparison.Ordinal)) ? "generator." : "";
+            Func<string, double[]?> read = name => vocoder.TryRead(prefix + name);
             if (_bigVgan is not null) _bigVgan.LoadTorch(read);
             else _hifiGan!.LoadTorch(read);
         }
@@ -141,23 +119,27 @@ public partial class GPTSoVITS<T>
     private void LoadFlowSynthesizer(GptSoVitsCheckpoints checkpoints)
     {
         var cfm = FlowSynthesizer;
-        var file = new Checkpoint(checkpoints.Synthesizer, "bridge.0.weight", "weight.");
-        bool lora = file.Keys.Any(k => k.Contains(".lora_A."));
+        var (checkpoint, filePrefix) = OpenCheckpoint(checkpoints.Synthesizer, "bridge.0.weight", "weight.");
+        using var opened = checkpoint;
+        var file = checkpoint.WithPrefix(filePrefix);
+        var keys = checkpoint.Names.Where(k => k.StartsWith(filePrefix, StringComparison.Ordinal)).Select(k => k.Substring(filePrefix.Length)).ToList();
+        bool lora = keys.Any(k => k.Contains(".lora_A."));
         if (!lora)
         {
-            cfm.Load(file.Take);
+            cfm.Load(file);
             return;
         }
         string basePath = checkpoints.SynthesizerBase
             ?? throw new ArgumentException("A LoRA synthesizer checkpoint adapts a pretrained one; set SynthesizerBase.", nameof(checkpoints));
-        var pretrained = new Checkpoint(basePath, "bridge.0.weight", "weight.");
+        var (pretrained, basePrefix) = OpenCheckpoint(basePath, "bridge.0.weight", "weight.");
         // The fine-tune's full tensors (style encoder, bridge, wns1) replace the base's; the DiT's base weights stay.
-        cfm.Load(name => file.Take(name) ?? pretrained.Take(name));
+        using (pretrained) cfm.Load(file.Or(pretrained.WithPrefix(basePrefix)));
         string loraPrefix = "cfm.base_model.model.estimator.";
-        var probe = file.Keys.First(k => k.StartsWith(loraPrefix, StringComparison.Ordinal) && k.Contains(".lora_A."));
+        var probe = keys.First(k => k.StartsWith(loraPrefix, StringComparison.Ordinal) && k.Contains(".lora_A."));
         var dit = cfm.Cfm.Estimator;
-        int rank = file.Length(probe) / dit.Configuration.Dim;                                               // lora_A [rank, dim]
-        Func<string, double[]?> read = file.Take;
+        long probeCount = (file.ShapeOf(probe) ?? Array.Empty<long>()).Aggregate(1L, (a, b) => a * b);
+        int rank = (int)(probeCount / dit.Configuration.Dim);                                                // lora_A [rank, dim]
+        var read = file;
         if (dit.HasLora)
         {
             if (_options.LoraRank != rank)

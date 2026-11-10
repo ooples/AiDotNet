@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.EndToEnd;
 using AiDotNet.TextToSpeech.StyleEmotion;
@@ -264,15 +265,18 @@ internal sealed class GptSoVitsCfmSynthesizer<T>
     }
 
     /// <summary>Loads the s2 v3/v4/V5 checkpoint's <c>weight</c>.</summary>
-    public void Load(Func<string, double[]?> read)
+    public void Load(Func<string, double[]?> read) => Load(TorchTensorSource.From(read));
+
+    /// <summary>Loads the s2 v3/v4/V5 checkpoint's <c>weight</c> from <paramref name="source"/>, each tensor copied straight
+    /// into its layer.</summary>
+    internal void Load(TorchTensorSource source)
     {
-        double[] Require(string name) => read(name) ?? throw new KeyNotFoundException($"The SoVITS checkpoint has no '{name}'.");
-        MeloOps.LoadConv(Require, SslProjection, "ssl_proj");
-        Quantizer.Load(read, "quantizer.vq.layers.0._codebook.");
-        TextEncoder.Load(Require, "enc_p.");
-        ReferenceEncoder.Load(_engine, Require, "ref_enc.");
-        MeloOps.LoadConv(Require, Bridge, "bridge.0");
-        MelEncoder.Load(Require, "wns1.");
-        Cfm.Estimator.Load(Require, "cfm.estimator.");
+        GptSoVitsWeights.Conv(source, SslProjection, "ssl_proj");
+        Quantizer.Load(source, "quantizer.vq.layers.0._codebook.");
+        TextEncoder.Load(source, "enc_p.");
+        ReferenceEncoder.Load(_engine, source, "ref_enc.");
+        GptSoVitsWeights.Conv(source, Bridge, "bridge.0");
+        MelEncoder.Load(source, "wns1.");
+        Cfm.Estimator.Load(source, "cfm.estimator.");
     }
 }

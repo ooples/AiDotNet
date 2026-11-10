@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
 
@@ -299,38 +300,50 @@ internal sealed class FireRedTtsGpt<T>
     /// <c>mel_embedding</c>, <c>gpt.h.*</c>, <c>gpt.ln_f</c>, the position tables, <c>final_norm</c>, the heads and
     /// <c>reference_embedding</c>. The checkpoint's text vocabulary has <paramref name="textRows"/> rows; a model with
     /// more (instruction tags) keeps the extra rows of the text table and head from its initialization.</summary>
-    public void Load(Func<string, int[], double[]> read, int textRows)
+    public void Load(Func<string, int[], double[]> read, int textRows) => Load(TorchTensorSource.From(read), textRows);
+
+    /// <summary>Loads the release's GPT state from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, int textRows)
     {
         var c = Configuration;
         int d = c.ModelDim;
         if (textRows < 1 || textRows > c.TextTokens) throw new ArgumentOutOfRangeException(nameof(textRows));
-        TextEmbedding.LoadLeadingRows(read("text_embedding.weight", new[] { textRows, d }));
-        AudioEmbedding.LoadTable(read("mel_embedding.weight", new[] { c.AudioTokens, d }));
-        Gpt.Load(read, "gpt.");
-        AudioPositions.LoadTable(read("mel_pos_embedding.emb.weight", new[] { c.MaxAudioTokens + 3, d }));
-        TextPositions.LoadTable(read("text_pos_embedding.emb.weight", new[] { c.MaxTextTokens + 2, d }));
-        IndexTtsOps.LoadNorm(_engine, read, FinalNorm, "final_norm", d);
+        TextEmbedding.LoadLeadingRows(source, "text_embedding.weight", textRows);
+        AudioEmbedding.LoadTable(source, "mel_embedding.weight");
+        Gpt.Load(source, "gpt.");
+        AudioPositions.LoadTable(source, "mel_pos_embedding.emb.weight");
+        TextPositions.LoadTable(source, "text_pos_embedding.emb.weight");
+        IndexTtsOps.LoadNorm(_engine, source, FinalNorm, "final_norm", d);
         if (textRows == c.TextTokens)
         {
-            IndexTtsOps.LoadLinear(_engine, read, TextHead, "text_head", d, c.TextTokens);
+            IndexTtsOps.LoadLinear(_engine, source, TextHead, "text_head", d, c.TextTokens);
         }
         else
         {
-            var weight = read("text_head.weight", new[] { textRows, d });
-            var bias = read("text_head.bias", new[] { textRows });
+            // The checkpoint's rows are the head's first outputs: weight [textRows, d] into columns of the [in, out] weights.
             var w = TextHead.GetWeights();                                                                 // [in, out]
             var b = TextHead.GetBiases();
-            for (int o = 0; o < textRows; o++)
+            int outputs = w.Shape[1];
+            source.ReadChunks("text_head.weight", new[] { textRows, d }, (start, values) =>
             {
-                for (int i = 0; i < d; i++) w[i, o] = NumOps.FromDouble(weight[o * d + i]);
-                b[o] = NumOps.FromDouble(bias[o]);
-            }
+                var span = w.AsWritableSpan();
+                for (int k = 0; k < values.Length; k++)
+                {
+                    int o = (start + k) / d, i = (start + k) % d;
+                    span[i * outputs + o] = NumOps.FromDouble(values[k]);
+                }
+            });
+            source.ReadChunks("text_head.bias", new[] { textRows }, (start, values) =>
+            {
+                var span = b.AsWritableSpan();
+                for (int k = 0; k < values.Length; k++) span[start + k] = NumOps.FromDouble(values[k]);
+            });
             _engine.InvalidatePersistentTensor(w);
             _engine.InvalidatePersistentTensor(b);
         }
-        IndexTtsOps.LoadLinear(_engine, read, AudioHead, "mel_head", d, c.AudioTokens);
-        IndexTtsOps.LoadLinear(_engine, read, Reference1, "reference_embedding.0", c.SpeakerDim, c.ReferenceHidden);
-        IndexTtsOps.LoadLinear(_engine, read, Reference2, "reference_embedding.2", c.ReferenceHidden, d);
+        IndexTtsOps.LoadLinear(_engine, source, AudioHead, "mel_head", d, c.AudioTokens);
+        IndexTtsOps.LoadLinear(_engine, source, Reference1, "reference_embedding.0", c.SpeakerDim, c.ReferenceHidden);
+        IndexTtsOps.LoadLinear(_engine, source, Reference2, "reference_embedding.2", c.ReferenceHidden, d);
     }
 
     /// <summary>The release's text vocabulary rows (57,184 ranks, 156 special tokens and one spare row).</summary>

@@ -33,15 +33,15 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2025,
     Authors = "Zhihao Du et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, Component = "language model", LearningRate = 1e-5, MaxGradientNorm = 5,
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, Component = "language model", LearningRate = 1e-5, MaxGradientNorm = 5,
     GradientAccumulationSteps = 2, Provenance = RecipeProvenance.ReleasedCode,
     Source = "FunAudioLLM/CosyVoice training configuration: constant 1e-5 Adam, clip 5, accumulation 2.")]
-[PaperOptimizer(OptimizerKind.Adam, Component = "flow", LearningRate = 1e-5, MaxGradientNorm = 5,
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, Component = "flow", LearningRate = 1e-5, MaxGradientNorm = 5,
     GradientAccumulationSteps = 2, Provenance = RecipeProvenance.ReleasedCode,
     Source = "FunAudioLLM/CosyVoice training configuration for CausalMaskedDiffWithDiT.")]
-[PaperOptimizer(OptimizerKind.Adam, Component = "vocoder", LearningRate = 2e-4, MaxGradientNorm = 5,
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, Component = "vocoder", LearningRate = 2e-4, MaxGradientNorm = 5,
     Provenance = RecipeProvenance.ReleasedCode, Source = "FunAudioLLM/CosyVoice HiFT GAN recipe.")]
-[PaperOptimizer(OptimizerKind.Adam, Component = "discriminator", LearningRate = 2e-4, MaxGradientNorm = 5,
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, Component = "discriminator", LearningRate = 2e-4, MaxGradientNorm = 5,
     Provenance = RecipeProvenance.ReleasedCode, Source = "FunAudioLLM/CosyVoice HiFT discriminator recipe.")]
 public partial class CosyVoice3<T> : CosyVoiceBase<T>
 {
@@ -248,7 +248,7 @@ public partial class CosyVoice3<T> : CosyVoiceBase<T>
         _options.SpeechTokenizerPath = path;
     }
 
-    private protected override void LoadFlowWeights(TorchTensorSource source) => DiTFlow.LoadTorchWeights(source.AsFunction());
+    private protected override void LoadFlowWeights(TorchTensorSource source) => DiTFlow.LoadTorchWeights(source);
     private protected override void LoadVocoderWeights(TorchTensorSource source) => CausalHift.LoadTorchWeights(source);
 
     private void OpenSpeakerEncoder(string path)

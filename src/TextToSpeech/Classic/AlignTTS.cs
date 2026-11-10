@@ -52,7 +52,7 @@ namespace AiDotNet.TextToSpeech.Classic;
     Authors = "Zeng et al."
 )]
 [PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
-                ReferenceBatchSize = 32, Schedule = LearningRateSchedulerType.Noam,
+                ReferenceBatchSize = 32, Schedule = LearningRateSchedulerType.Noam, WarmupSteps = 4000,
                 Phase = TrainingPhase.PreTraining,
                 Provenance = RecipeProvenance.DerivedFromCitedWork,
                 Source = "Zeng et al. 2020, Sec. 4.1: Adam with beta1 0.9, beta2 0.98 and epsilon 1e-9, "
@@ -61,8 +61,8 @@ namespace AiDotNet.TextToSpeech.Classic;
                         + "from its reference [18], Vaswani et al. 2017, which is the "
                         + "inverse-square-root schedule with warmup declared here as Noam; the "
                         + "provenance records that it comes from the cited work rather than from this "
-                        + "paper.")]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4,
+                        + "paper. The cited schedule uses 4000 warmup steps (Vaswani et al., Sec. 5.3).")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
                 Phase = TrainingPhase.FineTuning,
                 Source = "Zeng et al. 2020, Sec. 4.1: fine-tuning the whole model uses a fixed learning "
                         + "rate of 1e-4 over 80K steps.")]
@@ -110,16 +110,20 @@ public partial class AlignTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITraining
         _options = options ?? new AlignTTSOptions();
         Options = _options;
         _useNativeMode = true;
+        if (_options.LearningRate <= 0 || double.IsNaN(_options.LearningRate) || double.IsInfinity(_options.LearningRate))
+            throw new ArgumentOutOfRangeException(nameof(options), "Learning rate must be finite and positive.");
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
         InitializeLayers();
         _optimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+                modelDimensionOverride: _options.HiddenDim, trainingStepsOverride: 40_000)
             ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
         _fineTuningOptimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this, phase: AiDotNet.Attributes.TrainingPhase.FineTuning)
+            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+                phase: AiDotNet.Attributes.TrainingPhase.FineTuning, learningRateOverride: _options.LearningRate)
             ?? _optimizer;
     }
 

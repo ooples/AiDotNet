@@ -3,6 +3,7 @@ using AiDotNet.Audio.Codecs;
 using AiDotNet.Audio.Foundations;
 using AiDotNet.Enums;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
 using AiDotNet.Models.Options;
@@ -393,13 +394,9 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
         if (!HasPaperLayers) throw NotNative();
         string tokenizer = Path.Combine(directory, "tokenizer.json");
         if (File.Exists(tokenizer)) LoadTokenizer(tokenizer);
-        var weights = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var file in Directory.GetFiles(directory, "*.safetensors"))
-            foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(file))
-                weights[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        if (weights.Count == 0) throw new FileNotFoundException($"No .safetensors files in {directory}.");
-        LanguageModel.LoadTorchWeights((name, shape) => weights.TryGetValue(name, out var v) ? v
-            : throw new InvalidDataException($"The checkpoint has no tensor '{name}'."));
+        if (Directory.GetFiles(directory, "*.safetensors").Length == 0) throw new FileNotFoundException($"No .safetensors files in {directory}.");
+        using var weights = TorchCheckpointFile.OpenDirectory(directory);
+        LanguageModel.LoadTorchWeights(weights);
     }
 
     /// <summary>Loads X-codec2: HKUSTAudio/xcodec2's <c>model.safetensors</c> (or its <c>pytorch_model.bin</c>).</summary>
@@ -407,15 +404,17 @@ public partial class Llasa<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path))
-            state[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        LoadCodec(name => state.TryGetValue(name, out var v) ? v : null, state.Keys);
+        using var state = TorchCheckpointFile.Open(path);
+        LoadCodec(state, state.Names);
     }
 
-    internal void LoadCodec(Func<string, double[]?> read, IEnumerable<string> names)
+    internal void LoadCodec(Func<string, double[]?> read, IEnumerable<string> names) => LoadCodec(TorchTensorSource.From(read), names);
+
+    /// <summary>Loads X-codec2 from <paramref name="source"/>, each tensor copied straight into its layer, and checks every
+    /// one of <paramref name="names"/> has a place.</summary>
+    internal void LoadCodec(TorchTensorSource source, IEnumerable<string> names)
     {
-        var used = Codec.Load(read);
+        var used = Codec.Load(source);
         // The anti-aliasing filters are recomputed, w2v-BERT's layers past the one X-codec2 reads are never run, and its
         // masked-span embedding is for pretraining only.
         int layer = Codec.Configuration.SemanticLayer;

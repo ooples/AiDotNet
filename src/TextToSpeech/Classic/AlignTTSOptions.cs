@@ -6,9 +6,15 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// dimension 768, 2 heads and kernel 3; a duration predictor of 2 FFT blocks with dimension 128; a mix density network
 /// with hidden size 256 whose output is a mean and a variance per mel channel.</para>
 /// <para><b>For Beginners:</b> These options configure the AlignTTS model. Default values follow the original paper settings.</para>
+/// <para><see cref="TtsModelOptions.LearningRate"/> configures the fixed rate in joint fine-tuning and duration-predictor
+/// training. Alignment and decoder pre-training retain the dimension-scaled Noam schedule adopted by the paper.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(AcousticMelOptionsConverter))]
 public class AlignTTSOptions : AcousticModelOptions
 {
+    /// <summary>Mel projection width, independent of the FFT hidden width (Zeng et al., Fig. 1).</summary>
+    public override int DecoderDim { get => MelChannels; set => MelChannels = value; }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>

@@ -1,6 +1,7 @@
 using AiDotNet.Audio.Codecs;
 using AiDotNet.Audio.Foundations;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Latest;
 
@@ -269,21 +270,37 @@ internal sealed class FireRedTtsProductQuantizer<T>
 
     /// <summary>Loads <c>{prefix}project_in/out</c> and each codebook's <c>embed</c>, <c>embed_avg</c> and
     /// <c>cluster_size</c> (<c>{prefix}_codebook.codebooks.{b}.*</c>).</summary>
-    public void Load(Func<string, int[], double[]> read, Func<string, bool> has, string prefix)
+    public void Load(Func<string, int[], double[]> read, Func<string, bool> has, string prefix) =>
+        Load(TorchTensorSource.From(name => has(name) ? read(name, Array.Empty<int>()) : null), prefix);
+
+    /// <summary>Loads the projections and codebooks from <paramref name="source"/>, each tensor copied straight into its
+    /// storage.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
         var c = Configuration;
         int width = c.Codebooks * c.CodebookDim;
-        IndexTtsOps.LoadLinear(_engine, read, ProjectIn, prefix + "project_in", c.ModelDim, width);
-        IndexTtsOps.LoadLinear(_engine, read, ProjectOut, prefix + "project_out", width, c.ModelDim);
+        IndexTtsOps.LoadLinear(_engine, source, ProjectIn, prefix + "project_in", c.ModelDim, width);
+        IndexTtsOps.LoadLinear(_engine, source, ProjectOut, prefix + "project_out", width, c.ModelDim);
+        void Copy(string name, int[] shape, double[] destination) =>
+            source.ReadChunks(name, shape, (start, values) => values.CopyTo(new Span<double>(destination, start, values.Length)));
         for (int b = 0; b < c.Codebooks; b++)
         {
             string p = $"{prefix}_codebook.codebooks.{b}.";
-            var embed = read(p + "embed", new[] { c.CodebookSize, c.CodebookDim });
-            LoadCodebook(b, embed);
+            var book = new[] { c.CodebookSize, c.CodebookDim };
+            Copy(p + "embed", book, _embedAverage[b]);
+            LoadCodebook(b, _embedAverage[b]);
             // The running averages are training state; without them the codebook restarts its EMA from the codewords.
-            Array.Copy(has(p + "embed_avg") ? read(p + "embed_avg", new[] { c.CodebookSize, c.CodebookDim }) : embed, _embedAverage[b], _embedAverage[b].Length);
-            if (has(p + "cluster_size")) Array.Copy(read(p + "cluster_size", new[] { c.CodebookSize }), _clusterSize[b], c.CodebookSize);
+            if (source.Contains(p + "embed_avg")) Copy(p + "embed_avg", book, _embedAverage[b]);
+            if (source.Contains(p + "cluster_size")) Copy(p + "cluster_size", new[] { c.CodebookSize }, _clusterSize[b]);
         }
+    }
+
+    /// <summary>Sets codebook <paramref name="b"/>'s codewords from the named tensor of <paramref name="source"/>.</summary>
+    internal void LoadCodebook(int b, TorchTensorSource source, string name)
+    {
+        var book = Codebooks[b];
+        source.CopyTo(name, book.Shape.ToArray(), book);
+        _engine.InvalidatePersistentTensor(book);
     }
 
     /// <summary>Sets a codebook's codewords (the release's frozen flow embedding carries the same values).</summary>
@@ -494,14 +511,16 @@ internal sealed class FireRedTtsSpeechTokenizer<T>
 
     /// <summary>Loads the 1S release's <c>codec.bin</c> names (<c>encoder.layers.*</c>, <c>quantizer.quantizers.0.*</c>);
     /// the speaker encoder and HuBERT load separately.</summary>
-    public void Load(Func<string, int[], double[]> read, Func<string, bool> has)
+    public void Load(Func<string, int[], double[]> read, Func<string, bool> has) =>
+        Load(TorchTensorSource.From(name => has(name) ? read(name, Array.Empty<int>()) : null));
+
+    /// <summary>Loads the 1S release's <c>codec.bin</c> names from <paramref name="source"/>, each tensor copied straight
+    /// into its layer.</summary>
+    internal void Load(TorchTensorSource source)
     {
-        void Conv(StreamableConv1d<T> conv, string name)
-        {
-            var shape = conv.Conv.TorchWeightShape;
-            conv.Conv.LoadTorchWeights(read(name + ".conv.conv.weight_v", shape), read(name + ".conv.conv.weight_g", new[] { shape[0], 1, 1 }),
-                read(name + ".conv.conv.bias", new[] { shape[0] }));
-        }
+        void Conv(StreamableConv1d<T> conv, string name) =>
+            conv.Conv.LoadTorchWeights(source, name + ".conv.conv.weight_v", conv.Conv.TorchWeightShape, name + ".conv.conv.weight_g",
+                name + ".conv.conv.bias");
         // encoder.layers: 0 conv, 1 swish, then per stride a block and a swish, then the conv and the LSTM.
         Conv(EncoderIn, "encoder.layers.0");
         for (int i = 0; i < EncoderBlocks.Count; i++)
@@ -518,11 +537,8 @@ internal sealed class FireRedTtsSpeechTokenizer<T>
         Conv(EncoderOut, $"encoder.layers.{last}");
         string lstm = $"encoder.layers.{last + 1}.lstm.";
         foreach (var (cell, suffix) in new[] { (EncoderLstm.ForwardCells[0], ""), (EncoderLstm.BackwardCells[0]!, "_reverse") })
-        {
-            int hidden = cell.HiddenSize, input = cell.InputSize;
-            cell.LoadTorchWeights(read($"{lstm}weight_ih_l0{suffix}", new[] { 4 * hidden, input }), read($"{lstm}weight_hh_l0{suffix}", new[] { 4 * hidden, hidden }),
-                read($"{lstm}bias_ih_l0{suffix}", new[] { 4 * hidden }), read($"{lstm}bias_hh_l0{suffix}", new[] { 4 * hidden }));
-        }
-        Quantizer.Load(read, has, "quantizer.quantizers.0.");
+            cell.LoadTorchWeights(source, $"{lstm}weight_ih_l0{suffix}", $"{lstm}weight_hh_l0{suffix}", $"{lstm}bias_ih_l0{suffix}",
+                $"{lstm}bias_hh_l0{suffix}");
+        Quantizer.Load(source, "quantizer.quantizers.0.");
     }
 }

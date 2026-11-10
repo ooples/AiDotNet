@@ -103,6 +103,10 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private void ConfigureBase()
     {
         var o = _options;
+        if (o.NumEncoderLayers != 0)
+            throw new ArgumentException("NumEncoderLayers must be zero: Orpheus is a decoder-only causal Llama model.", nameof(_options));
+        if (o.Layers <= 0 || o.Heads <= 0 || o.KeyValueHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_options), "Llama layer and attention-head counts must be positive.");
         base.SampleRate = o.SampleRate;
         base.HopSize = o.CodecEncoderRates.Aggregate(1, (a, b) => a * b);
         base.HiddenDim = o.HiddenDim;
@@ -190,6 +194,7 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
             Intermediate = o.Intermediate, RmsEpsilon = o.RmsEpsilon, RopeTheta = o.RopeTheta, RopeScalingFactor = o.RopeScalingFactor,
             RopeLowFrequencyFactor = o.RopeLowFrequencyFactor, RopeHighFrequencyFactor = o.RopeHighFrequencyFactor,
             RopeOriginalMaxPositions = o.RopeOriginalMaxPositions, TieWordEmbeddings = true,
+            AttentionDropout = o.DropoutRate,
         });
         _lm.InitializeLikeReference(random);
         _codec = new Snac<T>(Engine, new SnacConfiguration
@@ -307,6 +312,7 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
         {
             using var _ = new NoGradScope<T>();
             var lm = LanguageModel;
+            lm.Training = false;
             var ids = new List<int>(prompt);
             var generated = new List<int>();
             var cache = new LlamaCache<T>();
@@ -469,6 +475,7 @@ public partial class OrpheusTTS<T> : TtsModelBase<T>, ICodecTts<T>
     internal Tensor<T> Loss(int[] ids)
     {
         var lm = LanguageModel;
+        lm.Training = IsTrainingMode;
         var row = Row(ids);
         var (_, logits) = lm.ForwardWithLogits(lm.Embed(row));
         return lm.CausalLmLoss(logits, row);

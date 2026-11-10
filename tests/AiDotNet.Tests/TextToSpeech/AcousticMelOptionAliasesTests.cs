@@ -20,6 +20,10 @@ public class AcousticMelOptionAliasesTests
         {
             "FastSpeech" => new FastSpeechOptions { FftFilterSize = 32, DurationPredictorFilterSize = 16 },
             "FastSpeech2" => new FastSpeech2Options { FftFilterSize = 32, VariancePredictorFilterSize = 16 },
+            "AlignTTS" => new AlignTTSOptions
+            {
+                FftFilterSize = 32, DurationPredictorDim = 8, DurationPredictorLayers = 1, MixDensityHiddenSize = 16,
+            },
             "TransformerTTS" => new TransformerTTSOptions
             {
                 FeedForwardDim = 32, EncoderPrenetLayers = 1, EncoderPrenetChannels = 16,
@@ -44,6 +48,7 @@ public class AcousticMelOptionAliasesTests
         {
             FastSpeechOptions fast => new FastSpeech<double>(arch, fast),
             FastSpeech2Options fast2 => new FastSpeech2<double>(arch, fast2),
+            AlignTTSOptions align => new AlignTTS<double>(arch, align),
             TransformerTTSOptions transformer => new TransformerTTS<double>(arch, transformer),
             _ => throw new ArgumentException("Unsupported acoustic fixture.", nameof(options)),
         };
@@ -52,6 +57,7 @@ public class AcousticMelOptionAliasesTests
     [Theory]
     [InlineData("FastSpeech")]
     [InlineData("FastSpeech2")]
+    [InlineData("AlignTTS")]
     [InlineData("TransformerTTS")]
     public void BaseTypedDecoderWidthChangesNativeMelProjectionAndSynthesis(string family)
     {
@@ -66,6 +72,7 @@ public class AcousticMelOptionAliasesTests
         {
             FastSpeech<double> fast => fast.Synthesize("hi"),
             FastSpeech2<double> fast2 => fast2.Synthesize("hi"),
+            AlignTTS<double> align => align.Synthesize("hi"),
             TransformerTTS<double> transformer => transformer.Synthesize("hi"),
             _ => throw new InvalidOperationException(),
         };
@@ -78,6 +85,8 @@ public class AcousticMelOptionAliasesTests
     [InlineData("FastSpeech", true)]
     [InlineData("FastSpeech2", false)]
     [InlineData("FastSpeech2", true)]
+    [InlineData("AlignTTS", false)]
+    [InlineData("AlignTTS", true)]
     [InlineData("TransformerTTS", false)]
     [InlineData("TransformerTTS", true)]
     public void LegacyMelGeometryWinsOverStaleSharedWidthInEitherPropertyOrder(string family, bool reverse)

@@ -1,3 +1,5 @@
+using AiDotNet.ModelLoading;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 public abstract partial class FishSpeechBase<T>
@@ -5,42 +7,15 @@ public abstract partial class FishSpeechBase<T>
     /// <summary>The release's codec checkpoint file name in the model directory.</summary>
     public const string CodecCheckpointName = "firefly-gan-vq-fsq-8x1024-21hz-generator.pth";
 
-    /// <summary>A checkpoint read once, its names stripped of a wrapper's prefix: each tensor becomes doubles when it is
-    /// read and is then released.</summary>
-    private sealed class Checkpoint
+    /// <summary>The checkpoint's state with a wrapper's prefix stripped, as the releases' loaders do: a Lightning
+    /// <c>state_dict</c>, then <paramref name="prefixes"/> (<c>model.</c> for the transformer, <c>generator.</c> for the
+    /// codec).</summary>
+    private static TorchTensorSource Unwrapped(TorchCheckpointFile file, params string[] prefixes)
     {
-        private readonly Dictionary<string, Tensor<float>> _tensors;
-        private readonly string _what;
-
-        public Checkpoint(string path, string what, params string[] prefixes)
-        {
-            _what = what;
-            var tensors = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-            // The releases' loaders: a Lightning "state_dict", then a "model." (transformer) or "generator." (codec) prefix.
-            foreach (var prefix in new[] { "state_dict." }.Concat(prefixes))
-                if (tensors.Keys.Any(k => k.StartsWith(prefix, StringComparison.Ordinal)))
-                    tensors = tensors.Where(p => p.Key.StartsWith(prefix, StringComparison.Ordinal))
-                        .ToDictionary(p => p.Key.Substring(prefix.Length), p => p.Value, StringComparer.Ordinal);
-            _tensors = tensors;
-        }
-
-        public double[]? Take(string name)
-        {
-            if (!_tensors.TryGetValue(name, out var tensor)) return null;
-            _tensors.Remove(name);
-            var values = new double[tensor.Length];
-            for (int i = 0; i < values.Length; i++) values[i] = tensor.GetFlat(i);
-            return values;
-        }
-
-        public double[] Read(string name, int[] shape)
-        {
-            var values = Take(name) ?? throw new InvalidDataException($"The {_what} checkpoint has no tensor '{name}'.");
-            long expected = shape.Aggregate(1L, (a, b) => a * b);
-            if (values.Length != expected)
-                throw new InvalidDataException($"The {_what} checkpoint's '{name}' has {values.Length} values; [{string.Join(", ", shape)}] needs {expected}.");
-            return values;
-        }
+        string prefix = "";
+        foreach (var next in new[] { "state_dict." }.Concat(prefixes))
+            if (file.Names.Any(k => k.StartsWith(prefix + next, StringComparison.Ordinal))) prefix += next;
+        return file.WithPrefix(prefix);
     }
 
     /// <summary>
@@ -66,8 +41,8 @@ public abstract partial class FishSpeechBase<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var checkpoint = new Checkpoint(path ?? throw new ArgumentNullException(nameof(path)), "transformer", "model.");
-        Transformer.Load(checkpoint.Read);
+        using var checkpoint = TorchCheckpointFile.Open(path ?? throw new ArgumentNullException(nameof(path)));
+        Transformer.Load(Unwrapped(checkpoint, "model."));
         _preferenceReference = null;
     }
 
@@ -76,7 +51,7 @@ public abstract partial class FishSpeechBase<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var checkpoint = new Checkpoint(path ?? throw new ArgumentNullException(nameof(path)), "codec", "generator.");
-        Codec.Load(checkpoint.Take);
+        using var checkpoint = TorchCheckpointFile.Open(path ?? throw new ArgumentNullException(nameof(path)));
+        Codec.Load(Unwrapped(checkpoint, "generator."));
     }
 }

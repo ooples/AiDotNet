@@ -67,6 +67,7 @@ public class TtsModelOptions : ModelOptions
     public virtual int HiddenDim { get; set; } = 256;
 
     /// <summary>Gets or sets the number of encoder layers.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Orpheus is a decoder-only Llama causal language model with no encoder; its native constructor requires NumEncoderLayers=0 (canopyai/Orpheus-TTS finetune/train.py).", ModelType = typeof(CodecBased.OrpheusTTS<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("CSM configures its native Llama layer counts through BackboneLayers and DecoderLayers.", ModelType = typeof(CodecBased.CSM<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("MinMo configures SenseVoice depth through LargeEncoderLayers, SmallEncoderBlocks and SmallEncoderTpBlocks.", ModelType = typeof(MultiModal.MinMo<>))]
     public virtual int NumEncoderLayers { get; set; } = 6;
@@ -74,7 +75,7 @@ public class TtsModelOptions : ModelOptions
     /// <summary>Gets or sets the number of decoder layers.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoice's released HiFi-GAN decoder has four upsampling stages [8,8,2,2]; other depths are rejected by the native constructor (myshell-ai/OpenVoice checkpoints/converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoice<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoiceV2's released HiFi-GAN decoder has four upsampling stages [8,8,2,2]; other depths are rejected by the native constructor (myshell-ai/OpenVoiceV2 converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoiceV2<>))]
-    public int NumDecoderLayers { get; set; } = 6;
+    public virtual int NumDecoderLayers { get; set; } = 6;
 
     /// <summary>Gets or sets the number of attention heads.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("CSM configures native attention heads through BackboneHeads, DecoderHeads and MimiHeads.", ModelType = typeof(CodecBased.CSM<>))]

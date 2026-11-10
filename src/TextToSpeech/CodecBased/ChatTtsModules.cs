@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Audio.Features;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.Vocoders;
 
@@ -19,7 +20,6 @@ internal sealed record ChatTtsStackConfiguration(int InputDim, int OutputDim, in
 /// <c>[1, channels, frames]</c>; layer norms use ε = 1e-6 and GELU is exact, as in the reference.</remarks>
 internal sealed class ChatTtsConvStack<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
 
     internal sealed record Block(NormedConv1DLayer<T> Depthwise, LayerNormalizationLayer<T> Norm, NormedConv1DLayer<T> Expand,
@@ -82,12 +82,14 @@ internal sealed class ChatTtsConvStack<T>
     }
 
     /// <summary>Loads <c>{prefix}conv_in.0/2</c>, <c>{prefix}decoder_block.{i}.*</c> and <c>{prefix}conv_out</c>.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the stack from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
         var c = Configuration;
         void Conv(NormedConv1DLayer<T> conv, string name, int output, int input, int kernel, bool bias = true) =>
-            conv.LoadTorchWeights(read(name + ".weight", new[] { output, input, kernel }), null,
-                bias ? read(name + ".bias", new[] { output }) : new double[output]);
+            conv.LoadTorchWeights(source, name + ".weight", new[] { output, input, kernel }, null, bias ? name + ".bias" : null);
         Conv(InputConv, prefix + "conv_in.0", c.BottleneckDim, c.InputDim, 3);
         Conv(BottleneckConv, prefix + "conv_in.2", c.Hidden, c.BottleneckDim, 3);
         for (int i = 0; i < Blocks.Count; i++)
@@ -95,12 +97,11 @@ internal sealed class ChatTtsConvStack<T>
             var b = Blocks[i];
             string p = $"{prefix}decoder_block.{i}";
             Conv(b.Depthwise, p + ".dwconv", c.Hidden, 1, c.Kernel);
-            TorchParameters.LayerNorm(_engine, b.Norm, read(p + ".norm.weight", new[] { c.Hidden }), read(p + ".norm.bias", new[] { c.Hidden }));
+            TorchParameters.LayerNorm(_engine, b.Norm, source, p + ".norm.weight", p + ".norm.bias");
             // pwconv1 / pwconv2 are nn.Linear over channels; the 1-wide convolutions take them as [out, in, 1].
-            b.Expand.LoadTorchWeights(read(p + ".pwconv1.weight", new[] { 4 * c.Hidden, c.Hidden }), null, read(p + ".pwconv1.bias", new[] { 4 * c.Hidden }));
-            b.Project.LoadTorchWeights(read(p + ".pwconv2.weight", new[] { c.Hidden, 4 * c.Hidden }), null, read(p + ".pwconv2.bias", new[] { c.Hidden }));
-            var gamma = read(p + ".weight", new[] { c.Hidden });
-            for (int k = 0; k < c.Hidden; k++) b.Scale.Scale[k] = NumOps.FromDouble(gamma[k]);
+            b.Expand.LoadTorchWeights(source, p + ".pwconv1.weight", new[] { 4 * c.Hidden, c.Hidden }, null, p + ".pwconv1.bias");
+            b.Project.LoadTorchWeights(source, p + ".pwconv2.weight", new[] { c.Hidden, 4 * c.Hidden }, null, p + ".pwconv2.bias");
+            source.CopyTo(p + ".weight", new[] { c.Hidden }, b.Scale.Scale);
             _engine.InvalidatePersistentTensor(b.Scale.Scale);
         }
         Conv(OutputConv, prefix + "conv_out", c.OutputDim, c.Hidden, 1, bias: false);
@@ -244,14 +245,17 @@ internal sealed class ChatTtsGroupedFsq<T>
     }
 
     /// <summary>Loads <c>{prefix}quantizer.rvqs.{g}.project_in/out</c>.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the projections from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
         int perGroup = Dim / Groups, d = _levels.Length;
         for (int g = 0; g < Groups; g++)
         {
             string p = $"{prefix}quantizer.rvqs.{g}";
-            TorchParameters.Linear(_engine, ProjectIn[g], perGroup, d, read(p + ".project_in.weight", new[] { d, perGroup }), read(p + ".project_in.bias", new[] { d }));
-            TorchParameters.Linear(_engine, ProjectOut[g], d, perGroup, read(p + ".project_out.weight", new[] { perGroup, d }), read(p + ".project_out.bias", new[] { perGroup }));
+            TorchParameters.Linear(_engine, ProjectIn[g], perGroup, d, source, p + ".project_in.weight", p + ".project_in.bias");
+            TorchParameters.Linear(_engine, ProjectOut[g], d, perGroup, source, p + ".project_out.weight", p + ".project_out.bias");
         }
     }
 }
@@ -265,7 +269,6 @@ internal sealed class ChatTtsGroupedFsq<T>
 /// </summary>
 internal sealed class ChatTtsMelDecoder<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly IEngine _engine;
     private readonly int _mels;
 
@@ -300,12 +303,14 @@ internal sealed class ChatTtsMelDecoder<T>
     }
 
     /// <summary>Loads <c>{prefix}decoder.*</c>, <c>{prefix}out_conv.weight</c> and <c>{prefix}coef</c>.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the decoder from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
-        Stack.LoadTorchWeights(read, prefix + "decoder.");
-        OutputConv.LoadTorchWeights(read(prefix + "out_conv.weight", new[] { _mels, Dim, 3 }), null, new double[_mels]);
-        var coef = read(prefix + "coef", new[] { 1, _mels, 1 });
-        for (int m = 0; m < _mels; m++) Coefficients.Scale[m] = NumOps.FromDouble(coef[m]);
+        Stack.LoadTorchWeights(source, prefix + "decoder.");
+        OutputConv.LoadTorchWeights(source, prefix + "out_conv.weight", new[] { _mels, Dim, 3 }, null, null);
+        source.CopyTo(prefix + "coef", new[] { 1, _mels, 1 }, Coefficients.Scale);
         _engine.InvalidatePersistentTensor(Coefficients.Scale);
     }
 }
@@ -379,11 +384,14 @@ internal sealed class ChatTtsDvaeEncoder<T>
     }
 
     /// <summary>Loads <c>{prefix}downsample_conv.0/2</c>, <c>{prefix}encoder.*</c> and the quantizer.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix)
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix) => LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the encoder from <paramref name="source"/>, each tensor copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix)
     {
-        Downsample1.LoadTorchWeights(read(prefix + "downsample_conv.0.weight", new[] { Dim, _mels, 3 }), null, read(prefix + "downsample_conv.0.bias", new[] { Dim }));
-        Downsample2.LoadTorchWeights(read(prefix + "downsample_conv.2.weight", new[] { Dim, Dim, 4 }), null, read(prefix + "downsample_conv.2.bias", new[] { Dim }));
-        Stack.LoadTorchWeights(read, prefix + "encoder.");
-        Quantizer.LoadTorchWeights(read, prefix + "vq_layer.");
+        Downsample1.LoadTorchWeights(source, prefix + "downsample_conv.0.weight", new[] { Dim, _mels, 3 }, null, prefix + "downsample_conv.0.bias");
+        Downsample2.LoadTorchWeights(source, prefix + "downsample_conv.2.weight", new[] { Dim, Dim, 4 }, null, prefix + "downsample_conv.2.bias");
+        Stack.LoadTorchWeights(source, prefix + "encoder.");
+        Quantizer.LoadTorchWeights(source, prefix + "vq_layer.");
     }
 }

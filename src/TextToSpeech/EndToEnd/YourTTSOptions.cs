@@ -18,6 +18,9 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// </remarks>
 public class YourTTSOptions : VITSOptions
 {
+    /// <summary>The width of the external H/ASP speaker embedding used by the native model.</summary>
+    public override int SpeakerEmbeddingDim { get => SpeakerEncoderDim; set => SpeakerEncoderDim = value; }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>

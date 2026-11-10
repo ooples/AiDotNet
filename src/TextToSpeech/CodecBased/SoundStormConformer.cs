@@ -211,6 +211,22 @@ internal static class TorchParameters
         layer.SetParameters(new Vector<T>(source.Read(name, shape).Select(ops.FromDouble).ToArray()));
     }
 
+    /// <summary>The bias-free layer's own <c>[in, out]</c> weight tensor for a loader that scatters a stored layout into it
+    /// (<see cref="AiDotNet.ModelLoading.TorchTensorSource.ReadChunks"/>), or a scratch tensor when the weight has no
+    /// storage (streamed); hand the result to <see cref="Commit{T}"/> once written.</summary>
+    public static Tensor<T> WeightsToWrite<T>(BiasFreeLinearLayer<T> layer, int inputs, int outputs)
+    {
+        var weights = layer.Weights;
+        return weights.Length == inputs * outputs && weights.Lifetime != WeightLifetime.Streaming ? weights : new Tensor<T>(new[] { inputs, outputs });
+    }
+
+    /// <summary>Publishes weights written into <see cref="WeightsToWrite{T}"/>'s tensor.</summary>
+    public static void Commit<T>(BiasFreeLinearLayer<T> layer, Tensor<T> written)
+    {
+        if (ReferenceEquals(written, layer.Weights)) AiDotNet.Tensors.Engines.AiDotNetEngine.Current.InvalidatePersistentTensor(written);
+        else layer.SetParameters(new Vector<T>(written.ToArray()));
+    }
+
     /// <summary>Loads an <c>nn.LayerNorm</c>'s weight and bias straight from <paramref name="source"/>.</summary>
     public static void LayerNorm<T>(IEngine engine, LayerNormalizationLayer<T> layer, AiDotNet.ModelLoading.TorchTensorSource source,
         string weightName, string biasName)
