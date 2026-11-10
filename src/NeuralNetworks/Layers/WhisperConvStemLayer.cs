@@ -74,7 +74,7 @@ public partial class WhisperConvStemLayer<T> : LayerBase<T>, IShapeContract
         int frames = input.Shape[rank - 2];
         if (input.Shape[rank - 1] != _numMels)
             throw new ArgumentException(
-                $"Whisper's stem was built for {_numMels} mel bins; got {input.Shape[rank - 1]}.", nameof(input));
+                $"Whisper's stem was built for {_numMels} mel bins (its first convolution's input channels) on the last axis; got {input.Shape[rank - 1]}.", nameof(input));
 
         // [B, T, M] -> [B, M, T] -> conv -> conv -> [B, W, T'] -> [B, T', W].
         var channelsFirst = Engine.TensorPermute(Engine.Reshape(input, new[] { batch, frames, _numMels }), new[] { 0, 2, 1 });

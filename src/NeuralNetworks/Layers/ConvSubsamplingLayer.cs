@@ -94,10 +94,10 @@ public partial class ConvSubsamplingLayer<T> : LayerBase<T>, IShapeContract
         int features = input.Shape[rank - 1];
         if (features != _inputFeatures)
             throw new ArgumentException(
-                $"Convolution subsampling was built for {_inputFeatures} feature bins; got {features}.", nameof(input));
+                $"Convolution subsampling was built for a feature size of {_inputFeatures} on the last axis; got {features}.", nameof(input));
         if (time < MinimumExtent)
             throw new ArgumentException(
-                $"Convolution subsampling needs at least {MinimumExtent} frames; got {time}.", nameof(input));
+                $"Convolution subsampling needs at least {MinimumExtent} frames on the time axis; got {time}.", nameof(input));
 
         // [B, T, F] -> [B, 1, T, F] -> conv -> [B, C, T', F'] -> [B, T', C, F'] -> [B, T', C * F'] -> [B, T', D].
         var image = Engine.Reshape(input, new[] { batch, 1, time, features });
