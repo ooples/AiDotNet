@@ -21,6 +21,9 @@ namespace AiDotNet.TextToSpeech.EndToEnd;
 /// </remarks>
 public class PiperOptions : VITSOptions
 {
+    /// <summary>Whether Piper's native framing inserts <see cref="PadId"/> after the sentence start and every phoneme.</summary>
+    public override bool AddBlank { get => InterspersePad; set => InterspersePad = value; }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
@@ -36,7 +39,6 @@ public class PiperOptions : VITSOptions
     /// <summary>Creates Piper's medium configuration.</summary>
     public PiperOptions()
     {
-        AddBlank = false;
         SpeakerEmbeddingDim = 512;
         ResblockType = 2;
         ResblockKernelSizes = [3, 5, 7];

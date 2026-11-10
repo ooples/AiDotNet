@@ -23,6 +23,10 @@ internal sealed class VitsOptionsConverter : JsonConverter
         if (typeof(YourTTSOptions).IsAssignableFrom(objectType)
             && data.GetValue("SpeakerEncoderDim", StringComparison.OrdinalIgnoreCase) is not null)
             Remove("SpeakerEmbeddingDim");
+        // Older Piper options stored an independent AddBlank=false beside the native InterspersePad=true.
+        if (typeof(PiperOptions).IsAssignableFrom(objectType)
+            && data.GetValue("InterspersePad", StringComparison.OrdinalIgnoreCase) is not null)
+            Remove("AddBlank");
         var options = existingValue ?? serializer.ContractResolver.ResolveContract(objectType).DefaultCreator?.Invoke()
             ?? throw new JsonSerializationException($"Cannot construct {objectType.FullName} options.");
         using var normalized = data.CreateReader();

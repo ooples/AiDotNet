@@ -200,7 +200,7 @@ public abstract class VitsModelOptions : EndToEndTtsOptions
     public int UpdatesPerEpoch { get; set; } = 196;
 
     /// <summary>Gets or sets whether a blank token (0) is placed between and around the characters.</summary>
-    public bool AddBlank { get; set; } = true;
+    public virtual bool AddBlank { get; set; } = true;
 
     /// <summary>Gets or sets the number of speakers; above one, a speaker table conditions the model and every training
     /// sample and synthesis names its speaker (0: a single-speaker model).</summary>

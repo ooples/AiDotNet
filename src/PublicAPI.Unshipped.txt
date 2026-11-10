@@ -1,4 +1,11 @@
 #nullable enable
+*REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.get -> bool
+*REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.set -> void
+virtual AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.get -> bool
+virtual AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.set -> void
+override AiDotNet.TextToSpeech.EndToEnd.PiperOptions.AddBlank.get -> bool
+override AiDotNet.TextToSpeech.EndToEnd.PiperOptions.AddBlank.set -> void
+
 override AiDotNet.TextToSpeech.Classic.GradTTSOptions.EncoderDim.get -> int
 override AiDotNet.TextToSpeech.Classic.GradTTSOptions.EncoderDim.set -> void
 override AiDotNet.TextToSpeech.Classic.GradTTSOptions.NumDecoderLayers.get -> int

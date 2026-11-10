@@ -5,6 +5,8 @@ using AiDotNet.Enums;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TextToSpeech.EndToEnd;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Xunit;
 
 namespace AiDotNet.Tests.TextToSpeech;
@@ -55,6 +57,11 @@ public class PiperPaperTests
         Assert.Equal(1, high.ResblockType);
         Assert.Equal(new[] { 8, 8, 2, 2 }, high.UpsampleRates);
         Assert.Equal(512, high.UpsampleInitialChannels);
+        foreach (var options in new[] { low, medium, high })
+        {
+            Assert.True(options.InterspersePad);
+            Assert.True(((VitsModelOptions)options).AddBlank);
+        }
     }
 
     [Fact(Timeout = 300000)]
@@ -85,6 +92,62 @@ public class PiperPaperTests
         var options = Small();
         options.InterspersePad = false;
         Assert.Equal(new double[] { 1, 7, 9, 11, 2 }, new Probe(options).Frame(ids).ToVector().ToArray());
+    }
+
+    private static double[] Framed(bool pad) => pad
+        ? new double[] { 1, 0, 7, 0, 9, 0, 11, 0, 2 }
+        : new double[] { 1, 7, 9, 11, 2 };
+
+    private static Tensor<double> Phonemes() => new(new[] { 3 }, new Vector<double>(new double[] { 7, 9, 11 }));
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SharedBlankOption_ControlsNativePiperFraming(bool pad)
+    {
+        var options = Small();
+        VitsModelOptions shared = options;
+        shared.AddBlank = pad;
+        Assert.Equal(pad, options.InterspersePad);
+        using var model = new Probe(options);
+        Assert.Equal(Framed(pad), model.Frame(Phonemes()).ToVector().ToArray());
+        options.InterspersePad = !pad;
+        Assert.Equal(!pad, shared.AddBlank);
+    }
+
+    public class DerivedPiperOptions : PiperOptions { public string Marker { get; set; } = "custom"; }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public void LegacyPaddingJson_NativeFlagWinsStaleSharedFlagInEitherOrder(bool pad, bool reverse)
+    {
+        // Full options from before AddBlank named Piper's native interspersePad setting.
+        var data = JObject.FromObject(Small());
+        data["InterspersePad"] = pad;
+        data["AddBlank"] = !pad;
+        data["Marker"] = "restored";
+        if (reverse) data = new JObject(data.Properties().Reverse().Select(p => new JProperty(p.Name, p.Value.DeepClone())));
+        var options = JsonConvert.DeserializeObject<DerivedPiperOptions>(data.ToString())!;
+        Assert.Equal("restored", options.Marker);
+        Assert.Equal(pad, options.AddBlank); Assert.Equal(pad, options.InterspersePad);
+        var copy = new PiperOptions(options);
+        Assert.Equal(pad, copy.AddBlank); Assert.Equal(pad, copy.InterspersePad);
+        using var model = new Probe(copy);
+        Assert.Equal(Framed(pad), model.Frame(Phonemes()).ToVector().ToArray());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SharedFlagOnlyJson_SetsTheNativePaddingOption(bool pad)
+    {
+        var options = JsonConvert.DeserializeObject<PiperOptions>("{ 'AddBlank': " + (pad ? "true" : "false") + " }")!;
+        Assert.Equal(pad, options.InterspersePad);
+        var copy = new PiperOptions(options);
+        Assert.Equal(pad, copy.AddBlank); Assert.Equal(pad, copy.InterspersePad);
     }
 
     private sealed class Probe : Piper<double>
