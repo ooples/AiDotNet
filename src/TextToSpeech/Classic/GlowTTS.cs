@@ -47,9 +47,11 @@ namespace AiDotNet.TextToSpeech.Classic;
     Year = 2020,
     Authors = "Kim et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam,
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1.0, Beta1 = 0.9, Beta2 = 0.98, Epsilon = 1e-9,
                 Schedule = LearningRateSchedulerType.Noam, WarmupSteps = 4000,
-                Source = "Kim et al. 2020, Sec. 4: Adam with the Noam learning rate schedule, trained for 240K iterations. No peak rate is declared because the paper states none, and the Noam peak is a function of the model dimension; the warmup is the schedule default of 4000 from Vaswani et al. 2017, which the paper cites without restating a length.")]
+                Source = "Kim et al. 2020, Sec. 4: Adam with the Noam schedule, trained for 240K iterations. "
+                    + "Released configs/base.json and commons.Adam specify multiplier 1, betas (0.9,0.98), epsilon 1e-9, "
+                    + "4000 warmup updates and the encoder hidden dimension; train.py clips gradient values to +/-5.")]
 public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingObjectiveProvider<T>
 {
     private readonly GlowTTSOptions _options;
@@ -99,11 +101,24 @@ public partial class GlowTTS<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainingO
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
-        _optimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        MaxGradNorm = NumOps.Zero; // The release clamps gradient values to +/-5; it does not clip their norm.
+        _optimizer = optimizer ?? CreateNativeOptimizer();
         InitializeLayers();
     }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateNativeOptimizer()
+    {
+        var optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+            learningRateOverride: _options.LearningRate, weightDecayOverride: _options.WeightDecay,
+            learningRateSchedulerOverride: new AiDotNet.LearningRateSchedulers.NoamSchedule(_options.HiddenDim, 4000, _options.LearningRate))
+            ?? throw new InvalidOperationException("Glow-TTS's native Adam recipe could not be created.");
+        if (optimizer.GetOptions() is GradientBasedOptimizerOptions<T, Tensor<T>, Tensor<T>> settings)
+            settings.EnableGradientClipping = false;
+        return optimizer;
+    }
+
+    /// <inheritdoc />
+    protected override double GradientValueClip => 5.0;
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
     public int MaxTextLength => _options.MaxTextLength;

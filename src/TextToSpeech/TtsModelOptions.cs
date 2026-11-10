@@ -24,7 +24,9 @@ public class TtsModelOptions : ModelOptions
 
         SampleRate = other.SampleRate;
         MelChannels = other.MelChannels;
-        HopSize = other.HopSize;
+        // Derived options restore their own native stride arrays after this base constructor.
+        // Copy the shared slot without dispatching a derived setter against not-yet-restored geometry.
+        _hopSize = other.HopSize;
         FftSize = other.FftSize;
         HiddenDim = other.HiddenDim;
         NumEncoderLayers = other.NumEncoderLayers;
@@ -45,7 +47,7 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("Bark's released EnCodec renderer operates at 24000 Hz; BarkOptions.Validate rejects every other sample rate.", ModelType = typeof(CodecBased.BarkModel<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("The released OpenVoice converter config fixes audio at 22050 Hz; the native constructor rejects other rates (myshell-ai/OpenVoice checkpoints/converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoice<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("The released OpenVoiceV2 converter config fixes audio at 22050 Hz; the native constructor rejects other rates (myshell-ai/OpenVoiceV2 converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoiceV2<>))]
-    public int SampleRate { get; set; } = 22050;
+    public virtual int SampleRate { get; set; } = 22050;
 
     /// <summary>Gets or sets the number of mel-spectrogram frequency channels.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro predicts waveform spectra directly with ISTFTNet and has no mel-spectrogram representation.", ModelType = typeof(EndToEnd.Kokoro<>))]
@@ -56,7 +58,8 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro has no mel frontend; its released ISTFTNet upsampling and inverse-STFT hop geometry are fixed by the decoder.", ModelType = typeof(EndToEnd.Kokoro<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoice's released HiFi-GAN strides [8,8,2,2] fix its hop at 256; the native constructor rejects other hops (myshell-ai/OpenVoice checkpoints/converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoice<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoiceV2's released HiFi-GAN strides [8,8,2,2] fix its hop at 256; the native constructor rejects other hops (myshell-ai/OpenVoiceV2 converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoiceV2<>))]
-    public virtual int HopSize { get; set; } = 256;
+    public virtual int HopSize { get => _hopSize; set => _hopSize = value; }
+    private int _hopSize = 256;
 
     /// <summary>Gets or sets the FFT window size.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro has no configurable analysis FFT; its released ISTFTNet synthesis transform has fixed decoder geometry.", ModelType = typeof(EndToEnd.Kokoro<>))]
@@ -68,6 +71,7 @@ public class TtsModelOptions : ModelOptions
 
     /// <summary>Gets or sets the number of encoder layers.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Orpheus is a decoder-only Llama causal language model with no encoder; its native constructor requires NumEncoderLayers=0 (canopyai/Orpheus-TTS finetune/train.py).", ModelType = typeof(CodecBased.OrpheusTTS<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("OuteTTS uses LlamaForCausalLM or Qwen3ForCausalLM without a separate text encoder; its native constructor requires NumEncoderLayers=0 (OuteAI/Llama-OuteTTS-1.0-1B config.json).", ModelType = typeof(Latest.OuteTTS<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("CSM configures its native Llama layer counts through BackboneLayers and DecoderLayers.", ModelType = typeof(CodecBased.CSM<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("MinMo configures SenseVoice depth through LargeEncoderLayers, SmallEncoderBlocks and SmallEncoderTpBlocks.", ModelType = typeof(MultiModal.MinMo<>))]
     public virtual int NumEncoderLayers { get; set; } = 6;
@@ -97,6 +101,9 @@ public class TtsModelOptions : ModelOptions
     public int MaxMelLength { get; set; } = 2048;
 
     /// <summary>Gets or sets the dropout rate.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("FreGrad's published frequency-aware residual network has no dropout (Nguyen et al. 2024, Figure 2 and Section 3.2; kaistmm/fregrad model.py); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.FreGrad<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("PriorGrad's published DiffWave vocoder has no dropout (Lee et al. 2022, Section 4.2; Microsoft NeuralSpeech PriorGrad-vocoder/model.py); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.PriorGrad<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("WaveGrad's UBlock, DBlock and FiLM modules have no dropout (Chen et al. 2021, Appendix A, Figures 4-6); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.WaveGrad<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("DiTTo uses this inherited setting only in its frozen SpeechT5 encoder, which always runs in inference mode; its trainable diffusion transformer has no dropout.", ModelType = typeof(FlowDiffusion.DiTToTTS<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("BigVGAN uses deterministic convolutional generator and discriminator blocks, without dropout.", ModelType = typeof(Vocoders.BigVGAN<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Voicebox configures dropout through AudioAttentionDropout, AudioActivationDropout, DurationAttentionDropout and DurationActivationDropout.", ModelType = typeof(CodecBased.Voicebox<>))]

@@ -155,6 +155,12 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     /// <summary>The global gradient-norm clip of a training group ("generator" or "discriminator"), 0 for none.</summary>
     protected virtual double GradientClipNorm(string group) => 0.0;
 
+    /// <summary>Prepares inputs which a paper shares between the generator and discriminator updates.</summary>
+    protected virtual void PrepareTrainingStep(Tensor<T> mel, Tensor<T> audio) { }
+
+    /// <summary>Releases inputs shared only for the current generator/discriminator training step.</summary>
+    protected virtual void CompleteTrainingStep() { }
+
     /// <summary>Sub-networks of a training group whose gradients are clipped separately (BigVGAN clips its period and
     /// resolution discriminators each to its own norm), or null to clip the group as one.</summary>
     protected virtual IReadOnlyList<IReadOnlyList<LayerBase<T>>>? ClippingLayerGroups(string group) => null;
@@ -164,8 +170,13 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     {
         if (_trainingGroup is null) return null;
         var groups = ClippingLayerGroups(_trainingGroup);
-        if (groups is null) return null;
         var trainable = new HashSet<Tensor<T>>(trainableParameters, Helpers.TensorReferenceComparer<Tensor<T>>.Instance);
+        // Discriminators are ComponentLayers, not the primary encoder/decoder Layers.
+        // The generic default clipping set therefore misses them; clip the active GAN
+        // group's actual selected tensors unless the paper defines finer subgroups.
+        if (groups is null)
+            return new[] { (IReadOnlyList<Tensor<T>>)Training.TapeTrainingStep<T>.CollectParameters(_trainingLayers!.ToList(), -1)
+                .Where(trainable.Contains).ToList() };
         return groups.Select(g => (IReadOnlyList<Tensor<T>>)Training.TapeTrainingStep<T>.CollectParameters(g.Cast<ILayer<T>>().ToList(), -1)
             .Where(trainable.Contains).ToList()).ToList();
     }
@@ -271,9 +282,16 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
         if (IsOnnxMode)
             throw new NotSupportedException("Training is not supported in ONNX mode.");
         var audio = sample.Audio ?? throw new ArgumentException($"{GetType().Name} trains on recordings; set Audio.", nameof(sample));
-        var segment = Segment(audio, _trainingRandom);
-        TrainStep(FramesOf(segment), segment);
+        var pair = RecordingPair(audio, _trainingRandom);
+        TrainStep(pair.Mel, pair.Audio);
         return LastLoss ?? NumOps.Zero;
+    }
+
+    /// <summary>The real recording segment and its input mel features for a training step.</summary>
+    protected virtual (Tensor<T> Mel, Tensor<T> Audio) RecordingPair(Tensor<T> audio, Random random)
+    {
+        var segment = Segment(audio, random);
+        return (FramesOf(segment), segment);
     }
 
     // The input features of a segment, one frame per hop: a centred STFT's extra last frame is dropped, so frame f
@@ -328,15 +346,27 @@ public abstract partial class GanVocoderBase<T> : VocoderBase<T>, ITrainingObjec
     {
         SetTrainingMode(true);
         _rememberedGeneration = null;
-        bool adversarial = _trainingSteps >= DiscriminatorStartStep;
-        if (adversarial && DiscriminatorStepFirst) DiscriminatorStep(mel, segment);
-        TrainLayers(_generatorLayers, mel, segment, () => GeneratorLoss(mel, segment, adversarial), "generator");
-        if (adversarial && !DiscriminatorStepFirst) DiscriminatorStep(mel, segment);
-        _trainingSteps++;
+        try
+        {
+            PrepareTrainingStep(mel, segment);
+            bool adversarial = _trainingSteps >= DiscriminatorStartStep;
+            if (adversarial && DiscriminatorStepFirst) DiscriminatorStep(mel, segment);
+            TrainLayers(_generatorLayers, mel, segment, () => GeneratorLoss(mel, segment, adversarial), "generator");
+            if (adversarial && !DiscriminatorStepFirst) DiscriminatorStep(mel, segment);
+            _trainingSteps++;
+        }
+        finally
+        {
+            CompleteTrainingStep();
+            SetTrainingMode(false);
+        }
     }
 
     private void DiscriminatorStep(Tensor<T> mel, Tensor<T> segment)
     {
+        // A preceding generator objective restores inference mode on exit. The fresh
+        // detached generation is still training: PWG reuses this batch's Gaussian input.
+        SetTrainingMode(true);
         Tensor<T> generated;
         if (_rememberedGeneration is not null)
         {

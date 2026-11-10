@@ -37,7 +37,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2022,
     Authors = "Lee et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, ReferenceBatchSize = 16,
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, ReferenceBatchSize = 16,
                 Source = "Lee et al. 2022, Sec. 4: Adam at 2e-4 for 1M iterations; batch 16 from the PriorGrad-vocoder params.py.")]
 public partial class PriorGrad<T> : DiffusionVocoderBase<T>
 {
@@ -78,12 +78,20 @@ public partial class PriorGrad<T> : DiffusionVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateNetwork()
     {
         var o = PaperOptions;
+        if (o.Conditioner != DiffWaveConditioner.MelSpectrogram)
+            throw new ArgumentException("PriorGrad's vocoder prior requires mel-spectrogram conditioning.", nameof(o.Conditioner));
+        if (o.NumClasses != 0)
+            throw new ArgumentException("PriorGrad's published vocoder has no discrete-label conditioner.", nameof(o.NumClasses));
+        if (o.DropoutRate != 0.0)
+            throw new ArgumentException("PriorGrad's published DiffWave denoiser has no dropout; DropoutRate must be zero.", nameof(o.DropoutRate));
+        if (o.UpsampleStrides.Length < 1 || o.UpsampleStrides.Any(s => s < 2 || s % 2 != 0))
+            throw new ArgumentException("PriorGrad's transposed-convolution strides must be positive and even.", nameof(o.UpsampleStrides));
         if (UpsampleFactor != o.HopSize)
             throw new ArgumentException($"The upsampler's strides ({string.Join("x", o.UpsampleStrides)}) must multiply to the hop ({o.HopSize}).");
         _network = new DiffWaveNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
             o.MelChannels, o.ResChannels, o.NumResLayers, o.DilationCycle, o.NoiseSchedule.Length, o.UpsampleStrides);
         _features = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels,
-            o.MelMinFrequency, o.MelMaxFrequency);
+            o.MelMinFrequency, o.MelMaxFrequency, singlePrecisionBasis: true);
         return _network.Layers;
     }
 
@@ -96,6 +104,33 @@ public partial class PriorGrad<T> : DiffusionVocoderBase<T>
     {
         var rows = _features!.Forward(audio);
         return Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, PaperOptions.MelChannels, rows.Shape[0] });
+    }
+
+    /// <inheritdoc />
+    protected override (Tensor<T> Condition, Tensor<T> Audio) RecordingPair(TtsTrainingSample<T> sample, Tensor<T> audio, Random random)
+        => PrepareRecording(audio, random);
+
+    internal (Tensor<T> Condition, Tensor<T> Audio) PrepareRecording(Tensor<T> audio, Random random)
+    {
+        var normalized = NormalizeRecording(audio);
+        int samples = checked(PaperOptions.CropFrames * UpsampleFactor);
+        if (samples < UpsampleFactor || normalized.Length < samples)
+            throw new ArgumentException("PriorGrad's training recording must contain a complete configured crop.", nameof(audio));
+        int start = random.Next(0, normalized.Length - samples + 1);
+        var segment = Engine.TensorSlice(normalized, new[] { start }, new[] { samples });
+        return (ComputeMel(segment), segment);
+    }
+
+    // Released NumpyDataset: peak-normalize before trimming the incomplete trailing hop.
+    private Tensor<T> NormalizeRecording(Tensor<T> audio)
+    {
+        var flat = Flat(audio);
+        double peak = 0;
+        for (int i = 0; i < flat.Length; i++) peak = Math.Max(peak, Math.Abs(NumOps.ToDouble(flat[i])));
+        double scale = peak >= 2.2250738585072014e-308 ? .95 / peak : .95;
+        int samples = flat.Length - flat.Length % UpsampleFactor;
+        if (samples == 0) throw new ArgumentException("The recording must contain at least one complete hop.", nameof(audio));
+        return Engine.TensorMultiplyScalar(Engine.TensorSlice(flat, new[] { 0 }, new[] { samples }), NumOps.FromDouble(scale));
     }
 
     /// <summary>The prior's standard deviation per sample <c>[1, 1, samples]</c> for a mel spectrogram
@@ -115,7 +150,7 @@ public partial class PriorGrad<T> : DiffusionVocoderBase<T>
     public void FitEnergyStatistics(IEnumerable<Tensor<T>> recordings, bool useDataMaximum = false)
     {
         if (recordings is null) throw new ArgumentNullException(nameof(recordings));
-        EnergyPrior.Fit(recordings.Select(ComputeMel), PaperOptions, useDataMaximum);
+        EnergyPrior.Fit(recordings.Select(audio => ComputeMel(NormalizeRecording(audio))), PaperOptions, useDataMaximum);
     }
 
     /// <inheritdoc />
@@ -136,12 +171,15 @@ public partial class PriorGrad<T> : DiffusionVocoderBase<T>
 
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
-        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = PaperOptions.LearningRate,
-                UseAdaptiveBetas = false,
-            }));
+    {
+        var optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+            learningRateOverride: PaperOptions.LearningRate, weightDecayOverride: PaperOptions.WeightDecay)
+            ?? throw new InvalidOperationException("PriorGrad's native Adam recipe could not be created.");
+        // The released learner uses max_grad_norm=None; the paper's Adam has no additional clip.
+        if (optimizer.GetOptions() is GradientBasedOptimizerOptions<T, Tensor<T>, Tensor<T>> settings)
+            settings.EnableGradientClipping = false;
+        return optimizer;
+    }
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()

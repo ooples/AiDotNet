@@ -120,6 +120,11 @@ public partial class NaturalSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>
         MaxGradNorm = NumOps.Zero;
         if (o.HiddenDim % o.NumHeads != 0 || o.HiddenDim % 2 != 0) throw new ArgumentException("HiddenDim must be even and divide by NumHeads.");
         if (o.HiddenDim % o.MemoryHeads != 0) throw new ArgumentException("HiddenDim must divide by MemoryHeads.");
+        if (o.UpsampleRates.Length < 1 || o.UpsampleRates.Length > 30 || o.UpsampleRates.Any(rate => rate <= 0)
+            || o.UpsampleKernels.Length != o.UpsampleRates.Length
+            || o.UpsampleKernels.Where((kernel, i) => kernel < o.UpsampleRates[i] || (kernel - o.UpsampleRates[i]) % 2 != 0).Any()
+            || o.UpsampleInitialChannels <= 0 || o.UpsampleInitialChannels % (1L << o.UpsampleRates.Length) != 0)
+            throw new ArgumentException("The decoder needs paired positive strides/kernels of matching parity and channels divisible at every stage.");
         if (o.UpsampleRates.Aggregate(1, (a, b) => a * b) != o.HopSize)
             throw new ArgumentException($"The decoder's upsampling rates must multiply to HopSize {o.HopSize}.");
         if (o.SegmentFrames < 1) throw new ArgumentException("SegmentFrames must be positive.");

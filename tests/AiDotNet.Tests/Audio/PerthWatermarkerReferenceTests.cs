@@ -13,8 +13,8 @@ using Xunit;
 namespace AiDotNet.Tests.Audio;
 
 /// <summary>Resemble's Perth implicit watermarker against resemble-perth 1.0.1 (<c>tools/reference-data/perth_reference.py</c>):
-/// the watermarked signal and the detections of a tiny model; with <c>PERTH_CHECKPOINT</c> set (perth_net_250000.pth.tar
-/// from the resemble-perth package), the released model's.</summary>
+/// the watermarked signal and the detections of a tiny model and the actual released model. The hash-verified release
+/// checkpoint is cached automatically, or supplied through <c>PERTH_CHECKPOINT</c>.</summary>
 public class PerthWatermarkerReferenceTests
 {
     private static double[] Doubles(JToken t) => t.Select(v => (double)v).ToArray();
@@ -59,8 +59,7 @@ public class PerthWatermarkerReferenceTests
         tiny.LoadTorchWeights(TorchTensorSource.From(n => state[n] is { } v ? Doubles(v) : null));
         Check(tiny, f["tiny"]!, signal, 1e-9, 3e-6);
 
-        string? checkpoint = Environment.GetEnvironmentVariable("PERTH_CHECKPOINT");
-        if (checkpoint is null || !File.Exists(checkpoint)) return;
+        string checkpoint = PerthReleasedCheckpointFixture.CheckpointPath;
         var released = PerthWatermarker<double>.Load(AiDotNetEngine.Current, checkpoint);
         Check(released, f["released"]!, signal, 1e-6, 1e-5);
     }

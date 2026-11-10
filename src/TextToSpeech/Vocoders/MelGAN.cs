@@ -5,6 +5,7 @@ using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Optimizers;
+using AiDotNet.Regularization;
 
 namespace AiDotNet.TextToSpeech.Vocoders;
 
@@ -72,7 +73,12 @@ public partial class MelGAN<T> : GanVocoderBase<T>
     {
         var o = PaperOptions;
         _generator = new MelGanGenerator<T>(Engine, o.MelChannels, o.Ngf * (1 << o.UpsampleRates.Length), o.UpsampleRates, o.ResidualLayers);
-        _mel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, UpsampleFactor, o.WindowSize, o.MelChannels, 0.0, o.SampleRate / 2.0);
+        if (o.SegmentSize <= 0)
+            throw new ArgumentOutOfRangeException(nameof(o.SegmentSize));
+        if (double.IsNaN(o.WeightDecay) || double.IsInfinity(o.WeightDecay) || o.WeightDecay < 0)
+            throw new ArgumentOutOfRangeException(nameof(o.WeightDecay));
+        _mel = new DifferentiableMel<T>(Engine, o.SampleRate, o.FftSize, UpsampleFactor, o.WindowSize, o.MelChannels,
+            0.0, o.SampleRate / 2.0, singlePrecisionBasis: true);
         return _generator.Layers;
     }
 
@@ -93,7 +99,9 @@ public partial class MelGAN<T> : GanVocoderBase<T>
 
     private Tensor<T> LogMel10(Tensor<T> audio, out int frames)
     {
-        var rows = Engine.TensorMultiplyScalar(_mel!.Forward(audio), NumOps.FromDouble(1.0 / Math.Log(10.0)));   // [frames, mel]
+        // Audio2Mel has no magnitude epsilon; HiFi-GAN's 1e-9 changes low-energy MelGAN features.
+        var rows = Engine.TensorMultiplyScalar(_mel!.LogMel(_mel.Magnitude(audio, epsilon: 0)),
+            NumOps.FromDouble(1.0 / Math.Log(10.0)));   // [frames, mel]
         frames = rows.Shape[0];
         return Engine.Reshape(Engine.TensorTranspose(rows), new[] { 1, PaperOptions.MelChannels, frames });
     }
@@ -128,15 +136,39 @@ public partial class MelGAN<T> : GanVocoderBase<T>
 
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer(string group)
-        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = PaperOptions.LearningRate,
-                Beta1 = PaperOptions.Beta1,
-                Beta2 = PaperOptions.Beta2,
-                // Adam's options adapt the betas during training by default; the paper's stay fixed.
-                UseAdaptiveBetas = false,
-            }));
+    {
+        var settings = new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+        {
+            InitialLearningRate = PaperOptions.LearningRate,
+            Beta1 = PaperOptions.Beta1,
+            Beta2 = PaperOptions.Beta2,
+            Epsilon = 1e-8,
+            UseAdaptiveBetas = false,
+            EnableGradientClipping = false,
+        };
+        if (PaperOptions.WeightDecay > 0)
+            settings.Regularization = new L2Regularization<T, Tensor<T>, Tensor<T>>(
+                new RegularizationOptions { Strength = PaperOptions.WeightDecay, L1Ratio = 0.0 });
+        return PaperOptimizerFactory.VerifyHandBuilt(this,
+            new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this, settings), group);
+    }
+
+    /// <inheritdoc />
+    protected override (Tensor<T> Mel, Tensor<T> Audio) RecordingPair(Tensor<T> audio, Random random)
+        => base.RecordingPair(PrepareRecordingAudio(audio, random), random);
+
+    // Released AudioDataset.load_wav_to_torch normalizes the complete recording, then draws its
+    // amplitude before __getitem__ chooses an arbitrary sample crop (or zero-pads a short recording).
+    internal Tensor<T> PrepareRecordingAudio(Tensor<T> audio, Random random)
+    {
+        var flat = Flat(audio);
+        double peak = 0;
+        for (int i = 0; i < flat.Length; i++)
+            peak = Math.Max(peak, Math.Abs(NumOps.ToDouble(flat[i])));
+        double amplitude = 0.3 + 0.7 * random.NextDouble();
+        double scale = peak >= 1.1754943508222875e-38 ? 0.95 * amplitude / peak : 0.95 * amplitude;
+        return Engine.TensorMultiplyScalar(flat, NumOps.FromDouble(scale));
+    }
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()

@@ -36,8 +36,9 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2019,
     Authors = "Prenger et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 24,
-                Source = "Prenger et al. 2019, Sec. 3.1: Adam with a step size of 1e-4 and a batch size of 24, 580k iterations (5e-5 after a plateau).")]
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, ReferenceBatchSize = 24,
+                Source = "Prenger et al. 2019, Sec. 3.1: Adam with a step size of 1e-4 and a batch size of 24, 580k iterations (5e-5 after a plateau). "
+                    + "NVIDIA/waveglow train.py uses torch.optim.Adam's fixed default betas (0.9, 0.999) and epsilon 1e-8.")]
 public partial class WaveGlow<T> : SegmentVocoderBase<T>
 {
     private WaveGlowFlow<T>? _flow;
@@ -72,8 +73,10 @@ public partial class WaveGlow<T> : SegmentVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateNetwork()
     {
         var o = PaperOptions;
-        if (o.HopSize % o.GroupSize != 0)
+        if (o.GroupSize < 2 || o.HopSize <= 0 || o.HopSize % o.GroupSize != 0)
             throw new ArgumentException($"The hop ({o.HopSize}) must be a multiple of the group size ({o.GroupSize}).");
+        if (o.SegmentSamples < o.GroupSize)
+            throw new ArgumentOutOfRangeException(nameof(o.SegmentSamples), "A recording segment must contain at least one audio group.");
         _flow = new WaveGlowFlow<T>(Engine, o.MelChannels, o.HopSize, o.UpsampleKernel, o.GroupSize, o.NumFlows, o.EarlyOutputEvery,
             o.EarlyOutputChannels, o.NumWaveNetLayers, o.ResidualChannels, o.GateChannels, o.SkipChannels, o.KernelSize);
         _features = new TacotronSpectrogram(o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, o.MelMinFrequency, o.MelMaxFrequency);
@@ -93,6 +96,52 @@ public partial class WaveGlow<T> : SegmentVocoderBase<T>
             for (int m = 0; m < bands; m++) mel[0, m, f] = NumOps.FromDouble(rows[f, m]);
         return mel;
     }
+
+    /// <inheritdoc />
+    protected override (Tensor<T> Condition, Tensor<T> Audio) RecordingPair(TtsTrainingSample<T> sample, Tensor<T> audio, Random random)
+        => PrepareRecording(audio, random);
+
+    /// <summary>NVIDIA mel2samp.py: crop or zero-pad exactly segment_length raw samples, then compute their mel features.
+    /// The released 16,000-sample crop is intentionally not rounded down to a 256-sample hop boundary.</summary>
+    internal (Tensor<T> Condition, Tensor<T> Audio) PrepareRecording(Tensor<T> recording, Random random)
+    {
+        var flat = Flat(recording);
+        int count = PaperOptions.SegmentSamples;
+        Tensor<T> segment;
+        if (flat.Length >= count)
+        {
+            int start = random.Next(0, flat.Length - count + 1);
+            segment = Engine.TensorSlice(flat, new[] { start }, new[] { count });
+        }
+        else
+            segment = Engine.TensorConcatenate(new[] { flat, new Tensor<T>(new[] { count - flat.Length }) }, 0);
+        return (ComputeMel(segment), segment);
+    }
+
+    /// <inheritdoc />
+    /// <remarks>Caller-supplied mel/audio pairs retain their alignment. Bound the sample count, rather than rounding
+    /// the requested segment to whole frames; raw recordings use the released preprocessing above.</remarks>
+    protected override (Tensor<T> Condition, Tensor<T> Audio) TrainingPair(Tensor<T> condition, Tensor<T> audio, Random random)
+        => PrepareAligned(condition, audio, random);
+
+    internal (Tensor<T> Condition, Tensor<T> Audio) PrepareAligned(Tensor<T> condition, Tensor<T> audio, Random random)
+    {
+        var flat = Flat(audio);
+        var o = PaperOptions;
+        int frames = condition.Shape[2];
+        if (frames < 1) throw new ArgumentException("At least one mel frame is required.", nameof(condition));
+        int capacity = checked((frames - 1) * o.HopSize + o.UpsampleKernel);
+        int count = Math.Min(o.SegmentSamples, Math.Min(flat.Length, capacity));
+        if (count < o.GroupSize) throw new ArgumentException("The aligned pair must contain at least one complete audio group.", nameof(audio));
+        int last = Math.Min(frames - 1, Math.Min((flat.Length - count) / o.HopSize, (capacity - count) / o.HopSize));
+        int start = random.Next(0, last + 1);
+        int melFrames = Math.Min(frames - start, count / o.HopSize + 1);
+        var mel = Engine.TensorSlice(condition, new[] { 0, 0, start }, new[] { 1, o.MelChannels, melFrames });
+        return (mel, Engine.TensorSlice(flat, new[] { start * o.HopSize }, new[] { count }));
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> EvaluationAudio(Tensor<T> condition, Tensor<T> target) => Flat(target);
 
     /// <summary>The latent z <c>[1, group, samples / group]</c> of a waveform <c>[samples]</c> given its mel spectrogram
     /// <c>[1, mel, frames]</c>, and the log-determinant of the flow.</summary>
@@ -145,12 +194,15 @@ public partial class WaveGlow<T> : SegmentVocoderBase<T>
 
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
-        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = PaperOptions.LearningRate,
-                UseAdaptiveBetas = false,
-            }));
+    {
+        var optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+            learningRateOverride: PaperOptions.LearningRate, weightDecayOverride: PaperOptions.WeightDecay)
+            ?? throw new InvalidOperationException("WaveGlow's native Adam recipe could not be created.");
+        // Neither the paper nor the released train.py clips WaveGlow gradients.
+        if (optimizer.GetOptions() is GradientBasedOptimizerOptions<T, Tensor<T>, Tensor<T>> settings)
+            settings.EnableGradientClipping = false;
+        return optimizer;
+    }
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()

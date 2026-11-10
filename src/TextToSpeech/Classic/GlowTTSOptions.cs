@@ -13,8 +13,18 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </para>
 /// <para><b>For Beginners:</b> These options configure the GlowTTS model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(ClassicFlowOptionsConverter))]
 public class GlowTTSOptions : AcousticModelOptions
 {
+    /// <summary>The native text encoder's hidden width (192).</summary>
+    public override int EncoderDim { get => HiddenDim; set => HiddenDim = value; }
+
+    /// <summary>The native affine coupling network's hidden width (192).</summary>
+    public override int DecoderDim { get => DecoderHiddenChannels; set => DecoderHiddenChannels = value; }
+
+    /// <summary>The number of native decoder flow blocks (12).</summary>
+    public override int NumDecoderLayers { get => NumFlowBlocks; set => NumFlowBlocks = value; }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
@@ -54,6 +64,8 @@ public class GlowTTSOptions : AcousticModelOptions
         FftSize = 1024;
         MelChannels = 80;
         UsePostnet = false;
+        LearningRate = 1.0; // commons.Adam's multiplier on the dimension-scaled Noam schedule.
+        WeightDecay = 0.0;
     }
 
     /// <summary>Gets or sets the encoder feed-forward filter (768).</summary>

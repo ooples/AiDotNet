@@ -1,4 +1,74 @@
 #nullable enable
+override AiDotNet.TextToSpeech.Vocoders.PriorGradOptions.HiddenDim.get -> int
+override AiDotNet.TextToSpeech.Vocoders.PriorGradOptions.HiddenDim.set -> void
+override AiDotNet.TextToSpeech.Vocoders.PriorGradOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.PriorGradOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.Vocoders.PriorGrad<T>.RecordingPair(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+virtual AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.RecordingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.UnivNet<T>.RecordingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.MelGAN<T>.RecordingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.UnivNetOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.UnivNetOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.Vocoders.ParallelWaveGANOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.ParallelWaveGANOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T>.RecordingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T>.TrainOnSample(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample) -> T
+virtual AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.PrepareTrainingStep(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> void
+virtual AiDotNet.TextToSpeech.Vocoders.GanVocoderBase<T>.CompleteTrainingStep() -> void
+override AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T>.PrepareTrainingStep(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! mel, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio) -> void
+override AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T>.CompleteTrainingStep() -> void
+override AiDotNet.TextToSpeech.Vocoders.FreGradOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.FreGradOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.Vocoders.WaveGradOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.WaveGradOptions.HopSize.set -> void
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.SampleRate.get -> int
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.SampleRate.set -> void
+virtual AiDotNet.TextToSpeech.TtsModelOptions.SampleRate.get -> int
+virtual AiDotNet.TextToSpeech.TtsModelOptions.SampleRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions.SampleRate.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions.SampleRate.set -> void
+override AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions.HopSize.set -> void
+virtual AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T>.RecordingPair(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.WaveGlow<T>.RecordingPair(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.WaveGlow<T>.TrainingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.WaveGlow<T>.EvaluationAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.TextToSpeech.Latest.OuteTTSOptions.NumHeads.get -> int
+override AiDotNet.TextToSpeech.Latest.OuteTTSOptions.NumHeads.set -> void
+override AiDotNet.TextToSpeech.Latest.OuteTTSOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.Latest.OuteTTSOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.FlowDiffusion.E2TTSOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.E2TTSOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.FlowDiffusion.E2TTSOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.E2TTSOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.NumDecoderLayers.set -> void
+
+*REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.get -> bool
+*REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.set -> void
+virtual AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.get -> bool
+virtual AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.set -> void
+override AiDotNet.TextToSpeech.EndToEnd.PiperOptions.AddBlank.get -> bool
+override AiDotNet.TextToSpeech.EndToEnd.PiperOptions.AddBlank.set -> void
+
+override AiDotNet.TextToSpeech.Classic.GradTTSOptions.EncoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.GradTTSOptions.EncoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.GradTTSOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.Classic.GradTTSOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.EncoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.EncoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.DecoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.DecoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.Classic.GlowTTSOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.Classic.GlowTTS<T>.GradientValueClip.get -> double
+
 override AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.NumDecoderLayers.get -> int
 override AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.NumDecoderLayers.set -> void
 *REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.SpeakerEmbeddingDim.get -> int

@@ -15,14 +15,58 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// at synthesis ten frames of log(1e-5) appended and their samples trimmed.</para>
 /// <para><b>For Beginners:</b> These options configure the UnivNet model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(UnivNetOptionsConverter))]
 public class UnivNetOptions : VocoderOptions
 {
+    /// <summary>The product of the actual LVC upsampling strides (256 samples in the paper).</summary>
+    public override int HopSize
+    {
+        get => UpsampleRates.Aggregate(1, (product, rate) => checked(product * rate));
+        set
+        {
+            if (value < 2) throw new ArgumentOutOfRangeException(nameof(value));
+            int stages = UpsampleRates.Length;
+            if (stages < 1 || UpsampleRates.Any(r => r < 2))
+                throw new ArgumentException("Every UnivNet LVC stage needs an upsampling stride of at least two.");
+            if (value == HopSize) return;
+            int PrimeFactors(int n)
+            {
+                int count = 0;
+                for (int divisor = 2; divisor <= n / divisor; divisor++)
+                    while (n % divisor == 0) { count++; n /= divisor; }
+                return count + (n > 1 ? 1 : 0);
+            }
+            int SmallestPrime(int n)
+            {
+                for (int divisor = 2; divisor <= n / divisor; divisor++)
+                    if (n % divisor == 0) return divisor;
+                return n;
+            }
+            int Gcd(int a, int b) { while (b != 0) { int r = a % b; a = b; b = r; } return a; }
+            if (PrimeFactors(value) < stages)
+                throw new ArgumentOutOfRangeException(nameof(value), "The hop cannot preserve every native upsampling stage.");
+            var rates = new int[stages];
+            int remaining = value;
+            for (int i = 0; i < stages; i++)
+            {
+                int factor = i == stages - 1 ? remaining : Gcd(UpsampleRates[i], remaining);
+                while (factor > 1 && PrimeFactors(remaining / factor) < stages - i - 1)
+                    factor /= SmallestPrime(factor);
+                if (factor < 2) factor = SmallestPrime(remaining);
+                rates[i] = factor;
+                remaining /= factor;
+            }
+            UpsampleRates = rates;
+        }
+    }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public UnivNetOptions(UnivNetOptions other)
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
+        UpsampleRates = (int[])other.UpsampleRates.Clone();
         NoiseDim = other.NoiseDim;
         ChannelSize = other.ChannelSize;
         Dilations = (int[])other.Dilations.Clone();

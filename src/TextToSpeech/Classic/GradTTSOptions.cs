@@ -12,8 +12,28 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </para>
 /// <para><b>For Beginners:</b> These options configure the GradTTS model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(ClassicFlowOptionsConverter))]
 public class GradTTSOptions : AcousticModelOptions
 {
+    /// <summary>The text encoder's actual hidden width (192 in the released configuration).</summary>
+    public override int EncoderDim { get => HiddenDim; set => HiddenDim = value; }
+
+    /// <summary>The number of U-Net resolutions, represented by <see cref="DecoderDimMultipliers"/>.</summary>
+    public override int NumDecoderLayers
+    {
+        get => DecoderDimMultipliers.Length;
+        set
+        {
+            if (value < 1 || value > 8)
+                throw new ArgumentOutOfRangeException(nameof(value), "The score U-Net supports one to eight resolutions.");
+            var previous = DecoderDimMultipliers;
+            var levels = new int[value];
+            for (int i = 0; i < value; i++)
+                levels[i] = i < previous.Length ? previous[i] : i == 0 ? 1 : checked(2 * levels[i - 1]);
+            DecoderDimMultipliers = levels;
+        }
+    }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
@@ -53,6 +73,7 @@ public class GradTTSOptions : AcousticModelOptions
         MelChannels = 80;
         UsePostnet = false;
         LearningRate = 1e-4;
+        WeightDecay = 0.0;
     }
 
     /// <summary>Gets or sets the reverse-diffusion steps N at inference (10; the paper evaluates 4, 10, 100, 1000).</summary>

@@ -49,7 +49,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Chen et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, ReferenceBatchSize = 256,
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, ReferenceBatchSize = 256,
                 Source = "Chen et al. 2021, Sec. 4: batch 256, about 1M steps; the paper states no optimizer, so Adam at 2e-4 with the gradient norm clipped to 1 follows lmnt-com/wavegrad params.py.")]
 public partial class WaveGrad<T> : DiffusionVocoderBase<T>
 {
@@ -94,6 +94,10 @@ public partial class WaveGrad<T> : DiffusionVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateNetwork()
     {
         var o = PaperOptions;
+        if (o.DropoutRate != 0.0)
+            throw new ArgumentException("WaveGrad's paper UBlock/DBlock/FiLM network has no dropout; DropoutRate must be zero.", nameof(o.DropoutRate));
+        if (o.UpsampleFactors.Length == 0 || o.UpsampleFactors.Any(f => f < 1))
+            throw new ArgumentException("WaveGrad needs positive UBlock factors.", nameof(o.UpsampleFactors));
         if (UpsampleFactor != o.HopSize)
             throw new ArgumentException($"The UBlocks' factors ({string.Join("x", o.UpsampleFactors)}) must multiply to the hop ({o.HopSize}).");
         _network = new WaveGradNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
@@ -146,12 +150,15 @@ public partial class WaveGrad<T> : DiffusionVocoderBase<T>
 
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
-        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = PaperOptions.LearningRate,
-                UseAdaptiveBetas = false,
-            }));
+    {
+        var optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+            learningRateOverride: PaperOptions.LearningRate, weightDecayOverride: PaperOptions.WeightDecay)
+            ?? throw new InvalidOperationException("WaveGrad's native Adam recipe could not be created.");
+        // SegmentVocoderBase already clips the full model gradient to GradientClipNorm, once, before Adam.
+        if (optimizer.GetOptions() is GradientBasedOptimizerOptions<T, Tensor<T>, Tensor<T>> settings)
+            settings.EnableGradientClipping = false;
+        return optimizer;
+    }
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()

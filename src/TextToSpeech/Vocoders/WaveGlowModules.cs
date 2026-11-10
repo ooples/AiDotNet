@@ -101,11 +101,12 @@ internal sealed class WaveGlowFlow<T>
     /// samples' mel vectors stacked (channel <c>m · group + j</c>).</summary>
     public Tensor<T> Condition(Tensor<T> mel, int samples)
     {
+        int t = samples / _group, used = t * _group;
         var up = _upsample.Forward(mel);
-        if (up.Shape[2] < samples)
+        if (up.Shape[2] < used)
             throw new ArgumentException($"The upsampled mel ({up.Shape[2]} samples) is shorter than the audio ({samples}).");
-        int m = mel.Shape[1], t = samples / _group;
-        var trimmed = _engine.TensorSlice(up, new[] { 0, 0, 0 }, new[] { 1, m, samples });
+        int m = mel.Shape[1];
+        var trimmed = _engine.TensorSlice(up, new[] { 0, 0, 0 }, new[] { 1, m, used });
         var grouped = _engine.TensorPermute(_engine.Reshape(trimmed, new[] { m, t, _group }), new[] { 0, 2, 1 }).Contiguous();
         return _engine.Reshape(grouped, new[] { 1, m * _group, t });
     }
@@ -115,6 +116,9 @@ internal sealed class WaveGlowFlow<T>
     public Tensor<T> Squeeze(Tensor<T> audio)
     {
         int t = audio.Length / _group;
+        if (t == 0) throw new ArgumentException("At least one complete audio group is required.", nameof(audio));
+        if (t * _group != audio.Length)
+            audio = _engine.TensorSlice(audio, new[] { 0 }, new[] { t * _group });
         return _engine.Reshape(_engine.TensorTranspose(_engine.Reshape(audio, new[] { t, _group })), new[] { 1, _group, t });
     }
 

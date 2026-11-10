@@ -20,7 +20,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </remarks>
 public class UnivNetPaperTests
 {
-    private static UnivNetOptions Options(long pretraining = 200_000) => new()
+    internal static UnivNetOptions Options(long pretraining = 200_000) => new()
     {
         MelChannels = 8, FftSize = 64, WindowSize = 64, HopSize = 16, SampleRate = 4000, MelMaxFrequency = 2000,
         UpsampleRates = [4, 4], NoiseDim = 4, ChannelSize = 4, Dilations = [1, 3], KernelPredictorHidden = 8,

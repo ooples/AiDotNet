@@ -13,8 +13,15 @@ namespace AiDotNet.TextToSpeech.FlowDiffusion;
 /// </para>
 /// <para><b>For Beginners:</b> These options configure the F5TTS model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(InfillingOptionsConverter))]
 public class F5TTSOptions : TtsModelOptions
 {
+    /// <summary>The ConvNeXt V2 blocks in the character encoder (four in F5-TTS Base).</summary>
+    public override int NumEncoderLayers { get => TextConvLayers; set => TextConvLayers = value; }
+
+    /// <summary>The flow estimator's DiT blocks (22 in F5-TTS Base).</summary>
+    public override int NumDecoderLayers { get => NumLayers; set => NumLayers = value; }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>

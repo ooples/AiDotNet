@@ -39,7 +39,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2024,
     Authors = "Nguyen et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999, ReferenceBatchSize = 16,
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, ReferenceBatchSize = 16,
                 Source = "Nguyen et al. 2024, Sec. 4.1: Adam with beta1 = 0.9, beta2 = 0.999, a fixed learning rate of 0.0002 and a batch size of 16.")]
 public partial class FreGrad<T> : DiffusionVocoderBase<T>
 {
@@ -82,6 +82,14 @@ public partial class FreGrad<T> : DiffusionVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateNetwork()
     {
         var o = PaperOptions;
+        if (o.Conditioner != DiffWaveConditioner.MelSpectrogram)
+            throw new ArgumentException("FreGrad's two energy priors require mel-spectrogram conditioning.", nameof(o.Conditioner));
+        if (o.NumClasses != 0)
+            throw new ArgumentException("FreGrad has no discrete-label conditioner.", nameof(o.NumClasses));
+        if (o.DropoutRate != 0.0)
+            throw new ArgumentException("FreGrad's published residual network has no dropout; DropoutRate must be zero.", nameof(o.DropoutRate));
+        if (o.UpsampleStrides.Length < 1 || o.UpsampleStrides.Any(s => s < 2 || s % 2 != 0))
+            throw new ArgumentException("FreGrad's transposed-convolution strides must be positive and even.", nameof(o.UpsampleStrides));
         if (UpsampleFactor != o.HopSize)
             throw new ArgumentException($"The upsampler's strides ({string.Join("x", o.UpsampleStrides)}) must multiply to half the hop ({o.HopSize}).");
         if (o.MelChannels < 2)
@@ -175,14 +183,15 @@ public partial class FreGrad<T> : DiffusionVocoderBase<T>
 
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
-        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = PaperOptions.LearningRate,
-                Beta1 = 0.9,
-                Beta2 = 0.999,
-                UseAdaptiveBetas = false,
-            }));
+    {
+        var optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+            learningRateOverride: PaperOptions.LearningRate, weightDecayOverride: PaperOptions.WeightDecay)
+            ?? throw new InvalidOperationException("FreGrad's native Adam recipe could not be created.");
+        // The released learner uses max_grad_norm=None; neither the step nor Adam clips the gradients.
+        if (optimizer.GetOptions() is GradientBasedOptimizerOptions<T, Tensor<T>, Tensor<T>> settings)
+            settings.EnableGradientClipping = false;
+        return optimizer;
+    }
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()

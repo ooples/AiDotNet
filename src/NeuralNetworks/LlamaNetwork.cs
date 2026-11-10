@@ -299,10 +299,19 @@ internal sealed class LlamaNetwork<T>
         if (c.AttentionDropout > 0)
             for (int i = 0; i < Layers.Count; i++)
             {
-                var dropout = Add(new DropoutLayer<T>(c.AttentionDropout));
-                dropout.SetTrainingMode(false);
-                _dropouts.Add(dropout);
-                Layers[i] = Layers[i] with { AttentionDropout = dropout };
+                // A parameter-free regularizer must not consume the enclosing model's initialization sequence:
+                // otherwise enabling attention dropout changes the weights of a codec constructed after this LM.
+                var enclosing = LayerInitializationSeedScope.CaptureScope();
+                LayerInitializationSeedScope.ResumeSequence(Layers[i].Query.RandomSeed is int seed
+                    ? AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(unchecked(seed ^ 0x4c4d4452)) : null);
+                try
+                {
+                    var dropout = Add(new DropoutLayer<T>(c.AttentionDropout));
+                    dropout.SetTrainingMode(false);
+                    _dropouts.Add(dropout);
+                    Layers[i] = Layers[i] with { AttentionDropout = dropout };
+                }
+                finally { LayerInitializationSeedScope.RestoreScope(enclosing); }
             }
     }
 
@@ -504,16 +513,21 @@ internal sealed class LlamaNetwork<T>
         var factors = sequenceLength > c.RopeOriginalMaxPositions && c.LongRopeLongFactors is not null ? c.LongRopeLongFactors : c.LongRopeShortFactors;
         for (int k = 0; k < half; k++) frequencies[k] = 1.0 / ((factors?[k] ?? 1.0) * Math.Pow(c.RopeTheta, 2.0 * k / rd));
         if (c.RopeScalingFactor <= 0) return frequencies;
-        double lowWavelength = c.RopeOriginalMaxPositions / c.RopeLowFrequencyFactor;
-        double highWavelength = c.RopeOriginalMaxPositions / c.RopeHighFrequencyFactor;
+        // Transformers 4.48.3 _compute_default_rope_parameters explicitly constructs float32 frequencies,
+        // even for a double or bfloat16 model. Retain the author's intermediate rounding through Llama-3 smoothing.
+        float lowWavelength = (float)(c.RopeOriginalMaxPositions / c.RopeLowFrequencyFactor);
+        float highWavelength = (float)(c.RopeOriginalMaxPositions / c.RopeHighFrequencyFactor);
         for (int k = 0; k < half; k++)
         {
-            double f = frequencies[k], wavelength = 2 * Math.PI / f;
-            double scaled = wavelength > lowWavelength ? f / c.RopeScalingFactor : f;
+            float power = (float)Math.Pow((float)c.RopeTheta, (float)(2.0 * k / rd));
+            float f = 1f / ((float)(factors?[k] ?? 1.0) * power);
+            float wavelength = (float)(2 * Math.PI) / f;
+            float scaled = wavelength > lowWavelength ? f / (float)c.RopeScalingFactor : f;
             if (!(wavelength < highWavelength) && !(wavelength > lowWavelength))
             {
-                double smooth = (c.RopeOriginalMaxPositions / wavelength - c.RopeLowFrequencyFactor) / (c.RopeHighFrequencyFactor - c.RopeLowFrequencyFactor);
-                scaled = (1 - smooth) * scaled / c.RopeScalingFactor + smooth * scaled;
+                float smooth = (c.RopeOriginalMaxPositions / wavelength - (float)c.RopeLowFrequencyFactor)
+                    / (float)(c.RopeHighFrequencyFactor - c.RopeLowFrequencyFactor);
+                scaled = (1f - smooth) * scaled / (float)c.RopeScalingFactor + smooth * scaled;
             }
             frequencies[k] = scaled;
         }

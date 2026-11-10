@@ -46,6 +46,17 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
+            : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? "chatterbox-published-perth"
+            : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "AddBlank" ? "natural-phoneme-frontend"
+            : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.UnivNet<T> && option == "SegmentSize" ? "univnet-recording-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.MelGAN<T> && option is "SegmentSize" or "SamplingSeed" ? "melgan-recording-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option is "AdversarialWeight" or "DiscriminatorGradientClipNorm" or "DiscriminatorLearningRate" ? "parallel-wavegan-adversarial-" + option
+            : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option is "MelMean" or "MelScale" ? "parallel-wavegan-normalization"
+            : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option is "SegmentSize" or "Epsilon" ? "parallel-wavegan-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T> && SpearOptionFixture.Handles(option) ? "spear-" + option
+            : network is AiDotNet.TextToSpeech.Latest.OuteTTS<T> && OuteOptionFixture.Handles(option) ? "oute-" + option
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.F5TTS<T> or AiDotNet.TextToSpeech.FlowDiffusion.E2TTS<T> ? "infilling-" + option
             : network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> && option == "RollbackThreshold" ? "4k-reflection"
             : network is AiDotNet.TextToSpeech.CodecBased.CosyVoice3<T> && option == "StaticChunkSize" ? "cosy-streaming-flow"
             : network is AiDotNet.TextToSpeech.CodecBased.UniAudio<T> ? "uniaudio-" + option
@@ -147,6 +158,8 @@ internal static class OptionSensitivityFixtureSetup
                 && option is "SpeakerEmbeddingDim" or "LanguageEmbeddingDim" ? "vits-conditioning-" + option
             : network is AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech<T>
                 && option is "DistillationSteps" or "EmaDecay" ? "comospeech-distillation"
+            : network is AiDotNet.TextToSpeech.Classic.GradTTS<T> && option == "NumDecoderLayers" ? "gradtts-native-depth"
+
             : network is AiDotNet.TextToSpeech.Classic.AlignTTS<T> && option == "LearningRate" ? "aligntts-fixed-rate-training"
             : network is AiDotNet.TextToSpeech.CodecBased.OrpheusTTS<T>
                 && option is "MaxGradNorm" or "RemoveDuplicateFrames" ? "orpheus-training-" + option
@@ -194,8 +207,21 @@ internal static class OptionSensitivityFixtureSetup
     private static long ObserveTask<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option,
         Func<INeuralNetworkModel<T>, Tensor<T>, long> observe)
     {
+        if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> marked && option == "Watermark")
+            // Run the real final synthesis stage with the hash-verified released checkpoint configured below.
+            return OptionSensitivityHarness.Fingerprint(marked.Watermarked(ChatterboxFixture.Recording<T>())
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T> spear && SpearOptionFixture.Handles(option))
+            return OptionSensitivityHarness.Fingerprint(SpearOptionFixture.Observe(spear, option));
+        if (network is AiDotNet.TextToSpeech.Latest.OuteTTS<T> oute && OuteOptionFixture.Handles(option))
+            return OptionSensitivityHarness.Fingerprint(OuteOptionFixture.Observe(oute, option));
         if (network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> agent && option == "RollbackThreshold")
             return AiDotNet.Tests.Video.Upscale4KOptionFixture.Observe(agent);
+        if (network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> naturalFrontend && option == "AddBlank")
+            // This is the actual text preprocessing path; Predict(Tensor) already receives phoneme IDs.
+            // A punctuation token is phonemized without loading the optional eSpeak library.
+            return OptionSensitivityHarness.Fingerprint(naturalFrontend.TextToPhonemes("!").Select(id => (double)id));
+
         if (network is AiDotNet.TextToSpeech.CodecBased.UniAudio<T> uniAudio && option == "UseReleasedTextFrontend")
             return UniAudioOptionFixture.ObserveFrontend(uniAudio);
         if (AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option))
@@ -518,10 +544,6 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> chatter && option == "VoiceEncoderPartialRate")
             return OptionSensitivityHarness.Fingerprint(chatter.VoiceEncoderModel!.Embed(ChatterboxFixture.Recording<T>(2), 24000)
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
-        if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> marked && option == "Watermark")
-            // The watermark is S3Gen's output's last step; Prepare points it at a compact Perth checkpoint.
-            return OptionSensitivityHarness.Fingerprint(marked.Watermarked(ChatterboxFixture.Recording<T>())
-                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
         if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> chunked && option == "StaticChunkSize")
             return OptionSensitivityHarness.Fingerprint(chunked.FlowModel!.Encode(Enumerable.Range(0, 12).ToArray(),
                 training: false, new Random(1337), streaming: true)
@@ -715,7 +737,7 @@ internal static class OptionSensitivityFixtureSetup
         "LatentFusionProbability" or "ClassDropout" or "WavenetDropout";
 
     private static bool IsVocoderFrontendOption(string option) => option is
-        "MelMinFrequency" or "MelMaxFrequency" or "WindowSize" or "MelMean" or "MelScale" or "EnergyMin";
+        "MelMinFrequency" or "MelMaxFrequency" or "WindowSize" or "MelMean" or "MelScale" or "EnergyMin" or "EnergyMax";
 
     private static Tensor<T> VocoderRecording<T>(AiDotNet.TextToSpeech.Vocoders.VocoderOptions options)
     {
@@ -728,6 +750,10 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? 0
+        : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option == "Epsilon" ? Math.Max(6, steps)
+        : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? 0
+        : network is AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T> && SpearOptionFixture.Handles(option) ? 0
+        : network is AiDotNet.TextToSpeech.Latest.OuteTTS<T> && OuteOptionFixture.Handles(option) ? 0
         : network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> && option == "RollbackThreshold" ? 0
         // Graph, inference and dropout probes already observe their native path directly; reserve the
         // full 100M-parameter backward pass for the optimizer settings that require it.
@@ -782,6 +808,46 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> parallel && option == "SegmentSize")
+        {
+            var settings = (AiDotNet.TextToSpeech.Vocoders.ParallelWaveGANOptions)parallel.GetOptions();
+            parallel.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+            { Tokens = new Tensor<T>(new[] { 1 }), Audio = VocoderRecording<T>(settings) });
+            return true;
+        }
+        if (network is AiDotNet.TextToSpeech.Vocoders.MelGAN<T> melGan && option is "SegmentSize" or "SamplingSeed")
+        {
+            var settings = (AiDotNet.TextToSpeech.Vocoders.MelGANOptions)melGan.GetOptions();
+            melGan.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+            { Tokens = new Tensor<T>(new[] { 1 }), Audio = VocoderRecording<T>(settings) });
+            return true;
+        }
+        if (network is AiDotNet.TextToSpeech.Vocoders.UnivNet<T> univNet && option == "SegmentSize")
+        {
+            var settings = (AiDotNet.TextToSpeech.Vocoders.UnivNetOptions)univNet.GetOptions();
+            univNet.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+            { Tokens = new Tensor<T>(new[] { 1 }), Audio = VocoderRecording<T>(settings) });
+            return true;
+        }
+        if (network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> waveGlow && option == "SegmentSamples")
+        {
+            var settings = (AiDotNet.TextToSpeech.Vocoders.WaveGlowOptions)waveGlow.GetOptions();
+            waveGlow.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+            { Tokens = new Tensor<T>(new[] { 1 }), Audio = VocoderRecording<T>(settings) });
+            return true;
+        }
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.F5TTS<T> or AiDotNet.TextToSpeech.FlowDiffusion.E2TTS<T>
+            && option == "AudioDropProbability")
+        {
+            var flow = (AiDotNet.TextToSpeech.FlowDiffusion.FlowMatchingTtsModelBase<T>)network;
+            var infillingOptions = (AiDotNet.TextToSpeech.TtsModelOptions)flow.GetOptions();
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            // A real partially observed mel span: the minimum recording may leave no audio condition to drop.
+            var mel = new Tensor<T>(new[] { 16, infillingOptions.MelChannels });
+            for (int i = 0; i < mel.Length; i++) mel[i] = ops.FromDouble(0.4 * Math.Sin(i * 0.17) + 0.2 * Math.Cos(i * 0.31));
+            flow.Train(input, mel);
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.EndToEnd.VITS2<T> alignment && option == "AlignmentNoiseDecay")
         {
             var settings = (AiDotNet.TextToSpeech.EndToEnd.VITS2Options)alignment.GetOptions();
@@ -941,6 +1007,59 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGANOptions parallel)
+        {
+            if (option is "AdversarialWeight" or "DiscriminatorGradientClipNorm" or "DiscriminatorLearningRate")
+                parallel.DiscriminatorStartStep = 0;
+            if (option == "DiscriminatorGradientClipNorm") parallel.DiscriminatorGradientClipNorm = 1e-6;
+            if (option == "SegmentSize") parallel.SegmentSize = checked(4 * parallel.HopSize);
+            if (option is "MelMean" or "MelScale")
+            {
+                parallel.MelMean = new double[parallel.MelChannels];
+                parallel.MelScale = Enumerable.Repeat(1.0, parallel.MelChannels).ToArray();
+            }
+        }
+        if (options is AiDotNet.TextToSpeech.Vocoders.MelGANOptions melGan && option is "SegmentSize" or "SamplingSeed")
+            melGan.SegmentSize = checked(4 * melGan.UpsampleRates.Aggregate(1, (a, b) => a * b));
+        if (options is AiDotNet.TextToSpeech.Vocoders.UnivNetOptions univNet && option == "SegmentSize")
+            univNet.SegmentSize = checked(4 * univNet.HopSize);
+        if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chatterbox && option == "Watermark")
+            chatterbox.WatermarkModelPath = AiDotNet.Tests.Audio.PerthReleasedCheckpointFixture.CheckpointPath;
+        if (options is AiDotNet.TextToSpeech.Vocoders.WaveGlowOptions waveGlow && option == "SegmentSamples")
+            waveGlow.SegmentSamples = 4 * waveGlow.HopSize;
+        if (options is AiDotNet.TextToSpeech.CodecBased.SPEARTTSOptions spear) SpearOptionFixture.Prepare(spear, option);
+        if (options is AiDotNet.TextToSpeech.Latest.OuteTTSOptions oute) OuteOptionFixture.Prepare(oute, option);
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions f5)
+        {
+            f5.WarmupSteps = 0;
+            if (option == "TotalSteps") { f5.WarmupSteps = 0; f5.TotalSteps = 6; }
+            if (option == "MaxGradientNorm") f5.MaxGradientNorm = 1e-8;
+            if (option == "AudioDropProbability")
+            {
+                f5.ConditionDropProbability = 0;
+                f5.MaskFractionMin = f5.MaskFractionMax = 0.5;
+                f5.AudioDropProbability = 0;
+            }
+        }
+        if (options is AiDotNet.TextToSpeech.FlowDiffusion.E2TTSOptions e2)
+        {
+            e2.WarmupSteps = 0;
+            if (option == "TotalSteps") { e2.WarmupSteps = 0; e2.TotalSteps = 6; }
+            if (option == "MaxGradientNorm") e2.MaxGradientNorm = 1e-8;
+            if (option == "AudioDropProbability")
+            {
+                e2.ConditionDropProbability = 0;
+                e2.MaskFractionMin = e2.MaskFractionMax = 0.5;
+                e2.AudioDropProbability = 0;
+            }
+        }
+        if (options is AiDotNet.TextToSpeech.Classic.GradTTSOptions grad && option == "NumDecoderLayers")
+        {
+            // Three released resolutions and eight mel bins allow a fourth genuine U-Net resolution.
+            grad.MelChannels = 8;
+            grad.DecoderDimMultipliers = new[] { 1, 2, 4 };
+        }
+
         if (options is AiDotNet.TextToSpeech.CodecBased.OrpheusTTSOptions orpheus && option == "MaxGradNorm")
             // Bind the actual optimizer clip in the compact LM; the release threshold can exceed every test gradient.
             orpheus.MaxGradNorm = 1e-12;
@@ -1216,8 +1335,6 @@ internal static class OptionSensitivityFixtureSetup
         }
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chatter && option == "VoiceEncoderPartialRate")
             chatter.VoiceEncoderPartialFrames = 160;
-        if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions marked && option == "Watermark")
-            marked.WatermarkModelPath = AiDotNet.Tests.TextToSpeech.PerthFixture.TinyCheckpointPath;
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chunked && option == "StaticChunkSize")
             chunked.StaticChunkSize = 2;
         if (options is AiDotNet.TextToSpeech.CodecBased.CosyVoiceAutoregressiveOptions sampling && option == "TopK")

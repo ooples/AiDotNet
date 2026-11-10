@@ -19,8 +19,35 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// reference's biquad filtering of the priors and of the sampled sub-bands is not in the paper and is not applied.</para>
 /// <para><b>For Beginners:</b> These options configure the FreGrad model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(FreGradOptionsConverter))]
 public class FreGradOptions : PriorGradOptions
 {
+    /// <summary>The waveform hop: twice the spectrogram upsampler's stride product, because the DWT halves time.</summary>
+    public override int HopSize
+    {
+        get => checked(2 * UpsampleStrides.Aggregate(1, (product, stride) => checked(product * stride)));
+        set
+        {
+            int stages = UpsampleStrides.Length;
+            if (stages < 1 || stages > 29 || UpsampleStrides.Any(s => s < 2 || s % 2 != 0))
+                throw new ArgumentException("FreGrad needs positive even transposed-convolution strides.");
+            long divisor = 1L << (stages + 1);
+            if (value < divisor || value % divisor != 0)
+                throw new ArgumentOutOfRangeException(nameof(value), "The waveform hop must support the DWT and every even upsampling stride.");
+            if (value == HopSize) return;
+            int Gcd(int a, int b) { while (b != 0) { int r = a % b; a = b; b = r; } return a; }
+            var strides = new int[stages];
+            int remaining = value / 2;
+            for (int i = 0; i < stages; i++)
+            {
+                int reserve = 1 << (stages - i - 1);
+                strides[i] = i == stages - 1 ? remaining : Gcd(UpsampleStrides[i], remaining / reserve);
+                remaining /= strides[i];
+            }
+            UpsampleStrides = strides;
+        }
+    }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
@@ -40,6 +67,7 @@ public class FreGradOptions : PriorGradOptions
         ResChannels = 32;
         DilationCycle = 7;
         UpsampleStrides = [16, 8];
+        DropoutRate = 0.0;
         MelMaxFrequency = 8000;
         NoiseSchedule = ZeroTerminalSnr(Linear(1e-4, 0.05, 50), 1e-4);
     }

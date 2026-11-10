@@ -111,6 +111,10 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
     private void ConfigureBase()
     {
         var o = _options;
+        if (o.NumEncoderLayers != 0)
+            throw new ArgumentException("NumEncoderLayers must be zero: OuteTTS uses a decoder-only causal language model.", nameof(_options));
+        if (o.Layers <= 0 || o.Heads <= 0 || o.KeyValueHeads <= 0)
+            throw new ArgumentOutOfRangeException(nameof(_options), "Language-model depth and attention-head counts must be positive.");
         base.SampleRate = o.SampleRate;
         base.HopSize = o.CodecEncoderRates.Aggregate(1, (a, b) => a * b);
         base.HiddenDim = o.HiddenDim;
@@ -203,6 +207,7 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
             Intermediate = o.Intermediate, RmsEpsilon = o.RmsEpsilon, RopeTheta = o.RopeTheta, RopeScalingFactor = o.RopeScalingFactor,
             RopeLowFrequencyFactor = o.RopeLowFrequencyFactor, RopeHighFrequencyFactor = o.RopeHighFrequencyFactor,
             RopeOriginalMaxPositions = o.RopeOriginalMaxPositions, QueryKeyNorm = o.QueryKeyNorm, TieWordEmbeddings = true,
+            AttentionDropout = o.DropoutRate,
         });
         _lm.InitializeLikeReference(random);
         _codecEncoder = new DacEncoder<T>(Engine, o.CodecEncoderDim, o.CodecEncoderRates, o.CodecLatentDim, _codecLayers);
@@ -291,8 +296,7 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
         var words = new List<(string Word, double Start, double End)>();
         if (transcript is null)
         {
-            var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
-            var result = Transcriber.TranscribeAudio(whisperAudio, _options.AlignerTemperatures, true, null, random);
+            var result = TranscribeSpeaker(whisperAudio);
             text = OuteTTSPrompts.NormalizeTranscript(result.Text);
             foreach (var segment in result.Segments)
                 foreach (var w in segment.Words) words.Add((w.Word.Trim(), w.Start, w.End));
@@ -304,6 +308,11 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
         }
         return SpeakerFromWords(samples, text, words);
     }
+
+    /// <summary>The actual Whisper transcription used to build a speaker, from its 16 kHz recording.</summary>
+    internal WhisperTranscription TranscribeSpeaker(double[] whisperAudio)
+        => Transcriber.TranscribeAudio(whisperAudio, _options.AlignerTemperatures, true, null,
+            AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed));
 
     // The transcript's words timed by Whisper's alignment over the recording's first window.
     private IEnumerable<(string Word, double Start, double End)> TimeTranscript(double[] audio, string transcript)
@@ -395,7 +404,7 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (text is null) throw new ArgumentNullException(nameof(text));
         if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(PreprocessText(text));
         if (!HasPaperLayers) return base.Synthesize(text);
-        var chunks = _options.Chunked ? OuteTTSPrompts.ChunkText(text, _options.ChunkMinWords, _options.ChunkMaxWords) : new List<string> { text };
+        var chunks = SynthesisChunks(text);
         var speaker = VoiceSpeaker();
         var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         var generated = new List<int>();
@@ -403,6 +412,11 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
             generated.AddRange(Generate(Tokenizer.Encode(OuteTTSPrompts.CompletionPrompt(chunk, speaker)), random));
         return AudioOf(generated);
     }
+
+    /// <summary>The actual release-style chunk plan consumed by synthesis, before tokenization and decoding.</summary>
+    internal List<string> SynthesisChunks(string text) => _options.Chunked
+        ? OuteTTSPrompts.ChunkText(text, _options.ChunkMinWords, _options.ChunkMaxWords)
+        : new List<string> { text };
 
     /// <inheritdoc />
     /// <remarks><paramref name="input"/> is a text's token ids (<see cref="PreprocessText"/>); the waveform of the codes
@@ -433,6 +447,7 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
         {
             using var _ = new NoGradScope<T>();
             var lm = LanguageModel;
+            lm.Training = false;
             var ids = new List<int>(prompt);
             var generated = new List<int>();
             var cache = new LlamaCache<T>();
@@ -615,6 +630,7 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
     internal Tensor<T> Loss(int[] ids, int[] labels)
     {
         var lm = LanguageModel;
+        lm.Training = IsTrainingMode;
         var row = Row(ids);
         var labelRow = new int[1, labels.Length];
         for (int i = 0; i < labels.Length; i++) labelRow[0, i] = labels[i];

@@ -34,8 +34,60 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <para><b>For Beginners:</b> SPEAR-TTS learns to talk from hours of untranscribed audio and to read from only
 /// minutes of transcribed speech, then speaks in any voice it hears for three seconds.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(SpearOptionsConverter))]
 public class SPEARTTSOptions : TtsModelOptions
 {
+    /// <summary>The actual SoundStream audio sample rate (16 kHz in the paper).</summary>
+    public override int SampleRate
+    {
+        get => SoundStream.SampleRate;
+        set
+        {
+            if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value));
+            if (value != SampleRate) ResizeCodec(sampleRate: value);
+        }
+    }
+
+    /// <summary>The actual SoundStream stride product (320 samples in the paper).</summary>
+    public override int HopSize
+    {
+        get => SoundStream.Ratios.Aggregate(1, (product, ratio) => checked(product * ratio));
+        set
+        {
+            if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value));
+            if (value != HopSize) ResizeCodec(hop: value);
+        }
+    }
+
+    private void ResizeCodec(int? sampleRate = null, int? hop = null, int? codebookSize = null, int? levels = null)
+    {
+        int previousHop = HopSize;
+        int selected = levels ?? SoundStream.QuantizersForBandwidth(SoundStream.TargetBandwidthKbps, previousHop);
+        int rate = sampleRate ?? SoundStream.SampleRate, stride = hop ?? previousHop, bins = codebookSize ?? SoundStream.CodebookSize;
+        if (selected < 1 || rate < 1 || stride < 1 || bins < 2)
+            throw new ArgumentOutOfRangeException(nameof(levels), "The codec needs positive rates/levels and at least two codes per level.");
+        var ratios = SoundStream.Ratios;
+        if (hop.HasValue)
+        {
+            if (ratios.Length == 0 || ratios.Any(r => r <= 0)) throw new ArgumentException("SoundStream strides must be positive.");
+            int Gcd(int a, int b) { while (b != 0) { int remainder = a % b; a = b; b = remainder; } return a; }
+            var rebuilt = new int[ratios.Length];
+            int remaining = stride;
+            for (int i = 0; i < rebuilt.Length; i++)
+            {
+                rebuilt[i] = i == rebuilt.Length - 1 ? remaining : Gcd(ratios[i], remaining);
+                remaining /= rebuilt[i];
+            }
+            ratios = rebuilt;
+        }
+        double bandwidth = selected * (double)rate / stride * Math.Log(bins, 2) / 1000.0;
+        SoundStream.SampleRate = rate;
+        SoundStream.Ratios = ratios;
+        SoundStream.CodebookSize = bins;
+        SoundStream.NumQuantizers = Math.Max(SoundStream.NumQuantizers, selected);
+        SoundStream.TargetBandwidthKbps = bandwidth;
+    }
+
     /// <summary>Creates the paper's options.</summary>
     public SPEARTTSOptions()
     {
@@ -51,7 +103,6 @@ public class SPEARTTSOptions : TtsModelOptions
         LearningRate = 0.0;
         WeightDecay = 0.0;
         MaxTextLength = 512;
-        SoundStream = new SoundStreamOptions { SampleRate = 16000, NumQuantizers = 12, CodebookSize = 1024, TargetBandwidthKbps = 1.5 };
     }
 
     /// <summary>Creates a copy of <paramref name="other"/>.</summary>
@@ -93,10 +144,26 @@ public class SPEARTTSOptions : TtsModelOptions
     public int SemanticFrameRate { get; set; } = 25;
 
     /// <summary>SoundStream RVQ levels the acoustic tokens keep (3).</summary>
-    public int NumCodebooks { get; set; } = 3;
+    public int NumCodebooks
+    {
+        get => SoundStream.QuantizersForBandwidth(SoundStream.TargetBandwidthKbps, HopSize);
+        set
+        {
+            if (value < 1) throw new ArgumentOutOfRangeException(nameof(value));
+            if (value != NumCodebooks) ResizeCodec(levels: value);
+        }
+    }
 
     /// <summary>Codes per RVQ level (1024).</summary>
-    public int CodebookSize { get; set; } = 1024;
+    public int CodebookSize
+    {
+        get => SoundStream.CodebookSize;
+        set
+        {
+            if (value < 2) throw new ArgumentOutOfRangeException(nameof(value));
+            if (value != CodebookSize) ResizeCodec(codebookSize: value);
+        }
+    }
 
     // ---------------------------------------------------------------- reading, S1 (§4, §7.2)
 
@@ -164,7 +231,8 @@ public class SPEARTTSOptions : TtsModelOptions
 
     /// <summary>The SoundStream codec. Its bandwidth must give <see cref="NumCodebooks"/> levels (3 at 50 Hz is
     /// 1.5 kbps).</summary>
-    public SoundStreamOptions SoundStream { get; set; }
+    public SoundStreamOptions SoundStream { get; set; } = new()
+    { SampleRate = 16000, NumQuantizers = 12, CodebookSize = 1024, TargetBandwidthKbps = 1.5 };
 
     /// <summary>The seed of synthesis and of the training corruption.</summary>
     public int SamplingSeed { get; set; } = 1234;

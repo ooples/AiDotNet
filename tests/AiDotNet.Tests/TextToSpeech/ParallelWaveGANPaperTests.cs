@@ -20,7 +20,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </remarks>
 public class ParallelWaveGANPaperTests
 {
-    private static ParallelWaveGANOptions Options(long discriminatorStart = 100_000) => new()
+    internal static ParallelWaveGANOptions Options(long discriminatorStart = 100_000) => new()
     {
         MelChannels = 8, FftSize = 64, WindowSize = 48, HopSize = 16, SampleRate = 4000, UpsampleRates = [4, 4],
         MelMinFrequency = 0, MelMaxFrequency = 2000, NumLayers = 4, NumStacks = 2, ResidualChannels = 8, GateChannels = 8,

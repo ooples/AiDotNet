@@ -15,14 +15,39 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// gradient-norm clipping at 10 (generator) and 1 (discriminator).</para>
 /// <para><b>For Beginners:</b> These options configure the Parallel WaveGAN model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(ParallelWaveGANOptionsConverter))]
 public class ParallelWaveGANOptions : VocoderOptions
 {
+    /// <summary>The product of the actual learned conditioning upsampler's scales (300 in the paper).</summary>
+    public override int HopSize
+    {
+        get => UpsampleRates.Aggregate(1, (product, scale) => checked(product * scale));
+        set
+        {
+            if (value < 1) throw new ArgumentOutOfRangeException(nameof(value));
+            if (UpsampleRates.Length == 0 || UpsampleRates.Any(s => s < 1))
+                throw new ArgumentException("Parallel WaveGAN needs positive native conditioning scales.");
+            if (value == HopSize) return;
+            int Gcd(int a, int b) { while (b != 0) { int r = a % b; a = b; b = r; } return a; }
+            var scales = new int[UpsampleRates.Length];
+            int remaining = value;
+            for (int i = 0; i < scales.Length; i++)
+            {
+                scales[i] = i == scales.Length - 1 ? remaining : Gcd(UpsampleRates[i], remaining);
+                remaining /= scales[i];
+            }
+            // A scale-one stage still has its learned three-tap smoothing convolution.
+            UpsampleRates = scales;
+        }
+    }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
     public ParallelWaveGANOptions(ParallelWaveGANOptions other)
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
+        UpsampleRates = (int[])other.UpsampleRates.Clone();
         AuxContextWindow = other.AuxContextWindow;
         NumLayers = other.NumLayers;
         NumStacks = other.NumStacks;
