@@ -46,6 +46,7 @@ public class CosyVoice2Options : CosyVoiceAutoregressiveOptions
         HiftSourceKernels = new[] { 7, 7, 11 };
         // The released recipe fine-tunes from Qwen at a constant rate: no warmup.
         WarmupSteps = 0;
+        LearningRate = 1e-5;
         VocoderSegmentLength = 24480;
     }
 

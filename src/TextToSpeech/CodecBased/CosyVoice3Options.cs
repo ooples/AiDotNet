@@ -49,6 +49,7 @@ public class CosyVoice3Options : CosyVoiceFamilyOptions
         HiftUpsampleKernels = new[] { 16, 11, 7 };
         HiftSourceKernels = new[] { 7, 7, 11 };
         WarmupSteps = 0;
+        LearningRate = 1e-5;
         VocoderSegmentLength = 24480;
         DiTInputDim = 80;
         PreLookaheadChannels = 1024;
