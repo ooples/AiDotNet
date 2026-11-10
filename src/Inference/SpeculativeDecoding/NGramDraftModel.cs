@@ -96,7 +96,7 @@ public class NGramDraftModel<T> : IDraftModel<T>
         for (int i = 0; i < numDraftTokens; i++)
         {
             var distribution = GetDistribution(context, temperature);
-            int token = SampleFromDistribution(distribution);
+            int token = TemperatureSampling<T>.Sample(distribution, _random);
 
             tokens.Add(token);
             probs.Add(distribution);
@@ -180,41 +180,7 @@ public class NGramDraftModel<T> : IDraftModel<T>
             }
         }
 
-        // Apply temperature
-        T one = NumOps.One;
-        if (!NumOps.Equals(temperature, one))
-        {
-            T sum = NumOps.Zero;
-            T invTemp = NumOps.Divide(one, temperature);
-            for (int i = 0; i < distribution.Length; i++)
-            {
-                distribution[i] = NumOps.Power(distribution[i], invTemp);
-                sum = NumOps.Add(sum, distribution[i]);
-            }
-            if (NumOps.GreaterThan(sum, NumOps.Zero))
-            {
-                for (int i = 0; i < distribution.Length; i++)
-                {
-                    distribution[i] = NumOps.Divide(distribution[i], sum);
-                }
-            }
-        }
-
-        return distribution;
-    }
-
-    private int SampleFromDistribution(Vector<T> distribution)
-    {
-        T r = NumOps.FromDouble(_random.NextDouble());
-        T cumulative = NumOps.Zero;
-
-        for (int i = 0; i < distribution.Length; i++)
-        {
-            cumulative = NumOps.Add(cumulative, distribution[i]);
-            if (NumOps.LessThanOrEquals(r, cumulative))
-                return i;
-        }
-
-        return distribution.Length - 1;
+        // Temperature 0 collapses to the greedy one-hot rather than dividing by zero.
+        return TemperatureSampling<T>.Apply(distribution, temperature);
     }
 }

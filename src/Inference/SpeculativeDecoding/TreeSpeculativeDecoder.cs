@@ -174,7 +174,7 @@ internal class TreeSpeculativeDecoder<T>
                     if (bonusPos < targetProbs.Rows)
                     {
                         var targetDist = targetProbs.GetRow(bonusPos);
-                        int bonusToken = SampleFromDistribution(ApplyTemperature(targetDist, temperature));
+                        int bonusToken = TemperatureSampling<T>.Sample(TemperatureSampling<T>.Apply(targetDist, temperature), _random);
                         tokens.Add(bonusToken);
                         generated++;
 
@@ -193,7 +193,7 @@ internal class TreeSpeculativeDecoder<T>
                     if (pos >= 0 && pos < targetProbs.Rows)
                     {
                         var targetDist = targetProbs.GetRow(pos);
-                        int fallbackToken = SampleFromDistribution(ApplyTemperature(targetDist, temperature));
+                        int fallbackToken = TemperatureSampling<T>.Sample(TemperatureSampling<T>.Apply(targetDist, temperature), _random);
                         tokens.Add(fallbackToken);
                         generated++;
 
@@ -342,7 +342,8 @@ internal class TreeSpeculativeDecoder<T>
             if (targetPos < 0 || targetPos >= targetProbs.Rows)
                 break;
 
-            T pTarget = targetProbs[targetPos, token];
+            // Compare against the target under the same temperature as the draft (one-hot when greedy).
+            T pTarget = TemperatureSampling<T>.Apply(targetProbs.GetRow(targetPos), temperature)[token];
             T pDraft = i < draftProbs.Length ? draftProbs[i] : NumOps.FromDouble(0.01);
 
             if (NumOps.LessThanOrEquals(pDraft, NumOps.Zero))
@@ -364,47 +365,5 @@ internal class TreeSpeculativeDecoder<T>
         }
 
         return accepted;
-    }
-
-    private Vector<T> ApplyTemperature(Vector<T> dist, T temperature)
-    {
-        T one = NumOps.One;
-        if (NumOps.Equals(temperature, one))
-            return dist;
-
-        var result = new Vector<T>(dist.Length);
-        T sum = NumOps.Zero;
-        T invTemp = NumOps.Divide(one, temperature);
-
-        for (int i = 0; i < dist.Length; i++)
-        {
-            result[i] = NumOps.Power(dist[i], invTemp);
-            sum = NumOps.Add(sum, result[i]);
-        }
-
-        if (NumOps.GreaterThan(sum, NumOps.Zero))
-        {
-            for (int i = 0; i < result.Length; i++)
-            {
-                result[i] = NumOps.Divide(result[i], sum);
-            }
-        }
-
-        return result;
-    }
-
-    private int SampleFromDistribution(Vector<T> distribution)
-    {
-        T r = NumOps.FromDouble(_random.NextDouble());
-        T cumulative = NumOps.Zero;
-
-        for (int i = 0; i < distribution.Length; i++)
-        {
-            cumulative = NumOps.Add(cumulative, distribution[i]);
-            if (NumOps.LessThanOrEquals(r, cumulative))
-                return i;
-        }
-
-        return distribution.Length - 1;
     }
 }
