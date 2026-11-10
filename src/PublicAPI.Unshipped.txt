@@ -1213,3 +1213,5 @@ override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.SetTrainingMode
 AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.get -> double
 AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.set -> void
 override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+*REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
+AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?
