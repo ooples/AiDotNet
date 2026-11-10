@@ -267,7 +267,7 @@ public sealed class OpenAiController : ControllerBase
             string full = ctx.Tokenizer.Decode(ids, skipSpecialTokens: true);
             lastFull = full;
 
-            int stopAt = FindStop(full, stops);
+            int stopAt = StopSequenceMatcher.FindStop(full, stops, out _);
             if (stopAt >= 0)
             {
                 string delta = stopAt > prev.Length ? full.Substring(prev.Length, stopAt - prev.Length) : string.Empty;
@@ -281,7 +281,7 @@ public sealed class OpenAiController : ControllerBase
             // Emit only text that cannot begin a future stop string: hold back the longest suffix of `full`
             // that is a proper prefix of some stop (so "EN" of stop "END" is never streamed before "D"
             // reveals or refutes the match). Streamed content cannot be retracted, hence the buffering.
-            int safeLen = full.Length - PendingStopPrefixLen(full, stops);
+            int safeLen = full.Length - StopSequenceMatcher.PendingPrefixLength(full, stops);
             if (safeLen > prev.Length)
             {
                 string delta = full.Substring(prev.Length, safeLen - prev.Length);
@@ -388,7 +388,7 @@ public sealed class OpenAiController : ControllerBase
             string full = ctx.Tokenizer.Decode(ids, skipSpecialTokens: true);
             lastFull = full;
 
-            int stopAt = FindStop(full, stops);
+            int stopAt = StopSequenceMatcher.FindStop(full, stops, out _);
             if (stopAt >= 0)
             {
                 string delta = stopAt > prev.Length ? full.Substring(prev.Length, stopAt - prev.Length) : string.Empty;
@@ -401,7 +401,7 @@ public sealed class OpenAiController : ControllerBase
 
             // Hold back the longest suffix that could still begin a stop string (see PendingStopPrefixLen);
             // streamed content cannot be retracted, so a partial stop prefix must never be emitted early.
-            int safeLen = full.Length - PendingStopPrefixLen(full, stops);
+            int safeLen = full.Length - StopSequenceMatcher.PendingPrefixLength(full, stops);
             if (safeLen > prev.Length)
             {
                 string delta = full.Substring(prev.Length, safeLen - prev.Length);
@@ -464,16 +464,7 @@ public sealed class OpenAiController : ControllerBase
             return false;
         }
 
-        var info = _modelRepository.GetModelInfo(modelName);
-        if (info == null && IsStandardCliAlias(modelName))
-        {
-            info = _modelRepository.GetAllModelInfo()
-                .FirstOrDefault(m => _textGeneration.SupportsGeneration(m.Name, m.NumericType) && _tokenizers.TryGet(m.Name, out _));
-            if (info != null)
-            {
-                modelName = info.Name;
-            }
-        }
+        var info = CliModelAliasResolver.Resolve(modelName, _modelRepository, _textGeneration, _tokenizers, out modelName);
         if (info == null)
         {
             error = OpenAiError(StatusCodes.Status404NotFound, $"The model '{modelName}' does not exist.", "invalid_request_error", "model_not_found");
@@ -548,7 +539,7 @@ public sealed class OpenAiController : ControllerBase
 
         var genTokens = new List<int>(resp.GeneratedTokens);
         string text = ctx.Tokenizer.Decode(genTokens, skipSpecialTokens: true);
-        int stopAt = FindStop(text, stops);
+        int stopAt = StopSequenceMatcher.FindStop(text, stops, out _);
         bool stopped = stopAt >= 0;
 
         // When a stop string ends generation early, trim the reported token count AND the log-probs to the
@@ -670,7 +661,7 @@ public sealed class OpenAiController : ControllerBase
         {
             ids.Add(tok);
             text = ctx.Tokenizer.Decode(ids, skipSpecialTokens: true);
-            int stopAt = FindStop(text, stops);
+            int stopAt = StopSequenceMatcher.FindStop(text, stops, out _);
             if (stopAt >= 0)
             {
                 text = text.Substring(0, stopAt);
@@ -689,41 +680,6 @@ public sealed class OpenAiController : ControllerBase
     {
         double? tpot = (ttftSeconds is { } t && genCount > 1) ? (totalSeconds - t) / (genCount - 1) : null;
         ServingMetrics.RecordRequest(success: true, promptTokens, genCount, totalSeconds, ttftSeconds, tpot);
-    }
-
-    private static int FindStop(string text, IReadOnlyList<string> stops)
-    {
-        if (stops.Count == 0) return -1;
-        int earliest = -1;
-        foreach (var s in stops)
-        {
-            if (string.IsNullOrEmpty(s)) continue;
-            int i = text.IndexOf(s, StringComparison.Ordinal);
-            if (i >= 0 && (earliest < 0 || i < earliest)) earliest = i;
-        }
-        return earliest;
-    }
-
-    // Length of the longest suffix of <paramref name="text"/> that is a PROPER prefix of some stop string —
-    // i.e. text the streamer must hold back because it could still grow into a stop match. Returns 0 when no
-    // trailing partial-stop is pending. A completed stop is handled by <see cref="FindStop"/>, not here.
-    private static int PendingStopPrefixLen(string text, IReadOnlyList<string> stops)
-    {
-        int held = 0;
-        foreach (var s in stops)
-        {
-            if (string.IsNullOrEmpty(s)) continue;
-            int max = Math.Min(s.Length - 1, text.Length);
-            for (int k = max; k > held; k--)
-            {
-                if (string.CompareOrdinal(text, text.Length - k, s, 0, k) == 0)
-                {
-                    held = k;
-                    break;
-                }
-            }
-        }
-        return held;
     }
 
     private int ResolveEosTokenId(ITokenizer tokenizer)
@@ -779,13 +735,4 @@ public sealed class OpenAiController : ControllerBase
 
     private ObjectResult OpenAiError(int status, string message, string type = "invalid_request_error", string? code = null)
         => new(new { error = new { message, type, param = (string?)null, code } }) { StatusCode = status };
-
-    internal static bool IsStandardCliAlias(string modelName)
-    {
-        return modelName.Equals("default", StringComparison.OrdinalIgnoreCase)
-            || modelName.StartsWith("gpt-", StringComparison.OrdinalIgnoreCase)
-            || modelName.StartsWith("o1-", StringComparison.OrdinalIgnoreCase)
-            || modelName.StartsWith("o3-", StringComparison.OrdinalIgnoreCase)
-            || modelName.StartsWith("claude-", StringComparison.OrdinalIgnoreCase);
-    }
 }

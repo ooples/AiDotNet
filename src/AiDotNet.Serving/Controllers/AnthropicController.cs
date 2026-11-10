@@ -28,16 +28,21 @@ public sealed class AnthropicController : ControllerBase
 {
     private const int DefaultMaxTokens = 256;
 
+    // Typed null for the anonymous-type SSE payload fields that are null until the message completes.
+    private static readonly string? NoStopReason = null;
+
     private readonly IModelRepository _modelRepository;
     private readonly ITokenizerRegistry _tokenizers;
     private readonly ITextGenerationService _textGeneration;
     private readonly ILogger<AnthropicController> _logger;
+    private readonly Configuration.ServingLimitsOptions _limits;
 
     public AnthropicController(
         IModelRepository modelRepository,
         ITokenizerRegistry tokenizers,
         ITextGenerationService textGeneration,
-        ILogger<AnthropicController> logger)
+        ILogger<AnthropicController> logger,
+        Configuration.ServingLimitsOptions? limits = null)
     {
         Guard.NotNull(modelRepository);
         _modelRepository = modelRepository;
@@ -47,6 +52,25 @@ public sealed class AnthropicController : ControllerBase
         _textGeneration = textGeneration;
         Guard.NotNull(logger);
         _logger = logger;
+        // Same contract as OpenAiController: when no ServingLimitsOptions is registered, the defaults apply,
+        // so this route can never bypass the deployment's generation caps.
+        _limits = limits ?? new Configuration.ServingLimitsOptions();
+    }
+
+    // Enforces the configured per-request generation limits at the HTTP boundary (rejected, not clamped).
+    private ObjectResult? CheckLimits(int promptTokens, int requestedMaxTokens)
+    {
+        if (requestedMaxTokens < 1 || requestedMaxTokens > _limits.EffectiveMaxCompletionTokens)
+        {
+            return AnthropicError(StatusCodes.Status400BadRequest,
+                $"'max_tokens' must be between 1 and {_limits.EffectiveMaxCompletionTokens}.");
+        }
+        if (promptTokens + requestedMaxTokens > _limits.EffectiveMaxContextTokens)
+        {
+            return AnthropicError(StatusCodes.Status400BadRequest,
+                $"prompt ({promptTokens} tokens) + max_tokens ({requestedMaxTokens}) exceeds the maximum context length of {_limits.EffectiveMaxContextTokens} tokens.");
+        }
+        return null;
     }
 
     /// <summary>Anthropic Messages API token counting endpoint (<c>POST /v1/messages/count_tokens</c>).</summary>
@@ -62,7 +86,7 @@ public sealed class AnthropicController : ControllerBase
         string prompt = RenderAnthropicPrompt(request);
         if (TryPrepare(request.Model, out var ctx, out _))
         {
-            int tokenCount = Math.Max(1, ctx!.Tokenizer.Encode(prompt).TokenIds.Count);
+            int tokenCount = Math.Max(1, ctx.Tokenizer.Encode(prompt).TokenIds.Count);
             return Ok(new AnthropicCountTokensResponse { InputTokens = tokenCount });
         }
 
@@ -82,15 +106,22 @@ public sealed class AnthropicController : ControllerBase
 
         if (!TryPrepare(request.Model, out var ctx, out var error))
         {
-            return error!;
+            return error;
         }
 
         string prompt = RenderAnthropicPrompt(request);
-        ctx!.PromptTokenIds = ctx.Tokenizer.Encode(prompt).TokenIds.ToArray();
+        ctx.PromptTokenIds = ctx.Tokenizer.Encode(prompt).TokenIds.ToArray();
+        int maxTokens = request.ResolveMaxTokens(DefaultMaxTokens);
+        var limitError = CheckLimits(ctx.PromptTokenCount, maxTokens);
+        if (limitError is not null)
+        {
+            return limitError;
+        }
+
         var sdr = new SpeculativeDecodingRequest
         {
             InputTokens = ctx.PromptTokenIds,
-            MaxNewTokens = Math.Max(1, request.ResolveMaxTokens(DefaultMaxTokens)),
+            MaxNewTokens = maxTokens,
             Temperature = request.Temperature ?? 1.0,
             TopP = request.TopP ?? 1.0,
             TopK = request.TopK ?? 0,
@@ -108,12 +139,13 @@ public sealed class AnthropicController : ControllerBase
             if (resp.Error is { } err)
             {
                 ct.ThrowIfCancellationRequested();
+                ServingMetrics.RecordRequest(false, ctx.PromptTokenCount, 0, sw.Elapsed.TotalSeconds);
                 return AnthropicError(StatusCodes.Status500InternalServerError, err, "api_error");
             }
 
             var genTokens = new List<int>(resp.GeneratedTokens);
             string text = ctx.Tokenizer.Decode(genTokens, skipSpecialTokens: true);
-            int stopAt = FindStop(text, stops, out string? matchedStop);
+            int stopAt = StopSequenceMatcher.FindStop(text, stops, out string? matchedStop);
             bool stopped = stopAt >= 0;
             if (stopped)
             {
@@ -150,8 +182,8 @@ public sealed class AnthropicController : ControllerBase
                 role = "assistant",
                 model = reportedModel,
                 content = Array.Empty<object>(),
-                stop_reason = (string?)null,
-                stop_sequence = (string?)null,
+                stop_reason = NoStopReason,
+                stop_sequence = NoStopReason,
                 usage = new { input_tokens = ctx.PromptTokenCount, output_tokens = 0 }
             }
         }, ct).ConfigureAwait(false);
@@ -167,34 +199,65 @@ public sealed class AnthropicController : ControllerBase
 
         var ids = new List<int>();
         string prev = string.Empty;
+        string lastFull = string.Empty;
         bool streamStopped = false;
         string? streamMatchedStop = null;
         double? ttftSeconds = null;
 
-        foreach (int tok in _textGeneration.GenerateStream(ctx.ModelName, ctx.NumericType, sdr, ct))
+        try
         {
-            ttftSeconds ??= sw.Elapsed.TotalSeconds;
-            ids.Add(tok);
-            string full = ctx.Tokenizer.Decode(ids, skipSpecialTokens: true);
-
-            int stopAt = FindStop(full, stops, out streamMatchedStop);
-            if (stopAt >= 0)
+            foreach (int tok in _textGeneration.GenerateStream(ctx.ModelName, ctx.NumericType, sdr, ct))
             {
-                string delta = stopAt > prev.Length ? full.Substring(prev.Length, stopAt - prev.Length) : string.Empty;
-                if (delta.Length > 0)
+                ttftSeconds ??= sw.Elapsed.TotalSeconds;
+                ids.Add(tok);
+                string full = ctx.Tokenizer.Decode(ids, skipSpecialTokens: true);
+                lastFull = full;
+
+                int stopAt = StopSequenceMatcher.FindStop(full, stops, out streamMatchedStop);
+                if (stopAt >= 0)
                 {
+                    string delta = stopAt > prev.Length ? full.Substring(prev.Length, stopAt - prev.Length) : string.Empty;
+                    if (delta.Length > 0)
+                    {
+                        await WriteTextDeltaAsync(delta, ct).ConfigureAwait(false);
+                    }
+                    prev = full.Substring(0, stopAt);
+                    streamStopped = true;
+                    break;
+                }
+
+                // Hold back any suffix that could still grow into a stop string: streamed text cannot be
+                // retracted, so "EN" of stop "END" must not reach the client before "D" settles the match.
+                int safeLen = full.Length - StopSequenceMatcher.PendingPrefixLength(full, stops);
+                if (safeLen > prev.Length)
+                {
+                    string delta = full.Substring(prev.Length, safeLen - prev.Length);
+                    prev = full.Substring(0, safeLen);
                     await WriteTextDeltaAsync(delta, ct).ConfigureAwait(false);
                 }
-                streamStopped = true;
-                break;
             }
 
-            if (full.Length > prev.Length)
+            // No stop matched: the held-back tail turned out to be ordinary text, so flush it.
+            if (!streamStopped && lastFull.Length > prev.Length)
             {
-                string delta = full.Substring(prev.Length);
-                prev = full;
-                await WriteTextDeltaAsync(delta, ct).ConfigureAwait(false);
+                await WriteTextDeltaAsync(lastFull.Substring(prev.Length), ct).ConfigureAwait(false);
             }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // message_start is already on the wire, so an HTTP error status is no longer possible. Report the
+            // failure in-band as Anthropic's `error` SSE event and end the stream without a normal completion.
+            _logger.LogError(ex, "Anthropic streaming generation failed for model {ModelName}", ctx.ModelName);
+            ServingMetrics.RecordRequest(false, ctx.PromptTokenCount, ids.Count, sw.Elapsed.TotalSeconds);
+            if (!HttpContext.RequestAborted.IsCancellationRequested)
+            {
+                await WriteAnthropicEventAsync("error", new
+                {
+                    type = "error",
+                    error = new { type = "api_error", message = "Text generation failed." }
+                }, ct).ConfigureAwait(false);
+            }
+            return new EmptyResult();
         }
 
         string finalStopReason = streamStopped ? "stop_sequence" : (ids.Count >= sdr.MaxNewTokens ? "max_tokens" : "end_turn");
@@ -271,17 +334,7 @@ public sealed class AnthropicController : ControllerBase
             return false;
         }
 
-        var info = _modelRepository.GetModelInfo(modelName);
-        if (info == null && OpenAiController.IsStandardCliAlias(modelName))
-        {
-            info = _modelRepository.GetAllModelInfo()
-                .FirstOrDefault(m => _textGeneration.SupportsGeneration(m.Name, m.NumericType) && _tokenizers.TryGet(m.Name, out _));
-            if (info != null)
-            {
-                modelName = info.Name;
-            }
-        }
-
+        var info = CliModelAliasResolver.Resolve(modelName, _modelRepository, _textGeneration, _tokenizers, out modelName);
         if (info == null)
         {
             error = AnthropicError(StatusCodes.Status404NotFound, $"The model '{modelName}' does not exist.", "not_found_error");
@@ -311,24 +364,6 @@ public sealed class AnthropicController : ControllerBase
             EosTokenId = eos >= 0 ? eos : null
         };
         return true;
-    }
-
-    private static int FindStop(string text, IReadOnlyList<string> stops, out string? matchedStop)
-    {
-        matchedStop = null;
-        if (stops.Count == 0) return -1;
-        int earliest = -1;
-        foreach (var s in stops)
-        {
-            if (string.IsNullOrEmpty(s)) continue;
-            int i = text.IndexOf(s, StringComparison.Ordinal);
-            if (i >= 0 && (earliest < 0 || i < earliest))
-            {
-                earliest = i;
-                matchedStop = s;
-            }
-        }
-        return earliest;
     }
 
     private int ResolveEosTokenId(ITokenizer tokenizer)

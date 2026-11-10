@@ -68,16 +68,6 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAu
             }
         }
 
-        // Anthropic Messages API / Claude Code CLI compatibility (`x-api-key` header)
-        if (Request.Headers.TryGetValue("x-api-key", out var anthropicHeaderValues))
-        {
-            var value = anthropicHeaderValues.ToString();
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value.Trim();
-            }
-        }
-
         if (Request.Headers.TryGetValue("Authorization", out var authValues))
         {
             var raw = authValues.ToString();
@@ -85,6 +75,17 @@ public sealed class ApiKeyAuthenticationHandler : AuthenticationHandler<ApiKeyAu
             if (!string.IsNullOrWhiteSpace(raw) && raw.StartsWith(Bearer, StringComparison.OrdinalIgnoreCase))
             {
                 return raw.Substring(Bearer.Length).Trim();
+            }
+        }
+
+        // Anthropic Messages API / Claude Code CLI compatibility (`x-api-key` header). Checked after the bearer
+        // credential so an unrelated x-api-key (e.g. one forwarded for an upstream service) cannot displace it.
+        if (Request.Headers.TryGetValue("x-api-key", out var anthropicHeaderValues))
+        {
+            var value = anthropicHeaderValues.ToString();
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value.Trim();
             }
         }
 
