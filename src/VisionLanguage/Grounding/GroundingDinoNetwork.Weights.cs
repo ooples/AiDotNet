@@ -42,7 +42,7 @@ internal sealed partial class GroundingDinoNetwork<T>
         }
 
         Backbone.LoadTorchWeights(source, "model.backbone.conv_encoder.model.");
-        Text.LoadTorchWeights(source.AsFunction(), "model.text_backbone.");
+        Text.LoadTorchWeights(source, "model.text_backbone.");
         Linear(TextProjection, "model.text_projection", c.Text.Hidden, d);
         var outChannels = Backbone.OutChannels;
         for (int level = 0; level < c.Levels; level++)
