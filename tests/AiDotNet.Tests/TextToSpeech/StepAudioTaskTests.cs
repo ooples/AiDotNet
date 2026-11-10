@@ -2,6 +2,8 @@ using System;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using AiDotNet.Enums;
+using AiDotNet.NeuralNetworks;
 using AiDotNet.TextToSpeech.MultiModal;
 using Xunit;
 
@@ -96,5 +98,38 @@ public class StepAudioTaskTests
         double policy = model.TrainPpo(question, StepAudioFixture.SampleRate);
         Assert.True(Finite(warmup) && Finite(policy));
         Assert.NotEqual(chatBefore, model.Core.ChatModel.Layers[0].Query.GetParameters().ToArray());
+    }
+
+    [Fact(Timeout = 900000)]
+    public async Task PpoClip_ChangesThePolicyUpdateOnTheReusedRollout()
+    {
+        await Task.Yield();
+        var question = StepAudioFixture.Tones<double>(0.4);
+        var tight = TrainWithClip(0);
+        var wide = TrainWithClip(0.9);
+
+        Assert.Equal(tight.Before, wide.Before);
+        Assert.False(tight.After.SequenceEqual(wide.After));
+
+        (double[] Before, double[] After) TrainWithClip(double clip)
+        {
+            var options = StepAudioFixture.Options();
+            options.IncludeRlhfModels = true;
+            options.Stage = StepAudioTrainingStage.RewardModel;
+            options.CriticWarmupSteps = 0;
+            options.WarmupSteps = 0;
+            options.PpoClip = clip;
+            using var model = new StepAudio<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional,
+                NeuralNetworkTaskType.Regression, inputSize: 1, outputSize: 1), options);
+            model.InitializeRlhfFromChat();
+            model.TrainReward(question, StepAudioFixture.SampleRate, "好的", "不知道");
+            model.InitializeCriticFromReward();
+            options.Stage = StepAudioTrainingStage.Ppo;
+
+            var query = model.Core.ChatModel.Layers[0].Query;
+            var before = query.GetParameters().ToArray();
+            Assert.True(Finite(model.TrainPpo(question, StepAudioFixture.SampleRate)));
+            return (before, query.GetParameters().ToArray());
+        }
     }
 }

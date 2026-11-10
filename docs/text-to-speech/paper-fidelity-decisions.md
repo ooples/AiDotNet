@@ -420,6 +420,10 @@ Mimi's generator and discriminator disable optimizer clipping explicitly. The [c
 
 Shared `NumEncoderLayers` and `NumDecoderLayers` now address Mimi's actual encoder/decoder Transformer depth through the existing joint `MimiTransformerLayers` setting (§3.3: eight layers on each side). The RQ temporal and depth decoders retain their distinct `Layers` and `DepthLayers` settings. Native saved codec depth takes precedence over conflicting legacy shared counts in either JSON order. Regressions inspect the physical layer arrays, including the existing zero-Transformer codec ablation; the paper defaults and stored/active codebook distinction are preserved.
 
+### Step-Audio policy updates and chat sampling
+
+Step-Audio keeps the behavior-policy log probabilities and advantages fixed for two policy updates on each rollout after critic warm-up. The Step-Audio report specifies the clip threshold but leaves the update count open. Two is the smallest count that exercises the clipped objective on an updated policy. A regression changes the clip threshold after the same reward-model training and verifies that the resulting policy parameters differ. The chat sampling probes exercise the native answer path. [Step-Audio, §5.2.6](https://arxiv.org/html/2502.11946#S5.SS2.SSS6) · [PPO, §5](https://arxiv.org/abs/1707.06347)
+
 ### NaturalSpeech 2 waveform and training controls
 
 NaturalSpeech 2 takes waveform codec latents throughout the native diffusion pipeline. The shared mel-width field defaults to zero and still accepts the inherited value of 80 in older serialized options. The option tests use audio to exercise codec frame rate, prompt cropping, and diffusion-time clipping, and run optimizer updates on a finite cosine schedule to exercise its horizon. The residual cross-entropy comparison fits the native SoundStream codebooks from the test audio before comparing the paper's ground-truth residuals with Amphion's predicted residuals. [NaturalSpeech 2 paper, §§3.1–3.3](https://arxiv.org/html/2304.09116#S3)

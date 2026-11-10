@@ -7824,6 +7824,14 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     network.SetTrainingMode(false);
                     return;
                 }
+                if (network is AiDotNet.TextToSpeech.MultiModal.StepAudio<T> stepAudio
+                    && AiDotNet.Tests.TextToSpeech.StepAudioFixture.IsPpoOption(option))
+                {
+                    network.SetTrainingMode(true);
+                    AiDotNet.Tests.TextToSpeech.StepAudioFixture.TrainPpo(stepAudio, steps);
+                    network.SetTrainingMode(false);
+                    return;
+                }
                 if (AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Handles(network))
                 {
                     AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Train(network);
