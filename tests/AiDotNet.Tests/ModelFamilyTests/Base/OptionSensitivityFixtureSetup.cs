@@ -46,6 +46,7 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
+            : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
             : network is AiDotNet.TextToSpeech.Latest.OuteTTS<T> && OuteOptionFixture.Handles(option) ? "oute-" + option
             : network is AiDotNet.TextToSpeech.FlowDiffusion.F5TTS<T> or AiDotNet.TextToSpeech.FlowDiffusion.E2TTS<T> ? "infilling-" + option
             : network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> && option == "RollbackThreshold" ? "4k-reflection"
@@ -797,6 +798,13 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> waveGlow && option == "SegmentSamples")
+        {
+            var settings = (AiDotNet.TextToSpeech.Vocoders.WaveGlowOptions)waveGlow.GetOptions();
+            waveGlow.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+            { Tokens = new Tensor<T>(new[] { 1 }), Audio = VocoderRecording<T>(settings) });
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.FlowDiffusion.F5TTS<T> or AiDotNet.TextToSpeech.FlowDiffusion.E2TTS<T>
             && option == "AudioDropProbability")
         {
@@ -968,6 +976,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Vocoders.WaveGlowOptions waveGlow && option == "SegmentSamples")
+            waveGlow.SegmentSamples = 4 * waveGlow.HopSize;
         if (options is AiDotNet.TextToSpeech.Latest.OuteTTSOptions oute) OuteOptionFixture.Prepare(oute, option);
         if (options is AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions f5)
         {

@@ -218,6 +218,11 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
     /// is the recording's mel spectrogram.</summary>
     protected virtual Tensor<T> SampleCondition(TtsTrainingSample<T> sample, Tensor<T> audio) => ComputeMel(audio);
 
+    /// <summary>The recording/condition pair used by a training step. Models whose released data pipeline crops raw
+    /// samples before extracting features override this, rather than inheriting frame-aligned feature cropping.</summary>
+    protected virtual (Tensor<T> Condition, Tensor<T> Audio) RecordingPair(TtsTrainingSample<T> sample, Tensor<T> audio, Random random)
+        => TrainingPair(SampleCondition(sample, audio), audio, random);
+
     /// <summary>The audio the training objective is evaluated against for a conditioning tensor and a target; the
     /// default is the target's samples under the spectrogram's frames.</summary>
     protected virtual Tensor<T> EvaluationAudio(Tensor<T> condition, Tensor<T> target) => AudioOfFrames(target, 0, condition.Shape[2]);
@@ -301,7 +306,7 @@ public abstract partial class SegmentVocoderBase<T> : VocoderBase<T>, ITrainingO
         ThrowIfDisposed();
         var audio = sample.Audio ?? throw new ArgumentException($"{GetType().Name} trains on recordings; set Audio.", nameof(sample));
         var flat = Flat(audio);
-        var (mel, segment) = TrainingPair(SampleCondition(sample, flat), flat, _trainingRandom);
+        var (mel, segment) = RecordingPair(sample, flat, _trainingRandom);
         TrainStep(mel, segment);
         return LastLoss ?? NumOps.Zero;
     }

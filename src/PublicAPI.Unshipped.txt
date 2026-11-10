@@ -1,4 +1,8 @@
 #nullable enable
+virtual AiDotNet.TextToSpeech.Vocoders.SegmentVocoderBase<T>.RecordingPair(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.WaveGlow<T>.RecordingPair(AiDotNet.TextToSpeech.TtsTrainingSample<T>! sample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.WaveGlow<T>.TrainingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.WaveGlow<T>.EvaluationAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.Latest.OuteTTSOptions.NumHeads.get -> int
 override AiDotNet.TextToSpeech.Latest.OuteTTSOptions.NumHeads.set -> void
 override AiDotNet.TextToSpeech.Latest.OuteTTSOptions.NumDecoderLayers.get -> int

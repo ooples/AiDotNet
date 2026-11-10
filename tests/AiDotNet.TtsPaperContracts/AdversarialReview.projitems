@@ -14,6 +14,8 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/NaturalSpeechNativeOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/InfillingNativeOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/OuteNativeOptionsTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/WaveGlowNativeOptionsTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/WaveGlowPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/OuteRopeAuthorReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/OuteOptionFixture.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/OuteTTSModelTests.cs" />
