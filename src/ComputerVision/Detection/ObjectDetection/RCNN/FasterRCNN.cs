@@ -234,15 +234,16 @@ public partial class FasterRCNN<T> : ObjectDetectorBase<T>, IDetectionTrainingMo
         if (extraProposals is { Count: > 0 })
             proposalBoxes = TwoStageTargets.AppendBoxes(proposalBoxes, extraProposals);
 
-        if (sampleRandom is not null && extraProposals is not null && proposalBoxes.Shape[0] > 0)
+        bool noRois = proposalBoxes.Shape[0] == 0;
+        if (sampleRandom is not null && extraProposals is not null && !noRois)
         {
             var rows = _detectionLoss.SampleStageRois(proposalBoxes, extraProposals, 0, sampleRandom);
-            proposalBoxes = rows.Length == 0
-                ? new Tensor<T>(new[] { 0, 4 })
-                : CvTensorOps<T>.Select(proposalBoxes, rows, 0);
+            noRois = rows.Length == 0;
+            if (!noRois)
+                proposalBoxes = CvTensorOps<T>.Select(proposalBoxes, rows, 0);
         }
 
-        if (proposalBoxes.Shape[0] == 0)
+        if (noRois)
         {
             // No proposals, return empty result
             return new List<Tensor<T>>
