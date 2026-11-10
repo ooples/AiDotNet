@@ -414,9 +414,14 @@ Bumped 0.135.0 to 0.136.0 for AiDotNet.Tensors #1146: 0.135.0's stride-1 conv in
          0.148.0 also carries AiDotNet.Tensors #1682 (#2322: TensorArena withheld one set of returned gradients per
          step and never gave them back, about 2.6 GB a step for ParaformerLarge) and #1681 (AffineGrid and the mode
          GridSample are differentiable in compiled training and on the GPU tape, which StegaStamp's spatial
-         transformer needs). -->
+         transformer needs).
+
+         Bumped 0.149.0 to 0.150.0 for #2445: AiDotNet.Tensors #1704 realizes lazy operands before a recorded
+         op's trace-time run (the fused conv + max-pool step parity and DocBank's NaN loss) and #1702 removes
+         the nondeterministic parallel paths WGANGP's identically seeded builds diverged on. Evolution stays at
+         0.9.0, above the 0.7.0 that 0.150.0 depends on. -->
     <PackageVersion Include="AiDotNet.Native.OneDNN" Version="0.148.0" />
-    <PackageVersion Include="AiDotNet.Tensors" Version="0.149.0" />
+    <PackageVersion Include="AiDotNet.Tensors" Version="0.150.0" />
     <PackageVersion Include="AiDotNet.Evolution" Version="0.9.0" />
     <PackageVersion Include="AiDotNet.Native.CLBlast" Version="0.148.0" />
     <!-- Microsoft / .NET -->
