@@ -1,4 +1,8 @@
 #nullable enable
+override AiDotNet.TextToSpeech.Latest.OuteTTSOptions.NumHeads.get -> int
+override AiDotNet.TextToSpeech.Latest.OuteTTSOptions.NumHeads.set -> void
+override AiDotNet.TextToSpeech.Latest.OuteTTSOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.Latest.OuteTTSOptions.NumDecoderLayers.set -> void
 override AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions.NumEncoderLayers.get -> int
 override AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions.NumEncoderLayers.set -> void
 override AiDotNet.TextToSpeech.FlowDiffusion.F5TTSOptions.NumDecoderLayers.get -> int

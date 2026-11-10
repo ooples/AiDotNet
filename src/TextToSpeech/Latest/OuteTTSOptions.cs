@@ -22,8 +22,15 @@ public enum OuteTTSBackbone
 /// <para><b>For Beginners:</b> These settings size OuteTTS's language model, its audio codec and the Whisper model
 /// that times a speaker's words; the defaults reproduce the released 1B model.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(OuteOptionsConverter))]
 public class OuteTTSOptions : TtsModelOptions
 {
+    /// <summary>The released causal language model's query attention heads.</summary>
+    public override int NumHeads { get => Heads; set => Heads = value; }
+
+    /// <summary>The released causal language model's decoder blocks.</summary>
+    public override int NumDecoderLayers { get => Layers; set => Layers = value; }
+
     /// <summary>Creates the Llama-OuteTTS-1.0-1B configuration.</summary>
     public OuteTTSOptions()
     {
@@ -35,6 +42,7 @@ public class OuteTTSOptions : TtsModelOptions
         LearningRate = 2e-5;
         WeightDecay = 0.0;
         DropoutRate = 0.0;
+        NumEncoderLayers = 0; // LlamaForCausalLM / Qwen3ForCausalLM have no separate text encoder.
     }
 
     /// <summary>Copies another instance.</summary>

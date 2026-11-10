@@ -13,6 +13,11 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/GradTtsScoreAuthorReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/NaturalSpeechNativeOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/InfillingNativeOptionsTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/OuteNativeOptionsTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/OuteRopeAuthorReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/OuteOptionFixture.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/OuteTTSModelTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/OuteTTSTokenizerTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/FlowMatchingInfillingPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/NaturalSpeechModelTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/NaturalSpeechReferenceTests.cs" />
