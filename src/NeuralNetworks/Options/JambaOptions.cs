@@ -1,3 +1,4 @@
+using AiDotNet.Attributes;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.NeuralNetworks.Options;
@@ -17,6 +18,7 @@ namespace AiDotNet.NeuralNetworks.Options;
 /// not a reproduction of that checkpoint.</para>
 /// </remarks>
 /// <seealso href="https://arxiv.org/abs/2403.19887">Original Jamba paper.</seealso>
+[PaperDefault(nameof(VocabSize), 65536, Source = "Lieber et al. 2024, Sec. 2: the vocabulary size is 64K")]
 public class JambaOptions : SequenceModelOptions
 {
     /// <summary>

@@ -457,7 +457,13 @@ public class FunctionMinimizationIntegrationTests
                 { InitialLearningRate = 0.5 }),
             "RMSProp" => new RootMeanSquarePropagationOptimizer<double, Tensor<double>, Tensor<double>>(
                 null, new RootMeanSquarePropagationOptimizerOptions<double, Tensor<double>, Tensor<double>>
-                { InitialLearningRate = 0.05 }),
+                {
+                    InitialLearningRate = 0.05,
+                    // At a fixed rate RMSProp ends in the cycle x = +-lr/2 (there ms = g^2, so each step is lr and flips
+                    // x). The raw early gradients keep ms large long enough to land inside 1e-3 first; clipped to norm
+                    // 1 they do not, and the run stalls at 0.025.
+                    EnableGradientClipping = false,
+                }),
             "AdaDelta" => new AdaDeltaOptimizer<double, Tensor<double>, Tensor<double>>(
                 null, new AdaDeltaOptimizerOptions<double, Tensor<double>, Tensor<double>>()),
             "Lion" => new LionOptimizer<double, Tensor<double>, Tensor<double>>(

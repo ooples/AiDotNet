@@ -2941,7 +2941,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Also drop compiled fused training plans and reset sticky-disable
         // so the next training run gets a fresh chance at the fused path.
         Training.CompiledTapeTrainingStep<T>.Invalidate(this);
-        FusedSession.Restart(disabled: FusedTrainingDisabledByConfiguration);
+        RestartFusedSessions(disabled: FusedTrainingDisabledByConfiguration);
     }
 
     /// <summary>
@@ -8055,6 +8055,67 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         }
     }
 
+    // -1 = not yet resolved; 0 = this model uses the base ForwardForTraining; 1 = it overrides it.
+    private int _forwardForTrainingOverridden = -1;
+
+    /// <summary>
+    /// The last layer when the training step may stop the forward before it and take the loss from
+    /// <see cref="IFusedReadoutLossLayer{T}.TryComputeFusedLoss"/> - an LM head fused with cross-entropy never forms its
+    /// <c>[rows, vocabulary]</c> output, on the tape or anywhere else. Only for the plain layer chain: no weight
+    /// streaming, no gradient checkpointing, no composite objective, and a model that does not override
+    /// <see cref="ForwardForTraining"/> (its forward may not be a layer chain). Null = use the full forward.
+    /// The readout must also be initialized. The compiled step runs the forward to initialize every layer before it
+    /// collects the parameters it trains, and a lazy head reached only inside the loss misses that forward: MobileNetV2
+    /// then predicted differently from its own clone after training. The full forward runs until the head is initialized.
+    /// </summary>
+    private IFusedReadoutLossLayer<T>? FusedReadoutForTraining()
+    {
+        if (Layers.Count < 2 || Layers[^1] is not IFusedReadoutLossLayer<T> head) return null;
+        if (Layers[^1] is Layers.LayerBase<T> { IsInitialized: false }) return null;
+        if (_weightLifetimeConfigured || GradientCheckpointingSegmentSize > 0
+            || (_memoryManager is not null && _memoryManager.IsCheckpointingEnabled) || this is ICompositeLoss<T>)
+            return null;
+        if (_forwardForTrainingOverridden < 0)
+        {
+            var declaring = GetType().GetMethod(nameof(ForwardForTraining), [typeof(Tensor<T>)])?.DeclaringType;
+            _forwardForTrainingOverridden = declaring == typeof(NeuralNetworkBase<T>) ? 0 : 1;
+        }
+        return _forwardForTrainingOverridden == 0 ? head : null;
+    }
+
+    /// <summary>The training forward through every layer but the last: the input of a fused readout.</summary>
+    private Tensor<T> ForwardForTrainingToReadout(Tensor<T> input)
+    {
+        EnsureLayerRandomSeedsWired();
+        var current = input;
+        for (int i = 0; i < Layers.Count - 1; i++)
+        {
+            var layerInput = current;
+            current = Layers[i].Forward(current);
+            if (Layers[i] is Layers.LayerBase<T> verifiable) verifiable.VerifyReportedOutputShape(current, layerInput);
+        }
+        if (!_firstForwardCompleted)
+        {
+            _firstForwardCompleted = true;
+            TryAutoEnableWeightStreaming();
+        }
+        return current;
+    }
+
+    /// <summary>
+    /// The training objective from the readout's input: the fused readout loss when the readout supports this loss and
+    /// target, else the readout's forward and <paramref name="loss"/> (the same value either way).
+    /// </summary>
+    private Tensor<T> FusedReadoutObjective(IFusedReadoutLossLayer<T> head, Tensor<T> readoutInput, Tensor<T> target,
+        ILossFunction<T> loss, Tensor<T> compositeInput)
+    {
+        if (head.TryComputeFusedLoss(readoutInput, target, loss) is { } fused)
+            return ApplyCompositeObjective(fused, compositeInput);
+        var prediction = Layers[^1].Forward(readoutInput);
+        return ApplyCompositeObjective(loss.ComputeTapeLoss(prediction, AlignTargetToOutputShape(prediction, target)),
+            compositeInput);
+    }
+
     public virtual Tensor<T> ForwardForTraining(Tensor<T> input)
     {
         // Propagate the architecture's RandomSeed to every layer once, before the first training
@@ -10970,7 +11031,41 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             },
             static (loss, _) => loss,
             objective.Optimizer,
-            objective.Parameters);
+            objective.Parameters,
+            sessionPerOptimizer: true);
+    }
+
+    // The fused sessions of declared objectives, one per optimizer they step. A model's objectives (a critic and
+    // the encoder it judges) train different parameters of the same layers with different optimizers, alternating
+    // every step. Through the model's one session each switch dropped the other's compiled plan and moments, so
+    // every fused step restarted Adam at t = 1: an update of lr * sign(g). Each optimizer keeps its own slot here.
+    // A failed step resets only its own session: Reset drops that optimizer's slot and the callback reclaims GPU
+    // transients. The model session's callback (OnFusedSessionReset) would drop every slot of the model and
+    // restart every session, discarding the other objective's committed plan and moments and clearing a sticky
+    // disable it had earned.
+    private Dictionary<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>, Training.FusedTrainingSession<T>>? _objectiveSessions;
+
+    private Training.FusedTrainingSession<T> ObjectiveSession(IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> optimizer)
+    {
+        _objectiveSessions ??= new(ReferenceEqualityComparer<IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>>.Instance);
+        if (!_objectiveSessions.TryGetValue(optimizer, out var session))
+        {
+            session = new Training.FusedTrainingSession<T>(this, onReset: ReclaimGpuTransientsAfterFusedFailure, stateKey: optimizer)
+            {
+                IsDisabled = FusedSession.IsDisabled,
+            };
+            _objectiveSessions[optimizer] = session;
+        }
+
+        return session;
+    }
+
+    // Re-enables (or keeps off) the fused path of the model's session and every declared objective's.
+    private void RestartFusedSessions(bool disabled)
+    {
+        FusedSession.Restart(disabled: disabled);
+        if (_objectiveSessions is null) return;
+        foreach (var session in _objectiveSessions.Values) session.Restart(disabled: disabled);
     }
 
     /// <summary>
@@ -12012,6 +12107,16 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         Func<Tensor<T>, Tensor<T>, Tensor<T>> loss,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null,
         Func<IReadOnlyList<Tensor<T>>>? parameterProvider = null)
+        => TrainCustomTapeStep(input, target, forward, loss, optimizer, parameterProvider, sessionPerOptimizer: false);
+
+    private T TrainCustomTapeStep(
+        Tensor<T> input,
+        Tensor<T> target,
+        Func<Tensor<T>, Tensor<T>> forward,
+        Func<Tensor<T>, Tensor<T>, Tensor<T>> loss,
+        IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer,
+        Func<IReadOnlyList<Tensor<T>>>? parameterProvider,
+        bool sessionPerOptimizer)
     {
         Guard.NotNull(input);
         Guard.NotNull(target);
@@ -12025,6 +12130,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
                 ? _baseTrainOptimizer
                 : optimizer ?? TrainingOptimizer ?? _baseTrainOptimizer);
         var resolvedOptimizer = configuredOptimizer ?? GetOrCreateBaseOptimizer();
+        var session = sessionPerOptimizer ? ObjectiveSession(resolvedOptimizer) : FusedSession;
 
         // Lazily shaped layers own no parameters until their first forward, and a plan holds only the tensors that
         // exist when it is built. A custom objective can reach layers the network's own forward never does (a
@@ -12071,7 +12177,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         T lossValue = NumOps.Zero;
         var outcome = parameters.Count == 0
             ? Training.FusedStepOutcome.Declined
-            : FusedSession.TryStep(request, out lossValue);
+            : session.TryStep(request, out lossValue);
         if (outcome == Training.FusedStepOutcome.Stepped)
         {
             CustomFusedStepCount++;
@@ -12082,14 +12188,14 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // A committed plan's optimizer moments cannot move to the eager optimizer; the session's shared policy
             // drops the plan after a device fault and throws for anything else.
             if (outcome == Training.FusedStepOutcome.CommittedFailure)
-                FusedSession.DropAfterCommittedFailure();
+                session.DropAfterCommittedFailure();
             CustomEagerStepCount++;
             lossValue = Training.TapeTrainingStepper<T>.EagerStep(request);
             InvalidateWeightCachesAfterSuccessfulWeightUpdate();
         }
 
-        // The per-batch scheduler advance every other training entry point makes, on the optimizer that stepped.
-        StepSchedulerIfSupported(resolvedOptimizer);
+        // No scheduler advance here: the fused session advances the optimizer that stepped, and the eager step's
+        // update does too. A second advance ran every per-batch schedule at twice its rate.
         LastLoss = lossValue;
         return lossValue;
     }
@@ -12596,6 +12702,15 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             else
             {
             stepTape = new GradientTape<T>();
+            if (FusedReadoutForTraining() is { } fusedReadout)
+            {
+                // The readout fuses itself with the loss: its [rows, vocabulary] output is never formed. `output` is
+                // the readout input here (it only feeds the step diagnostics' rank/length).
+                output = ForwardForTrainingToReadout(input);
+                lossTensor = FusedReadoutObjective(fusedReadout, output, expected, loss, input);
+            }
+            else
+            {
             output = ForwardForTraining(input);
 
             // Align output shape to target: when ranks mismatch, ALWAYS reshape the
@@ -12613,6 +12728,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             // Same declared objective as every other tape-loss path. Wiring only some of them left the
             // composite inert for whichever path a model happened to take - ABCNet took this one.
             lossTensor = ApplyCompositeObjective(loss.ComputeTapeLoss(output, expected), input);
+            }
             }
             using var tape = stepTape;
 
@@ -13379,7 +13495,12 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     protected bool IsFusedTrainingDisabled
     {
         get => FusedSession.IsDisabled;
-        set => FusedSession.IsDisabled = value;
+        set
+        {
+            FusedSession.IsDisabled = value;
+            if (_objectiveSessions is null) return;
+            foreach (var session in _objectiveSessions.Values) session.IsDisabled = value;
+        }
     }
 
     /// <summary>
@@ -13440,11 +13561,13 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
     /// </summary>
     internal Training.FusedTrainingSession<T> FusedSession => _fusedSession ??= new Training.FusedTrainingSession<T>(
         this,
-        onReset: () =>
-        {
-            InvalidateParameterCountCache();
-            ReclaimGpuTransientsAfterFusedFailure();
-        });
+        onReset: OnFusedSessionReset);
+
+    private void OnFusedSessionReset()
+    {
+        InvalidateParameterCountCache();
+        ReclaimGpuTransientsAfterFusedFailure();
+    }
 
     private Training.FusedTrainingSession<T>? _fusedSession;
 
@@ -13750,17 +13873,20 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // per-step transient arena, the #1822 persistence check, the committed state): FusedTrainingSession owns it
         // for every base class. What stays here is what only a NeuralNetworkBase knows: its gates above, its
         // target alignment and composite objective, its gradient publication, and its post-step bookkeeping.
+        var fusedReadoutHead = FusedReadoutForTraining();
         var request = new Training.FusedTrainingStepRequest<T>
         {
             Layers = trainableLayers,
             Input = input,
             Target = expected,
-            Forward = ForwardForTraining,
-            ComputeLoss = (pred, tgt) =>
-            {
-                tgt = AlignTargetToOutputShape(pred, tgt);
-                return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred);
-            },
+            Forward = fusedReadoutHead is null ? ForwardForTraining : ForwardForTrainingToReadout,
+            ComputeLoss = fusedReadoutHead is null
+                ? (pred, tgt) =>
+                {
+                    tgt = AlignTargetToOutputShape(pred, tgt);
+                    return ApplyCompositeObjective(loss.ComputeTapeLoss(pred, tgt), pred);
+                }
+                : (h, tgt) => FusedReadoutObjective(fusedReadoutHead, h, tgt, loss, h),
             Optimizer = resolvedOptimizer,
             ExtraParameters = fusedExtraParameters,
             Selection = selectedParameters,
@@ -15123,7 +15249,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
             Training.CompiledTapeTrainingStep<T>.Invalidate(this);
             // A sticky disable protected the previous optimizer's moments from a fused re-engagement mid-run. The new
             // optimizer has no such moments, so it gets the configured default rather than inheriting the disable.
-            FusedSession.Restart(disabled: FusedTrainingDisabledByConfiguration);
+            RestartFusedSessions(disabled: FusedTrainingDisabledByConfiguration);
         }
         _baseTrainOptimizer = optimizer;
         _baseTrainOptimizerExplicitlyConfigured = optimizer is not null;
@@ -15159,7 +15285,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // gradient and held the update's sign. Six unrelated families reported that same cosine of
         // exactly 1.000000 in CI for this reason.
         Training.CompiledTapeTrainingStep<T>.Invalidate(this);
-        FusedSession.Restart(disabled: FusedSession.IsDisabled);
+        RestartFusedSessions(disabled: FusedSession.IsDisabled);
 
         ResetOwnedOptimizerState();
     }
@@ -15221,7 +15347,7 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         // Compiled training state is kept per model, so each model the walk reaches drops its own plan
         // (and the moments inside it); invalidating only the root would leave nested models' plans alive.
         Training.CompiledTapeTrainingStep<T>.Invalidate(this);
-        FusedSession.Restart(disabled: FusedSession.IsDisabled);
+        RestartFusedSessions(disabled: FusedSession.IsDisabled);
 
         var plan = GetOwnedOptimizerPlan(GetType());
 
@@ -15815,13 +15941,21 @@ public abstract partial class NeuralNetworkBase<T> : INeuralNetworkModel<T>, IIn
         {
             layer.ResetState();
         }
-        // Give the fused-training path a fresh chance after ResetState — the
+        // Give the fused-training path a fresh chance after ResetState: the
         // user typically calls this between training runs, which is exactly
         // when the sticky-disable from a prior fallback should be cleared.
-        // Also clear the fused-commitment: ResetState is an explicit
-        // "start training over" signal, so any plan-embedded Adam/SGD state
-        // is no longer needed, and the next run can engage fused fresh.
-        FusedSession.Restart(disabled: FusedTrainingDisabledByConfiguration);
+        // ResetState clears recurrent state, not optimizer state: the eager
+        // optimizer keeps its moments across it, so a committed plan keeps its
+        // own too (no retrace per sequence) and stays committed, so a step that
+        // cannot run fused fails loudly rather than continuing eagerly from the
+        // eager optimizer's older moments. ResetBaseTrainOptimizerState is the
+        // reset that also drops the plan.
+        FusedSession.Rearm(disabled: FusedTrainingDisabledByConfiguration);
+        if (_objectiveSessions is not null)
+        {
+            foreach (var session in _objectiveSessions.Values)
+                session.Rearm(disabled: FusedTrainingDisabledByConfiguration);
+        }
     }
 
     /// <summary>

@@ -10,8 +10,10 @@ using AiDotNet.Serving.Security.Attestation;
 using AiDotNet.Serving.Security.Licensing;
 using AiDotNet.Serving.Services;
 using AiDotNet.Serving.Services.Federated;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Serialization;
 using Pomelo.EntityFrameworkCore.MySql.Infrastructure;
@@ -51,6 +53,22 @@ public class Program
             builder.Configuration.GetSection("ServingProgramSynthesis"));
         builder.Services.Configure<StripeOptions>(
             builder.Configuration.GetSection("Stripe"));
+        builder.Services.Configure<ServingSecurityOptions>(
+            builder.Configuration.GetSection(ServingSecurityOptions.SectionName));
+
+        // Security settings shape the authentication registration below, so they are read and validated now: an
+        // invalid value stops the host here, naming the setting, instead of failing a request later.
+        var securityOptions = new ServingSecurityOptions();
+        builder.Configuration.GetSection(ServingSecurityOptions.SectionName).Bind(securityOptions);
+        securityOptions.Validate();
+
+        // ServingSecurity:ApiKeys:HeaderName is the API key header setting. The legacy
+        // ApiKeyAuthenticationOptions section still overrides it so existing deployments keep working.
+        var legacyApiKeySection = builder.Configuration.GetSection("ApiKeyAuthenticationOptions");
+        string? legacyApiKeyHeaderName = legacyApiKeySection[nameof(ApiKeyAuthenticationOptions.HeaderName)];
+        string apiKeyHeaderName = string.IsNullOrWhiteSpace(legacyApiKeyHeaderName)
+            ? securityOptions.ApiKeys.HeaderName
+            : legacyApiKeyHeaderName;
 
         // Get serving options to configure Kestrel
         var servingOptions = new ServingOptions();
@@ -135,15 +153,57 @@ public class Program
 
         // Stripe payment integration
         builder.Services.AddScoped<IStripeService, StripeService>();
-        builder.Services.AddAuthentication(ApiKeyAuthenticationDefaults.Scheme)
+        var jwtOptions = securityOptions.JwtAuthentication;
+        var authentication = builder.Services.AddAuthentication(ServingAuthenticationSchemes.Default)
+            .AddPolicyScheme(ServingAuthenticationSchemes.Default, "API key or JWT bearer", options =>
+                options.ForwardDefaultSelector = context =>
+                    ServingAuthenticationSchemes.Select(context.Request, apiKeyHeaderName, jwtOptions.Enabled))
             .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(
                 ApiKeyAuthenticationDefaults.Scheme,
-                options => builder.Configuration.GetSection("ApiKeyAuthenticationOptions").Bind(options));
+                options =>
+                {
+                    legacyApiKeySection.Bind(options);
+                    options.HeaderName = apiKeyHeaderName;
+                });
 
+        if (jwtOptions.Enabled)
+        {
+            authentication.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
+            {
+                if (!string.IsNullOrWhiteSpace(jwtOptions.Authority))
+                {
+                    options.Authority = jwtOptions.Authority;
+                }
+
+                options.Audience = jwtOptions.Audience;
+                options.RequireHttpsMetadata = jwtOptions.RequireHttpsMetadata;
+                // Keep claim types as issued, so ServingSecurity:Admin:ClaimType "role" and
+                // ServingSecurity:Jwt:TierClaimType "tier" match the token's own claim names.
+                options.MapInboundClaims = false;
+
+                byte[]? signingKey = jwtOptions.GetSigningKeyBytes();
+                options.TokenValidationParameters = new TokenValidationParameters
+                {
+                    ValidateIssuer = true,
+                    ValidIssuer = string.IsNullOrWhiteSpace(jwtOptions.Issuer) ? null : jwtOptions.Issuer,
+                    ValidateAudience = true,
+                    ValidAudience = jwtOptions.Audience,
+                    ValidateLifetime = true,
+                    ValidateIssuerSigningKey = true,
+                    IssuerSigningKey = signingKey is null ? null : new SymmetricSecurityKey(signingKey)
+                };
+            });
+        }
+
+        var adminOptions = securityOptions.Admin;
         builder.Services.AddAuthorization(options =>
         {
-            options.AddPolicy("AiDotNetAdmin", policy =>
-                policy.RequireClaim(ApiKeyClaimTypes.Scope, ApiKeyScopes.Admin.ToString()));
+            // API keys reach the admin endpoints through the Admin scope; other callers (JWT) through the
+            // configured admin claim.
+            options.AddPolicy(ServingAuthorizationPolicies.Admin, policy =>
+                policy.RequireAuthenticatedUser().RequireAssertion(context =>
+                    context.User.HasClaim(ApiKeyClaimTypes.Scope, ApiKeyScopes.Admin.ToString()) ||
+                    context.User.HasClaim(adminOptions.ClaimType, adminOptions.ClaimValue)));
 
             // Default authorization is REQUIRED for every endpoint that
             // doesn't explicitly opt out with [AllowAnonymous]. Without
@@ -210,6 +270,9 @@ public class Program
         builder.Services.AddSingleton<IServingCodeTaskRequestValidator, ServingCodeTaskRequestValidator>();
         builder.Services.AddSingleton<IServingCodeTaskResultRedactor, ServingCodeTaskResultRedactor>();
         builder.Services.AddSingleton<IServingCodeTaskExecutor, ServingCodeTaskExecutor>();
+
+        // Apply database migrations first: hosted services start in registration order, before requests.
+        builder.Services.AddHostedService<ServingDatabaseMigrationService>();
 
         // Register hosted service to load startup models at application start
         builder.Services.AddHostedService<ModelStartupService>();
@@ -307,12 +370,11 @@ public class Program
                 "or accept the fail-closed default for same-origin-only deployments.");
         }
 
-        // Apply migrations on startup (configurable)
-        if (persistenceOptions.MigrateOnStartup)
+        if (!string.IsNullOrWhiteSpace(legacyApiKeyHeaderName))
         {
-            using var scope = app.Services.CreateScope();
-            var db = scope.ServiceProvider.GetRequiredService<ServingDbContext>();
-            db.Database.Migrate();
+            app.Logger.LogWarning(
+                "ApiKeyAuthenticationOptions:HeaderName is deprecated; move it to ServingSecurity:ApiKeys:HeaderName. " +
+                "The legacy value {HeaderName} is in effect.", legacyApiKeyHeaderName);
         }
 
         // Configure the HTTP request pipeline

@@ -372,19 +372,10 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             return parameters;
         }
 
-        // Gradient clipping to prevent overshooting on ill-conditioned problems
-        // Clip gradients with norm > 10 to prevent explosive updates
-        var maxGradientNorm = NumOps.FromDouble(10.0);
-        Vector<T> clippedGradient;
-        if (NumOps.GreaterThan(gradientNorm, maxGradientNorm))
-        {
-            var scale = NumOps.Divide(maxGradientNorm, gradientNorm);
-            clippedGradient = (Vector<T>)Engine.Multiply(gradient, scale);
-        }
-        else
-        {
-            clippedGradient = gradient;
-        }
+        // The curvature pairs and the direction use the gradient as given. A fixed clip here (it was norm 10) made
+        // y = g_k - g_{k-1} the difference of two clipped gradients, so on f(x) = x^2 the steps from x = 10 to x = 5
+        // stored the same gradient twice and skipped the update. Clipping, when wanted, is the options' job
+        // (EnableGradientClipping); the step-length limit below still bounds each step.
 
         // Update inverse Hessian if we have previous state
         if (_previousGradient is not null && _previousParameters is not null)
@@ -392,7 +383,7 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             // s = x_k - x_{k-1}
             var s = (Vector<T>)Engine.Subtract(parameters, _previousParameters);
             // y = g_k - g_{k-1}
-            var y = (Vector<T>)Engine.Subtract(clippedGradient, _previousGradient);
+            var y = (Vector<T>)Engine.Subtract(gradient, _previousGradient);
 
             var sDotY = s.DotProduct(y);
 
@@ -413,7 +404,7 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
         }
 
         // Compute search direction: d = -H * g
-        var direction = _inverseHessian.Multiply(clippedGradient);
+        var direction = _inverseHessian.Multiply(gradient);
         var directionSpan = direction.AsWritableSpan();
         for (int i = 0; i < directionSpan.Length; i++)
         {
@@ -458,7 +449,7 @@ public partial class BFGSOptimizer<T, TInput, TOutput> : GradientBasedOptimizerB
             _previousGradient = new Vector<T>(parameters.Length, skipZeroInit: true);
         }
         parameterSpan.CopyTo(_previousParameters.AsWritableSpan());
-        clippedGradient.AsSpan().CopyTo((_previousGradient ?? throw new InvalidOperationException("_previousGradient is null where it is required.")).AsWritableSpan());
+        gradient.AsSpan().CopyTo((_previousGradient ?? throw new InvalidOperationException("_previousGradient is null where it is required.")).AsWritableSpan());
 
         return direction;
     }

@@ -31,7 +31,7 @@ jobs:
           ref: 46e1069bc677f60b386fbfb8d9c184f4fe6eaad2 # v0.148.0, the AiDotNet.Tensors version Directory.Packages.props references
           path: companion-tensors
           persist-credentials: false
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: '10.0.x'
       - name: Install OpenCL runtime

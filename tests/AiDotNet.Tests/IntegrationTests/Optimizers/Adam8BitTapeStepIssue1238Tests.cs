@@ -54,6 +54,8 @@ public class Adam8BitTapeStepIssue1238Tests
 
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            // The expected values are the update rule on the raw gradient; the default norm clip is not part of it.
+            EnableGradientClipping = false,
             Min8BitSize = 0,
             BlockSize = 64,
             CompressBothMoments = true,
@@ -109,6 +111,8 @@ public class Adam8BitTapeStepIssue1238Tests
 
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            // The expected values are the update rule on the raw gradient; the default norm clip is not part of it.
+            EnableGradientClipping = false,
             Min8BitSize = 0,
             BlockSize = 64,
             CompressBothMoments = false,
@@ -163,6 +167,8 @@ public class Adam8BitTapeStepIssue1238Tests
         // review time.
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            // The expected values are the update rule on the raw gradient; the default norm clip is not part of it.
+            EnableGradientClipping = false,
             Min8BitSize = 0,
             BlockSize = 16,
             CompressBothMoments = true,
@@ -213,6 +219,8 @@ public class Adam8BitTapeStepIssue1238Tests
 
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            // The expected values are the update rule on the raw gradient; the default norm clip is not part of it.
+            EnableGradientClipping = false,
             Min8BitSize = 0,
             BlockSize = 32,
             CompressBothMoments = true,
@@ -269,6 +277,8 @@ public class Adam8BitTapeStepIssue1238Tests
 
         var options = new Adam8BitOptimizerOptions<double, Matrix<double>, Vector<double>>
         {
+            // The expected values are the update rule on the raw gradient; the default norm clip is not part of it.
+            EnableGradientClipping = false,
             BlockSize = 64,
             InitialLearningRate = 0.01,
         };
