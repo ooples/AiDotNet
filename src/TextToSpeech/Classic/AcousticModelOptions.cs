@@ -30,23 +30,28 @@ public class AcousticModelOptions : TtsModelOptions
     }
 
     /// <summary>Gets or sets the encoder embedding dimension.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron (Wang et al. 2017) sizes its parts with TacotronOptions' own fields (EmbeddingDim, CbhgChannels); the inherited encoder width has no part to size.", ModelType = typeof(Tacotron<>))]
     public virtual int EncoderDim { get; set; } = 256;
 
     /// <summary>Ordered symbol inventory used to train the text embedding. Null selects this model's English inventory.</summary>
     public string[]? TextSymbols { get; set; }
 
     /// <summary>Gets or sets the decoder output dimension (mel channels).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron (Wang et al. 2017) sizes its parts with TacotronOptions' own fields (DecoderRnnDim, AttentionDim); the inherited decoder width has no part to size.", ModelType = typeof(Tacotron<>))]
     public virtual int DecoderDim { get; set; } = 80;
 
     /// <summary>Gets or sets the number of mel frames generated per decoder step (reduction factor).</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("PromptTTS's acoustic model is FastSpeech 2's (Guo et al. 2023): non-autoregressive, it emits every frame at once, so there is no reduction factor.", ModelType = typeof(DescriptionBased.PromptTTS<>))]
     public int OutputsPerStep { get; set; } = 1;
 
     /// <summary>Gets or sets whether to use a postnet for mel refinement.</summary>
     public bool UsePostnet { get; set; } = true;
 
     /// <summary>Gets or sets the postnet embedding dimension.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("PromptTTS's acoustic model is FastSpeech 2's (Guo et al. 2023), which has no post-net (FastSpeech2Options sets UsePostnet = false).", ModelType = typeof(DescriptionBased.PromptTTS<>))]
     public int PostnetDim { get; set; } = 512;
 
     /// <summary>Gets or sets the number of postnet convolution layers.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("PromptTTS's acoustic model is FastSpeech 2's (Guo et al. 2023), which has no post-net (FastSpeech2Options sets UsePostnet = false).", ModelType = typeof(DescriptionBased.PromptTTS<>))]
     public int PostnetLayers { get; set; } = 5;
 }

@@ -198,7 +198,7 @@ public partial class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
         }
 
         var o = _options;
-        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(Architecture.RandomSeed ?? o.SamplingSeed);
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.Seed ?? Architecture.RandomSeed ?? o.SamplingSeed);
         int keyValueHeads = o.KeyValueHeads > 0 ? o.KeyValueHeads : o.NumHeads;
         _core = new ParlerCore<T>(Engine, _decoderLayers, new ParlerConfiguration(
             AudioVocabulary: o.AudioVocabulary, Codebooks: o.NumCodebooks, ModelDim: o.HiddenDim, Heads: o.NumHeads,
@@ -431,6 +431,7 @@ public partial class ParlerTTS<T> : TtsModelBase<T>, ICodecTts<T>
                 EnableGradientClipping = o.MaxGradientNorm > 0,
                 MaxGradientNorm = o.MaxGradientNorm > 0 ? o.MaxGradientNorm : 1.0,
                 LearningRateScheduler = schedule,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             };
             _optimizer = PaperOptimizerFactory.VerifyHandBuilt(this, new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, options));
         }

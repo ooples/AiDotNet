@@ -95,13 +95,16 @@ public partial class NemotronSpeech<T> : AudioNeuralNetworkBase<T>, ISpeechRecog
     }
 
     /// <inheritdoc />
-    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer => _optimizer;
+    // Rebuilt from the options if it was cleared (a probe that changes an option clears it).
+    protected internal override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? TrainingOptimizer =>
+        _optimizer ??= PaperOptimizerFactory.VerifyHandBuilt(this, ReleaseOptimizer());
 
     // The release's AdamW under Noam with its factor, which the paper-optimizer factory's Noam does not take.
     private AdamWOptimizer<T, Tensor<T>, Tensor<T>> ReleaseOptimizer() => new(this, new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
     {
         Beta1 = 0.9, Beta2 = 0.98, WeightDecay = _options.WeightDecay,
         LearningRateScheduler = new NoamSchedule(_options.EncoderDim, Math.Max(1, _options.WarmupSteps), _options.NoamFactor),
+        SchedulerStepMode = SchedulerStepMode.StepPerBatch,
     });
 
     /// <summary>The release's SentencePiece tokenizer (1,024 pieces; output id <c>p + 1</c> is piece <c>p</c>).</summary>

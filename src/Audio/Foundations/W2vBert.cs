@@ -401,6 +401,7 @@ public partial class W2vBert<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMod
                 Beta2 = 0.98,
                 Epsilon = 1e-9,
                 LearningRateScheduler = schedule,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             }), "w2v-BERT");
         return _optimizer;
     }

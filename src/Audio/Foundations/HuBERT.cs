@@ -75,6 +75,7 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
     private bool _disposed;
     // The paper network on the native path; null in ONNX mode or with custom layers.
     private Wav2Vec2Network<T>? _network;
+    internal Wav2Vec2Network<T>? Network => _network;
     private Random _random = Tensors.Helpers.RandomHelper.CreateSeededRandom(43);
 
     #endregion

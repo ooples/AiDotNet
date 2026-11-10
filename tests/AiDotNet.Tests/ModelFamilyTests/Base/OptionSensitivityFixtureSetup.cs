@@ -546,6 +546,47 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> chatter && option == "VoiceEncoderPartialRate")
             return OptionSensitivityHarness.Fingerprint(chatter.VoiceEncoderModel!.Embed(ChatterboxFixture.Recording<T>(2), 24000)
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.TextToSpeech.Classic.Tacotron<T> griffin
+            && option is "PreEmphasis" or "GriffinLimIterations" or "GriffinLimPower")
+            // These act only where the linear spectrogram becomes audio: Griffin-Lim, then de-emphasis.
+            return OptionSensitivityHarness.Fingerprint(griffin.SynthesizeWaveform("ab")
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.TextToSpeech.DescriptionBased.PromptTTS<T> prompted
+            && option is "StyleLearningRate" or "StyleTrainingSteps" or "SamplingSeed" or "PrefixHiddenSize")
+        {
+            // These drive the style encoder's own stage (TrainStyle), which the generic step does not run.
+            var settings = (AiDotNet.TextToSpeech.DescriptionBased.PromptTTSOptions)prompted.GetOptions();
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var promptIds = new Tensor<T>(new[] { 5 });
+            for (int i = 0; i < 5; i++) promptIds[i] = ops.FromDouble(2 + (7 * i) % Math.Max(1, settings.StyleVocabularySize - 2));
+            var labels = settings.StyleFactorClasses.Select((classes, i) => i % classes).ToArray();
+            var losses = new List<double>();
+            for (int step = 0; step < 3; step++) losses.Add(ops.ToDouble(prompted.TrainStyle(promptIds, labels)));
+            losses.Add(ops.ToDouble(prompted.EvaluateStyleLoss(promptIds, labels)));
+            return OptionSensitivityHarness.Fingerprint(losses);
+        }
+        if (network is AiDotNet.Audio.Foundations.W2vBert<T> w2v && option is "SemanticLayer" or "SemanticClusters")
+        {
+            // The layer and cluster count shape AudioLM's semantic tokenizer, fitted here on three synthetic voices.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            Tensor<T> Voice(double hz)
+            {
+                var x = new Tensor<T>(new[] { 8000 });
+                for (int i = 0; i < x.Length; i++)
+                    x[i] = ops.FromDouble(0.5 * Math.Sin(2 * Math.PI * hz * i / 16000) + 0.2 * Math.Sin(2 * Math.PI * 3.1 * hz * i / 16000));
+                return x;
+            }
+            var recordings = new[] { Voice(120), Voice(220), Voice(320) };
+            w2v.FitSemanticTokenizer(recordings);
+            return OptionSensitivityHarness.Fingerprint(recordings.SelectMany(r => w2v.SemanticTokens(r)).Select(t => (double)t));
+        }
+        if (network is AiDotNet.Audio.Foundations.HuBERT<T> hubert && option == "MaskTimeProbability")
+        {
+            // At the fixture's length a span covers every frame whatever the rate; draw the mask over 500 frames.
+            var model = hubert.Network ?? throw new InvalidOperationException("native model");
+            var drawn = model.DrawMask(1, 500, model.Configuration.MaskTimeProbability, new Random(1337));
+            return OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, 500).Select(t => drawn[0, t] ? 1.0 : 0.0));
+        }
         if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> topK && option == "GenerationTopK")
         {
             // Top-k filters the T3 speech-token draw; the fingerprint is the seeded generation itself.
@@ -1072,6 +1113,30 @@ internal static class OptionSensitivityFixtureSetup
     private static bool IsWaveRnnTrainingOption(string option) => IsWaveRnnSparseOption(option)
         || option is "SequenceSamples" or "LearningRate" or "WeightDecay" or "MaxGradientNorm";
 
+    /// <summary>After <paramref name="option"/> takes a perturbed value: options the model requires to equal it follow, so
+    /// the perturbation tests the pair rather than the constructor's rejection of a mismatch.</summary>
+    internal static void Reconcile(AiDotNet.Models.Options.ModelOptions options, string option)
+    {
+        // Parler-TTS's frames, codes and codebooks are its codec's: the codec follows (a hop of h is one stride of h).
+        if (options is AiDotNet.TextToSpeech.DescriptionBased.ParlerTTSOptions parler
+            && option is "SampleRate" or "HopSize" or "CodebookSize" or "NumCodebooks")
+        {
+            var codec = (AiDotNet.Audio.Effects.DACOptions)AiDotNet.Models.CloneEngine.CopyConfiguration(parler.Codec);
+            codec.SampleRate = parler.SampleRate;
+            codec.CodebookSize = parler.CodebookSize;
+            codec.NumQuantizers = parler.NumCodebooks;
+            codec.TargetBandwidthKbps = 1e6;                // every quantizer, so the count is NumQuantizers
+            if (option == "HopSize" && parler.HopSize > 0) { codec.EncoderRates = [parler.HopSize]; codec.DecoderRates = [parler.HopSize]; }
+            parler.Codec = codec;
+        }
+        // PromptTTS's style and content representations share one width (§4.1).
+        if (options is AiDotNet.TextToSpeech.DescriptionBased.PromptTTSOptions prompt)
+        {
+            if (option == "HiddenDim") prompt.EncoderDim = prompt.HiddenDim;
+            else if (option == "EncoderDim") prompt.HiddenDim = prompt.EncoderDim;
+        }
+    }
+
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
         if (options is AiDotNet.TextToSpeech.Vocoders.WaveRNNOptions waveRnn)
@@ -1426,6 +1491,12 @@ internal static class OptionSensitivityFixtureSetup
         }
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chatter && option == "VoiceEncoderPartialRate")
             chatter.VoiceEncoderPartialFrames = 160;
+        if (options is AiDotNet.TextToSpeech.DescriptionBased.ParlerTTSOptions rotary && option == "RopeTheta")
+            rotary.RotaryEmbeddings = true;                 // the base acts only on rotary positions (off in the release)
+        if (options is AiDotNet.TextToSpeech.DescriptionBased.PromptTTSOptions seeded && option == "SamplingSeed")
+            seeded.StyleDropout = 0.1;                        // the seed draws the style encoder's dropout masks
+        if (options is AiDotNet.Audio.Foundations.W2vBertOptions semantic && option == "SemanticLayer")
+            semantic.MaskedLayers = 2;                       // the fixture's one masked block leaves no other layer to read
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions distilled && option == "DistillationTeacherSteps")
         {
             distilled.Variant = AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant.Turbo;
@@ -1534,7 +1605,8 @@ internal static class OptionSensitivityFixtureSetup
     {
         if (network is not AiDotNet.TextToSpeech.TtsModelBase<T>
             and not AiDotNet.Audio.Codecs.NeuralAudioCodecBase<T>
-            and not AiDotNet.SpeechRecognition.NeMo.CanaryQwen<T>) return;
+            and not AiDotNet.SpeechRecognition.NeMo.CanaryQwen<T>
+            and not AiDotNet.SpeechRecognition.NeMo.NemotronSpeech<T>) return;
         // The generated fixtures inject constant-rate optimizers for convergence invariants.
         // Reconstruct option probes without that override so the paper optimizer reads its settings.
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance

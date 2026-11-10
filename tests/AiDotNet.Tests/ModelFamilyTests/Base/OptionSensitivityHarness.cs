@@ -323,6 +323,7 @@ public static class OptionSensitivityHarness
                 perturbed = Rebuild(probe, declaredOptions, options =>
                 {
                     property.SetValue(options, candidate);
+                    OptionSensitivityFixtureSetup.Reconcile(options, option);
                     applied = property.GetValue(options);
                 }, expectedParameterCount: control.ParameterCount,
                     expectedParameterShapesFingerprint: control.ParameterShapesFingerprint);

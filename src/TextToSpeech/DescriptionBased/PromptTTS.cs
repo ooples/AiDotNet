@@ -460,6 +460,7 @@ public partial class PromptTTS<T> : VarianceAdaptorTtsModelBase<T>, IAcousticMod
                 LearningRateScheduler = total > 0
                     ? new LambdaLRScheduler(o.StyleLearningRate, step => Math.Max(0.0, (double)(total - step) / total))
                     : null,
+                SchedulerStepMode = SchedulerStepMode.StepPerBatch,
             };
             _styleOptimizer = PaperOptimizerFactory.VerifyHandBuilt(this, new AdamWOptimizer<T, Tensor<T>, Tensor<T>>(this, options), "style-encoder");
         }

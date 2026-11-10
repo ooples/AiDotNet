@@ -67,6 +67,7 @@ public class TtsModelOptions : ModelOptions
 
     /// <summary>Gets or sets the model hidden dimension.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro's released style and decoder interfaces require hidden width 512; the native constructor rejects other widths.", ModelType = typeof(EndToEnd.Kokoro<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron (Wang et al. 2017) sizes its parts with TacotronOptions' own fields (EmbeddingDim, CbhgChannels, AttentionDim, DecoderRnnDim); the inherited width has no part to size.", ModelType = typeof(Classic.Tacotron<>))]
     public virtual int HiddenDim { get; set; } = 256;
 
     /// <summary>Gets or sets the number of encoder layers.</summary>
@@ -74,16 +75,20 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("OuteTTS uses LlamaForCausalLM or Qwen3ForCausalLM without a separate text encoder; its native constructor requires NumEncoderLayers=0 (OuteAI/Llama-OuteTTS-1.0-1B config.json).", ModelType = typeof(Latest.OuteTTS<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("CSM configures its native Llama layer counts through BackboneLayers and DecoderLayers.", ModelType = typeof(CodecBased.CSM<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("MinMo configures SenseVoice depth through LargeEncoderLayers, SmallEncoderBlocks and SmallEncoderTpBlocks.", ModelType = typeof(MultiModal.MinMo<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron (Wang et al. 2017) sizes its parts with TacotronOptions' own fields (PrenetSizes, EncoderBankSize, CbhgChannels); the inherited layer count has no part to size.", ModelType = typeof(Classic.Tacotron<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Parler-TTS's description encoder depth is TextEncoderLayers (Flan-T5's); its decoder depth is NumDecoderLayers. The inherited encoder count has no part to size.", ModelType = typeof(DescriptionBased.ParlerTTS<>))]
     public virtual int NumEncoderLayers { get; set; } = 6;
 
     /// <summary>Gets or sets the number of decoder layers.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoice's released HiFi-GAN decoder has four upsampling stages [8,8,2,2]; other depths are rejected by the native constructor (myshell-ai/OpenVoice checkpoints/converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoice<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("OpenVoiceV2's released HiFi-GAN decoder has four upsampling stages [8,8,2,2]; other depths are rejected by the native constructor (myshell-ai/OpenVoiceV2 converter/config.json).", ModelType = typeof(VoiceCloning.OpenVoiceV2<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron's decoder is the paper's fixed attention GRU plus two residual GRUs (§3.3); the inherited layer count has no part to size.", ModelType = typeof(Classic.Tacotron<>))]
     public virtual int NumDecoderLayers { get; set; } = 6;
 
     /// <summary>Gets or sets the number of attention heads.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("CSM configures native attention heads through BackboneHeads, DecoderHeads and MimiHeads.", ModelType = typeof(CodecBased.CSM<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Deep Voice 3 section 3.6 uses a single dot-product alignment per convolutional attention hop, not configurable multi-head attention; the native constructor requires NumHeads=1 (arXiv:1710.07654).", ModelType = typeof(Classic.DeepVoice3<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron's attention is single-head additive (Bahdanau) attention, §3.3; there are no heads.", ModelType = typeof(Classic.Tacotron<>))]
     public virtual int NumHeads { get; set; } = 8;
 
     /// <summary>Gets or sets the phoneme/text vocabulary size.</summary>
@@ -114,6 +119,7 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("CSM's native Llama and Mimi blocks use deterministic attention without dropout.", ModelType = typeof(CodecBased.CSM<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("UniAudio's author MegaByteModel and ResidualAttentionBlock contain no dropout (yangdongchao/UniAudio, UniAudio/model.py); native options require zero dropout.", ModelType = typeof(CodecBased.UniAudio<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("MinMo configures dropout on its native Qwen adapters through LoraDropout; its other native blocks do not use this generic setting.", ModelType = typeof(MultiModal.MinMo<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron applies dropout only in its pre-nets (PrenetDropout, 0.5, Table 1); the inherited rate has no part to act on.", ModelType = typeof(Classic.Tacotron<>))]
     public virtual double DropoutRate { get; set; } = 0.1;
 
     /// <summary>Gets or sets the ONNX model path.</summary>
@@ -126,5 +132,6 @@ public class TtsModelOptions : ModelOptions
     public double LearningRate { get; set; } = 1e-4;
 
     /// <summary>Gets or sets the weight decay.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Tacotron trains with plain Adam and no weight decay (§4); the inherited decay has no part to act on.", ModelType = typeof(Classic.Tacotron<>))]
     public double WeightDecay { get; set; } = 0.01;
 }

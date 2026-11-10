@@ -119,6 +119,7 @@ public partial class Tacotron2<T> : TtsModelBase<T>, IAcousticModel<T>, ITrainin
             l2RegularizationStrength: _options.WeightDecay,
             learningRateScheduler: new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(rate,
                 step => step < 50000 ? 1.0 : Math.Max(1e-2, Math.Pow(0.5, (step - 50000) / 50000.0))),
+            schedulerStepMode: AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
             maxGradientNorm: 1.0);
         InitializeLayers();
     }
