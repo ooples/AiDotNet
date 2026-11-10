@@ -1206,3 +1206,5 @@ AiDotNet.Attributes.ScalarKernelAttribute.Reason.get -> string!
 AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase<T>.DetectEachImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, double confidenceThreshold, double nmsThreshold) -> AiDotNet.ComputerVision.Detection.ObjectDetection.BatchDetectionResult<T>!
 override AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.CascadeRCNN<T>.DetectBatch(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, double confidenceThreshold, double nmsThreshold) -> AiDotNet.ComputerVision.Detection.ObjectDetection.BatchDetectionResult<T>!
 override AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.FasterRCNN<T>.DetectBatch(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, double confidenceThreshold, double nmsThreshold) -> AiDotNet.ComputerVision.Detection.ObjectDetection.BatchDetectionResult<T>!
+override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
+virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool

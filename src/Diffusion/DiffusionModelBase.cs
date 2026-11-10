@@ -1406,6 +1406,12 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         Tensor<T> expectedOutput) => input;
 
     /// <summary>
+    /// Whether a training sample carries a leading batch axis, so each element gets its own timestep. Rank 1 is one
+    /// sample; by default any higher rank is a batch along axis 0.
+    /// </summary>
+    protected virtual bool IsBatchedTrainingSample(Tensor<T> sample) => sample.Rank >= 2;
+
+    /// <summary>
     /// Predicts scheduler noise for a prepared training sample.
     /// </summary>
     /// <remarks>
@@ -1483,8 +1489,8 @@ public abstract partial class DiffusionModelBase<T> : IDiffusionModel<T>, IConfi
         // across the batch, which is the canonical DDPM training pattern.
         //
         // Rank-1 input (unbatched, historical AiDotNet contract) still gets a single
-        // timestep; rank ≥ 2 gets per-element timesteps.
-        bool isBatched = trainingSample.Rank >= 2;
+        // timestep; rank ≥ 2 gets per-element timesteps unless the model reads it as one sample.
+        bool isBatched = IsBatchedTrainingSample(trainingSample);
         int batchSize = isBatched ? trainingSample.Shape[0] : 1;
         var timesteps = new int[batchSize];
         for (int b = 0; b < batchSize; b++)
