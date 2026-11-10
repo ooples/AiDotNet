@@ -19,7 +19,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </remarks>
 public class MelGANPaperTests
 {
-    private static MelGANOptions Options() => new()
+    internal static MelGANOptions Options() => new()
     {
         Ngf = 4, UpsampleRates = [4, 4], DiscriminatorWidthDivisor = 16, MelChannels = 8, FftSize = 64, WindowSize = 64,
         HopSize = 16, SampleRate = 4000, SegmentSize = 512,

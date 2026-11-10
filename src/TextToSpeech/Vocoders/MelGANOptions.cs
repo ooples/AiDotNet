@@ -20,6 +20,7 @@ public class MelGANOptions : VocoderOptions
     public MelGANOptions(MelGANOptions other)
         : base(other ?? throw new ArgumentNullException(nameof(other)))
     {
+        UpsampleRates = (int[])other.UpsampleRates.Clone();
         Ngf = other.Ngf;
         ResidualLayers = other.ResidualLayers;
         NumDiscriminators = other.NumDiscriminators;
@@ -71,6 +72,6 @@ public class MelGANOptions : VocoderOptions
     /// <summary>Gets or sets the STFT window of the input features (1024).</summary>
     public int WindowSize { get; set; } = 1024;
 
-    /// <summary>Gets or sets the seed of the training segment draws.</summary>
+    /// <summary>Gets or sets the seed of the recording amplitude and training segment draws.</summary>
     public int SamplingSeed { get; set; }
 }

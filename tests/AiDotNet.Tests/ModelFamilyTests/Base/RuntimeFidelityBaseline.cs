@@ -4446,7 +4446,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.Vocoders.MelGAN`1::SampleRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.MelGAN`1::UpsampleInitialChannels", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.MelGAN`1::VocabSize", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.TextToSpeech.Vocoders.MelGAN`1::WeightDecay", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN`1::DropoutRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN`1::FftSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN`1::HiddenDim", OptionSensitivityOutcome.Insensitive },

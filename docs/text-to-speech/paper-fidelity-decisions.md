@@ -229,6 +229,17 @@ The waveform hop configures the product of the actual LVC strides while keeping 
 Recording training follows the [released dataset](https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/datasets/dataloader.py): zero-pad short audio to segment length plus 2000, compute the whole mel spectrogram, then choose aligned audio/mel crops while leaving the final context frame out of the start range. The [released STFT](https://github.com/maum-ai/univnet/blob/9bb2b54838bb6d7ce767131cc7b8b61198bc7558/utils/stft.py) explicitly retains librosa's float32 mel bank; those constants are preserved for double-precision inference too. `univnet_recording_reference.py` checks three Git blobs and executes the unmodified loader/STFT bodies, with API compatibility adapters and double-precision comparison inputs. Its long- and short-recording fixtures check exact waveform crops and mel values at 1e-10, including the boundary context lost by recomputing features after cropping. Runtime segment-size checks train on longer real recordings with an independent control-cache group.
 
 
+### MelGAN recording and optimizer fidelity
+
+The [paper](https://arxiv.org/abs/1910.06711), Sections 2.3 and Appendix B, remains authoritative: summed hinge adversarial and feature-matching terms with weight 10, no waveform or mel training loss, and Adam at 1e-4 with fixed 0.5/0.9 betas. The released trainer additionally rescales feature matching by discriminator/layer counts; that rescaling does not replace the explicit paper objective. Both native optimizers now honor configured rate, betas and optional coupled L2 decay without additional clipping; default decay remains zero.
+
+The pinned [released dataset](https://github.com/descriptinc/melgan-neurips/blob/6488045bfba1975602288de07a58570c7b4d66ea/mel2wav/dataset.py) normalizes the complete recording to a 0.95 peak and applies uniform amplitude augmentation in [0.3, 1.0) before an arbitrary sample crop or zero padding. Recording training now follows that ordering. The [released Audio2Mel](https://github.com/descriptinc/melgan-neurips/blob/6488045bfba1975602288de07a58570c7b4d66ea/mel2wav/modules.py) explicitly keeps a float32 mel bank and computes magnitude without epsilon; the shared HiFi-GAN epsilon is no longer applied to MelGAN. `melgan_recording_reference.py` verifies both Git blobs and executes unmodified author class bodies with only modern API adapters. Goldens cover long crops, short padding, silence and low-energy features, retaining original float32 arithmetic with bounds of 1e-7 for audio and 2e-6 for mel comparisons against native double precision. Python/NumPy RNG choices are recorded separately rather than claiming identical .NET random streams.
+
+Native tests verify reproducible real generator/discriminator updates, changed crop/seed/decay behavior and independent copied stride arrays. The original crop-size and sampling-seed probes now train on longer actual recordings with a dedicated control-cache group. Their original contracts pass; the real decay update also retires its stale insensitive baseline entry.
+
+
+
+
 ## Codec language models
 
 | Model | Paper | Gaps filled from | Choices |

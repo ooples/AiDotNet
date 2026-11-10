@@ -50,6 +50,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "AddBlank" ? "natural-phoneme-frontend"
             : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.UnivNet<T> && option == "SegmentSize" ? "univnet-recording-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.MelGAN<T> && option is "SegmentSize" or "SamplingSeed" ? "melgan-recording-crop"
             : network is AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T> && SpearOptionFixture.Handles(option) ? "spear-" + option
             : network is AiDotNet.TextToSpeech.Latest.OuteTTS<T> && OuteOptionFixture.Handles(option) ? "oute-" + option
             : network is AiDotNet.TextToSpeech.FlowDiffusion.F5TTS<T> or AiDotNet.TextToSpeech.FlowDiffusion.E2TTS<T> ? "infilling-" + option
@@ -803,6 +804,13 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.Vocoders.MelGAN<T> melGan && option is "SegmentSize" or "SamplingSeed")
+        {
+            var settings = (AiDotNet.TextToSpeech.Vocoders.MelGANOptions)melGan.GetOptions();
+            melGan.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+            { Tokens = new Tensor<T>(new[] { 1 }), Audio = VocoderRecording<T>(settings) });
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.Vocoders.UnivNet<T> univNet && option == "SegmentSize")
         {
             var settings = (AiDotNet.TextToSpeech.Vocoders.UnivNetOptions)univNet.GetOptions();
@@ -988,6 +996,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Vocoders.MelGANOptions melGan && option is "SegmentSize" or "SamplingSeed")
+            melGan.SegmentSize = checked(4 * melGan.UpsampleRates.Aggregate(1, (a, b) => a * b));
         if (options is AiDotNet.TextToSpeech.Vocoders.UnivNetOptions univNet && option == "SegmentSize")
             univNet.SegmentSize = checked(4 * univNet.HopSize);
         if (options is AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions chatterbox && option == "Watermark")
