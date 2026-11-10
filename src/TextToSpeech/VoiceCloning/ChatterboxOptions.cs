@@ -13,6 +13,13 @@ public enum ChatterboxVariant
 
     /// <summary>The 23-language model, version 3 (<c>t3_mtl23ls_v3</c>).</summary>
     MultilingualV3,
+
+    /// <summary>Chatterbox Turbo (<c>ResembleAI/chatterbox-turbo</c>): a GPT-2 medium T3 over GPT-2 text tokens and a two-step
+    /// mean-flow S3Gen.</summary>
+    Turbo,
+
+    /// <summary>Chatterbox Nano (<c>ResembleAI/chatterbox-nano</c>): Turbo with a GPT-2 small T3.</summary>
+    Nano,
 }
 
 /// <summary>Options for Resemble AI's Chatterbox releases (the original English model by default; see
@@ -114,7 +121,53 @@ public class ChatterboxOptions : CosyVoiceConformerOptions
         ChineseSegmenterPath = other.ChineseSegmenterPath;
         HebrewDiacritizerPath = other.HebrewDiacritizerPath;
         RussianStresserPath = other.RussianStresserPath;
+        GenerationTopK = other.GenerationTopK;
+        ReferenceLoudness = other.ReferenceLoudness;
+        DistillationTeacherSteps = other.DistillationTeacherSteps;
     }
+
+    /// <summary>Options for Chatterbox Turbo, or Nano (<c>ChatterboxTurboTTS.from_local</c>'s T3Config and
+    /// <c>generate()</c>'s defaults): GPT-2 medium (24 layers, 1,024 wide) or small (12, 768) over the 50,276 GPT-2 text
+    /// tokens, 6,563 speech tokens, 375 raw prompt tokens from 15 s of reference; sampling at temperature 0.8 with top-k
+    /// 1,000, top-p 0.95 and repetition penalty 1.2, no guidance; the reference normalized to −27 LUFS; a two-step mean-flow
+    /// S3Gen.</summary>
+    public static ChatterboxOptions Turbo(bool nano = false)
+    {
+        int width = nano ? 768 : 1024;
+        return new ChatterboxOptions
+        {
+            Variant = nano ? ChatterboxVariant.Nano : ChatterboxVariant.Turbo,
+            VocabSize = 50276,
+            SpeechVocabularySize = 6563,
+            LLMDim = width,
+            NumLLMLayers = nano ? 12 : 24,
+            NumHeads = nano ? 12 : 16,
+            KeyValueHeads = nano ? 12 : 16,
+            LmFeedForwardDim = 4 * width,
+            SpeechConditionPromptTokens = 375,
+            EncoderReferenceSeconds = 15,
+            Exaggeration = 0,
+            ClassifierFreeGuidanceWeight = 0,
+            MinP = 0,
+            GenerationTopP = 0.95,
+            GenerationTopK = 1000,
+            ReferenceLoudness = -27,
+            FlowTimesteps = 2,
+        };
+    }
+
+    /// <summary>Top-k sampling of speech tokens (Hugging Face's <c>TopKLogitsWarper</c>); 0 keeps every token. The original
+    /// and multilingual releases do not use it (0); Turbo samples from the top 1,000.</summary>
+    public int GenerationTopK { get; set; }
+
+    /// <summary>The integrated loudness (LUFS, ITU-R BS.1770 as pyloudnorm measures it) a reference recording is normalized
+    /// to before conditioning, or null to use it as recorded (the original and multilingual releases). Turbo uses −27.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("The loudness applies to a reference recording when a voice is created, which token-id inputs never reach. ChatterboxTurboTests checks that CreateVoice normalizes the reference to it.")]
+    public double? ReferenceLoudness { get; set; }
+
+    /// <summary>Euler steps of the frozen teacher S3Gen per distillation target when training a mean-flow (Turbo, Nano)
+    /// decoder: the teacher's average velocity over [t, r] (IntMeanFlow, Eq. 5–6; the paper's default 16).</summary>
+    public int DistillationTeacherSteps { get; set; } = 16;
 
     /// <summary>Options for the 23-language release (<c>ChatterboxMultilingualTTS</c>): its 2,454-symbol grapheme vocabulary,
     /// otherwise the English model's sizes.</summary>

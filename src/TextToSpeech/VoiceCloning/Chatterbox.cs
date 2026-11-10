@@ -41,6 +41,8 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     private ChatterboxTokenizer? _tokenizer;
     private PerthWatermarker<T>? _watermarker;
     private ChatterboxMultilingualText? _multilingualText;
+    private CosyVoiceFlow<T>? _teacherFlow;
+    private AiDotNet.Tokenization.Interfaces.ITokenizer? _gpt2Tokenizer;
     private CosyVoiceFlowConfiguration? _flowConfiguration;
     private readonly ConditionalWeakTable<TtsVoice<T>, T3VoiceCondition> _t3VoiceConditions = new();
     private int _t3WeightsGeneration;
@@ -111,29 +113,48 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     public override int[] Tokenize(string text)
     {
         if (text is null) throw new ArgumentNullException(nameof(text));
-        return IsMultilingual ? MultilingualText.Encode(text, _options.LanguageId.ToLowerInvariant()) : Tokenizer.Encode(text);
+        if (IsMultilingual) return MultilingualText.Encode(text, _options.LanguageId.ToLowerInvariant());
+        if (IsTurbo) return Gpt2Tokenizer.Encode(text).TokenIds.ToArray();
+        return Tokenizer.Encode(text);
     }
 
-    private bool IsMultilingual => _options.Variant != ChatterboxVariant.English;
+    private bool IsMultilingual => _options.Variant is ChatterboxVariant.MultilingualV2 or ChatterboxVariant.MultilingualV3;
 
-    public override string Detokenize(IEnumerable<int> ids) => Tokenizer.Decode(ids);
+    // Turbo and Nano: GPT-2 T3, GPT-2 text tokens, the mean-flow S3Gen.
+    private bool IsTurbo => _options.Variant is ChatterboxVariant.Turbo or ChatterboxVariant.Nano;
+
+    public override string Detokenize(IEnumerable<int> ids) =>
+        IsTurbo ? Gpt2Tokenizer.Decode(ids.ToList(), skipSpecialTokens: false) : Tokenizer.Decode(ids);
+
+    private static readonly (string From, string To)[] ReleasePunctuation =
+    {
+        ("...", ", "), ("…", ", "), (":", ","), (" - ", ", "), (";", ", "),
+        ("—", "-"), ("–", "-"), (" ,", ","), ("“", "\""), ("”", "\""), ("‘", "'"), ("’", "'"),
+    };
+
+    // tts_turbo.punc_norm keeps "...", " - " and ";".
+    private static readonly (string From, string To)[] TurboPunctuation =
+    {
+        ("…", ", "), (":", ","), ("—", "-"), ("–", "-"), (" ,", ","), ("“", "\""), ("”", "\""), ("‘", "'"), ("’", "'"),
+    };
+
+    /// <summary>tts_turbo.punc_norm: Turbo's and Nano's punctuation cleanup before GPT-2 tokenization.</summary>
+    internal static string TurboNormalizeText(string text) => NormalizeText(text, new[] { ".", "!", "?", "-", "," }, TurboPunctuation);
 
     /// <summary>Applies the release's punctuation cleanup before BPE tokenization.</summary>
     public static string NormalizeText(string text) => NormalizeText(text, new[] { ".", "!", "?", "-", "," });
 
     // punc_norm with its language's sentence enders (the multilingual release also accepts 、，。？！).
-    internal static string NormalizeText(string text, string[] sentenceEnders)
+    internal static string NormalizeText(string text, string[] sentenceEnders) => NormalizeText(text, sentenceEnders, ReleasePunctuation);
+
+    private static string NormalizeText(string text, string[] sentenceEnders, (string From, string To)[] replacements)
     {
         if (text is null) throw new ArgumentNullException(nameof(text));
         if (text.Length == 0) return "You need to add some text for me to talk.";
         if (char.IsLower(text[0])) text = char.ToUpperInvariant(text[0]) + text.Substring(1);
         text = string.Join(" ", text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-        foreach (var replacement in new[]
-        {
-            ("...", ", "), ("…", ", "), (":", ","), (" - ", ", "), (";", ", "),
-            ("—", "-"), ("–", "-"), (" ,", ","), ("“", "\""), ("”", "\""), ("‘", "'"), ("’", "'"),
-        })
-            text = text.Replace(replacement.Item1, replacement.Item2);
+        foreach (var replacement in replacements)
+            text = text.Replace(replacement.From, replacement.To);
         text = text.TrimEnd(' ');
         if (!sentenceEnders.Any(ender => text.EndsWith(ender, StringComparison.Ordinal)))
             text += ".";
@@ -148,6 +169,9 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     {
         if (recording is null) throw new ArgumentNullException(nameof(recording));
         var full = Resample(recording, sampleRate, _options.SampleRate);
+        if (IsTurbo && full.Length <= 5 * _options.SampleRate)
+            throw new ArgumentException("Chatterbox Turbo's reference recording must be longer than 5 seconds.", nameof(recording));
+        if (_options.ReferenceLoudness is double lufs) full = NormalizeLoudness(full, lufs);
         int decoderSamples = Math.Min(full.Length, _options.DecoderReferenceSeconds * _options.SampleRate);
         var decoderReference = Engine.TensorSlice(full, new[] { 0 }, new[] { decoderSamples });
         var s3Voice = base.CreateVoice(decoderReference, _options.SampleRate, transcript: null);
@@ -165,7 +189,9 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     public override Tensor<T> Synthesize(string text)
     {
         ThrowIfDisposed();
-        string normalized = IsMultilingual ? ChatterboxMultilingualText.NormalizePunctuation(text) : NormalizeText(text);
+        string normalized = IsMultilingual ? ChatterboxMultilingualText.NormalizePunctuation(text)
+            : IsTurbo ? TurboNormalizeText(text)
+            : NormalizeText(text);
         var input = Ids(Tokenize(normalized));
         // The native path watermarks in PredictCore.
         return IsOnnxMode && OnnxModel is not null ? Watermarked(OnnxModel.Run(input)) : Predict(input);
@@ -234,7 +260,8 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
             Loss: _options.FlowLoss,
             Causal: true,
             TokenMelRatio: _options.TokenMelRatio,
-            Lookahead: _options.Lookahead);
+            Lookahead: _options.Lookahead,
+            MeanFlow: IsTurbo);
 
     protected override void BuildLanguageModel(List<LayerBase<T>> layers, Random initialization) =>
         _t3 = new ChatterboxT3<T>(Engine, layers, _options, initialization);
@@ -256,10 +283,34 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
             condition = PrepareT3VoiceCondition(reference);
             _t3VoiceConditions.Add(voice, condition);
         }
-        return T3.Generate(text,
+        var tokens = T3.Generate(text,
             new ChatterboxT3Condition<T>(condition.SpeakerEmbedding, condition.PromptSpeechTokens,
                 _options.Exaggeration), random);
+        // Turbo's generate() ends the speech with three S3GEN_SIL tokens before S3Gen.
+        return IsTurbo ? tokens.Concat(new[] { SilenceToken, SilenceToken, SilenceToken }).ToArray() : tokens;
     }
+
+    private const int SilenceToken = 4299;
+
+    /// <summary>The frozen teacher a mean-flow (Turbo, Nano) decoder is distilled from: the instantaneous-velocity S3Gen flow
+    /// with the same sizes, read from the release's <c>s3gen.safetensors</c> by <see cref="LoadPretrainedWeights"/>.</summary>
+    internal CosyVoiceFlow<T> TeacherFlow
+    {
+        get
+        {
+            if (_teacherFlow is not null) return _teacherFlow;
+            if (!IsTurbo) throw new InvalidOperationException("Only Turbo and Nano distill their flow.");
+            var layers = new List<LayerBase<T>>();
+            _teacherFlow = new CosyVoiceFlow<T>(Engine, layers, FlowConfiguration with { MeanFlow = false }, new Random(_options.Seed ?? 0));
+            foreach (var layer in layers) layer.SetTrainingMode(false);
+            return _teacherFlow;
+        }
+    }
+
+    protected override Tensor<T> FlowTrainingLoss(IReadOnlyList<int> speech, Tensor<T> target, Tensor<T> xvector, bool training, Random random) =>
+        IsTurbo
+            ? Flow.DistillationLoss(TeacherFlow, speech, target, xvector, training, random, _options.DistillationTeacherSteps)
+            : base.FlowTrainingLoss(speech, target, xvector, training, random);
 
     protected override Tensor<T> LanguageModelLoss(
         IReadOnlyList<int> text,
@@ -376,9 +427,17 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         if (string.IsNullOrWhiteSpace(modelDirectory))
             throw new ArgumentException("The model directory is required.", nameof(modelDirectory));
 
-        string tokenizerPath = Path.Combine(modelDirectory, IsMultilingual ? "grapheme_mtl_merged_expanded_v1.json" : "tokenizer.json");
-        _tokenizer = ChatterboxTokenizer.Load(tokenizerPath);
-        _options.TokenizerPath = tokenizerPath;
+        if (IsTurbo)
+        {
+            _options.TokenizerPath = modelDirectory;
+            _gpt2Tokenizer = null;
+        }
+        else
+        {
+            string tokenizerPath = Path.Combine(modelDirectory, IsMultilingual ? "grapheme_mtl_merged_expanded_v1.json" : "tokenizer.json");
+            _tokenizer = ChatterboxTokenizer.Load(tokenizerPath);
+            _options.TokenizerPath = tokenizerPath;
+        }
         if (IsMultilingual)
         {
             _options.CangjieMappingPath = Path.Combine(modelDirectory, "Cangjie5_TC.json");
@@ -396,13 +455,19 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         {
             ChatterboxVariant.MultilingualV2 => "t3_mtl23ls_v2.safetensors",
             ChatterboxVariant.MultilingualV3 => "t3_mtl23ls_v3.safetensors",
+            ChatterboxVariant.Turbo => "t3_turbo_v1.safetensors",
+            ChatterboxVariant.Nano => "t3_nano_v1.safetensors",
             _ => "t3_cfg.safetensors",
         };
         // The multilingual release ships its voice encoder and S3Gen as PyTorch state dicts.
         string extension = IsMultilingual ? ".pt" : ".safetensors";
         using (var t3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, t3File))) T3.LoadTorchWeights(t3);
         using (var ve = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "ve" + extension))) VoiceEncoder.LoadTorchWeights(ve);
-        using (var s3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "s3gen" + extension)))
+        // Turbo's S3Gen is the mean-flow one; its instantaneous-velocity s3gen.safetensors is the distillation teacher.
+        string teacherFile = Path.Combine(modelDirectory, "s3gen.safetensors");
+        if (IsTurbo && File.Exists(teacherFile))
+            using (var teacher = TorchCheckpointFile.Open(teacherFile)) TeacherFlow.LoadTorchWeights(teacher.WithPrefix("flow."), "");
+        using (var s3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, IsTurbo ? "s3gen_meanflow.safetensors" : "s3gen" + extension)))
         {
             Flow.LoadTorchWeights(s3.WithPrefix("flow."), "");
             Hift.LoadTorchWeights(s3.WithPrefix("mel2wav."));
@@ -471,6 +536,17 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         return new T3VoiceCondition(speaker, prompt, _t3WeightsGeneration);
     }
 
+    // ChatterboxTurboTTS.norm_loudness: the reference scaled to the target integrated loudness (pyloudnorm); left as it is
+    // when its loudness cannot be measured (silence), as the release's try/except does.
+    private Tensor<T> NormalizeLoudness(Tensor<T> audio, double target)
+    {
+        var values = audio.ToArray().Select(v => NumOps.ToDouble(v)).ToArray();
+        double loudness = AiDotNet.Audio.Effects.LoudnessMeter.IntegratedLoudness(values, _options.SampleRate);
+        double gain = Math.Pow(10.0, (target - loudness) / 20.0);
+        if (double.IsNaN(gain) || double.IsInfinity(gain) || gain <= 0) return audio;
+        return Engine.TensorMultiplyScalar(audio, NumOps.FromDouble(gain));
+    }
+
     private Tensor<T> Resample(Tensor<T> audio, int from, int to)
     {
         var flat = Engine.Reshape(audio, new[] { audio.Length });
@@ -523,12 +599,28 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
     private void LoadConfiguredTokenizer()
     {
         string? tokenizerPath = _options.TokenizerPath;
-        if (!string.IsNullOrWhiteSpace(tokenizerPath))
+        // Turbo's tokenizer is a GPT-2 directory, read on first use.
+        if (!string.IsNullOrWhiteSpace(tokenizerPath) && !IsTurbo)
             _tokenizer = ChatterboxTokenizer.Load(tokenizerPath!);
     }
 
     private ChatterboxTokenizer Tokenizer => _tokenizer ?? throw new InvalidOperationException(
         "Chatterbox needs its released tokenizer.json. Set ChatterboxOptions.TokenizerPath or call LoadPretrainedWeights.");
+
+    // Turbo's GPT-2 tokenizer (vocab.json, merges.txt, added_tokens.json, tokenizer_config.json), read from the directory
+    // TokenizerPath names.
+    private AiDotNet.Tokenization.Interfaces.ITokenizer Gpt2Tokenizer
+    {
+        get
+        {
+            if (_gpt2Tokenizer is not null) return _gpt2Tokenizer;
+            var directory = _options.TokenizerPath;
+            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory))
+                throw new InvalidOperationException("Chatterbox Turbo needs its GPT-2 tokenizer: set ChatterboxOptions.TokenizerPath to the release "
+                    + "directory (vocab.json, merges.txt, added_tokens.json) or call LoadPretrainedWeights.");
+            return _gpt2Tokenizer = AiDotNet.Tokenization.HuggingFace.HuggingFaceTokenizerLoader.LoadFromDirectory(directory!);
+        }
+    }
 
     // The multilingual front end, built on first use from the tokenizer and the Cangjie mapping; pkuseg, Dicta and the
     // Russian stresser load only for text in their languages.
