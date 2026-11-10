@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Audio.Whisper;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.TextToSpeech.CodecBased;
@@ -433,26 +434,28 @@ internal sealed class WhisperSpeechVq<T>
 
     /// <summary>Loads a checkpoint's <c>state_dict</c> (vector-quantize-pytorch 1.6's per-quantizer projections; the output
     /// blocks under <c>out_blocks</c>, as the released checkpoints name them, or <c>_out_blocks</c>, as the code does).</summary>
-    public void LoadTorchWeights(Func<string, double[]?> read)
+    public void LoadTorchWeights(Func<string, double[]?> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
-        double[] Read(string name) => read(name) ?? throw new InvalidDataException($"The VQ checkpoint has no tensor '{name}'.");
         int w = c.Width, hidden = w * c.FfnMult;
-        TorchParameters.LayerNorm(_engine, MlpNorm, Read("mlp_ln.weight"), Read("mlp_ln.bias"));
-        TorchParameters.Linear(_engine, Mlp1, w, hidden, Read("mlp.0.weight"), Read("mlp.0.bias"));
-        TorchParameters.Linear(_engine, Mlp2, hidden, w, Read("mlp.2.weight"), Read("mlp.2.bias"));
+        TorchParameters.LayerNorm(_engine, MlpNorm, source, "mlp_ln.weight", "mlp_ln.bias");
+        TorchParameters.Linear(_engine, Mlp1, w, hidden, source, "mlp.0.weight", "mlp.0.bias");
+        TorchParameters.Linear(_engine, Mlp2, hidden, w, source, "mlp.2.weight", "mlp.2.bias");
         for (int q = 0; q < c.QuantizerDepth; q++)
         {
             string p = $"rq.layers.{q}.";
-            TorchParameters.Linear(_engine, ProjectIn[q], w, c.CodebookWidth, Read(p + "project_in.weight"), Read(p + "project_in.bias"));
-            TorchParameters.Linear(_engine, ProjectOut[q], c.CodebookWidth, w, Read(p + "project_out.weight"), Read(p + "project_out.bias"));
-            TorchParameters.Linear(Embed[q], 1, c.CodebookSize * c.CodebookWidth, Read(p + "_codebook.embed"));
-            TorchParameters.Linear(EmbedAverage[q], 1, c.CodebookSize * c.CodebookWidth, Read(p + "_codebook.embed_avg"));
-            TorchParameters.Linear(ClusterSize[q], 1, c.CodebookSize, Read(p + "_codebook.cluster_size"));
+            TorchParameters.Linear(_engine, ProjectIn[q], w, c.CodebookWidth, source, p + "project_in.weight", p + "project_in.bias");
+            TorchParameters.Linear(_engine, ProjectOut[q], c.CodebookWidth, w, source, p + "project_out.weight", p + "project_out.bias");
+            TorchParameters.Linear(Embed[q], 1, c.CodebookSize * c.CodebookWidth, source, p + "_codebook.embed");
+            TorchParameters.Linear(EmbedAverage[q], 1, c.CodebookSize * c.CodebookWidth, source, p + "_codebook.embed_avg");
+            TorchParameters.Linear(ClusterSize[q], 1, c.CodebookSize, source, p + "_codebook.cluster_size");
         }
-        TorchParameters.Linear(Positions, 1, Whisper.Dimensions.AudioContext * w, Read("positional_embedding.weight"));
-        string blocks = read("out_blocks.0.attn_ln.weight") is not null ? "out_blocks." : "_out_blocks.";
-        for (int i = 0; i < Blocks.Count; i++) Blocks[i].LoadTorchWeights(read, $"{blocks}{i}.");
-        TorchParameters.LayerNorm(_engine, PostNorm, Read("ln_post.weight"), Read("ln_post.bias"));
+        TorchParameters.Linear(Positions, 1, Whisper.Dimensions.AudioContext * w, source, "positional_embedding.weight");
+        string blocks = source.Contains("out_blocks.0.attn_ln.weight") ? "out_blocks." : "_out_blocks.";
+        for (int i = 0; i < Blocks.Count; i++) Blocks[i].LoadTorchWeights(source, $"{blocks}{i}.");
+        TorchParameters.LayerNorm(_engine, PostNorm, source, "ln_post.weight", "ln_post.bias");
     }
 }

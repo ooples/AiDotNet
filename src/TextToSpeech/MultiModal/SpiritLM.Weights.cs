@@ -1,41 +1,29 @@
 using AiDotNet.Audio.Foundations;
+using AiDotNet.ModelLoading;
 using AiDotNet.Models.Options;
 
 namespace AiDotNet.TextToSpeech.MultiModal;
 
 public partial class SpiritLM<T>
 {
-    private static Dictionary<string, Tensor<float>> ReadAll(IEnumerable<string> paths)
+    // A file's tensors under a prefix, each read as the loader asks for it.
+    private static void LoadFile(string path, string prefix, Action<Func<string, double[]?>> load)
     {
-        var tensors = new Dictionary<string, Tensor<float>>(StringComparer.Ordinal);
-        foreach (var path in paths)
-        {
-            if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
-            foreach (var pair in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path)) tensors[pair.Key] = pair.Value;
-        }
-        return tensors;
+        using var file = TorchCheckpointFile.Open(path);
+        load(name => file.TryRead(prefix + name));
     }
 
-    private static double[] Values(Tensor<float> tensor)
+    // The checkpoint's files: its safetensors (one source over the shards), else its pytorch_model.bin shards.
+    private static TorchCheckpointFile[] OpenShards(string directory)
     {
-        var values = new double[tensor.Length];
-        for (int i = 0; i < values.Length; i++) values[i] = tensor.GetFlat(i);
-        return values;
-    }
-
-    private static Func<string, double[]?> Reader(Dictionary<string, Tensor<float>> tensors, string prefix) =>
-        name => tensors.TryGetValue(prefix + name, out var t) ? Values(t) : null;
-
-    private static IEnumerable<string> Shards(string directory)
-    {
-        foreach (var index in new[] { "model.safetensors.index.json", "pytorch_model.bin.index.json" })
-        {
-            string path = Path.Combine(directory, index);
-            if (File.Exists(path))
-                return Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(path))["weight_map"]!.Values<string>().Distinct().Select(f => Path.Combine(directory, f!)).ToList();
-        }
-        foreach (var single in new[] { "model.safetensors", "pytorch_model.bin" })
-            if (File.Exists(Path.Combine(directory, single))) return new[] { Path.Combine(directory, single) };
+        if (File.Exists(Path.Combine(directory, "model.safetensors.index.json")) || File.Exists(Path.Combine(directory, "model.safetensors")))
+            return new[] { TorchCheckpointFile.OpenDirectory(directory) };
+        string index = Path.Combine(directory, "pytorch_model.bin.index.json");
+        if (File.Exists(index))
+            return Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(index))["weight_map"]!.Values<string>().Distinct()
+                .Select(f => TorchCheckpointFile.Open(Path.Combine(directory, f!))).ToArray();
+        string single = Path.Combine(directory, "pytorch_model.bin");
+        if (File.Exists(single)) return new[] { TorchCheckpointFile.Open(single) };
         throw new FileNotFoundException($"No checkpoint in {directory}.");
     }
 
@@ -49,16 +37,16 @@ public partial class SpiritLM<T>
     {
         ThrowIfDisposed();
         if (modelDirectory is null) throw new ArgumentNullException(nameof(modelDirectory));
-        var tensors = ReadAll(Shards(modelDirectory));
-        var used = new HashSet<string>(StringComparer.Ordinal);
-        LanguageModel.LoadTorchWeights((name, _) =>
+        var files = OpenShards(modelDirectory);
+        try
         {
-            if (!tensors.TryGetValue(name, out var tensor)) throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            used.Add(name);
-            return Values(tensor);
-        }, "model.", "lm_head.weight");
-        var left = tensors.Keys.Where(k => !used.Contains(k) && !k.EndsWith("rotary_emb.inv_freq", StringComparison.Ordinal)).ToList();
-        if (left.Count > 0) throw new InvalidDataException($"The checkpoint has {left.Count} tensors this model has no place for (first: '{left[0]}').");
+            LanguageModel.LoadTorchWeights(files.Skip(1).Aggregate((TorchTensorSource)files[0], (all, file) => all.Or(file)), "model.", "lm_head.weight");
+            foreach (var file in files) file.RequireAllUsed("language model", k => k.EndsWith("rotary_emb.inv_freq", StringComparison.Ordinal));
+        }
+        finally
+        {
+            foreach (var file in files) file.Dispose();
+        }
         if (_options.TokenizerPath is null && File.Exists(Path.Combine(modelDirectory, "tokenizer.model")))
         {
             _options.TokenizerPath = Path.Combine(modelDirectory, "tokenizer.model");
@@ -77,18 +65,21 @@ public partial class SpiritLM<T>
     {
         ThrowIfDisposed();
         if (directory is null) throw new ArgumentNullException(nameof(directory));
-        var hubert = ReadAll(new[] { Path.Combine(directory, "hubert_25hz", "mhubert_base_25hz.pt") });
-        UnitExtractor.LoadFairseqWeights(Reader(hubert, "model_weight."));
+        LoadFile(Path.Combine(directory, "hubert_25hz", "mhubert_base_25hz.pt"), "model_weight.", UnitExtractor.LoadFairseqWeights);
         if (_options.UnitQuantizer == SpiritLmUnitQuantizer.LinearCtc)
-            UnitExtractor.Quantizer!.LoadTorchWeights(Reader(ReadAll(new[] { Path.Combine(directory, "hubert_25hz", "L11_quantizer_500.pt") }), "model_weight."));
+            LoadFile(Path.Combine(directory, "hubert_25hz", "L11_quantizer_500.pt"), "model_weight.", UnitExtractor.Quantizer!.LoadTorchWeights);
         string vocoder = IsExpressive ? "hifigan_spiritlm_expressive_w2v2" : "hifigan_spiritlm_base";
-        Vocoder.LoadTorchWeights(Reader(ReadAll(new[] { Path.Combine(directory, vocoder, "generator.pt") }), "generator."));
+        LoadFile(Path.Combine(directory, vocoder, "generator.pt"), "generator.", read => Vocoder.LoadTorchWeights(read));
         if (IsExpressive)
         {
-            PitchQuantizer.LoadTorchWeights(Reader(ReadAll(new[] { Path.Combine(directory, "vqvae_f0_quantizer", "model.pt") }), "model."));
+            using (var pitch = TorchCheckpointFile.Open(Path.Combine(directory, "vqvae_f0_quantizer", "model.pt")))
+                PitchQuantizer.LoadTorchWeights(pitch.WithPrefix("model."));
             // The released style classifier; SpeechProp has no released weights.
             if (!UsesSpeechProp)
-                StyleEncoder.LoadTorchWeights(Reader(ReadAll(new[] { Path.Combine(directory, "style_encoder_w2v2", "pytorch_model.bin") }), ""));
+            {
+                using var style = TorchCheckpointFile.Open(Path.Combine(directory, "style_encoder_w2v2", "pytorch_model.bin"));
+                StyleEncoder.LoadTorchWeights(style);
+            }
         }
     }
 
@@ -98,7 +89,7 @@ public partial class SpiritLM<T>
     {
         ThrowIfDisposed();
         var fcpe = Fcpe ?? throw new InvalidOperationException("FCPE is SpiritLM Expressive's pitch extractor with PitchExtractor = Fcpe.");
-        fcpe.LoadTorchWeights(Reader(ReadAll(new[] { path }), "model."));
+        LoadFile(path, "model.", fcpe.LoadTorchWeights);
     }
 
     /// <summary>
@@ -114,7 +105,8 @@ public partial class SpiritLM<T>
         double[,] centers;
         try
         {
-            var tensors = ReadAll(new[] { path });
+            // A small file of centroids: read whole.
+            var tensors = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
             if (!tensors.TryGetValue("cluster_centers", out var table)) throw new InvalidDataException("The torch file has no 'cluster_centers'.");
             int clusters = table.Shape[0], width = table.Shape[1];
             centers = new double[clusters, width];

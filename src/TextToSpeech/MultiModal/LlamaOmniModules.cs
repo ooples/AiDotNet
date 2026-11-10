@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
@@ -52,11 +53,14 @@ internal sealed class LlamaOmniAdaptor<T>
     }
 
     /// <summary>Loads <c>{prefix}linear1</c> and <c>{prefix}linear2</c>.</summary>
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
         int inputs = EncoderDim * Downsample, hidden = Hidden, output = OutputDim;
-        TorchParameters.Linear(_engine, First, inputs, hidden, read(prefix + "linear1.weight", new[] { hidden, inputs }), read(prefix + "linear1.bias", new[] { hidden }));
-        TorchParameters.Linear(_engine, Second, hidden, output, read(prefix + "linear2.weight", new[] { output, hidden }), read(prefix + "linear2.bias", new[] { output }));
+        TorchParameters.Linear(_engine, First, inputs, hidden, source, prefix + "linear1.weight", prefix + "linear1.bias");
+        TorchParameters.Linear(_engine, Second, hidden, output, source, prefix + "linear2.weight", prefix + "linear2.bias");
     }
 }
 
@@ -187,13 +191,14 @@ internal sealed class LlamaOmniSpeechDecoder<T>
     }
 
     /// <summary>Loads the release's <c>{prefix}input_proj</c>, <c>{prefix}layers.{i}.*</c> and <c>{prefix}output_proj</c>.</summary>
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
         var c = Configuration;
-        TorchParameters.Linear(_engine, InputProjection, c.LanguageModelWidth, c.Width, read(prefix + "input_proj.weight", new[] { c.Width, c.LanguageModelWidth }),
-            read(prefix + "input_proj.bias", new[] { c.Width }));
-        Network.LoadTorchWeights(read, prefix);
-        TorchParameters.Linear(_engine, OutputProjection, c.Width, c.Units + 1, read(prefix + "output_proj.weight", new[] { c.Units + 1, c.Width }),
-            read(prefix + "output_proj.bias", new[] { c.Units + 1 }));
+        TorchParameters.Linear(_engine, InputProjection, c.LanguageModelWidth, c.Width, source, prefix + "input_proj.weight", prefix + "input_proj.bias");
+        Network.LoadTorchWeights(source, prefix);
+        TorchParameters.Linear(_engine, OutputProjection, c.Width, c.Units + 1, source, prefix + "output_proj.weight", prefix + "output_proj.bias");
     }
 }

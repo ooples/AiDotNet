@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Audio.Foundations;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
@@ -123,16 +124,19 @@ internal sealed class KaniSpeakerEmbedder<T>
     }
 
     /// <summary>Loads the embedder's checkpoint (<c>wavlm.*</c>, <c>top_layers.*</c>).</summary>
-    public void LoadTorchWeights(Func<string, double[]?> read)
+    public void LoadTorchWeights(Func<string, double[]?> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
-        double[] Need(string name) => read(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-        WavLm.LoadTorchWeights((name, shape) => Need("wavlm." + name), name => read("wavlm." + name) is not null);
+        var wavlm = source.WithPrefix("wavlm.");
+        WavLm.LoadTorchWeights((name, _) => wavlm.Read(name, Array.Empty<int>()), wavlm.Contains);
         var c = Configuration;
-        TorchParameters.Linear(_engine, First, _pooled, c.IntermediateSize, Need("top_layers.affine1.weight"), Need("top_layers.affine1.bias"));
-        TorchParameters.Linear(_engine, Second, c.IntermediateSize, c.EmbeddingSize, Need("top_layers.affine2.weight"), Need("top_layers.affine2.bias"));
-        TorchParameters.Linear(FirstMean, 1, c.IntermediateSize, Need("top_layers.batchnorm1.running_mean"));
-        TorchParameters.Linear(FirstVariance, 1, c.IntermediateSize, Need("top_layers.batchnorm1.running_var"));
-        TorchParameters.Linear(SecondMean, 1, c.EmbeddingSize, Need("top_layers.batchnorm2.running_mean"));
-        TorchParameters.Linear(SecondVariance, 1, c.EmbeddingSize, Need("top_layers.batchnorm2.running_var"));
+        TorchParameters.Linear(_engine, First, _pooled, c.IntermediateSize, source, "top_layers.affine1.weight", "top_layers.affine1.bias");
+        TorchParameters.Linear(_engine, Second, c.IntermediateSize, c.EmbeddingSize, source, "top_layers.affine2.weight", "top_layers.affine2.bias");
+        TorchParameters.Linear(FirstMean, 1, c.IntermediateSize, source, "top_layers.batchnorm1.running_mean", new[] { c.IntermediateSize });
+        TorchParameters.Linear(FirstVariance, 1, c.IntermediateSize, source, "top_layers.batchnorm1.running_var", new[] { c.IntermediateSize });
+        TorchParameters.Linear(SecondMean, 1, c.EmbeddingSize, source, "top_layers.batchnorm2.running_mean", new[] { c.EmbeddingSize });
+        TorchParameters.Linear(SecondVariance, 1, c.EmbeddingSize, source, "top_layers.batchnorm2.running_var", new[] { c.EmbeddingSize });
     }
 }

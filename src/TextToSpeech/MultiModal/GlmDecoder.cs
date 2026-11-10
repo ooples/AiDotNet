@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Latest;
@@ -190,24 +191,26 @@ internal sealed class GlmDecoder<T>
 
     /// <summary>Loads a Hugging Face <c>ChatGLMForConditionalGeneration</c> state (<c>transformer.*</c>; the rotary
     /// buffer <c>inv_freq</c> is recomputed and not read).</summary>
-    public void Load(Func<string, int[], double[]> read)
+    public void Load(Func<string, int[], double[]> read) => Load(TorchTensorSource.From(read));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source)
     {
         var c = _c;
         int d = c.Hidden, qkv = c.Heads * c.HeadDim + 2 * c.KeyValueGroups * c.HeadDim;
-        Embedding.LoadTable(read("transformer.embedding.word_embeddings.weight", new[] { c.VocabSize, d }));
+        Embedding.LoadTable(source, "transformer.embedding.word_embeddings.weight");
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
             string p = $"transformer.encoder.layers.{i}.";
-            TorchParameters.Linear(b.InputNorm, 1, d, read(p + "input_layernorm.weight", new[] { d }));
-            TorchParameters.Linear(_engine, b.QueryKeyValue, d, qkv, read(p + "self_attention.query_key_value.weight", new[] { qkv, d }),
-                read(p + "self_attention.query_key_value.bias", new[] { qkv }));
-            TorchParameters.Linear(b.Dense, c.Heads * c.HeadDim, d, read(p + "self_attention.dense.weight", new[] { d, c.Heads * c.HeadDim }));
-            TorchParameters.Linear(b.PostAttentionNorm, 1, d, read(p + "post_attention_layernorm.weight", new[] { d }));
-            TorchParameters.Linear(b.HiddenToFour, d, 2 * c.FeedForward, read(p + "mlp.dense_h_to_4h.weight", new[] { 2 * c.FeedForward, d }));
-            TorchParameters.Linear(b.FourToHidden, c.FeedForward, d, read(p + "mlp.dense_4h_to_h.weight", new[] { d, c.FeedForward }));
+            TorchParameters.Linear(b.InputNorm, 1, d, source, p + "input_layernorm.weight", new[] { d });
+            TorchParameters.Linear(_engine, b.QueryKeyValue, d, qkv, source, p + "self_attention.query_key_value.weight", p + "self_attention.query_key_value.bias");
+            TorchParameters.Linear(b.Dense, c.Heads * c.HeadDim, d, source, p + "self_attention.dense.weight");
+            TorchParameters.Linear(b.PostAttentionNorm, 1, d, source, p + "post_attention_layernorm.weight", new[] { d });
+            TorchParameters.Linear(b.HiddenToFour, d, 2 * c.FeedForward, source, p + "mlp.dense_h_to_4h.weight");
+            TorchParameters.Linear(b.FourToHidden, c.FeedForward, d, source, p + "mlp.dense_4h_to_h.weight");
         }
-        TorchParameters.Linear(FinalNorm, 1, d, read("transformer.encoder.final_layernorm.weight", new[] { d }));
-        TorchParameters.Linear(Output, d, c.VocabSize, read("transformer.output_layer.weight", new[] { c.VocabSize, d }));
+        TorchParameters.Linear(FinalNorm, 1, d, source, "transformer.encoder.final_layernorm.weight", new[] { d });
+        TorchParameters.Linear(Output, d, c.VocabSize, source, "transformer.output_layer.weight");
     }
 }

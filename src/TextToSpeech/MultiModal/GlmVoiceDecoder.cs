@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.TextToSpeech.CodecBased;
@@ -255,19 +256,22 @@ internal sealed class GlmVoiceDecoder<T>
 
     /// <summary>Loads the release's <c>flow.pt</c> and <c>hift.pt</c> states. <c>hift.pt</c> keeps weight norm's
     /// <c>weight_g</c>/<c>weight_v</c>, read here as the parametrization's gain and direction.</summary>
-    public void Load(Func<string, int[], double[]> readFlow, Func<string, int[], double[]> readHift, Func<string, bool> hiftHas)
+    public void Load(Func<string, int[], double[]> readFlow, Func<string, int[], double[]> readHift, Func<string, bool> hiftHas) =>
+        Load(TorchTensorSource.From(readFlow), TorchTensorSource.From(readHift), hiftHas);
+
+    /// <summary>Loads the same tensors from <paramref name="flow"/> and <paramref name="hift"/>, each copied straight into
+    /// its layer.</summary>
+    internal void Load(TorchTensorSource flow, TorchTensorSource hift, Func<string, bool> hiftHas)
     {
-        Flow.LoadTorchWeights(readFlow, "");
-        Hift.LoadTorchWeights((name, shape) =>
+        Flow.LoadTorchWeights(flow, "");
+        Hift.LoadTorchWeights(hift.WithNames(name =>
         {
-            if (!hiftHas(name))
-            {
-                if (name.EndsWith(".parametrizations.weight.original0", StringComparison.Ordinal))
-                    name = name.Substring(0, name.Length - ".parametrizations.weight.original0".Length) + ".weight_g";
-                else if (name.EndsWith(".parametrizations.weight.original1", StringComparison.Ordinal))
-                    name = name.Substring(0, name.Length - ".parametrizations.weight.original1".Length) + ".weight_v";
-            }
-            return readHift(name, shape);
-        });
+            if (hiftHas(name)) return name;
+            if (name.EndsWith(".parametrizations.weight.original0", StringComparison.Ordinal))
+                return name.Substring(0, name.Length - ".parametrizations.weight.original0".Length) + ".weight_g";
+            if (name.EndsWith(".parametrizations.weight.original1", StringComparison.Ordinal))
+                return name.Substring(0, name.Length - ".parametrizations.weight.original1".Length) + ".weight_v";
+            return name;
+        }));
     }
 }

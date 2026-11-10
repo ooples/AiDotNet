@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -298,17 +299,19 @@ internal sealed class WhisperSpeechT2S<T>
 
     /// <summary>Loads the release's state dict (<c>lang_embeddings</c>, <c>cps_embeddings</c>, <c>encoder.*</c>,
     /// <c>embeddings.embedding.*</c>, <c>decoder.*</c>).</summary>
-    public void LoadTorchWeights(Func<string, double[]?> read)
+    public void LoadTorchWeights(Func<string, double[]?> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
-        double[] Read(string name) => read(name) ?? throw new InvalidDataException($"The T2S checkpoint has no tensor '{name}'.");
-        TorchParameters.Linear(LanguageEmbeddings, 1, c.Languages * c.Width, Read("lang_embeddings.weight"));
-        if (CpsEmbeddings is not null) TorchParameters.Linear(CpsEmbeddings, 1, c.CpsBins * c.Width, Read("cps_embeddings.weight"));
-        TextEmbeddings.LoadTorchWeights(read, "encoder.embedding.");
-        for (int i = 0; i < EncoderBlocks.Count; i++) EncoderBlocks[i].LoadTorchWeights(read, $"encoder.layers.{i}.");
-        TorchParameters.LayerNorm(_engine, EncoderNorm, Read("encoder.ln_post.weight"), Read("encoder.ln_post.bias"));
-        SemanticEmbeddings.LoadTorchWeights(read, "embeddings.embedding.");
-        for (int i = 0; i < DecoderBlocks.Count; i++) DecoderBlocks[i].LoadTorchWeights(read, $"decoder.layers.{i}.");
-        TorchParameters.LayerNorm(_engine, DecoderNorm, Read("decoder.ln_post.weight"), Read("decoder.ln_post.bias"));
+        TorchParameters.Linear(LanguageEmbeddings, 1, c.Languages * c.Width, source, "lang_embeddings.weight");
+        if (CpsEmbeddings is not null) TorchParameters.Linear(CpsEmbeddings, 1, c.CpsBins * c.Width, source, "cps_embeddings.weight");
+        TextEmbeddings.LoadTorchWeights(source, "encoder.embedding.");
+        for (int i = 0; i < EncoderBlocks.Count; i++) EncoderBlocks[i].LoadTorchWeights(source, $"encoder.layers.{i}.");
+        TorchParameters.LayerNorm(_engine, EncoderNorm, source, "encoder.ln_post.weight", "encoder.ln_post.bias");
+        SemanticEmbeddings.LoadTorchWeights(source, "embeddings.embedding.");
+        for (int i = 0; i < DecoderBlocks.Count; i++) DecoderBlocks[i].LoadTorchWeights(source, $"decoder.layers.{i}.");
+        TorchParameters.LayerNorm(_engine, DecoderNorm, source, "decoder.ln_post.weight", "decoder.ln_post.bias");
     }
 }

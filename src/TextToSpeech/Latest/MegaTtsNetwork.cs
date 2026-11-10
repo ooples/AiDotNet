@@ -1,5 +1,6 @@
 using AiDotNet.Audio.Features;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.Latest;
@@ -307,26 +308,29 @@ internal sealed class MegaTtsNetwork<T>
     /// <c>prosody_frames</c>, <c>prosody_phones</c>, <c>codebook</c>, <c>prosody_out</c>, <c>timbre_prenet</c>,
     /// <c>timbre</c>, <c>duration</c>, <c>decoder</c>, <c>code_embed</c>, <c>lm_content</c>, <c>lm_timbre</c>,
     /// <c>lm_layers</c>, <c>lm_norm</c>, <c>lm_head</c> and <c>disc</c>.</summary>
-    public void LoadTorch(Func<string, double[]> read)
+    public void LoadTorch(Func<string, double[]> read) => LoadTorch(TorchTensorSource.From(read));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(TorchTensorSource source)
     {
         var c = Configuration;
-        Content.LoadTorch(_engine, read, "content");
-        MegaTts3Ops.LoadDense(_engine, read, ProsodyPrenet, "prosody_prenet", c.ProsodyBins, c.Hidden);
-        ProsodyFrames.LoadTorch(_engine, read, "prosody_frames");
-        ProsodyPhones.LoadTorch(_engine, read, "prosody_phones");
-        Quantizer.Codebook.LoadTable(read("codebook.weight"));
-        MegaTts3Ops.LoadDense(_engine, read, ProsodyOut, "prosody_out", c.CodeDimension, c.Hidden);
-        MegaTts3Ops.LoadDense(_engine, read, TimbrePrenet, "timbre_prenet", c.Mels, c.Hidden);
-        Timbre.LoadTorch(_engine, read, "timbre");
-        Duration.LoadTorch(_engine, read, "duration");
-        Decoder.LoadTorch(_engine, read, "decoder");
-        CodeEmbedding.LoadTable(read("code_embed.weight"));
-        MegaTts3Ops.LoadDense(_engine, read, LmContent, "lm_content", c.Hidden, c.LmHidden);
-        MegaTts3Ops.LoadDense(_engine, read, LmTimbre, "lm_timbre", c.Hidden, c.LmHidden);
-        for (int i = 0; i < LmLayers.Count; i++) LmLayers[i].LoadTorch(_engine, read, $"lm_layers.{i}.op");
-        CodecBased.TorchParameters.LayerNorm(_engine, LmNorm, read("lm_norm.weight"), read("lm_norm.bias"));
-        MegaTts3Ops.LoadDense(_engine, read, LmHead, "lm_head", c.LmHidden, c.Codes + 2);
-        Discriminator.LoadTorch(read, "disc");
+        Content.LoadTorch(_engine, source, "content");
+        MegaTts3Ops.LoadDense(_engine, source, ProsodyPrenet, "prosody_prenet", c.ProsodyBins, c.Hidden);
+        ProsodyFrames.LoadTorch(_engine, source, "prosody_frames");
+        ProsodyPhones.LoadTorch(_engine, source, "prosody_phones");
+        Quantizer.Codebook.LoadTable(source, "codebook.weight");
+        MegaTts3Ops.LoadDense(_engine, source, ProsodyOut, "prosody_out", c.CodeDimension, c.Hidden);
+        MegaTts3Ops.LoadDense(_engine, source, TimbrePrenet, "timbre_prenet", c.Mels, c.Hidden);
+        Timbre.LoadTorch(_engine, source, "timbre");
+        Duration.LoadTorch(_engine, source, "duration");
+        Decoder.LoadTorch(_engine, source, "decoder");
+        CodeEmbedding.LoadTable(source, "code_embed.weight");
+        MegaTts3Ops.LoadDense(_engine, source, LmContent, "lm_content", c.Hidden, c.LmHidden);
+        MegaTts3Ops.LoadDense(_engine, source, LmTimbre, "lm_timbre", c.Hidden, c.LmHidden);
+        for (int i = 0; i < LmLayers.Count; i++) LmLayers[i].LoadTorch(_engine, source, $"lm_layers.{i}.op");
+        CodecBased.TorchParameters.LayerNorm(_engine, LmNorm, source, "lm_norm.weight", "lm_norm.bias");
+        MegaTts3Ops.LoadDense(_engine, source, LmHead, "lm_head", c.LmHidden, c.Codes + 2);
+        Discriminator.LoadTorch(source, "disc");
     }
 
     /// <summary>The P-LLM's logits <c>[L, codes + 2]</c> for previous codes (the start token first) with each position's

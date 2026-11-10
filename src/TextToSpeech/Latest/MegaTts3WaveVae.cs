@@ -1,5 +1,6 @@
 using AiDotNet.Audio.Codecs;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using EnginePadMode = AiDotNet.Tensors.Engines.PadMode;
@@ -55,10 +56,13 @@ internal sealed class MegaTts3Upsample<T>
         return _engine.TensorAdd(near, trans);
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(Func<string, double[]> read, string prefix) => LoadTorch(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(TorchTensorSource source, string prefix)
     {
         void Load(NormedConv1DLayer<T> conv, string name) =>
-            conv.LoadTorchWeights(read($"{name}.weight_v"), read($"{name}.weight_g"), read($"{name}.bias"));
+            conv.LoadTorchWeights(source, $"{name}.weight_v", conv.TorchWeightShape, $"{name}.weight_g", $"{name}.bias");
         Load(Conv, $"{prefix}.upsample.3");
         Load(Transposed, $"{prefix}.trans_upsample.1");
     }
@@ -105,14 +109,18 @@ internal sealed class MegaTts3ResidualStacks<T>
         return _engine.TensorMultiplyScalar(sum!, NumOps.FromDouble(1.0 / 3));
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(Func<string, double[]> read, string prefix) => LoadTorch(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(TorchTensorSource source, string prefix)
     {
         for (int s = 0; s < Stacks.Count; s++)
             for (int j = 0; j < Stacks[s].Count; j++)
             {
                 string block = $"{prefix}.block{s + 1}";
-                Stacks[s][j].Dilated.LoadTorchWeights(read($"{block}.convs1.{j}.weight_v"), read($"{block}.convs1.{j}.weight_g"), read($"{block}.convs1.{j}.bias"));
-                Stacks[s][j].Plain.LoadTorchWeights(read($"{block}.convs2.{j}.weight_v"), read($"{block}.convs2.{j}.weight_g"), read($"{block}.convs2.{j}.bias"));
+                var (dilated, plain) = (Stacks[s][j].Dilated, Stacks[s][j].Plain);
+                dilated.LoadTorchWeights(source, $"{block}.convs1.{j}.weight_v", dilated.TorchWeightShape, $"{block}.convs1.{j}.weight_g", $"{block}.convs1.{j}.bias");
+                plain.LoadTorchWeights(source, $"{block}.convs2.{j}.weight_v", plain.TorchWeightShape, $"{block}.convs2.{j}.weight_g", $"{block}.convs2.{j}.bias");
             }
     }
 }
@@ -212,33 +220,35 @@ internal sealed class MegaTts3WaveVae<T>
 
     /// <summary>Loads a release checkpoint (<c>model_gen</c>'s state; the encoder is optional, as the release ships only
     /// the decoder).</summary>
-    public void LoadTorch(IEngine engine, Func<string, double[]?> read, bool includeEncoder)
+    public void LoadTorch(IEngine engine, Func<string, double[]?> read, bool includeEncoder) => LoadTorch(engine, TorchTensorSource.From(read), includeEncoder);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(IEngine engine, TorchTensorSource source, bool includeEncoder)
     {
-        double[] Need(string name) => read(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
         if (includeEncoder)
         {
             foreach (var (name, conv) in Encoder.NamedConvolutions("encoder.encoder.model"))
-                conv.Conv.LoadTorchWeights(Need($"{name}.conv.conv.weight_v"), Need($"{name}.conv.conv.weight_g"), Need($"{name}.conv.conv.bias"));
+                conv.Conv.LoadTorchWeights(source, $"{name}.conv.conv.weight_v", conv.Conv.TorchWeightShape, $"{name}.conv.conv.weight_g", $"{name}.conv.conv.bias");
             if (Encoder.NamedLstm("encoder.encoder.model") is { } lstm)
             {
                 var cells = lstm.Lstm.ForwardCells;
                 for (int l = 0; l < cells.Count; l++)
-                    cells[l].LoadTorchWeights(Need($"{lstm.Name}.lstm.weight_ih_l{l}"), Need($"{lstm.Name}.lstm.weight_hh_l{l}"),
-                        Need($"{lstm.Name}.lstm.bias_ih_l{l}"), Need($"{lstm.Name}.lstm.bias_hh_l{l}"));
+                    cells[l].LoadTorchWeights(source, $"{lstm.Name}.lstm.weight_ih_l{l}", $"{lstm.Name}.lstm.weight_hh_l{l}",
+                        $"{lstm.Name}.lstm.bias_ih_l{l}", $"{lstm.Name}.lstm.bias_hh_l{l}");
             }
             int d = Configuration.EncoderDimension, n = 2 * Configuration.LatentChannels;
-            TorchParameters.Linear(engine, ToPosterior, d, n, Need("proj_to_z.weight"), Need("proj_to_z.bias"));
+            TorchParameters.Linear(engine, ToPosterior, d, n, source, "proj_to_z.weight", "proj_to_z.bias");
         }
-        TorchParameters.Linear(engine, ToDecoder, Configuration.LatentChannels, Configuration.UpsamplerChannels, Need("proj_to_decoder.weight"), Need("proj_to_decoder.bias"));
-        LatentUpsampler.LoadTorch(Need, "latent_upsampler");
-        GeneratorInput.LoadTorchWeights(Need("decoder.model_up.1.weight_v"), Need("decoder.model_up.1.weight_g"), Need("decoder.model_up.1.bias"));
+        TorchParameters.Linear(engine, ToDecoder, Configuration.LatentChannels, Configuration.UpsamplerChannels, source, "proj_to_decoder.weight", "proj_to_decoder.bias");
+        LatentUpsampler.LoadTorch(source, "latent_upsampler");
+        GeneratorInput.LoadTorchWeights(source, "decoder.model_up.1.weight_v", GeneratorInput.TorchWeightShape, "decoder.model_up.1.weight_g", "decoder.model_up.1.bias");
         int index = 2;
         foreach (var (up, stacks) in Stages)
         {
-            up.LoadTorch(Need, $"decoder.model_up.{index++}");
-            stacks.LoadTorch(Need, $"decoder.model_up.{index++}");
+            up.LoadTorch(source, $"decoder.model_up.{index++}");
+            stacks.LoadTorch(source, $"decoder.model_up.{index++}");
         }
         string last = $"decoder.model_up.{index + 2}";
-        GeneratorOutput.LoadTorchWeights(Need($"{last}.weight_v"), Need($"{last}.weight_g"), Need($"{last}.bias"));
+        GeneratorOutput.LoadTorchWeights(source, $"{last}.weight_v", GeneratorOutput.TorchWeightShape, $"{last}.weight_g", $"{last}.bias");
     }
 }

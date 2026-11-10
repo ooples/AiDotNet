@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
+using AiDotNet.ModelLoading;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -566,48 +567,18 @@ public partial class GLM4Voice<T> : TtsModelBase<T>
 
     // ---------------------------------------------------------------- weights
 
-    private static Func<string, int[], double[]> Reader(Dictionary<string, Tensor<float>> tensors, HashSet<string> used, string what) => (name, _) =>
-    {
-        if (!tensors.TryGetValue(name, out var tensor)) throw new InvalidDataException($"The {what} checkpoint has no tensor '{name}'.");
-        used.Add(name);
-        var values = new double[tensor.Length];
-        for (int i = 0; i < values.Length; i++) values[i] = tensor.GetFlat(i);
-        return values;
-    };
-
-    private static void RequireAllUsed(Dictionary<string, Tensor<float>> tensors, HashSet<string> used, string what)
-    {
-        var left = tensors.Keys.Where(k => !used.Contains(k)).ToList();
-        if (left.Count > 0) throw new InvalidDataException($"The {what} checkpoint has {left.Count} tensors this model has no place for (first: '{left[0]}').");
-    }
-
-    private static Dictionary<string, Tensor<float>> ReadAll(IEnumerable<string> paths)
-    {
-        var tensors = new Dictionary<string, Tensor<float>>(StringComparer.Ordinal);
-        foreach (var path in paths)
-        {
-            if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
-            foreach (var pair in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path)) tensors[pair.Key] = pair.Value;
-        }
-        return tensors;
-    }
-
     /// <summary>Loads THUDM/glm-4-voice-9b (its safetensors shards) into the language model and, unless one is set, its
     /// tokenizer.</summary>
     public void LoadLanguageModel(string directory)
     {
         ThrowIfDisposed();
         if (directory is null) throw new ArgumentNullException(nameof(directory));
-        string index = Path.Combine(directory, "model.safetensors.index.json");
-        var files = File.Exists(index)
-            ? Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(index))["weight_map"]!.Values<string>().Distinct().Select(f => Path.Combine(directory, f!)).ToList()
-            : new List<string> { Path.Combine(directory, "model.safetensors") };
-        var tensors = ReadAll(files);
-        var used = new HashSet<string>(StringComparer.Ordinal);
-        LanguageModel.Load(Reader(tensors, used, "GLM-4-Voice"));
-        // The rotary table is recomputed.
-        foreach (var key in tensors.Keys.Where(k => k.EndsWith("rotary_pos_emb.inv_freq", StringComparison.Ordinal))) used.Add(key);
-        RequireAllUsed(tensors, used, "GLM-4-Voice");
+        using (var tensors = TorchCheckpointFile.OpenDirectory(directory))
+        {
+            LanguageModel.Load(tensors);
+            // The rotary table is recomputed.
+            tensors.RequireAllUsed("GLM-4-Voice", k => k.EndsWith("rotary_pos_emb.inv_freq", StringComparison.Ordinal));
+        }
         if (_options.TokenizerDirectory is null && File.Exists(Path.Combine(directory, "tokenizer.model")))
         {
             _options.TokenizerDirectory = directory;
@@ -621,10 +592,9 @@ public partial class GLM4Voice<T> : TtsModelBase<T>
     {
         ThrowIfDisposed();
         if (directory is null) throw new ArgumentNullException(nameof(directory));
-        var tensors = ReadAll(new[] { Path.Combine(directory, "model.safetensors") });
-        var used = new HashSet<string>(StringComparer.Ordinal);
-        SpeechTokenizer.LoadEncoder(Reader(tensors, used, "speech tokenizer"), tensors.ContainsKey);
-        RequireAllUsed(tensors, used, "speech tokenizer");
+        using var tensors = TorchCheckpointFile.Open(Path.Combine(directory, "model.safetensors"));
+        SpeechTokenizer.LoadEncoder(tensors, tensors.Contains);
+        tensors.RequireAllUsed("speech tokenizer");
     }
 
     /// <summary>Loads THUDM/glm-4-voice-decoder (<c>flow.pt</c> and <c>hift.pt</c>).</summary>
@@ -632,13 +602,11 @@ public partial class GLM4Voice<T> : TtsModelBase<T>
     {
         ThrowIfDisposed();
         if (directory is null) throw new ArgumentNullException(nameof(directory));
-        var flow = ReadAll(new[] { Path.Combine(directory, "flow.pt") });
-        var hift = ReadAll(new[] { Path.Combine(directory, "hift.pt") });
-        var flowUsed = new HashSet<string>(StringComparer.Ordinal);
-        var hiftUsed = new HashSet<string>(StringComparer.Ordinal);
-        SpeechDecoder.Load(Reader(flow, flowUsed, "flow"), Reader(hift, hiftUsed, "HiFT"), hift.ContainsKey);
-        RequireAllUsed(flow, flowUsed, "flow");
-        RequireAllUsed(hift, hiftUsed, "HiFT");
+        using var flow = TorchCheckpointFile.Open(Path.Combine(directory, "flow.pt"));
+        using var hift = TorchCheckpointFile.Open(Path.Combine(directory, "hift.pt"));
+        SpeechDecoder.Load(flow, hift, hift.Contains);
+        flow.RequireAllUsed("flow");
+        hift.RequireAllUsed("HiFT");
     }
 
     // ---------------------------------------------------------------- housekeeping

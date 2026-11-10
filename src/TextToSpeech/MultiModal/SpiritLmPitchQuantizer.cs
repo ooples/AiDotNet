@@ -1,3 +1,4 @@
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -355,10 +356,12 @@ internal sealed class SpiritLmPitchQuantizer<T>
 
     /// <summary>Loads the release's <c>model.pt</c> <c>model</c> state (<c>encoder.level_blocks.0.model</c>,
     /// <c>vq.level_blocks.0.k</c>, <c>decoder.level_blocks.0.model</c>, <c>decoder.out</c>).</summary>
-    public void LoadTorchWeights(Func<string, double[]?> take)
+    public void LoadTorchWeights(Func<string, double[]?> take) => LoadTorchWeights(TorchTensorSource.From(take));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
-        double[] Read(string name) => take(name) ?? throw new InvalidDataException($"The F0 VQ-VAE checkpoint has no tensor '{name}'.");
-        void Conv(NormedConv1DLayer<T> conv, string name) => conv.LoadTorchWeights(Read(name + ".weight"), null, Read(name + ".bias"));
+        void Conv(NormedConv1DLayer<T> conv, string name) => conv.LoadTorchWeights(source, name + ".weight", conv.TorchWeightShape, null, name + ".bias");
         void Stack(List<ResidualBlock> stack, string name)
         {
             for (int d = 0; d < stack.Count; d++)
@@ -382,8 +385,8 @@ internal sealed class SpiritLmPitchQuantizer<T>
             Conv(DecoderBlocks[i].Up, $"{decoder}.{i + 1}.1");
         }
         Conv(DecoderOut, "decoder.out");
-        var k = Read("vq.level_blocks.0.k");
         int codes = Configuration.Codes, width = Configuration.LatentDim;
+        var k = source.Read("vq.level_blocks.0.k", Array.Empty<int>());
         if (k.Length != codes * width) throw new InvalidDataException($"The codebook holds {k.Length} values, not {codes} x {width}.");
         Codebook = new double[codes, width];
         for (int c = 0; c < codes; c++)

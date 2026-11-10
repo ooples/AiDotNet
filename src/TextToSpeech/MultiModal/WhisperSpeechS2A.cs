@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -326,27 +327,29 @@ internal sealed class WhisperSpeechS2A<T>
     }
 
     /// <summary>Loads the release's state dict.</summary>
-    public void LoadTorchWeights(Func<string, double[]?> read)
+    public void LoadTorchWeights(Func<string, double[]?> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
         int w = c.Width;
-        double[] Read(string name) => read(name) ?? throw new InvalidDataException($"The S2A checkpoint has no tensor '{name}'.");
-        TorchParameters.Linear(SemanticEmbedding, 1, c.SemanticCodes * c.SemanticWidth, Read("semantic_embedding.weight"));
-        if (EmbedToHidden is not null) TorchParameters.Linear(_engine, EmbedToHidden, c.SemanticWidth, w, Read("emb_to_hidden.weight"), Read("emb_to_hidden.bias"));
-        if (HiddenToEmbed is not null) TorchParameters.Linear(_engine, HiddenToEmbed, w, c.SemanticWidth, Read("hidden_to_emb.weight"), Read("hidden_to_emb.bias"));
+        TorchParameters.Linear(SemanticEmbedding, 1, c.SemanticCodes * c.SemanticWidth, source, "semantic_embedding.weight");
+        if (EmbedToHidden is not null) TorchParameters.Linear(_engine, EmbedToHidden, c.SemanticWidth, w, source, "emb_to_hidden.weight", "emb_to_hidden.bias");
+        if (HiddenToEmbed is not null) TorchParameters.Linear(_engine, HiddenToEmbed, w, c.SemanticWidth, source, "hidden_to_emb.weight", "hidden_to_emb.bias");
         string speakerName = c.Conditioned ? "cond_embeddings.speaker.spk_to_hidden" : "spk_to_hidden";
-        if (SpeakerToHidden is not null) TorchParameters.Linear(_engine, SpeakerToHidden, c.SpeakerWidth, w, Read(speakerName + ".weight"), Read(speakerName + ".bias"));
+        if (SpeakerToHidden is not null) TorchParameters.Linear(_engine, SpeakerToHidden, c.SpeakerWidth, w, source, speakerName + ".weight", speakerName + ".bias");
         if (c.Conditioned)
         {
-            TorchParameters.Linear(LanguageEmbedding!, 1, (c.Languages + 1) * w, Read("cond_embeddings.lang.embed.weight"));
-            TorchParameters.Linear(SnrEmbedding!, 1, 11 * w, Read("cond_embeddings.snr.embed.weight"));
-            TorchParameters.Linear(C50Embedding!, 1, 7 * w, Read("cond_embeddings.c50.embed.weight"));
+            TorchParameters.Linear(LanguageEmbedding!, 1, (c.Languages + 1) * w, source, "cond_embeddings.lang.embed.weight");
+            TorchParameters.Linear(SnrEmbedding!, 1, 11 * w, source, "cond_embeddings.snr.embed.weight");
+            TorchParameters.Linear(C50Embedding!, 1, 7 * w, source, "cond_embeddings.c50.embed.weight");
         }
-        for (int i = 0; i < EncoderBlocks.Count; i++) EncoderBlocks[i].LoadTorchWeights(read, $"encoder.{i}.");
-        TorchParameters.LayerNorm(_engine, EncoderNorm, Read("ln_post.weight"), Read("ln_post.bias"));
-        for (int q = 0; q < c.Quantizers; q++) AcousticEmbeddings[q].LoadTorchWeights(read, $"embds.embeddings.{q}.", loadSpecial: q == 0);
-        for (int i = 0; i < DecoderBlocks.Count; i++) DecoderBlocks[i].LoadTorchWeights(read, $"decoder.layers.{i}.");
-        TorchParameters.LayerNorm(_engine, DecoderNorm, Read("decoder.ln_post.weight"), Read("decoder.ln_post.bias"));
-        TorchParameters.Linear(_engine, Splitter, w, w * c.Quantizers, Read("head.splitter.0.weight"), Read("head.splitter.0.bias"));
+        for (int i = 0; i < EncoderBlocks.Count; i++) EncoderBlocks[i].LoadTorchWeights(source, $"encoder.{i}.");
+        TorchParameters.LayerNorm(_engine, EncoderNorm, source, "ln_post.weight", "ln_post.bias");
+        for (int q = 0; q < c.Quantizers; q++) AcousticEmbeddings[q].LoadTorchWeights(source, $"embds.embeddings.{q}.", loadSpecial: q == 0);
+        for (int i = 0; i < DecoderBlocks.Count; i++) DecoderBlocks[i].LoadTorchWeights(source, $"decoder.layers.{i}.");
+        TorchParameters.LayerNorm(_engine, DecoderNorm, source, "decoder.ln_post.weight", "decoder.ln_post.bias");
+        TorchParameters.Linear(_engine, Splitter, w, w * c.Quantizers, source, "head.splitter.0.weight", "head.splitter.0.bias");
     }
 }

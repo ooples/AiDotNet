@@ -137,6 +137,10 @@ internal abstract class TorchTensorSource
     /// <summary>The same tensors, each name the loader asks for mapped by <paramref name="map"/> to the stored one.</summary>
     public TorchTensorSource WithNames(Func<string, string> map) => new Renamed(this, map);
 
+    /// <summary>These tensors, and <paramref name="fallback"/>'s for the names this source lacks (adapters a merged
+    /// checkpoint does not ship, generated as the reference initializes them).</summary>
+    public TorchTensorSource Or(TorchTensorSource fallback) => new Either(this, fallback);
+
     /// <summary>A source over an already loaded state dict (a <see cref="ComputerVision.Weights.WeightLoader"/> result);
     /// prefer <see cref="TorchCheckpointFile.Open"/>, which does not hold the whole checkpoint in memory.</summary>
     public static TorchTensorSource From(IReadOnlyDictionary<string, Tensor<float>> state, string description = "the state dict") =>
@@ -202,6 +206,19 @@ internal abstract class TorchTensorSource
         public override long[]? ShapeOf(string name) => _inner.ShapeOf(_map(name));
         protected override long Decode(string name, int[] shape, SafetensorsFile.DecodedChunk sink) => _inner.Decode(_map(name), shape, sink);
         public override double[]? TryRead(string name, int[]? shape = null) => _inner.TryRead(_map(name), shape);
+    }
+
+    private sealed class Either : TorchTensorSource
+    {
+        private readonly TorchTensorSource _first;
+        private readonly TorchTensorSource _second;
+        public Either(TorchTensorSource first, TorchTensorSource second) { _first = first; _second = second; }
+        private TorchTensorSource For(string name) => _first.Contains(name) ? _first : _second;
+        protected override string Description => _first.Description;
+        public override bool Contains(string name) => _first.Contains(name) || _second.Contains(name);
+        public override long[]? ShapeOf(string name) => For(name).ShapeOf(name);
+        protected override long Decode(string name, int[] shape, SafetensorsFile.DecodedChunk sink) => For(name).Decode(name, shape, sink);
+        public override double[]? TryRead(string name, int[]? shape = null) => For(name).TryRead(name, shape);
     }
 
     /// <summary>Decodes a float tensor's values in chunks through a pooled buffer.</summary>

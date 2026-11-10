@@ -3,6 +3,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
+using AiDotNet.ModelLoading;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -405,11 +406,9 @@ public partial class MegaTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
         if (!File.Exists(path)) throw new FileNotFoundException($"Checkpoint not found: {path}", path);
-        var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path))
-            state[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        string prefix = state.Keys.Any(k => k.StartsWith("generator.", StringComparison.Ordinal)) ? "generator." : "";
-        Vocoder.LoadTorch(name => state.TryGetValue(name, out var v) ? v : null, prefix);
+        using var state = TorchCheckpointFile.Open(path);
+        string prefix = state.Names.Any(k => k.StartsWith("generator.", StringComparison.Ordinal)) ? "generator." : "";
+        Vocoder.LoadTorch(name => state.TryRead(name), prefix);
     }
 
     // ---------------------------------------------------------------- housekeeping

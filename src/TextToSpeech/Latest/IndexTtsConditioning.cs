@@ -1,4 +1,5 @@
 using AiDotNet.ActivationFunctions;
+using AiDotNet.ModelLoading;
 using AiDotNet.Helpers;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
@@ -121,27 +122,43 @@ internal static class IndexTtsOps
     }
 
     public static void LoadLinear<T>(IEngine engine, Func<string, int[], double[]> read, DenseLayer<T> layer, string name, int inputs, int outputs) =>
-        TorchParameters.Linear(engine, layer, inputs, outputs, read(name + ".weight", new[] { outputs, inputs }), read(name + ".bias", new[] { outputs }));
+        LoadLinear(engine, TorchTensorSource.From(read), layer, name, inputs, outputs);
 
     public static void LoadLinear<T>(Func<string, int[], double[]> read, BiasFreeLinearLayer<T> layer, string name, int inputs, int outputs) =>
-        TorchParameters.Linear(layer, inputs, outputs, read(name + ".weight", new[] { outputs, inputs }));
+        LoadLinear(TorchTensorSource.From(read), layer, name, inputs, outputs);
 
     public static void LoadNorm<T>(IEngine engine, Func<string, int[], double[]> read, LayerNormalizationLayer<T> norm, string name, int dim) =>
-        TorchParameters.LayerNorm(engine, norm, read(name + ".weight", new[] { dim }), read(name + ".bias", new[] { dim }));
+        LoadNorm(engine, TorchTensorSource.From(read), norm, name, dim);
 
     public static void LoadConv<T>(Func<string, int[], double[]> read, NormedConv1DLayer<T> conv, string name, int outputs) =>
-        conv.LoadTorchWeights(read(name + ".weight", conv.TorchWeightShape), null, read(name + ".bias", new[] { outputs }));
+        LoadConv(TorchTensorSource.From(read), conv, name, outputs);
 
     /// <summary>Loads an <c>nn.Conv2d</c>'s weight <c>[out, in, kh, kw]</c> and bias.</summary>
-    public static void LoadConv2D<T>(IEngine engine, Func<string, int[], double[]> read, Conv2DLayer<T> conv, string name)
+    public static void LoadConv2D<T>(IEngine engine, Func<string, int[], double[]> read, Conv2DLayer<T> conv, string name) =>
+        LoadConv2D(engine, TorchTensorSource.From(read), conv, name);
+
+    /// <summary>Loads an <c>nn.Linear</c>'s <c>{name}.weight</c> and <c>{name}.bias</c> from <paramref name="source"/>.</summary>
+    public static void LoadLinear<T>(IEngine engine, TorchTensorSource source, DenseLayer<T> layer, string name, int inputs, int outputs) =>
+        TorchParameters.Linear(engine, layer, inputs, outputs, source, name + ".weight", name + ".bias");
+
+    /// <summary>Loads a bias-free <c>nn.Linear</c>'s <c>{name}.weight</c> from <paramref name="source"/>.</summary>
+    public static void LoadLinear<T>(TorchTensorSource source, BiasFreeLinearLayer<T> layer, string name, int inputs, int outputs) =>
+        TorchParameters.Linear(layer, inputs, outputs, source, name + ".weight");
+
+    /// <summary>Loads an <c>nn.LayerNorm</c>'s <c>{name}.weight</c> and <c>{name}.bias</c> from <paramref name="source"/>.</summary>
+    public static void LoadNorm<T>(IEngine engine, TorchTensorSource source, LayerNormalizationLayer<T> norm, string name, int dim) =>
+        TorchParameters.LayerNorm(engine, norm, source, name + ".weight", name + ".bias");
+
+    /// <summary>Loads an <c>nn.Conv1d</c>'s <c>{name}.weight</c> and <c>{name}.bias</c> from <paramref name="source"/>.</summary>
+    public static void LoadConv<T>(TorchTensorSource source, NormedConv1DLayer<T> conv, string name, int outputs) =>
+        conv.LoadTorchWeights(source, name + ".weight", conv.TorchWeightShape, null, name + ".bias");
+
+    /// <summary>Loads an <c>nn.Conv2d</c>'s weight <c>[out, in, kh, kw]</c> and bias from <paramref name="source"/>.</summary>
+    public static void LoadConv2D<T>(IEngine engine, TorchTensorSource source, Conv2DLayer<T> conv, string name)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
         var kernel = conv.Kernel;
-        var weight = read(name + ".weight", kernel.Shape.ToArray());
-        if (weight.Length != kernel.Length) throw new ArgumentException($"'{name}.weight' has {weight.Length} values, expected {kernel.Length}.");
-        for (int i = 0; i < weight.Length; i++) kernel[i] = ops.FromDouble(weight[i]);
-        var bias = read(name + ".bias", new[] { conv.Bias.Length });
-        for (int i = 0; i < bias.Length; i++) conv.Bias[i] = ops.FromDouble(bias[i]);
+        source.CopyTo(name + ".weight", kernel.Shape.ToArray(), kernel);
+        source.CopyTo(name + ".bias", new[] { conv.Bias.Length }, conv.Bias);
         engine.InvalidatePersistentTensor(kernel);
         engine.InvalidatePersistentTensor(conv.Bias);
     }
@@ -318,35 +335,38 @@ internal sealed class IndexTtsConformerEncoder<T>
     }
 
     /// <summary>Loads the release's <c>{prefix}embed.*</c>, <c>{prefix}encoders.{i}.*</c> and <c>{prefix}after_norm</c>.</summary>
-    public void Load(Func<string, int[], double[]> read, string prefix)
+    public void Load(Func<string, int[], double[]> read, string prefix) => Load(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(TorchTensorSource source, string prefix)
     {
         var c = Configuration;
         int d = c.OutputSize;
-        IndexTtsOps.LoadConv2D(_engine, read, Subsample, prefix + "embed.conv.0");
-        IndexTtsOps.LoadLinear(_engine, read, SubsampleOut, prefix + "embed.out.0", d * SubsampledFeatures, d);
+        IndexTtsOps.LoadConv2D(_engine, source, Subsample, prefix + "embed.conv.0");
+        IndexTtsOps.LoadLinear(_engine, source, SubsampleOut, prefix + "embed.out.0", d * SubsampledFeatures, d);
         for (int i = 0; i < Blocks.Count; i++)
         {
             var b = Blocks[i];
             string p = $"{prefix}encoders.{i}.";
-            IndexTtsOps.LoadNorm(_engine, read, b.NormAttention, p + "norm_mha", d);
-            IndexTtsOps.LoadLinear(_engine, read, b.Query, p + "self_attn.linear_q", d, d);
-            IndexTtsOps.LoadLinear(_engine, read, b.Key, p + "self_attn.linear_k", d, d);
-            IndexTtsOps.LoadLinear(_engine, read, b.Value, p + "self_attn.linear_v", d, d);
-            IndexTtsOps.LoadLinear(_engine, read, b.Output, p + "self_attn.linear_out", d, d);
-            IndexTtsOps.LoadLinear(read, b.Position, p + "self_attn.linear_pos", d, d);
-            TorchParameters.Linear(b.BiasU, 1, d, read(p + "self_attn.pos_bias_u", new[] { c.Heads, d / c.Heads }));
-            TorchParameters.Linear(b.BiasV, 1, d, read(p + "self_attn.pos_bias_v", new[] { c.Heads, d / c.Heads }));
-            IndexTtsOps.LoadNorm(_engine, read, b.NormConvolution, p + "norm_conv", d);
-            IndexTtsOps.LoadConv(read, b.Pointwise1, p + "conv_module.pointwise_conv1", 2 * d);
-            IndexTtsOps.LoadConv(read, b.Depthwise, p + "conv_module.depthwise_conv", d);
-            IndexTtsOps.LoadNorm(_engine, read, b.ConvolutionNorm, p + "conv_module.norm", d);
-            IndexTtsOps.LoadConv(read, b.Pointwise2, p + "conv_module.pointwise_conv2", d);
-            IndexTtsOps.LoadNorm(_engine, read, b.NormFeedForward, p + "norm_ff", d);
-            IndexTtsOps.LoadLinear(_engine, read, b.FeedForward1, p + "feed_forward.w_1", d, c.LinearUnits);
-            IndexTtsOps.LoadLinear(_engine, read, b.FeedForward2, p + "feed_forward.w_2", c.LinearUnits, d);
-            IndexTtsOps.LoadNorm(_engine, read, b.NormFinal, p + "norm_final", d);
+            IndexTtsOps.LoadNorm(_engine, source, b.NormAttention, p + "norm_mha", d);
+            IndexTtsOps.LoadLinear(_engine, source, b.Query, p + "self_attn.linear_q", d, d);
+            IndexTtsOps.LoadLinear(_engine, source, b.Key, p + "self_attn.linear_k", d, d);
+            IndexTtsOps.LoadLinear(_engine, source, b.Value, p + "self_attn.linear_v", d, d);
+            IndexTtsOps.LoadLinear(_engine, source, b.Output, p + "self_attn.linear_out", d, d);
+            IndexTtsOps.LoadLinear(source, b.Position, p + "self_attn.linear_pos", d, d);
+            TorchParameters.Linear(b.BiasU, 1, d, source, p + "self_attn.pos_bias_u", new[] { c.Heads, d / c.Heads });
+            TorchParameters.Linear(b.BiasV, 1, d, source, p + "self_attn.pos_bias_v", new[] { c.Heads, d / c.Heads });
+            IndexTtsOps.LoadNorm(_engine, source, b.NormConvolution, p + "norm_conv", d);
+            IndexTtsOps.LoadConv(source, b.Pointwise1, p + "conv_module.pointwise_conv1", 2 * d);
+            IndexTtsOps.LoadConv(source, b.Depthwise, p + "conv_module.depthwise_conv", d);
+            IndexTtsOps.LoadNorm(_engine, source, b.ConvolutionNorm, p + "conv_module.norm", d);
+            IndexTtsOps.LoadConv(source, b.Pointwise2, p + "conv_module.pointwise_conv2", d);
+            IndexTtsOps.LoadNorm(_engine, source, b.NormFeedForward, p + "norm_ff", d);
+            IndexTtsOps.LoadLinear(_engine, source, b.FeedForward1, p + "feed_forward.w_1", d, c.LinearUnits);
+            IndexTtsOps.LoadLinear(_engine, source, b.FeedForward2, p + "feed_forward.w_2", c.LinearUnits, d);
+            IndexTtsOps.LoadNorm(_engine, source, b.NormFinal, p + "norm_final", d);
         }
-        IndexTtsOps.LoadNorm(_engine, read, AfterNorm, prefix + "after_norm", d);
+        IndexTtsOps.LoadNorm(_engine, source, AfterNorm, prefix + "after_norm", d);
     }
 }
 
@@ -418,21 +438,24 @@ internal sealed class IndexTtsPerceiver<T>
     }
 
     /// <summary>Loads the release's <c>{prefix}proj_context</c>, <c>latents</c>, <c>layers.{i}.*</c> and <c>norm.gamma</c>.</summary>
-    public void Load(IEngine engine, Func<string, int[], double[]> read, string prefix)
+    public void Load(IEngine engine, Func<string, int[], double[]> read, string prefix) => Load(engine, TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void Load(IEngine engine, TorchTensorSource source, string prefix)
     {
         int inner = HeadDim * _heads;
-        if (ProjectContext is not null) IndexTtsOps.LoadLinear(engine, read, ProjectContext, prefix + "proj_context", _contextDim, _dim);
-        TorchParameters.Linear(Latents, 1, _latents * _dim, read(prefix + "latents", new[] { _latents, _dim }));
+        if (ProjectContext is not null) IndexTtsOps.LoadLinear(engine, source, ProjectContext, prefix + "proj_context", _contextDim, _dim);
+        TorchParameters.Linear(Latents, 1, _latents * _dim, source, prefix + "latents", new[] { _latents, _dim });
         for (int i = 0; i < Layers.Count; i++)
         {
             var l = Layers[i];
             string p = $"{prefix}layers.{i}.";
-            IndexTtsOps.LoadLinear(read, l.ToQuery, p + "0.to_q", _dim, inner);
-            IndexTtsOps.LoadLinear(read, l.ToKeyValue, p + "0.to_kv", _dim, 2 * inner);
-            IndexTtsOps.LoadLinear(read, l.ToOutput, p + "0.to_out", inner, _dim);
-            IndexTtsOps.LoadLinear(engine, read, l.FeedForward1, p + "1.0", _dim, 2 * _feedForward);
-            IndexTtsOps.LoadLinear(engine, read, l.FeedForward2, p + "1.2", _feedForward, _dim);
+            IndexTtsOps.LoadLinear(source, l.ToQuery, p + "0.to_q", _dim, inner);
+            IndexTtsOps.LoadLinear(source, l.ToKeyValue, p + "0.to_kv", _dim, 2 * inner);
+            IndexTtsOps.LoadLinear(source, l.ToOutput, p + "0.to_out", inner, _dim);
+            IndexTtsOps.LoadLinear(engine, source, l.FeedForward1, p + "1.0", _dim, 2 * _feedForward);
+            IndexTtsOps.LoadLinear(engine, source, l.FeedForward2, p + "1.2", _feedForward, _dim);
         }
-        TorchParameters.Linear(Gamma, 1, _dim, read(prefix + "norm.gamma", new[] { _dim }));
+        TorchParameters.Linear(Gamma, 1, _dim, source, prefix + "norm.gamma", new[] { _dim });
     }
 }

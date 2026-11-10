@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -349,14 +350,25 @@ internal sealed class MegaTts2CrossAttention<T>
         return MegaTts3Ops.Rows(_engine, Output, merged);
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(Func<string, double[]> read, string prefix) => LoadTorch(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(TorchTensorSource source, string prefix)
     {
         int h = Width, kw = KeyWidth;
-        var bias = read($"{prefix}.in_proj_bias");
-        TorchParameters.Linear(_engine, Query, h, h, read($"{prefix}.q_proj_weight"), bias.Take(h).ToArray());
-        TorchParameters.Linear(_engine, Key, kw, h, read($"{prefix}.k_proj_weight"), bias.Skip(h).Take(h).ToArray());
-        TorchParameters.Linear(_engine, Value, kw, h, read($"{prefix}.v_proj_weight"), bias.Skip(2 * h).ToArray());
-        MegaTts3Ops.LoadDense(_engine, read, Output, $"{prefix}.out_proj", h, h);
+        var bias = source.Read($"{prefix}.in_proj_bias", Array.Empty<int>());
+        // The packed bias splits over the three projections; each weight goes straight into its layer.
+        void Projection(DenseLayer<T> layer, string name, int inputs, int offset)
+        {
+            TorchParameters.Linear(_engine, layer, inputs, h, source, name, null);
+            var b = layer.GetBiases();
+            for (int o = 0; o < h; o++) b[o] = NumOps.FromDouble(bias[offset + o]);
+            _engine.InvalidatePersistentTensor(b);
+        }
+        Projection(Query, $"{prefix}.q_proj_weight", h, 0);
+        Projection(Key, $"{prefix}.k_proj_weight", kw, h);
+        Projection(Value, $"{prefix}.v_proj_weight", kw, 2 * h);
+        MegaTts3Ops.LoadDense(_engine, source, Output, $"{prefix}.out_proj", h, h);
     }
 }
 
@@ -516,24 +528,27 @@ internal sealed class MegaTts2CodeDecoder<T>
         return Decode(Inputs(tokens, linguistic), Enumerable.Range(cached, tokens.Count).ToArray(), null, cache);
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(Func<string, double[]> read, string prefix) => LoadTorch(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(TorchTensorSource source, string prefix)
     {
         int h = Width;
-        Embedding.LoadTable(read($"{prefix}.code_emb.weight"));
-        MegaTts3Ops.LoadDense(_engine, read, Projection, $"{prefix}.enc_proj", Linguistic, h);
+        Embedding.LoadTable(source, $"{prefix}.code_emb.weight");
+        MegaTts3Ops.LoadDense(_engine, source, Projection, $"{prefix}.enc_proj", Linguistic, h);
         for (int i = 0; i < Layers.Count; i++)
         {
             var layer = Layers[i];
             string p = $"{prefix}.layers.{i}.op";
-            TorchParameters.LayerNorm(_engine, layer.Norm1, read($"{p}.layer_norm1.weight"), read($"{p}.layer_norm1.bias"));
-            TorchParameters.Linear(layer.InProjection, h, 3 * h, read($"{p}.self_attn.in_proj_weight"));
-            TorchParameters.Linear(layer.OutProjection, h, h, read($"{p}.self_attn.out_proj.weight"));
-            TorchParameters.LayerNorm(_engine, layer.Norm2, read($"{p}.layer_norm2.weight"), read($"{p}.layer_norm2.bias"));
-            MegaTts3Ops.LoadDense(_engine, read, layer.Ffn1, $"{p}.ffn.ffn_1.1", h, 4 * h);
-            MegaTts3Ops.LoadDense(_engine, read, layer.Ffn2, $"{p}.ffn.ffn_2", 4 * h, h);
+            TorchParameters.LayerNorm(_engine, layer.Norm1, source, $"{p}.layer_norm1.weight", $"{p}.layer_norm1.bias");
+            TorchParameters.Linear(layer.InProjection, h, 3 * h, source, $"{p}.self_attn.in_proj_weight");
+            TorchParameters.Linear(layer.OutProjection, h, h, source, $"{p}.self_attn.out_proj.weight");
+            TorchParameters.LayerNorm(_engine, layer.Norm2, source, $"{p}.layer_norm2.weight", $"{p}.layer_norm2.bias");
+            MegaTts3Ops.LoadDense(_engine, source, layer.Ffn1, $"{p}.ffn.ffn_1.1", h, 4 * h);
+            MegaTts3Ops.LoadDense(_engine, source, layer.Ffn2, $"{p}.ffn.ffn_2", 4 * h, h);
         }
-        TorchParameters.LayerNorm(_engine, FinalNorm, read($"{prefix}.layer_norm.weight"), read($"{prefix}.layer_norm.bias"));
-        MegaTts3Ops.LoadDense(_engine, read, Output, Regression ? $"{prefix}.project_out_dim.0" : $"{prefix}.project_out_dim", h, Outputs);
+        TorchParameters.LayerNorm(_engine, FinalNorm, source, $"{prefix}.layer_norm.weight", $"{prefix}.layer_norm.bias");
+        MegaTts3Ops.LoadDense(_engine, source, Output, Regression ? $"{prefix}.project_out_dim.0" : $"{prefix}.project_out_dim", h, Outputs);
     }
 }
 
@@ -675,22 +690,25 @@ internal sealed class MegaTts2Network<T>
     }
 
     /// <summary>Loads a state dict in the module names of <c>tools/reference-data/megatts2_model_reference.py</c>.</summary>
-    public void LoadTorch(Func<string, double[]> read)
+    public void LoadTorch(Func<string, double[]> read) => LoadTorch(TorchTensorSource.From(read));
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(TorchTensorSource source)
     {
         var c = Configuration;
-        Content.LoadTorch(_engine, read, "content");
-        MegaTts3Ops.LoadDense(_engine, read, ProsodyPrenet, "prosody_prenet", c.Mels, c.ProsodyHidden);
-        ProsodyFrames.LoadTorch(_engine, read, "prosody_frames");
-        ProsodyGroups.LoadTorch(_engine, read, "prosody_groups");
-        Quantizer.Codebook.LoadTable(read("codebook.weight"));
-        MegaTts3Ops.LoadDense(_engine, read, ProsodyOut, "prosody_out", c.CodeDimension, c.Hidden);
-        MegaTts3Ops.LoadDense(_engine, read, TimbrePrenet, "timbre_prenet", c.Mels, c.TimbreHidden);
-        TimbreFrames.LoadTorch(_engine, read, "timbre_frames");
-        TimbreGroups.LoadTorch(_engine, read, "timbre_groups");
-        TimbreAttention.LoadTorch(read, "timbre_attention");
-        Decoder.LoadTorch(_engine, read, "decoder");
-        ProsodyModel.LoadTorch(read, "plm");
-        DurationModel.LoadTorch(read, "dur");
-        Discriminator.LoadTorch(read, "disc");
+        Content.LoadTorch(_engine, source, "content");
+        MegaTts3Ops.LoadDense(_engine, source, ProsodyPrenet, "prosody_prenet", c.Mels, c.ProsodyHidden);
+        ProsodyFrames.LoadTorch(_engine, source, "prosody_frames");
+        ProsodyGroups.LoadTorch(_engine, source, "prosody_groups");
+        Quantizer.Codebook.LoadTable(source, "codebook.weight");
+        MegaTts3Ops.LoadDense(_engine, source, ProsodyOut, "prosody_out", c.CodeDimension, c.Hidden);
+        MegaTts3Ops.LoadDense(_engine, source, TimbrePrenet, "timbre_prenet", c.Mels, c.TimbreHidden);
+        TimbreFrames.LoadTorch(_engine, source, "timbre_frames");
+        TimbreGroups.LoadTorch(_engine, source, "timbre_groups");
+        TimbreAttention.LoadTorch(source, "timbre_attention");
+        Decoder.LoadTorch(_engine, source, "decoder");
+        ProsodyModel.LoadTorch(source, "plm");
+        DurationModel.LoadTorch(source, "dur");
+        Discriminator.LoadTorch(source, "disc");
     }
 }

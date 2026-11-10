@@ -1,5 +1,6 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -57,10 +58,13 @@ internal sealed class MegaTtsAttention<T>
         return _engine.Reshape(OutProjection.Forward(merged), new[] { b, t, h });
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(Func<string, double[]> read, string prefix) => LoadTorch(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(TorchTensorSource source, string prefix)
     {
-        TorchParameters.Linear(InProjection, Width, 3 * Width, read($"{prefix}.in_proj_weight"));
-        TorchParameters.Linear(OutProjection, Width, Width, read($"{prefix}.out_proj.weight"));
+        TorchParameters.Linear(InProjection, Width, 3 * Width, source, $"{prefix}.in_proj_weight");
+        TorchParameters.Linear(OutProjection, Width, Width, source, $"{prefix}.out_proj.weight");
     }
 }
 
@@ -115,14 +119,17 @@ internal sealed class MegaTtsTransformerLayer<T>
         return Mask(_engine.TensorAdd(x, y));
     }
 
-    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix)
+    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix) => LoadTorch(engine, TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(IEngine engine, TorchTensorSource source, string prefix)
     {
-        TorchParameters.LayerNorm(engine, Norm1, read($"{prefix}.layer_norm1.weight"), read($"{prefix}.layer_norm1.bias"));
-        Attention.LoadTorch(read, $"{prefix}.self_attn");
+        TorchParameters.LayerNorm(engine, Norm1, source, $"{prefix}.layer_norm1.weight", $"{prefix}.layer_norm1.bias");
+        Attention.LoadTorch(source, $"{prefix}.self_attn");
         string norm2 = Decoder ? "layer_norm3" : "layer_norm2";
-        TorchParameters.LayerNorm(engine, Norm2, read($"{prefix}.{norm2}.weight"), read($"{prefix}.{norm2}.bias"));
-        MegaTts3Ops.LoadConv(read, Ffn1, Decoder ? $"{prefix}.ffn.ffn_1.1" : $"{prefix}.ffn.ffn_1");
-        MegaTts3Ops.LoadDense(engine, read, Ffn2, $"{prefix}.ffn.ffn_2", Filter, Width);
+        TorchParameters.LayerNorm(engine, Norm2, source, $"{prefix}.{norm2}.weight", $"{prefix}.{norm2}.bias");
+        MegaTts3Ops.LoadConv(source, Ffn1, Decoder ? $"{prefix}.ffn.ffn_1.1" : $"{prefix}.ffn.ffn_1");
+        MegaTts3Ops.LoadDense(engine, source, Ffn2, $"{prefix}.ffn.ffn_2", Filter, Width);
     }
 }
 
@@ -195,11 +202,14 @@ internal sealed class MegaTtsContentEncoder<T>
         return _engine.TensorMultiply(FinalNorm.Forward(x), mask);
     }
 
-    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix)
+    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix) => LoadTorch(engine, TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(IEngine engine, TorchTensorSource source, string prefix)
     {
-        Embedding.LoadTable(read($"{prefix}.embed_tokens.weight"));
-        for (int i = 0; i < Layers.Count; i++) Layers[i].LoadTorch(engine, read, $"{prefix}.layers.{i}.op");
-        TorchParameters.LayerNorm(engine, FinalNorm, read($"{prefix}.layer_norm.weight"), read($"{prefix}.layer_norm.bias"));
+        Embedding.LoadTable(source, $"{prefix}.embed_tokens.weight");
+        for (int i = 0; i < Layers.Count; i++) Layers[i].LoadTorch(engine, source, $"{prefix}.layers.{i}.op");
+        TorchParameters.LayerNorm(engine, FinalNorm, source, $"{prefix}.layer_norm.weight", $"{prefix}.layer_norm.bias");
     }
 }
 
@@ -242,14 +252,17 @@ internal sealed class MegaTtsDurationPredictor<T>
         return _engine.Reshape(y, new[] { b, l });
     }
 
-    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix)
+    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix) => LoadTorch(engine, TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(IEngine engine, TorchTensorSource source, string prefix)
     {
         for (int i = 0; i < Layers.Count; i++)
         {
-            MegaTts3Ops.LoadConv(read, Layers[i].Conv, $"{prefix}.conv.{i}.0");
-            TorchParameters.LayerNorm(engine, Layers[i].Norm, read($"{prefix}.conv.{i}.2.weight"), read($"{prefix}.conv.{i}.2.bias"));
+            MegaTts3Ops.LoadConv(source, Layers[i].Conv, $"{prefix}.conv.{i}.0");
+            TorchParameters.LayerNorm(engine, Layers[i].Norm, source, $"{prefix}.conv.{i}.2.weight", $"{prefix}.conv.{i}.2.bias");
         }
-        MegaTts3Ops.LoadDense(engine, read, Output, $"{prefix}.linear.0", Channels, 1);
+        MegaTts3Ops.LoadDense(engine, source, Output, $"{prefix}.linear.0", Channels, 1);
     }
 }
 
@@ -327,19 +340,22 @@ internal sealed class MegaTtsConvBlocks<T>
         return Mask(MegaTts3Ops.OverTime(_engine, PostNet, x), outer);
     }
 
-    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix)
+    public void LoadTorch(IEngine engine, Func<string, double[]> read, string prefix) => LoadTorch(engine, TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(IEngine engine, TorchTensorSource source, string prefix)
     {
         for (int i = 0; i < Blocks.Count; i++)
             for (int j = 0; j < Blocks[i].Count; j++)
             {
                 var (norm, conv, pointwise) = Blocks[i][j];
                 string p = $"{prefix}.res_blocks.{i}.blocks.{j}";
-                TorchParameters.LayerNorm(engine, norm, read($"{p}.0.weight"), read($"{p}.0.bias"));
-                MegaTts3Ops.LoadConv(read, conv, $"{p}.1");
-                MegaTts3Ops.LoadConv(read, pointwise, $"{p}.4");
+                TorchParameters.LayerNorm(engine, norm, source, $"{p}.0.weight", $"{p}.0.bias");
+                MegaTts3Ops.LoadConv(source, conv, $"{p}.1");
+                MegaTts3Ops.LoadConv(source, pointwise, $"{p}.4");
             }
-        TorchParameters.LayerNorm(engine, LastNorm, read($"{prefix}.last_norm.weight"), read($"{prefix}.last_norm.bias"));
-        MegaTts3Ops.LoadConv(read, PostNet, $"{prefix}.post_net1");
+        TorchParameters.LayerNorm(engine, LastNorm, source, $"{prefix}.last_norm.weight", $"{prefix}.last_norm.bias");
+        MegaTts3Ops.LoadConv(source, PostNet, $"{prefix}.post_net1");
     }
 }
 
@@ -411,14 +427,16 @@ internal sealed class MegaTtsMelDiscriminator<T>
         return total is null ? null : _engine.Reshape(total, new[] { b });
     }
 
-    private void Copy(Tensor<T> target, double[] values)
+    private void Copy(Tensor<T> target, TorchTensorSource source, string name)
     {
-        if (values.Length != target.Length) throw new InvalidDataException($"Expected {target.Length} values, got {values.Length}.");
-        for (int i = 0; i < values.Length; i++) target[i] = NumOps.FromDouble(values[i]);
+        source.CopyTo(name, Array.Empty<int>(), target);
         _engine.InvalidatePersistentTensor(target);
     }
 
-    public void LoadTorch(Func<string, double[]> read, string prefix)
+    public void LoadTorch(Func<string, double[]> read, string prefix) => LoadTorch(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the same tensors from <paramref name="source"/>, each copied straight into its layer.</summary>
+    internal void LoadTorch(TorchTensorSource source, string prefix)
     {
         for (int k = 0; k < Windows.Count; k++)
         {
@@ -426,14 +444,13 @@ internal sealed class MegaTtsMelDiscriminator<T>
             string p = $"{prefix}.discriminators.{k}";
             for (int i = 0; i < 3; i++)
             {
-                Copy(w.Convs[i].Kernel, read($"{p}.model.{i}.0.weight"));
-                Copy(w.Convs[i].Bias, read($"{p}.model.{i}.0.bias"));
+                Copy(w.Convs[i].Kernel, source, $"{p}.model.{i}.0.weight");
+                Copy(w.Convs[i].Bias, source, $"{p}.model.{i}.0.bias");
             }
             for (int i = 0; i < 2; i++)
-                TorchParameters.BatchNorm(w.Norms[i], read($"{p}.model.{i}.3.weight"), read($"{p}.model.{i}.3.bias"),
-                    read($"{p}.model.{i}.3.running_mean"), read($"{p}.model.{i}.3.running_var"));
-            var weight = read($"{p}.adv_layer.weight");
-            TorchParameters.Linear(_engine, w.Output, weight.Length, 1, weight, read($"{p}.adv_layer.bias"));
+                TorchParameters.BatchNorm(w.Norms[i], source, $"{p}.model.{i}.3.", w.Convs[i].Bias.Length);
+            var weight = source.Read($"{p}.adv_layer.weight", Array.Empty<int>());
+            TorchParameters.Linear(_engine, w.Output, weight.Length, 1, weight, source.Read($"{p}.adv_layer.bias", new[] { 1 }));
         }
     }
 }

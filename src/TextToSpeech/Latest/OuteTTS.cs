@@ -5,6 +5,7 @@ using AiDotNet.Enums;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
 using AiDotNet.LearningRateSchedulers;
+using AiDotNet.ModelLoading;
 using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
@@ -499,12 +500,8 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
         if (!HasPaperLayers) throw NotNative();
         string tokenizer = Path.Combine(directory, "tokenizer.json");
         if (File.Exists(tokenizer)) LoadTokenizer(tokenizer);
-        var weights = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var file in Directory.GetFiles(directory, "*.safetensors"))
-            foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(file))
-                weights[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        LanguageModel.LoadTorchWeights((name, shape) => weights.TryGetValue(name, out var v) ? v
-            : throw new InvalidDataException($"The checkpoint has no tensor '{name}'."));
+        using var weights = TorchCheckpointFile.OpenDirectory(directory);
+        LanguageModel.LoadTorchWeights(weights);
     }
 
     /// <summary>Loads the codec: descript-audio-codec's checkpoint (ibm-research/DAC.speech.v1.0's
@@ -513,15 +510,17 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var all = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var entry in all)
-        {
-            string name = entry.Key.StartsWith("state_dict.", StringComparison.Ordinal) ? entry.Key.Substring("state_dict.".Length) : entry.Key;
-            state[name] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        }
-        LoadCodec(name => state.TryGetValue(name, out var v) ? v : null, state.Keys);
+        using var file = TorchCheckpointFile.Open(path);
+        var state = Unwrapped(file, "state_dict.");
+        LoadCodec(name => state.TryRead(name), file.Names.Select(k => Unwrapped(k, "state_dict.")).ToList());
     }
+
+    // A checkpoint whose state dict is saved under a wrapper key: each name with or without the wrapper.
+    private static TorchTensorSource Unwrapped(TorchTensorSource file, string wrapper) =>
+        file.WithNames(name => file.Contains(wrapper + name) ? wrapper + name : name);
+
+    private static string Unwrapped(string name, string wrapper) =>
+        name.StartsWith(wrapper, StringComparison.Ordinal) ? name.Substring(wrapper.Length) : name;
 
     internal void LoadCodec(Func<string, double[]?> read, IEnumerable<string> names)
     {
@@ -539,14 +538,11 @@ public partial class OuteTTS<T> : TtsModelBase<T>, ICodecTts<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw NotNative();
-        var all = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var entry in all)
+        using (var file = TorchCheckpointFile.Open(path))
         {
-            string name = entry.Key.StartsWith("model_state_dict.", StringComparison.Ordinal) ? entry.Key.Substring("model_state_dict.".Length) : entry.Key;
-            state[name] = entry.Value.ToVector().Select(v => (double)v).ToArray();
+            var state = Unwrapped(file, "model_state_dict.");
+            Aligner.LoadTorchWeights(state);
         }
-        Aligner.LoadTorchWeights((name, shape) => state.TryGetValue(name, out var v) ? v : throw new InvalidDataException($"The checkpoint has no tensor '{name}'."));
         if (!OpenAiWhisperNetwork<T>.ReleasedAlignmentHeads.TryGetValue(alignmentHeads, out var dump))
             throw new ArgumentException($"Unknown Whisper release '{alignmentHeads}'.", nameof(alignmentHeads));
         Aligner.SetAlignmentHeads(dump);

@@ -1,6 +1,7 @@
 using AiDotNet.Attributes;
 using AiDotNet.Audio.Foundations;
 using AiDotNet.Enums;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
@@ -189,9 +190,7 @@ public partial class KaniTTS2<T> : KaniTTSBase<T>
     {
         if (!HasPaperLayers) throw NotNative();
         string file = Directory.Exists(path) ? Path.Combine(path, "model.safetensors") : path;
-        var weights = new Dictionary<string, double[]>(StringComparer.Ordinal);
-        foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(file))
-            weights[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-        Embedder.LoadTorchWeights(name => weights.TryGetValue(name, out var v) ? v : null);
+        using var weights = TorchCheckpointFile.Open(file);
+        Embedder.LoadTorchWeights(weights);
     }
 }

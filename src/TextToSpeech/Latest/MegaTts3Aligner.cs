@@ -1,4 +1,5 @@
 using AiDotNet.Audio.Whisper;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.TextToSpeech.Latest;
@@ -145,4 +146,7 @@ internal sealed class MegaTts3Aligner<T>
 
     /// <summary>Loads the release's <c>aligner_lm</c> checkpoint state.</summary>
     public void LoadTorch(Func<string, double[]> read) => Network.LoadTorchWeights((name, _) => read(name));
+
+    /// <summary>Loads the release's <c>aligner_lm</c> checkpoint state from <paramref name="source"/>.</summary>
+    internal void LoadTorch(TorchTensorSource source) => Network.LoadTorchWeights(source);
 }
