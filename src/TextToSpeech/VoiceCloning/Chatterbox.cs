@@ -401,7 +401,7 @@ public partial class Chatterbox<T> : CosyVoiceBase<T>
         // The multilingual release ships its voice encoder and S3Gen as PyTorch state dicts.
         string extension = IsMultilingual ? ".pt" : ".safetensors";
         using (var t3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, t3File))) T3.LoadTorchWeights(t3);
-        using (var ve = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "ve" + extension))) VoiceEncoder.LoadTorchWeights(ve.Read);
+        using (var ve = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "ve" + extension))) VoiceEncoder.LoadTorchWeights(ve);
         using (var s3 = TorchCheckpointFile.Open(Path.Combine(modelDirectory, "s3gen" + extension)))
         {
             Flow.LoadTorchWeights(s3.WithPrefix("flow."), "");

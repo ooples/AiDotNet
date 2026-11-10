@@ -1,4 +1,5 @@
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 using AiDotNet.TextToSpeech.Vocoders;
@@ -109,23 +110,19 @@ internal sealed class ChatterboxVoiceEncoder<T>
         return _engine.Reshape(NormalizeRows(averaged), new[] { _options.T3SpeakerEmbeddingDim });
     }
 
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads the release's <c>ve</c> state (<c>lstm.*_l{k}</c>, <c>proj</c>, <c>similarity_weight</c>,
+    /// <c>similarity_bias</c>) straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         int hidden = _options.VoiceEncoderHiddenDim;
         for (int layer = 0; layer < _cells.Count; layer++)
-        {
-            int input = layer == 0 ? _options.VoiceEncoderMelChannels : hidden;
-            _cells[layer].LoadTorchWeights(
-                read($"lstm.weight_ih_l{layer}", new[] { 4 * hidden, input }),
-                read($"lstm.weight_hh_l{layer}", new[] { 4 * hidden, hidden }),
-                read($"lstm.bias_ih_l{layer}", new[] { 4 * hidden }),
-                read($"lstm.bias_hh_l{layer}", new[] { 4 * hidden }));
-        }
-        TorchParameters.Linear(_engine, _projection, hidden, _options.T3SpeakerEmbeddingDim,
-            read("proj.weight", new[] { _options.T3SpeakerEmbeddingDim, hidden }),
-            read("proj.bias", new[] { _options.T3SpeakerEmbeddingDim }));
-        _similarityWeight.LoadTable(read("similarity_weight", new[] { 1 }));
-        _similarityBias.LoadTable(read("similarity_bias", new[] { 1 }));
+            _cells[layer].LoadTorchWeights(source, $"lstm.weight_ih_l{layer}", $"lstm.weight_hh_l{layer}",
+                $"lstm.bias_ih_l{layer}", $"lstm.bias_hh_l{layer}");
+        TorchParameters.Linear(_engine, _projection, hidden, _options.T3SpeakerEmbeddingDim, source, "proj.weight", "proj.bias");
+        _similarityWeight.LoadTable(source, "similarity_weight", new[] { 1 });
+        _similarityBias.LoadTable(source, "similarity_bias", new[] { 1 });
     }
 
     private Tensor<T> NormalizeRows(Tensor<T> rows)
