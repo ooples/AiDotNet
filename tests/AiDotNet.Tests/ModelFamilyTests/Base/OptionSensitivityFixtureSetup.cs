@@ -145,6 +145,8 @@ internal static class OptionSensitivityFixtureSetup
                 && option is "LanguageEmbeddingDim" or "SpeakerConsistencyLossWeight" ? "yourtts-conditioning-" + option
             : network is AiDotNet.TextToSpeech.EndToEnd.VITS<T> or AiDotNet.TextToSpeech.EndToEnd.Piper<T>
                 && option is "SpeakerEmbeddingDim" or "LanguageEmbeddingDim" ? "vits-conditioning-" + option
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech<T>
+                && option is "DistillationSteps" or "EmaDecay" ? "comospeech-distillation"
             : network is AiDotNet.TextToSpeech.Classic.AlignTTS<T> && option == "LearningRate" ? "aligntts-fixed-rate-training"
             : network is AiDotNet.TextToSpeech.CodecBased.OrpheusTTS<T>
                 && option is "MaxGradNorm" or "RemoveDuplicateFrames" ? "orpheus-training-" + option
@@ -739,6 +741,8 @@ internal static class OptionSensitivityFixtureSetup
             ? Math.Max(4, steps)
             : network is AiDotNet.Audio.MusicGen.MusicGenModel<T> && option is "WarmupSteps" or "TrainingSteps"
             ? Math.Max(4, steps)
+            : network is AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech<T> && option is "DistillationSteps" or "EmaDecay"
+            ? Math.Max(2, steps)
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "SlmDiscriminatorInterval"
             ? Math.Max(3, steps)
             : network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> && option == "BertBeta1"
@@ -753,6 +757,11 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptionTraining<T>(INeuralNetworkModel<T> network, string option)
     {
+        if (network is AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech<T> como
+            && option is "DistillationSteps" or "EmaDecay"
+            && como.CurrentPhase == AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeechTrainingPhase.Teacher)
+            como.BeginDistillation();
+
         if (network is AiDotNet.TextToSpeech.Classic.AlignTTS<T> align && option == "LearningRate")
             align.CurrentPhase = AiDotNet.TextToSpeech.Classic.AlignTTSTrainingPhase.JointFineTuning;
         if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> style && IsStyleTts2JointOption(option))

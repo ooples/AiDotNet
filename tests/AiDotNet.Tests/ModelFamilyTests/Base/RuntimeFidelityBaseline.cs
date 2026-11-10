@@ -4122,7 +4122,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech`1::NumDiffusionSteps", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech`1::NumFlowSteps", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech`1::SampleRate", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech`1::WeightDecay", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS`1::FilterChannels", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS`1::InterChannels", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.FlowDiffusion.DiTToTTS`1::LearningRate", OptionSensitivityOutcome.Insensitive },

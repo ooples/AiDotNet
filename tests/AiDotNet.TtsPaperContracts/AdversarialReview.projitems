@@ -6,6 +6,8 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/LlamaAttentionDropoutReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/AcousticMelOptionAliasesTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/AlignVoiceFlowOptimizerTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/CoMoSpeechOptimizerOptionsTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/CoMoSpeechPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VitsNativeGeometryOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VITSPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VITS2PaperTests.cs" />
