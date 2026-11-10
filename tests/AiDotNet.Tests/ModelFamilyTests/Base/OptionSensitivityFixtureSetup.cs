@@ -85,6 +85,7 @@ internal static class OptionSensitivityFixtureSetup
 
             : network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> ? "vevo-" + option
             : network is AiDotNet.TextToSpeech.CodecBased.Llasa<T> && LlasaOptionFixture.Handles(option) ? "llasa-" + option
+            : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2<T> && NaturalSpeech2OptionFixture.Handles(option) ? "naturalspeech2-" + option
 
             : network is AiDotNet.Finance.Forecasting.StateSpace.Hippo<T> && option == "TimescaleMax" ? "hippo-timescale-clamp"
             : network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> && option == "ConfidenceWindow" ? "ctc-segmentation-confidence"
@@ -303,6 +304,8 @@ internal static class OptionSensitivityFixtureSetup
             return VevoOptionFixture.Observe(vevo, option);
         if (network is AiDotNet.TextToSpeech.CodecBased.Llasa<T> llasa && option == "IncludePromptAudio")
             return LlasaOptionFixture.ObservePrompt(llasa);
+        if (network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2<T> naturalSpeech2 && NaturalSpeech2OptionFixture.Handles(option))
+            return NaturalSpeech2OptionFixture.Observe(naturalSpeech2, option);
 
         if (network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> segmentation && option == "ConfidenceWindow")
             return AiDotNet.Tests.Audio.CtcSegmentationOptionFixture.Observe(segmentation);
@@ -1176,6 +1179,8 @@ internal static class OptionSensitivityFixtureSetup
     /// the perturbation tests the pair rather than the constructor's rejection of a mismatch.</summary>
     internal static void Reconcile(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2Options naturalSpeech2)
+            NaturalSpeech2OptionFixture.Reconcile(naturalSpeech2, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.VevoOptions vevoOptions)
             VevoOptionFixture.Reconcile(vevoOptions, option);
         // Parler-TTS's frames, codes and codebooks are its codec's: the codec follows (a hop of h is one stride of h).
@@ -1200,6 +1205,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2Options naturalSpeech2)
+            NaturalSpeech2OptionFixture.Prepare(naturalSpeech2, option);
         if (options is AiDotNet.TextToSpeech.CodecBased.LlasaOptions llasa)
             LlasaOptionFixture.Prepare(llasa, option);
         if (options is AiDotNet.TextToSpeech.MultiModal.MoshiOptions moshiOptions)

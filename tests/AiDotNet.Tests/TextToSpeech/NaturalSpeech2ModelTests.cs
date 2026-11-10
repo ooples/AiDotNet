@@ -36,6 +36,27 @@ public class NaturalSpeech2ModelTests
 
     private static Tensor<double> Ids(params int[] ids) => new(new[] { ids.Length }, new Vector<double>(ids.Select(i => (double)i).ToArray()));
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(-1)]
+    public void NativeCodecRejectsUnsupportedMelWidths(int width)
+    {
+        var options = Tiny(new NaturalSpeech2Options { MelChannels = width });
+        var architecture = new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
+            inputSize: 1, outputSize: 1);
+        Assert.Throws<ArgumentException>(() => new NaturalSpeech2<double>(architecture, options));
+    }
+
+    [Fact]
+    public void LegacyMelDefaultStillLoads()
+    {
+        var options = Tiny(Newtonsoft.Json.JsonConvert.DeserializeObject<NaturalSpeech2Options>("{\"MelChannels\":80}")!);
+        using var model = new NaturalSpeech2<double>(
+            new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
+                inputSize: 1, outputSize: 1), options);
+        Assert.True(model.GetParameters().Length > 0);
+    }
+
     [Theory(Timeout = 900000)]
     [InlineData("paper")]
     [InlineData("amphion")]

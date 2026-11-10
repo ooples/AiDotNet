@@ -420,6 +420,10 @@ Mimi's generator and discriminator disable optimizer clipping explicitly. The [c
 
 Shared `NumEncoderLayers` and `NumDecoderLayers` now address Mimi's actual encoder/decoder Transformer depth through the existing joint `MimiTransformerLayers` setting (§3.3: eight layers on each side). The RQ temporal and depth decoders retain their distinct `Layers` and `DepthLayers` settings. Native saved codec depth takes precedence over conflicting legacy shared counts in either JSON order. Regressions inspect the physical layer arrays, including the existing zero-Transformer codec ablation; the paper defaults and stored/active codebook distinction are preserved.
 
+### NaturalSpeech 2 waveform and training controls
+
+NaturalSpeech 2 takes waveform codec latents throughout the native diffusion pipeline. The shared mel-width field defaults to zero and still accepts the inherited value of 80 in older serialized options. The option tests use audio to exercise codec frame rate, prompt cropping, and diffusion-time clipping, and run optimizer updates on a finite cosine schedule to exercise its horizon. The residual cross-entropy comparison fits the native SoundStream codebooks from the test audio before comparing the paper's ground-truth residuals with Amphion's predicted residuals. [NaturalSpeech 2 paper, §§3.1–3.3](https://arxiv.org/html/2304.09116#S3)
+
 ### Llasa architecture and training controls
 
 The shared encoder layer count selects the X-codec2 Wav2Vec2-BERT read depth. The decoder layer and attention head counts configure the native Llama network. Saved native settings take precedence over the shared aliases. The released Llama configuration specifies zero attention dropout, which the constructors enforce. [Llasa paper](https://arxiv.org/abs/2502.04128) · [Released configuration](https://huggingface.co/HKUSTAudio/Llasa-1B/blob/cef8ce6a6eea3b593c5b28868d2391ec15eb9058/config.json)

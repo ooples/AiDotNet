@@ -111,7 +111,10 @@ public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
     {
         var o = _options;
         base.SampleRate = o.SampleRate;
-        base.MelChannels = o.MelChannels;
+        // Older serialized options contain the inherited mel default.
+        if (o.MelChannels is not (0 or 80))
+            throw new ArgumentException("NaturalSpeech 2 consumes waveform codec latents and has no mel frontend.", nameof(o.MelChannels));
+        base.MelChannels = 0;
         base.HopSize = o.HopSize;
         base.HiddenDim = o.HiddenDim;
         MaxGradNorm = NumOps.FromDouble(o.GradientClipNorm);
@@ -122,6 +125,8 @@ public partial class NaturalSpeech2<T> : TtsModelBase<T>, IEndToEndTts<T>
         if (o.PromptMinFraction < 0 || o.PromptMaxFraction < o.PromptMinFraction || o.PromptMaxFraction >= 1)
             throw new ArgumentException("The prompt fractions satisfy 0 <= PromptMinFraction <= PromptMaxFraction < 1.");
         if (o.Temperature <= 0) throw new ArgumentException("Temperature must be positive.");
+        if (!(o.TimeEpsilon >= 0 && o.TimeEpsilon < .5))
+            throw new ArgumentOutOfRangeException(nameof(o.TimeEpsilon), "Diffusion time clipping requires 0 <= TimeEpsilon < 0.5.");
         if (o.SamplingSteps < 1) throw new ArgumentException("SamplingSteps must be positive.");
         if (o.DenoiserAttentionEvery < 1 || o.PredictorAttentionEvery < 1) throw new ArgumentException("The attention intervals must be positive.");
     }

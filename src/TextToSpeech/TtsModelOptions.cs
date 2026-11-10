@@ -54,6 +54,7 @@ public class TtsModelOptions : ModelOptions
     [AiDotNet.Attributes.OptionBehaviourExempt("E3 TTS sections 3.2-3.3 predict the raw waveform with a BERT-conditioned U-Net and have no mel representation (arXiv:2311.00945).", ModelType = typeof(FlowDiffusion.E3TTS<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi uses Mimi's waveform SEANet/RVQ, not mel channels (Defossez et al. 2024 section 3.3); native construction requires MelChannels=0.", ModelType = typeof(MultiModal.Moshi<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi ASR uses Mimi waveform codes, not mel channels; native construction requires MelChannels=0 (Defossez et al. 2024 section 3.3).", ModelType = typeof(AiDotNet.SpeechRecognition.Streaming.Moshi<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("NaturalSpeech 2 consumes waveform codec latents (Shen et al. 2023, §3.1). Its constructors reject mel widths other than zero and the inherited legacy default of 80.", ModelType = typeof(CodecBased.NaturalSpeech2<>))]
     public virtual int MelChannels { get; set; } = 80;
 
     /// <summary>Gets or sets the hop size for mel-spectrogram computation.</summary>
