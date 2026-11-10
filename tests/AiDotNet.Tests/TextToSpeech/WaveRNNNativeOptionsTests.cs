@@ -79,7 +79,7 @@ public class WaveRNNNativeOptionsTests
         }
         using var model = new Probe(o);
         Assert.Equal(2 * hop, model.Predict(new Tensor<double>(new[] { 1, 4, 2 })).Length);
-        Assert.True(double.IsFinite(model.Train(Sample())));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
     }
 
     [Theory]
@@ -91,7 +91,7 @@ public class WaveRNNNativeOptionsTests
         var o = Options(); o.HiddenDim = width;
         using var model = new Probe(o);
         Assert.Equal(width, Core(model).Hidden); Assert.Equal(width, new WaveRNNOptions(o).HiddenDim);
-        Assert.True(double.IsFinite(model.Train(Sample())));
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
         Assert.Throws<ArgumentOutOfRangeException>(() => o.HiddenDim = 3);
     }
 
@@ -130,8 +130,8 @@ public class WaveRNNNativeOptionsTests
         Assert.Equal(audio.ToArray().Skip(start * 16).Take(samples).ToArray(), pair.Audio.ToArray());
         for (int c = 0; c < 4; c++) for (int f = 0; f < pair.Condition.Shape[2]; f++)
             Assert.Equal(mel[0, c, start + f], pair.Condition[0, c, f]);
-        Assert.True(double.IsFinite(model.Train(Sample())));
-        Assert.True(double.IsFinite(((ITrainingObjectiveProvider<double>)model)
+        Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
+        Assert.True(TtsPaperNumerics.IsFinite(((ITrainingObjectiveProvider<double>)model)
             .EvaluateTrainingObjective(pair.Condition, pair.Audio)));
     }
 
@@ -200,7 +200,7 @@ public class WaveRNNNativeOptionsTests
         var o = Options(); o.SparsityTarget = .5; o.PruningStartStep = 0; o.PruningSteps = 2;
         o.PruningInterval = 1; o.PruneBlockRows = rows; o.PruneBlockColumns = columns;
         using var model = new Probe(o);
-        for (int step = 0; step < 4; step++) Assert.True(double.IsFinite(model.Train(Sample())));
+        for (int step = 0; step < 4; step++) Assert.True(TtsPaperNumerics.IsFinite(model.Train(Sample())));
         Assert.Equal(.5, model.RecurrentSparsity);
         var kernel = Core(model).Recurrent.Kernel();
         for (int gate = 0; gate < 3; gate++) for (int r = 0; r < 16; r += rows) for (int c = 0; c < 16; c += columns)

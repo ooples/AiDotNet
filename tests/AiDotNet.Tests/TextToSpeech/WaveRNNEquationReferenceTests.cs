@@ -34,7 +34,7 @@ public class WaveRNNEquationReferenceTests
     {
         Assert.Equal(expected.Length, actual.Length);
         for (int i = 0; i < expected.Length; i++)
-            if (!double.IsFinite(actual[i]) || Math.Abs(actual[i] - expected[i]) > 1e-10)
+            if (!TtsPaperNumerics.IsFinite(actual[i]) || Math.Abs(actual[i] - expected[i]) > 1e-10)
             {
                 failures.Add($"{name}[{i}]: {actual[i]:R} vs {expected[i]:R}");
                 return;
