@@ -32,8 +32,42 @@ public enum DiffWaveConditioner
 /// clips), so a model input is the class label (or, unconditionally, ignored) rather than a spectrogram.</para>
 /// <para><b>For Beginners:</b> These options configure the DiffWave model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(DiffWaveOptionsConverter))]
 public class DiffWaveOptions : VocoderOptions
 {
+    /// <summary>The actual residual denoiser width (64 for vocoding, 256 for the paper's utterance models).</summary>
+    public override int HiddenDim
+    {
+        get => ResChannels;
+        set => ResChannels = value > 0 ? value : throw new ArgumentOutOfRangeException(nameof(value));
+    }
+
+    /// <summary>The product of the mel conditioner's even transposed-convolution strides.</summary>
+    public override int HopSize
+    {
+        get => UpsampleStrides.Aggregate(1, (product, stride) => checked(product * stride));
+        set
+        {
+            int stages = UpsampleStrides.Length;
+            if (stages < 1 || stages > 30 || UpsampleStrides.Any(s => s < 2 || s % 2 != 0))
+                throw new ArgumentException("DiffWave's mel upsampler needs positive even strides.");
+            long divisor = 1L << stages;
+            if (value < divisor || value % divisor != 0)
+                throw new ArgumentOutOfRangeException(nameof(value), "The hop must preserve every even conditioning upsampling stage.");
+            if (value == HopSize) return;
+            int Gcd(int a, int b) { while (b != 0) { int r = a % b; a = b; b = r; } return a; }
+            var strides = new int[stages];
+            int remaining = value;
+            for (int i = 0; i < stages; i++)
+            {
+                int reserve = 1 << (stages - i - 1);
+                strides[i] = i == stages - 1 ? remaining : Gcd(UpsampleStrides[i], remaining / reserve);
+                remaining /= strides[i];
+            }
+            UpsampleStrides = strides;
+        }
+    }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>

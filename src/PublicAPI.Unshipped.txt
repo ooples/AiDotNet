@@ -1,4 +1,8 @@
 #nullable enable
+override AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions.HiddenDim.get -> int
+override AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions.HiddenDim.set -> void
+override AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions.HopSize.set -> void
 override AiDotNet.TextToSpeech.Vocoders.PriorGradOptions.HiddenDim.get -> int
 override AiDotNet.TextToSpeech.Vocoders.PriorGradOptions.HiddenDim.set -> void
 override AiDotNet.TextToSpeech.Vocoders.PriorGradOptions.HopSize.get -> int
