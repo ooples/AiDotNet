@@ -36,7 +36,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2018,
     Authors = "Kalchbrenner et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 32,
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, ReferenceBatchSize = 32,
                 Source = "The paper states no optimizer (500k steps, Sec. 3.1); fatchord/WaveRNN hparams.py: Adam at 1e-4, batch 32, gradient norm clipped to 4.")]
 public partial class WaveRNN<T> : SegmentVocoderBase<T>
 {
@@ -76,11 +76,47 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateNetwork()
     {
         var o = PaperOptions;
-        if (UpsampleFactor != o.HopSize)
-            throw new ArgumentException($"The upsampling scales ({string.Join("x", o.UpsampleScales)}) must multiply to the hop ({o.HopSize}).");
+        if (o.DropoutRate != 0.0)
+            throw new ArgumentException("WaveRNN's published recurrent network has no dropout; DropoutRate must be zero.", nameof(o.DropoutRate));
+        if (o.RnnDim <= 0 || o.RnnDim % 2 != 0)
+            throw new ArgumentOutOfRangeException(nameof(o.RnnDim), "WaveRNN needs two equal nonempty state halves.");
+        if (o.UpsampleScales.Length == 0 || o.UpsampleScales.Any(s => s <= 0))
+            throw new ArgumentException("WaveRNN needs positive conditioning upsampling factors.", nameof(o.UpsampleScales));
+        if (o.SequenceSamples <= 0) throw new ArgumentOutOfRangeException(nameof(o.SequenceSamples));
+        if (double.IsNaN(o.SparsityTarget) || o.SparsityTarget < 0 || o.SparsityTarget > 1)
+            throw new ArgumentOutOfRangeException(nameof(o.SparsityTarget));
+        if (o.PruningStartStep < 0 || o.PruningSteps <= 0 || o.PruningInterval <= 0)
+            throw new ArgumentException("The pruning schedule needs a nonnegative start and positive duration and interval.");
+        if (o.PruneBlockRows <= 0 || o.PruneBlockColumns <= 0 ||
+            o.RnnDim % o.PruneBlockRows != 0 || o.RnnDim % o.PruneBlockColumns != 0)
+            throw new ArgumentException("Pruning blocks must tile each recurrent gate matrix.");
         _core = new WaveRnnCore<T>(Engine, o.RnnDim, o.MelChannels, o.UpsampleScales, 256);
         _features = new TacotronSpectrogram(o.SampleRate, o.FftSize, o.HopSize, o.WindowSize, o.MelChannels, o.MelMinFrequency, o.MelMaxFrequency);
         return _core.Layers;
+    }
+
+    /// <inheritdoc />
+    protected override (Tensor<T> Condition, Tensor<T> Audio) TrainingPair(Tensor<T> condition, Tensor<T> audio, Random random)
+    {
+        audio = Flat(audio);
+        // Section 5.1 uses 960 samples, which is not a multiple of the 300-sample feature hop.
+        // Keep every target sample; the last conditioning frame can cover only part of the sequence.
+        int hop = UpsampleFactor;
+        int samples = Math.Min(PaperOptions.SequenceSamples, Math.Min(audio.Length, checked(condition.Shape[2] * hop)));
+        if (samples <= 0) throw new ArgumentException("WaveRNN training needs nonempty aligned audio and conditioning.");
+        int frames = 1 + (samples - 1) / hop;
+        int lastStart = Math.Min(condition.Shape[2] - frames, (audio.Length - samples) / hop);
+        int start = lastStart > 0 ? random.Next(lastStart + 1) : 0;
+        return (Engine.TensorSlice(condition, new[] { 0, 0, start }, new[] { 1, condition.Shape[1], frames }),
+            Engine.TensorSlice(audio, new[] { start * hop }, new[] { samples }));
+    }
+
+    /// <inheritdoc />
+    protected override Tensor<T> EvaluationAudio(Tensor<T> condition, Tensor<T> target)
+    {
+        if (target.Length > checked(condition.Shape[2] * UpsampleFactor))
+            throw new ArgumentException("The conditioning must cover every evaluated waveform sample.", nameof(condition));
+        return target;
     }
 
     /// <inheritdoc />
@@ -214,9 +250,9 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
         if (o.SparsityTarget <= 0 || step < o.PruningStartStep)
             return;
         int since = step - o.PruningStartStep;
-        if (_mask is null || since % Math.Max(1, o.PruningInterval) == 0 || since == o.PruningSteps)
+        if (_mask is null || since % o.PruningInterval == 0 || since == o.PruningSteps)
         {
-            double progress = Math.Min(1.0, since / (double)Math.Max(1, o.PruningSteps));
+            double progress = Math.Min(1.0, since / (double)o.PruningSteps);
             double z = o.SparsityTarget * (1 - Math.Pow(1 - progress, 3));
             _mask = PruningMask(z);
         }
@@ -228,7 +264,7 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
     {
         var o = PaperOptions;
         var kernel = _core!.Recurrent.Kernel();
-        int hidden = _core.Hidden, br = Math.Max(1, o.PruneBlockRows), bc = Math.Max(1, o.PruneBlockColumns);
+        int hidden = _core.Hidden, br = o.PruneBlockRows, bc = o.PruneBlockColumns;
         if (hidden % br != 0 || hidden % bc != 0)
             throw new InvalidOperationException($"The pruning block {br}x{bc} must tile the {hidden}x{hidden} gate matrices.");
         var mask = new Tensor<T>(kernel._shape);
@@ -258,12 +294,14 @@ public partial class WaveRNN<T> : SegmentVocoderBase<T>
 
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
-        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = PaperOptions.LearningRate,
-                UseAdaptiveBetas = false,
-            }));
+    {
+        var optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+            learningRateOverride: PaperOptions.LearningRate, weightDecayOverride: PaperOptions.WeightDecay)
+            ?? throw new InvalidOperationException("WaveRNN's native Adam recipe could not be created.");
+        if (optimizer.GetOptions() is GradientBasedOptimizerOptions<T, Tensor<T>, Tensor<T>> settings)
+            settings.EnableGradientClipping = false; // The model applies its single global norm clip.
+        return optimizer;
+    }
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()

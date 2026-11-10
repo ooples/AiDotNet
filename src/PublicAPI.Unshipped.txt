@@ -1,4 +1,10 @@
 #nullable enable
+override AiDotNet.TextToSpeech.Vocoders.WaveRNNOptions.HiddenDim.get -> int
+override AiDotNet.TextToSpeech.Vocoders.WaveRNNOptions.HiddenDim.set -> void
+override AiDotNet.TextToSpeech.Vocoders.WaveRNNOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.Vocoders.WaveRNNOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.Vocoders.WaveRNN<T>.TrainingPair(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! audio, System.Random! random) -> (AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! Audio)
+override AiDotNet.TextToSpeech.Vocoders.WaveRNN<T>.EvaluationAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! condition, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions.HiddenDim.get -> int
 override AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions.HiddenDim.set -> void
 override AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions.HopSize.get -> int

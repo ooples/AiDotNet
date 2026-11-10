@@ -15,8 +15,39 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// 1e-4, batch 32, gradient norm clipped to 4).</para>
 /// <para><b>For Beginners:</b> These options configure the WaveRNN model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(WaveRNNOptionsConverter))]
 public class WaveRNNOptions : VocoderOptions
 {
+    /// <summary>The actual recurrent state width, split into equal coarse and fine halves.</summary>
+    public override int HiddenDim
+    {
+        get => RnnDim;
+        set => RnnDim = value > 0 && value % 2 == 0 ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), "WaveRNN needs two equal nonempty state halves.");
+    }
+
+    /// <summary>The product of the actual conditioning upsampling factors.</summary>
+    public override int HopSize
+    {
+        get => UpsampleScales.Aggregate(1, (product, scale) => checked(product * scale));
+        set
+        {
+            if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value));
+            if (UpsampleScales.Length == 0 || UpsampleScales.Any(s => s <= 0))
+                throw new ArgumentException("WaveRNN needs positive conditioning factors.");
+            if (value == HopSize) return;
+            int Gcd(int a, int b) { while (b != 0) { int r = a % b; a = b; b = r; } return a; }
+            var scales = new int[UpsampleScales.Length];
+            int remaining = value;
+            for (int i = 0; i < scales.Length; i++)
+            {
+                scales[i] = i == scales.Length - 1 ? remaining : Gcd(UpsampleScales[i], remaining);
+                remaining /= scales[i];
+            }
+            UpsampleScales = scales;
+        }
+    }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
@@ -59,7 +90,7 @@ public class WaveRNNOptions : VocoderOptions
     /// <summary>Gets or sets the conditioning upsampler's factors (5, 5, 4, 3; their product is the hop).</summary>
     public int[] UpsampleScales { get; set; } = [5, 5, 4, 3];
 
-    /// <summary>Gets or sets the samples of a training sequence (960; rounded down to whole frames).</summary>
+    /// <summary>Gets or sets the exact samples of a training sequence (960; full back-propagation through time).</summary>
     public int SequenceSamples { get; set; } = 960;
 
     /// <summary>Gets or sets the analysis window of the input features (1200: 50 ms).</summary>

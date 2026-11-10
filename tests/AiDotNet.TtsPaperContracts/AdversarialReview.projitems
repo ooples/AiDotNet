@@ -28,6 +28,9 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/PriorGradNativeOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/PriorGradPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/DiffWaveNativeOptionsTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/WaveRNNNativeOptionsTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/WaveRNNEquationReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/WaveRNNPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/DiffWavePaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/GanVocoderWeights.cs" />
     <Compile Include="../AiDotNet.Tests/Audio/PerthReleasedCheckpointFixture.cs" />
