@@ -45,7 +45,8 @@ public class MoshiLmReferenceTests
         return result;
     }
 
-    private static MoshiLanguageModel<double> Model(int depthStreams, string state)
+    private static MoshiLanguageModel<double> Model(int depthStreams, string state,
+        List<LayerBase<double>>? layers = null)
     {
         var f = Data.Value;
         var c = f["config"]!;
@@ -65,7 +66,7 @@ public class MoshiLmReferenceTests
                 FeedForward = depthFeedForward, Context = 0, Rotary = false, WeightsPerStep = depthStreams,
             },
         };
-        var model = new MoshiLanguageModel<double>(AiDotNetEngine.Current, new List<LayerBase<double>>(), configuration, new Random(0));
+        var model = new MoshiLanguageModel<double>(AiDotNetEngine.Current, layers ?? new List<LayerBase<double>>(), configuration, new Random(0));
         var weights = State((string)f[state]!);
         model.LoadTorchWeights(name => weights.TryGetValue(name, out var v) ? v : null);
         return model;
@@ -151,5 +152,60 @@ public class MoshiLmReferenceTests
         var loss = model.Loss(Codes())[0];
         double expected = (double)Data.Value["paper_loss"]!;
         Assert.True(Math.Abs(loss - expected) <= 1e-10 * Math.Max(1, Math.Abs(expected)), $"{expected:R} vs {loss:R}");
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData("paper", 6)]
+    [InlineData("release", 3)]
+    public async Task EveryParameterDerivative_MatchesPinnedAuthorAutograd(string name, int depthStreams)
+    {
+        await Task.Yield();
+        const string filename = "moshi_lm_gradient_reference.json";
+        string path = Path.Combine(AppContext.BaseDirectory, "TextToSpeech", "ReferenceData", filename);
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); !File.Exists(path) && dir is not null; dir = dir.Parent)
+            path = Path.Combine(dir.FullName, "tests", "AiDotNet.Tests", "TextToSpeech", "ReferenceData", filename);
+        var reference = JObject.Parse(File.ReadAllText(path));
+        Assert.Equal("e6a55d2722a65870ef52a6c9f6ecfc0e90f38362", (string)reference["author_commit"]!);
+        var item = reference["cases"]![name]!;
+        Assert.Empty(item["unused_parameters"]!);
+        var layers = new List<LayerBase<double>>();
+        var model = Model(depthStreams, $"{name}_state", layers);
+        var parameters = layers.SelectMany(layer => layer.GetTrainableParameters()).ToArray();
+        Assert.Equal((int)item["parameter_scalars"]!, parameters.Sum(p => p.Length));
+        var expectedLayers = new List<LayerBase<double>>();
+        var authorGradients = State((string)item["gradient_state"]!);
+        Assert.Equal((int)item["parameter_tensors"]!, authorGradients.Count);
+        var consumed = new HashSet<string>();
+        var expectedModel = Model(depthStreams, $"{name}_state", expectedLayers);
+        expectedModel.LoadTorchWeights(key =>
+        {
+            Assert.True(authorGradients.TryGetValue(key, out var value), $"Missing author derivative {key}");
+            consumed.Add(key);
+            return value;
+        });
+        Assert.Equal(authorGradients.Keys.OrderBy(key => key), consumed.OrderBy(key => key));
+        var expectedParameters = expectedLayers.SelectMany(layer => layer.GetTrainableParameters()).ToArray();
+        Assert.Equal(parameters.Length, expectedParameters.Length);
+        using var tape = new GradientTape<double>();
+        var loss = model.Loss(Codes());
+        double expectedLoss = (double)item["loss"]!;
+        Assert.True(Math.Abs(loss[0] - expectedLoss) <= 1e-10 * Math.Max(1, Math.Abs(expectedLoss)));
+        var gradients = tape.ComputeGradients(loss, sources: parameters);
+        int nonzero = 0;
+        for (int p = 0; p < parameters.Length; p++)
+        {
+            Assert.Equal(parameters[p].Shape, expectedParameters[p].Shape);
+            Assert.True(gradients.TryGetValue(parameters[p], out var actual), $"Native parameter {p} has no derivative");
+            Assert.NotNull(actual);
+            if (actual!.ToArray().Any(value => value != 0)) nonzero++;
+            for (int i = 0; i < actual.Length; i++)
+            {
+                double expected = expectedParameters[p].GetFlat(i);
+                double value = actual.GetFlat(i);
+                Assert.True(Math.Abs(value - expected) <= 1e-10 * Math.Max(1, Math.Abs(expected)),
+                    $"{name} parameter {p}[{i}]: author {expected:R}, native {value:R}");
+            }
+        }
+        Assert.True(nonzero > 0);
     }
 }

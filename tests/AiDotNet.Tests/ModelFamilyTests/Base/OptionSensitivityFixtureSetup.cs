@@ -35,6 +35,7 @@ internal static class OptionSensitivityFixtureSetup
             or AiDotNet.TextToSpeech.MultiModal.AudioPaLM<T>
             or AiDotNet.SpeechRecognition.LLMIntegrated.AudioPaLM<T>
             or AiDotNet.TextToSpeech.MultiModal.SpiritLM<T>
+            or AiDotNet.TextToSpeech.MultiModal.Moshi<T>
             or AiDotNet.TextToSpeech.Latest.MegaTTS3<T>
             or AiDotNet.TextToSpeech.CodecBased.SparkTTS<T>;
 
@@ -46,11 +47,15 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
+            : network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> && option == "TtsPaddingTarget" ? "moshi-padding-rate"
             : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? "chatterbox-published-perth"
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "AddBlank" ? "natural-phoneme-frontend"
             : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.UnivNet<T> && option == "SegmentSize" ? "univnet-recording-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.MelGAN<T> && option is "SegmentSize" or "SamplingSeed" ? "melgan-recording-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && IsHiFiGanTrainingOption(option) ? "hifigan-recording-" + option
+            : network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> && IsWaveNetTrainingOption(option) ? "wavenet-recording-" + option
+            : network is AiDotNet.TextToSpeech.Vocoders.Vocos<T> && IsVocosRecordingOption(option) ? "vocos-recording-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.WaveRNN<T> && IsWaveRnnTrainingOption(option) ? "wavernn-training-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.DiffWave<T> && option is "NumClasses" or "UtteranceSamples" ? "diffwave-task-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option is "AdversarialWeight" or "DiscriminatorGradientClipNorm" or "DiscriminatorLearningRate" ? "parallel-wavegan-adversarial-" + option
@@ -732,6 +737,32 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> moshi)
+        {
+            // Predict consumes SentencePiece IDs. Numeric ramp inputs can decode to repeated
+            // unknown pieces and spend the entire streaming context on an invalid utterance.
+            var ids = moshi.Core.Tokenizer.Encode("the cat sat").ToArray();
+            var moshiOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            return new Tensor<T>(new[] { ids.Length }, new Vector<T>(ids.Select(id => moshiOps.FromDouble(id)).ToArray()));
+        }
+        if (network is AiDotNet.TextToSpeech.Vocoders.Vocos<T> vocos && !IsVocoderFrontendOption(option))
+        {
+            var settings = (AiDotNet.TextToSpeech.Vocoders.VocosOptions)vocos.GetOptions();
+            var mel = new Tensor<T>(new[] { 1, settings.MelChannels, 3 });
+            var vocosOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int c = 0; c < settings.MelChannels; c++) for (int f = 0; f < 3; f++)
+                mel[0, c, f] = vocosOps.FromDouble(.2 * Math.Sin(.3 * c + .2 * f));
+            return mel;
+        }
+        if (network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> waveNet && !IsVocoderFrontendOption(option))
+        {
+            var settings = (AiDotNet.TextToSpeech.Vocoders.WaveNetOptions)waveNet.GetOptions();
+            var mel = new Tensor<T>(new[] { 1, settings.MelChannels, 1 });
+            var waveNetOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int c = 0; c < settings.MelChannels; c++)
+                mel[0, c, 0] = waveNetOps.FromDouble(.2 * Math.Sin(.3 * c));
+            return mel;
+        }
         if (network is AiDotNet.TextToSpeech.Vocoders.WaveRNN<T> waveRnn && !IsVocoderFrontendOption(option))
         {
             var settings = (AiDotNet.TextToSpeech.Vocoders.WaveRNNOptions)waveRnn.GetOptions();
@@ -831,6 +862,9 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? 0
+        : network is AiDotNet.TextToSpeech.Vocoders.Vocos<T> && option == "CosineSteps" ? Math.Max(4, steps)
+        : network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> && option == "LearningRateHalvingSteps" ? Math.Max(4, steps)
+        : network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && option is "LearningRateDecay" or "UpdatesPerEpoch" ? Math.Max(4, steps)
         : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option == "Epsilon" ? Math.Max(6, steps)
         : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? 0
         : network is AiDotNet.TextToSpeech.CodecBased.SPEARTTS<T> && SpearOptionFixture.Handles(option) ? 0
@@ -1075,6 +1109,9 @@ internal static class OptionSensitivityFixtureSetup
             return true;
         }
         if ((network is AiDotNet.TextToSpeech.Vocoders.DiffusionVocoderBase<T> && option == "CropFrames"
+                || network is AiDotNet.TextToSpeech.Vocoders.Vocos<T> && IsVocosRecordingOption(option)
+                || network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> && IsWaveNetTrainingOption(option)
+                || network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && IsHiFiGanTrainingOption(option)
                 || network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option is "SegmentSize" or "SamplingSeed"
                 || network is AiDotNet.TextToSpeech.Vocoders.BigVGAN<T> && option == "SegmentSize")
             && network is AiDotNet.TextToSpeech.TtsModelBase<T> vocoder
@@ -1106,6 +1143,15 @@ internal static class OptionSensitivityFixtureSetup
         "MaxReferenceSeconds" => "reference-crop",
         _ => string.Empty,
     };
+
+    private static bool IsVocosRecordingOption(string option) => option is "SegmentSize" or "SamplingSeed"
+        or "LearningRate" or "WeightDecay" or "Beta1" or "Beta2" or "CosineSteps";
+
+    private static bool IsWaveNetTrainingOption(string option) => option is "SegmentSamples" or "LearningRate"
+        or "WeightDecay" or "LearningRateHalvingSteps";
+
+    private static bool IsHiFiGanTrainingOption(string option) => option is "SegmentSize" or "LearningRate"
+        or "WeightDecay" or "LearningRateDecay" or "UpdatesPerEpoch";
 
     private static bool IsWaveRnnSparseOption(string option) => option is "SparsityTarget"
         or "PruningSteps" or "PruningStartStep" or "PruningInterval" or "PruneBlockRows" or "PruneBlockColumns";
@@ -1139,6 +1185,33 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.MultiModal.MoshiOptions moshi && option == "TtsPaddingTarget")
+            // App. C applies the bonus only below the target fraction. A randomly initialized
+            // tiny LM rarely samples padding with bonus 1, keeping all positive targets on
+            // the same side of that branch. Use the real rate controller with a positive
+            // bonus that lets the observed fraction cross the candidate targets.
+            moshi.TtsPaddingBonus = 8;
+        if (options is AiDotNet.TextToSpeech.Vocoders.VocosOptions vocos)
+        {
+            vocos.MelChannels = 8;
+            // Both the control and its half-length candidate exceed torchaudio's reflection pad.
+            if (IsVocosRecordingOption(option))
+                vocos.SegmentSize = checked(2 * vocos.HopSize * Math.Max(2, 1 + vocos.FftSize / (2 * vocos.HopSize)));
+            if (option == "CosineSteps") vocos.CosineSteps = 4;
+        }
+        if (options is AiDotNet.TextToSpeech.Vocoders.WaveNetOptions waveNet)
+        {
+            waveNet.MelChannels = 8;
+            if (IsWaveNetTrainingOption(option)) waveNet.SegmentSamples = checked(2 * waveNet.HopSize);
+            if (option == "LearningRateHalvingSteps") waveNet.LearningRateHalvingSteps = 2;
+        }
+        if (options is AiDotNet.TextToSpeech.Vocoders.HiFiGANOptions hiFiGan && IsHiFiGanTrainingOption(option))
+        {
+            // Keep the half-size perturbation frame-aligned and long enough for the released reflect padding.
+            int hiFiCropHop = hiFiGan.HopSize;
+            hiFiGan.SegmentSize = checked(2 * hiFiCropHop * Math.Max(2, (int)Math.Ceiling(hiFiGan.FftSize / (2.0 * hiFiCropHop))));
+            if (option is "LearningRateDecay" or "UpdatesPerEpoch") hiFiGan.UpdatesPerEpoch = 2;
+        }
         if (options is AiDotNet.TextToSpeech.Vocoders.WaveRNNOptions waveRnn)
         {
             waveRnn.MelChannels = 8;
@@ -1587,6 +1660,7 @@ internal static class OptionSensitivityFixtureSetup
         // Cross an epoch boundary within the probe's two training steps.
         var perEpoch = options.GetType().GetProperty("UpdatesPerEpoch");
         if (perEpoch is not null && perEpoch.CanWrite
+            && !(options is AiDotNet.TextToSpeech.Vocoders.HiFiGANOptions && (option is "LearningRateDecay" or "UpdatesPerEpoch"))
             && (perEpoch.PropertyType == typeof(int) || Nullable.GetUnderlyingType(perEpoch.PropertyType) == typeof(int)))
             perEpoch.SetValue(options, 1);
     }
@@ -1636,6 +1710,11 @@ internal static class OptionSensitivityFixtureSetup
 
         switch (network)
         {
+            case AiDotNet.TextToSpeech.MultiModal.Moshi<T> model:
+                // Replay the factory's real Mimi k-means initialization on each configuration
+                // rebuild; an empty RVQ decodes all sampled LM codes identically.
+                MoshiFixture.SpreadCodes(model.Core);
+                break;
             case AiDotNet.Audio.Generation.SoundStream<T> model:
                 // Configuration clones preserve the source's public runtime flag, which can
                 // override the options candidate applied by the probe's reconstructed constructor.

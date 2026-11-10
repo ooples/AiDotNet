@@ -50,6 +50,28 @@ public class StreamingMoshiPaperTests
     }
 
     [Fact(Timeout = 300000)]
+    public async Task PaddingTarget_ChangesTheActualWordTimesWithinTheValidFractionRange()
+    {
+        await Task.Yield();
+        var options = MoshiFixture.Options(MoshiVariant.Tts);
+        // A strong positive bonus makes padding available in this untrained tiny LM;
+        // the real App. C controller decides when that bonus is enabled.
+        options.TtsPaddingBonus = 8;
+        options.TtsPaddingTarget = 0.65;
+        using var model = MoshiFixture.Tts<double>(options);
+        var slower = model.Speak("the cat sat");
+        options.TtsPaddingTarget = 0.325;
+        var faster = model.Speak("the cat sat");
+        var expected = new[] { "the", "cat", "sat" };
+        Assert.Equal(expected, slower.Words.Select(w => w.Text).ToArray());
+        Assert.Equal(expected, faster.Words.Select(w => w.Text).ToArray());
+        Assert.All(slower.Audio.ToArray(), value => Assert.True(Finite(value)));
+        Assert.All(faster.Audio.ToArray(), value => Assert.True(Finite(value)));
+        Assert.False(slower.Words.Select(w => w.Time).SequenceEqual(faster.Words.Select(w => w.Time)));
+        Assert.False(slower.Audio.ToArray().SequenceEqual(faster.Audio.ToArray()));
+    }
+
+    [Fact(Timeout = 300000)]
     public async Task Chat_AnswersOverTheUsersSpan()
     {
         await Task.Yield();

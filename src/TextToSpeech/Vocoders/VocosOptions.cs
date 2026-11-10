@@ -16,8 +16,16 @@ namespace AiDotNet.TextToSpeech.Vocoders;
 /// the magnitude clipped at 100.</para>
 /// <para><b>For Beginners:</b> These options configure the Vocos model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(VocosOptionsConverter))]
 public class VocosOptions : VocoderOptions
 {
+    /// <summary>The width of the actual ConvNeXt backbone.</summary>
+    public override int HiddenDim
+    {
+        get => ConvNeXtDim;
+        set => ConvNeXtDim = value > 0 ? value : throw new ArgumentOutOfRangeException(nameof(value));
+    }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>

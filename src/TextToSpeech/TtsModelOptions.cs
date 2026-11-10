@@ -106,6 +106,8 @@ public class TtsModelOptions : ModelOptions
     public int MaxMelLength { get; set; } = 2048;
 
     /// <summary>Gets or sets the dropout rate.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Vocos's published ConvNeXt backbone has no dropout (Siuzdak 2024, Figure 2 and Section 3.2; gemelo-ai/vocos ConvNeXtBlock); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.Vocos<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("WaveNet's selected gated residual architecture and the r9y9 mulaw256 reference preset use zero dropout (van den Oord et al. 2016, Figure 4 and Equation 2); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.WaveNet<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("WaveRNN's published recurrent equations and dual-softmax architecture have no dropout (Kalchbrenner et al. 2018, Equation 2 and Figure 1); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.WaveRNN<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("FreGrad's published frequency-aware residual network has no dropout (Nguyen et al. 2024, Figure 2 and Section 3.2; kaistmm/fregrad model.py); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.FreGrad<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("PriorGrad's published DiffWave vocoder has no dropout (Lee et al. 2022, Section 4.2; Microsoft NeuralSpeech PriorGrad-vocoder/model.py); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.PriorGrad<>))]

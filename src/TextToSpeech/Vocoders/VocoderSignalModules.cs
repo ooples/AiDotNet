@@ -248,6 +248,7 @@ internal sealed class CenteredLogMel<T>
     private readonly double _spectrumPower;
     private readonly bool _logarithm;
     private readonly bool _constantPadding;
+    private readonly bool _exactMagnitude;
     private readonly Tensor<T> _cos;
     private readonly Tensor<T> _sin;
     private readonly Tensor<T> _mel;
@@ -261,10 +262,12 @@ internal sealed class CenteredLogMel<T>
     /// DiffWave's features).</param>
     public CenteredLogMel(IEngine engine, int sampleRate, int fftSize, int hopSize, int windowSize, int melChannels, double fMin, double fMax, double floor,
         bool htkScale = false, bool naturalLog = false, bool normalizedWindow = false,
-        double spectrumPower = 1.0, bool htkAreaNormalization = false, bool logarithm = true, bool constantPadding = false)
+        double spectrumPower = 1.0, bool htkAreaNormalization = false, bool logarithm = true, bool constantPadding = false,
+        bool exactMagnitude = false)
     {
         _logarithm = logarithm;
         _constantPadding = constantPadding;
+        _exactMagnitude = exactMagnitude;
         if (spectrumPower <= 0) throw new ArgumentOutOfRangeException(nameof(spectrumPower));
         _spectrumPower = spectrumPower;
         _naturalLog = naturalLog;
@@ -321,8 +324,13 @@ internal sealed class CenteredLogMel<T>
         var framed = _engine.Reshape(_engine.TensorIndexSelect(_engine.Reshape(audio, new[] { audio.Length, 1 }), index, 0), new[] { frames, _fft });
         var re = _engine.TensorMatMul(framed, _cos);
         var im = _engine.TensorMatMul(framed, _sin);
-        var magnitude = _engine.TensorPow(_engine.TensorAddScalar(_engine.TensorAdd(_engine.TensorMultiply(re, re), _engine.TensorMultiply(im, im)),
-            NumOps.FromDouble(1e-20)), NumOps.FromDouble(0.5 * _spectrumPower));
+        var squared = _engine.TensorAdd(_engine.TensorMultiply(re, re), _engine.TensorMultiply(im, im));
+        // Vocos/torchaudio use abs(STFT), without an additive bias. A far-below-log-floor clamp keeps
+        // sqrt's derivative finite at zero without perturbing the nonzero spectrum.
+        var stable = _exactMagnitude
+            ? _engine.TensorAddScalar(_engine.ReLU(_engine.TensorAddScalar(squared, NumOps.FromDouble(-1e-30))), NumOps.FromDouble(1e-30))
+            : _engine.TensorAddScalar(squared, NumOps.FromDouble(1e-20));
+        var magnitude = _engine.TensorPow(stable, NumOps.FromDouble(0.5 * _spectrumPower));
         var mel = _engine.TensorMatMul(magnitude, _mel);
         if (!_logarithm)
             return _engine.Reshape(_engine.TensorTranspose(mel), new[] { 1, _mels, frames });
