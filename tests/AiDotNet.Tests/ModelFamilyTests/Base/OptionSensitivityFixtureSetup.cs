@@ -51,6 +51,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.UnivNet<T> && option == "SegmentSize" ? "univnet-recording-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.MelGAN<T> && option is "SegmentSize" or "SamplingSeed" ? "melgan-recording-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.WaveRNN<T> && IsWaveRnnTrainingOption(option) ? "wavernn-training-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.DiffWave<T> && option is "NumClasses" or "UtteranceSamples" ? "diffwave-task-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option is "AdversarialWeight" or "DiscriminatorGradientClipNorm" or "DiscriminatorLearningRate" ? "parallel-wavegan-adversarial-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option is "MelMean" or "MelScale" ? "parallel-wavegan-normalization"
@@ -663,6 +664,15 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.Vocoders.WaveRNN<T> waveRnn && !IsVocoderFrontendOption(option))
+        {
+            var settings = (AiDotNet.TextToSpeech.Vocoders.WaveRNNOptions)waveRnn.GetOptions();
+            var mel = new Tensor<T>(new[] { 1, settings.MelChannels, 2 });
+            var waveRnnOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int c = 0; c < settings.MelChannels; c++) for (int f = 0; f < 2; f++)
+                mel[0, c, f] = waveRnnOps.FromDouble(.2 * Math.Sin(.3 * c + .2 * f));
+            return mel;
+        }
         if (network is AiDotNet.TextToSpeech.Vocoders.DiffWave<T> && option is "NumClasses" or "UtteranceSamples")
             return new Tensor<T>(new[] { 1 }); // Label zero, or the ignored unconditional input.
         if (network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> cam && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds")
@@ -811,6 +821,14 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.Vocoders.WaveRNN<T> waveRnn && IsWaveRnnTrainingOption(option))
+        {
+            var audio = new Tensor<T>(new[] { 4096 });
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < audio.Length; i++) audio[i] = ops.FromDouble(.3 * Math.Sin(.17 * i) + .1 * Math.Cos(.31 * i));
+            waveRnn.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T> { Tokens = new Tensor<T>(new[] { 1 }), Audio = audio });
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.Vocoders.DiffWave<T> diffWave && option is "NumClasses" or "UtteranceSamples")
         {
             var settings = (AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions)diffWave.GetOptions();
@@ -1021,8 +1039,29 @@ internal static class OptionSensitivityFixtureSetup
         _ => string.Empty,
     };
 
+    private static bool IsWaveRnnSparseOption(string option) => option is "SparsityTarget"
+        or "PruningSteps" or "PruningStartStep" or "PruningInterval" or "PruneBlockRows" or "PruneBlockColumns";
+
+    private static bool IsWaveRnnTrainingOption(string option) => IsWaveRnnSparseOption(option)
+        || option is "SequenceSamples" or "LearningRate" or "WeightDecay" or "MaxGradientNorm";
+
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Vocoders.WaveRNNOptions waveRnn)
+        {
+            waveRnn.MelChannels = 8;
+            waveRnn.SequenceSamples = 32;
+            if (option == "MaxGradientNorm") waveRnn.MaxGradientNorm = 1e-5;
+            if (IsWaveRnnSparseOption(option))
+            {
+                waveRnn.RnnDim = 16;
+                waveRnn.SparsityTarget = .75;
+                waveRnn.PruningStartStep = 0;
+                waveRnn.PruningSteps = 4;
+                waveRnn.PruningInterval = 1;
+                waveRnn.PruneBlockRows = waveRnn.PruneBlockColumns = 1;
+            }
+        }
         if (options is AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions diffWave
             && options is not AiDotNet.TextToSpeech.Vocoders.PriorGradOptions && option is "NumClasses" or "UtteranceSamples")
         {
