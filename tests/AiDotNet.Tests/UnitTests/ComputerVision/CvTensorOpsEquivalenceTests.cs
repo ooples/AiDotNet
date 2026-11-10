@@ -402,6 +402,7 @@ public class CvTensorOpsEquivalenceTests
         return merged;
     }
 
+    /// <summary>torchvision's roi_align_forward_kernel_impl with aligned = false, transcribed.</summary>
     private static Tensor<double> RefRoIAlign(Tensor<double> features, Tensor<double> rois, double spatialScale, int outputSize, int samplingRatio, int[]? batchIndices)
     {
         int batchSize = features.Shape[0], channels = features.Shape[1], featureH = features.Shape[2], featureW = features.Shape[3];
@@ -410,31 +411,39 @@ public class CvTensorOpsEquivalenceTests
         double Feat(int b, int c, int y, int x) => At(features, b, c, y, x);
         double Bilinear(int batch, int channel, double y, double x)
         {
-            int y0 = (int)Math.Floor(y), x0 = (int)Math.Floor(x);
-            int y1 = Math.Min(y0 + 1, featureH - 1), x1 = Math.Min(x0 + 1, featureW - 1);
-            double wy1 = y - y0, wy0 = 1.0 - wy1, wx1 = x - x0, wx0 = 1.0 - wx1;
-            return wy0 * (wx0 * Feat(batch, channel, y0, x0) + wx1 * Feat(batch, channel, y0, x1))
-                 + wy1 * (wx0 * Feat(batch, channel, y1, x0) + wx1 * Feat(batch, channel, y1, x1));
+            if (y < -1.0 || y > featureH || x < -1.0 || x > featureW) return 0;
+            if (y <= 0) y = 0;
+            if (x <= 0) x = 0;
+            int y0 = (int)y, x0 = (int)x, y1, x1;
+            if (y0 >= featureH - 1) { y1 = y0 = featureH - 1; y = y0; } else y1 = y0 + 1;
+            if (x0 >= featureW - 1) { x1 = x0 = featureW - 1; x = x0; } else x1 = x0 + 1;
+            double ly = y - y0, lx = x - x0, hy = 1.0 - ly, hx = 1.0 - lx;
+            return hy * hx * Feat(batch, channel, y0, x0) + hy * lx * Feat(batch, channel, y0, x1)
+                 + ly * hx * Feat(batch, channel, y1, x0) + ly * lx * Feat(batch, channel, y1, x1);
         }
         for (int roiIdx = 0; roiIdx < numRois; roiIdx++)
         {
             int batchIdx = batchIndices is not null && roiIdx < batchIndices.Length ? Math.Min(batchIndices[roiIdx], batchSize - 1) : 0;
             double x1 = rois[roiIdx * 4 + 0] * spatialScale, y1 = rois[roiIdx * 4 + 1] * spatialScale;
             double x2 = rois[roiIdx * 4 + 2] * spatialScale, y2 = rois[roiIdx * 4 + 3] * spatialScale;
-            double binW = (x2 - x1) / outputSize, binH = (y2 - y1) / outputSize;
+            double roiW = Math.Max(x2 - x1, 1.0), roiH = Math.Max(y2 - y1, 1.0);
+            double binW = roiW / outputSize, binH = roiH / outputSize;
+            int gridH = samplingRatio > 0 ? samplingRatio : (int)Math.Ceiling(roiH / outputSize);
+            int gridW = samplingRatio > 0 ? samplingRatio : (int)Math.Ceiling(roiW / outputSize);
+            double count = Math.Max(gridH * gridW, 1);
             for (int c = 0; c < channels; c++)
                 for (int ph = 0; ph < outputSize; ph++)
                     for (int pw = 0; pw < outputSize; pw++)
                     {
-                        double binStartY = y1 + ph * binH, binStartX = x1 + pw * binW, sum = 0; int count = 0;
-                        for (int iy = 0; iy < samplingRatio; iy++)
-                            for (int ix = 0; ix < samplingRatio; ix++)
+                        double sum = 0;
+                        for (int iy = 0; iy < gridH; iy++)
+                            for (int ix = 0; ix < gridW; ix++)
                             {
-                                double y = binStartY + (iy + 0.5) * binH / samplingRatio;
-                                double x = binStartX + (ix + 0.5) * binW / samplingRatio;
-                                if (y >= 0 && y < featureH && x >= 0 && x < featureW) { sum += Bilinear(batchIdx, c, y, x); count++; }
+                                double y = y1 + ph * binH + (iy + 0.5) * binH / gridH;
+                                double x = x1 + pw * binW + (ix + 0.5) * binW / gridW;
+                                sum += Bilinear(batchIdx, c, y, x);
                             }
-                        Set(output, roiIdx, c, ph, pw, count > 0 ? sum / count : 0);
+                        Set(output, roiIdx, c, ph, pw, sum / count);
                     }
         }
         return output;
@@ -593,9 +602,10 @@ public class CvTensorOpsEquivalenceTests
         AssertNoFailures();
     }
 
-    /// <summary>RoIAlign, including boxes partly or wholly outside the feature map.</summary>
+    /// <summary>RoIAlign against torchvision's algorithm, including boxes partly or wholly outside the feature map, boxes
+    /// smaller than one cell and the adaptive sampling ratio.</summary>
     [Fact]
-    public async Task RoIAlign_MatchesTheLoopItReplaced()
+    public async Task RoIAlign_MatchesTorchvision()
     {
         await Task.Yield();
         int seed = 6000;
@@ -603,7 +613,7 @@ public class CvTensorOpsEquivalenceTests
                 var rr = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(++seed);
                 foreach (int nb in new[] { 1, 2 })
                 foreach (var (fh, fw) in new[] { (8, 8), (5, 7), (16, 12) })
-                foreach (var (ps, sr) in new[] { (2, 2), (7, 2), (3, 1) })
+                foreach (var (ps, sr) in new[] { (2, 2), (7, 2), (3, 1), (2, 0) })
                 {
                     var feat = Rand(new[] { nb, 3, fh, fw }, ++seed);
                     int R = 6; var rois = new Tensor<double>(new[] { R, 4 }); var bi = new int[R];
@@ -613,6 +623,7 @@ public class CvTensorOpsEquivalenceTests
                         // Include boxes partly and wholly outside the map, and degenerate ones.
                         double ax = rr.NextDouble() * imgW * 1.3 - imgW * 0.15, ay = rr.NextDouble() * imgH * 1.3 - imgH * 0.15;
                         double bw = rr.NextDouble() * imgW * 0.8, bh = rr.NextDouble() * imgH * 0.8;
+                        if (r == R - 2) { bw = 3; bh = 2; }
                         if (r == R - 1) { ax = imgW * 2; ay = imgH * 2; }
                         rois[r * 4] = ax; rois[r * 4 + 1] = ay; rois[r * 4 + 2] = ax + bw; rois[r * 4 + 3] = ay + bh;
                         bi[r] = rr.Next(nb);
