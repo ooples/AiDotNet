@@ -259,11 +259,11 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// The query projection's bias, or null when the projection has none (the default). Whisper's attention has one
     /// on the query and value projections and none on the key (Radford et al. 2022).
     /// </summary>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_embeddingDimension", Condition = nameof(_useQueryBias))]
     private Tensor<T>? _queryBias;
 
     /// <summary>The value projection's bias, or null when the projection has none (the default).</summary>
-    [TrainableParameter(Role = PersistentTensorRole.Biases)]
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_embeddingDimension", Condition = nameof(_useValueBias))]
     private Tensor<T>? _valueBias;
 
     private bool _useQueryBias;
