@@ -16109,9 +16109,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
 
             // The Conformer factory's convolution subsampling projects channels x mel bins with fixed weights, so
             // the mel axis cannot vary either: these models take time-major [B, frames, mels] and vary the frames.
+            // FullyQualifiedName is rendered in FullyQualifiedFormat, so it carries the global:: prefix.
             if (ConvSubsamplingAsrClassNames.Contains(model.ClassName)
                 && (model.ClassName != "Conformer"
-                    || model.FullyQualifiedName.StartsWith("AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
+                    || model.FullyQualifiedName.StartsWith("global::AiDotNet.Audio.SpeechRecognition.", System.StringComparison.Ordinal)))
             {
                 sb.AppendLine("    protected override int VariableLengthAxis => 1;");
             }
