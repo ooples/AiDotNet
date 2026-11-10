@@ -16,8 +16,18 @@ namespace AiDotNet.TextToSpeech.CodecBased;
 /// <para><b>For Beginners:</b> These settings size Llasa's language model and its speech codec, and control how it picks
 /// each next speech token; the defaults reproduce the released 1B model.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(LlasaOptionsConverter))]
 public class LlasaOptions : TtsModelOptions
 {
+    /// <summary>Gets or sets X-codec2's actual Wav2Vec2-BERT semantic encoder read depth.</summary>
+    public override int NumEncoderLayers { get => SemanticLayer; set => SemanticLayer = value; }
+
+    /// <summary>Gets or sets the actual Llama decoder depth.</summary>
+    public override int NumDecoderLayers { get => Layers; set => Layers = value; }
+
+    /// <summary>Gets or sets the actual Llama query-head count.</summary>
+    public override int NumHeads { get => Heads; set => Heads = value; }
+
     /// <summary>Creates the Llasa-1B configuration.</summary>
     public LlasaOptions()
     {

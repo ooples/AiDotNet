@@ -376,10 +376,11 @@ public partial class StepAudio<T>
     }
 
     /// <summary>
-    /// One PPO step (§5.2.6) on a spoken question: the policy (the chat model) samples an answer; the per-token reward is
+    /// One PPO rollout (§5.2.6) on a spoken question: the policy (the chat model) samples an answer; the per-token reward is
     /// −β (log π − log π_ref) with the reward model's score added at the last token; GAE (γ, λ) gives the advantages
     /// (whitened) and returns; the critic minimizes ½ (V − R)², and after its warm-up steps the policy minimizes the
-    /// clipped surrogate −min(ρA, clip(ρ, 1 ± ε)A). Returns the policy loss (the value loss during warm-up).
+    /// clipped surrogate −min(ρA, clip(ρ, 1 ± ε)A) on the same rollout across two updates.
+    /// Returns the final policy loss (the value loss during warm-up).
     /// </summary>
     public T TrainPpo(Tensor<T> question, int sampleRate)
     {
@@ -430,13 +431,18 @@ public partial class StepAudio<T>
         if (_ppoSteps <= o.CriticWarmupSteps) return valueLoss;
         var oldTensor = Vector(old);
         var advantage = Vector(whitened);
-        return Step("policy", Optimizer("policy", _layers.Chat), () =>
+        var policyOptimizer = Optimizer("policy", _layers.Chat);
+        Tensor<T> PolicyLoss()
         {
             var ratio = Engine.TensorExp(Engine.TensorSubtract(ResponseLogProbabilities(core.ChatModel, ids, start), oldTensor));
             var unclipped = Engine.TensorMultiply(ratio, advantage);
             var clipped = Engine.TensorMultiply(Engine.TensorClamp(ratio, Ops.FromDouble(1 - o.PpoClip), Ops.FromDouble(1 + o.PpoClip)), advantage);
             return Engine.TensorNegate(Engine.ReduceMean(Engine.TensorMin(unclipped, clipped), new[] { 0 }, false));
-        });
+        }
+        // PPO §5 reuses the rollout across multiple updates. Step-Audio leaves the count unspecified.
+        // The second update can clip against the fixed behavior-policy probabilities.
+        Step("policy", policyOptimizer, PolicyLoss);
+        return Step("policy", policyOptimizer, PolicyLoss);
     }
 
     /// <inheritdoc />

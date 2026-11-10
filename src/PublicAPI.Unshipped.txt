@@ -5008,6 +5008,12 @@ override AiDotNet.SpeechRecognition.Multilingual.OmnilangualASR<T>.ResolveLayerP
 override AiDotNet.SpeechRecognition.ProprietaryAPI.RevAI<T>.TryApplyLearningRule(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target) -> bool
 override AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T>.PreprocessAudio(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! rawAudio) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.TextToSpeech.CodecBased.LlasaOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.CodecBased.LlasaOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.CodecBased.LlasaOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.CodecBased.LlasaOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.CodecBased.LlasaOptions.NumHeads.get -> int
+override AiDotNet.TextToSpeech.CodecBased.LlasaOptions.NumHeads.set -> void
 override AiDotNet.TextToSpeech.CodecBased.VevoOptions.NumEncoderLayers.get -> int
 override AiDotNet.TextToSpeech.CodecBased.VevoOptions.NumEncoderLayers.set -> void
 override AiDotNet.TextToSpeech.CodecBased.VevoOptions.NumDecoderLayers.get -> int

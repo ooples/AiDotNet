@@ -7806,6 +7806,32 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     network.SetTrainingMode(false);
                     return;
                 }
+                if (network is AiDotNet.TextToSpeech.CodecBased.Llasa<T> llasa
+                    && AiDotNet.Tests.TextToSpeech.LlasaOptionFixture.Handles(option))
+                {
+                    network.SetTrainingMode(true);
+                    AiDotNet.Tests.TextToSpeech.LlasaOptionFixture.TrainSchedule(llasa,
+                        OptionSensitivityFixtureSetup.TrainingSteps(network, option, steps));
+                    network.SetTrainingMode(false);
+                    return;
+                }
+                if (network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech2<T> naturalSpeech2
+                    && AiDotNet.Tests.TextToSpeech.NaturalSpeech2OptionFixture.Handles(option))
+                {
+                    network.SetTrainingMode(true);
+                    AiDotNet.Tests.TextToSpeech.NaturalSpeech2OptionFixture.Train(naturalSpeech2,
+                        OptionSensitivityFixtureSetup.TrainingSteps(network, option, steps));
+                    network.SetTrainingMode(false);
+                    return;
+                }
+                if (network is AiDotNet.TextToSpeech.MultiModal.StepAudio<T> stepAudio
+                    && AiDotNet.Tests.TextToSpeech.StepAudioFixture.IsPpoOption(option))
+                {
+                    network.SetTrainingMode(true);
+                    AiDotNet.Tests.TextToSpeech.StepAudioFixture.TrainPpo(stepAudio, steps);
+                    network.SetTrainingMode(false);
+                    return;
+                }
                 if (AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Handles(network))
                 {
                     AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Train(network);

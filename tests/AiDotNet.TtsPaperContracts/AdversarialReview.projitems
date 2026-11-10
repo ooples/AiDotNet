@@ -1,5 +1,6 @@
 <Project>
   <ItemGroup>
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/LlasaModelTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/ReleasedVocosBandwidthFixture.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/ReleasedVocosBandwidthTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VevoNativeOptionsTests.cs" />

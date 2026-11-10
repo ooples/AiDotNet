@@ -2,10 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
 using AiDotNet.Enums;
+using AiDotNet.LearningRateSchedulers;
+using AiDotNet.Models.Options;
 using AiDotNet.NeuralNetworks;
+using AiDotNet.Optimizers;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.TextToSpeech;
 using AiDotNet.TextToSpeech.CodecBased;
@@ -86,6 +90,87 @@ public class LlasaModelTests
     }
 
     // ---------------------------------------------------------------- a tiny model
+
+    [Theory]
+    [InlineData("NumHeads", 4)]
+    [InlineData("NumEncoderLayers", 3)]
+    [InlineData("NumDecoderLayers", 2)]
+    public void SharedArchitecture_ChangesPhysicalCodecOrLlamaLayers(string property, int value)
+    {
+        var options = TinyOptions();
+        typeof(LlasaOptions).GetProperty(property)!.SetValue(options, value);
+        using var control = CreateModel();
+        using var changed = CreateModel(options);
+        switch (property)
+        {
+            case "NumHeads":
+                Assert.Equal(value, changed.LanguageModel.Configuration.Heads);
+                Assert.NotEqual(control.GetParameters().Length, changed.GetParameters().Length);
+                break;
+            case "NumEncoderLayers":
+                Assert.Equal(value, changed.Codec.Configuration.SemanticLayer);
+                Assert.True(changed.CodecLayers.Count > control.CodecLayers.Count);
+                break;
+            default:
+                Assert.Equal(value, changed.LanguageModel.Layers.Count);
+                Assert.NotEqual(control.GetParameters().Length, changed.GetParameters().Length);
+                break;
+        }
+    }
+
+    [Theory]
+    [InlineData("Heads", "NumHeads", 2)]
+    [InlineData("Layers", "NumDecoderLayers", 1)]
+    [InlineData("SemanticLayer", "NumEncoderLayers", 2)]
+    public void SavedNativeDimensions_WinSharedAliasesInEitherOrder(string native, string alias, int value)
+    {
+        foreach (string json in new[] { $"{{\"{native}\":{value},\"{alias}\":99}}", $"{{\"{alias}\":99,\"{native}\":{value}}}" })
+        {
+            var options = Newtonsoft.Json.JsonConvert.DeserializeObject<LlasaOptions>(json)!;
+            Assert.Equal(value, typeof(LlasaOptions).GetProperty(alias)!.GetValue(options));
+            Assert.Equal(value, typeof(LlasaOptions).GetProperty(alias)!.GetValue(new LlasaOptions(options)));
+        }
+        var legacy = Newtonsoft.Json.JsonConvert.DeserializeObject<LlasaOptions>($"{{\"{alias}\":{value}}}")!;
+        Assert.Equal(value, typeof(LlasaOptions).GetProperty(native)!.GetValue(legacy));
+    }
+
+    [Theory]
+    [InlineData(.1)]
+    [InlineData(-.1)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void ReleasedLlama_RejectsUnsupportedGenericDropout(double rate)
+    {
+        var options = TinyOptions(); options.DropoutRate = rate;
+        Assert.Throws<ArgumentException>(() => CreateModel(options));
+    }
+
+    [Fact(Timeout = 300000)]
+    public async Task ActualTrainingBatches_AdvanceWarmupAndCosineToThePaperFloor()
+    {
+        await Task.Yield();
+        var options = TinyOptions();
+        options.TrainingSteps = 4; options.Epochs = 1; options.WarmupEpochFraction = .5;
+        options.LearningRate = .001; options.FinalLearningRateFraction = .1;
+        using var model = CreateModel(options);
+        var ids = model.Tokenizer.Encode("a");
+        var sample = new TtsTrainingSample<double>
+        {
+            Text = "a", Tokens = new Tensor<double>(new[] { ids.Length }, new Vector<double>(ids.Select(id => (double)id).ToArray())),
+            CodecTokens = model.EncodeToTokens(Recording(1000)),
+        };
+        var field = typeof(Llasa<double>).GetField("_optimizer", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        var expected = new[] { .0005, .001, .00055, .0001 };
+        for (int step = 0; step < expected.Length; step++)
+        {
+            Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(model.Train(sample)));
+            var optimizer = Assert.IsType<AdamWOptimizer<double, Tensor<double>, Tensor<double>>>(field.GetValue(model));
+            var configured = Assert.IsType<AdamWOptimizerOptions<double, Tensor<double>, Tensor<double>>>(optimizer.GetOptions());
+            var scheduler = Assert.IsType<LinearWarmupScheduler>(configured.LearningRateScheduler);
+            Assert.Equal(step + 1, scheduler.CurrentStep);
+            Assert.Equal(expected[step], scheduler.CurrentLearningRate, 12);
+        }
+    }
 
     private static LlasaOptions TinyOptions() => new()
     {

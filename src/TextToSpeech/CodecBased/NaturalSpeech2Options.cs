@@ -81,6 +81,7 @@ public class NaturalSpeech2Options : TtsModelOptions
     {
         SampleRate = 16000;
         HopSize = 200;
+        MelChannels = 0;
         HiddenDim = 512;
         NumHeads = 8;
         NumEncoderLayers = 6;
