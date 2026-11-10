@@ -327,13 +327,16 @@ internal sealed class Wav2Vec2Pretraining<T>
     }
 
     /// <summary>Loads the quantizer and projections of a transformers <c>Wav2Vec2ForPreTraining</c> state dict.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads the quantizer and projections straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         var c = Configuration;
         int entries = c.Groups * c.EntriesPerGroup, width = c.CodevectorDim / c.Groups;
-        TorchParameters.Linear(_engine, WeightProjection, _featureDim, entries,
-            read("quantizer.weight_proj.weight", new[] { entries, _featureDim }), read("quantizer.weight_proj.bias", new[] { entries }));
-        var codevectors = read("quantizer.codevectors", new[] { 1, entries, width });
+        TorchParameters.Linear(_engine, WeightProjection, _featureDim, entries, source, "quantizer.weight_proj.weight", "quantizer.weight_proj.bias");
+        // Split per group, so read.
+        var codevectors = source.Read("quantizer.codevectors", new[] { 1, entries, width });
         for (int g = 0; g < c.Groups; g++)
         {
             // Codebook g as a [V → d/G] map whose weight [out, in] has codevector rows as columns.
@@ -342,9 +345,7 @@ internal sealed class Wav2Vec2Pretraining<T>
                 for (int d = 0; d < width; d++) weight[d * c.EntriesPerGroup + e] = codevectors[(g * c.EntriesPerGroup + e) * width + d];
             TorchParameters.Linear(Codebooks[g], c.EntriesPerGroup, width, weight);
         }
-        TorchParameters.Linear(_engine, ProjectHidden, _hiddenSize, c.ProjectedDim,
-            read("project_hid.weight", new[] { c.ProjectedDim, _hiddenSize }), read("project_hid.bias", new[] { c.ProjectedDim }));
-        TorchParameters.Linear(_engine, ProjectQuantized, c.CodevectorDim, c.ProjectedDim,
-            read("project_q.weight", new[] { c.ProjectedDim, c.CodevectorDim }), read("project_q.bias", new[] { c.ProjectedDim }));
+        TorchParameters.Linear(_engine, ProjectHidden, _hiddenSize, c.ProjectedDim, source, "project_hid.weight", "project_hid.bias");
+        TorchParameters.Linear(_engine, ProjectQuantized, c.CodevectorDim, c.ProjectedDim, source, "project_q.weight", "project_q.bias");
     }
 }

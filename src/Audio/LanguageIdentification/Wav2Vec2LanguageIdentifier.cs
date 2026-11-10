@@ -235,14 +235,18 @@ public partial class Wav2Vec2LanguageIdentifier<T> : AudioNeuralNetworkBase<T>, 
     }
 
     /// <summary>Loads a transformers <c>Wav2Vec2ForSequenceClassification</c> state dict.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a transformers <c>Wav2Vec2ForSequenceClassification</c> state dict straight from
+    /// <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         if (_network is null || _poolingProjection is null || _classifierLayer is null)
             throw new InvalidOperationException("Weights load into the native network.");
-        _network.LoadTorchWeights((name, shape) => read($"wav2vec2.{name}", shape));
+        _network.LoadTorchWeights(source.WithPrefix("wav2vec2."));
         int h = _options.HiddenSize, p = _options.ClassifierProjectionSize, n = _languageIdToCode.Count;
-        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, _poolingProjection, h, p, read("projector.weight", new[] { p, h }), read("projector.bias", new[] { p }));
-        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, _classifierLayer, p, n, read("classifier.weight", new[] { n, p }), read("classifier.bias", new[] { n }));
+        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, _poolingProjection, h, p, source, "projector.weight", "projector.bias");
+        TextToSpeech.CodecBased.TorchParameters.Linear(Engine, _classifierLayer, p, n, source, "classifier.weight", "classifier.bias");
     }
 
     #endregion

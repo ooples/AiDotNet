@@ -213,19 +213,23 @@ internal sealed class SanmEncoder<T>
     /// <summary>Loads the release's encoder state (<c>{prefix}encoders0.0.*</c>, <c>encoders.{i}.*</c>,
     /// <c>tp_encoders.{i}.*</c>, <c>after_norm</c>, <c>tp_norm</c>; SenseVoiceSmall's <c>model.pt</c> under
     /// <c>encoder.</c>).</summary>
-    public void LoadTorchWeights(Func<string, double[]?> read, string prefix = "encoder.")
+    public void LoadTorchWeights(Func<string, double[]?> read, string prefix = "encoder.") =>
+        LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads the release's encoder state straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source, string prefix = "encoder.")
     {
         var c = Configuration;
-        double[] Read(string name) => read(prefix + name) ?? throw new InvalidDataException($"The SenseVoice checkpoint has no tensor '{prefix}{name}'.");
-        void Norm(LayerNormalizationLayer<T> norm, string name) => TorchParameters.LayerNorm(_engine, norm, Read(name + ".weight"), Read(name + ".bias"));
+        string Name(string name) => source.Contains(prefix + name) ? prefix + name
+            : throw new InvalidDataException($"The SenseVoice checkpoint has no tensor '{prefix}{name}'.");
+        void Norm(LayerNormalizationLayer<T> norm, string name) => TorchParameters.LayerNorm(_engine, norm, source, Name(name + ".weight"), Name(name + ".bias"));
         void Dense(DenseLayer<T> layer, string name, int inputs, int outputs) =>
-            TorchParameters.Linear(_engine, layer, inputs, outputs, Read(name + ".weight"), Read(name + ".bias"));
+            TorchParameters.Linear(_engine, layer, inputs, outputs, source, Name(name + ".weight"), Name(name + ".bias"));
         void Load(Block b, string p)
         {
             Norm(b.Norm1, p + "norm1");
             Dense(b.QueryKeyValue, p + "self_attn.linear_q_k_v", b.InputSize, 3 * c.Width);
-            var fsmn = Read(p + "self_attn.fsmn_block.weight");
-            b.Fsmn.LoadTorchWeights(fsmn, null, new double[c.Width]);
+            b.Fsmn.LoadTorchWeights(source, Name(p + "self_attn.fsmn_block.weight"), b.Fsmn.TorchWeightShape, null, null);
             Dense(b.Output, p + "self_attn.linear_out", c.Width, c.Width);
             Norm(b.Norm2, p + "norm2");
             Dense(b.FeedForward1, p + "feed_forward.w_1", c.Width, c.FeedForward);

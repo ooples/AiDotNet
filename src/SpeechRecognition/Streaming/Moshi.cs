@@ -81,20 +81,13 @@ public partial class Moshi<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>,
     {
         ThrowIfDisposed();
         if (directory is null) throw new ArgumentNullException(nameof(directory));
-        Dictionary<string, double[]> Read(string path)
-        {
-            var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
-            foreach (var entry in new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path))
-                state[entry.Key] = entry.Value.ToVector().Select(v => (double)v).ToArray();
-            return state;
-        }
-        var lm = Read(Path.Combine(directory, "model.safetensors"));
-        _core.LanguageModel.LoadTorchWeights(name => lm.TryGetValue(name, out var v) ? v : null);
+        using (var lm = AiDotNet.ModelLoading.TorchCheckpointFile.Open(Path.Combine(directory, "model.safetensors")))
+            _core.LanguageModel.LoadTorchWeights(name => lm.TryRead(name));
         string? mimi = Directory.GetFiles(directory, "tokenizer-*.safetensors").OrderBy(f => f, StringComparer.Ordinal).FirstOrDefault();
         if (mimi is not null)
         {
-            var state = Read(mimi);
-            _core.Mimi.Load(name => state.TryGetValue(name, out var v) ? v : null);
+            using var state = AiDotNet.ModelLoading.TorchCheckpointFile.Open(mimi);
+            _core.Mimi.Load(state);
         }
         string tokenizer = Path.Combine(directory, "tokenizer_spm_32k_3.model");
         if (_options.TokenizerPath is null && File.Exists(tokenizer))

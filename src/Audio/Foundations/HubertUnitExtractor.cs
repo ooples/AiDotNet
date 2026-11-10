@@ -205,7 +205,10 @@ internal sealed class HubertUnitExtractor<T>
     /// <c>post_extract_proj</c>, <c>encoder.pos_conv.0</c>, <c>encoder.layers.{i}.self_attn</c>/<c>fc1</c>/<c>fc2</c>, …)
     /// under the names <see cref="HubertNetwork{T}"/> reads; <paramref name="take"/> returns null for a missing tensor.
     /// </summary>
-    public void LoadFairseqWeights(Func<string, double[]?> take)
+    public void LoadFairseqWeights(Func<string, double[]?> take) => LoadFairseqWeights(AiDotNet.ModelLoading.TorchTensorSource.From(take));
+
+    /// <summary>Loads a fairseq HuBERT checkpoint's <c>model</c> state straight from <paramref name="source"/>.</summary>
+    internal void LoadFairseqWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         string? Fairseq(string name)
         {
@@ -232,6 +235,7 @@ internal sealed class HubertUnitExtractor<T>
                 : rest;
             return $"encoder.layers.{m.Groups[1].Value}.{rest}";
         }
-        Network.LoadTorchWeights(name => Fairseq(name) is { } mapped ? take(mapped) : null);
+        // A name fairseq has no counterpart for maps to one no checkpoint holds.
+        Network.LoadTorchWeights(source.WithNames(name => Fairseq(name) ?? "\0" + name));
     }
 }

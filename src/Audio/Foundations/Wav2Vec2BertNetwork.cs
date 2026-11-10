@@ -1,5 +1,6 @@
 using AiDotNet.Audio.Features;
 using AiDotNet.Helpers;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -287,15 +288,18 @@ internal sealed class Wav2Vec2BertNetwork<T>
 
     /// <summary>Loads a transformers <c>Wav2Vec2BertModel</c> state dict, each name under <paramref name="prefix"/>
     /// (X-codec2 keeps it under <c>semantic_model.</c>). Layers beyond those built are not read.</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "")
+    public void LoadTorchWeights(Func<string, int[], double[]> read, string prefix = "") =>
+        LoadTorchWeights(TorchTensorSource.From(read), prefix);
+
+    /// <summary>Loads a transformers <c>Wav2Vec2BertModel</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source, string prefix = "")
     {
         var c = Configuration;
-        int h = c.HiddenSize, e = h / c.Heads, f = c.IntermediateSize;
+        int h = c.HiddenSize, f = c.IntermediateSize;
         void Lin(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{prefix}{name}.weight", new[] { outputs, inputs }),
-                read($"{prefix}{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{prefix}{name}.weight", $"{prefix}{name}.bias");
         void Norm(LayerNormalizationLayer<T> layer, string name, int width)
-            => TorchParameters.LayerNorm(_engine, layer, read($"{prefix}{name}.weight", new[] { width }), read($"{prefix}{name}.bias", new[] { width }));
+            => TorchParameters.LayerNorm(_engine, layer, source, $"{prefix}{name}.weight", $"{prefix}{name}.bias");
         Norm(ProjectionNorm, "feature_projection.layer_norm", c.FeatureInputDim);
         Lin(Projection, "feature_projection.projection", c.FeatureInputDim, h);
         for (int i = 0; i < EncoderLayers.Count; i++)
@@ -310,12 +314,12 @@ internal sealed class Wav2Vec2BertNetwork<T>
             Lin(l.Key, $"{p}.self_attn.linear_k", h, h);
             Lin(l.Value, $"{p}.self_attn.linear_v", h, h);
             Lin(l.Output, $"{p}.self_attn.linear_out", h, h);
-            l.Distance.LoadTable(read($"{prefix}{p}.self_attn.distance_embedding.weight", new[] { c.LeftMaxPositions + c.RightMaxPositions + 1, e }));
+            l.Distance.LoadTable(source, $"{prefix}{p}.self_attn.distance_embedding.weight");
             Norm(l.ConvolutionNorm, $"{p}.conv_module.layer_norm", h);
-            TorchParameters.Linear(l.Pointwise1, h, 2 * h, read($"{prefix}{p}.conv_module.pointwise_conv1.weight", new[] { 2 * h, h, 1 }));
-            l.Depthwise.LoadTorchWeights(read($"{prefix}{p}.conv_module.depthwise_conv.weight", new[] { h, 1, c.DepthwiseKernel }), null, new double[h]);
+            TorchParameters.Linear(l.Pointwise1, h, 2 * h, source, $"{prefix}{p}.conv_module.pointwise_conv1.weight", new[] { 2 * h, h, 1 });
+            l.Depthwise.LoadTorchWeights(source, $"{prefix}{p}.conv_module.depthwise_conv.weight", new[] { h, 1, c.DepthwiseKernel }, null, null);
             Norm(l.DepthwiseNorm, $"{p}.conv_module.depthwise_layer_norm", h);
-            TorchParameters.Linear(l.Pointwise2, h, h, read($"{prefix}{p}.conv_module.pointwise_conv2.weight", new[] { h, h, 1 }));
+            TorchParameters.Linear(l.Pointwise2, h, h, source, $"{prefix}{p}.conv_module.pointwise_conv2.weight", new[] { h, h, 1 });
             Norm(l.FeedForward2Norm, $"{p}.ffn2_layer_norm", h);
             Lin(l.FeedForward2In, $"{p}.ffn2.intermediate_dense", h, f);
             Lin(l.FeedForward2Out, $"{p}.ffn2.output_dense", f, h);

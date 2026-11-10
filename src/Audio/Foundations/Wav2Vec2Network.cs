@@ -1,6 +1,7 @@
 using AiDotNet.ActivationFunctions;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.TextToSpeech.CodecBased;
 
@@ -434,6 +435,47 @@ internal sealed class Wav2Vec2Network<T>
         }
     }
 
+    /// <summary>Loads a feature-encoder convolution <c>[out, in, k]</c> into its unfolded linear map <c>[k·in, out]</c> (row
+    /// <c>k·in + c</c> of the window): the stored kernel is copied once into scratch and scattered into the layer's own
+    /// weight.</summary>
+    internal static void LoadUnfoldedConv(IEngine engine, TorchTensorSource source, LayerBase<T> conv, string weightName, string? biasName,
+        int inputs, int kernel, int outputs)
+    {
+        var stored = new Tensor<T>(new[] { outputs, inputs, kernel });
+        source.CopyTo(weightName, stored.Shape.ToArray(), stored);
+        var from = stored.AsSpan();
+        Tensor<T> weights;
+        if (conv is BiasFreeLinearLayer<T> plain)
+        {
+            weights = plain.Weights;
+            if (weights.Length != stored.Length || weights.Lifetime == WeightLifetime.Streaming)
+            {
+                // No storage to write into: the SetParameters route.
+                var unfolded = new double[stored.Length];
+                for (int o = 0; o < outputs; o++)
+                    for (int ch = 0; ch < inputs; ch++)
+                        for (int k = 0; k < kernel; k++) unfolded[o * kernel * inputs + k * inputs + ch] = NumOps.ToDouble(from[(o * inputs + ch) * kernel + k]);
+                TorchParameters.Linear(plain, kernel * inputs, outputs, unfolded);
+                return;
+            }
+        }
+        else
+        {
+            var dense = (DenseLayer<T>)conv;
+            using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
+                dense.Forward(new Tensor<T>(new[] { 1, kernel * inputs }));
+            weights = dense.GetWeights();
+            var bias = dense.GetBiases();
+            source.CopyTo(biasName ?? throw new ArgumentNullException(nameof(biasName)), new[] { outputs }, bias);
+            engine.InvalidatePersistentTensor(bias);
+        }
+        var to = weights.AsWritableSpan();                                                       // [k·in, out]
+        for (int o = 0; o < outputs; o++)
+            for (int ch = 0; ch < inputs; ch++)
+                for (int k = 0; k < kernel; k++) to[(k * inputs + ch) * outputs + o] = from[(o * inputs + ch) * kernel + k];
+        engine.InvalidatePersistentTensor(weights);
+    }
+
     private void LoadGroupedConv(GroupedConv1DLayer<T> conv, double[] weight, double[] bias)
     {
         var (w, b) = conv.ConvParameters;
@@ -475,54 +517,49 @@ internal sealed class Wav2Vec2Network<T>
 
     /// <summary>Loads parameters named as transformers' <c>Wav2Vec2Model</c> state dict (prefix included by the caller's
     /// <paramref name="read"/>).</summary>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads a transformers <c>Wav2Vec2Model</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(TorchTensorSource source)
     {
         var c = Configuration;
         int h = c.HiddenSize;
         void Lin(DenseLayer<T> layer, string name, int inputs, int outputs)
-            => TorchParameters.Linear(_engine, layer, inputs, outputs, read($"{name}.weight", new[] { outputs, inputs }), read($"{name}.bias", new[] { outputs }));
+            => TorchParameters.Linear(_engine, layer, inputs, outputs, source, $"{name}.weight", $"{name}.bias");
         void Norm(LayerNormalizationLayer<T> layer, string name, int width)
-            => TorchParameters.LayerNorm(_engine, layer, read($"{name}.weight", new[] { width }), read($"{name}.bias", new[] { width }));
+            => TorchParameters.LayerNorm(_engine, layer, source, $"{name}.weight", $"{name}.bias");
         for (int i = 0; i < ConvLayers.Count; i++)
         {
             int inputs = i == 0 ? 1 : c.ConvDims[i - 1], kernel = c.ConvKernels[i], outputs = c.ConvDims[i];
-            var w = read($"feature_extractor.conv_layers.{i}.conv.weight", new[] { outputs, inputs, kernel });
-            // [out, in, k] → columns k·in + c of the unfolded window.
-            var unfolded = new double[outputs * kernel * inputs];
-            for (int o = 0; o < outputs; o++)
-                for (int ch = 0; ch < inputs; ch++)
-                    for (int k = 0; k < kernel; k++) unfolded[o * kernel * inputs + k * inputs + ch] = w[(o * inputs + ch) * kernel + k];
-            if (ConvLayers[i].Conv is BiasFreeLinearLayer<T> plain) TorchParameters.Linear(plain, kernel * inputs, outputs, unfolded);
-            else TorchParameters.Linear(_engine, (DenseLayer<T>)ConvLayers[i].Conv, kernel * inputs, outputs, unfolded,
-                read($"feature_extractor.conv_layers.{i}.conv.bias", new[] { outputs }));
+            string convName = $"feature_extractor.conv_layers.{i}.conv";
+            LoadUnfoldedConv(_engine, source, ConvLayers[i].Conv, convName + ".weight", ConvLayers[i].Conv is BiasFreeLinearLayer<T> ? null : convName + ".bias",
+                inputs, kernel, outputs);
             string normName = $"feature_extractor.conv_layers.{i}.layer_norm";
             if (ConvLayers[i].Norm is LayerNormalizationLayer<T> ln) Norm(ln, normName, outputs);
-            else if (ConvLayers[i].Norm is GroupNormalizationLayer<T> gn)
-            {
-                var gamma = read($"{normName}.weight", new[] { outputs });
-                var beta = read($"{normName}.bias", new[] { outputs });
-                var gt = gn.GetGammaTensor();
-                var bt = gn.GetBetaTensor();
-                for (int j = 0; j < outputs; j++)
-                {
-                    gt[j] = NumOps.FromDouble(gamma[j]);
-                    bt[j] = NumOps.FromDouble(beta[j]);
-                }
-                _engine.InvalidatePersistentTensor(gt);
-                _engine.InvalidatePersistentTensor(bt);
-            }
+            else if (ConvLayers[i].Norm is GroupNormalizationLayer<T> gn) gn.LoadAffine(source, $"{normName}.weight", $"{normName}.bias");
         }
         Norm(ProjectionNorm, "feature_projection.layer_norm", c.ConvDims[^1]);
         Lin(Projection, "feature_projection.projection", c.ConvDims[^1], h);
-        TorchParameters.Linear(MaskEmbedding, 1, h, read("masked_spec_embed", new[] { h }));
+        TorchParameters.Linear(MaskEmbedding, 1, h, source, "masked_spec_embed", new[] { h });
         int perGroup = h / c.PositionalConvGroups;
         if (PositionalConv is not null)
-            LoadPositional(read("encoder.pos_conv_embed.conv.parametrizations.weight.original1", new[] { h, perGroup, c.PositionalConvKernel }),
-                read("encoder.pos_conv_embed.conv.parametrizations.weight.original0", new[] { 1, 1, c.PositionalConvKernel }),
-                read("encoder.pos_conv_embed.conv.bias", new[] { h }));
+        {
+            var (v, g, b) = PositionalConv.WeightNormParameters;
+            source.CopyTo("encoder.pos_conv_embed.conv.parametrizations.weight.original1", new[] { h, perGroup, c.PositionalConvKernel }, v);
+            source.CopyTo("encoder.pos_conv_embed.conv.parametrizations.weight.original0", new[] { 1, 1, c.PositionalConvKernel }, g);
+            source.CopyTo("encoder.pos_conv_embed.conv.bias", new[] { h }, b);
+            _engine.InvalidatePersistentTensor(v);
+            _engine.InvalidatePersistentTensor(g);
+            _engine.InvalidatePersistentTensor(b);
+        }
         for (int i = 0; i < PositionalConvStack.Count; i++)
-            LoadGroupedConv(PositionalConvStack[i], read($"encoder.pos_conv_embed.layers.{i}.conv.weight", new[] { h, perGroup, c.PositionalConvKernel }),
-                read($"encoder.pos_conv_embed.layers.{i}.conv.bias", new[] { h }));
+        {
+            var (w, b) = PositionalConvStack[i].ConvParameters;
+            source.CopyTo($"encoder.pos_conv_embed.layers.{i}.conv.weight", new[] { h, perGroup, c.PositionalConvKernel }, w);
+            source.CopyTo($"encoder.pos_conv_embed.layers.{i}.conv.bias", new[] { h }, b);
+            _engine.InvalidatePersistentTensor(w);
+            _engine.InvalidatePersistentTensor(b);
+        }
         Norm(EncoderNorm, "encoder.layer_norm", h);
         for (int i = 0; i < EncoderLayers.Count; i++)
         {

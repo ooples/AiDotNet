@@ -693,10 +693,17 @@ public partial class CLAPModel<T> : AudioNeuralNetworkBase<T>, IAudioFingerprint
     public IReadOnlyCollection<string> LoadLaionWeights(Func<string, int[], double[]> read)
     {
         Guard.NotNull(read);
+        return LoadLaionWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+    }
+
+    /// <summary>Loads a LAION-CLAP checkpoint straight from <paramref name="source"/>; returns the names read.</summary>
+    internal IReadOnlyCollection<string> LoadLaionWeights(AiDotNet.ModelLoading.TorchTensorSource source)
+    {
+        Guard.NotNull(source);
         if (!_useNativeMode)
             throw new NotSupportedException("LAION weights load into the native network; this instance is in ONNX mode.");
         MaterializeForLoading();
-        var loader = new TorchStateDictLoader<T>(read, Engine);
+        var loader = new TorchStateDictLoader<T>(source, Engine);
 
         int index = 0;
         ILayer<T> Next() => index < Layers.Count

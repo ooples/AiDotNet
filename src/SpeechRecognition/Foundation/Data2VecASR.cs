@@ -124,10 +124,13 @@ public partial class Data2VecASR<T> : AudioNeuralNetworkBase<T>, ISpeechRecogniz
 
     /// <summary>Loads a transformers <c>*ForCTC</c> state dict (<c>data2vec_audio.*</c> and <c>lm_head.*</c>).</summary>
     /// <param name="read">Returns the named tensor's values, row-major, for the shape given.</param>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a transformers <c>*ForCTC</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         if (_stack is null) throw new InvalidOperationException("Weights load into the native network.");
-        _stack.LoadTorchWeights(read, "data2vec_audio.");
+        _stack.LoadTorchWeights(source, "data2vec_audio.");
     }
 
     // The network reads the raw waveform, truncated to the longest window a transcription covers.

@@ -115,6 +115,17 @@ public sealed partial class ResidualVectorQuantizerLayer<T> : LayerBase<T>, IRes
     /// <summary>Loads codebook <paramref name="q"/>'s state: the codes <c>[bins, dim]</c>, their EMA sums, the EMA usage
     /// <c>[bins]</c>, and whether k-means initialization already ran (reference <c>embed</c>, <c>embed_avg</c>,
     /// <c>cluster_size</c>, <c>inited</c>).</summary>
+    internal void LoadCodebook(int q, AiDotNet.ModelLoading.TorchTensorSource source, string embedName, string embedAverageName,
+        string clusterSizeName, bool initialized)
+    {
+        source.CopyTo(embedName, new[] { _bins, _dim }, _embed[q]);
+        source.CopyTo(embedAverageName, new[] { _bins, _dim }, _embedAverage[q]);
+        source.CopyTo(clusterSizeName, new[] { _bins }, _clusterSize[q]);
+        _initialized[q][0] = initialized ? NumOps.One : NumOps.Zero;
+        Invalidate(q);
+    }
+
+    /// <summary>Loads codebook <paramref name="q"/>'s state from arrays (see the other overload).</summary>
     internal void LoadCodebook(int q, double[] embed, double[] embedAverage, double[] clusterSize, bool initialized)
     {
         if (embed.Length != _bins * _dim || embedAverage.Length != _bins * _dim || clusterSize.Length != _bins)

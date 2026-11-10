@@ -102,20 +102,22 @@ internal sealed class SpeechBrainXVector<T>
 
     /// <summary>Loads <c>embedding_model.ckpt</c> (<c>blocks.{3i}.conv</c>, <c>blocks.{3i+2}.norm</c>,
     /// <c>blocks.{3L+1}.w</c>).</summary>
-    public void Load(Func<string, int[], double[]> read)
+    public void Load(Func<string, int[], double[]> read) => Load(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads <c>embedding_model.ckpt</c> straight from <paramref name="source"/>.</summary>
+    internal void Load(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         int inputs = _c.Mels;
         for (int i = 0; i < Blocks.Count; i++)
         {
             var (conv, norm) = Blocks[i];
             int outputs = _c.Channels[i];
-            conv.LoadTorchWeights(read($"blocks.{3 * i}.conv.weight", new[] { outputs, inputs, _c.Kernels[i] }), null, read($"blocks.{3 * i}.conv.bias", new[] { outputs }));
-            string n = $"blocks.{3 * i + 2}.norm.";
-            TorchParameters.BatchNorm(norm, read(n + "weight", new[] { outputs }), read(n + "bias", new[] { outputs }),
-                read(n + "running_mean", new[] { outputs }), read(n + "running_var", new[] { outputs }));
+            conv.LoadTorchWeights(source, $"blocks.{3 * i}.conv.weight", new[] { outputs, inputs, _c.Kernels[i] }, null, $"blocks.{3 * i}.conv.bias");
+            TorchParameters.BatchNorm(norm, source, $"blocks.{3 * i + 2}.norm.", outputs);
             norm.SetTrainingMode(false);
             inputs = outputs;
         }
-        IndexTtsOps.LoadLinear(_engine, read, Embedding, $"blocks.{3 * Blocks.Count + 1}.w", 2 * inputs, _c.EmbeddingSize);
+        string w = $"blocks.{3 * Blocks.Count + 1}.w";
+        TorchParameters.Linear(_engine, Embedding, 2 * inputs, _c.EmbeddingSize, source, w + ".weight", w + ".bias");
     }
 }

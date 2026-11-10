@@ -6,6 +6,7 @@ using AiDotNet.Attributes;
 using AiDotNet.Audio.Foundations;
 using AiDotNet.Helpers;
 using AiDotNet.Interfaces;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 using AiDotNet.Tensors.Engines.Autodiff;
 using AiDotNet.TextToSpeech.CodecBased;
@@ -648,12 +649,21 @@ internal sealed class XCodec2<T>
     /// buffer when present. The anti-aliasing filters stored as buffers are recomputed, not read. Returns the names it
     /// read.
     /// </summary>
-    public HashSet<string> Load(Func<string, double[]?> read)
+    public HashSet<string> Load(Func<string, double[]?> read) => Load(TorchTensorSource.From(read));
+
+    /// <summary>Loads an X-codec2 state dict straight from <paramref name="source"/>; returns the names it read.</summary>
+    internal HashSet<string> Load(TorchTensorSource source)
     {
         var used = new HashSet<string>(StringComparer.Ordinal);
+        string Use(string name)
+        {
+            if (!source.Contains(name)) throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
+            used.Add(name);
+            return name;
+        }
         double[]? Read(string name, int count, bool optional = false)
         {
-            var values = read(name);
+            var values = source.TryRead(name);
             if (values is null)
             {
                 if (optional) return null;
@@ -663,7 +673,7 @@ internal sealed class XCodec2<T>
             used.Add(name);
             return values;
         }
-        Semantic.LoadTorchWeights((name, shape) => Read(name, shape.Aggregate(1, (a, b) => a * b))!, "semantic_model.");
+        Semantic.LoadTorchWeights(source.WithNames(Use), "semantic_model.");
         // The ISTFT window is a buffer PyTorch computed in single precision; use the stored values when present.
         var window = Read("generator.head.istft.window", _decoder.WindowLength, optional: true);
         if (window is not null) _decoder.Istft.LoadWindow(window);
@@ -672,19 +682,17 @@ internal sealed class XCodec2<T>
             switch (module)
             {
                 case NormedConv1DLayer<T> conv:
-                    var shape = conv.TorchWeightShape;
-                    int count = shape.Aggregate(1, (a, b) => a * b);
                     if (conv.Normalization == ConvolutionNormalization.Weight)
                     {
-                        var direction = Read($"{name}.parametrizations.weight.original1", count, optional: true);
-                        var gain = direction is null ? Read($"{name}.weight_g", shape[0])! : Read($"{name}.parametrizations.weight.original0", shape[0])!;
-                        direction ??= Read($"{name}.weight_v", count)!;
-                        conv.LoadTorchWeights(direction, gain, Read($"{name}.bias", conv.OutputChannels)!);
+                        bool parametrized = source.Contains($"{name}.parametrizations.weight.original1");
+                        string direction = Use(parametrized ? $"{name}.parametrizations.weight.original1" : $"{name}.weight_v");
+                        string gain = Use(parametrized ? $"{name}.parametrizations.weight.original0" : $"{name}.weight_g");
+                        conv.LoadTorchWeights(source, direction, conv.TorchWeightShape, gain, Use($"{name}.bias"));
                     }
                     else
                     {
-                        var bias = conv.HasBias ? Read($"{name}.bias", conv.OutputChannels)! : new double[conv.OutputChannels];
-                        conv.LoadTorchWeights(Read($"{name}.weight", count)!, null, bias);
+                        string weight = Use($"{name}.weight");
+                        conv.LoadTorchWeights(source, weight, conv.TorchWeightShape, null, conv.HasBias ? Use($"{name}.bias") : null);
                     }
                     break;
                 case XCodec2SnakeBetaLayer<T> snake:
@@ -693,25 +701,22 @@ internal sealed class XCodec2<T>
                     snake.Load(alpha, beta);
                     break;
                 case GroupNormalizationLayer<T> group:
-                    XCodec2.LoadNorm(_engine, group.GetGammaTensor(), group.GetBetaTensor(), Read($"{name}.weight", group.GetGammaTensor().Length)!,
-                        Read($"{name}.bias", group.GetBetaTensor().Length)!);
+                    group.LoadAffine(source, Use($"{name}.weight"), Use($"{name}.bias"));
                     break;
                 case LayerNormalizationLayer<T> norm:
-                    int width = norm.GetGammaTensor().Length;
-                    TorchParameters.LayerNorm(_engine, norm, Read($"{name}.weight", width)!, Read($"{name}.bias", width)!);
+                    TorchParameters.LayerNorm(_engine, norm, source, Use($"{name}.weight"), Use($"{name}.bias"));
                     break;
                 case RMSNormalizationLayer<T> rms:
                     var gamma = rms.GetGammaTensor();
-                    var weight = Read($"{name}.weight", gamma.Length)!;
-                    for (int i = 0; i < weight.Length; i++) gamma[i] = Ops.FromDouble(weight[i]);
+                    source.CopyTo(Use($"{name}.weight"), new[] { gamma.Length }, gamma);
                     _engine.InvalidatePersistentTensor(gamma);
                     break;
                 case BiasFreeLinearLayer<T> linear:
-                    TorchParameters.Linear(linear, linear.InputSize, linear.OutputSize, Read($"{name}.weight", linear.InputSize * linear.OutputSize)!);
+                    TorchParameters.Linear(linear, linear.InputSize, linear.OutputSize, source, Use($"{name}.weight"));
                     break;
                 case DenseLayer<T> dense:
                     int inputs = dense.GetWeights().Shape[0], outputs = dense.GetWeights().Shape[1];
-                    TorchParameters.Linear(_engine, dense, inputs, outputs, Read($"{name}.weight", inputs * outputs)!, Read($"{name}.bias", outputs)!);
+                    TorchParameters.Linear(_engine, dense, inputs, outputs, source, Use($"{name}.weight"), Use($"{name}.bias"));
                     break;
                 default:
                     throw new InvalidOperationException($"No loader for {module.GetType().Name} ('{name}').");
@@ -736,17 +741,5 @@ internal static class XCodec2
         var conv = new NormedConv1DLayer<T>(input, output, kernel, 1, 1, 1, padding, false, ConvolutionNormalization.None, useBias: bias);
         owner.Add(conv);
         return conv;
-    }
-
-    internal static void LoadNorm<T>(IEngine engine, Tensor<T> gamma, Tensor<T> beta, double[] weight, double[] bias)
-    {
-        var ops = MathHelper.GetNumericOperations<T>();
-        for (int i = 0; i < weight.Length; i++)
-        {
-            gamma[i] = ops.FromDouble(weight[i]);
-            beta[i] = ops.FromDouble(bias[i]);
-        }
-        engine.InvalidatePersistentTensor(gamma);
-        engine.InvalidatePersistentTensor(beta);
     }
 }

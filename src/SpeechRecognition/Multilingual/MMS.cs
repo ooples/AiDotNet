@@ -128,10 +128,13 @@ public partial class MMS<T> : AudioNeuralNetworkBase<T>, ISpeechRecognizer<T>
 
     /// <summary>Loads a transformers <c>Wav2Vec2ForCTC</c> state dict (<c>wav2vec2.*</c> and <c>lm_head.*</c>).</summary>
     /// <param name="read">Returns the named tensor's values, row-major, for the shape given.</param>
-    public void LoadTorchWeights(Func<string, int[], double[]> read)
+    public void LoadTorchWeights(Func<string, int[], double[]> read) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads a transformers <c>*ForCTC</c> state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         if (_stack is null) throw new InvalidOperationException("Weights load into the native MMS network.");
-        _stack.LoadTorchWeights(read, "wav2vec2.");
+        _stack.LoadTorchWeights(source, "wav2vec2.");
     }
 
     // MMS reads the raw waveform, truncated to the longest window a transcription covers.

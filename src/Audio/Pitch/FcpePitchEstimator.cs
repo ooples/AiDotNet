@@ -238,32 +238,32 @@ internal sealed class FcpePitchEstimator<T>
 
     /// <summary>Loads torchfcpe's state dict (<c>input_stack</c>, <c>net.encoder_layers.{i}.conformer.net</c>, <c>norm</c>,
     /// the weight-normalized <c>output_proj</c> and the <c>cent_table</c> buffer).</summary>
-    public void LoadTorchWeights(Func<string, double[]?> take)
+    public void LoadTorchWeights(Func<string, double[]?> take) => LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource.From(take));
+
+    /// <summary>Loads torchfcpe's state dict straight from <paramref name="source"/>.</summary>
+    internal void LoadTorchWeights(AiDotNet.ModelLoading.TorchTensorSource source)
     {
-        double[] Read(string name) => take(name) ?? throw new InvalidDataException($"The FCPE checkpoint has no tensor '{name}'.");
-        InputConv1.LoadTorchWeights(Read("input_stack.0.weight"), null, Read("input_stack.0.bias"));
-        var gamma = InputNorm.GetGammaTensor();
-        var beta = InputNorm.GetBetaTensor();
-        var g = Read("input_stack.1.weight");
-        var b = Read("input_stack.1.bias");
-        for (int i = 0; i < Hidden; i++) { gamma[i] = NumOps.FromDouble(g[i]); beta[i] = NumOps.FromDouble(b[i]); }
-        _engine.InvalidatePersistentTensor(gamma);
-        _engine.InvalidatePersistentTensor(beta);
-        InputConv2.LoadTorchWeights(Read("input_stack.3.weight"), null, Read("input_stack.3.bias"));
+        string Name(string name) => source.Contains(name) ? name : throw new InvalidDataException($"The FCPE checkpoint has no tensor '{name}'.");
+        double[] Read(string name) => source.TryRead(name) ?? throw new InvalidDataException($"The FCPE checkpoint has no tensor '{name}'.");
+        void Conv(NormedConv1DLayer<T> conv, string weight, string bias) =>
+            conv.LoadTorchWeights(source, Name(weight), conv.TorchWeightShape, null, Name(bias));
+        Conv(InputConv1, "input_stack.0.weight", "input_stack.0.bias");
+        InputNorm.LoadAffine(source, Name("input_stack.1.weight"), Name("input_stack.1.bias"));
+        Conv(InputConv2, "input_stack.3.weight", "input_stack.3.bias");
         for (int i = 0; i < Modules.Count; i++)
         {
             string p = $"net.encoder_layers.{i}.conformer.net";
             var m = Modules[i];
-            TorchParameters.LayerNorm(_engine, m.Norm, Read($"{p}.0.weight"), Read($"{p}.0.bias"));
-            m.Pointwise1.LoadTorchWeights(Read($"{p}.2.weight"), null, Read($"{p}.2.bias"));
-            m.Depthwise.LoadTorchWeights(Read($"{p}.4.conv.weight"), null, Read($"{p}.4.conv.bias"));
-            m.Pointwise2.LoadTorchWeights(Read($"{p}.6.weight"), null, Read($"{p}.6.bias"));
+            TorchParameters.LayerNorm(_engine, m.Norm, source, Name($"{p}.0.weight"), Name($"{p}.0.bias"));
+            Conv(m.Pointwise1, $"{p}.2.weight", $"{p}.2.bias");
+            Conv(m.Depthwise, $"{p}.4.conv.weight", $"{p}.4.conv.bias");
+            Conv(m.Pointwise2, $"{p}.6.weight", $"{p}.6.bias");
         }
-        TorchParameters.LayerNorm(_engine, OutputNorm, Read("norm.weight"), Read("norm.bias"));
-        // weight = g · v / ‖v‖ per output row.
+        TorchParameters.LayerNorm(_engine, OutputNorm, source, Name("norm.weight"), Name("norm.bias"));
+        // weight = g · v / ‖v‖ per output row (computed on, so read).
         // The bundled checkpoint has weight_g/weight_v; newer torch saves the parametrization.
-        var v = take("output_proj.weight_v") ?? Read("output_proj.parametrizations.weight.original1");
-        var gain = take("output_proj.weight_g") ?? Read("output_proj.parametrizations.weight.original0");
+        var v = source.TryRead("output_proj.weight_v") ?? Read("output_proj.parametrizations.weight.original1");
+        var gain = source.TryRead("output_proj.weight_g") ?? Read("output_proj.parametrizations.weight.original0");
         var weight = new double[v.Length];
         for (int o = 0; o < Bins; o++)
         {

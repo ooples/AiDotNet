@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using AiDotNet.Agentic.Models.Local;
+using AiDotNet.ModelLoading;
 using AiDotNet.NeuralNetworks.Layers;
 
 namespace AiDotNet.Audio.Effects;
@@ -23,19 +24,20 @@ public partial class DAC<T>
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw new NotSupportedException("Pretrained weights load into the native encoder, quantizer and decoder.");
-        using var stream = File.OpenRead(path);
-        var file = SafetensorsReader.Read(stream);
+        List<string> names;
+        using (var header = File.OpenRead(path)) names = SafetensorsReader.Read(header).Names.ToList();
+        using var file = TorchCheckpointFile.Open(path);
         var used = new HashSet<string>();
 
-        double[] Read(string name, params int[] shape)
+        // Checks the stored shape and returns the name.
+        string Use(string name, params int[] shape)
         {
-            var tensor = file.Get(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
-            var actual = tensor.Shape.Select(d => (int)d).ToArray();
-            if (!actual.SequenceEqual(shape))
+            var actual = file.ShapeOf(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
+            if (!actual.SequenceEqual(shape.Select(d => (long)d)))
                 throw new InvalidDataException($"'{name}' is [{string.Join(", ", actual)}] in the checkpoint but [{string.Join(", ", shape)}] in this " +
                     "model; build the model with the checkpoint's configuration.");
             used.Add(name);
-            return file.ReadAsDouble(name);
+            return name;
         }
 
         void Load(string name, LayerBase<T> layer)
@@ -43,10 +45,11 @@ public partial class DAC<T>
             switch (layer)
             {
                 case NormedConv1DLayer<T> conv:
-                    conv.LoadTorchWeights(Read($"{name}.weight", conv.TorchWeightShape), null, Read($"{name}.bias", conv.OutputChannels));
+                    conv.LoadTorchWeights(file, Use($"{name}.weight", conv.TorchWeightShape), conv.TorchWeightShape, null,
+                        Use($"{name}.bias", conv.OutputChannels));
                     break;
                 case SnakeLayer<T> snake:
-                    snake.LoadAlpha(Read($"{name}.alpha", 1, snake.Channels, 1));
+                    snake.LoadAlpha(file.Read(Use($"{name}.alpha", 1, snake.Channels, 1), new[] { 1, snake.Channels, 1 }));
                     break;
                 default:
                     throw new InvalidOperationException($"No loader for {layer.GetType().Name} at '{name}'.");
@@ -61,13 +64,12 @@ public partial class DAC<T>
             string prefix = $"quantizer.quantizers.{q}";
             Load($"{prefix}.in_proj", _quantizer!.InProjection(q));
             Load($"{prefix}.out_proj", _quantizer.OutProjection(q));
-            var codebook = Read($"{prefix}.codebook.weight", o.CodebookSize, o.CodebookDim);
             var target = _quantizer.Codebook(q);
-            for (int i = 0; i < codebook.Length; i++) target[i] = NumOps.FromDouble(codebook[i]);
+            file.CopyTo(Use($"{prefix}.codebook.weight", o.CodebookSize, o.CodebookDim), new[] { o.CodebookSize, o.CodebookDim }, target);
             Engine.InvalidatePersistentTensor(target);
         }
 
-        var unused = file.Names.Where(n => !used.Contains(n)).ToList();
+        var unused = names.Where(n => !used.Contains(n)).ToList();
         if (unused.Count > 0)
             throw new InvalidDataException($"The checkpoint has {unused.Count} tensors this model has no place for (first: '{unused[0]}'); " +
                 "its configuration differs from the model's.");
@@ -81,25 +83,39 @@ public partial class DAC<T>
     /// conversion script renames), and every tensor must be used.
     /// </summary>
     /// <param name="read">The checkpoint's tensors by name, null for a name it lacks.</param>
-    internal void LoadDescriptWeights(Func<string, double[]?> read)
+    internal void LoadDescriptWeights(Func<string, double[]?> read) => LoadDescriptWeights(TorchTensorSource.From(read));
+
+    /// <summary>Loads descript-audio-codec's layout straight from <paramref name="source"/>.</summary>
+    internal void LoadDescriptWeights(TorchTensorSource source)
     {
         ThrowIfDisposed();
         if (!HasPaperLayers) throw new NotSupportedException("Pretrained weights load into the native encoder, quantizer and decoder.");
         var o = PaperOptions;
         _usedDescriptNames = LoadDescriptModules(Engine, _encoder!, _decoder!, _quantizer!, o.EncoderRates.Length, o.DecoderRates.Length, o.NumQuantizers,
-            o.CodebookSize, o.CodebookDim, read);
+            o.CodebookSize, o.CodebookDim, source);
     }
 
     /// <summary>Loads descript-audio-codec's layout into DAC's modules wherever they live (a codec, or a model that owns
     /// them); returns the names read.</summary>
     internal static HashSet<string> LoadDescriptModules(IEngine engine, DacEncoder<T> encoder, DacDecoder<T> decoder, FactorizedVectorQuantizerLayer<T> quantizer,
-        int encoderBlocks, int decoderBlocks, int quantizers, int codebookSize, int codebookDim, Func<string, double[]?> read)
+        int encoderBlocks, int decoderBlocks, int quantizers, int codebookSize, int codebookDim, Func<string, double[]?> read) =>
+        LoadDescriptModules(engine, encoder, decoder, quantizer, encoderBlocks, decoderBlocks, quantizers, codebookSize, codebookDim,
+            TorchTensorSource.From(read));
+
+    /// <summary>Loads descript-audio-codec's layout straight from <paramref name="source"/>; returns the names read.</summary>
+    internal static HashSet<string> LoadDescriptModules(IEngine engine, DacEncoder<T> encoder, DacDecoder<T> decoder, FactorizedVectorQuantizerLayer<T> quantizer,
+        int encoderBlocks, int decoderBlocks, int quantizers, int codebookSize, int codebookDim, TorchTensorSource source)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
         var used = new HashSet<string>(StringComparer.Ordinal);
+        string Use(string name)
+        {
+            if (!source.Contains(name)) throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
+            used.Add(name);
+            return name;
+        }
         double[] Read(string name, int count)
         {
-            var values = read(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
+            var values = source.TryRead(name) ?? throw new InvalidDataException($"The checkpoint has no tensor '{name}'.");
             if (values.Length != count) throw new InvalidDataException($"'{name}' has {values.Length} values; this model expects {count}.");
             used.Add(name);
             return values;
@@ -109,9 +125,7 @@ public partial class DAC<T>
             switch (layer)
             {
                 case NormedConv1DLayer<T> conv:
-                    var shape = conv.TorchWeightShape;
-                    conv.LoadTorchWeights(Read($"{descript}.weight_v", shape.Aggregate(1, (a, b) => a * b)), Read($"{descript}.weight_g", shape[0]),
-                        Read($"{descript}.bias", conv.OutputChannels));
+                    conv.LoadTorchWeights(source, Use($"{descript}.weight_v"), conv.TorchWeightShape, Use($"{descript}.weight_g"), Use($"{descript}.bias"));
                     break;
                 case SnakeLayer<T> snake:
                     snake.LoadAlpha(Read($"{descript}.alpha", snake.Channels));
@@ -127,9 +141,8 @@ public partial class DAC<T>
             string prefix = $"quantizer.quantizers.{q}";
             Load($"{prefix}.in_proj", quantizer.InProjection(q));
             Load($"{prefix}.out_proj", quantizer.OutProjection(q));
-            var codebook = Read($"{prefix}.codebook.weight", codebookSize * codebookDim);
             var target = quantizer.Codebook(q);
-            for (int i = 0; i < codebook.Length; i++) target[i] = ops.FromDouble(codebook[i]);
+            source.CopyTo(Use($"{prefix}.codebook.weight"), new[] { codebookSize, codebookDim }, target);
             engine.InvalidatePersistentTensor(target);
         }
         return used;
@@ -144,14 +157,15 @@ public partial class DAC<T>
     /// in descript's layout; see <see cref="LoadDescriptWeights"/>.</summary>
     public void LoadDescriptCheckpoint(string path)
     {
+        // A .pth state dict is unpickled whole; its tensors are copied from there into the layers.
         var all = new AiDotNet.ComputerVision.Weights.WeightLoader().LoadWeights(path);
-        var state = new Dictionary<string, double[]>(StringComparer.Ordinal);
+        var state = new Dictionary<string, Tensor<float>>(StringComparer.Ordinal);
         foreach (var entry in all)
         {
             string name = entry.Key.StartsWith("state_dict.", StringComparison.Ordinal) ? entry.Key.Substring("state_dict.".Length) : entry.Key;
-            state[name] = entry.Value.ToVector().Select(v => (double)v).ToArray();
+            state[name] = entry.Value;
         }
-        LoadDescriptWeights(name => state.TryGetValue(name, out var v) ? v : null);
+        LoadDescriptWeights(TorchTensorSource.From(state, $"the checkpoint {path}"));
         var unused = state.Keys.Where(n => !UsedDescriptNames.Contains(n)).ToList();
         if (unused.Count > 0)
             throw new InvalidDataException($"The checkpoint has {unused.Count} tensors this model has no place for (first: '{unused[0]}'); " +

@@ -187,10 +187,13 @@ internal sealed class SpeechBrainEcapa<T>
     }
 
     /// <summary>Loads <c>embedding_model.ckpt</c> (speechbrain's ECAPA_TDNN state dict).</summary>
-    public void Load(Func<string, int[], double[]> read)
+    public void Load(Func<string, int[], double[]> read) => Load(AiDotNet.ModelLoading.TorchTensorSource.From(read));
+
+    /// <summary>Loads speechbrain's ECAPA_TDNN state dict straight from <paramref name="source"/>.</summary>
+    internal void Load(AiDotNet.ModelLoading.TorchTensorSource source)
     {
         void LoadConv(NormedConv1DLayer<T> conv, string name, int inputs, int outputs, int kernel) =>
-            conv.LoadTorchWeights(read(name + ".weight", new[] { outputs, inputs, kernel }), null, read(name + ".bias", new[] { outputs }));
+            conv.LoadTorchWeights(source, name + ".weight", new[] { outputs, inputs, kernel }, null, name + ".bias");
         void LoadTdnn(Tdnn block, string name)
         {
             LoadConv(block.Conv, name + ".conv.conv", block.Inputs, block.Outputs, block.Kernel);
@@ -198,8 +201,7 @@ internal sealed class SpeechBrainEcapa<T>
         }
         void LoadNorm(BatchNormalizationLayer<T> norm, string n, int channels)
         {
-            TorchParameters.BatchNorm(norm, read(n + ".weight", new[] { channels }), read(n + ".bias", new[] { channels }),
-                read(n + ".running_mean", new[] { channels }), read(n + ".running_var", new[] { channels }));
+            TorchParameters.BatchNorm(norm, source, n + ".", channels);
             norm.SetTrainingMode(false);
         }
         LoadTdnn(First, "blocks.0");
