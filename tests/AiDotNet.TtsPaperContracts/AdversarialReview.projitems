@@ -11,6 +11,9 @@
     <Compile Include="../AiDotNet.Tests/TextToSpeech/ClassicFlowNativeOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/GradTTSPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/GradTtsScoreAuthorReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/NaturalSpeechNativeOptionsTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/NaturalSpeechModelTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/NaturalSpeechReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/GlowTTSPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VitsNativeGeometryOptionsTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/VITSPaperTests.cs" />

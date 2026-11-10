@@ -27,8 +27,57 @@ public enum NaturalSpeechStage
 /// Train it in stages: optionally pre-train the phoneme encoder on text, then warm up, initialize the memory bank, train
 /// jointly and finish with tuning.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(NaturalSpeechOptionsConverter))]
 public class NaturalSpeechOptions : TtsModelOptions
 {
+    /// <summary>The native HiFi-GAN decoder's upsampling product (256 in the released configuration).</summary>
+    public override int HopSize
+    {
+        get => UpsampleRates.Aggregate(1, (product, rate) => checked(product * rate));
+        set
+        {
+            if (value <= 0) throw new ArgumentOutOfRangeException(nameof(value), "HopSize must be positive.");
+            if (value != HopSize) RecomposeDecoder(value, UpsampleRates.Length);
+        }
+    }
+
+    /// <summary>The native waveform decoder's upsampling stages (four in the released configuration).</summary>
+    public override int NumDecoderLayers
+    {
+        get => UpsampleRates.Length;
+        set
+        {
+            if (value != NumDecoderLayers) RecomposeDecoder(HopSize, value);
+        }
+    }
+
+    private void RecomposeDecoder(int hop, int depth)
+    {
+        if (depth < 1 || depth > 30 || UpsampleInitialChannels <= 0 || UpsampleInitialChannels % (1L << depth) != 0)
+            throw new ArgumentOutOfRangeException(nameof(depth), "The decoder's channels must halve to a positive integer at every stage.");
+        if (UpsampleRates.Length == 0 || UpsampleRates.Any(rate => rate <= 0))
+            throw new ArgumentException("UpsampleRates must contain positive strides.", nameof(UpsampleRates));
+        int Gcd(int a, int b)
+        {
+            while (b != 0) { int remainder = a % b; a = b; b = remainder; }
+            return a;
+        }
+        var rates = new int[depth];
+        var kernels = new int[depth];
+        int remaining = hop;
+        for (int i = 0; i < depth; i++)
+        {
+            rates[i] = i == depth - 1 ? remaining
+                : Gcd(i < UpsampleRates.Length ? UpsampleRates[i] : 1, remaining);
+            remaining /= rates[i];
+            // Matching stride/kernel parity makes ConvTranspose emit exactly inputFrames * stride, including odd hops.
+            kernels[i] = checked((int)(2L * rates[i] - (rates[i] & 1)));
+        }
+        UpsampleRates = rates;
+        UpsampleKernels = kernels;
+    }
+
+
     /// <summary>Creates the paper's configuration.</summary>
     public NaturalSpeechOptions()
     {
@@ -46,12 +95,13 @@ public class NaturalSpeechOptions : TtsModelOptions
         WeightDecay = 0.01;
     }
 
-    /// <summary>heatz123/naturalspeech's choices where they depart from the paper: the VITS phoneme encoder, a 2-layer,
+    /// <summary>heatz123/naturalspeech's choices where they depart from the paper: blank-separated phonemes, the VITS phoneme encoder, a 2-layer,
     /// 256-filter duration predictor, its learnable upsampling, the plain KL instead of soft-DTW (with the warp scaled to
     /// 0.07·192 should soft-DTW be on), the duration loss kept after warm-up, and its loss weights (forward KL 0.001,
     /// end-to-end 0.1, duration 5).</summary>
     public static NaturalSpeechOptions Heatz123() => new()
     {
+        AddBlank = true,
         PhonemeEncoder = NaturalSpeechPhonemeEncoder.Vits,
         DurationLayers = 2,
         DurationFilter = 256,

@@ -53,6 +53,10 @@ public partial class NaturalSpeech<T>
         using var _ = new NoGradScope<T>();
         // spectrogram_torch (ε 1e-6) and spec_to_mel_torch, frames trimmed to whole hops.
         var magnitude = Spectrogram.Magnitude(audio, 1e-6);
+        // Symmetric STFT reflection can yield one fewer frame at odd hops; the posterior reads the actual analysis.
+        frames = Math.Min(frames, magnitude.Shape[0]);
+        if (frames < phonemes.Length)
+            throw new ArgumentException($"The analysis has {frames} frames, fewer than the text's {phonemes.Length} phonemes.", nameof(sample));
         var trimmed = Engine.TensorSlice(magnitude, new[] { 0, 0 }, new[] { frames, magnitude.Shape[1] });
         var mel = Spectrogram.LogMel(trimmed);
         var spectrogram = Engine.Reshape(Engine.TensorTranspose(trimmed), new[] { 1, trimmed.Shape[1], frames });
@@ -530,6 +534,7 @@ public partial class NaturalSpeech<T>
             new AdamWOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
                 InitialLearningRate = o.LearningRate, Beta1 = o.Beta1, Beta2 = o.Beta2, Epsilon = o.Epsilon, WeightDecay = o.WeightDecay,
+                EnableGradientClipping = false, // The released loop calls clip_grad_value_(..., None).
                 LearningRateScheduler = new AiDotNet.LearningRateSchedulers.LambdaLRScheduler(o.LearningRate,
                     s => perEpoch is int n && n > 0 ? Math.Pow(o.LearningRateDecay, Math.Truncate(s / (double)n)) : 1.0),
                 SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,

@@ -1,4 +1,9 @@
 #nullable enable
+override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.HopSize.get -> int
+override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.HopSize.set -> void
+override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions.NumDecoderLayers.set -> void
+
 *REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.get -> bool
 *REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.set -> void
 virtual AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.AddBlank.get -> bool

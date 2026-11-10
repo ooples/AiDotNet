@@ -198,6 +198,11 @@ internal static class OptionSensitivityFixtureSetup
     {
         if (network is AiDotNet.Video.Enhancement.Upscale4KAgent<T> agent && option == "RollbackThreshold")
             return AiDotNet.Tests.Video.Upscale4KOptionFixture.Observe(agent);
+        if (network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> naturalFrontend && option == "AddBlank")
+            // This is the actual text preprocessing path; Predict(Tensor) already receives phoneme IDs.
+            // A punctuation token is phonemized without loading the optional eSpeak library.
+            return OptionSensitivityHarness.Fingerprint(naturalFrontend.TextToPhonemes("!").Select(id => (double)id));
+
         if (network is AiDotNet.TextToSpeech.CodecBased.UniAudio<T> uniAudio && option == "UseReleasedTextFrontend")
             return UniAudioOptionFixture.ObserveFrontend(uniAudio);
         if (AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option))
