@@ -57,6 +57,19 @@ public partial class EAST<T> : TextDetectorBase<T>
     public override string Name => $"EAST-{Options.Size}";
 
     /// <summary>
+    /// Minimum mean score-map value inside a merged box for it to be kept, applied after locality-aware NMS.
+    /// </summary>
+    /// <remarks>
+    /// The reference decoder (argman/EAST <c>detect(score_map_thresh=0.8, box_thresh=0.1, nms_thres=0.2)</c>)
+    /// keeps two thresholds: pixels are selected by the score map, which here is
+    /// <see cref="TextDetectionOptions{T}.ConfidenceThreshold"/>, and each merged box is then re-scored as the
+    /// mean score inside it and dropped below <c>box_thresh</c>. A box covers the shrunk text core and the margin
+    /// around it, so its mean sits well below its pixels' scores; filtering it with the pixel threshold dropped
+    /// small words outright.
+    /// </remarks>
+    public double BoxScoreThreshold { get; set; } = 0.1;
+
+    /// <summary>
     /// Creates a new EAST text detector.
     /// </summary>
     /// <param name="options">Text detection options.</param>
@@ -213,7 +226,7 @@ public partial class EAST<T> : TextDetectorBase<T>
         // reference does after LANMS, so confidences stay in [0, 1] and threshold like single-pixel scores.
         foreach (var region in regions)
             region.Confidence = NumOps.FromDouble(MeanScoreInside(region, score, scaleX, scaleY));
-        regions = regions.Where(r => NumOps.ToDouble(r.Confidence) >= confidenceThreshold).ToList();
+        regions = regions.Where(r => NumOps.ToDouble(r.Confidence) >= BoxScoreThreshold).ToList();
 
         // Limit to max detections
         if (regions.Count > Options.MaxDetections)
