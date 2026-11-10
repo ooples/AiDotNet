@@ -48,6 +48,7 @@ internal static class OptionSensitivityFixtureSetup
     internal static string ControlGroup<T>(INeuralNetworkModel<T> network, string option)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? "image-normalization"
             : network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> ? "moshi-" + option
+            : network is AiDotNet.TextToSpeech.Classic.PortaSpeech<T> && option is "PostNetLearningRate" or "PostNetTemperature" ? "portaspeech-postnet"
             : network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> && option == "Watermark" ? "chatterbox-published-perth"
             : network is AiDotNet.TextToSpeech.CodecBased.NaturalSpeech<T> && option == "AddBlank" ? "natural-phoneme-frontend"
             : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
@@ -216,6 +217,9 @@ internal static class OptionSensitivityFixtureSetup
     {
         if (network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> moshi)
             return MoshiOptionFixture.Observe(moshi, option);
+        if (network is AiDotNet.TextToSpeech.Classic.PortaSpeech<T> porta && option is "PostNetLearningRate" or "PostNetTemperature")
+            // The author trains and samples the flow post-net only in the second phase.
+            porta.CurrentPhase = AiDotNet.TextToSpeech.Classic.PortaSpeechTrainingPhase.PostNet;
         if (network is AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T> marked && option == "Watermark")
             // Run the real final synthesis stage with the hash-verified released checkpoint configured below.
             return OptionSensitivityHarness.Fingerprint(marked.Watermarked(ChatterboxFixture.Recording<T>())

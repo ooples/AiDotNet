@@ -1,5 +1,6 @@
 <Project>
   <ItemGroup>
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/PortaSpeechPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/MoshiLmReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/MoshiInterleaverReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/MoshiTokenizerReferenceTests.cs" />

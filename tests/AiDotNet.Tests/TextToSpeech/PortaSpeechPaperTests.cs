@@ -23,17 +23,79 @@ public class PortaSpeechPaperTests
 {
     private const int MelBins = 8;
 
-    private static PortaSpeech<double> CreateModel() => new(
-        new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
-            inputSize: 8, outputSize: MelBins) { RandomSeed = 11 },
-        new PortaSpeechOptions
+    private static PortaSpeech<double> CreateModel(Action<PortaSpeechOptions>? configure = null, bool paperOptimizer = false)
+    {
+        var options = new PortaSpeechOptions
         {
             HiddenDim = 16, EncoderDim = 16, NumHeads = 2, NumEncoderLayers = 1, NumWordEncoderLayers = 1, FilterChannels = 32,
             DurationPredictorDropout = 0.0, GeneratorChannels = 16, ProsodyDim = 4, GeneratorEncoderLayers = 2,
             GeneratorDecoderLayers = 2, PriorFlowSteps = 2, PriorFlowLayers = 2, PriorFlowChannels = 8, PostNetChannels = 16,
             PostNetLayers = 2, NumFlowLayers = 4, PostNetShareGroupSize = 2, MelChannels = MelBins, KlStartUpdates = 0,
-        },
-        new AiDotNet.Optimizers.AdamOptimizer<double, Tensor<double>, Tensor<double>>(null));
+        };
+        configure?.Invoke(options);
+        return new PortaSpeech<double>(
+            new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
+                inputSize: 8, outputSize: MelBins) { RandomSeed = 11 }, options,
+            paperOptimizer ? null : new AiDotNet.Optimizers.AdamOptimizer<double, Tensor<double>, Tensor<double>>(null));
+    }
+
+    [Theory]
+    [InlineData("EncoderDim", 8)]
+    [InlineData("DecoderDim", 8)]
+    [InlineData("NumDecoderLayers", 3)]
+    public void SharedArchitectureFields_ChangeActualNetworkParameters(string field, int value)
+    {
+        using var control = CreateModel();
+        using var changed = CreateModel(options => typeof(PortaSpeechOptions).GetProperty(field)!.SetValue(options, value));
+        Assert.NotEqual(control.GetParameters().Length, changed.GetParameters().Length);
+        var mel = changed.Synthesize("ab cd");
+        Assert.Equal(MelBins, mel.Shape[1]);
+        Assert.All(mel.ToArray(), value => Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(value)));
+    }
+
+    [Theory]
+    [InlineData("{\"HiddenDim\":16,\"EncoderDim\":192}", 16, 192, 4)]
+    [InlineData("{\"EncoderDim\":192,\"HiddenDim\":16}", 16, 192, 4)]
+    [InlineData("{\"GeneratorChannels\":16,\"DecoderDim\":192}", 192, 16, 4)]
+    [InlineData("{\"DecoderDim\":192,\"GeneratorChannels\":16}", 192, 16, 4)]
+    [InlineData("{\"GeneratorDecoderLayers\":2,\"NumDecoderLayers\":4}", 192, 192, 2)]
+    [InlineData("{\"NumDecoderLayers\":4,\"GeneratorDecoderLayers\":2}", 192, 192, 2)]
+    [InlineData("{\"EncoderDim\":16,\"DecoderDim\":8,\"NumDecoderLayers\":2}", 16, 8, 2)]
+    public void SavedNativeArchitecture_WinsLegacyAliasesInEitherOrder(string json, int encoder, int generator, int layers)
+    {
+        var options = Newtonsoft.Json.JsonConvert.DeserializeObject<PortaSpeechOptions>(json)!;
+        Assert.Equal(encoder, options.HiddenDim);
+        Assert.Equal(generator, options.GeneratorChannels);
+        Assert.Equal(layers, options.GeneratorDecoderLayers);
+        var copied = new PortaSpeechOptions(options);
+        Assert.Equal(encoder, copied.EncoderDim);
+        Assert.Equal(generator, copied.DecoderDim);
+        Assert.Equal(layers, copied.NumDecoderLayers);
+    }
+
+    [Fact]
+    public void PostNetTemperature_ChangesOnlySecondPhaseSynthesis()
+    {
+        using var cool = CreateModel(options => options.PostNetTemperature = .4);
+        using var warm = CreateModel(options => options.PostNetTemperature = .8);
+        Assert.Equal(cool.Synthesize("ab cd").ToArray(), warm.Synthesize("ab cd").ToArray());
+        cool.CurrentPhase = warm.CurrentPhase = PortaSpeechTrainingPhase.PostNet;
+        Assert.False(cool.Synthesize("ab cd").ToArray().SequenceEqual(warm.Synthesize("ab cd").ToArray()));
+    }
+
+    [Fact]
+    public void PostNetLearningRate_ChangesActualSecondPhaseOptimizerUpdate()
+    {
+        using var slow = CreateModel(options => options.PostNetLearningRate = .001, paperOptimizer: true);
+        using var fast = CreateModel(options => options.PostNetLearningRate = .002, paperOptimizer: true);
+        Assert.Equal(slow.GetParameters().ToArray(), fast.GetParameters().ToArray());
+        slow.CurrentPhase = fast.CurrentPhase = PortaSpeechTrainingPhase.PostNet;
+        Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(slow.Train(Sample(slow))));
+        Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(fast.Train(Sample(fast))));
+        Assert.False(slow.GetParameters().ToArray().SequenceEqual(fast.GetParameters().ToArray()));
+        slow.CurrentPhase = fast.CurrentPhase = PortaSpeechTrainingPhase.VariationalGenerator;
+        Assert.Equal(slow.Synthesize("ab cd").ToArray(), fast.Synthesize("ab cd").ToArray());
+    }
 
     // "ab cd" as characters: words [a b] [space] [c d].
     private static TtsTrainingSample<double> Sample(PortaSpeech<double> model)

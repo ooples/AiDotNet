@@ -15,8 +15,18 @@ namespace AiDotNet.TextToSpeech.Classic;
 /// </para>
 /// <para><b>For Beginners:</b> These options configure the PortaSpeech model. Default values follow the original paper settings.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(PortaSpeechOptionsConverter))]
 public class PortaSpeechOptions : AcousticModelOptions
 {
+    /// <summary>Gets or sets the linguistic encoder width through the native shared hidden size.</summary>
+    public override int EncoderDim { get => HiddenDim; set => HiddenDim = value; }
+
+    /// <summary>Gets or sets the variational generator's encoder and decoder hidden channels.</summary>
+    public override int DecoderDim { get => GeneratorChannels; set => GeneratorChannels = value; }
+
+    /// <summary>Gets or sets the actual VAE decoder's WaveNet layer count.</summary>
+    public override int NumDecoderLayers { get => GeneratorDecoderLayers; set => GeneratorDecoderLayers = value; }
+
     /// <summary>Initializes a new instance by copying from another instance.</summary>
     /// <param name="other">The options instance to copy from.</param>
     /// <exception cref="ArgumentNullException">Thrown when other is null.</exception>
