@@ -83,7 +83,7 @@ internal static class OptionSensitivityFixtureSetup
 
             : network is AiDotNet.TextToSpeech.CodecBased.Bark<T> && BarkOptionFixture.Handles(option) ? "bark-" + option
 
-            : network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> && option == "MaxLength" ? "vevo-autoregressive-budget"
+            : network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> ? "vevo-" + option
 
             : network is AiDotNet.Finance.Forecasting.StateSpace.Hippo<T> && option == "TimescaleMax" ? "hippo-timescale-clamp"
             : network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> && option == "ConfidenceWindow" ? "ctc-segmentation-confidence"
@@ -298,8 +298,8 @@ internal static class OptionSensitivityFixtureSetup
         if (network is AiDotNet.TextToSpeech.CodecBased.Bark<T> bark && BarkOptionFixture.Handles(option))
             return BarkOptionFixture.Observe(bark, option);
 
-        if (network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> vevo && option == "MaxLength")
-            return VevoOptionFixture.Observe(vevo);
+        if (network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> vevo)
+            return VevoOptionFixture.Observe(vevo, option);
 
         if (network is AiDotNet.SpeechRecognition.CTCVariants.CTCSegmentation<T> segmentation && option == "ConfidenceWindow")
             return AiDotNet.Tests.Audio.CtcSegmentationOptionFixture.Observe(segmentation);
@@ -869,6 +869,7 @@ internal static class OptionSensitivityFixtureSetup
     internal static int TrainingSteps<T>(INeuralNetworkModel<T> network, string option, int steps)
         => AiDotNet.Tests.VisionLanguage.NormalizationOptionFixture.Handles(network, option) ? 0
         : network is AiDotNet.TextToSpeech.MultiModal.Moshi<T> && MoshiOptionFixture.IsSampling(option) ? 0
+        : network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> && VevoOptionFixture.IsSampling(option) ? 0
         : network is AiDotNet.TextToSpeech.Vocoders.Vocos<T> && option == "CosineSteps" ? Math.Max(4, steps)
         : network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> && option == "LearningRateHalvingSteps" ? Math.Max(4, steps)
         : network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && option is "LearningRateDecay" or "UpdatesPerEpoch" ? Math.Max(4, steps)
@@ -1170,6 +1171,8 @@ internal static class OptionSensitivityFixtureSetup
     /// the perturbation tests the pair rather than the constructor's rejection of a mismatch.</summary>
     internal static void Reconcile(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.CodecBased.VevoOptions vevoOptions)
+            VevoOptionFixture.Reconcile(vevoOptions, option);
         // Parler-TTS's frames, codes and codebooks are its codec's: the codec follows (a hop of h is one stride of h).
         if (options is AiDotNet.TextToSpeech.DescriptionBased.ParlerTTSOptions parler
             && option is "SampleRate" or "HopSize" or "CodebookSize" or "NumCodebooks")
@@ -1359,8 +1362,8 @@ internal static class OptionSensitivityFixtureSetup
         if (options is AiDotNet.TextToSpeech.CodecBased.BarkOptions bark && BarkOptionFixture.Handles(option))
             BarkOptionFixture.PrepareOptions(bark, option);
 
-        if (options is AiDotNet.TextToSpeech.CodecBased.VevoOptions vevo && option == "MaxLength")
-            VevoOptionFixture.PrepareOptions(vevo);
+        if (options is AiDotNet.TextToSpeech.CodecBased.VevoOptions vevo)
+            VevoOptionFixture.PrepareOptions(vevo, option);
 
         if (options is AiDotNet.TextToSpeech.DescriptionBased.ParlerTTSOptions parler && option == "CodebookWeights")
             parler.CodebookWeights ??= Enumerable.Repeat(1.0, parler.NumCodebooks).ToArray();

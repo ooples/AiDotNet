@@ -108,12 +108,14 @@ public class TtsModelOptions : ModelOptions
     public int MaxTextLength { get; set; } = 512;
 
     /// <summary>Gets or sets the maximum output audio length in mel frames.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Vevo's released AR MaxLength budget bounds codec/mel generation (Amphion 26f6883 ar_model.py); native construction rejects a separate nonzero MaxMelLength.", ModelType = typeof(CodecBased.Vevo<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Kokoro emits waveforms rather than mel frames; duration logits and Speed determine its output length.", ModelType = typeof(EndToEnd.Kokoro<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi generates codec audio rather than mel frames (Defossez et al. 2024 sections 3.3-3.4); native construction requires MaxMelLength=0.", ModelType = typeof(MultiModal.Moshi<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi ASR produces text from waveform codes, not mel frames; native construction requires MaxMelLength=0 (Defossez et al. 2024 section 3.3 and Appendix C).", ModelType = typeof(AiDotNet.SpeechRecognition.Streaming.Moshi<>))]
     public int MaxMelLength { get; set; } = 2048;
 
     /// <summary>Gets or sets the dropout rate.</summary>
+    [AiDotNet.Attributes.OptionBehaviourExempt("Vevo's released AR and flow Llama configurations use zero dropout, and frozen HuBERT runs in inference mode (Amphion 26f6883); native construction requires DropoutRate=0.", ModelType = typeof(CodecBased.Vevo<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi's released streaming transformer fixes attention dropout to zero (kyutai-labs/moshi e6a55d2 modules/transformer.py); construction requires DropoutRate=0. MimiQuantizerDropout controls codec quantizer dropout separately.", ModelType = typeof(MultiModal.Moshi<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Moshi ASR uses the same zero-dropout streaming transformer (kyutai-labs/moshi e6a55d2 modules/transformer.py); construction requires DropoutRate=0. MimiQuantizerDropout controls codec quantizer dropout separately.", ModelType = typeof(AiDotNet.SpeechRecognition.Streaming.Moshi<>))]
     [AiDotNet.Attributes.OptionBehaviourExempt("Vocos's published ConvNeXt backbone has no dropout (Siuzdak 2024, Figure 2 and Section 3.2; gemelo-ai/vocos ConvNeXtBlock); the native constructor accepts DropoutRate=0 only.", ModelType = typeof(Vocoders.Vocos<>))]

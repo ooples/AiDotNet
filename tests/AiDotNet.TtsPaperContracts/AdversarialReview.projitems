@@ -1,5 +1,8 @@
 <Project>
   <ItemGroup>
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/VevoNativeOptionsTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/VevoPaperTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/MaskGctReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/PortaSpeechPaperTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/MoshiLmReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/MoshiInterleaverReferenceTests.cs" />

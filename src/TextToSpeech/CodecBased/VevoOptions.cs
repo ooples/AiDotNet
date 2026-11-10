@@ -29,8 +29,18 @@ public enum VevoStage
 /// <para><b>For Beginners:</b> These settings size Vevo's networks and control how it imitates a voice; the defaults
 /// reproduce the released model.</para>
 /// </remarks>
+[Newtonsoft.Json.JsonConverter(typeof(VevoOptionsConverter))]
 public class VevoOptions : TtsModelOptions
 {
+    /// <summary>Gets or sets the frozen HuBERT encoder depth at which features are read.</summary>
+    public override int NumEncoderLayers { get => HubertLayer; set => HubertLayer = value; }
+
+    /// <summary>Gets or sets Vevo-TTS's actual autoregressive decoder depth.</summary>
+    public override int NumDecoderLayers { get => TextArLayers; set => TextArLayers = value; }
+
+    /// <summary>Gets or sets Vevo-TTS's actual autoregressive attention heads.</summary>
+    public override int NumHeads { get => TextArHeads; set => TextArHeads = value; }
+
     /// <summary>Creates the released Vevo configuration.</summary>
     public VevoOptions()
     {
@@ -44,6 +54,8 @@ public class VevoOptions : TtsModelOptions
         LearningRate = 2e-4;
         WeightDecay = 0.01;
         DropoutRate = 0.0;
+        // The released autoregressive MaxLength budget determines the generated codec/mel length.
+        MaxMelLength = 0;
     }
 
     // ---------------------------------------------------------------- text
@@ -114,7 +126,7 @@ public class VevoOptions : TtsModelOptions
     // ---------------------------------------------------------------- the autoregressive transformers
 
     /// <summary>Phone vocabulary of the autoregressive transformers (1024).</summary>
-    public int PhoneVocabulary { get; set; } = 1024;
+    public int PhoneVocabulary { get => VocabSize; set => VocabSize = value; }
 
     /// <summary>Vevo-TTS's transformer width (1920).</summary>
     public int TextArHidden { get; set; } = 1920;

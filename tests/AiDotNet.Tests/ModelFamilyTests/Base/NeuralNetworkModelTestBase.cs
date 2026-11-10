@@ -7797,6 +7797,15 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     network.SetTrainingMode(false);
                     return;
                 }
+                if (network is AiDotNet.TextToSpeech.CodecBased.Vevo<T> vevo)
+                {
+                    network.SetTrainingMode(true);
+                    int vevoSteps = OptionSensitivityFixtureSetup.TrainingSteps(network, option, steps);
+                    for (int i = 0; i < vevoSteps; i++)
+                        AiDotNet.Tests.TextToSpeech.VevoOptionFixture.Train(vevo);
+                    network.SetTrainingMode(false);
+                    return;
+                }
                 if (AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Handles(network))
                 {
                     AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Train(network);

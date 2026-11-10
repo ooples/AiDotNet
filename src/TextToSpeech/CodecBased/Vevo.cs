@@ -116,6 +116,12 @@ public partial class Vevo<T> : TtsModelBase<T>
     private void ConfigureBase()
     {
         var o = _options;
+        if (o.DropoutRate != 0)
+            throw new ArgumentException("The released Vevo transformers use zero dropout; frozen HuBERT always runs in inference mode.", nameof(o.DropoutRate));
+        if (o.MaxMelLength != 0)
+            throw new ArgumentException("Vevo uses the autoregressive MaxLength token budget; the separate generic MaxMelLength must be zero.", nameof(o.MaxMelLength));
+        if (o.MaxTextLength <= 0)
+            throw new ArgumentException("The input phone limit must be positive.", nameof(o.MaxTextLength));
         if (o.HiddenDim % o.FlowHeads != 0) throw new ArgumentException("HiddenDim must divide by FlowHeads.");
         if (o.HubertLayer < 1) throw new ArgumentException("HubertLayer counts HuBERT's layers from 1.");
         if (o.HubertConvStrides.Aggregate(1, (a, b) => a * b) * o.SampleRate != o.HopSize * o.ContentSampleRate)
@@ -212,6 +218,8 @@ public partial class Vevo<T> : TtsModelBase<T>
 
     private int[] PhoneIds(Tensor<T> tensor, string name)
     {
+        if (tensor.Length > _options.MaxTextLength)
+            throw new ArgumentException($"The input contains {tensor.Length} phones; the configured limit is {_options.MaxTextLength}.", name);
         var ids = new int[tensor.Length];
         for (int i = 0; i < ids.Length; i++)
         {
