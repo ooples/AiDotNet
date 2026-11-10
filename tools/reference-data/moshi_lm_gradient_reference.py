@@ -83,6 +83,36 @@ def main():
             "gradient_state": base64.b64encode(save(gradients)).decode("ascii"),
         }
 
+    model = reference.build(6, 2294, original, "paper_state")
+    groups = {"temporal": [], "depth": [], "text": []}
+    for name, parameter in model.named_parameters():
+        group = "depth" if name.startswith(("depformer", "linears.")) else "text" if name.startswith(("text_emb.", "text_linear.")) else "temporal"
+        groups[group].append(parameter)
+    settings = {"temporal_rate": 3e-5, "depth_rate": 2e-4, "text_rate_multiplier": 0.75,
+                "beta1": 0.9, "beta2": 0.95, "epsilon": 1e-8, "weight_decay": 0.1,
+                "max_norm": 2.0, "cosine_steps": 4}
+    optimizer = torch.optim.AdamW([
+        {"params": groups["temporal"], "lr": settings["temporal_rate"]},
+        {"params": groups["depth"], "lr": settings["depth_rate"]},
+        {"params": groups["text"], "lr": settings["temporal_rate"] * settings["text_rate_multiplier"]},
+    ], betas=(settings["beta1"], settings["beta2"]), eps=settings["epsilon"], weight_decay=settings["weight_decay"])
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=settings["cosine_steps"])
+    steps = []
+    for step in range(2):
+        optimizer.zero_grad()
+        loss = eq7(torch, model(codes), codes, 6)
+        loss.backward()
+        norm = torch.nn.utils.clip_grad_norm_(model.parameters(), settings["max_norm"])
+        used_rates = [group["lr"] for group in optimizer.param_groups]
+        optimizer.step()
+        scheduler.step()
+        pack = lambda values: base64.b64encode(save({key: value.detach().contiguous() for key, value in values.items()})).decode("ascii")
+        steps.append({"loss": loss.item(), "unclipped_norm": norm.item(), "used_rates": used_rates,
+                      "next_rates": [group["lr"] for group in optimizer.param_groups],
+                      "weights": pack(dict(model.named_parameters())),
+                      "first_moment": pack({name: optimizer.state[p]["exp_avg"] for name, p in model.named_parameters()}),
+                      "second_moment": pack({name: optimizer.state[p]["exp_avg_sq"] for name, p in model.named_parameters()})})
+
     # Check every imported author Python file against the pinned Git tree, not
     # just a package name/version or a locally edited checkout's HEAD.
     files = {}
@@ -106,6 +136,7 @@ def main():
         "python": platform.python_version(), "torch": torch.__version__, "safetensors": safetensors.__version__,
         "precision_alignment": "Explicit float64 RMSNorm and RoPE from moshi_lm_reference.py; all other author definitions unchanged",
         "base_fixture_sha256": hashlib.sha256(BASE.read_bytes()).hexdigest(), "cases": cases,
+        "optimizer": {"settings": settings, "steps": steps},
     }
     if args.write:
         args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

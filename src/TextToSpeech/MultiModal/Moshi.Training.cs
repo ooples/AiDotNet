@@ -243,6 +243,7 @@ public partial class Moshi<T>
         {
             InitialLearningRate = o.MimiLearningRate, Beta1 = 0.5, Beta2 = 0.9, Epsilon = 1e-8, WeightDecay = generator ? o.MimiWeightDecay : 0.0,
             UseAdaptiveLearningRate = false, UseAdaptiveBetas = false,
+            EnableGradientClipping = false, MaxGradientNorm = 0.0,
         });
         if (generator)
         {

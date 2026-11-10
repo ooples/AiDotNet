@@ -4254,7 +4254,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.MultiModal.Moshi`1::MaxMelLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.MultiModal.Moshi`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.MultiModal.Moshi`1::MelChannels", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.TextToSpeech.MultiModal.Moshi`1::NumDecoderLayers", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.MultiModal.Moshi`1::SpeakerEmbeddingDim", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.MultiModal.SpeechGPT`1::CodecFrameRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.MultiModal.SpeechGPT`1::FftSize", OptionSensitivityOutcome.Insensitive },

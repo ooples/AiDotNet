@@ -22432,3 +22432,9 @@ AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant.Nano = 4 -> AiDotNet.TextTo
 AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant.Turbo = 3 -> AiDotNet.TextToSpeech.VoiceCloning.ChatterboxVariant
 override AiDotNet.TextToSpeech.VoiceCloning.Chatterbox<T>.FlowTrainingLoss(System.Collections.Generic.IReadOnlyList<int>! speech, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! xvector, bool training, System.Random! random) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 static AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions.Turbo(bool nano = false) -> AiDotNet.TextToSpeech.VoiceCloning.ChatterboxOptions!
+override AiDotNet.TextToSpeech.MultiModal.Moshi<T>.MaxGradNormValue.get -> double
+override AiDotNet.SpeechRecognition.Streaming.Moshi<T>.MaxGradNormValue.get -> double
+override AiDotNet.TextToSpeech.MultiModal.MoshiOptions.NumEncoderLayers.get -> int
+override AiDotNet.TextToSpeech.MultiModal.MoshiOptions.NumEncoderLayers.set -> void
+override AiDotNet.TextToSpeech.MultiModal.MoshiOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.MultiModal.MoshiOptions.NumDecoderLayers.set -> void
