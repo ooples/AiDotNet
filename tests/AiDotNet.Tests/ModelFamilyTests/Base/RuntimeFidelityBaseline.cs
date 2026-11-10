@@ -964,6 +964,7 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.Document.Analysis.PageSegmentation.DocBank`1::ImageHeight", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Document.Analysis.PageSegmentation.DocBank`1::ImageSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Document.Analysis.PageSegmentation.DocBank`1::ImageWidth", OptionSensitivityOutcome.Insensitive },
+            { "AiDotNet.Document.Analysis.PageSegmentation.DocBank`1::LearningRate", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Document.Analysis.PageSegmentation.DocBank`1::MaxGradNorm", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Document.Analysis.PageSegmentation.DocBank`1::MaxSequenceLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Document.Analysis.PageSegmentation.DocBank`1::NumDecoderLayers", OptionSensitivityOutcome.Insensitive },

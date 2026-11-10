@@ -66,6 +66,26 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
 {
     private readonly DocBankOptions _options;
 
+    /// <summary>
+    /// Builds the model's own optimizer at the rate its options publish.
+    /// </summary>
+    /// <returns>An Adam optimizer configured from the options.</returns>
+    /// <remarks>
+    /// <para>
+    /// Both constructors previously wrote <c>new AdamOptimizer&lt;...&gt;(this)</c> with no
+    /// options, so the model trained at the optimizer's own default and DocBankOptions could not
+    /// influence it. The default is unchanged -- 1e-3 IS Adam's default -- but it is now a value
+    /// a caller can see and set.
+    /// </para>
+    /// </remarks>
+    private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
+        => new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
+            this,
+            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
+            {
+                InitialLearningRate = _options.LearningRate
+            });
+
     #region Fields
 
     private readonly bool _useNativeMode;
@@ -176,9 +196,7 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
         _hasUserSuppliedOptimizer = optimizer is not null;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    // Training runs at the paper recipe (AdamW 5e-5) or a caller-supplied optimizer; this Adam is
-    // only the fallback if no recipe resolves. DocBankOptions carries no learning rate.
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    ?? CreateDefaultOptimizer();
 
         ImageSize = _options.ImageSize;
 
@@ -225,9 +243,7 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
         _hasUserSuppliedOptimizer = optimizer is not null;
         _optimizer = optimizer
     ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-    // Training runs at the paper recipe (AdamW 5e-5) or a caller-supplied optimizer; this Adam is
-    // only the fallback if no recipe resolves. DocBankOptions carries no learning rate.
-    ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+    ?? CreateDefaultOptimizer();
 
         ImageSize = _options.ImageSize;
 

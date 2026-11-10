@@ -39,4 +39,18 @@ public class DocBankOptions : DocumentNeuralNetworkOptions
     /// this on lets the model read that text as well as look at the picture.</para>
     /// </remarks>
     public bool UseTextFeatures { get; set; }
+
+    /// <summary>
+    /// Gets or sets the learning rate used when the model creates its own optimizer.
+    /// Default: 1e-3.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The model previously built a BARE optimizer -- <c>new AdamOptimizer&lt;...&gt;(this)</c> --
+    /// so it trained at the optimizer's own default and no configured rate could reach it. 1e-3
+    /// IS Adam's default, so this preserves the behaviour the model already had while making the
+    /// value visible and overridable. Supplying an optimizer explicitly still bypasses it.
+    /// </para>
+    /// </remarks>
+    public double LearningRate { get; set; } = 1e-3;
 }
