@@ -47,7 +47,7 @@ namespace AiDotNet.TextToSpeech.Vocoders;
     Year = 2021,
     Authors = "Kong et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, ReferenceBatchSize = 16,
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 2e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, ReferenceBatchSize = 16,
                 Source = "Kong et al. 2021, Sec. 5.1: Adam with a batch size of 16 and a learning rate of 2e-4, 1M steps.")]
 public partial class DiffWave<T> : DiffusionVocoderBase<T>
 {
@@ -88,10 +88,17 @@ public partial class DiffWave<T> : DiffusionVocoderBase<T>
     protected override IReadOnlyList<LayerBase<T>> CreateNetwork()
     {
         var o = PaperOptions;
-        if (UpsampleFactor != o.HopSize)
-            throw new ArgumentException($"The upsampler's strides ({string.Join("x", o.UpsampleStrides)}) must multiply to the hop ({o.HopSize}).");
+        if (!Enum.IsDefined(typeof(DiffWaveConditioner), o.Conditioner))
+            throw new ArgumentException("DiffWave requires a published mel, unconditional or discrete-label task.", nameof(o.Conditioner));
+        if (o.DropoutRate != 0.0)
+            throw new ArgumentException("DiffWave's published residual network has no dropout; DropoutRate must be zero.", nameof(o.DropoutRate));
+        if (o.Conditioner == DiffWaveConditioner.MelSpectrogram &&
+            (o.UpsampleStrides.Length < 1 || o.UpsampleStrides.Any(s => s < 2 || s % 2 != 0)))
+            throw new ArgumentException("The mel conditioner's transposed-convolution strides must be positive and even.", nameof(o.UpsampleStrides));
         if (o.Conditioner == DiffWaveConditioner.ClassLabel && o.NumClasses <= 0)
-            throw new ArgumentException("A class-conditional DiffWave needs NumClasses (the dataset's label count).");
+            throw new ArgumentException("A class-conditional DiffWave needs NumClasses (the dataset's label count).", nameof(o.NumClasses));
+        if (o.Conditioner != DiffWaveConditioner.ClassLabel && o.NumClasses != 0)
+            throw new ArgumentException("A discrete label count requires DiffWave's class-conditioned task.", nameof(o.NumClasses));
         if (o.Conditioner != DiffWaveConditioner.MelSpectrogram && o.UtteranceSamples <= 0)
             throw new ArgumentException("A DiffWave without a spectrogram needs UtteranceSamples, the length it generates.");
         _network = new DiffWaveNetwork<T>(Engine, AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(o.SamplingSeed + 7),
@@ -193,12 +200,14 @@ public partial class DiffWave<T> : DiffusionVocoderBase<T>
 
     /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreatePaperOptimizer()
-        => PaperOptimizerFactory.VerifyHandBuilt(this, new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this,
-            new AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                InitialLearningRate = PaperOptions.LearningRate,
-                UseAdaptiveBetas = false,
-            }));
+    {
+        var optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+            learningRateOverride: PaperOptions.LearningRate, weightDecayOverride: PaperOptions.WeightDecay)
+            ?? throw new InvalidOperationException("DiffWave's native Adam recipe could not be created.");
+        if (optimizer.GetOptions() is GradientBasedOptimizerOptions<T, Tensor<T>, Tensor<T>> settings)
+            settings.EnableGradientClipping = false;
+        return optimizer;
+    }
 
     /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()

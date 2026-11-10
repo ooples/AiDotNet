@@ -262,6 +262,15 @@ Recording training and energy-statistic fitting now follow the [released dataset
 The [released learner](https://github.com/microsoft/NeuralSpeech/blob/8cf4fbcbf451c3affc68ecfa6c970327e927062f/PriorGrad-vocoder/learner.py) uses Adam at 2e-4 with its fixed default betas/epsilon and `max_grad_norm=None`. The native recipe explicitly fixes 0.9/0.999 and 1e-8, honors configured rate/decay and disables additional optimizer clipping. EnergyMax probes use recording-derived mel features so that the prior's clamp does not hide the setting's effect; the native update test uses the paper-sized FFT instead of the small FFT whose energies all hit the minimum scale. Width, hop and decay regressions inspect real parameter counts and updates, including FreGrad's inherited width behavior.
 
 
+### DiffWave's three generation tasks
+
+[The primary paper](https://arxiv.org/pdf/2009.09761), Sections 3.2–3.3 and 5.1–5.3, specifies three real tasks: a mel-conditioned vocoder, unconditional utterances and discrete-label-conditioned utterances. The native model retains all three. Global labels use the paper's shared 128-dimensional embedding with a separate projection in each residual block. The utterance presets retain 16 kHz, 16,000 samples, 36 layers, 256 residual channels and the 200-step schedule; these differ from the [LMNT reproduction](https://github.com/lmnt-com/diffwave/blob/0594106093b8d8c444de8bd8cd26482f653c569f/src/diffwave/params.py)'s five-second 22.05 kHz unconditional default. The paper's L2 noise objective also remains authoritative over that release's L1 learner.
+
+Shared width and hop now configure the actual residual channels and even conditioning strides. Copies retain independent stride arrays, and explicit native dimensions in saved JSON take precedence over old shared aliases. The published residual architecture has no dropout; native construction rejects nonzero dropout rather than adding an unreported layer. Class counts require the class-conditioned task, and all valid paper tasks remain selectable.
+
+Duration and class-count probes now run the appropriate real task with a one-element condition and genuine labelled or unlabelled waveform training. Their control-cache groups are distinct from the vocoder. Tests check actual reverse-diffusion output lengths, exactly 128 new embedding parameters per additional class, updates to the selected label's embedding while untouched labels remain fixed, and different generated audio for trained labels. No duration padding or metadata-only observation supplies the effect. Native tests exercise synthesis, learning and configured decay in all three modes, alongside PriorGrad/FreGrad inheritance and saved-configuration regressions. Adam uses the released fixed 0.9/0.999 betas, epsilon 1e-8 and configured rate/decay without an additional optimizer clip; the [released learner](https://github.com/lmnt-com/diffwave/blob/0594106093b8d8c444de8bd8cd26482f653c569f/src/diffwave/learner.py) sets `max_grad_norm=None`.
+
+
 ## Codec language models
 
 | Model | Paper | Gaps filled from | Choices |

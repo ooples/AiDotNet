@@ -20,7 +20,7 @@ namespace AiDotNet.Tests.TextToSpeech;
 /// </remarks>
 public class DiffWavePaperTests
 {
-    private static DiffWaveOptions Options(bool fast = false) => new()
+    internal static DiffWaveOptions Options(bool fast = false) => new()
     {
         MelChannels = 8, FftSize = 64, WindowSize = 64, HopSize = 16, SampleRate = 4000, UpsampleStrides = [4, 4],
         ResChannels = 8, NumResLayers = 4, DilationCycle = 2, NoiseSchedule = DiffWaveOptions.Linear(1e-4, 0.05, 20),

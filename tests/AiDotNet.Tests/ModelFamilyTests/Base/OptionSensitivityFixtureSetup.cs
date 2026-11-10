@@ -51,6 +51,7 @@ internal static class OptionSensitivityFixtureSetup
             : network is AiDotNet.TextToSpeech.Vocoders.WaveGlow<T> && option == "SegmentSamples" ? "waveglow-recording-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.UnivNet<T> && option == "SegmentSize" ? "univnet-recording-crop"
             : network is AiDotNet.TextToSpeech.Vocoders.MelGAN<T> && option is "SegmentSize" or "SamplingSeed" ? "melgan-recording-crop"
+            : network is AiDotNet.TextToSpeech.Vocoders.DiffWave<T> && option is "NumClasses" or "UtteranceSamples" ? "diffwave-task-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option is "AdversarialWeight" or "DiscriminatorGradientClipNorm" or "DiscriminatorLearningRate" ? "parallel-wavegan-adversarial-" + option
             : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option is "MelMean" or "MelScale" ? "parallel-wavegan-normalization"
             : network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> && option is "SegmentSize" or "Epsilon" ? "parallel-wavegan-" + option
@@ -662,6 +663,8 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static Tensor<T> ObservationInput<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.Vocoders.DiffWave<T> && option is "NumClasses" or "UtteranceSamples")
+            return new Tensor<T>(new[] { 1 }); // Label zero, or the ignored unconditional input.
         if (network is AiDotNet.Audio.Speaker.CAMPlusPlus<T> cam && option is "FrameShiftMilliseconds" or "FrameLengthMilliseconds")
         {
             var settings = (AiDotNet.Audio.Speaker.CAMPlusPlusOptions)cam.GetOptions();
@@ -808,6 +811,19 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.TextToSpeech.Vocoders.DiffWave<T> diffWave && option is "NumClasses" or "UtteranceSamples")
+        {
+            var settings = (AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions)diffWave.GetOptions();
+            var audio = new Tensor<T>(new[] { 128 });
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            for (int i = 0; i < audio.Length; i++) audio[i] = ops.FromDouble(.3 * Math.Sin(.17 * i) + .1 * Math.Cos(.31 * i));
+            diffWave.Train(new AiDotNet.TextToSpeech.TtsTrainingSample<T>
+            {
+                Tokens = new Tensor<T>(new[] { 1 }), Audio = audio,
+                ClassLabel = settings.Conditioner == AiDotNet.TextToSpeech.Vocoders.DiffWaveConditioner.ClassLabel ? 0 : null,
+            });
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGAN<T> parallel && option == "SegmentSize")
         {
             var settings = (AiDotNet.TextToSpeech.Vocoders.ParallelWaveGANOptions)parallel.GetOptions();
@@ -1007,6 +1023,15 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        if (options is AiDotNet.TextToSpeech.Vocoders.DiffWaveOptions diffWave
+            && options is not AiDotNet.TextToSpeech.Vocoders.PriorGradOptions && option is "NumClasses" or "UtteranceSamples")
+        {
+            diffWave.Conditioner = option == "NumClasses"
+                ? AiDotNet.TextToSpeech.Vocoders.DiffWaveConditioner.ClassLabel
+                : AiDotNet.TextToSpeech.Vocoders.DiffWaveConditioner.Unconditional;
+            diffWave.NumClasses = option == "NumClasses" ? 2 : 0;
+            diffWave.UtteranceSamples = 128;
+        }
         if (options is AiDotNet.TextToSpeech.Vocoders.ParallelWaveGANOptions parallel)
         {
             if (option is "AdversarialWeight" or "DiscriminatorGradientClipNorm" or "DiscriminatorLearningRate")
