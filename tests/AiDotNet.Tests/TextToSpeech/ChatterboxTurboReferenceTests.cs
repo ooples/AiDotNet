@@ -148,8 +148,7 @@ public class ChatterboxTurboReferenceTests
     [Fact]
     public void Tokenize_MatchesTheReleaseGpt2Tokenizer()
     {
-        string? directory = Environment.GetEnvironmentVariable("CHATTERBOX_TURBO_DIR");
-        if (directory is null || !Directory.Exists(directory)) return;
+        string directory = ChatterboxTurboTokenizerFixture.DirectoryPath;
         var options = ChatterboxFixture.Options();
         options.Variant = ChatterboxVariant.Turbo;
         options.TokenizerPath = directory;

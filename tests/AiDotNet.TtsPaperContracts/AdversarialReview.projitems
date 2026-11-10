@@ -55,6 +55,9 @@
     <Compile Include="../AiDotNet.Tests/Audio/PerthWatermarkerReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/WhisperSpeechT2SReferenceTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/ChatterboxWatermarkTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/ChatterboxTurboTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/ChatterboxTurboReferenceTests.cs" />
+    <Compile Include="../AiDotNet.Tests/TextToSpeech/ChatterboxTurboTokenizerFixture.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/TtsReleasedConfigurationTests.cs" />
     <Compile Include="../AiDotNet.Tests/TextToSpeech/TtsNativeOptionsSerializationTests.cs" />
     <Compile Include="../AiDotNet.Tests/UnitTests/Training/SummedTapeObjectiveTests.cs" />
