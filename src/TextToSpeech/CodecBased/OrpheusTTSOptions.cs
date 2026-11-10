@@ -1,3 +1,5 @@
+using Newtonsoft.Json;
+
 namespace AiDotNet.TextToSpeech.CodecBased;
 
 /// <summary>How <see cref="OrpheusTTS{T}"/> turns the generated codes into audio.</summary>
@@ -25,8 +27,15 @@ public enum OrpheusDecoding
 /// <para><b>For Beginners:</b> These settings size Orpheus's language model and its audio codec, and control how it picks
 /// each next sound token; the defaults reproduce the released 3B model.</para>
 /// </remarks>
+[JsonConverter(typeof(OrpheusOptionsConverter))]
 public class OrpheusTTSOptions : TtsModelOptions
 {
+    /// <summary>Query attention heads, the native Llama <see cref="Heads"/> setting.</summary>
+    public override int NumHeads { get => Heads; set => Heads = value; }
+
+    /// <summary>Causal decoder depth, the native Llama <see cref="Layers"/> setting.</summary>
+    public override int NumDecoderLayers { get => Layers; set => Layers = value; }
+
     /// <summary>Creates the orpheus-3b-0.1-ft configuration.</summary>
     public OrpheusTTSOptions()
     {
@@ -38,6 +47,7 @@ public class OrpheusTTSOptions : TtsModelOptions
         LearningRate = 5e-5;
         WeightDecay = 0.0;
         DropoutRate = 0.0;
+        NumEncoderLayers = 0; // AutoModelForCausalLM has no separate encoder.
     }
 
     /// <summary>Copies another instance.</summary>

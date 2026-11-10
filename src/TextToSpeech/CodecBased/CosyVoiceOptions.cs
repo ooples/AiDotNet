@@ -40,6 +40,7 @@ public class CosyVoiceOptions : CosyVoiceAutoregressiveOptions
         HiftUpsampleKernels = new[] { 16, 16 };
         HiftSourceKernels = new[] { 7, 11 };
         WarmupSteps = 2500;
+        LearningRate = 1e-3;
         VocoderSegmentLength = 24576;
     }
 

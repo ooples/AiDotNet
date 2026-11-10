@@ -54,22 +54,22 @@ namespace AiDotNet.TextToSpeech.CodecBased;
     Year = 2024,
     Authors = "Du et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, Component = "language model", LearningRate = 1e-3, WarmupSteps = 2500,
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, Component = "language model", LearningRate = 1e-3, WarmupSteps = 2500,
     Schedule = LearningRateSchedulerType.NoamHoldAnnealing, HoldFraction = 0, DecayRate = 0.5, MaxGradientNorm = 5,
     GradientAccumulationSteps = 2, Provenance = RecipeProvenance.ReleasedCode,
     Source = "The paper names no optimizer. FunAudioLLM/CosyVoice examples/libritts/cosyvoice/conf/cosyvoice.yaml train_conf: Adam at 1e-3 under "
         + "WarmupLR (2,500 warmup steps, then inverse-square-root decay: NoamHoldAnnealing with no hold and power 0.5), "
         + "gradient clipping at 5 and 2-step accumulation; run.sh trains llm and flow with it in turn.")]
-[PaperOptimizer(OptimizerKind.Adam, Component = "flow", LearningRate = 1e-3, WarmupSteps = 2500,
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, Component = "flow", LearningRate = 1e-3, WarmupSteps = 2500,
     Schedule = LearningRateSchedulerType.NoamHoldAnnealing, HoldFraction = 0, DecayRate = 0.5, MaxGradientNorm = 5,
     GradientAccumulationSteps = 2, Provenance = RecipeProvenance.ReleasedCode,
     Source = "FunAudioLLM/CosyVoice examples/libritts/cosyvoice/conf/cosyvoice.yaml train_conf, the flow's run of the "
         + "same recipe as the language model's.")]
-[PaperOptimizer(OptimizerKind.Adam, Component = "vocoder", LearningRate = 2e-4, MaxGradientNorm = 5,
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, Component = "vocoder", LearningRate = 2e-4, MaxGradientNorm = 5,
     Provenance = RecipeProvenance.ReleasedCode,
     Source = "The paper names no optimizer. FunAudioLLM/CosyVoice examples/libritts/cosyvoice/conf/cosyvoice.yaml "
         + "train_conf_gan: Adam at a constant 2e-4 for HiFT, gradient clipping at 5, no accumulation.")]
-[PaperOptimizer(OptimizerKind.Adam, Component = "discriminator", LearningRate = 2e-4, MaxGradientNorm = 5,
+[PaperOptimizer(OptimizerKind.Adam, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, Component = "discriminator", LearningRate = 2e-4, MaxGradientNorm = 5,
     Provenance = RecipeProvenance.ReleasedCode,
     Source = "The paper names no optimizer. FunAudioLLM/CosyVoice cosyvoice.yaml train_conf_gan optim_d: Adam at a "
         + "constant 2e-4 for the discriminators.")]

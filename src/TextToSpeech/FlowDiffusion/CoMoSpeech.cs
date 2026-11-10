@@ -59,13 +59,15 @@ public enum CoMoSpeechTrainingPhase
     Year = 2023,
     Authors = "Ye et al."
 )]
-[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, ReferenceBatchSize = 16,
+[PaperOptimizer(OptimizerKind.Adam, LearningRate = 1e-4, Beta1 = 0.9, Beta2 = 0.999, Epsilon = 1e-8, ReferenceBatchSize = 16,
                 Source = "Ye et al. 2023, Sec. 4.1.2: the Adam optimizer with learning rate 1e-4 at a batch size of 16 "
                         + "for 1.7 million iterations, for both the teacher and the distilled model.")]
 public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcousticModel<T>, ITrainingObjectiveProvider<T>
 {
     private readonly CoMoSpeechOptions _options;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _optimizer;
+    private readonly bool _callerSuppliedOptimizer;
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _distillationOptimizer;
     private bool _useNativeMode;
     private bool _disposed;
     private Random _trainingRandom;
@@ -108,15 +110,34 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
         _options = options ?? new CoMoSpeechOptions();
         Options = _options;
         _useNativeMode = true;
+        if (_options.LearningRate <= 0 || double.IsNaN(_options.LearningRate) || double.IsInfinity(_options.LearningRate))
+            throw new ArgumentOutOfRangeException(nameof(options), "LearningRate must be finite and positive.");
+        if (_options.WeightDecay < 0 || double.IsNaN(_options.WeightDecay) || double.IsInfinity(_options.WeightDecay))
+            throw new ArgumentOutOfRangeException(nameof(options), "WeightDecay must be finite and nonnegative.");
+        if (_options.DistillationSteps < 2)
+            throw new ArgumentOutOfRangeException(nameof(options), "DistillationSteps must provide at least two noise levels.");
+        if (_options.EmaDecay < 0 || _options.EmaDecay > 1 || double.IsNaN(_options.EmaDecay))
+            throw new ArgumentOutOfRangeException(nameof(options), "EmaDecay must lie in [0, 1].");
         _trainingRandom = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(_options.SamplingSeed);
         base.SampleRate = _options.SampleRate;
         base.MelChannels = _options.MelChannels;
         base.HopSize = _options.HopSize;
         base.HiddenDim = _options.HiddenDim;
-        _optimizer = optimizer
-            ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
-            ?? new AdamOptimizer<T, Tensor<T>, Tensor<T>>(this);
+        _callerSuppliedOptimizer = optimizer is not null;
+        _optimizer = optimizer ?? CreateNativeOptimizer();
         InitializeLayers();
+    }
+
+    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> CreateNativeOptimizer()
+    {
+        var optimizer = PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this,
+            learningRateOverride: _options.LearningRate, weightDecayOverride: _options.WeightDecay)
+            ?? throw new InvalidOperationException("CoMoSpeech's native Adam recipe could not be created.");
+        // GradientClippingGroups already clips encoder and decoder independently to norm 1.
+        // A second optimizer-wide clip would rescale both groups together and change the released update.
+        if (optimizer.GetOptions() is GradientBasedOptimizerOptions<T, Tensor<T>, Tensor<T>> settings)
+            settings.EnableGradientClipping = false;
+        return optimizer;
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
@@ -150,6 +171,9 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
         _target = CreateDenoiser();
         CopyParameters(_denoiser, _teacher);
         CopyParameters(_denoiser, _target);
+        // train.py loads the teacher weights into a student, then creates a fresh decoder-only Adam.
+        // A caller-supplied optimizer remains under the caller's control across the phase transition.
+        _distillationOptimizer = _callerSuppliedOptimizer ? _optimizer : CreateNativeOptimizer();
         CurrentPhase = CoMoSpeechTrainingPhase.Distillation;
     }
 
@@ -395,7 +419,10 @@ public partial class CoMoSpeech<T> : TtsModelBase<T>, IEndToEndTts<T>, IAcoustic
         var draw = DrawTrainingRandomness(mel.Shape[0], _trainingRandom);
         if (CurrentPhase == CoMoSpeechTrainingPhase.Distillation)
             UpdateTarget();
-        TrainWithCustomObjective(tokens, mel, (x, y) => Objective(x, y, draw), _optimizer);
+        var optimizer = CurrentPhase == CoMoSpeechTrainingPhase.Distillation
+            ? _distillationOptimizer ??= _callerSuppliedOptimizer ? _optimizer : CreateNativeOptimizer()
+            : _optimizer;
+        TrainWithCustomObjective(tokens, mel, (x, y) => Objective(x, y, draw), optimizer);
         return true;
     }
 

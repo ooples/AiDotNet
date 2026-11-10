@@ -1,4 +1,28 @@
 #nullable enable
+override AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.NumDecoderLayers.set -> void
+*REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.SpeakerEmbeddingDim.get -> int
+*REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.SpeakerEmbeddingDim.set -> void
+virtual AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.SpeakerEmbeddingDim.get -> int
+virtual AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.SpeakerEmbeddingDim.set -> void
+override AiDotNet.TextToSpeech.EndToEnd.YourTTSOptions.SpeakerEmbeddingDim.get -> int
+override AiDotNet.TextToSpeech.EndToEnd.YourTTSOptions.SpeakerEmbeddingDim.set -> void
+*REMOVED*AiDotNet.TextToSpeech.EndToEnd.EndToEndTtsOptions.DecoderDim.get -> int
+*REMOVED*AiDotNet.TextToSpeech.EndToEnd.EndToEndTtsOptions.DecoderDim.set -> void
+virtual AiDotNet.TextToSpeech.EndToEnd.EndToEndTtsOptions.DecoderDim.get -> int
+virtual AiDotNet.TextToSpeech.EndToEnd.EndToEndTtsOptions.DecoderDim.set -> void
+override AiDotNet.TextToSpeech.FlowDiffusion.VoiceFlowOptions.DecoderDim.get -> int
+override AiDotNet.TextToSpeech.FlowDiffusion.VoiceFlowOptions.DecoderDim.set -> void
+override AiDotNet.TextToSpeech.Classic.AlignTTSOptions.DecoderDim.get -> int
+override AiDotNet.TextToSpeech.Classic.AlignTTSOptions.DecoderDim.set -> void
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.NumDecoderLayers.get -> int
+*REMOVED*AiDotNet.TextToSpeech.TtsModelOptions.NumDecoderLayers.set -> void
+virtual AiDotNet.TextToSpeech.TtsModelOptions.NumDecoderLayers.get -> int
+virtual AiDotNet.TextToSpeech.TtsModelOptions.NumDecoderLayers.set -> void
+override AiDotNet.TextToSpeech.CodecBased.OrpheusTTSOptions.NumHeads.get -> int
+override AiDotNet.TextToSpeech.CodecBased.OrpheusTTSOptions.NumHeads.set -> void
+override AiDotNet.TextToSpeech.CodecBased.OrpheusTTSOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.CodecBased.OrpheusTTSOptions.NumDecoderLayers.set -> void
 override AiDotNet.TextToSpeech.Classic.FastSpeechOptions.DecoderDim.get -> int
 override AiDotNet.TextToSpeech.Classic.FastSpeechOptions.DecoderDim.set -> void
 override AiDotNet.TextToSpeech.Classic.TransformerTTSOptions.DecoderDim.get -> int
