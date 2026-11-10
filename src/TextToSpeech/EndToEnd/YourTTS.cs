@@ -52,18 +52,26 @@ public partial class YourTTS<T> : StochasticDurationVitsBase<T>
 
     /// <summary>Creates a YourTTS model that runs an exported ONNX graph.</summary>
     public YourTTS(NeuralNetworkArchitecture<T> architecture, string modelPath, YourTTSOptions? options = null)
-        : base(architecture, modelPath, options ?? new YourTTSOptions())
+        : base(architecture, modelPath, Configure(options))
     {
     }
 
     /// <summary>Creates a trainable YourTTS model.</summary>
     public YourTTS(NeuralNetworkArchitecture<T> architecture, YourTTSOptions? options = null,
         IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? optimizer = null)
-        : base(architecture, options ?? new YourTTSOptions(), optimizer)
+        : base(architecture, Configure(options), optimizer)
     {
     }
 
     private YourTTSOptions PaperOptions => (YourTTSOptions)VitsOptions;
+
+    private static YourTTSOptions Configure(YourTTSOptions? options)
+    {
+        var configured = options ?? new YourTTSOptions();
+        if (configured.NumSpeakers != 0)
+            throw new ArgumentException("YourTTS conditions on external speaker embeddings; NumSpeakers must be 0 because there is no speaker-ID table.", nameof(options));
+        return configured;
+    }
 
     /// <inheritdoc />
     protected override int ExternalSpeakerChannels => PaperOptions.SpeakerEncoderDim;

@@ -1,4 +1,12 @@
 #nullable enable
+override AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.NumDecoderLayers.get -> int
+override AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.NumDecoderLayers.set -> void
+*REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.SpeakerEmbeddingDim.get -> int
+*REMOVED*AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.SpeakerEmbeddingDim.set -> void
+virtual AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.SpeakerEmbeddingDim.get -> int
+virtual AiDotNet.TextToSpeech.EndToEnd.VitsModelOptions.SpeakerEmbeddingDim.set -> void
+override AiDotNet.TextToSpeech.EndToEnd.YourTTSOptions.SpeakerEmbeddingDim.get -> int
+override AiDotNet.TextToSpeech.EndToEnd.YourTTSOptions.SpeakerEmbeddingDim.set -> void
 *REMOVED*AiDotNet.TextToSpeech.EndToEnd.EndToEndTtsOptions.DecoderDim.get -> int
 *REMOVED*AiDotNet.TextToSpeech.EndToEnd.EndToEndTtsOptions.DecoderDim.set -> void
 virtual AiDotNet.TextToSpeech.EndToEnd.EndToEndTtsOptions.DecoderDim.get -> int

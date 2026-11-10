@@ -4118,7 +4118,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.TextToSpeech.EndToEnd.YourTTS`1::MaxMelLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.EndToEnd.YourTTS`1::MaxTextLength", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.EndToEnd.YourTTS`1::NumDiffusionSteps", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.TextToSpeech.EndToEnd.YourTTS`1::SpeakerEmbeddingDim", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech`1::FftSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech`1::HopSize", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.TextToSpeech.FlowDiffusion.CoMoSpeech`1::InterChannels", OptionSensitivityOutcome.Insensitive },
