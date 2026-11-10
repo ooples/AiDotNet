@@ -16093,10 +16093,17 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     // DemucsNoise likewise, once its waveform output stopped passing through ReLU: at its paper Adam
                     // 3e-4 the first update is a sign step of every one of its 3.4M weights (|dtheta| = 3e-4 sqrt(n)), so
                     // the loss goes 1.68 -> 3.10 -> 0.69 -> 0.24 -> 0.16 -> 0.12 -> 0.04 and a 2-step probe sees only the hump.
-                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer" or "RoomImpulseResponse" or "ParaformerLarge" or "CosyVoice2" or "MatchaTTS" or "DemucsNoise"
+                    sb.AppendLine(model.ClassName is "HuBERTSER" or "SpikingFullSubNet" or "ContextNet" or "Paraformer" or "RoomImpulseResponse" or "ParaformerLarge" or "CosyVoice2" or "MatchaTTS" or "DemucsNoise" or "KyutaiMoshi"
                         ? "    protected override int MemorizationTaskIterations => 15;"
                         : "    protected override int MemorizationTaskIterations => 2;");
                     sb.AppendLine("    protected override double MemorizationTaskLossThreshold => 0.99999;");
+                    // KyutaiMoshi trains with DropoutRate 0.1, so GetLastLoss() is one draw over dropout masks: on
+                    // a fixed pair it wandered 4.47, 4.52, 4.54, 4.58, 4.54, 4.69, 4.49 over 30 steps with no trend.
+                    // The evaluation loss at the same parameters falls every step (4.542354 -> 4.542295 -> ...
+                    // -> 4.536263 at step 30) as the paper's one-cycle warm-up from a 2e-6 peak LR ramps up. One
+                    // update clears the threshold by 3e-6, so it is judged on that path over 15 steps (ratio 0.99959).
+                    if (model.ClassName == "KyutaiMoshi")
+                        sb.AppendLine("    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;");
                 }
             }
 
