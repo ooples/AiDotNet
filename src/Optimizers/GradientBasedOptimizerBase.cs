@@ -4554,6 +4554,47 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
     }
 
     /// <summary>
+    /// The first-order stopping test: true when no gradient component exceeds <paramref name="tolerance"/>.
+    /// </summary>
+    protected bool GradientWithinTolerance(Vector<T> gradient, T tolerance)
+        => !NumOps.GreaterThan(InfinityNorm(gradient), tolerance);
+
+    /// <summary>
+    /// Returns <paramref name="direction"/> and its directional derivative g'd when it is a descent direction,
+    /// and otherwise steepest descent (-g, -g'g).
+    /// </summary>
+    protected (Vector<T> Direction, T DirectionalDerivative) EnsureDescentDirection(
+        Vector<T> gradient, Vector<T> direction)
+    {
+        T directionalDerivative = gradient.DotProduct(direction);
+        if (NumOps.LessThan(directionalDerivative, NumOps.Zero))
+        {
+            return (direction, directionalDerivative);
+        }
+
+        return ((Vector<T>)Engine.Negate(gradient), NumOps.Negate(gradient.DotProduct(gradient)));
+    }
+
+    /// <summary>
+    /// Builds a <see cref="LineSearchProblem"/>, reading the objective and slope at the start point as doubles.
+    /// </summary>
+    protected LineSearchProblem CreateLineSearchProblem(
+        Vector<T> current,
+        Vector<T> direction,
+        T objective,
+        T directionalDerivative,
+        Func<Vector<T>, (T objective, Vector<T> gradient)> objectiveAndGradient,
+        Func<Vector<T>, Vector<T>>? projection,
+        int parameterCount,
+        double sufficientDecreaseConstant,
+        double curvatureConstant)
+        => new LineSearchProblem(
+            current, direction, objective,
+            objectiveAndGradient, projection, parameterCount,
+            sufficientDecreaseConstant, curvatureConstant,
+            NumOps.ToDouble(objective), NumOps.ToDouble(directionalDerivative));
+
+    /// <summary>
     /// Supplies the search direction for <see cref="MinimizeWithLineSearch"/>, so the loop itself
     /// can be shared between methods that differ only in how they choose where to go.
     /// </summary>
@@ -4667,6 +4708,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
 
         T carriedObjective = NumOps.Zero;
         Vector<T>? carriedGradient = null;
+        T fallbackStep = NumOps.FromDouble(GradientOptions.LineSearchFallbackStep);
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
@@ -4694,29 +4736,22 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
             EnsureFiniteEvaluation(objective, gradient, iteration, methodName);
             Observe(current, objective);
 
-            if (!NumOps.GreaterThan(InfinityNorm(gradient), tolerance))
+            if (GradientWithinTolerance(gradient, tolerance))
             {
                 break;
             }
 
-            var direction = directions.ComputeDirection(gradient);
-            Guard.NotNull(direction);
-
-            var directionalDerivative = gradient.DotProduct(direction);
+            var proposed = directions.ComputeDirection(gradient);
+            Guard.NotNull(proposed);
 
             // A rule that has accumulated a poor picture of the surface can propose an ascent
             // direction. Steepest descent is always available and always correct.
-            if (!NumOps.LessThan(directionalDerivative, NumOps.Zero))
-            {
-                direction = (Vector<T>)Engine.Multiply(gradient, NumOps.Negate(NumOps.One));
-                directionalDerivative = NumOps.Negate(gradient.DotProduct(gradient));
-            }
+            var (direction, directionalDerivative) = EnsureDescentDirection(gradient, proposed);
 
-            var problem = new LineSearchProblem(
-                current, direction, objective,
+            var problem = CreateLineSearchProblem(
+                current, direction, objective, directionalDerivative,
                 objectiveAndGradient, projection, parameterCount,
-                GradientOptions.ArmijoConstant, GradientOptions.WolfeCurvatureConstant,
-                NumOps.ToDouble(objective), NumOps.ToDouble(directionalDerivative));
+                GradientOptions.ArmijoConstant, GradientOptions.WolfeCurvatureConstant);
 
             LineSearchOutcome? outcome = GradientOptions.UseStrongWolfeLineSearch
                 ? StrongWolfeLineSearch(problem, Observe)
@@ -4730,8 +4765,7 @@ public abstract class GradientBasedOptimizerBase<T, TInput, TOutput> : Optimizer
                     projection,
                     (Vector<T>)Engine.Add(
                         current,
-                        (Vector<T>)Engine.Multiply(
-                            direction, NumOps.FromDouble(GradientOptions.LineSearchFallbackStep))),
+                        (Vector<T>)Engine.Multiply(direction, fallbackStep)),
                     parameterCount);
 
                 var (fallbackObjective, fallbackGradient) = objectiveAndGradient(fallbackPoint);
