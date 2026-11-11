@@ -115,13 +115,15 @@ public partial class ResNet<T> : NeuralNetworkBase<T>, IDetectionBackbone<T>
         // Layers are created in training mode; a new backbone predicts, so its batch norms must start on running
         // statistics (as VGG16BNBackbone's do). In training mode a batch of images was normalized with that batch's
         // statistics, so DetectBatch disagreed with detecting each image alone, and inference overwrote the running
-        // statistics.
-        SetTrainingMode(false);
+        // statistics. The non-virtual helper keeps an override from running before a derived constructor.
+        ApplyTrainingMode(false);
     }
 
     /// <inheritdoc />
     /// <remarks>The stem and stage layers are held directly rather than in Layers, so the mode is passed to each.</remarks>
-    public override void SetTrainingMode(bool isTraining)
+    public override void SetTrainingMode(bool isTraining) => ApplyTrainingMode(isTraining);
+
+    private void ApplyTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
         _conv1.SetTrainingMode(isTraining);
