@@ -71,10 +71,10 @@ public abstract class CosyVoiceConformerOptions : CosyVoiceFamilyOptions
     public CosyVoiceFlowLoss FlowLoss { get; set; } = CosyVoiceFlowLoss.AbsoluteError;
 
     /// <summary>The S3 speech tokenizer's width (1,280 in every release).</summary>
-    public int SpeechTokenizerState { get; set; } = 1280;
+    public virtual int SpeechTokenizerState { get; set; } = 1280;
 
     /// <summary>The S3 speech tokenizer's attention heads.</summary>
-    public int SpeechTokenizerHeads { get; set; } = 20;
+    public virtual int SpeechTokenizerHeads { get; set; } = 20;
 
     /// <summary>The S3 speech tokenizer's blocks.</summary>
     public int SpeechTokenizerLayers { get; set; } = 6;

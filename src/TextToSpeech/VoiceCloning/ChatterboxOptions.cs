@@ -32,15 +32,15 @@ public class ChatterboxOptions : CosyVoiceConformerOptions
 {
     /// <summary>S3Tokenizer v2's fixed eight-dimensional ternary FSQ vocabulary.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("S3Tokenizer v2 requires exactly 3^8 = 6561 codes. ChatterboxOptionContextTests rejects unpaired cardinalities and exercises valid native codec configurations.")]
-    public new int CodebookSize { get => base.CodebookSize; set => base.CodebookSize = value; }
+    public override int CodebookSize { get => base.CodebookSize; set => base.CodebookSize = value; }
 
     /// <summary>S3Tokenizer v2's state width, equal to 64 times its head count.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("S3Tokenizer v2 uses 64-wide rotary heads. ChatterboxOptionContextTests verifies native encoding with paired 64/1 and 128/2 widths and rejects unpaired changes.")]
-    public new int SpeechTokenizerState { get => base.SpeechTokenizerState; set => base.SpeechTokenizerState = value; }
+    public override int SpeechTokenizerState { get => base.SpeechTokenizerState; set => base.SpeechTokenizerState = value; }
 
     /// <summary>S3Tokenizer v2's count of 64-wide rotary heads.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("S3Tokenizer v2 uses 64-wide rotary heads. ChatterboxOptionContextTests verifies native encoding with paired 64/1 and 128/2 widths and rejects unpaired changes.")]
-    public new int SpeechTokenizerHeads { get => base.SpeechTokenizerHeads; set => base.SpeechTokenizerHeads = value; }
+    public override int SpeechTokenizerHeads { get => base.SpeechTokenizerHeads; set => base.SpeechTokenizerHeads = value; }
 
     /// <summary>Initializes a new instance with default values.</summary>
     public ChatterboxOptions()

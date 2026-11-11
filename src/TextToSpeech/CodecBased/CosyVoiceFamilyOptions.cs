@@ -41,7 +41,7 @@ public abstract class CosyVoiceFamilyOptions : ModelOptions
     public double WeightDecay { get; set; } = 0.0;
     /// <summary>Speech-token vocabulary cardinality.</summary>
     [AiDotNet.Attributes.NotScaled("the codec's codes per codebook, which it must equal")]
-    public int CodebookSize { get; set; } = 1024;
+    public virtual int CodebookSize { get; set; } = 1024;
     /// <summary>Speech tokens per second.</summary>
     public int CodecFrameRate { get; set; } = 50;
     /// <summary>Language-model hidden width.</summary>

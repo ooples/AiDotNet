@@ -13,7 +13,7 @@ public class XTTSv2Options : CodecTtsOptions
 {
     /// <summary>The GPT is decoder-only; use ConditioningBlocks for the reference encoder.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("XTTS GPT is decoder-only and requires NumEncoderLayers=0; native contracts reject other values. ConditioningBlocks controls the separate reference encoder.")]
-    public new int NumEncoderLayers { get => base.NumEncoderLayers; set => base.NumEncoderLayers = value; }
+    public override int NumEncoderLayers { get => base.NumEncoderLayers; set => base.NumEncoderLayers = value; }
 
     /// <summary>The text embedding rows, paired with the loaded tokenizer vocabulary.</summary>
     [AiDotNet.Attributes.OptionBehaviourExempt("VocabSize must match the loaded tokenizer's rows; native contracts reject unpaired counts and load paired tokenizer/embedding vocabularies.")]
