@@ -370,7 +370,9 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
         T loss = engine.TensorSum(engine.TensorNegate(engine.TensorLog(probs)));
 
         // Coefficient factor per sample: first class 1 - P(Y<=0), last class -P(Y<=K-2),
-        // middle classes (gamma_{y-1} - gamma_y) / P(Y=y)
+        // middle classes (gamma_y - gamma_{y-1}) / P(Y=y). With P(Y=y) = sigmoid(alpha_y - eta) - sigmoid(alpha_{y-1} - eta),
+        // dP/deta = gamma_{y-1} - gamma_y, so d(-log P)/deta = (gamma_y - gamma_{y-1}) / P, which also reduces to the
+        // first- and last-class factors when gamma_{-1} = gamma_{K-1} = 0.
         var firstClass = engine.TensorGather(OneHotVector(0, k), classIndices.Reshape(n), 0);
         var lastClass = engine.TensorGather(OneHotVector(k - 1, k), classIndices.Reshape(n), 0);
         var middleClass = engine.ScalarMinusTensor(NumOps.One, engine.TensorAdd(firstClass, lastClass));
@@ -378,7 +380,7 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
             engine.TensorAdd(
                 engine.TensorMultiply(firstClass, engine.ScalarMinusTensor(NumOps.One, cumHi)),
                 engine.TensorMultiply(lastClass, engine.TensorNegate(cumLo))),
-            engine.TensorMultiply(middleClass, engine.TensorDivide(engine.TensorSubtract(gammaLo, gammaHi), probs)));
+            engine.TensorMultiply(middleClass, engine.TensorDivide(engine.TensorSubtract(gammaHi, gammaLo), probs)));
         var gradCoef = engine.TensorMatMul(engine.TensorTranspose(features), factor.Reshape(n, 1)).Reshape(p);
 
         // Threshold gradients: -gamma_y / P at threshold y, +gamma_{y-1} / P at threshold y-1
