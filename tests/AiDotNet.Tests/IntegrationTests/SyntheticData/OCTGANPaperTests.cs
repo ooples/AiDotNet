@@ -76,7 +76,9 @@ public class OCTGANPaperTests
         for (int i = 0; i < rows.Length; i++) rows[i] = rng.NextDouble();
         for (int index = 0; index < 2; index++)
         {
-            var (analytic, numeric) = generator.TimePointGradientCheck(rows, index, 1e-5);
+            // The ODE field is ReLU's: a 1e-5 step crossed a kink once the critic saw real categories (numeric
+            // -0.081833 against -0.081586), while 1e-6 and 1e-7 both agree with the analytic value to 1e-10.
+            var (analytic, numeric) = generator.TimePointGradientCheck(rows, index, 1e-6);
             Assert.True(Math.Abs(analytic) > 1e-9, $"dD/dt_{index + 1} = {analytic}");
             Assert.Equal(numeric, analytic, 6);
         }

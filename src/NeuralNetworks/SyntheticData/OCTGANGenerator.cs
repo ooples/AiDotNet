@@ -435,10 +435,12 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
     }
 
     /// <summary>The discriminator from a row with its condition ([batch, row + condition width]) to a score.</summary>
-    private Tensor<T> DiscriminatorForward(Tensor<T> input, bool training)
+    /// <remarks><paramref name="batchStatistics"/> (default: <paramref name="training"/>) chooses whether the ODE
+    /// batch norms normalize by the batch's statistics or read their running ones.</remarks>
+    private Tensor<T> DiscriminatorForward(Tensor<T> input, bool training, bool? batchStatistics = null)
     {
         foreach (var drop in _discDropoutLayers) drop.SetTrainingMode(training);
-        foreach (var bn in _discOdeNormLayers) bn.SetTrainingMode(training);
+        foreach (var bn in _discOdeNormLayers) bn.SetTrainingMode(batchStatistics ?? training);
         int hidden = _discDropoutLayers.Count;
 
         // Eq. 2.
@@ -620,7 +622,12 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
                 {
                     var head = GeneratorHead(input);
                     var fake = ApplyOutputActivations(head, gumbel: true);
-                    var scores = DiscriminatorForward(WithCondition(fake, cond), training: true);
+                    // L_G scores the rows with the critic as a function of each row: its ODE batch norms read their
+                    // running statistics here. With batch statistics over the fake batch alone, D(x) depended on the
+                    // batch x sat in, and the adversarial term pulled the generator off its condition - 59-87% of the
+                    // rows carried the requested category after 40 epochs, falling further with training, against
+                    // 97-100% with the critic's running statistics (and 99-100% under L_matching alone).
+                    var scores = DiscriminatorForward(WithCondition(fake, cond), training: true, batchStatistics: false);
                     var loss = Engine.TensorNegate(Engine.ReduceMean(scores, new[] { 0, 1 }, keepDims: false));
                     if (_condWidth > 0 && _catOutputBlocks.Count > 0)
                         loss = Engine.TensorAdd(loss, ConditionalCrossEntropy(head, cond, mask));
