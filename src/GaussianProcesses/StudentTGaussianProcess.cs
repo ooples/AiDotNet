@@ -202,7 +202,7 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// Gets the outlier weights after training.
     /// </summary>
-    /// <returns>Array of weights in [0,1], where lower values indicate outliers.</returns>
+    /// <returns>Vector of weights in [0,1], where lower values indicate outliers.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> After training, this shows how much each training point
@@ -210,16 +210,11 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// This can help identify problematic data points in your dataset.
     /// </para>
     /// </remarks>
-    public double[]? GetOutlierWeights()
+    public Vector<T>? GetOutlierWeights()
     {
         if (_weights is null) return null;
 
-        var result = new double[_weights.Length];
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            result[i] = _numOps.ToDouble(_weights[i]);
-        }
-        return result;
+        return _weights.Clone();
     }
 
     /// <summary>
@@ -241,15 +236,9 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         if (_weights is null)
             throw new InvalidOperationException("Model must be trained before identifying outliers.");
 
-        var outliers = new List<int>();
-        for (int i = 0; i < _weights.Length; i++)
-        {
-            if (_numOps.ToDouble(_weights[i]) < threshold)
-            {
-                outliers.Add(i);
-            }
-        }
-        return outliers.ToArray();
+        var engine = Engine;
+        var belowThreshold = engine.TensorLessThan(Tensor<T>.FromVector(_weights), _numOps.FromDouble(threshold));
+        return engine.TensorNonzero(belowThreshold).AsSpan().ToArray();
     }
 
     /// <summary>
@@ -282,19 +271,13 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         _K = ComputeKernelMatrix(X, X);
 
         // Initialize EP site parameters
-        _sitePrecisions = new Vector<T>(n);
+        _sitePrecisions = Tensor<T>.CreateDefault(new[] { n }, _numOps.FromDouble(1e-6)).ToVector();
         _siteNaturalMeans = new Vector<T>(n);
-        _weights = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            _sitePrecisions[i] = _numOps.FromDouble(1e-6);
-            _siteNaturalMeans[i] = _numOps.FromDouble(0);
-            _weights[i] = _numOps.FromDouble(1.0);
-        }
+        _weights = Tensor<T>.CreateDefault(new[] { n }, _numOps.One).ToVector();
 
         // Initialize posterior to prior
         _posteriorMean = new Vector<T>(n);
-        _posteriorCov = CopyMatrix(_K);
+        _posteriorCov = _K.Clone();
 
         // EP iterations
         double prevLogZ = double.NegativeInfinity;
@@ -483,40 +466,24 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         // Posterior covariance: (K^{-1} + diag(site_precisions))^{-1}
 
         // Build K + diag(1/site_precisions) for numerical stability
-        var Sigma = new Matrix<T>(n, n);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                Sigma[i, j] = _K[i, j];
-            }
-            double sp = _numOps.ToDouble(_sitePrecisions[i]);
-            if (sp > 1e-10)
-            {
-                double diag = _numOps.ToDouble(Sigma[i, i]) + 1.0 / sp;
-                Sigma[i, i] = _numOps.FromDouble(diag);
-            }
-        }
+        // Only sites with precision above 1e-10 take part.
+        var engine = Engine;
+        var precisions = Tensor<T>.FromVector(_sitePrecisions);
+        var active = engine.TensorGreaterThan(precisions, _numOps.FromDouble(1e-10));
+        var zeros = engine.TensorZerosLike(precisions);
+        var siteVariances = engine.TensorWhere(
+            active, engine.TensorReciprocal(engine.TensorWhere(active, precisions, engine.TensorOnesLike(precisions))), zeros);
+        var Sigma = GaussianProcessEngineOps.AddToDiagonal(_K, siteVariances.ToVector());
 
         // Compute posterior covariance via Cholesky
-        var L = CholeskyDecomposition(Sigma);
-        _posteriorCov = ComputeInverseFromCholesky(L);
+        var L = CholeskyFactor(Tensor<T>.FromMatrix(Sigma));
+        var posteriorCov = Linalg.CholeskyInverse(L, upper: false);
+        _posteriorCov = posteriorCov.ToMatrix();
 
         // Compute posterior mean
-        for (int i = 0; i < n; i++)
-        {
-            double mean = 0;
-            for (int j = 0; j < n; j++)
-            {
-                double snm = _numOps.ToDouble(_siteNaturalMeans[j]);
-                double sp = _numOps.ToDouble(_sitePrecisions[j]);
-                if (sp > 1e-10)
-                {
-                    mean += _numOps.ToDouble(_posteriorCov[i, j]) * snm;
-                }
-            }
-            _posteriorMean[i] = _numOps.FromDouble(mean);
-        }
+        var naturalMeans = engine.TensorWhere(active, Tensor<T>.FromVector(_siteNaturalMeans), zeros);
+        engine.TensorMatMul(posteriorCov, naturalMeans.Reshape(new[] { n, 1 }))
+            .AsSpan().CopyTo(_posteriorMean.AsWritableSpan());
     }
 
     /// <summary>
@@ -528,16 +495,22 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         if (_posteriorMean is null || _posteriorCov is null) return 0;
         var y = FittedY;
 
-        double logZ = 0;
+        // Σ_i log t_ν(y_i - m_i; σ_i) with σ_i = sqrt(v_i + scale²):
+        // log Γ((ν+1)/2) - log Γ(ν/2) - ½ log(νπ) - log σ_i - ((ν+1)/2) log(1 + z_i²/ν), z_i = (y_i - m_i)/σ_i
+        var engine = Engine;
         int n = y.Length;
-        for (int i = 0; i < n; i++)
-        {
-            double yi = _numOps.ToDouble(y[i]);
-            double mi = _numOps.ToDouble(_posteriorMean[i]);
-            double vi = _numOps.ToDouble(_posteriorCov[i, i]);
-            logZ += StudentTLogPdf(yi - mi, _nu, Math.Sqrt(vi + _scale * _scale));
-        }
-        return logZ;
+        double logNormConstant = LogGamma((_nu + 1) / 2) - LogGamma(_nu / 2) - 0.5 * Math.Log(_nu * Math.PI);
+        var residuals = Tensor<T>.FromVector(engine.Subtract(y, _posteriorMean));
+        var sigma = engine.TensorSqrt(engine.TensorAddScalar(
+            engine.TensorDiagonal(Tensor<T>.FromMatrix(_posteriorCov)), _numOps.FromDouble(_scale * _scale)));
+        var z = engine.TensorDivide(residuals, sigma);
+        var logKernel = engine.TensorLog1p(engine.TensorDivideScalar(engine.TensorSquare(z), _numOps.FromDouble(_nu)));
+        T total = _numOps.Subtract(
+            _numOps.Subtract(_numOps.FromDouble(n * logNormConstant), engine.TensorSum(engine.TensorLog(sigma))),
+            _numOps.Multiply(_numOps.FromDouble((_nu + 1) / 2), engine.TensorSum(logKernel)));
+
+        // Convergence is monitored against the double tolerance.
+        return _numOps.ToDouble(total);
     }
 
     /// <summary>
@@ -554,11 +527,7 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     public override (T mean, T variance) Predict(Vector<T> x)
     {
         // Convert single point to matrix
-        var XNew = new Matrix<T>(1, x.Length);
-        for (int j = 0; j < x.Length; j++)
-        {
-            XNew[0, j] = x[j];
-        }
+        var XNew = Tensor<T>.FromVector(x).Reshape(new[] { 1, x.Length }).ToMatrix();
 
         var (means, variances) = PredictBatch(XNew);
         return (means[0], variances[0]);
@@ -613,55 +582,25 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
         // predictive mean we use the standard GP formula with training targets y.
         // The posterior mean from EP is the latent function estimate at training points,
         // NOT the alpha weights. Using it directly as alpha double-applies K⁻¹.
-        var alpha = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            alpha[i] = FittedY[i];
-        }
+        var engine = Engine;
+        var alpha = Tensor<T>.FromVector(FittedY).Reshape(new[] { n, 1 });
 
         // Solve for weights
-        var Kregularized = CopyMatrix(_K);
-        for (int i = 0; i < n; i++)
-        {
-            double diag = _numOps.ToDouble(Kregularized[i, i]) + _jitter;
-            Kregularized[i, i] = _numOps.FromDouble(diag);
-        }
-        var Lk = CholeskyDecomposition(Kregularized);
-        var alphaWeights = SolveLowerTriangular(Lk, alpha);
-        alphaWeights = SolveUpperTriangular(Transpose(Lk), alphaWeights);
+        var Kregularized = GaussianProcessEngineOps.AddToDiagonal(_K, _numOps.FromDouble(_jitter));
+        var Lk = CholeskyFactor(Tensor<T>.FromMatrix(Kregularized));
+        var alphaWeights = Linalg.CholeskySolve(alpha, Lk, upper: false);
 
-        var mean = new Vector<T>(nNew);
-        var variance = new Vector<T>(nNew);
+        // Mean prediction
+        var kStar = Tensor<T>.FromMatrix(KStar);
+        var mean = engine.TensorMatMul(kStar, alphaWeights).Reshape(new[] { nNew }).ToVector();
 
-        for (int i = 0; i < nNew; i++)
-        {
-            // Mean prediction
-            double predMean = 0;
-            for (int j = 0; j < n; j++)
-            {
-                predMean += _numOps.ToDouble(KStar[i, j]) * _numOps.ToDouble(alphaWeights[j]);
-            }
-            mean[i] = _numOps.FromDouble(predMean);
-
-            // Variance prediction
-            var xNew = GetRow(XNew, i);
-            double kStarStar = _numOps.ToDouble(_kernel.Calculate(xNew, xNew));
-
-            var v = new Vector<T>(n);
-            for (int j = 0; j < n; j++)
-            {
-                v[j] = KStar[i, j];
-            }
-            var vSolved = SolveLowerTriangular(Lk, v);
-
-            double vTv = 0;
-            for (int j = 0; j < n; j++)
-            {
-                vTv += _numOps.ToDouble(vSolved[j]) * _numOps.ToDouble(vSolved[j]);
-            }
-
-            variance[i] = _numOps.FromDouble(Math.Max(kStarStar - vTv + _scale * _scale, 1e-10));
-        }
+        // Variance prediction: k** - ||Lk⁻¹ k*||² + scale², floored at 1e-10
+        var kStarStar = Tensor<T>.FromVector(KernelDiagonal(XNew));
+        var vSolved = Linalg.SolveTriangular(Lk, engine.TensorTranspose(kStar), upper: false);
+        var vTv = engine.ReduceSum(engine.TensorSquare(vSolved), new[] { 0 }, keepDims: false);
+        var variance = engine.TensorMax(
+            engine.TensorAddScalar(engine.TensorSubtract(kStarStar, vTv), _numOps.FromDouble(_scale * _scale)),
+            _numOps.FromDouble(1e-10)).ToVector();
 
         return (mean, variance);
     }
@@ -689,144 +628,33 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     /// <summary>
     /// Extracts a row from a matrix as a vector.
     /// </summary>
-    private Vector<T> GetRow(Matrix<T> matrix, int row)
+    private static Vector<T> GetRow(Matrix<T> matrix, int row) => matrix.GetRow(row);
+
+    /// <summary>
+    /// Kernel self-similarities k(x_i, x_i) for every row of <paramref name="X"/>.
+    /// </summary>
+    private Vector<T> KernelDiagonal(Matrix<T> X)
     {
-        var result = new Vector<T>(matrix.Columns);
-        for (int j = 0; j < matrix.Columns; j++)
+        var diagonal = new Vector<T>(X.Rows);
+        for (int i = 0; i < X.Rows; i++)
         {
-            result[j] = matrix[row, j];
+            var xi = GetRow(X, i);
+            diagonal[i] = _kernel.Calculate(xi, xi);
         }
-        return result;
+
+        return diagonal;
     }
 
     /// <summary>
-    /// Creates a copy of a matrix.
+    /// Lower Cholesky factor of a symmetric positive definite matrix.
     /// </summary>
-    private Matrix<T> CopyMatrix(Matrix<T> A)
+    private Tensor<T> CholeskyFactor(Tensor<T> matrix)
     {
-        var result = new Matrix<T>(A.Rows, A.Columns);
-        for (int i = 0; i < A.Rows; i++)
-        {
-            for (int j = 0; j < A.Columns; j++)
-            {
-                result[i, j] = A[i, j];
-            }
-        }
-        return result;
-    }
+        var (factor, info) = Linalg.CholeskyEx(matrix, upper: false);
+        if (Engine.TensorCountNonzero(info) > 0)
+            throw new InvalidOperationException("Matrix is not positive definite.");
 
-    /// <summary>
-    /// Performs Cholesky decomposition.
-    /// </summary>
-    private Matrix<T> CholeskyDecomposition(Matrix<T> A)
-    {
-        int n = A.Rows;
-        var L = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j <= i; j++)
-            {
-                double sum = 0;
-                for (int k = 0; k < j; k++)
-                {
-                    sum += _numOps.ToDouble(L[i, k]) * _numOps.ToDouble(L[j, k]);
-                }
-
-                if (i == j)
-                {
-                    double val = _numOps.ToDouble(A[i, i]) - sum;
-                    L[i, j] = _numOps.FromDouble(Math.Sqrt(Math.Max(val, 1e-10)));
-                }
-                else
-                {
-                    double ljj = _numOps.ToDouble(L[j, j]);
-                    L[i, j] = _numOps.FromDouble((_numOps.ToDouble(A[i, j]) - sum) / ljj);
-                }
-            }
-        }
-        return L;
-    }
-
-    /// <summary>
-    /// Computes matrix inverse from Cholesky factor.
-    /// </summary>
-    private Matrix<T> ComputeInverseFromCholesky(Matrix<T> L)
-    {
-        int n = L.Rows;
-        var Inv = new Matrix<T>(n, n);
-
-        // Solve L * L^T * Inv = I column by column
-        for (int j = 0; j < n; j++)
-        {
-            var e = new Vector<T>(n);
-            e[j] = _numOps.FromDouble(1.0);
-
-            var z = SolveLowerTriangular(L, e);
-            var col = SolveUpperTriangular(Transpose(L), z);
-
-            for (int i = 0; i < n; i++)
-            {
-                Inv[i, j] = col[i];
-            }
-        }
-        return Inv;
-    }
-
-    /// <summary>
-    /// Solves Lx = b for x where L is lower triangular.
-    /// </summary>
-    private Vector<T> SolveLowerTriangular(Matrix<T> L, Vector<T> b)
-    {
-        int n = b.Length;
-        var x = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            double sum = 0;
-            for (int j = 0; j < i; j++)
-            {
-                sum += _numOps.ToDouble(L[i, j]) * _numOps.ToDouble(x[j]);
-            }
-            x[i] = _numOps.FromDouble((_numOps.ToDouble(b[i]) - sum) / _numOps.ToDouble(L[i, i]));
-        }
-        return x;
-    }
-
-    /// <summary>
-    /// Solves Ux = b for x where U is upper triangular.
-    /// </summary>
-    private Vector<T> SolveUpperTriangular(Matrix<T> U, Vector<T> b)
-    {
-        int n = b.Length;
-        var x = new Vector<T>(n);
-
-        for (int i = n - 1; i >= 0; i--)
-        {
-            double sum = 0;
-            for (int j = i + 1; j < n; j++)
-            {
-                sum += _numOps.ToDouble(U[i, j]) * _numOps.ToDouble(x[j]);
-            }
-            x[i] = _numOps.FromDouble((_numOps.ToDouble(b[i]) - sum) / _numOps.ToDouble(U[i, i]));
-        }
-        return x;
-    }
-
-    /// <summary>
-    /// Transposes a matrix.
-    /// </summary>
-    private Matrix<T> Transpose(Matrix<T> A)
-    {
-        var result = new Matrix<T>(A.Columns, A.Rows);
-        for (int i = 0; i < A.Rows; i++)
-        {
-            for (int j = 0; j < A.Columns; j++)
-            {
-                result[j, i] = A[i, j];
-            }
-        }
-        return result;
+        return factor;
     }
 
     /// <summary>
