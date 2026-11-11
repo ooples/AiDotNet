@@ -228,13 +228,8 @@ public partial class SplineRegression<T> : NonLinearRegressionBase<T>
 
         // Symmetrize X'X to handle floating-point rounding in matrix multiplication
         // (X'X is mathematically symmetric but may have tiny asymmetries)
-        for (int i = 0; i < xTx.Rows; i++)
-            for (int j = i + 1; j < xTx.Columns; j++)
-            {
-                var avg = NumOps.Divide(NumOps.Add(xTx[i, j], xTx[j, i]), NumOps.FromDouble(2.0));
-                xTx[i, j] = avg;
-                xTx[j, i] = avg;
-            }
+        // (A + A^T) / 2: halving by a power of two is exact, and the diagonal is unchanged.
+        xTx = Engine.MatrixMultiplyScalar(Engine.MatrixAdd(xTx, Engine.MatrixTranspose(xTx)), NumOps.FromDouble(0.5));
 
         // Always add minimum ridge regularization for numerical stability (prevents
         // Cholesky failure on collinear/degenerate data).
@@ -243,10 +238,7 @@ public partial class SplineRegression<T> : NonLinearRegressionBase<T>
         var regularizationStrength = Regularization?.GetOptions().Strength ?? 0.0;
         var effectiveReg = Math.Max(regularizationStrength, 1e-4);
         T regTerm = NumOps.FromDouble(effectiveReg);
-        for (int i = 0; i < xTx.Rows; i++)
-        {
-            xTx[i, i] = NumOps.Add(xTx[i, i], regTerm);
-        }
+        xTx = RegressionEngineOps2.AddDiagonal(xTx, regTerm);
 
         var xTy = basisFunctions.Transpose().Multiply(y);
         try
@@ -294,13 +286,15 @@ public partial class SplineRegression<T> : NonLinearRegressionBase<T>
             totalBasis += _options.Degree + _knots[i].Length;
         }
 
-        var basis = new Matrix<T>(x.Rows, totalBasis);
+        if (x.Rows == 0)
+        {
+            return new Matrix<T>(0, totalBasis);
+        }
 
-        // Constant term
-        for (int i = 0; i < x.Rows; i++)
-            basis[i, 0] = NumOps.One;
-
-        int columnIndex = 1;
+        // Build each basis column as a whole vector, then stack them as the columns of the matrix.
+        var columns = new List<Tensor<T>>(totalBasis) { Engine.Fill(x.Rows, NumOps.One).AsTensor() };
+        var zeros = Engine.FillZero<T>(x.Rows).AsTensor();
+        T splineDegree = NumOps.FromDouble(_options.Degree);
 
         for (int feature = 0; feature < x.Columns; feature++)
         {
@@ -309,24 +303,22 @@ public partial class SplineRegression<T> : NonLinearRegressionBase<T>
             // Linear and higher-order terms
             for (int degree = 1; degree <= _options.Degree; degree++)
             {
-                for (int i = 0; i < x.Rows; i++)
-                    basis[i, columnIndex] = NumOps.Power(featureVector[i], NumOps.FromDouble(degree));
-                columnIndex++;
+                columns.Add(Engine.Power(featureVector, NumOps.FromDouble(degree)).AsTensor());
             }
 
-            // Knot terms
-            for (int k = 0; k < _knots[feature].Length; k++)
+            // Knot terms: (x - knot)^degree where x > knot, else 0
+            var knots = _knots[feature];
+            foreach (var knot in knots)
             {
-                for (int i = 0; i < x.Rows; i++)
-                {
-                    var diff = NumOps.Subtract(featureVector[i], _knots[feature][k]);
-                    basis[i, columnIndex] = NumOps.GreaterThan(diff, NumOps.Zero)
-                        ? NumOps.Power(diff, NumOps.FromDouble(_options.Degree))
-                        : NumOps.Zero;
-                }
-                columnIndex++;
+                var diff = Engine.Subtract(featureVector, Engine.Fill(x.Rows, knot)).AsTensor();
+                columns.Add(Engine.TensorWhere(
+                    Engine.TensorGreaterThan(diff, NumOps.Zero),
+                    Engine.TensorPower(diff, splineDegree),
+                    zeros));
             }
         }
+
+        var basis = Engine.TensorStack(columns.ToArray(), 1).ToMatrix();
 
         return basis;
     }
