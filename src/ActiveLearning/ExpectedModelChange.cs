@@ -117,13 +117,8 @@ public class ExpectedModelChange<T> : IActiveLearningStrategy<T>
         var predictions = model.Predict(unlabeledPool);
         var numSamples = unlabeledPool.Shape[0];
         var numClasses = predictions.Length / numSamples;
-        var scores = new Vector<T>(numSamples);
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            var probs = ExtractProbabilities(predictions, i, numClasses);
-            scores[i] = ComputeExpectedChange(probs, numClasses);
-        }
+        var probs = ActiveLearningEngineOps.SoftmaxRows(predictions, numSamples, numClasses);
+        var scores = ComputeExpectedChange(probs).ToVector();
 
         UpdateStatistics(scores);
         return scores;
@@ -141,17 +136,54 @@ public class ExpectedModelChange<T> : IActiveLearningStrategy<T>
     }
 
     /// <summary>
-    /// Computes the expected model change for a single sample.
+    /// Computes the expected model change for every sample.
     /// </summary>
-    private T ComputeExpectedChange(Vector<T> probabilities, int numClasses)
+    /// <param name="probabilities">A [numSamples, numClasses] tensor of class probabilities.</param>
+    private Tensor<T> ComputeExpectedChange(Tensor<T> probabilities)
     {
+        var gradientLengths = ComputeGradientLengths(probabilities);
         return _metric switch
         {
-            ChangeMetric.ExpectedGradientLength => ComputeEGL(probabilities, numClasses),
-            ChangeMetric.MaxGradientLength => ComputeMaxGradient(probabilities, numClasses),
-            ChangeMetric.GradientVariance => ComputeGradientVariance(probabilities, numClasses),
-            _ => ComputeEGL(probabilities, numClasses)
+            ChangeMetric.ExpectedGradientLength => ComputeEGL(probabilities, gradientLengths),
+            ChangeMetric.MaxGradientLength => ActiveLearningEngineOps.MaxRows(gradientLengths),
+            ChangeMetric.GradientVariance => ComputeGradientVariance(gradientLengths),
+            _ => ComputeEGL(probabilities, gradientLengths)
         };
+    }
+
+    /// <summary>
+    /// Computes the cross-entropy gradient length ||p - one_hot(y)|| for every sample and every
+    /// possible label y.
+    /// </summary>
+    /// <returns>A [numSamples, numClasses] tensor; entry [i, y] = sqrt(Σ_c (p_ic - δ_cy)²).</returns>
+    private static Tensor<T> ComputeGradientLengths(Tensor<T> probabilities)
+    {
+        var engine = AiDotNetEngine.Current;
+        int numSamples = probabilities.Shape[0];
+        int numClasses = probabilities.Shape[1];
+        if (numSamples == 0 || numClasses == 0)
+        {
+            return new Tensor<T>(new[] { numSamples, numClasses });
+        }
+
+        var identity = engine.TensorEye<T>(numClasses).Reshape(new[] { 1, numClasses, numClasses });
+        var blockRows = ActiveLearningEngineOps.BlockRows(numSamples, (long)numClasses * numClasses);
+        var blocks = new List<Tensor<T>>();
+
+        for (int start = 0; start < numSamples; start += blockRows)
+        {
+            int count = Math.Min(blockRows, numSamples - start);
+            var shape = new[] { count, numClasses, numClasses };
+            var block = engine.TensorSlice(probabilities, new[] { start, 0 }, new[] { count, numClasses })
+                .Reshape(new[] { count, 1, numClasses });
+
+            // Gradient components p_c - δ_{cy}, laid out as [sample, y, c]
+            var gradComponents = engine.TensorSubtract(engine.TensorBroadcastTo(block, shape), engine.TensorBroadcastTo(identity, shape));
+            var gradMagnitudeSq = engine.ReduceSum(engine.TensorMultiply(gradComponents, gradComponents), new[] { 2 }, keepDims: false);
+            blocks.Add(engine.TensorSqrt(gradMagnitudeSq));
+        }
+
+        return engine.TensorConcatenate(blocks.ToArray(), 0);
     }
 
     /// <summary>
@@ -162,135 +194,38 @@ public class ExpectedModelChange<T> : IActiveLearningStrategy<T>
     /// The expected gradient length is: Σ_y P(y|x) * ||p - one_hot(y)||
     /// This simplifies to: Σ_y P(y|x) * sqrt(Σ_c (p_c - δ_{cy})²)
     /// </remarks>
-    private T ComputeEGL(Vector<T> probabilities, int numClasses)
+    private static Tensor<T> ComputeEGL(Tensor<T> probabilities, Tensor<T> gradientLengths)
     {
-        var egl = _numOps.Zero;
-
-        // For each possible label
-        for (int y = 0; y < numClasses; y++)
+        var engine = AiDotNetEngine.Current;
+        if (probabilities.Shape[1] == 0)
         {
-            // Compute gradient magnitude if label were y
-            var gradMagnitudeSq = _numOps.Zero;
-            for (int c = 0; c < numClasses; c++)
-            {
-                // Gradient component: p_c - δ_{cy}
-                var delta = (c == y) ? _numOps.One : _numOps.Zero;
-                var gradComponent = _numOps.Subtract(probabilities[c], delta);
-                var squared = _numOps.Multiply(gradComponent, gradComponent);
-                gradMagnitudeSq = _numOps.Add(gradMagnitudeSq, squared);
-            }
-
-            // Weight by probability of this label
-            var gradMagnitude = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(gradMagnitudeSq)));
-            var weighted = _numOps.Multiply(probabilities[y], gradMagnitude);
-            egl = _numOps.Add(egl, weighted);
+            return new Tensor<T>(new[] { probabilities.Shape[0] });
         }
 
-        return egl;
+        // Weight each label's gradient magnitude by the probability of that label
+        return engine.ReduceSum(engine.TensorMultiply(probabilities, gradientLengths), new[] { 1 }, keepDims: false);
     }
 
     /// <summary>
-    /// Computes maximum gradient length across all possible labels.
+    /// Computes the (population) variance of gradient lengths across possible labels.
     /// </summary>
-    private T ComputeMaxGradient(Vector<T> probabilities, int numClasses)
+    private Tensor<T> ComputeGradientVariance(Tensor<T> gradientLengths)
     {
-        var maxGrad = _numOps.Zero;
-
-        for (int y = 0; y < numClasses; y++)
+        var engine = AiDotNetEngine.Current;
+        int numSamples = gradientLengths.Shape[0];
+        int numClasses = gradientLengths.Shape[1];
+        var count = _numOps.FromDouble(numClasses);
+        if (numSamples == 0 || numClasses == 0)
         {
-            var gradMagnitudeSq = _numOps.Zero;
-            for (int c = 0; c < numClasses; c++)
-            {
-                var delta = (c == y) ? _numOps.One : _numOps.Zero;
-                var gradComponent = _numOps.Subtract(probabilities[c], delta);
-                var squared = _numOps.Multiply(gradComponent, gradComponent);
-                gradMagnitudeSq = _numOps.Add(gradMagnitudeSq, squared);
-            }
-
-            var gradMagnitude = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(gradMagnitudeSq)));
-            if (_numOps.GreaterThan(gradMagnitude, maxGrad))
-            {
-                maxGrad = gradMagnitude;
-            }
+            // Σ over no labels divided by zero labels, as the scalar formula gives
+            return engine.TensorDivideScalar(new Tensor<T>(new[] { numSamples }), count);
         }
 
-        return maxGrad;
-    }
-
-    /// <summary>
-    /// Computes variance of gradient lengths across possible labels.
-    /// </summary>
-    private T ComputeGradientVariance(Vector<T> probabilities, int numClasses)
-    {
-        var gradLengths = new Vector<T>(numClasses);
-
-        // Compute gradient length for each possible label
-        for (int y = 0; y < numClasses; y++)
-        {
-            var gradMagnitudeSq = _numOps.Zero;
-            for (int c = 0; c < numClasses; c++)
-            {
-                var delta = (c == y) ? _numOps.One : _numOps.Zero;
-                var gradComponent = _numOps.Subtract(probabilities[c], delta);
-                var squared = _numOps.Multiply(gradComponent, gradComponent);
-                gradMagnitudeSq = _numOps.Add(gradMagnitudeSq, squared);
-            }
-            gradLengths[y] = _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(gradMagnitudeSq)));
-        }
-
-        // Compute mean
-        var mean = _numOps.Zero;
-        for (int y = 0; y < numClasses; y++)
-        {
-            mean = _numOps.Add(mean, gradLengths[y]);
-        }
-        mean = _numOps.Divide(mean, _numOps.FromDouble(numClasses));
-
-        // Compute variance
-        var variance = _numOps.Zero;
-        for (int y = 0; y < numClasses; y++)
-        {
-            var diff = _numOps.Subtract(gradLengths[y], mean);
-            var squared = _numOps.Multiply(diff, diff);
-            variance = _numOps.Add(variance, squared);
-        }
-
-        return _numOps.Divide(variance, _numOps.FromDouble(numClasses));
-    }
-
-    /// <summary>
-    /// Extracts probabilities for a single sample from batch predictions.
-    /// </summary>
-    private Vector<T> ExtractProbabilities(Tensor<T> predictions, int sampleIndex, int numClasses)
-    {
-        var probs = new Vector<T>(numClasses);
-        var startIdx = sampleIndex * numClasses;
-
-        // Apply softmax to get probabilities
-        var maxLogit = _numOps.MinValue;
-        for (int c = 0; c < numClasses; c++)
-        {
-            if (_numOps.GreaterThan(predictions[startIdx + c], maxLogit))
-            {
-                maxLogit = predictions[startIdx + c];
-            }
-        }
-
-        var expSum = _numOps.Zero;
-        for (int c = 0; c < numClasses; c++)
-        {
-            var shifted = _numOps.Subtract(predictions[startIdx + c], maxLogit);
-            var expVal = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
-            probs[c] = expVal;
-            expSum = _numOps.Add(expSum, expVal);
-        }
-
-        for (int c = 0; c < numClasses; c++)
-        {
-            probs[c] = _numOps.Divide(probs[c], expSum);
-        }
-
-        return probs;
+        var shape = new[] { numSamples, numClasses };
+        var mean = engine.TensorDivideScalar(engine.ReduceSum(gradientLengths, new[] { 1 }, keepDims: true), count);
+        var diff = engine.TensorSubtract(gradientLengths, engine.TensorBroadcastTo(mean, shape));
+        var variance = engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 1 }, keepDims: false);
+        return engine.TensorDivideScalar(variance, count);
     }
 
     /// <summary>

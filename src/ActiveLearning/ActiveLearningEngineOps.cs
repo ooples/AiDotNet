@@ -141,9 +141,18 @@ internal static class ActiveLearningEngineOps
     /// </summary>
     internal static int PairwiseBlockRows(int n, int d)
     {
-        long perRow = Math.Max(1L, (long)n * Math.Max(1, d));
-        long rows = (1L << 22) / perRow;
-        return (int)Math.Max(1L, Math.Min(n, rows));
+        return BlockRows(n, (long)n * Math.Max(1, d));
+    }
+
+    /// <summary>
+    /// Number of rows (at least one, at most <paramref name="totalRows"/>) per block when each row
+    /// produces <paramref name="elementsPerRow"/> intermediate elements, targeting about four
+    /// million elements per block.
+    /// </summary>
+    internal static int BlockRows(int totalRows, long elementsPerRow)
+    {
+        long rows = (1L << 22) / Math.Max(1L, elementsPerRow);
+        return (int)Math.Max(1L, Math.Min(totalRows, rows));
     }
 
     /// <summary>
