@@ -152,27 +152,63 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
             }
         }
 
-        var oneHot = new Tensor<T>(predicted.Shape.ToArray());
-        int batchElements = target.Length;
-
-        for (int i = 0; i < batchElements; i++)
+        // Validate every target value at once: it must be an integer class index in [0, numClasses).
+        // (int)rawVal truncates, so "not an integer" is rawVal != trunc(rawVal) (NaN included).
+        var flatTarget = Engine.Reshape(target, new[] { target.Length });
+        var notInteger = Engine.TensorNotEquals(flatTarget, Engine.TensorTrunc(flatTarget));
+        var outOfRange = Engine.TensorMax(
+            Engine.TensorLessThan(flatTarget, NumOps.Zero),
+            Engine.TensorGreaterThan(flatTarget, NumOps.FromDouble(numClasses - 1)));
+        var invalid = Engine.TensorMax(notInteger, outOfRange);
+        if (target.Length > 0 && NumOps.GreaterThan(Engine.TensorMaxValue(invalid), NumOps.Zero))
         {
-            double rawVal = NumOps.ToDouble(target[i]);
+            // First offending position, reported exactly as the per-element check did.
+            int i = Engine.TensorArgMax(invalid, 0).GetFlat(0);
+            double rawVal = NumOps.ToDouble(flatTarget.GetFlat(i));
             int classIdx = (int)rawVal;
             if (rawVal != classIdx)
             {
                 throw new ArgumentException(
                     $"Target value {rawVal} at position {i} is not an integer class index.");
             }
-            if (classIdx < 0 || classIdx >= numClasses)
-            {
-                throw new ArgumentOutOfRangeException(nameof(target),
-                    $"Class index {classIdx} at position {i} is out of range [0, {numClasses}). " +
-                    "Target values must be valid class indices.");
-            }
-            oneHot[i * numClasses + classIdx] = NumOps.One;
+
+            throw new ArgumentOutOfRangeException(nameof(target),
+                $"Class index {classIdx} at position {i} is out of range [0, {numClasses}). " +
+                "Target values must be valid class indices.");
         }
 
-        return oneHot;
+        // One-hot along the last axis: compare each class index against 0..numClasses-1.
+        var oneHotShape = predicted.Shape.ToArray();
+        var columnShape = (int[])oneHotShape.Clone();
+        columnShape[columnShape.Length - 1] = 1;
+        var classIds = Engine.TensorArange<T>(0, numClasses, 1);
+        return Engine.TensorEquals(
+            Engine.TensorBroadcastTo(Engine.Reshape(target, columnShape), oneHotShape),
+            Engine.TensorBroadcastTo(classIds, oneHotShape));
+    }
+
+    /// <summary>
+    /// Element-wise <c>NumericalStabilityHelper.SafeLog</c>: log(max(x, epsilon)).
+    /// </summary>
+    protected Tensor<T> SafeLogTensor(Tensor<T> values, double epsilon = NumericalStabilityHelper.DefaultEpsilon)
+    {
+        return Engine.TensorLog(Engine.TensorClampMin(values, NumOps.FromDouble(epsilon)));
+    }
+
+    /// <summary>
+    /// Element-wise <c>NumericalStabilityHelper.SafeDiv</c>: a denominator whose
+    /// magnitude is below epsilon is replaced by epsilon carrying the denominator's sign (+epsilon for 0).
+    /// </summary>
+    protected Tensor<T> SafeDivideTensor(
+        Tensor<T> numerator, Tensor<T> denominator, double epsilon = NumericalStabilityHelper.DefaultEpsilon)
+    {
+        T eps = NumOps.FromDouble(epsilon);
+        var signedEps = Engine.TensorWhere(
+            Engine.TensorLessThan(denominator, NumOps.Zero),
+            Engine.TensorFullLike(denominator, NumOps.Negate(eps)),
+            Engine.TensorFullLike(denominator, eps));
+        var safeDenominator = Engine.TensorWhere(
+            Engine.TensorLessThan(Engine.TensorAbs(denominator), eps), signedEps, denominator);
+        return Engine.TensorDivide(numerator, safeDenominator);
     }
 }
