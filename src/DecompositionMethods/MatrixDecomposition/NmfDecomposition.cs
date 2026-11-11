@@ -431,17 +431,108 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
             return new Vector<T>(0);
         }
 
-        // Gaussian elimination with partial pivoting as one engine solve. A singular normal matrix
-        // (rank-deficient factor) falls back to the minimum-norm least-squares solution.
+        // Gaussian elimination with partial pivoting as one engine solve.
         var a = Tensor<T>.FromMatrix(A);
         var rhs = Tensor<T>.FromVector(b, new[] { n, 1 });
         var (solution, info) = Linalg.SolveEx(a, rhs);
         if (Engine.TensorCountNonzero(info) > 0)
         {
-            solution = Engine.TensorMatMul(Linalg.Pinv(a), rhs);
+            // Singular: keep the original elimination, which sets the components with a zero pivot to zero.
+            return SolveByEliminationSkippingZeroPivots(A, b);
         }
 
         return solution.Reshape(new[] { n }).ToVector();
+    }
+
+    /// <summary>
+    /// Gaussian elimination with partial pivoting that leaves zero-pivot components at zero (the
+    /// original behaviour for singular systems).
+    /// </summary>
+    private Vector<T> SolveByEliminationSkippingZeroPivots(Matrix<T> A, Vector<T> b)
+    {
+        int n = A.Rows;
+        Matrix<T> augmented = new Matrix<T>(n, n + 1);
+
+        // Create augmented matrix [A|b]
+        for (int i = 0; i < n; i++)
+        {
+            for (int j = 0; j < n; j++)
+            {
+                augmented[i, j] = A[i, j];
+            }
+            augmented[i, n] = b[i];
+        }
+
+        // Forward elimination with partial pivoting
+        for (int k = 0; k < n - 1; k++)
+        {
+            // Find pivot
+            int maxRow = k;
+            for (int i = k + 1; i < n; i++)
+            {
+                if (NumOps.GreaterThan(NumOps.Abs(augmented[i, k]), NumOps.Abs(augmented[maxRow, k])))
+                {
+                    maxRow = i;
+                }
+            }
+
+            // Swap rows
+            if (maxRow != k)
+            {
+                for (int j = k; j <= n; j++)
+                {
+                    T temp = augmented[k, j];
+                    augmented[k, j] = augmented[maxRow, j];
+                    augmented[maxRow, j] = temp;
+                }
+            }
+
+            // Eliminate column
+            for (int i = k + 1; i < n; i++)
+            {
+                if (!NumOps.Equals(augmented[k, k], NumOps.Zero))
+                {
+                    T factor = NumOps.Divide(augmented[i, k], augmented[k, k]);
+                    for (int j = k; j <= n; j++)
+                    {
+                        augmented[i, j] = NumOps.Subtract(augmented[i, j], NumOps.Multiply(factor, augmented[k, j]));
+                    }
+                }
+            }
+        }
+
+        // Back substitution
+        Vector<T> x = new Vector<T>(n);
+        for (int i = n - 1; i >= 0; i--)
+        {
+            // VECTORIZED: Use dot product for sum computation
+            T sum = NumOps.Zero;
+            if (i < n - 1)
+            {
+                int remaining = n - i - 1;
+                var rowSlice = new T[remaining];
+                var xSlice = new T[remaining];
+                for (int k = 0; k < remaining; k++)
+                {
+                    rowSlice[k] = augmented[i, i + 1 + k];
+                    xSlice[k] = x[i + 1 + k];
+                }
+                var rowVec = new Vector<T>(rowSlice);
+                var xVec = new Vector<T>(xSlice);
+                sum = rowVec.DotProduct(xVec);
+            }
+
+            if (!NumOps.Equals(augmented[i, i], NumOps.Zero))
+            {
+                x[i] = NumOps.Divide(NumOps.Subtract(augmented[i, n], sum), augmented[i, i]);
+            }
+            else
+            {
+                x[i] = NumOps.Zero;
+            }
+        }
+
+        return x;
     }
 
     /// <summary>
