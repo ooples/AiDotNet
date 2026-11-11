@@ -55,10 +55,13 @@ public class DetectionResult<T>
     {
         var numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         var threshold = numOps.FromDouble(minConfidence);
+        double thresholdValue = numOps.ToDouble(threshold);
+        var confidences = CvTensorOps<T>.ToDoubleArray(Detections.Select(d => d.Confidence).ToArray());
 
         return new DetectionResult<T>
         {
-            Detections = Detections.Where(d => numOps.GreaterThanOrEquals(d.Confidence, threshold)).ToList(),
+            // Compared in double: exact for every T, since the threshold is first rounded to T.
+            Detections = Detections.Where((d, i) => confidences[i] >= thresholdValue).ToList(),
             InferenceTime = InferenceTime,
             ImageWidth = ImageWidth,
             ImageHeight = ImageHeight,
@@ -90,10 +93,9 @@ public class DetectionResult<T>
     /// <returns>A new DetectionResult with sorted detections.</returns>
     public DetectionResult<T> SortByConfidence()
     {
-        var numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         return new DetectionResult<T>
         {
-            Detections = Detections.OrderByDescending(d => numOps.ToDouble(d.Confidence)).ToList(),
+            Detections = CvTensorOps<T>.OrderByDescending(Detections, d => d.Confidence),
             InferenceTime = InferenceTime,
             ImageWidth = ImageWidth,
             ImageHeight = ImageHeight,
@@ -314,7 +316,6 @@ public class DetectionStatistics<T>
     /// <returns>Statistics about the detections.</returns>
     public static DetectionStatistics<T> FromResult(DetectionResult<T> result)
     {
-        var numOps = Tensors.Helpers.MathHelper.GetNumericOperations<T>();
         var stats = new DetectionStatistics<T>
         {
             TotalDetections = result.Count
@@ -323,14 +324,15 @@ public class DetectionStatistics<T>
         if (result.Count == 0) return stats;
 
         // Group by class
-        var grouped = result.Detections.GroupBy(d => d.ClassId);
+        var confidences = CvTensorOps<T>.ToDoubleArray(result.Detections.Select(d => d.Confidence).ToArray());
+        var grouped = result.Detections.Select((d, i) => (d.ClassId, Confidence: confidences[i])).GroupBy(d => d.ClassId);
         foreach (var group in grouped)
         {
             stats.CountByClass[group.Key] = group.Count();
-            stats.AverageConfidenceByClass[group.Key] = group.Average(d => numOps.ToDouble(d.Confidence));
+            stats.AverageConfidenceByClass[group.Key] = group.Average(d => d.Confidence);
         }
 
-        stats.AverageConfidence = result.Detections.Average(d => numOps.ToDouble(d.Confidence));
+        stats.AverageConfidence = confidences.Average();
 
         return stats;
     }
