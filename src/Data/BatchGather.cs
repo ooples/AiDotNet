@@ -33,4 +33,18 @@ internal static class BatchGather
         if (indices.Length == 0) return new Matrix<T>(0, source.Columns);
         return Rows(Tensor<T>.FromMatrix(source), indices).ToMatrix();
     }
+
+    /// <summary>The integer labels 0..count-1 as a new <typeparamref name="T"/> array (one bulk cast).</summary>
+    internal static T[] Ramp<T>(int count)
+    {
+        if (count <= 0) return Array.Empty<T>();
+        return new Tensor<int>(Enumerable.Range(0, count).ToArray(), new[] { count }).Cast<T>().AsSpan().ToArray();
+    }
+
+    /// <summary>Rounds integral-valued labels to their int class ids with the engine (round half to even).</summary>
+    internal static int[] RoundToInt32<T>(Vector<T> values)
+    {
+        if (values.Length == 0) return Array.Empty<int>();
+        return AiDotNetEngine.Current.TensorRound(Tensor<T>.FromVector(values)).Cast<int>().AsSpan().ToArray();
+    }
 }

@@ -313,7 +313,7 @@ public abstract class EpisodicDataLoaderBase<T, TInput, TOutput> :
     private Dictionary<int, List<int>> BuildClassIndex(Vector<T> datasetY)
     {
         var classToIndices = new Dictionary<int, List<int>>();
-        int[] classLabels = DoubleStorage.RoundToInt32(datasetY);
+        int[] classLabels = BatchGather.RoundToInt32(datasetY);
 
         for (int i = 0; i < classLabels.Length; i++)
         {

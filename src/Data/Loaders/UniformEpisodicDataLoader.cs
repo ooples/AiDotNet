@@ -189,7 +189,7 @@ public class UniformEpisodicDataLoader<T, TInput, TOutput> : EpisodicDataLoaderB
             }
 
             // Step 2: For each selected class, sample and split examples
-            var taskLabels = DoubleStorage.Ramp<T>(selectedClasses.Length);
+            var taskLabels = BatchGather.Ramp<T>(selectedClasses.Length);
             for (int classIdx = 0; classIdx < selectedClasses.Length; classIdx++)
             {
                 int classLabel = selectedClasses[classIdx];
