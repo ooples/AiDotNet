@@ -401,7 +401,7 @@ public partial class BayesianRegression<T> : RegressionBase<T>
         {
             // exp(-gamma * ||a - b||^2)
             KernelType.RBF => engine.TensorExp(engine.TensorMultiplyScalar(
-                engine.ReduceSum(engine.TensorSquare(RegressionEngineOps.PairwiseDifferences(left, right)), new[] { 2 }, keepDims: false),
+                Tensor<T>.FromMatrix(RegressionEngineOps.PairwiseDistanceSums(left, right, absolute: false)),
                 NumOps.Negate(NumOps.FromDouble(_bayesOptions.Gamma)))),
             // (gamma * a.b + coef0)^degree
             KernelType.Polynomial => engine.TensorPower(
@@ -416,7 +416,7 @@ public partial class BayesianRegression<T> : RegressionBase<T>
                     NumOps.FromDouble(_bayesOptions.Coef0))),
             // exp(-gamma * ||a - b||_1)
             KernelType.Laplacian => engine.TensorExp(engine.TensorMultiplyScalar(
-                engine.ReduceSum(engine.TensorAbs(RegressionEngineOps.PairwiseDifferences(left, right)), new[] { 2 }, keepDims: false),
+                Tensor<T>.FromMatrix(RegressionEngineOps.PairwiseDistanceSums(left, right, absolute: true)),
                 NumOps.Negate(NumOps.FromDouble(_bayesOptions.LaplacianGamma)))),
             _ => throw new ArgumentException(
                 $"Unsupported cross-kernel type: {_bayesOptions.KernelType}"),
