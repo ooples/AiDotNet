@@ -101,6 +101,8 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
         if (!File.Exists(modelPath))
             throw new FileNotFoundException($"ONNX model not found: {modelPath}", modelPath);
         _options = options ?? new HuBERTOptions();
+        if (_options.SampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "HuBERTOptions.SampleRate must be a positive rate in Hz.");
         Options = _options;
         _useNativeMode = false;
         base.SampleRate = _options.SampleRate;
@@ -115,6 +117,8 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
         : base(architecture)
     {
         _options = options ?? new HuBERTOptions();
+        if (_options.SampleRate <= 0)
+            throw new ArgumentOutOfRangeException(nameof(options), "HuBERTOptions.SampleRate must be a positive rate in Hz.");
         Options = _options;
         _useNativeMode = true;
         // The rate this model publishes on its own options. Built bare, the optimizer
@@ -313,7 +317,31 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
     {
         if (_network is null) throw new InvalidOperationException("The native network is not initialized.");
         using var _ = new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>();
-        return _network.Forward(audio, training: false, _random);
+        return _network.Forward(ToEncoderRate(audio), training: false, _random);
+    }
+
+    // The convolutional feature encoder is the paper's 16 kHz front end (total stride 320 = 20 ms frames), so audio
+    // recorded at SampleRate is band-limited resampled to 16 kHz first; each leading row (batch item) separately.
+    private const int EncoderSampleRate = 16000;
+
+    private Tensor<T> ToEncoderRate(Tensor<T> audio)
+    {
+        if (SampleRate == EncoderSampleRate) return audio;
+        int samples = audio.Shape[audio.Rank - 1];
+        if (audio.Rank == 1) return AudioHelper<T>.ResampleBandLimited(Engine, audio, SampleRate, EncoderSampleRate);
+        int rows = audio.Length / Math.Max(1, samples);
+        var flat = Engine.Reshape(audio, new[] { rows, samples });
+        var resampled = new Tensor<T>[rows];
+        for (int r = 0; r < rows; r++)
+        {
+            var row = Engine.Reshape(Engine.TensorSlice(flat, new[] { r, 0 }, new[] { 1, samples }), new[] { samples });
+            var converted = AudioHelper<T>.ResampleBandLimited(Engine, row, SampleRate, EncoderSampleRate);
+            resampled[r] = Engine.Reshape(converted, new[] { 1, converted.Length });
+        }
+        var stacked = Engine.TensorConcatenate(resampled, 0);
+        var shape = audio.Shape.ToArray();
+        shape[shape.Length - 1] = stacked.Shape[1];
+        return Engine.Reshape(stacked, shape);
     }
 
     private Tensor<T> Unbatch(Tensor<T> audio, Tensor<T> x)
@@ -322,13 +350,17 @@ public partial class HuBERT<T> : AudioNeuralNetworkBase<T>, IAudioFoundationMode
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
+        input = ToEncoderRate(input);
         if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input);
         if (_network is not null) return Unbatch(input, _network.Forward(input, training: false, _random).Hidden);
         var c = input; foreach (var l in Layers) c = l.Forward(c); return c;
     }
 
     public override Tensor<T> ForwardForTraining(Tensor<T> input)
-        => _network is null ? base.ForwardForTraining(input) : Unbatch(input, _network.Forward(input, training: true, _random).Hidden);
+    {
+        input = ToEncoderRate(input);
+        return _network is null ? base.ForwardForTraining(input) : Unbatch(input, _network.Forward(input, training: true, _random).Hidden);
+    }
 
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the

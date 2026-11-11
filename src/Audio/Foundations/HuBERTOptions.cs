@@ -22,7 +22,8 @@ public class HuBERTOptions : ModelOptions
 {
     #region Audio
 
-    /// <summary>Gets or sets the expected audio sample rate in Hz.</summary>
+    /// <summary>Gets or sets the sample rate in Hz of the audio passed to the model. Audio at any other rate than the
+    /// encoder's native 16 kHz is band-limited resampled to 16 kHz before the convolutional feature encoder.</summary>
     public int SampleRate { get; set; } = 16000;
 
     #endregion
