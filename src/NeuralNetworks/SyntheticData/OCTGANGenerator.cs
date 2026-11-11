@@ -288,7 +288,8 @@ public partial class OCTGANGenerator<T> : NeuralSyntheticTabularGeneratorBase<T>
         if (data.Rows == 0) throw new ArgumentException("OCT-GAN needs at least one training row.", nameof(data));
         int epochCount = epochs ?? _options.Epochs;
         if (epochCount < 0) throw new ArgumentOutOfRangeException(nameof(epochs), "Epochs cannot be negative.");
-        _columns = columns.ToList();
+        // A categorical column given without its categories takes the distinct values in the data, as CTGAN's does.
+        _columns = SyntheticTabularGeneratorBase<T>.PrepareColumns(data, columns);
 
         // Section 3.1: mode-specific normalization; section 3.3: conditions from the discrete columns.
         _transformer = new TabularDataTransformer<T>(_options.VGMModes, _random);
