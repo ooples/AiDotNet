@@ -44,7 +44,6 @@ namespace AiDotNet.Data.Pipeline;
 /// </remarks>
 public class SnapshotPipeline<T>
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     private readonly DataPipeline<Tensor<T>> _sourcePipeline;
     private readonly DiskCacheOptions _options;
@@ -257,12 +256,9 @@ public class SnapshotPipeline<T>
         }
 
         // Write data as doubles
-        var span = tensor.Data.Span;
-        writer.Write(span.Length);
-        for (int i = 0; i < span.Length; i++)
-        {
-            writer.Write(NumOps.ToDouble(span[i]));
-        }
+        var values = DoubleStorage.ToDoubles(tensor);
+        writer.Write(values.Length);
+        DoubleStorage.WriteDoubles(writer, values);
 
         if (_options.CompressData && writeStream is GZipStream gzip)
         {
@@ -321,11 +317,7 @@ public class SnapshotPipeline<T>
 
         // Read data
         int dataLength = reader.ReadInt32();
-        var data = new T[dataLength];
-        for (int i = 0; i < dataLength; i++)
-        {
-            data[i] = NumOps.FromDouble(reader.ReadDouble());
-        }
+        var data = DoubleStorage.ToArray<T>(DoubleStorage.ReadDoubles(reader, dataLength));
 
         return new Tensor<T>(data, shape);
     }

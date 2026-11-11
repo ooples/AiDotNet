@@ -23,7 +23,6 @@ namespace AiDotNet.Data.Formats;
 /// <typeparam name="T">The numeric type for values.</typeparam>
 public class Hdf5Dataset<T> : IDisposable
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("HDF5");
 
     private readonly Hdf5DatasetOptions _options;
@@ -91,13 +90,7 @@ public class Hdf5Dataset<T> : IDisposable
 
         _stream.Position = info.DataOffset;
         int numElements = (int)(info.DataLength / 8);
-        var data = new T[numElements];
-
-        for (int i = 0; i < numElements; i++)
-        {
-            double value = _reader.ReadDouble();
-            data[i] = NumOps.FromDouble(value);
-        }
+        var data = DoubleStorage.ToArray<T>(DoubleStorage.ReadDoubles(_reader, numElements));
 
         return new Tensor<T>(data, info.Shape);
     }
@@ -133,11 +126,7 @@ public class Hdf5Dataset<T> : IDisposable
         _stream.Position = info.DataOffset + rowOffset;
 
         int totalElements = actualRows * elementsPerRow;
-        var data = new T[totalElements];
-        for (int i = 0; i < totalElements; i++)
-        {
-            data[i] = NumOps.FromDouble(_reader.ReadDouble());
-        }
+        var data = DoubleStorage.ToArray<T>(DoubleStorage.ReadDoubles(_reader, totalElements));
 
         var sliceShape = new int[info.Shape.Length];
         sliceShape[0] = actualRows;
@@ -186,10 +175,7 @@ public class Hdf5Dataset<T> : IDisposable
         foreach (var kvp in datasets)
         {
             long dataStart = stream.Position;
-            foreach (T value in kvp.Value.Data)
-            {
-                writer.Write(NumOps.ToDouble(value));
-            }
+            DoubleStorage.WriteDoubles(writer, DoubleStorage.ToDoubles(kvp.Value.Data));
             long dataLength = stream.Position - dataStart;
             offsets.Add((dataStart, dataLength));
         }

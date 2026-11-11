@@ -23,7 +23,6 @@ namespace AiDotNet.Data.Formats;
 /// <typeparam name="T">The numeric type for values.</typeparam>
 public class ArrowDataset<T> : IDisposable
 {
-    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("ARRW");
 
     private readonly ArrowDatasetOptions _options;
@@ -99,14 +98,7 @@ public class ArrowDataset<T> : IDisposable
 
         _stream.Position = info.DataOffset;
         int numElements = (int)(info.DataLength / 8);
-        var data = new T[numElements];
-
-        for (int i = 0; i < numElements; i++)
-        {
-            data[i] = NumOps.FromDouble(_reader.ReadDouble());
-        }
-
-        return data;
+        return DoubleStorage.ToArray<T>(DoubleStorage.ReadDoubles(_reader, numElements));
     }
 
     /// <summary>
@@ -139,14 +131,7 @@ public class ArrowDataset<T> : IDisposable
         _stream.Position = info.DataOffset + rowOffset;
 
         int totalElements = actualRows * info.ElementsPerRow;
-        var data = new T[totalElements];
-
-        for (int i = 0; i < totalElements; i++)
-        {
-            data[i] = NumOps.FromDouble(_reader.ReadDouble());
-        }
-
-        return data;
+        return DoubleStorage.ToArray<T>(DoubleStorage.ReadDoubles(_reader, totalElements));
     }
 
     /// <summary>
@@ -211,10 +196,7 @@ public class ArrowDataset<T> : IDisposable
         foreach (var kvp in columns)
         {
             long dataStart = stream.Position;
-            foreach (T value in kvp.Value.Data)
-            {
-                writer.Write(NumOps.ToDouble(value));
-            }
+            DoubleStorage.WriteDoubles(writer, DoubleStorage.ToDoubles(kvp.Value.Data));
             offsets.Add((dataStart, stream.Position - dataStart));
         }
 
