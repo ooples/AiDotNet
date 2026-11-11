@@ -286,7 +286,7 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
             for (int c = 1; c < numCenters; c++)
             {
                 // First point with the largest min-distance (a strict > scan keeps the earliest).
-                int farthest = Engine.TensorArgMax(minDistSq.AsTensor(), 0)[0];
+                int farthest = Engine.TensorArgMax(minDistSq.AsTensor(), 0).ToArray()[0];
                 centers.SetRow(c, x.GetRow(farthest));
 
                 // Update minDistSq with the new center's contribution.
@@ -300,9 +300,6 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
         // path is now a pure function of X.
         const int maxIterations = 100;
         var assignments = new int[x.Rows];
-        var newCenters = new Matrix<T>(numCenters, x.Columns);
-        var ones = Engine.Fill(x.Rows, NumOps.One).AsTensor();
-        var xTensor = Tensor<T>.FromMatrix(x);
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
@@ -317,78 +314,68 @@ public partial class RadialBasisFunctionRegression<T> : NonLinearRegressionBase<
                 break; // Convergence reached
             }
 
-            // Compute new centers: per-cluster sums of the assigned rows and the cluster sizes
-            var assignmentIndex = new Tensor<int>(assignments, new[] { assignments.Length });
-            var sums = Engine.TensorIndexAdd(
-                Engine.TensorZerosLike(Tensor<T>.FromMatrix(newCenters)), 0, assignmentIndex, xTensor).ToMatrix();
-            var countTensor = Engine.TensorIndexAdd(
-                Engine.FillZero<T>(numCenters).AsTensor(), 0, assignmentIndex, ones);
-            var occupied = Engine.TensorNonzero(countTensor).ToArray();
-            var nonEmpty = new bool[numCenters];
-            foreach (int cluster in occupied)
-            {
-                nonEmpty[cluster] = true;
-            }
-
-            // Means of the non-empty clusters; empty clusters keep their (zero) sums here.
-            var safeCounts = Engine.TensorWhere(nonEmpty, countTensor, Engine.TensorOnesLike(countTensor));
-            var means = Engine.TensorDivide(
-                Tensor<T>.FromMatrix(sums),
-                Engine.TensorBroadcastTo(Engine.Reshape(safeCounts, new[] { numCenters, 1 }), new[] { numCenters, x.Columns })).ToMatrix();
-            newCenters = means;
-
-            for (int i = 0; i < numCenters; i++)
-            {
-                if (nonEmpty[i])
-                {
-                    continue;
-                }
-
-                // Deterministic empty-cluster fallback: reseed with the
-                // point farthest from any current non-empty center, which
-                // mirrors the k-means++ seeding above and keeps training
-                // a pure function of X. The scan sees the clusters before i
-                // already averaged and those after i still as running sums.
-                var reference = new List<int>();
-                for (int c = 0; c < numCenters; c++)
-                {
-                    if (c != i && nonEmpty[c])
-                    {
-                        reference.Add(c);
-                    }
-                }
-
-                int farthest = 0;
-                if (reference.Count > 0)
-                {
-                    var before = reference.Where(c => c < i).ToList();
-                    var after = reference.Where(c => c > i).ToList();
-                    var referenceRows = new List<Tensor<T>>();
-                    if (before.Count > 0)
-                    {
-                        referenceRows.Add(Tensor<T>.FromMatrix(RegressionEngineOps2.GatherRows(means, before)));
-                    }
-
-                    if (after.Count > 0)
-                    {
-                        referenceRows.Add(Tensor<T>.FromMatrix(RegressionEngineOps2.GatherRows(sums, after)));
-                    }
-
-                    var referenceCenters = referenceRows.Count == 1
-                        ? referenceRows[0].ToMatrix()
-                        : Engine.TensorConcatenate(referenceRows.ToArray(), 0).ToMatrix();
-                    var toReference = Tensor<T>.FromMatrix(RegressionEngineOps2.PairwiseDistances(x, referenceCenters));
-                    var minDistToCenter = Engine.TensorAmin(toReference, new[] { 1 }, keepDims: false);
-                    farthest = Engine.TensorArgMax(minDistToCenter, 0)[0];
-                }
-
-                newCenters.SetRow(i, x.GetRow(farthest));
-            }
-
-            centers = newCenters;
+            // Compute new centers: per-cluster means, reseeding any empty cluster
+            centers = UpdateCenters(x, assignments, numCenters);
         }
 
         return centers;
+    }
+
+    /// <summary>
+    /// One k-means center update: every non-empty cluster becomes the mean of its assigned rows, and
+    /// every empty cluster is reseeded with the first row farthest from the means of the other
+    /// non-empty clusters (row 0 when there are none).
+    /// </summary>
+    /// <remarks>
+    /// The previous scalar update reseeded empty cluster i while the clusters after i still held
+    /// their running sums rather than their means, so the farthest-point distances were measured
+    /// against the wrong centers whenever a non-empty cluster followed an empty one.
+    /// </remarks>
+    internal Matrix<T> UpdateCenters(Matrix<T> x, int[] assignments, int numCenters)
+    {
+        var xTensor = Tensor<T>.FromMatrix(x);
+        var assignmentIndex = new Tensor<int>(assignments, new[] { assignments.Length });
+        var sums = Engine.TensorIndexAdd(new Tensor<T>(new[] { numCenters, x.Columns }), 0, assignmentIndex, xTensor);
+        var countTensor = Engine.TensorIndexAdd(
+            Engine.FillZero<T>(numCenters).AsTensor(), 0, assignmentIndex, Engine.Fill(x.Rows, NumOps.One).AsTensor());
+        var nonEmpty = new bool[numCenters];
+        foreach (int cluster in Engine.TensorNonzero(countTensor).ToArray())
+        {
+            nonEmpty[cluster] = true;
+        }
+
+        // Means of the non-empty clusters (empty clusters are divided by one and replaced below).
+        var safeCounts = Engine.TensorWhere(nonEmpty, countTensor, Engine.TensorOnesLike(countTensor));
+        var means = Engine.TensorDivide(
+            sums,
+            Engine.TensorBroadcastTo(Engine.Reshape(safeCounts, new[] { numCenters, 1 }), new[] { numCenters, x.Columns }))
+            .ToMatrix();
+        var newCenters = means.Clone();
+
+        for (int i = 0; i < numCenters; i++)
+        {
+            if (nonEmpty[i])
+            {
+                continue;
+            }
+
+            // Deterministic empty-cluster fallback: reseed with the point farthest from any
+            // non-empty center, which mirrors the k-means++ seeding and keeps training a pure
+            // function of X.
+            var reference = Enumerable.Range(0, numCenters).Where(c => c != i && nonEmpty[c]).ToList();
+            int farthest = 0;
+            if (reference.Count > 0)
+            {
+                var toReference = Tensor<T>.FromMatrix(
+                    RegressionEngineOps2.PairwiseDistances(x, RegressionEngineOps2.GatherRows(means, reference)));
+                var minDistToCenter = Engine.TensorAmin(toReference, new[] { 1 }, keepDims: false);
+                farthest = Engine.TensorArgMax(minDistToCenter, 0).ToArray()[0];
+            }
+
+            newCenters.SetRow(i, x.GetRow(farthest));
+        }
+
+        return newCenters;
     }
 
     /// <summary>
