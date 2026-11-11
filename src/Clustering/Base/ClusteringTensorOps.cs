@@ -195,6 +195,10 @@ internal static class ClusteringTensorOps
         return engine.TensorEquals(column, ids);
     }
 
+    /// <summary>Number of samples carrying each label 0..k-1 ([k], in T).</summary>
+    internal static Vector<T> ClusterCounts<T>(Vector<T> labels, int k)
+        => Engine.ReduceSum(OneHotMask(labels, k), new[] { 0 }, false).ToVector();
+
     /// <summary>Per-cluster sums of the rows of x [k, d] and member counts [k].</summary>
     internal static Matrix<T> ClusterSums<T>(Matrix<T> x, Vector<T> labels, int k, out Vector<T> counts)
     {
