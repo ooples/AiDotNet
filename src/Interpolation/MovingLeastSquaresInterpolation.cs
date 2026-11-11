@@ -75,6 +75,20 @@ public partial class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
     private readonly IMatrixDecomposition<T>? _decomposition;
 
     /// <summary>
+    /// The power of x in each polynomial basis term, in the order the terms are solved for.
+    /// </summary>
+    /// <remarks>
+    /// Term k is x^_xExponents[k] * y^_yExponents[k]; the terms run over total degree p = 0.._polynomialDegree and,
+    /// within each p, over q = 0..p as x^(p - q) * y^q.
+    /// </remarks>
+    private readonly Tensor<T> _xExponents;
+
+    /// <summary>
+    /// The power of y in each polynomial basis term, aligned with <see cref="_xExponents"/>.
+    /// </summary>
+    private readonly Tensor<T> _yExponents;
+
+    /// <summary>
     /// Creates a new instance of the Moving Least Squares interpolation algorithm.
     /// </summary>
     /// <remarks>
@@ -106,6 +120,23 @@ public partial class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
         _smoothingLength = _numOps.FromDouble(smoothingLength);
         _polynomialDegree = polynomialDegree;
         _decomposition = decomposition;
+
+        int basisSize = (_polynomialDegree + 1) * (_polynomialDegree + 2) / 2;
+        var xExponents = new int[basisSize];
+        var yExponents = new int[basisSize];
+        int index = 0;
+        for (int p = 0; p <= _polynomialDegree; p++)
+        {
+            for (int q = 0; q <= p; q++)
+            {
+                xExponents[index] = p - q;
+                yExponents[index] = q;
+                index++;
+            }
+        }
+
+        _xExponents = new Tensor<int>(xExponents, new[] { basisSize }).Cast<T>();
+        _yExponents = new Tensor<int>(yExponents, new[] { basisSize }).Cast<T>();
     }
 
     /// <summary>
@@ -131,31 +162,29 @@ public partial class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
     /// <returns>The interpolated z-value at the specified (x,y) coordinate.</returns>
     public T Interpolate(T x, T y)
     {
-        int basisSize = (_polynomialDegree + 1) * (_polynomialDegree + 2) / 2;
-        var A = new Matrix<T>(_x.Length, basisSize);
-        var W = new Matrix<T>(_x.Length, _x.Length);
-        var b = new Vector<T>(_x.Length);
+        var engine = AiDotNetEngine.Current;
+        int n = _x.Length;
+        int basisSize = _xExponents.Length;
+        Tensor<T> xs = _x.AsTensor();
+        Tensor<T> ys = _y.AsTensor();
 
-        for (int i = 0; i < _x.Length; i++)
-        {
-            T dx = _numOps.Subtract(x, _x[i]);
-            T dy = _numOps.Subtract(y, _y[i]);
-            T distance = _numOps.Sqrt(_numOps.Add(_numOps.Multiply(dx, dx), _numOps.Multiply(dy, dy)));
-            T weight = CalculateWeight(distance);
+        Tensor<T> dx = engine.ScalarMinusTensor(x, xs);
+        Tensor<T> dy = engine.ScalarMinusTensor(y, ys);
+        Tensor<T> distance = engine.TensorSqrt(engine.TensorAdd(engine.TensorMultiply(dx, dx), engine.TensorMultiply(dy, dy)));
+        Tensor<T> weight = CalculateWeight(distance);
 
-            W[i, i] = weight;
-            b[i] = _numOps.Multiply(_z[i], weight);
+        var W = engine.TensorDiag(weight).ToMatrix();
+        var b = engine.TensorMultiply(_z.AsTensor(), weight).ToVector();
 
-            int index = 0;
-            for (int p = 0; p <= _polynomialDegree; p++)
-            {
-                for (int q = 0; q <= p; q++)
-                {
-                    A[i, index] = _numOps.Multiply(weight, _numOps.Multiply(_numOps.Power(_x[i], _numOps.FromDouble(p - q)), _numOps.Power(_y[i], _numOps.FromDouble(q))));
-                    index++;
-                }
-            }
-        }
+        // A[i, k] = weight[i] * (x[i]^xExponent[k] * y[i]^yExponent[k])
+        int[] termShape = { n, basisSize };
+        Tensor<T> xPowers = engine.TensorPower(
+            engine.TensorBroadcastTo(xs.Reshape(n, 1), termShape),
+            engine.TensorBroadcastTo(_xExponents.Reshape(1, basisSize), termShape));
+        Tensor<T> yPowers = engine.TensorPower(
+            engine.TensorBroadcastTo(ys.Reshape(n, 1), termShape),
+            engine.TensorBroadcastTo(_yExponents.Reshape(1, basisSize), termShape));
+        var A = engine.TensorMultiply(weight.Reshape(n, 1), engine.TensorMultiply(xPowers, yPowers)).ToMatrix();
 
         var AtW = A.Transpose().Multiply(W);
         var AtWA = AtW.Multiply(A);
@@ -165,19 +194,11 @@ public partial class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
         var decomposition = _decomposition ?? new LuDecomposition<T>(AtWA);
         var coefficients = MatrixSolutionHelper.SolveLinearSystem(AtWb, decomposition);
 
-        T result = _numOps.Zero;
-        int coeffIndex = 0;
-        for (int p = 0; p <= _polynomialDegree; p++)
-        {
-            for (int q = 0; q <= p; q++)
-            {
-                result = _numOps.Add(result, _numOps.Multiply(coefficients[coeffIndex],
-                    _numOps.Multiply(_numOps.Power(x, _numOps.FromDouble(p - q)), _numOps.Power(y, _numOps.FromDouble(q)))));
-                coeffIndex++;
-            }
-        }
+        Tensor<T> terms = engine.TensorMultiply(
+            engine.TensorPower(engine.Fill(basisSize, x).AsTensor(), _xExponents),
+            engine.TensorPower(engine.Fill(basisSize, y).AsTensor(), _yExponents));
 
-        return result;
+        return engine.TensorSum(engine.TensorMultiply(coefficients.AsTensor(), terms));
     }
 
     /// <summary>
@@ -195,14 +216,18 @@ public partial class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
     /// The specific weight function used here is w = (1 - (d/h)²) for d &lt; h, and w = 0 for d = h,
     /// where d is the distance and h is the smoothing length.
     /// </remarks>
-    /// <param name="distance">The distance from the target point to a data point.</param>
-    /// <returns>The weight assigned to the data point.</returns>
-    private T CalculateWeight(T distance)
+    /// <param name="distance">The distance from the target point to each data point.</param>
+    /// <returns>The weight assigned to each data point.</returns>
+    private Tensor<T> CalculateWeight(Tensor<T> distance)
     {
-        if (_numOps.GreaterThanOrEquals(distance, _smoothingLength))
-            return _numOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> ratio = engine.TensorDivideScalar(distance, _smoothingLength);
+        Tensor<T> weight = engine.ScalarMinusTensor(_numOps.One, engine.TensorMultiply(ratio, ratio));
 
-        T ratio = _numOps.Divide(distance, _smoothingLength);
-        return _numOps.Subtract(_numOps.One, _numOps.Multiply(ratio, ratio));
+        // Points at or beyond the smoothing length have no influence
+        Tensor<T> beyond = engine.TensorAdd(
+            engine.TensorGreaterThan(distance, _smoothingLength),
+            engine.TensorEquals(distance, _smoothingLength));
+        return engine.TensorMaskedFill(weight, engine.TensorEqScalar(beyond, _numOps.One), _numOps.Zero);
     }
 }
