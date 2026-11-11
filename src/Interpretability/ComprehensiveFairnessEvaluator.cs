@@ -78,12 +78,15 @@ namespace AiDotNet.Interpretability
             };
 
             // Add per-group metrics to additional metrics
-            foreach (var group in groups)
+            // Group sizes are converted to T in one bulk cast rather than one scalar conversion per group.
+            var groupKeys = groups.Select(group => group?.ToString() ?? "unknown").ToArray();
+            var sizes = new Tensor<int>(groupKeys.Select(key => groupStats[key].Size).ToArray(), new[] { groupKeys.Length })
+                .Cast<T>().ToVector();
+            foreach (var (groupKey, size) in groupKeys.Zip(sizes, (key, value) => (key, value)))
             {
-                string groupKey = group?.ToString() ?? "unknown";
                 var stats = groupStats[groupKey];
                 fairnessMetrics.AdditionalMetrics[$"Group_{groupKey}_PositiveRate"] = stats.PositiveRate;
-                fairnessMetrics.AdditionalMetrics[$"Group_{groupKey}_Size"] = _numOps.FromDouble(stats.Size);
+                fairnessMetrics.AdditionalMetrics[$"Group_{groupKey}_Size"] = size;
 
                 if (actualLabels != null)
                 {
