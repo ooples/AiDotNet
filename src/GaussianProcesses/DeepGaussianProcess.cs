@@ -786,8 +786,6 @@ internal class DGPLayer<T>
                 _inducingInputs[i, j] = _numOps.FromDouble(random.NextDouble() * 2 - 1);
             }
         }
-            }
-        }
 
         // Initialize variational parameters
         _variationalMean = new Matrix<T>(m, _outputDim);
