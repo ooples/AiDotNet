@@ -157,6 +157,7 @@ public class ColumnTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         _nOutputFeatures = outputIdx;
     }
+
     private Matrix<T> ExtractColumns(Matrix<T> data, int[] columns) => PreprocessingTensorOps.SelectColumns(data, columns);
 
     /// <summary>
