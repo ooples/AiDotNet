@@ -65,9 +65,9 @@ public partial class PchipInterpolation<T> : IInterpolation<T>
         _x = x;
         _y = y;
         _numOps = MathHelper.GetNumericOperations<T>();
-        _slopes = new Vector<T>(x.Length);
+        _slopes = CalculateInitialSlopes();
 
-        CalculateSlopes();
+        ApplyMonotonicityLimit();
     }
 
     /// <summary>
@@ -130,34 +130,45 @@ public partial class PchipInterpolation<T> : IInterpolation<T>
     /// that if your data is increasing between two points, the curve will only increase (not wiggle up and down).
     /// </para>
     /// </remarks>
-    private void CalculateSlopes()
+    private Vector<T> CalculateInitialSlopes()
     {
+        var engine = AiDotNetEngine.Current;
         int n = _x.Length;
+        Tensor<T> xs = _x.AsTensor();
+        Tensor<T> ys = _y.AsTensor();
 
-        for (int i = 0; i < n - 1; i++)
+        // Secant slopes of every segment
+        Tensor<T> secants = engine.TensorDivide(
+            engine.TensorSubtract(Slice(ys, 1, n - 1), Slice(ys, 0, n - 1)),
+            engine.TensorSubtract(Slice(xs, 1, n - 1), Slice(xs, 0, n - 1)));
+
+        // slopes[0] is the first secant, slopes[1..n-3] the weighted harmonic means of neighbouring secants,
+        // slopes[n-1] the last secant (for n >= 3); the slot before it stays zero, as in the original pass
+        var pieces = new List<Tensor<T>> { Slice(secants, 0, 1) };
+        if (n >= 4)
         {
-            T dx = _numOps.Subtract(_x[i + 1], _x[i]);
-            T dy = _numOps.Subtract(_y[i + 1], _y[i]);
-            T slope = _numOps.Divide(dy, dx);
-
-            if (i == 0)
-            {
-                _slopes[i] = slope;
-            }
-            else if (i == n - 2)
-            {
-                _slopes[n - 1] = slope;
-            }
-            else
-            {
-                T dx_prev = _numOps.Subtract(_x[i], _x[i - 1]);
-                T dy_prev = _numOps.Subtract(_y[i], _y[i - 1]);
-                T slope_prev = _numOps.Divide(dy_prev, dx_prev);
-
-                _slopes[i] = WeightedHarmonicMean(slope_prev, slope);
-            }
+            pieces.Add(WeightedHarmonicMean(Slice(secants, 0, n - 3), Slice(secants, 1, n - 3)));
         }
 
+        pieces.Add(Tensor<T>.FromScalar(_numOps.Zero));
+        if (n >= 3)
+        {
+            pieces.Add(Slice(secants, n - 2, 1));
+        }
+
+        return engine.TensorConcatenate(pieces.ToArray(), 0).ToVector();
+    }
+
+    /// <summary>
+    /// Limits the slopes so each segment stays monotone (Fritsch-Carlson), walking the segments in order.
+    /// </summary>
+    /// <remarks>
+    /// Each step reads the slope the previous step may have rescaled, so this pass stays sequential until the
+    /// engine provides a fused Fritsch-Carlson limit.
+    /// </remarks>
+    private void ApplyMonotonicityLimit()
+    {
+        int n = _x.Length;
         // Adjust slopes to ensure monotonicity
         for (int i = 0; i < n - 1; i++)
         {
@@ -206,16 +217,18 @@ public partial class PchipInterpolation<T> : IInterpolation<T>
     /// too influenced by a very steep segment nearby.
     /// </para>
     /// </remarks>
-    private T WeightedHarmonicMean(T a, T b)
+    private Tensor<T> WeightedHarmonicMean(Tensor<T> a, Tensor<T> b)
     {
-        if (_numOps.Equals(a, _numOps.Zero) || _numOps.Equals(b, _numOps.Zero))
-            return _numOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> w1 = engine.TensorAbs(b);
+        Tensor<T> w2 = engine.TensorAbs(a);
+        Tensor<T> mean = engine.TensorDivide(
+            engine.TensorAdd(engine.TensorMultiply(w1, a), engine.TensorMultiply(w2, b)),
+            engine.TensorAdd(w1, w2));
 
-        T w1 = _numOps.Abs(b);
-        T w2 = _numOps.Abs(a);
-
-        return _numOps.Divide(_numOps.Add(_numOps.Multiply(w1, a), _numOps.Multiply(w2, b)),
-                               _numOps.Add(w1, w2));
+        // Zero wherever either neighbouring slope is zero
+        Tensor<T> eitherZero = engine.TensorAdd(engine.TensorEquals(a, _numOps.Zero), engine.TensorEquals(b, _numOps.Zero));
+        return engine.TensorWhere(eitherZero, new Tensor<T>(new[] { a.Length }), mean);
     }
 
     /// <summary>
@@ -247,12 +260,14 @@ public partial class PchipInterpolation<T> : IInterpolation<T>
     /// </remarks>
     private int FindInterval(T x)
     {
-        for (int i = 0; i < _x.Length - 1; i++)
-        {
-            if (_numOps.LessThanOrEquals(x, _x[i + 1]))
-                return i;
-        }
+        return InterpolationSearch.FirstSegmentReaching(_x, x, 0, _x.Length - 2);
+    }
 
-        return _x.Length - 2;
+    /// <summary>
+    /// Returns <paramref name="length"/> consecutive elements of a vector tensor starting at <paramref name="start"/>.
+    /// </summary>
+    private static Tensor<T> Slice(Tensor<T> values, int start, int length)
+    {
+        return AiDotNetEngine.Current.TensorSlice(values, new[] { start }, new[] { length });
     }
 }
