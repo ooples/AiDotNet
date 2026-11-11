@@ -276,13 +276,8 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </remarks>
     protected virtual ClassificationTaskType InferTaskType(Vector<T> y)
     {
-        var uniqueClasses = new HashSet<double>();
-        for (int i = 0; i < y.Length; i++)
-        {
-            uniqueClasses.Add(NumOps.ToDouble(y[i]));
-        }
-
-        return uniqueClasses.Count == 2 ? ClassificationTaskType.Binary : ClassificationTaskType.MultiClass;
+        int uniqueCount = y.Length == 0 ? 0 : Engine.TensorUnique(y.AsTensor(), sorted: false).Length;
+        return uniqueCount == 2 ? ClassificationTaskType.Binary : ClassificationTaskType.MultiClass;
     }
 
     /// <summary>
@@ -292,20 +287,12 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// <returns>A sorted vector of unique class labels.</returns>
     protected virtual Vector<T> ExtractClassLabels(Vector<T> y)
     {
-        var uniqueClasses = new HashSet<double>();
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length == 0)
         {
-            uniqueClasses.Add(NumOps.ToDouble(y[i]));
+            return new Vector<T>(0);
         }
 
-        var sortedClasses = uniqueClasses.OrderBy(x => x).ToArray();
-        var labels = new Vector<T>(sortedClasses.Length);
-        for (int i = 0; i < sortedClasses.Length; i++)
-        {
-            labels[i] = NumOps.FromDouble(sortedClasses[i]);
-        }
-
-        return labels;
+        return Engine.TensorUnique(y.AsTensor(), sorted: true).AsVector();
     }
 
     /// <summary>
@@ -331,14 +318,13 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
         }
 
         // Count samples per class
+        // Unknown labels map to -1; shifting by one sends them to bin 0, which is dropped.
         var classCounts = new int[NumClasses];
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length > 0)
         {
-            int classIdx = GetClassIndexFromLabel(y[i]);
-            if (classIdx >= 0)
-            {
-                classCounts[classIdx]++;
-            }
+            var shifted = Engine.TensorAddScalar(GetClassIndexTensor(y), 1);
+            var binCounts = Engine.TensorBinCount(shifted, NumClasses + 1).ToArray();
+            Array.Copy(binCounts, 1, classCounts, 0, Math.Min(NumClasses, binCounts.Length - 1));
         }
 
         // Compute weights: n_samples / (n_classes * n_samples_per_class)
@@ -373,20 +359,52 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     /// </remarks>
     protected int GetClassIndexFromLabel(T label)
     {
-        if (ClassLabels is null)
+        if (ClassLabels is null || ClassLabels.Length == 0)
         {
             return -1;
         }
 
-        for (int i = 0; i < ClassLabels.Length; i++)
+        return GetClassIndicesFromLabels(Vector<T>.FromArray(new[] { label }))[0];
+    }
+
+    /// <summary>
+    /// Maps every label in <paramref name="labels"/> to its class index in <see cref="ClassLabels"/>.
+    /// </summary>
+    /// <param name="labels">The label values to look up.</param>
+    /// <returns>The class index of each label, or -1 where a label is not a known class.</returns>
+    /// <remarks>
+    /// Batched form of <see cref="GetClassIndexFromLabel"/>: the known labels are sorted once and every
+    /// query is located with a single sorted search, so the lookup is a handful of engine calls instead
+    /// of a scan per sample. <see cref="ClassLabels"/> does not have to be sorted.
+    /// </remarks>
+    protected int[] GetClassIndicesFromLabels(Vector<T> labels)
+    {
+        return GetClassIndexTensor(labels).ToArray();
+    }
+
+    /// <summary>
+    /// Tensor form of <see cref="GetClassIndicesFromLabels"/>: a rank-1 <see cref="Tensor{T}"/> of class
+    /// indices with -1 for labels that are not known classes.
+    /// </summary>
+    /// <param name="labels">The label values to look up.</param>
+    /// <returns>The class index of each label, or -1 where a label is not a known class.</returns>
+    protected Tensor<int> GetClassIndexTensor(Vector<T> labels)
+    {
+        int n = labels.Length;
+        var result = new Tensor<int>(new[] { n });
+        Engine.TensorFill(result, -1);
+        if (ClassLabels is null || ClassLabels.Length == 0 || n == 0)
         {
-            if (NumOps.Compare(ClassLabels[i], label) == 0)
-            {
-                return i;
-            }
+            return result;
         }
 
-        return -1;
+        var engine = Engine;
+        var (sortedLabels, order) = engine.TensorSort(ClassLabels.AsTensor(), 0, false);
+        var query = labels.AsTensor();
+        var position = engine.TensorClamp(
+            engine.TensorSearchSorted(sortedLabels, query, false), 0, ClassLabels.Length - 1);
+        var found = engine.TensorEq(engine.TensorGather(sortedLabels, position, 0), query);
+        return engine.TensorWhere(found, engine.TensorGather(order, position, 0), result);
     }
 
     /// <summary>
@@ -547,14 +565,11 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
 
         if (classLabelsToken != null)
         {
-            var classLabelsAsDoubles = classLabelsToken.ToObject<double[]>() ?? Array.Empty<double>();
-            if (classLabelsAsDoubles.Length > 0)
+            // Serialized as T[] (see Serialize), so it is read back as T[] in one call.
+            var classLabelValues = classLabelsToken.ToObject<T[]>() ?? Array.Empty<T>();
+            if (classLabelValues.Length > 0)
             {
-                ClassLabels = new Vector<T>(classLabelsAsDoubles.Length);
-                for (int i = 0; i < classLabelsAsDoubles.Length; i++)
-                {
-                    ClassLabels[i] = NumOps.FromDouble(classLabelsAsDoubles[i]);
-                }
+                ClassLabels = Vector<T>.Wrap(classLabelValues);
             }
         }
 
