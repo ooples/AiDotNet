@@ -16,14 +16,14 @@ internal static class SyntheticGanOptionFixture
         var definition = type.IsGenericType ? type.GetGenericTypeDefinition() : null;
         if (definition == typeof(PATEGANOptions<>))
         {
-            type.GetProperty("EmbeddingDimension")!.SetValue(options, 4);
-            type.GetProperty("NumTeachers")!.SetValue(options, 3);
-            type.GetProperty("BatchSize")!.SetValue(options, 4);
-            type.GetProperty("Epochs")!.SetValue(options, 4);
+            type.GetProperty("EmbeddingDimension")?.SetValue(options, 4);
+            type.GetProperty("NumTeachers")?.SetValue(options, 3);
+            type.GetProperty("BatchSize")?.SetValue(options, 4);
+            type.GetProperty("Epochs")?.SetValue(options, 4);
             // With unit Laplace noise the first moment is always the tightest bound.
             // A larger noise scale makes the accountant's moment-order limit observable.
-            if (option == "MomentOrders") type.GetProperty("LaplaceScale")!.SetValue(options, 10.0);
-            if (option == "Epochs") type.GetProperty("Epsilon")!.SetValue(options, 100.0);
+            if (option == "MomentOrders") type.GetProperty("LaplaceScale")?.SetValue(options, 10.0);
+            if (option == "Epochs") type.GetProperty("Epsilon")?.SetValue(options, 100.0);
             return;
         }
         if (definition != typeof(CTABGANPlusOptions<>) && definition != typeof(CopulaGANOptions<>) && definition != typeof(CausalGANOptions<>)
@@ -102,9 +102,12 @@ internal static class SyntheticGanOptionFixture
             return TtsPaperNumerics.Fingerprint(values);
         }
         var options = ((AiDotNet.NeuralNetworks.NeuralNetworkBase<T>)model).GetOptions();
-        int width = (int)options.GetType().GetProperty("EmbeddingDimension")!.GetValue(options)!;
-        // OCT-GAN's generator reads EmbeddingDimension noise and appends its (unfitted, empty) condition itself.
-        if (model is not CausalGANGenerator<T> and not PATEGANGenerator<T> and not OCTGANGenerator<T>)
+        int width = options.GetType().GetProperty("EmbeddingDimension")?.GetValue(options) is int embedding ? embedding : 0;
+        // OCT-GAN's unfitted generator reads the width it was built for (the architecture's input size);
+        // CTAB-GAN+ and CopulaGAN read noise followed by that input.
+        if (model is OCTGANGenerator<T> oct)
+            width = oct.GeneratorInputWidth;
+        else if (model is not CausalGANGenerator<T> and not PATEGANGenerator<T>)
             width += model.GetArchitecture().CalculatedInputSize;
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         var input = engine.Reshape(engine.TensorMultiplyScalar(engine.TensorArange<T>(1, width + 1, 1), ops.FromDouble(.1)), new[] { 1, width });

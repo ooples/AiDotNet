@@ -400,8 +400,17 @@ internal static class OptionSensitivityFixtureSetup
             // window spans 43 analysis frames; the fixture's clip is shorter than one beat window. Twelve seconds at
             // 22.05 kHz hold several of each. The options shape the 30 surface features; an unfitted classifier's
             // softmax over raw features (centroids in Hz) saturates, so the features themselves are observed.
-            return OptionSensitivityHarness.Fingerprint(((AiDotNet.Interfaces.IGenreClassifier<T>)genre).ExtractFeatures(Waveform<T>(262144))
-                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+            // A steady tone has no periodicity between 40 and 200 bpm, so its beat histogram is empty at every window;
+            // the tone pulses at 120 bpm (2 Hz at 22.05 kHz), 0.5 (1 + cos) of an envelope on a 440 Hz carrier.
+        {
+            var genreEngine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+            var genreOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            const int genreSamples = 262144;
+            var pulse = genreEngine.TensorAddScalar(CosineRamp<T>(genreSamples, 2 * Math.PI * 2 / 22050, 0.5), genreOps.FromDouble(0.5));
+            var pulsed = genreEngine.TensorMultiply(SineRamp<T>(genreSamples, 2 * Math.PI * 440 / 22050, 0.5), pulse);
+            return OptionSensitivityHarness.Fingerprint(((AiDotNet.Interfaces.IGenreClassifier<T>)genre).ExtractFeatures(pulsed)
+                .Select(genreOps.ToDouble));
+        }
         if (network is AiDotNet.Audio.Speaker.SpeakerEmbeddingExtractor<T> or AiDotNet.Audio.Speaker.SpeakerVerifier<T>
             && option is "SampleRate" or "FftSize" or "HopLength" or "NormalizationWindowFrames")
             // The MFCC front end (Kaldi's 25 ms / 10 ms frames, 3-second sliding mean normalization) runs on a waveform;
@@ -426,6 +435,18 @@ internal static class OptionSensitivityFixtureSetup
             // Motion guidance steps the latents along the warping-error gradient of RAFT flows computed on the LQ clip at
             // a quarter of its size. The fixture's 8 x 8 frames give 2 x 2 flows, at which every pixel is occluded and the
             // gradient vanishes. Two 32 x 32 frames of a pattern shifted one pixel give RAFT a visible motion.
+            if (option == "GuidanceScale")
+            {
+                // The untrained RAFT's random flows push every pixel's forward-backward check past the occlusion bound,
+                // so the visibility mask sums to zero and the guidance step is empty at every scale. A zeroed flow-update
+                // head makes RAFT predict zero flow, which leaves every pixel visible and the warping error nonzero.
+                var bindingFlags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+                var raft = typeof(AiDotNet.Video.Enhancement.MGLDVSR<T>).GetField("_raft", bindingFlags)?.GetValue(network);
+                if (raft?.GetType().GetField("_flow2", bindingFlags)?.GetValue(raft) is AiDotNet.Diffusion.VAE.LazyWeightModule<T> flowHead)
+                    flowHead.SetParameters(new AiDotNet.Tensors.LinearAlgebra.Vector<T>(checked((int)flowHead.ParameterCount)));
+                else
+                    throw new InvalidOperationException("MGLDVSR's RAFT flow-update head was not found; the GuidanceScale probe cannot zero it.");
+            }
             return observe(network, ShiftedClip<T>(2, 32));
         }
         if (network is AiDotNet.Video.Enhancement.StreamDiffVSR<T> streamDiff && option == "AttentionHeads")
@@ -1326,6 +1347,16 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.Audio.LanguageIdentification.Wav2Vec2LanguageIdentifier<T> lid && option == "FeatureProjectionDropout")
+        {
+            // The projection dropout acts before SpecAugment's time masks (10-frame spans, at least two). The fixture's
+            // 2,048 samples give about six frames, every one masked, so nothing before the mask reaches the loss. Two
+            // seconds give about a hundred frames, most of them unmasked.
+            var lidOps = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var english = AiDotNet.Tensors.Engines.AiDotNetEngine.Current.TensorConcatenate(new[] { new Tensor<T>(new[] { 1 }, new AiDotNet.Tensors.LinearAlgebra.Vector<T>(new[] { lidOps.One })), new Tensor<T>(new[] { 3 }) }, 0);
+            lid.Train(Waveform<T>(32000), english);
+            return true;
+        }
         if (network is AiDotNet.Finance.Forecasting.Foundation.Chronos<T> chronos && option is "BatchSize" or "MinPast" or "MissingValueProbability")
         {
             // The batch, the earliest split point and the missing-value augmentation shape the windows the paper's
@@ -2101,9 +2132,10 @@ internal static class OptionSensitivityFixtureSetup
             // probability masks two. Two-frame spans leave eleven starts, where p sets the count (p T / l + U).
             avMask.AudioMaskLength = 2;
         if (options is AiDotNet.Video.Options.RealBasicVSROptions realBasic && option == "InferenceCleaningThreshold")
-            // The compact cleaning module's mean |residue| is below every perturbation of 1.5/255, so each threshold
-            // stops after the first pass. From 0 (run every pass) the +0.1 perturbation stops after one.
-            realBasic.InferenceCleaningThreshold = 0;
+            // The fixture's first cleaning pass leaves a mean |residue| between 8/255 and 16/255 (measured: thresholds
+            // up to 8 run all three passes, from 16 one). From 11 the doubled and halved perturbations fall on
+            // either side, so one of them changes the number of passes.
+            realBasic.InferenceCleaningThreshold = 11;
 
         // The single-speaker, monolingual graph has no conditioning tables to resize.
         // Enable the native conditioning path in both builds before perturbing its width.
