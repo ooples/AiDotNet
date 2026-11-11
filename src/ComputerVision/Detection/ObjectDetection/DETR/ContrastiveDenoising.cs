@@ -61,7 +61,6 @@ internal static class ContrastiveDenoising<T>
     public static ContrastiveDenoisingPlan<T>? Plan(DetectionTrainingBatch<T> targets, int numClasses,
         int denoisingQueries, double labelNoiseRatio, double boxNoiseScale, Random random)
     {
-        var ops = MathHelper.GetNumericOperations<T>();
         int batch = targets.ImageCount;
         int singlePad = Enumerable.Range(0, batch).Max(b => targets[b].Count);
         if (singlePad == 0 || denoisingQueries <= 0) return null;
@@ -72,6 +71,10 @@ internal static class ContrastiveDenoising<T>
         var labels = new int[batch * pad];
         var boxes = new double[batch * pad * 4];
         var occupied = new bool[batch * pad];
+        // Each image's (cx, cy, w, h) in double, one bulk conversion per image; no random draw is involved.
+        var targetBoxes = Enumerable.Range(0, batch)
+            .Select(b => CvTensorOps<T>.ToDoubleArray(targets[b].SelectMany(gt => new[] { gt.CenterX, gt.CenterY, gt.Width, gt.Height }).ToArray()))
+            .ToArray();
 
         // Reference order: every (copy r, concatenated target) entry, copy-major; even copies are positive.
         for (int r = 0; r < 2 * groups; r++)
@@ -88,7 +91,7 @@ internal static class ContrastiveDenoising<T>
                     if (labelNoiseRatio > 0 && random.NextDouble() < labelNoiseRatio * 0.5) label = random.Next(numClasses);
                     labels[slot] = label;
 
-                    double cx = ops.ToDouble(gt.CenterX), cy = ops.ToDouble(gt.CenterY), w = ops.ToDouble(gt.Width), h = ops.ToDouble(gt.Height);
+                    double cx = targetBoxes[b][t * 4], cy = targetBoxes[b][(t * 4) + 1], w = targetBoxes[b][(t * 4) + 2], h = targetBoxes[b][(t * 4) + 3];
                     double[] corners = { cx - (w / 2), cy - (h / 2), cx + (w / 2), cy + (h / 2) };
                     if (boxNoiseScale > 0)
                     {
@@ -132,17 +135,21 @@ internal static class ContrastiveDenoising<T>
     public static Tensor<bool> AttendMask(int batch, int heads, int total, ContrastiveDenoisingPlan<T> plan)
     {
         int pad = plan.PadSize, group = 2 * plan.SinglePad;
+        // The [total, total] pattern is the same for every image and head.
+        var pattern = new bool[total * total];
+        for (int q = 0; q < total; q++)
+            for (int key = 0; key < total; key++)
+            {
+                bool blocked = q >= pad
+                    ? key < pad
+                    : key < pad && (key / group) != (q / group);
+                pattern[(q * total) + key] = !blocked;
+            }
+
         var mask = new Tensor<bool>(new[] { batch, heads, total, total });
-        for (int b = 0; b < batch; b++)
-            for (int h = 0; h < heads; h++)
-                for (int q = 0; q < total; q++)
-                    for (int key = 0; key < total; key++)
-                    {
-                        bool blocked = q >= pad
-                            ? key < pad
-                            : key < pad && (key / group) != (q / group);
-                        mask[b, h, q, key] = !blocked;
-                    }
+        var destination = mask.AsWritableSpan();
+        for (int plane = 0; plane < batch * heads; plane++)
+            pattern.AsSpan().CopyTo(destination.Slice(plane * pattern.Length, pattern.Length));
         return mask;
     }
 }
