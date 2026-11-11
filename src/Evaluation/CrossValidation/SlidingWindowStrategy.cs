@@ -32,8 +32,11 @@ public class SlidingWindowStrategy<T> : ICrossValidationStrategy<T>
     private readonly int _step;
     private int _numSplits;
 
+    /// <inheritdoc />
     public string Name => $"Sliding Window (size={_windowSize})";
+    /// <inheritdoc />
     public string Description => "Time series CV with fixed-size sliding training window.";
+    /// <inheritdoc />
     public int NumSplits => _numSplits;
 
     /// <summary>
@@ -58,6 +61,7 @@ public class SlidingWindowStrategy<T> : ICrossValidationStrategy<T>
         _step = resolvedStep;
     }
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         if (dataSize < _windowSize + _testSize)

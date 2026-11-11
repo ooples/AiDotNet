@@ -109,15 +109,25 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
 
     #region Properties
 
+    /// <inheritdoc />
     public override int SequenceLength => _contextLength;
+    /// <inheritdoc />
     public override int PredictionHorizon => _forecastHorizon;
+    /// <inheritdoc />
     public override int NumFeatures => 1;
+    /// <inheritdoc />
     public override int PatchSize => 1;
+    /// <inheritdoc />
     public override int Stride => 1;
+    /// <inheritdoc />
     public override bool IsChannelIndependent => true;
+    /// <inheritdoc />
     public override bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc />
     public override FoundationModelSize ModelSize => FoundationModelSize.Small;
+    /// <inheritdoc />
     public override int MaxContextLength => _contextLength;
+    /// <inheritdoc />
     public override int MaxPredictionHorizon => _forecastHorizon;
 
     #endregion
@@ -304,7 +314,9 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
 
     #region NeuralNetworkBase Overrides
 
+    /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
 
     /// <summary>
@@ -441,6 +453,7 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
 
     // UpdateParameters was an empty override, silently dropping every restore. The base
     // distributes the vector over the declared enumeration.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object> { { "NetworkType", "TimeDiff" }, { "ContextLength", _contextLength }, { "ForecastHorizon", _forecastHorizon }, { "HiddenDimension", _hiddenDimension }, { "DiffusionSteps", _diffusionSteps }, { "UseFutureMixup", _useFutureMixup }, { "UseAutoregressiveInit", _useAutoregressiveInit }, { "UseNativeMode", _useNativeMode } },
@@ -454,7 +467,9 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
 
     #region IForecastingModel Implementation
 
+    /// <inheritdoc />
     protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles) => _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
+    /// <inheritdoc />
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         // TimeDiff is non-autoregressive — truncate output to requested steps
@@ -466,8 +481,10 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
         return result;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals) { T mse = NumOps.Zero; T mae = NumOps.Zero; int count = 0; for (int i = 0; i < predictions.Length && i < actuals.Length; i++) { var diff = NumOps.Subtract(predictions[i], actuals[i]); mse = NumOps.Add(mse, NumOps.Multiply(diff, diff)); mae = NumOps.Add(mae, NumOps.Abs(diff)); count++; } if (count > 0) { mse = NumOps.Divide(mse, NumOps.FromDouble(count)); mae = NumOps.Divide(mae, NumOps.FromDouble(count)); } return new Dictionary<string, T> { ["MSE"] = mse, ["MAE"] = mae, ["RMSE"] = NumOps.Sqrt(mse) }; }
 
+    /// <inheritdoc />
     public override Tensor<T> ApplyInstanceNormalization(Tensor<T> input)
         // RevIN forward (Kim et al. 2022), delegated to the shared tape-tracked helper. The previous
         // hand-rolled version accumulated mean/variance with scalar NumOps arithmetic and wrote the
@@ -476,6 +493,7 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
         // differentiable layer in the paper, not a preprocessing step.
         => NormalizeInstanceOnTape(input, DefaultRevInEpsilon, out _, out _);
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetFinancialMetrics() { T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero; return new Dictionary<string, T> { ["ContextLength"] = NumOps.FromDouble(_contextLength), ["ForecastHorizon"] = NumOps.FromDouble(_forecastHorizon), ["DiffusionSteps"] = NumOps.FromDouble(_diffusionSteps), ["LastLoss"] = lastLoss }; }
 
     #endregion
@@ -565,6 +583,7 @@ public partial class TimeDiff<T> : TimeSeriesFoundationModelBase<T>, ITrainingOb
         return xk;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForecastOnnx(Tensor<T> input) { if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized."); int batchSize = input.Shape[0]; int seqLen = input.Shape.Length > 1 ? input.Shape[1] : input.Length; int features = input.Shape.Length > 2 ? input.Shape[2] : 1; var inputData = new float[batchSize * seqLen * features]; for (int i = 0; i < input.Length && i < inputData.Length; i++) inputData[i] = (float)NumOps.ToDouble(input[i]); var inputTensor = new OnnxTensors.DenseTensor<float>(inputData, new[] { batchSize, seqLen, features }); var inputs = new List<NamedOnnxValue> { NamedOnnxValue.CreateFromTensor("input", inputTensor) }; using var results = OnnxSession.Run(inputs); var outputTensor = results.First().AsTensor<float>(); var outputShape = outputTensor.Dimensions.ToArray(); var output = new Tensor<T>(outputShape); int totalElements = 1; foreach (var dim in outputShape) totalElements *= dim; for (int i = 0; i < totalElements && i < output.Length; i++) output.Data.Span[i] = NumOps.FromDouble(outputTensor.GetValue(i)); return output; }
 
     /// <summary>

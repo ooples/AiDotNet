@@ -373,6 +373,7 @@ public partial class FeatureAblationExplainer<T> : ILocalExplainer<T, FeatureAbl
     public Vector<T> ComputeGlobalAttributions(Matrix<T> data)
         => AttributionAggregation.MeanAbsolute<T>(ExplainBatch(data));
 
+    /// <inheritdoc />
     public FeatureAblationExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         var results = new FeatureAblationExplanation<T>[instances.Rows];

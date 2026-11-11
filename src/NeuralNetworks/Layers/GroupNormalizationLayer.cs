@@ -105,6 +105,7 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
     /// </remarks>
     public override bool MakesUpstreamBiasRedundant => _numGroups == _numChannels;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -161,6 +162,7 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
     /// </summary>
     private int[]? _originalInputShape;
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         _originalInputShape = input._shape;
@@ -242,6 +244,7 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
             : output;
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         if (_gammaGradient == null || _betaGradient == null)
@@ -258,8 +261,10 @@ public partial class GroupNormalizationLayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_beta);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients() { base.ClearGradients(); _gammaGradient = null; _betaGradient = null; }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _gammaGradient = null;

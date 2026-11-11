@@ -26,7 +26,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Causal;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _minAssociationThreshold;
@@ -35,10 +35,13 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double MinAssociationThreshold => _minAssociationThreshold;
     public Vector<T>? AssociationScores => _associationScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public MMPCSelector(
@@ -56,12 +59,14 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _minAssociationThreshold = minAssociationThreshold;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "MMPCSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -157,12 +162,14 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return engine.TensorAbs(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(residX, residY));
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -171,11 +178,13 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("MMPCSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -188,6 +197,7 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null)

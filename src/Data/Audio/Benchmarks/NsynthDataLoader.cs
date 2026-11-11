@@ -36,10 +36,15 @@ public class NsynthDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "NSynth";
+    /// <inheritdoc />
     public override string Description => "NSynth musical-note instrument-family classification (305k notes, 11 classes)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.Samples;
+    /// <inheritdoc />
     public override int OutputDimension => NumInstrumentFamilies;
 
     public NsynthDataLoader(NsynthDataLoaderOptions? options = null)

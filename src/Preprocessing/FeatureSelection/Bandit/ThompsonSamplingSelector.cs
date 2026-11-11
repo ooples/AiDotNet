@@ -25,7 +25,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Bandit;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class ThompsonSamplingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class ThompsonSamplingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _nIterations;
@@ -37,12 +37,15 @@ public class ThompsonSamplingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int NIterations => _nIterations;
     public double[]? Alphas => _alphas;
     public double[]? Betas => _betas;
     public double[]? PosteriorMeans => _posteriorMeans;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public ThompsonSamplingSelector(
@@ -62,12 +65,14 @@ public class ThompsonSamplingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _randomState = randomState;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "ThompsonSamplingSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -227,12 +232,14 @@ public class ThompsonSamplingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return Math.Sqrt(-2 * Math.Log(u1)) * Math.Cos(2 * Math.PI * u2);
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -246,11 +253,13 @@ public class ThompsonSamplingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("ThompsonSamplingSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -263,6 +272,7 @@ public class ThompsonSamplingSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

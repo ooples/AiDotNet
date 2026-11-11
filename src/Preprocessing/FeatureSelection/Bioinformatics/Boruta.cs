@@ -24,7 +24,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Bioinformatics;
 /// <typeparam name="T">The numeric type for calculations.</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly int _maxIterations;
     private readonly double _pValue;
@@ -46,7 +46,9 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     public int MaxIterations => _maxIterations;
     public Vector<T>? Importances => _importances;
     public BorutaDecision[]? Decisions => _decisions;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public Boruta(
@@ -68,12 +70,14 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _randomState = randomState;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "Boruta requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -207,12 +211,14 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return t - (c0 + c1 * t + c2 * t * t) / (1 + d1 * t + d2 * t * t + d3 * t * t * t);
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -221,11 +227,13 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return PreprocessingTensorOps.SelectColumns(data, _selectedIndices);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("Boruta does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -238,6 +246,7 @@ public class Boruta<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return Array.Empty<string>();

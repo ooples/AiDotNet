@@ -44,6 +44,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
             _minNoise = minNoise;
         }
 
+        /// <inheritdoc />
         public override Vector<T> GetExplorationAction(Vector<T> state, Vector<T> policyAction, int actionSpaceSize, Random random)
         {
             var noisyAction = new Vector<T>(actionSpaceSize);
@@ -61,11 +62,13 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
             return ClampAction(noisyAction);
         }
 
+        /// <inheritdoc />
         public override void Update()
         {
             _noiseStdDev = Math.Max(_minNoise, _noiseStdDev * _noiseDecay);
         }
 
+        /// <inheritdoc />
         public override void Reset()
         {
             // Noise doesn't typically reset between episodes

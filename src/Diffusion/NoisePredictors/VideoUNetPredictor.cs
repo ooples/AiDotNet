@@ -2052,6 +2052,7 @@ public partial class VideoUNetPredictor<T> : NoisePredictorBase<T>
     {
     }
 
+    /// <inheritdoc />
     protected override Vector<T> GetParameterGradients()
     {
         var gradients = new List<T>();

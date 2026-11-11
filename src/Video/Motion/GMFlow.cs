@@ -297,6 +297,7 @@ public partial class GMFlow<T> : OpticalFlowBase<T>
         return warped;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => ForwardPair(input);
 
     /// <inheritdoc/>
@@ -642,6 +643,7 @@ public partial class GMFlow<T> : OpticalFlowBase<T>
     }
 
     // UpdateParameters restated the base verbatim; ModelBase routes it to SetParameters.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

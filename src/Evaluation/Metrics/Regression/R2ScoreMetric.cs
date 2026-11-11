@@ -23,15 +23,24 @@ public class R2ScoreMetric<T> : IRegressionMetric<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "R2Score";
+    /// <inheritdoc />
     public string Category => "Regression";
+    /// <inheritdoc />
     public string Description => "Coefficient of determination - proportion of variance explained.";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.HigherIsBetter;
+    /// <inheritdoc />
     public T? MinValue => default; // Can be negative
+    /// <inheritdoc />
     public T? MaxValue => NumOps.One;
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         if (predictions.Length != actuals.Length)
@@ -62,6 +71,7 @@ public class R2ScoreMetric<T> : IRegressionMetric<T>
         return NumOps.FromDouble(1 - ssRes / ssTot);
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
         ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

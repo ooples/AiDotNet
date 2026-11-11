@@ -55,6 +55,7 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
     private readonly int _numHeads;
     private readonly int _ffnDim;
     private readonly double _dropoutRate;
+    private readonly IActivationFunction<T> _ffnActivation;
 
     // Widened from the concrete MultiHeadAttentionLayer/DenseLayer types so the
     // inference optimizer / LoRA configuration can swap in wrapped implementations
@@ -82,6 +83,7 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
     private readonly DropoutLayer<T>? _crossDropout;
     private readonly DropoutLayer<T>? _ffnDropout;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>Initialises a Pre-LN transformer decoder block.</summary>
@@ -89,7 +91,10 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
     /// <param name="numHeads">Number of attention heads. Must divide <paramref name="hiddenSize"/>.</param>
     /// <param name="ffnDim">Inner dimension of the feed-forward network.</param>
     /// <param name="dropoutRate">Dropout probability on each sublayer output (0 disables).</param>
-    public TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0.0)
+    /// <param name="ffnActivation">The feed-forward inner activation; null uses ReLU (Vaswani 2017). Whisper's
+    /// decoder uses GELU.</param>
+    public TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0.0,
+        IActivationFunction<T>? ffnActivation = null)
         : base(new[] { hiddenSize }, new[] { hiddenSize })
     {
         if (hiddenSize <= 0) throw new ArgumentOutOfRangeException(nameof(hiddenSize));
@@ -100,12 +105,13 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
         _numHeads = numHeads;
         _ffnDim = ffnDim;
         _dropoutRate = dropoutRate;
+        _ffnActivation = ffnActivation ?? new ReLUActivation<T>();
 
         _selfAttention = new MultiHeadAttentionLayer<T>(numHeads, hiddenSize / numHeads, activationFunction: new IdentityActivation<T>());
         _norm1 = new LayerNormalizationLayer<T>(hiddenSize);
         _crossAttention = new MultiHeadAttentionLayer<T>(numHeads, hiddenSize / numHeads, activationFunction: new IdentityActivation<T>());
         _norm2 = new LayerNormalizationLayer<T>(hiddenSize);
-        _ffnUp = new DenseLayer<T>(ffnDim, new ReLUActivation<T>() as IActivationFunction<T>);
+        _ffnUp = new DenseLayer<T>(ffnDim, _ffnActivation);
         _ffnDown = new DenseLayer<T>(hiddenSize, new IdentityActivation<T>() as IActivationFunction<T>);
         _norm3 = new LayerNormalizationLayer<T>(hiddenSize);
         if (dropoutRate > 0)
@@ -316,6 +322,10 @@ public partial class TransformerDecoderBlock<T> : LayerBase<T>, IShapeContract
         metadata["NumHeads"] = _numHeads.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["FfnDim"] = _ffnDim.ToString(System.Globalization.CultureInfo.InvariantCulture);
         metadata["DropoutRate"] = _dropoutRate.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        // The FFN activation is a constructor argument, so it is persisted as TransformerEncoderBlock persists its own.
+        var ffnActivationType = _ffnActivation.GetType();
+        string? qualifiedName = ffnActivationType.AssemblyQualifiedName;
+        metadata["FfnActivationType"] = qualifiedName ?? ffnActivationType.FullName ?? string.Empty;
         // Both attentions' causal mask, attention dropout and positional encoding are configured AFTER construction
         // (an autoregressive decoder sets UseCausalMask on SelfAttentionLayer), so the constructor arguments above
         // cannot rebuild them. A replaced self-attention (LoRA / quantized wrapper) is not rebuilt by the deserializer

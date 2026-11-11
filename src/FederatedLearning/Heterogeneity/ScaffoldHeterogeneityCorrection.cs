@@ -31,6 +31,7 @@ public sealed class ScaffoldHeterogeneityCorrection<T> : FederatedHeterogeneityC
         _clientLearningRate = clientLearningRate;
     }
 
+    /// <inheritdoc />
     public override Vector<T> Correct(int clientId, int roundNumber, Vector<T> globalParameters, Vector<T> localParameters, int localEpochs)
     {
         if (globalParameters.Length != localParameters.Length)
@@ -88,6 +89,7 @@ public sealed class ScaffoldHeterogeneityCorrection<T> : FederatedHeterogeneityC
         return corrected;
     }
 
+    /// <inheritdoc />
     public override string GetCorrectionName() => "SCAFFOLD";
 }
 

@@ -74,6 +74,7 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         _random = Random;
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         EnsureStateExists(state);
@@ -93,6 +94,7 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         string stateKey = GetStateKey(state);
@@ -156,6 +158,7 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         }
     }
 
+    /// <inheritdoc />
     public override T Train() => NumOps.Zero;
 
     private void EnsureStateExists(Vector<T> state)
@@ -188,11 +191,15 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
     private T GetMaxQValue(string stateKey) { if (!_qTable.ContainsKey(stateKey)) return NumOps.Zero; T max = _qTable[stateKey][0]; for (int a = 1; a < _options.ActionSize; a++) if (NumOps.GreaterThan(_qTable[stateKey][a], max)) max = _qTable[stateKey][a]; return max; }
     private int ArgMax(Vector<T> values) { int maxIndex = 0; T maxValue = values[0]; for (int i = 1; i < values.Length; i++) if (NumOps.GreaterThan(values[i], maxValue)) { maxValue = values[i]; maxIndex = i; } return maxIndex; }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T> { ["states_visited"] = NumOps.FromDouble(_qTable.Count), ["model_size"] = NumOps.FromDouble(_model.Count), ["epsilon"] = NumOps.FromDouble(_epsilon), ["total_steps"] = NumOps.FromDouble(_totalSteps) };
+    /// <inheritdoc />
     public override void ResetEpisode() { }
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input) => SelectAction(input, false);
     public Task<Vector<T>> PredictAsync(Vector<T> input) => Task.FromResult(Predict(input));
     public Task TrainAsync() { Train(); return Task.CompletedTask; }
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new ModelMetadata<T> { FeatureCount = this.FeatureCount, Complexity = ParameterCount };
     /// <summary>
     /// The number of Q-values actually stored: the sum of each state's action entries.
@@ -224,6 +231,7 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
             new AiDotNet.Models.Parameters.NestedKeyedScalarCollectionParameterSource<T, string, int>(
                 () => _qTable));
     }
+    /// <inheritdoc />
     public override int FeatureCount => _options.StateSize;
     /// <summary>
     /// The Q-table's <c>(state, action)</c> entries in a fixed order.
@@ -251,6 +259,7 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
 
         return entries;
     }
+    /// <inheritdoc />
     public override void SaveModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))
@@ -262,6 +271,7 @@ public partial class DynaQPlusAgent<T> : ReinforcementLearningAgentBase<T>
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
+    /// <inheritdoc />
     public override void LoadModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))

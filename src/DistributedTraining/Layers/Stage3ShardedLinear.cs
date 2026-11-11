@@ -63,6 +63,7 @@ public sealed partial class Stage3ShardedLinear<T> : LayerBase<T>, IShapeContrac
     private Tensor<T> _weightShard;   // [shardLen] — the ONLY weight storage resident on this rank
     private Tensor<T> _bias;          // [outputSize] (replicated)
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
     public int ShardLength => _shardLen;
 
@@ -100,6 +101,7 @@ public sealed partial class Stage3ShardedLinear<T> : LayerBase<T>, IShapeContrac
         for (int o = 0; o < _outputSize; o++) _bias[o] = NumOps.Zero;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // Materialize the full weight just-in-time (AllGather), use it, then let it be collected.
@@ -128,10 +130,12 @@ public sealed partial class Stage3ShardedLinear<T> : LayerBase<T>, IShapeContrac
         for (int o = 0; o < _outputSize; o++) _bias[o] = fullBias[o];
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
         => throw new System.InvalidOperationException(
             "Stage3ShardedLinear is tape-native: the registered weight shard is updated by the " +
             "optimizer's tape Step, not by the legacy per-layer UpdateParameters.");
 
+    /// <inheritdoc />
     public override void ResetState() { }
 }

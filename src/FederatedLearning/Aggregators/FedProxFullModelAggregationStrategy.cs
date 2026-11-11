@@ -30,6 +30,7 @@ public sealed class FedProxFullModelAggregationStrategy<T, TInput, TOutput> :
         _mu = mu;
     }
 
+    /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> Aggregate(
         Dictionary<int, IFullModel<T, TInput, TOutput>> clientModels,
         Dictionary<int, double> clientWeights)
@@ -37,6 +38,7 @@ public sealed class FedProxFullModelAggregationStrategy<T, TInput, TOutput> :
         return _fedAvg.Aggregate(clientModels, clientWeights);
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "FedProx";
 
     public double GetMu() => _mu;

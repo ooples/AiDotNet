@@ -313,6 +313,7 @@ public class SentenceTransformersFineTuner<T> : EmbeddingModelBase<T>
         return new Vector<T>(values).Normalize();
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (!_disposed)

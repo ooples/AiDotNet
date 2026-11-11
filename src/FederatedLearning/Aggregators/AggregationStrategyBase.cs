@@ -14,8 +14,10 @@ using AiDotNet.Interfaces;
 /// </remarks>
 public abstract class AggregationStrategyBase<TModel, T> : FederatedLearningComponentBase<T>, IAggregationStrategy<TModel>
 {
+    /// <inheritdoc />
     public abstract TModel Aggregate(Dictionary<int, TModel> clientModels, Dictionary<int, double> clientWeights);
 
+    /// <inheritdoc />
     public abstract string GetStrategyName();
 
     protected static double GetTotalWeightOrThrow(

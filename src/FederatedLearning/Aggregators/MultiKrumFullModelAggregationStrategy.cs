@@ -36,6 +36,7 @@ public sealed class MultiKrumFullModelAggregationStrategy<T, TInput, TOutput> :
         _useClientWeightsForAveraging = useClientWeightsForAveraging;
     }
 
+    /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> Aggregate(
         Dictionary<int, IFullModel<T, TInput, TOutput>> clientModels,
         Dictionary<int, double> clientWeights)
@@ -108,6 +109,7 @@ public sealed class MultiKrumFullModelAggregationStrategy<T, TInput, TOutput> :
         return InterfaceGuard.Parameterizable(reference).WithParameters(aggregatedParameters);
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "MultiKrum";
 }
 

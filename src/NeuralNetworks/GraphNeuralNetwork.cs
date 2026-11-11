@@ -736,37 +736,24 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
     }
 
     /// <summary>
-    /// Performs a forward pass through the network to generate a prediction from graph data.
+    /// Predicts over the given graph: <see cref="NeuralNetworkBase{T}.Predict"/> with <paramref name="adjacencyMatrix"/>
+    /// in place of the graph set through <see cref="SetAdjacencyMatrix"/>, for this call only.
     /// </summary>
-    /// <param name="nodeFeatures">A tensor containing features for each node in the graph.</param>
-    /// <param name="adjacencyMatrix">A tensor representing the connections between nodes in the graph.</param>
-    /// <returns>A tensor containing the prediction for the graph data.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when either nodeFeatures or adjacencyMatrix is null.</exception>
-    /// <exception cref="ArgumentException">Thrown when nodeFeatures and adjacencyMatrix have incompatible dimensions.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when the network encounters an unsupported layer type or invalid output shape.</exception>
+    /// <param name="nodeFeatures">Node features, <c>[nodes, features]</c> or <c>[batch, nodes, features]</c>.</param>
+    /// <param name="adjacencyMatrix">The <c>[nodes, nodes]</c> matrix every graph layer multiplies by, used as given.</param>
+    /// <returns>The network's output: per node, or per graph when the layer stack ends in a readout.</returns>
+    /// <exception cref="ArgumentNullException">Thrown when either argument is null.</exception>
+    /// <exception cref="ArgumentException">Thrown when the adjacency is not square over the features' node axis.</exception>
     /// <remarks>
     /// <para>
-    /// This method processes graph data through the network. It takes node features and an adjacency matrix
-    /// as input and passes them through graph-specific and standard layers, applying appropriate transformations
-    /// at each step. The method concludes with hybrid pooling to generate the final output.
-    /// If graph smoothness regularization is enabled, it caches the node representations for auxiliary loss computation.
+    /// The output comes from the network's own trained layers. This method used to end in a "hybrid pooling" that
+    /// built two new, randomly initialized dense layers on every call, so its result was untrained and changed from
+    /// call to call; with <c>[nodes, features]</c> input it pooled over the feature axis and threw. A graph-level
+    /// readout belongs in the layer stack (a <c>MeanLayer</c> over the node axis, say), where it is trained.
     /// </para>
-    /// <para><b>For Beginners:</b> This method processes a graph (like a social network)
-    /// through the neural network to make predictions.
-    ///
-    /// You provide two pieces of information:
-    /// - nodeFeatures: Information about each node (like age, interests for each person)
-    /// - adjacencyMatrix: Information about how nodes are connected (like who is friends with whom)
-    ///
-    /// The method:
-    /// - Passes this information through specialized graph layers
-    /// - Also passes it through standard neural network layers
-    /// - Combines the results using a technique called "hybrid pooling"
-    /// - If smoothness regularization is enabled, saves intermediate representations
-    /// - Returns a prediction based on the entire graph structure
-    ///
-    /// This is useful for tasks like predicting which users might become friends,
-    /// which products a customer might like, or how a molecule might behave.
+    /// <para><b>For Beginners:</b> Use this to run the trained network on a graph you have at hand without changing
+    /// the graph the network trains on. The adjacency matrix says which nodes are connected; for a Kipf-Welling GCN,
+    /// pass its normalized form <c>D^-1/2 (A + I) D^-1/2</c>.
     /// </para>
     /// </remarks>
     public Tensor<T> PredictGraph(Tensor<T> nodeFeatures, Tensor<T> adjacencyMatrix)
@@ -774,98 +761,35 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
         if (nodeFeatures == null || adjacencyMatrix == null)
             throw new ArgumentNullException(nodeFeatures == null ? nameof(nodeFeatures) : nameof(adjacencyMatrix));
 
-        if (nodeFeatures.Shape[0] != adjacencyMatrix.Shape[0] || nodeFeatures.Shape[1] != adjacencyMatrix.Shape[1])
-            throw new ArgumentException("Node features and adjacency matrix dimensions are incompatible.");
+        // The adjacency is [nodes, nodes] and the features [nodes, features] or [batch, nodes, features]. This compared
+        // the feature width with the node count, so it rejected every graph whose nodes and features differ in number.
+        if (adjacencyMatrix.Rank != 2 || adjacencyMatrix.Shape[0] != adjacencyMatrix.Shape[1]
+            || nodeFeatures.Rank < 2 || NodeCount(nodeFeatures) != adjacencyMatrix.Shape[0])
+            throw new ArgumentException(
+                $"Node features [{string.Join(", ", nodeFeatures.Shape.ToArray())}] and adjacency matrix "
+                + $"[{string.Join(", ", adjacencyMatrix.Shape.ToArray())}] dimensions are incompatible: the adjacency must be "
+                + "[nodes, nodes] over the features' node axis.");
 
-        // Cache for auxiliary loss computation
-        if (UseAuxiliaryLoss)
+        var trainingGraph = CurrentGraph();
+        InstallGraph(adjacencyMatrix);
+        try
         {
-            _lastAdjacencyMatrix = adjacencyMatrix;
-        }
+            var output = Predict(nodeFeatures);
 
-        var current = nodeFeatures;
-        foreach (var layer in Layers)
-        {
-            if (layer is IGraphConvolutionLayer<T> graphLayer)
+            // Cached for the graph-smoothness diagnostics.
+            if (UseAuxiliaryLoss)
             {
-                // Use the SetAdjacencyMatrix/Forward pattern for all graph layers
-                graphLayer.SetAdjacencyMatrix(adjacencyMatrix);
-                current = layer.Forward(current);
-            }
-            else
-            {
-                // Handle non-graph layers (e.g., Dense, Activation)
-                current = layer.Forward(current);
+                _lastAdjacencyMatrix = adjacencyMatrix;
+                _lastNodeRepresentations = output;
             }
 
-            // Ensure the output maintains the expected shape
-            if (current.Rank < 2)
-                throw new InvalidOperationException($"Layer {layer.GetType().Name} produced an invalid output shape.");
+            return output;
         }
-
-        // Cache node representations for auxiliary loss
-        if (UseAuxiliaryLoss)
+        finally
         {
-            _lastNodeRepresentations = current;
+            // Back to the graph set through SetAdjacencyMatrix, or to the identity graph when none was set.
+            InstallGraph(trainingGraph ?? IdentityGraph(adjacencyMatrix.Shape[0]));
         }
-
-        // Implement hybrid pooling
-        return HybridPooling(current);
-    }
-
-    /// <summary>
-    /// Performs hybrid pooling on node features to generate a final output representation.
-    /// </summary>
-    /// <param name="nodeFeatures">A tensor containing processed features for each node.</param>
-    /// <returns>A tensor containing the pooled output representation.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method combines multiple pooling strategies to create a comprehensive representation of the entire graph.
-    /// It applies mean, max, and sum pooling, concatenates the results, and then processes them through a small
-    /// neural network to learn the best combination of these pooling methods.
-    /// </para>
-    /// <para><b>For Beginners:</b> This method combines information from all nodes in the graph
-    /// to make an overall prediction.
-    /// 
-    /// Imagine having data about many individual users and needing to make a single
-    /// prediction about the entire social network. This method:
-    /// 
-    /// 1. Combines node information in three different ways:
-    ///    - Mean pooling: Takes the average of all nodes (like the average age of all users)
-    ///    - Max pooling: Takes the maximum value from all nodes (like the age of the oldest user)
-    ///    - Sum pooling: Adds up values from all nodes (like the total number of posts)
-    /// 
-    /// 2. Puts these three summaries together
-    /// 
-    /// 3. Uses a small neural network to figure out the best way to combine these summaries
-    /// 
-    /// This approach is more powerful than just using one type of pooling because
-    /// different problems might need different ways of combining node information.
-    /// </para>
-    /// </remarks>
-    private Tensor<T> HybridPooling(Tensor<T> nodeFeatures)
-    {
-        // Perform different types of pooling
-        var meanPooled = nodeFeatures.MeanOverAxis(1);
-        var maxPooled = nodeFeatures.MaxOverAxis(1);
-        var sumPooled = nodeFeatures.SumOverAxis(1);
-
-        // Concatenate the pooling results
-        var concatenated = Engine.TensorConcatenate(new[] { meanPooled, maxPooled, sumPooled }, axis: 1);
-
-        // Apply a small neural network to learn the best combination
-        var denseLayer = new DenseLayer<T>(concatenated.Shape[1] / 2,
-            _finalDenseLayerVectorActivation ?? new ReLUActivation<T>());
-        // No separate activation layer needed since activation is included in the dense layer
-        var outputLayer = new DenseLayer<T>(meanPooled.Shape[1],
-            _finalActivationLayerVectorActivation ?? new IdentityActivation<T>());
-        var activation = new ReLUActivation<T>();
-
-        var hidden = denseLayer.Forward(concatenated);
-        hidden = activation.Activate(hidden);
-        var output = outputLayer.Forward(hidden);
-
-        return output;
     }
 
     // UpdateParameters re-sliced the flat vector across Layers by hand -- the base walks
@@ -901,8 +825,7 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
 
-        int numNodes = input.Shape[0];
-        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
+        var adjacencyMatrix = EnsureAdjacencyMatrix(NodeCount(input));
 
         // Set all layers to inference mode
         foreach (var layer in Layers)
@@ -930,7 +853,132 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
     [Scratch]
     private Tensor<T>? _autoAdjacencyMatrix;
 
+    /// <summary>
+    /// The last graph <see cref="CurrentGraph"/> confirmed is not an identity matrix, so the check runs once per graph.
+    /// </summary>
+    [Scratch]
+    private Tensor<T>? _confirmedGraph;
+
+    /// <summary>
+    /// Sets the graph that <see cref="NeuralNetworkBase{T}.Predict"/> and <see cref="NeuralNetworkBase{T}.Train"/>
+    /// propagate over, or clears it with <c>null</c>.
+    /// </summary>
+    /// <param name="adjacencyMatrix">
+    /// A square <c>[nodes, nodes]</c> matrix that every graph layer multiplies by, used as given: for a Kipf-Welling
+    /// GCN pass the normalized <c>D^-1/2 (A + I) D^-1/2</c>. <c>null</c> returns to the identity graph.
+    /// </param>
+    /// <exception cref="ArgumentException">The matrix is not square and rank 2.</exception>
+    /// <remarks>
+    /// <para>
+    /// Without a graph, Predict and Train use the identity adjacency, under which a graph layer sees only each
+    /// node's own features. <see cref="PredictGraph"/> takes a graph per call, but it is inference only; this is
+    /// how the graph reaches training.
+    /// </para>
+    /// <para>
+    /// A clone or a saved and loaded copy keeps the graph.
+    /// </para>
+    /// <para><b>For Beginners:</b> The adjacency matrix says which nodes are connected. Set it once before training
+    /// so that each node learns from its neighbours, not only from itself. Inputs are then <c>[nodes, features]</c>,
+    /// or <c>[batch, nodes, features]</c> for several feature sets over the same graph.
+    /// </para>
+    /// </remarks>
+    public void SetAdjacencyMatrix(Tensor<T>? adjacencyMatrix)
+    {
+        if (adjacencyMatrix is not null
+            && (adjacencyMatrix.Rank != 2 || adjacencyMatrix.Shape[0] != adjacencyMatrix.Shape[1]))
+        {
+            throw new ArgumentException(
+                $"The adjacency matrix must be square [nodes, nodes]; got [{string.Join(", ", adjacencyMatrix.Shape)}].",
+                nameof(adjacencyMatrix));
+        }
+
+        if (adjacencyMatrix is not null)
+        {
+            InstallGraph(adjacencyMatrix);
+            return;
+        }
+
+        var current = CurrentGraph();
+        if (current is not null)
+            InstallGraph(IdentityGraph(current.Shape[0]));
+    }
+
+    /// <summary>
+    /// The graph the layers hold, or null when they hold none or only the identity graph this network supplies.
+    /// </summary>
+    /// <remarks>
+    /// The graph lives in the graph layers, not in a field here: every graph layer persists its adjacency as
+    /// input-sized state, outside the parameter vector, so a clone or a saved and loaded copy carries it. A model
+    /// field would have to join the parameter vector to be persisted, which would make ParameterCount depend on
+    /// the graph. An identity matrix counts as no graph, since that is what no graph means, which also covers the
+    /// fallback identity a clone copies from its source's layers.
+    /// </remarks>
+    private Tensor<T>? CurrentGraph()
+    {
+        Tensor<T>? graph = null;
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer && graphLayer.GetAdjacencyMatrix() is { } held)
+            {
+                graph = held;
+                break;
+            }
+        }
+
+        if (graph is null || ReferenceEquals(graph, _autoAdjacencyMatrix)) return null;
+        if (ReferenceEquals(graph, _confirmedGraph)) return graph;
+        if (IsIdentity(graph)) return null;
+
+        _confirmedGraph = graph;
+        return graph;
+    }
+
+    private bool IsIdentity(Tensor<T> graph)
+    {
+        if (graph.Rank != 2 || graph.Shape[0] != graph.Shape[1]) return false;
+        int nodes = graph.Shape[0];
+        for (int i = 0; i < nodes; i++)
+        {
+            for (int j = 0; j < nodes; j++)
+            {
+                if (!NumOps.Equals(graph[i, j], i == j ? NumOps.One : NumOps.Zero)) return false;
+            }
+        }
+
+        return true;
+    }
+
+    private void InstallGraph(Tensor<T> graph)
+    {
+        foreach (var layer in Layers)
+        {
+            if (layer is IGraphConvolutionLayer<T> graphLayer)
+                graphLayer.SetAdjacencyMatrix(graph);
+        }
+    }
+
+    // The node axis: [nodes, features] or [batch, nodes, features].
+    private static int NodeCount(Tensor<T> input) => input.Rank >= 3 ? input.Shape[input.Rank - 2] : input.Shape[0];
+
     private Tensor<T> EnsureAdjacencyMatrix(int numNodes)
+    {
+        var graph = CurrentGraph();
+        if (graph is not null)
+        {
+            if (graph.Shape[0] != numNodes)
+            {
+                throw new ArgumentException(
+                    $"The input has {numNodes} nodes but the adjacency matrix set through SetAdjacencyMatrix covers "
+                    + $"{graph.Shape[0]}.");
+            }
+
+            return graph;
+        }
+
+        return IdentityGraph(numNodes);
+    }
+
+    private Tensor<T> IdentityGraph(int numNodes)
     {
         if (_autoAdjacencyMatrix != null && _autoAdjacencyMatrix.Shape[0] == numNodes)
             return _autoAdjacencyMatrix;
@@ -945,7 +993,7 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
         // No explicit graph was supplied, so use the neutral Kipf-Welling case:
         // A has no off-diagonal edges, A + I is identity, and symmetric
         // normalization leaves identity unchanged. Real graph structure should
-        // still be provided through PredictGraph when available.
+        // be provided through SetAdjacencyMatrix (Predict and Train) or PredictGraph.
         var adj = new Tensor<T>([numNodes, numNodes]);
         for (int i = 0; i < numNodes; i++)
             adj[i, i] = NumOps.One;
@@ -964,7 +1012,7 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
     protected override void OnTrainingStepStarting(Tensor<T> input, Tensor<T> target)
     {
         base.OnTrainingStepStarting(input, target);
-        var adjacencyMatrix = EnsureAdjacencyMatrix(input.Rank == 1 ? 1 : input.Shape[0]);
+        var adjacencyMatrix = EnsureAdjacencyMatrix(input.Rank == 1 ? 1 : NodeCount(input));
         foreach (var layer in Layers)
         {
             if (layer is IGraphConvolutionLayer<T> graphLayer)
@@ -977,8 +1025,7 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
         if (input.Rank == 1)
             input = Engine.Reshape(input, [1, input.Shape[0]]);
 
-        int numNodes = input.Shape[0];
-        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
+        var adjacencyMatrix = EnsureAdjacencyMatrix(NodeCount(input));
 
         foreach (var layer in Layers)
         {
@@ -1022,8 +1069,7 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
         if (input.Rank == 1)
             input = input.Reshape([1, input.Shape[0]]);
 
-        int numNodes = input.Shape[0];
-        var adjacencyMatrix = EnsureAdjacencyMatrix(numNodes);
+        var adjacencyMatrix = EnsureAdjacencyMatrix(NodeCount(input));
 
         foreach (var layer in Layers)
         {
@@ -1042,6 +1088,7 @@ public partial class GraphNeuralNetwork<T> : GraphModelLayoutBase<T>, IAuxiliary
         return activations;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>

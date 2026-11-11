@@ -32,10 +32,15 @@ public class Flowers102DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
     private int _sampleCount;
     private int _imageSize;
 
+    /// <inheritdoc />
     public override string Name => "Flowers-102";
+    /// <inheritdoc />
     public override string Description => "Oxford Flowers-102 fine-grained classification";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _imageSize * _imageSize * 3;
+    /// <inheritdoc />
     public override int OutputDimension => NumClasses;
 
     public Flowers102DataLoader(Flowers102DataLoaderOptions? options = null)

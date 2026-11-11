@@ -11,6 +11,7 @@ namespace AiDotNet.ProgramSynthesis.Requests;
 /// </remarks>
 public sealed class CodeGenerationRequest : CodeTaskRequestBase
 {
+    /// <inheritdoc />
     public override CodeTask Task => CodeTask.Generation;
 
     public string Description { get; set; } = string.Empty;

@@ -84,9 +84,12 @@ internal static class FinancialMath
 /// <summary>Fraction of steps where the forecast got the DIRECTION right (sign match) — the hit rate.</summary>
 public sealed class DirectionalAccuracyMetric<T> : IFinancialMetric<T>
 {
+    /// <inheritdoc />
     public string Name => "DirectionalAccuracy";
+    /// <inheritdoc />
     public bool HigherIsBetter => true;
 
+    /// <inheritdoc />
     public double Compute(IReadOnlyList<double> predicted, IReadOnlyList<double> actual)
     {
         int n = Math.Min(predicted.Count, actual.Count), correct = 0, counted = 0;
@@ -103,9 +106,12 @@ public sealed class DirectionalAccuracyMetric<T> : IFinancialMetric<T>
 /// <summary>Annualized Sharpe ratio of the signal-following strategy.</summary>
 public sealed class StrategySharpeMetric<T> : IFinancialMetric<T>
 {
+    /// <inheritdoc />
     public string Name => "StrategySharpe";
+    /// <inheritdoc />
     public bool HigherIsBetter => true;
 
+    /// <inheritdoc />
     public double Compute(IReadOnlyList<double> predicted, IReadOnlyList<double> actual)
     {
         var (mean, std, _) = FinancialMath.Moments(FinancialMath.StrategyReturns(predicted, actual));
@@ -116,9 +122,12 @@ public sealed class StrategySharpeMetric<T> : IFinancialMetric<T>
 /// <summary>Annualized Sortino ratio (downside-only volatility) of the signal-following strategy.</summary>
 public sealed class StrategySortinoMetric<T> : IFinancialMetric<T>
 {
+    /// <inheritdoc />
     public string Name => "StrategySortino";
+    /// <inheritdoc />
     public bool HigherIsBetter => true;
 
+    /// <inheritdoc />
     public double Compute(IReadOnlyList<double> predicted, IReadOnlyList<double> actual)
     {
         var (mean, _, downside) = FinancialMath.Moments(FinancialMath.StrategyReturns(predicted, actual));
@@ -129,9 +138,12 @@ public sealed class StrategySortinoMetric<T> : IFinancialMetric<T>
 /// <summary>Max drawdown of the strategy equity curve (NEGATED so higher is better for uniform ranking).</summary>
 public sealed class MaxDrawdownMetric<T> : IFinancialMetric<T>
 {
+    /// <inheritdoc />
     public string Name => "StrategyMaxDrawdown";
+    /// <inheritdoc />
     public bool HigherIsBetter => true; // reports -drawdown
 
+    /// <inheritdoc />
     public double Compute(IReadOnlyList<double> predicted, IReadOnlyList<double> actual)
         => -FinancialMath.MaxDrawdown(FinancialMath.StrategyReturns(predicted, actual));
 }
@@ -139,9 +151,12 @@ public sealed class MaxDrawdownMetric<T> : IFinancialMetric<T>
 /// <summary>Profit factor: gross profit / gross loss of the signal-following strategy.</summary>
 public sealed class ProfitFactorMetric<T> : IFinancialMetric<T>
 {
+    /// <inheritdoc />
     public string Name => "ProfitFactor";
+    /// <inheritdoc />
     public bool HigherIsBetter => true;
 
+    /// <inheritdoc />
     public double Compute(IReadOnlyList<double> predicted, IReadOnlyList<double> actual)
     {
         double up = 0, down = 0;
@@ -157,9 +172,12 @@ public sealed class ProfitFactorMetric<T> : IFinancialMetric<T>
 /// <summary>Information coefficient: Pearson correlation between predicted and realized returns.</summary>
 public sealed class InformationCoefficientMetric<T> : IFinancialMetric<T>
 {
+    /// <inheritdoc />
     public string Name => "InformationCoefficient";
+    /// <inheritdoc />
     public bool HigherIsBetter => true;
 
+    /// <inheritdoc />
     public double Compute(IReadOnlyList<double> predicted, IReadOnlyList<double> actual)
     {
         int n = Math.Min(predicted.Count, actual.Count);

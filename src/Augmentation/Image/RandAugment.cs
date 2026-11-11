@@ -16,6 +16,7 @@ public class RandAugment<T> : ImageAugmenterBase<T>
         N = n; M = m; MStd = mStd;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var ops = (AugmentOp[])Enum.GetValues(typeof(AugmentOp));
@@ -105,6 +106,7 @@ public class RandAugment<T> : ImageAugmenterBase<T>
         }
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();
