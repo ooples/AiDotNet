@@ -78,264 +78,50 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
         var rng = Tensors.Helpers.RandomHelper.CreateSeededRandom(42);
         var cov = ComputeCovarianceMatrix(data);
         var corr = CovarianceToCorrelation(cov);
-        T eps = NumOps.FromDouble(1e-10);
 
         // Feature dimension per edge pair: 4 features
         int featDim = 4;
         T initScale = NumOps.FromDouble(Math.Sqrt(2.0 / featDim));
-        T headScale = NumOps.FromDouble(1.0 / Math.Sqrt(headDim));
 
-        // Query, Key, Value projection matrices (featDim x headDim)
-        var Wq = new Matrix<T>(featDim, headDim);
-        var Wk = new Matrix<T>(featDim, headDim);
-        var Wv = new Matrix<T>(featDim, headDim);
-        var Wo = new Matrix<T>(headDim, 1); // Output projection
+        // Query, Key, Value projection matrices (featDim x headDim), drawn interleaved per (f, k),
+        // then the output projection (headDim x 1).
+        var qkvDraws = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Tensor<T>.CreateRandom(rng, featDim, headDim, 3), NumOps.FromDouble(-0.5)), initScale);
+        var Wq = Engine.TensorSliceAxis(qkvDraws, 2, 0);
+        var Wk = Engine.TensorSliceAxis(qkvDraws, 2, 1);
+        var Wv = Engine.TensorSliceAxis(qkvDraws, 2, 2);
+        var Wo = Engine.TensorMultiplyScalar(
+            Engine.TensorAddScalar(Tensor<T>.CreateRandom(rng, headDim, 1), NumOps.FromDouble(-0.5)), initScale);
 
-        for (int f = 0; f < featDim; f++)
-            for (int k = 0; k < headDim; k++)
-            {
-                Wq[f, k] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-                Wk[f, k] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-                Wv[f, k] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-            }
-        for (int k = 0; k < headDim; k++)
-            Wo[k, 0] = NumOps.Multiply(initScale, NumOps.FromDouble(rng.NextDouble() - 0.5));
-
-        T lr = NumOps.FromDouble(LearningRate);
         // Acyclicity warm-up: start with NO NOTEARS penalty (rho = 0). The first half of training is a
         // pure data fit so edge probabilities can converge toward the (standardized) correlation signal;
         // the augmented-Lagrangian penalty is only switched on for the second half (see the rho update at
         // end of epoch). Starting at rho = 1 and ramping ×10 on the initial near-complete graph made the
         // penalty dominate immediately and saturate every edge — including the true ones — to 0.
         T rho = NumOps.Zero;
+        T boundedRho = NumOps.One;
 
-        // Precompute features per variable pair
-        int numPairs = d * d;
-        var features = new Matrix<T>(numPairs, featDim);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                int idx = i * d + j;
-                features[idx, 0] = cov[i, j];
-                features[idx, 1] = corr[i, j];
-                features[idx, 2] = cov[i, i];
-                features[idx, 3] = cov[j, j];
-            }
+        // Precompute features per variable pair (row i*d + j): cov[i,j], corr[i,j], cov[i,i], cov[j,j],
+        // regrouped by target as [j, i, feature] for the attention over pairs sharing target j.
+        var c = Tensor<T>.FromMatrix(cov);
+        var r = Tensor<T>.FromMatrix(corr);
+        var variance = Engine.TensorDiagonal(c);
+        var shape = new[] { d, d };
+        var features = Engine.TensorStack(new[]
+        {
+            c.Reshape(new[] { d * d }),
+            r.Reshape(new[] { d * d }),
+            Engine.TensorBroadcastTo(variance.Reshape(new[] { d, 1 }), shape).Reshape(new[] { d * d }),
+            Engine.TensorBroadcastTo(variance.Reshape(new[] { 1, d }), shape).Reshape(new[] { d * d }),
+        }, 1);
+        var byTarget = Engine.Reshape(Engine.TensorPermute(features.Reshape(new[] { d, d, featDim }), new[] { 1, 0, 2 }),
+            new[] { d * d, featDim });
+        var offDiagonal = OffDiagonalMask(d);
+        var absCorr = Engine.TensorAbs(r);
 
         for (int epoch = 0; epoch < MaxEpochs; epoch++)
         {
-            // Compute Q, K, V for each pair
-            var Q = new Matrix<T>(numPairs, headDim);
-            var K = new Matrix<T>(numPairs, headDim);
-            var V = new Matrix<T>(numPairs, headDim);
-
-            for (int p = 0; p < numPairs; p++)
-                for (int k = 0; k < headDim; k++)
-                {
-                    T q = NumOps.Zero, kv = NumOps.Zero, v = NumOps.Zero;
-                    for (int f = 0; f < featDim; f++)
-                    {
-                        q = NumOps.Add(q, NumOps.Multiply(features[p, f], Wq[f, k]));
-                        kv = NumOps.Add(kv, NumOps.Multiply(features[p, f], Wk[f, k]));
-                        v = NumOps.Add(v, NumOps.Multiply(features[p, f], Wv[f, k]));
-                    }
-                    Q[p, k] = q;
-                    K[p, k] = kv;
-                    V[p, k] = v;
-                }
-
-            // Self-attention over pairs sharing the same target j
-            // For target j: attend over all source pairs (*,j)
-            var attended = new Matrix<T>(numPairs, headDim);
-            var attnWeights = new Matrix<T>(numPairs, d); // attention weights for backprop
-
-            // Pre-allocate reusable vectors outside the attention loop
-            var scores = new Vector<T>(d);
-            var qRow = new Vector<T>(headDim);
-            var kRow = new Vector<T>(headDim);
-
-            for (int j = 0; j < d; j++)
-            {
-                // Pairs targeting j: indices i*d+j for i in [0..d)
-                for (int qi = 0; qi < d; qi++)
-                {
-                    int qIdx = qi * d + j;
-                    if (qi == j) continue;
-
-                    // Compute attention scores against all keys for target j
-                    T maxScore = NumOps.FromDouble(-1e10);
-                    // Extract Q row for this query
-                    for (int k = 0; k < headDim; k++) qRow[k] = Q[qIdx, k];
-                    for (int ki = 0; ki < d; ki++)
-                    {
-                        int kIdx = ki * d + j;
-                        for (int k = 0; k < headDim; k++) kRow[k] = K[kIdx, k];
-                        T score = NumOps.Multiply(Engine.DotProduct(qRow, kRow), headScale);
-                        scores[ki] = score;
-                        if (NumOps.GreaterThan(score, maxScore)) maxScore = score;
-                    }
-
-                    // Softmax
-                    T sumExp = NumOps.Zero;
-                    for (int ki = 0; ki < d; ki++)
-                    {
-                        T expVal = NumOps.FromDouble(Math.Exp(
-                            Math.Min(20, NumOps.ToDouble(NumOps.Subtract(scores[ki], maxScore)))));
-                        scores[ki] = expVal;
-                        sumExp = NumOps.Add(sumExp, expVal);
-                    }
-                    for (int ki = 0; ki < d; ki++)
-                    {
-                        scores[ki] = NumOps.Divide(scores[ki], NumOps.Add(sumExp, eps));
-                        attnWeights[qIdx, ki] = scores[ki];
-                    }
-
-                    // Weighted sum of values
-                    for (int k = 0; k < headDim; k++)
-                    {
-                        T sum = NumOps.Zero;
-                        for (int ki = 0; ki < d; ki++)
-                            sum = NumOps.Add(sum, NumOps.Multiply(scores[ki], V[ki * d + j, k]));
-                        attended[qIdx, k] = sum;
-                    }
-                }
-            }
-
-            // Output: edge logits from attended representation
-            var P = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    int idx = i * d + j;
-                    T logit = NumOps.Zero;
-                    for (int k = 0; k < headDim; k++)
-                        logit = NumOps.Add(logit, NumOps.Multiply(attended[idx, k], Wo[k, 0]));
-                    double sv = NumOps.ToDouble(logit);
-                    P[i, j] = NumOps.FromDouble(sv > 20 ? 1.0 : sv < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv)));
-                }
-
-            // Compute NOTEARS acyclicity constraint and gradient: h(P) = tr(exp(P∘P)) - d
-            var PSq = new Matrix<T>(d, d);
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                    PSq[i, j] = NumOps.Multiply(P[i, j], P[i, j]);
-            var expPSq = MatrixExponentialTaylor(PSq, d);
-            T hCurrent = NumOps.Zero;
-            for (int i = 0; i < d; i++)
-                hCurrent = NumOps.Add(hCurrent, expPSq[i, i]);
-            hCurrent = NumOps.Subtract(hCurrent, NumOps.FromDouble(d));
-            // Bounded NOTEARS penalty coefficient: rho*h (no augmented-Lagrangian alpha term — this
-            // schedule uses a fixed rho, not the alpha-accumulating dual ascent that collapsed edges).
-            T augCoeff = NumOps.Multiply(rho, hCurrent);
-
-            // Compute gradients: data fit + NOTEARS acyclicity
-            var gWo = new Matrix<T>(headDim, 1);
-            var gWq = new Matrix<T>(featDim, headDim);
-            var gWk = new Matrix<T>(featDim, headDim);
-            var gWv = new Matrix<T>(featDim, headDim);
-
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    int idx = i * d + j;
-                    T pij = P[i, j];
-                    T absCorr = NumOps.Abs(corr[i, j]);
-                    T dataGrad = NumOps.Subtract(pij, absCorr);
-                    // NOTEARS gradient: augCoeff (= rho*h) * exp(P²)^T[j,i] * 2 * P[i,j]
-                    T acycGrad = NumOps.Multiply(augCoeff,
-                        NumOps.Multiply(expPSq[j, i], NumOps.Multiply(NumOps.FromDouble(2), pij)));
-                    T totalGrad = NumOps.Add(dataGrad, acycGrad);
-                    T sigDeriv = NumOps.Multiply(pij, NumOps.Subtract(NumOps.One, pij));
-                    T dLogit = NumOps.Multiply(totalGrad, sigDeriv);
-
-                    // Gradient w.r.t. Wo
-                    for (int k = 0; k < headDim; k++)
-                        gWo[k, 0] = NumOps.Add(gWo[k, 0],
-                            NumOps.Multiply(dLogit, attended[idx, k]));
-
-                    // Simplified gradient through attention to Wv (dominant term)
-                    for (int ki = 0; ki < d; ki++)
-                    {
-                        T aw = attnWeights[idx, ki];
-                        int kIdx = ki * d + j;
-                        for (int k = 0; k < headDim; k++)
-                        {
-                            T dV = NumOps.Multiply(dLogit, NumOps.Multiply(Wo[k, 0], aw));
-                            for (int f = 0; f < featDim; f++)
-                                gWv[f, k] = NumOps.Add(gWv[f, k],
-                                    NumOps.Multiply(dV, features[kIdx, f]));
-                        }
-                    }
-                }
-
-            // Normalize and apply gradients
-            T normFactor = NumOps.FromDouble(1.0 / (d * (d - 1)));
-            for (int k = 0; k < headDim; k++)
-            {
-                gWo[k, 0] = NumOps.Multiply(gWo[k, 0], normFactor);
-                Wo[k, 0] = NumOps.Subtract(Wo[k, 0], NumOps.Multiply(lr, gWo[k, 0]));
-            }
-            // Gradient w.r.t. Wq and Wk through attention scores
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    int idx = i * d + j;
-                    T pij = P[i, j];
-                    T absCorr2 = NumOps.Abs(corr[i, j]);
-                    T dataGrad2 = NumOps.Subtract(pij, absCorr2);
-                    // NOTEARS acyclicity gradient: ρ·h(W) · ∂h/∂W_ij
-                    // where ∂h/∂W_ij = 2·W_ij·[e^{W⊙W}]_ji (Zheng et al. 2018)
-                    // Approximation: use 2·pij as proxy for ∂h/∂W_ij (ignores matrix exponential).
-                    // Consistent with the main path's bounded penalty: (rho * pij) * 2 * pij
-                    // (fixed rho, no augmented-Lagrangian alpha term).
-                    T acycGrad2 = NumOps.Multiply(NumOps.Multiply(rho, pij),
-                        NumOps.Multiply(NumOps.FromDouble(2), pij));
-                    T totalGrad2 = NumOps.Add(dataGrad2, acycGrad2);
-                    T sigDeriv2 = NumOps.Multiply(pij, NumOps.Subtract(NumOps.One, pij));
-                    T dLogit2 = NumOps.Multiply(totalGrad2, sigDeriv2);
-
-                    // dLogit/dAttended * dAttended/dAttnWeights * dAttnWeights/dScores * dScores/dQ,K
-                    for (int ki = 0; ki < d; ki++)
-                    {
-                        T aw = attnWeights[idx, ki];
-                        int kIdx2 = ki * d + j;
-                        // d(attended)/d(attnWeight[ki]) = V[ki]
-                        T dAttnW = NumOps.Zero;
-                        for (int k = 0; k < headDim; k++)
-                            dAttnW = NumOps.Add(dAttnW,
-                                NumOps.Multiply(dLogit2, NumOps.Multiply(Wo[k, 0], V[kIdx2, k])));
-                        // softmax jacobian (simplified): attn * (1-attn) for diagonal term
-                        T dScore = NumOps.Multiply(dAttnW, NumOps.Multiply(aw, NumOps.Subtract(NumOps.One, aw)));
-                        dScore = NumOps.Multiply(dScore, headScale);
-                        // dScore/dQ[h] = K[h], dScore/dK[h] = Q[h]
-                        for (int h = 0; h < headDim; h++)
-                        {
-                            for (int f = 0; f < featDim; f++)
-                            {
-                                gWq[f, h] = NumOps.Add(gWq[f, h],
-                                    NumOps.Multiply(dScore,
-                                        NumOps.Multiply(features[idx, f], K[kIdx2, h])));
-                                gWk[f, h] = NumOps.Add(gWk[f, h],
-                                    NumOps.Multiply(dScore,
-                                        NumOps.Multiply(features[kIdx2, f], Q[idx, h])));
-                            }
-                        }
-                    }
-                }
-
-            for (int f = 0; f < featDim; f++)
-                for (int k = 0; k < headDim; k++)
-                {
-                    gWv[f, k] = NumOps.Multiply(gWv[f, k], normFactor);
-                    gWq[f, k] = NumOps.Multiply(gWq[f, k], normFactor);
-                    gWk[f, k] = NumOps.Multiply(gWk[f, k], normFactor);
-                    Wv[f, k] = NumOps.Subtract(Wv[f, k], NumOps.Multiply(lr, gWv[f, k]));
-                    Wq[f, k] = NumOps.Subtract(Wq[f, k], NumOps.Multiply(lr, gWq[f, k]));
-                    Wk[f, k] = NumOps.Subtract(Wk[f, k], NumOps.Multiply(lr, gWk[f, k]));
-                }
+            (Wq, Wk, Wv, Wo) = AttentionStep(byTarget, Wq, Wk, Wv, Wo, absCorr, offDiagonal, rho, d, headDim);
 
             // Apply only a BOUNDED acyclicity penalty in the second half of training (warm-up; see the rho
             // initialization). The original schedule grew rho ×10 toward MaxPenaltyValue (1e16) AND
@@ -345,71 +131,147 @@ public class AVICIAlgorithm<T> : DeepCausalBase<T>
             // recovered no edges. A fixed, modest rho (no ×10 ramp, no alpha runaway) breaks ties toward a
             // DAG without overwhelming the data fit; the final orientation is resolved by BuildFinalAdjacency.
             if (epoch >= MaxEpochs / 2)
-                rho = NumOps.FromDouble(1.0);
+                rho = boundedRho;
         }
 
         // Final inference using trained parameters
-        var learnedP = new double[d, d];
-        // Re-run forward pass with trained Wq, Wk, Wv, Wo
-        var Qf = new Matrix<T>(d * d, headDim);
-        var Kf = new Matrix<T>(d * d, headDim);
-        var Vf = new Matrix<T>(d * d, headDim);
-        for (int idx = 0; idx < d * d; idx++)
-            for (int k = 0; k < headDim; k++)
-            {
-                T qSum = NumOps.Zero, kSum = NumOps.Zero, vSum = NumOps.Zero;
-                for (int f = 0; f < featDim; f++)
-                {
-                    qSum = NumOps.Add(qSum, NumOps.Multiply(features[idx, f], Wq[f, k]));
-                    kSum = NumOps.Add(kSum, NumOps.Multiply(features[idx, f], Wk[f, k]));
-                    vSum = NumOps.Add(vSum, NumOps.Multiply(features[idx, f], Wv[f, k]));
-                }
-                Qf[idx, k] = qSum; Kf[idx, k] = kSum; Vf[idx, k] = vSum;
-            }
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-            {
-                if (i == j) continue;
-                int qIdx = i * d + j;
-                // Compute attention and output
-                T maxS = NumOps.FromDouble(-1e10);
-                var sc = new T[d];
-                for (int ki = 0; ki < d; ki++)
-                {
-                    int kIdx = ki * d + j;
-                    T score = NumOps.Zero;
-                    for (int k = 0; k < headDim; k++)
-                        score = NumOps.Add(score, NumOps.Multiply(Qf[qIdx, k], Kf[kIdx, k]));
-                    score = NumOps.Multiply(score, headScale);
-                    sc[ki] = score;
-                    if (NumOps.GreaterThan(score, maxS)) maxS = score;
-                }
-                T sExp = NumOps.Zero;
-                for (int ki = 0; ki < d; ki++)
-                {
-                    sc[ki] = NumOps.FromDouble(Math.Exp(Math.Min(20, NumOps.ToDouble(NumOps.Subtract(sc[ki], maxS)))));
-                    sExp = NumOps.Add(sExp, sc[ki]);
-                }
-                var att = new T[headDim];
-                for (int k = 0; k < headDim; k++)
-                {
-                    T sum = NumOps.Zero;
-                    for (int ki = 0; ki < d; ki++)
-                    {
-                        T w = NumOps.Divide(sc[ki], NumOps.Add(sExp, eps));
-                        sum = NumOps.Add(sum, NumOps.Multiply(w, Vf[ki * d + j, k]));
-                    }
-                    att[k] = sum;
-                }
-                T logit = NumOps.Zero;
-                for (int k = 0; k < headDim; k++)
-                    logit = NumOps.Add(logit, NumOps.Multiply(att[k], Wo[k, 0]));
-                double sv2 = NumOps.ToDouble(logit);
-                double prob = sv2 > 20 ? 1.0 : sv2 < -20 ? 0.0 : 1.0 / (1.0 + Math.Exp(-sv2));
-                learnedP[i, j] = prob;
-            }
+        var final = AttendPairs(byTarget, Wq, Wk, Wv, Wo, offDiagonal, d, headDim);
+        return BuildFinalAdjacency(ToDoubleGrid(final.P, d), cov, d);
+    }
 
-        return BuildFinalAdjacency(learnedP, cov, d);
+    /// <summary>Forward pass of the pair attention, with every [j, i, ·] intermediate kept for backprop.</summary>
+    private sealed class PairAttention
+    {
+        public PairAttention(Tensor<T> q, Tensor<T> k, Tensor<T> v, Tensor<T> weights, Tensor<T> attended, Tensor<T> p)
+        {
+            Q = q;
+            K = k;
+            V = v;
+            Weights = weights;
+            Attended = attended;
+            P = p;
+        }
+
+        /// <summary>Queries, keys, values [j, i, headDim] of pair (i, j).</summary>
+        public Tensor<T> Q { get; }
+        public Tensor<T> K { get; }
+        public Tensor<T> V { get; }
+
+        /// <summary>Attention weights [j, query i, key i].</summary>
+        public Tensor<T> Weights { get; }
+
+        /// <summary>Attended representation [j, i, headDim].</summary>
+        public Tensor<T> Attended { get; }
+
+        /// <summary>Edge probabilities [i, j], zero diagonal.</summary>
+        public Tensor<T> P { get; }
+    }
+
+    /// <summary>
+    /// Self-attention over the pairs sharing each target j: scores Q K^T / sqrt(headDim), a softmax
+    /// shifted by max(score, -1e10) with exponents capped at 20 and denominator sum + 1e-10, then
+    /// P[i,j] = sigmoid(attended · Wo) saturated beyond ±20.
+    /// </summary>
+    private PairAttention AttendPairs(Tensor<T> byTarget, Tensor<T> Wq, Tensor<T> Wk, Tensor<T> Wv, Tensor<T> Wo,
+        Tensor<T> offDiagonal, int d, int headDim)
+    {
+        var pairShape = new[] { d, d, headDim };
+        var q = Engine.TensorMatMul(byTarget, Wq).Reshape(pairShape);
+        var k = Engine.TensorMatMul(byTarget, Wk).Reshape(pairShape);
+        var v = Engine.TensorMatMul(byTarget, Wv).Reshape(pairShape);
+
+        var scores = Engine.TensorMultiplyScalar(
+            Engine.TensorMatMul(q, Engine.TensorPermute(k, new[] { 0, 2, 1 })),
+            NumOps.FromDouble(1.0 / Math.Sqrt(headDim)));                           // [j, qi, ki]
+        var scoreShape = new[] { d, d, d };
+        var maxScore = Engine.TensorMax(Engine.ReduceMax(scores, new[] { 2 }, true), NumOps.FromDouble(-1e10));
+        var shifted = Engine.TensorSubtract(scores, Engine.TensorBroadcastTo(maxScore, scoreShape));
+        var cap = Engine.TensorFullLike(shifted, NumOps.FromDouble(20));
+        var expScores = Engine.TensorExp(Engine.TensorWhere(Engine.TensorGreaterThan(shifted, cap), cap, shifted));
+        var sumExp = Engine.TensorAddScalar(Engine.ReduceSum(expScores, new[] { 2 }, true), NumOps.FromDouble(1e-10));
+        var weights = Engine.TensorDivide(expScores, Engine.TensorBroadcastTo(sumExp, scoreShape));
+
+        // Weighted sum of values, then edge logits from the attended representation
+        var attended = Engine.TensorMatMul(weights, v);                              // [j, i, headDim]
+        var logits = Engine.TensorMatMul(attended.Reshape(new[] { d * d, headDim }), Wo).Reshape(new[] { d, d }); // [j, i]
+        var p = Engine.TensorMultiply(offDiagonal, ClampedSigmoid(Engine.TensorTranspose(logits), 1.0));
+        return new PairAttention(q, k, v, weights, attended, p);
+    }
+
+    /// <summary>
+    /// One training step: data fit P - |corr| plus the bounded NOTEARS gradient rho·h·exp(P∘P)^T∘2P
+    /// drives Wo and (through the attention weights) Wv; Wo is applied first, and the Wq / Wk
+    /// gradients, which use the proxy acyclicity term rho·P·2P and the diagonal softmax Jacobian,
+    /// are taken through the updated Wo. All gradients are averaged over the d(d-1) pairs.
+    /// </summary>
+    private (Tensor<T> Wq, Tensor<T> Wk, Tensor<T> Wv, Tensor<T> Wo) AttentionStep(Tensor<T> byTarget, Tensor<T> Wq,
+        Tensor<T> Wk, Tensor<T> Wv, Tensor<T> Wo, Tensor<T> absCorr, Tensor<T> offDiagonal, T rho, int d, int headDim)
+    {
+        var a = AttendPairs(byTarget, Wq, Wk, Wv, Wo, offDiagonal, d, headDim);
+        var P = a.P;
+        T lr = NumOps.FromDouble(LearningRate);
+        T normFactor = NumOps.FromDouble(1.0 / (d * (d - 1)));
+        T two = NumOps.FromDouble(2);
+
+        // Compute NOTEARS acyclicity constraint and gradient: h(P) = tr(exp(P∘P)) - d
+        var expPSq = Tensor<T>.FromMatrix(MatrixExponentialTaylor(Engine.TensorMultiply(P, P).ToMatrix(), d));
+        T hCurrent = NumOps.Subtract(Engine.TensorTrace(expPSq), NumOps.FromDouble(d));
+        // Bounded NOTEARS penalty coefficient: rho*h (no augmented-Lagrangian alpha term — this
+        // schedule uses a fixed rho, not the alpha-accumulating dual ascent that collapsed edges).
+        T augCoeff = NumOps.Multiply(rho, hCurrent);
+
+        var dataGrad = Engine.TensorSubtract(P, absCorr);
+        var sigDeriv = Engine.TensorMultiply(P, Engine.ScalarMinusTensor(NumOps.One, P));
+        var acycGrad = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(Engine.TensorTranspose(expPSq), Engine.TensorMultiplyScalar(P, two)), augCoeff);
+        var dLogit = Engine.TensorMultiply(offDiagonal, Engine.TensorMultiply(Engine.TensorAdd(dataGrad, acycGrad), sigDeriv));
+        var dLogitByTarget = Engine.TensorTranspose(dLogit);                         // [j, i]
+
+        // Gradient w.r.t. Wo
+        var gWo = Engine.TensorMatMul(Engine.TensorTranspose(a.Attended.Reshape(new[] { d * d, headDim })),
+            dLogitByTarget.Reshape(new[] { d * d, 1 }));
+
+        // Simplified gradient through attention to Wv (dominant term):
+        // gWv[f,k] = Wo[k] * sum_{j,ki} (sum_i dLogit[i,j] attn[j,i,ki]) features[(ki,j), f]
+        var keyWeight = Engine.TensorMatMul(dLogitByTarget.Reshape(new[] { d, 1, d }), a.Weights).Reshape(new[] { 1, d * d });
+        var featureWeight = Engine.TensorMatMul(keyWeight, byTarget);                 // [1, featDim]
+        var gWv = Engine.TensorMatMul(Engine.TensorTranspose(featureWeight), Engine.TensorTranspose(Wo));
+
+        // Normalize and apply the Wo gradient first
+        var newWo = Engine.TensorSubtract(Wo, Engine.TensorMultiplyScalar(Engine.TensorMultiplyScalar(gWo, normFactor), lr));
+
+        // Gradient w.r.t. Wq and Wk through attention scores.
+        // NOTEARS acyclicity gradient: ρ·h(W) · ∂h/∂W_ij
+        // where ∂h/∂W_ij = 2·W_ij·[e^{W⊙W}]_ji (Zheng et al. 2018)
+        // Approximation: use 2·pij as proxy for ∂h/∂W_ij (ignores matrix exponential).
+        // Consistent with the main path's bounded penalty: (rho * pij) * 2 * pij
+        // (fixed rho, no augmented-Lagrangian alpha term).
+        var acycGrad2 = Engine.TensorMultiply(Engine.TensorMultiplyScalar(P, rho), Engine.TensorMultiplyScalar(P, two));
+        var dLogit2 = Engine.TensorMultiply(offDiagonal, Engine.TensorMultiply(Engine.TensorAdd(dataGrad, acycGrad2), sigDeriv));
+        var dLogit2ByTarget = Engine.TensorTranspose(dLogit2);
+
+        // d(attended)/d(attnWeight[ki]) = V[ki]; dAttnW[j,i,ki] = dLogit2[i,j] * (V[j,ki,:] · Wo)
+        var valueScore = Engine.TensorMatMul(a.V.Reshape(new[] { d * d, headDim }), newWo).Reshape(new[] { d, 1, d });
+        var scoreShape = new[] { d, d, d };
+        var dAttnW = Engine.TensorMultiply(Engine.TensorBroadcastTo(dLogit2ByTarget.Reshape(new[] { d, d, 1 }), scoreShape),
+            Engine.TensorBroadcastTo(valueScore, scoreShape));
+        // softmax jacobian (simplified): attn * (1-attn) for diagonal term, times the score scale
+        var dScore = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(dAttnW, Engine.TensorMultiply(a.Weights, Engine.ScalarMinusTensor(NumOps.One, a.Weights))),
+            NumOps.FromDouble(1.0 / Math.Sqrt(headDim)));
+
+        // dScore/dQ[h] = K[h], dScore/dK[h] = Q[h]
+        var queryGrad = Engine.TensorMatMul(dScore, a.K).Reshape(new[] { d * d, headDim });
+        var keyGrad = Engine.TensorMatMul(Engine.TensorPermute(dScore, new[] { 0, 2, 1 }), a.Q).Reshape(new[] { d * d, headDim });
+        var featuresT = Engine.TensorTranspose(byTarget);
+        var gWq = Engine.TensorMatMul(featuresT, queryGrad);
+        var gWk = Engine.TensorMatMul(featuresT, keyGrad);
+
+        return (
+            Engine.TensorSubtract(Wq, Engine.TensorMultiplyScalar(Engine.TensorMultiplyScalar(gWq, normFactor), lr)),
+            Engine.TensorSubtract(Wk, Engine.TensorMultiplyScalar(Engine.TensorMultiplyScalar(gWk, normFactor), lr)),
+            Engine.TensorSubtract(Wv, Engine.TensorMultiplyScalar(Engine.TensorMultiplyScalar(gWv, normFactor), lr)),
+            newWo);
     }
 
 }
