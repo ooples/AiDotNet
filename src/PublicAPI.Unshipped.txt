@@ -977,6 +977,7 @@ AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Init
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.IsExactBackprop.get -> bool
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Name.get -> string!
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> void
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1) -> void
 AiDotNet.Interfaces.IFeatureSelector<T>
 AiDotNet.Interfaces.IFeatureSelector<T>.GetSupportMask() -> bool[]!
@@ -1161,6 +1162,28 @@ AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.Us
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
+AiDotNet.Interfaces.LocalObjectiveStep<T>.ReadoutLossDetached.get -> System.Func<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.Layers.TiedEmbeddingHeadLayer<T>.TryComputeFusedLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Interfaces.ILossFunction<T>! loss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.DetachReadoutOnHiddenLayers.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.LayerStride.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.UseDepthProgressiveWeight.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.ApplyAuxiliaryGradients(System.Collections.Generic.IReadOnlyDictionary<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!, AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>! gradients) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.AuxiliaryParameters.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.BuildLocalObjective(AiDotNet.Interfaces.LocalObjectiveContext<T>! context) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.BuildOutputObjective(AiDotNet.Interfaces.LocalObjectiveStep<T>! step, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! prediction, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! defaultLoss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.ComputeTeachingSignals(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.DetachReadoutOnHiddenLayers.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.Initialize(AiDotNet.Interfaces.ICreditAssignmentContext<T>! context) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.IsExactBackprop.get -> bool
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.LayerStride.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.MaxCandidates.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.Name.get -> string!
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.SampledTiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, int maxCandidates = 1024, double localWeight = 1, bool detachReadoutOnHiddenLayers = true, int layerStride = 1, bool useDepthProgressiveWeight = false, int? seed = null) -> void
+AiDotNet.NeuralNetworks.CreditAssignment.SampledTiedReadoutLocalErrorCreditRule<T>.UseDepthProgressiveWeight.get -> bool
+static AiDotNet.NeuralNetworks.CreditAssignment.CreditRules.TiedReadoutLocalError<T>(int readoutLayerCount = 2, double localWeight = 1, bool detachReadoutOnHiddenLayers = false, int layerStride = 1, bool useDepthProgressiveWeight = false) -> AiDotNet.Interfaces.ICreditRule<T>!
+static AiDotNet.NeuralNetworks.CreditAssignment.CreditRules.SampledTiedReadoutLocalError<T>(int readoutLayerCount = 2, int maxCandidates = 1024, double localWeight = 1, bool detachReadoutOnHiddenLayers = true, int layerStride = 1, bool useDepthProgressiveWeight = false, int? seed = null) -> AiDotNet.Interfaces.ICreditRule<T>!
 override AiDotNet.Diffusion.DDPMModel<T>.CanPredictFromTimestepTensor.get -> bool
 override AiDotNet.Diffusion.DDPMModel<T>.PredictTrainingNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! noisySample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! timesteps, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultConformerLayers(int encoderDim = 512, int numLayers = 18, int numAttentionHeads = 8, int feedForwardExpansionFactor = 4, int numMels = 80, int vocabSize = 5000, double dropoutRate = 0.1, int maxSequenceLength = 750, int convKernelSize = 31) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
