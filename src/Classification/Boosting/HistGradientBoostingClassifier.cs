@@ -104,7 +104,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Instead of storing exact values, features are grouped into
     /// bins. This array stores the boundaries between bins for each feature.</para>
     /// </remarks>
-    private double[][]? _binBoundaries;
+    private Vector<T>[]? _binBoundaries;
 
     /// <summary>
     /// The initial prediction (log-odds for binary, class probabilities for multiclass).
@@ -338,7 +338,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
 
         var binnedX = BinFeatures(input, _binBoundaries);
         int numOutputs = NumClasses == 2 ? 1 : NumClasses;
-        var predictions = new Vector<T>(input.Rows);
+        var bestClasses = new int[input.Rows];
 
         for (int i = 0; i < input.Rows; i++)
         {
@@ -360,7 +360,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
             if (NumClasses == 2)
             {
                 double prob = 1.0 / (1.0 + Math.Exp(-rawPred[0]));
-                predictions[i] = prob >= 0.5 ? ClassLabels[1] : ClassLabels[0];
+                bestClasses[i] = prob >= 0.5 ? 1 : 0;
             }
             else
             {
@@ -383,11 +383,11 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
                         bestClass = k;
                     }
                 }
-                predictions[i] = ClassLabels[bestClass];
+                bestClasses[i] = bestClass;
             }
         }
 
-        return predictions;
+        return ClassIndicesToLabels(new Tensor<int>(bestClasses, new[] { bestClasses.Length }));
     }
 
     /// <summary>
@@ -399,43 +399,51 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> This finds evenly-spaced quantile boundaries for each feature.
     /// For example, with 256 bins, we find the values that divide the data into 256 equal parts.</para>
     /// </remarks>
-    private double[][] ComputeBinBoundaries(Matrix<T> x)
+    private Vector<T>[] ComputeBinBoundaries(Matrix<T> x)
     {
         int p = x.Columns;
-        var boundaries = new double[p][];
+        int n = x.Rows;
+        var boundaries = new Vector<T>[p];
+        var engine = Engine;
 
         for (int j = 0; j < p; j++)
         {
-            // Collect unique values with validation
-            var values = new List<double>();
-            for (int i = 0; i < x.Rows; i++)
+            if (n == 0)
             {
-                double val = NumOps.ToDouble(x[i, j]);
-                if (double.IsNaN(val) || double.IsInfinity(val))
-                {
-                    throw new ArgumentException(
-                        $"Missing/NaN/Infinity values are not supported. Found at row {i}, feature {j}. Please impute before training.",
-                        nameof(x));
-                }
-                values.Add(val);
+                boundaries[j] = new Vector<T>(0);
+                continue;
             }
-            values.Sort();
 
-            // Compute quantile boundaries
-            int numBins = Math.Min(_maxBins, values.Count);
-            var binBounds = new List<double>();
+            // Validate: every value must be finite
+            var column = x.GetColumn(j).AsTensor();
+            var invalid = engine.TensorWhere(engine.TensorIsFinite(column),
+                new Tensor<T>(new[] { n }), FilledVector(n, NumOps.One).AsTensor());
+            if (engine.TensorCountNonzero(invalid) > 0)
+            {
+                var badRows = engine.TensorNonzero(invalid);
+                throw new ArgumentException(
+                    $"Missing/NaN/Infinity values are not supported. Found at row {badRows.ToArray()[0]}, feature {j}. Please impute before training.",
+                    nameof(x));
+            }
 
+            var sorted = engine.TensorSort(column, 0, false).Values;
+
+            // Compute quantile boundaries (strictly increasing, so duplicates are dropped)
+            int numBins = Math.Min(_maxBins, n);
+            if (numBins <= 1)
+            {
+                boundaries[j] = new Vector<T>(0);
+                continue;
+            }
+
+            var positions = new int[numBins - 1];
             for (int b = 1; b < numBins; b++)
             {
-                int idx = (int)((double)b / numBins * values.Count);
-                idx = Math.Min(idx, values.Count - 1);
-                if (binBounds.Count == 0 || values[idx] > binBounds[^1])
-                {
-                    binBounds.Add(values[idx]);
-                }
+                positions[b - 1] = Math.Min((int)((double)b / numBins * n), n - 1);
             }
 
-            boundaries[j] = [.. binBounds];
+            var candidates = engine.TensorGather(sorted, new Tensor<int>(positions, new[] { positions.Length }), 0);
+            boundaries[j] = engine.TensorUniqueConsecutive(candidates).ToVector();
         }
 
         return boundaries;
@@ -451,20 +459,26 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// <para><b>For Beginners:</b> Converts continuous feature values to bin indices.
     /// A value of 5.3 might become bin 42 if that's where 5.3 falls in the boundaries.</para>
     /// </remarks>
-    private int[,] BinFeatures(Matrix<T> x, double[][] boundaries)
+    private int[,] BinFeatures(Matrix<T> x, Vector<T>[] boundaries)
     {
         int n = x.Rows;
         int p = x.Columns;
         var binned = new int[n, p];
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            for (int j = 0; j < p; j++)
+            return binned;
+        }
+
+        var engine = Engine;
+        for (int j = 0; j < p; j++)
+        {
+            // Bin = index of the first boundary >= value (an exact boundary match maps to its own index)
+            var bins = boundaries[j].Length == 0
+                ? new int[n]
+                : engine.TensorSearchSorted(boundaries[j].AsTensor(), x.GetColumn(j).AsTensor(), false).ToArray();
+            for (int i = 0; i < n; i++)
             {
-                double val = NumOps.ToDouble(x[i, j]);
-                int bin = Array.BinarySearch(boundaries[j], val);
-                if (bin < 0) bin = ~bin;
-                binned[i, j] = bin;
+                binned[i, j] = bins[i];
             }
         }
 
@@ -485,14 +499,12 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     {
         int numOutputs = NumClasses == 2 ? 1 : NumClasses;
         var classCounts = new int[NumClasses];
-
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length > 0)
         {
-            int classIdx = GetClassIndexFromLabel(y[i]);
-            if (classIdx >= 0 && classIdx < NumClasses)
-            {
-                classCounts[classIdx]++;
-            }
+            // Unknown labels map to -1; shifting by one sends them to bin 0, which is dropped.
+            var shifted = Engine.TensorAddScalar(GetClassIndexTensor(y), 1);
+            var binCounts = Engine.TensorBinCount(shifted, NumClasses + 1).ToArray();
+            Array.Copy(binCounts, 1, classCounts, 0, Math.Min(NumClasses, binCounts.Length - 1));
         }
 
         var initial = new double[numOutputs];
@@ -536,13 +548,14 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         int n = y.Length;
         var gradients = new double[n];
         var hessians = new double[n];
+        var targetClasses = GetClassIndicesFromLabels(y);
 
         if (NumClasses == 2)
         {
             // Binary cross-entropy gradients
             for (int i = 0; i < n; i++)
             {
-                double target = GetClassIndexFromLabel(y[i]) == 1 ? 1.0 : 0.0;
+                double target = targetClasses[i] == 1 ? 1.0 : 0.0;
                 double pred = 1.0 / (1.0 + Math.Exp(-predictions[i, 0]));
                 gradients[i] = pred - target;
                 hessians[i] = pred * (1 - pred);
@@ -568,7 +581,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
                 }
 
                 double pred = Math.Exp(predictions[i, classIdx] - maxVal) / sumExp;
-                double target = GetClassIndexFromLabel(y[i]) == classIdx ? 1.0 : 0.0;
+                double target = targetClasses[i] == classIdx ? 1.0 : 0.0;
 
                 gradients[i] = pred - target;
                 hessians[i] = pred * (1 - pred);
@@ -766,25 +779,32 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// </remarks>
     public override Dictionary<string, T> GetFeatureImportance()
     {
-        var importance = new double[NumFeatures];
-
-        // Count feature usage across all trees
+        // Collect the feature of every split across all trees
+        var splitFeatures = new List<int>();
         foreach (var tree in _trees)
         {
-            CountFeatureUsage(tree, importance);
+            CountFeatureUsage(tree, splitFeatures);
         }
 
-        // Normalize
-        double total = importance.Sum();
-        if (total == 0) total = 1;
+        // Usage count per feature, normalized to sum to 1
+        var engine = Engine;
+        var importance = new Tensor<T>(new[] { NumFeatures });
+        if (splitFeatures.Count > 0 && NumFeatures > 0)
+        {
+            var counts = engine.TensorScatterAdd(importance,
+                new Tensor<int>(splitFeatures.ToArray(), new[] { splitFeatures.Count }),
+                FilledVector(splitFeatures.Count, NumOps.One).AsTensor(), 0);
+            importance = engine.TensorDivideScalar(counts, engine.TensorSum(counts));
+        }
 
+        var values = importance.ToArray();
         var result = new Dictionary<string, T>();
         for (int i = 0; i < NumFeatures; i++)
         {
             string name = FeatureNames is not null && i < FeatureNames.Length
                 ? FeatureNames[i]
                 : $"Feature_{i}";
-            result[name] = NumOps.FromDouble(importance[i] / total);
+            result[name] = values[i];
         }
 
         return result;
@@ -794,21 +814,21 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     /// Counts feature usage in a tree for importance calculation.
     /// </summary>
     /// <param name="node">Tree node to process.</param>
-    /// <param name="importance">Array to accumulate importance scores.</param>
+    /// <param name="splitFeatures">Receives the feature index of every split.</param>
     /// <remarks>
     /// <para><b>For Beginners:</b> Recursively traverses the tree and counts how often
     /// each feature is used for splits.</para>
     /// </remarks>
-    private void CountFeatureUsage(HistTree node, double[] importance)
+    private void CountFeatureUsage(HistTree node, List<int> splitFeatures)
     {
         if (node.LeftChild is null || node.RightChild is null)
         {
             return;
         }
 
-        importance[node.FeatureIndex] += 1;
-        CountFeatureUsage(node.LeftChild, importance);
-        CountFeatureUsage(node.RightChild, importance);
+        splitFeatures.Add(node.FeatureIndex);
+        CountFeatureUsage(node.LeftChild, splitFeatures);
+        CountFeatureUsage(node.RightChild, splitFeatures);
     }
 
     private static HistTree CloneHistTree(HistTree node)
