@@ -138,13 +138,12 @@ public partial class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
             _numOps.Multiply(_ay, y)
         );
 
-        for (int i = 0; i < _x.Length; i++)
-        {
-            T r = CalculateDistance(x, y, _x[i], _y[i]);
-            result = _numOps.Add(result, _numOps.Multiply(_weights[i], RadialBasisFunction(r)));
-        }
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> basis = DistanceBasis(
+            engine.ScalarMinusTensor(x, _x.AsTensor()),
+            engine.ScalarMinusTensor(y, _y.AsTensor()));
 
-        return result;
+        return _numOps.Add(result, engine.TensorSum(engine.TensorMultiply(_weights.AsTensor(), basis)));
     }
 
     /// <summary>
@@ -168,28 +167,22 @@ public partial class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
     /// </remarks>
     private void CalculateWeights()
     {
+        var engine = AiDotNetEngine.Current;
         int n = _x.Length;
-        Matrix<T> L = new Matrix<T>(n + 3, n + 3);
-        Vector<T> rhs = new Vector<T>(n + 3);
+        Tensor<T> xs = _x.AsTensor();
+        Tensor<T> ys = _y.AsTensor();
 
-        // Fill the L matrix
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i; j < n; j++)
-            {
-                T r = CalculateDistance(_x[i], _y[i], _x[j], _y[j]);
-                T value = RadialBasisFunction(r);
-                L[i, j] = value;
-                L[j, i] = value;
-            }
-            L[i, n] = _numOps.One;
-            L[i, n + 1] = _x[i];
-            L[i, n + 2] = _y[i];
-            L[n, i] = _numOps.One;
-            L[n + 1, i] = _x[i];
-            L[n + 2, i] = _y[i];
-            rhs[i] = _z[i];
-        }
+        // L = [[K, P], [P^T, 0]] with K[i, j] = phi(|p_i - p_j|) and P = [1, x, y]
+        Tensor<T> kernel = DistanceBasis(
+            engine.TensorSubtract(xs.Reshape(n, 1), xs.Reshape(1, n)),
+            engine.TensorSubtract(ys.Reshape(n, 1), ys.Reshape(1, n)));
+        Tensor<T> polynomial = engine.TensorConcatenate(
+            new[] { Tensor<T>.CreateDefault(new[] { n, 1 }, _numOps.One), xs.Reshape(n, 1), ys.Reshape(n, 1) }, 1);
+        Tensor<T> top = engine.TensorConcatenate(new[] { kernel, polynomial }, 1);
+        Tensor<T> bottom = engine.TensorConcatenate(
+            new[] { engine.TensorTranspose(polynomial), new Tensor<T>(new[] { 3, 3 }) }, 1);
+        Matrix<T> L = engine.TensorConcatenate(new[] { top, bottom }, 0).ToMatrix();
+        Vector<T> rhs = engine.TensorConcatenate(new[] { _z.AsTensor(), new Tensor<T>(new[] { 3 }) }, 0).ToVector();
 
         // Solve the system
         var decomposition = _decomposition ?? new LuDecomposition<T>(L);
@@ -201,43 +194,40 @@ public partial class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
         _ax = solution[n + 1];
         _ay = solution[n + 2];
     }
-
     /// <summary>
-    /// Calculates the Euclidean distance between two points in 2D space.
+    /// Calculates the thin plate basis for the Euclidean distances given by coordinate differences in 2D space.
     /// </summary>
-    /// <param name="x1">The x-coordinate of the first point.</param>
-    /// <param name="y1">The y-coordinate of the first point.</param>
-    /// <param name="x2">The x-coordinate of the second point.</param>
-    /// <param name="y2">The y-coordinate of the second point.</param>
-    /// <returns>The distance between the two points.</returns>
+    /// <param name="dx">The x-coordinate differences.</param>
+    /// <param name="dy">The y-coordinate differences.</param>
+    /// <returns>The radial basis function of each distance.</returns>
     /// <remarks>
     /// <para>
-    /// <b>For Beginners:</b> This method calculates the straight-line distance between two points
+    /// <b>For Beginners:</b> This method calculates the straight-line distance for each pair of points
     /// using the Pythagorean theorem (the square root of the sum of squared differences
-    /// in x and y coordinates).
+    /// in x and y coordinates), then applies the radial basis function to it.
     /// </para>
     /// <para>
     /// For example, the distance between points (0,0) and (3,4) would be 5 units.
     /// </para>
     /// </remarks>
-    private T CalculateDistance(T x1, T y1, T x2, T y2)
+    private Tensor<T> DistanceBasis(Tensor<T> dx, Tensor<T> dy)
     {
-        T dx = _numOps.Subtract(x1, x2);
-        T dy = _numOps.Subtract(y1, y2);
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> r = engine.TensorSqrt(engine.TensorAdd(engine.TensorMultiply(dx, dx), engine.TensorMultiply(dy, dy)));
 
-        return _numOps.Sqrt(_numOps.Add(_numOps.Multiply(dx, dx), _numOps.Multiply(dy, dy)));
+        return RadialBasisFunction(r);
     }
 
     /// <summary>
     /// Calculates the radial basis function used in Thin Plate Spline interpolation.
     /// </summary>
-    /// <param name="r">The distance value.</param>
-    /// <returns>The result of the radial basis function.</returns>
+    /// <param name="r">The distance values.</param>
+    /// <returns>The result of the radial basis function for each distance.</returns>
     /// <remarks>
     /// <para>
     /// <b>For Beginners:</b> This function is a mathematical formula that determines how the
     /// influence of each data point spreads out in space. For Thin Plate Splines,
-    /// this function is r² × log(r), where r is the distance from a point.
+    /// this function is r^2 * log(r), where r is the distance from a point.
     /// </para>
     /// <para>
     /// Think of it as defining how the "bending" of our imaginary metal plate works
@@ -249,14 +239,11 @@ public partial class ThinPlateSplineInterpolation<T> : I2DInterpolation<T>
     /// to avoid mathematical problems with the logarithm of zero.
     /// </para>
     /// </remarks>
-    private T RadialBasisFunction(T r)
+    private Tensor<T> RadialBasisFunction(Tensor<T> r)
     {
-        if (_numOps.Equals(r, _numOps.Zero))
-            return _numOps.Zero;
+        var engine = AiDotNetEngine.Current;
+        Tensor<T> value = engine.TensorMultiply(engine.TensorMultiply(r, r), engine.TensorLog(r));
 
-        return _numOps.Multiply(
-            _numOps.Multiply(r, r),
-            _numOps.Log(r)
-        );
+        return engine.TensorWhere(engine.TensorEquals(r, _numOps.Zero), new Tensor<T>(r._shape), value);
     }
 }
