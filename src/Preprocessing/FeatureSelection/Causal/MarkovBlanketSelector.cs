@@ -29,12 +29,12 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _threshold;
     private readonly int _nBins;
 
-    private double[]? _relevanceScores;
+    private Vector<T>? _relevanceScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int MaxFeatures => _maxFeatures;
-    public double[]? RelevanceScores => _relevanceScores;
+    public Vector<T>? RelevanceScores => _relevanceScores;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
 
@@ -70,30 +70,28 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        // Convert and discretize data
-        var X = DiscretizeData(data, n, p);
-        var y = DiscretizeTarget(target, n);
+        // Discretize data (one-hot bins per feature) and the target
+        var engine = Engine;
+        var xBins = Discretize(Tensor<T>.FromMatrix(data));
+        var yBins = Discretize(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }));
 
-        // Initialize relevance scores
-        _relevanceScores = new double[p];
-
-        // Compute mutual information with target for each feature
-        for (int j = 0; j < p; j++)
-            _relevanceScores[j] = ComputeMutualInformation(X, y, j, n);
+        // Mutual information with target for each feature
+        var relevance = engine.Reshape(
+            PreprocessingTensorOps.HistogramMutualInformation(xBins, yBins, _nBins, bits: false, logEpsilon: 0, clampAtZero: false),
+            new[] { p });
+        _relevanceScores = relevance.ToVector();
 
         // Grow-Shrink algorithm for Markov blanket
         var blanket = new HashSet<int>();
-        var candidates = Enumerable.Range(0, p)
-            .OrderByDescending(j => _relevanceScores[j])
-            .ToList();
+        var candidates = engine.TensorArgsort(relevance, 0, true).AsSpan().ToArray();
+        T threshold = NumOps.FromDouble(_threshold);
 
         // Growing phase: add features that increase conditional MI
         foreach (int candidate in candidates)
         {
             if (blanket.Count >= _maxFeatures) break;
 
-            double conditionalMI = ComputeConditionalMI(X, y, candidate, blanket, n);
-            if (conditionalMI > _threshold)
+            if (PreprocessingTensorOps.IsAbove(ConditionalMutualInformation(xBins, yBins, candidate, blanket, n), threshold))
                 blanket.Add(candidate);
         }
 
@@ -104,8 +102,7 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             int feature = blanketList[i];
             var others = blanket.Where(f => f != feature).ToHashSet();
 
-            double conditionalMI = ComputeConditionalMI(X, y, feature, others, n);
-            if (conditionalMI <= _threshold)
+            if (!PreprocessingTensorOps.IsAbove(ConditionalMutualInformation(xBins, yBins, feature, others, n), threshold))
                 blanket.Remove(feature);
         }
 
@@ -113,151 +110,92 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // If blanket is empty, select top features by MI
         if (_selectedIndices.Length == 0)
-        {
-            _selectedIndices = Enumerable.Range(0, p)
-                .OrderByDescending(j => _relevanceScores[j])
-                .Take(Math.Min(Math.Min(5, p), _maxFeatures))
-                .OrderBy(x => x)
-                .ToArray();
-        }
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(relevance, Math.Min(Math.Min(5, p), _maxFeatures));
 
         IsFitted = true;
     }
 
-    private int[,] DiscretizeData(Matrix<T> data, int n, int p)
+    /// <summary>
+    /// Equal-width bins over [min, max] with <c>bin = min(floor((x - min) / range * (nBins - 1)), nBins - 1)</c>
+    /// (0 for a constant column), returned one-hot as [n, columns * nBins].
+    /// </summary>
+    private Tensor<T> Discretize(Tensor<T> x)
     {
-        var result = new int[n, p];
-        for (int j = 0; j < p; j++)
-        {
-            double min = double.MaxValue, max = double.MinValue;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                min = Math.Min(min, val);
-                max = Math.Max(max, val);
-            }
-
-            double range = max - min;
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(data[i, j]);
-                result[i, j] = range > 1e-10
-                    ? Math.Min((int)((val - min) / range * (_nBins - 1)), _nBins - 1)
-                    : 0;
-            }
-        }
-        return result;
+        var engine = Engine;
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(x), new[] { 1, p });
+        var range = engine.TensorSubtract(engine.Reshape(PreprocessingTensorOps.ColumnMax(x), new[] { 1, p }), min);
+        var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(x, min), range), NumOps.FromDouble(_nBins - 1));
+        var bins = engine.TensorMin(engine.TensorFloor(scaled), NumOps.FromDouble(_nBins - 1));
+        var varying = engine.TensorBroadcastTo(engine.TensorGreaterThan(range, NumOps.FromDouble(1e-10)), new[] { n, p });
+        return PreprocessingTensorOps.OneHotBins(engine.TensorWhere(varying, bins, new Tensor<T>(new[] { n, p })), _nBins);
     }
 
-    private int[] DiscretizeTarget(Vector<T> target, int n)
+    private Tensor<T> FeatureBins(Tensor<T> bins, int feature) =>
+        Engine.TensorSlice(bins, new[] { 0, feature * _nBins }, new[] { bins.Shape[0], _nBins });
+
+    private T ConditionalMutualInformation(Tensor<T> xBins, Tensor<T> yBins, int feature, HashSet<int> conditionSet, int n)
     {
-        var result = new int[n];
-        double min = double.MaxValue, max = double.MinValue;
-        for (int i = 0; i < n; i++)
-        {
-            double val = NumOps.ToDouble(target[i]);
-            min = Math.Min(min, val);
-            max = Math.Max(max, val);
-        }
-
-        double range = max - min;
-        for (int i = 0; i < n; i++)
-        {
-            double val = NumOps.ToDouble(target[i]);
-            result[i] = range > 1e-10
-                ? Math.Min((int)((val - min) / range * (_nBins - 1)), _nBins - 1)
-                : 0;
-        }
-        return result;
-    }
-
-    private double ComputeMutualInformation(int[,] X, int[] y, int feature, int n)
-    {
-        var jointCounts = new Dictionary<(int, int), int>();
-        var xCounts = new int[_nBins];
-        var yCounts = new int[_nBins];
-
-        for (int i = 0; i < n; i++)
-        {
-            int xVal = X[i, feature];
-            int yVal = y[i];
-            xCounts[xVal]++;
-            yCounts[yVal]++;
-            var key = (xVal, yVal);
-            jointCounts[key] = jointCounts.GetValueOrDefault(key) + 1;
-        }
-
-        double mi = 0;
-        foreach (var kvp in jointCounts)
-        {
-            double pxy = (double)kvp.Value / n;
-            double px = (double)xCounts[kvp.Key.Item1] / n;
-            double py = (double)yCounts[kvp.Key.Item2] / n;
-            if (pxy > 0 && px > 0 && py > 0)
-                mi += pxy * Math.Log(pxy / (px * py));
-        }
-
-        return mi;
-    }
-
-    private double ComputeConditionalMI(int[,] X, int[] y, int feature, HashSet<int> conditionSet, int n)
-    {
+        var engine = Engine;
+        var featureBins = FeatureBins(xBins, feature);
+        var unconditioned = engine.Reshape(
+            PreprocessingTensorOps.HistogramMutualInformation(featureBins, yBins, _nBins, bits: false, logEpsilon: 0, clampAtZero: false),
+            new[] { 1 });
         if (conditionSet.Count == 0)
-            return ComputeMutualInformation(X, y, feature, n);
+            return engine.TensorSum(unconditioned);
 
-        // Compute MI conditioned on each conditioning variable and average
-        double totalMI = 0;
+        // MI conditioned on each conditioning variable, averaged over the variables that have a group of more than 5 rows
+        Tensor<T>? total = null;
         int condCount = 0;
-
         foreach (int condFeature in conditionSet)
         {
-            // Group by conditioning variable value
-            var groups = Enumerable.Range(0, n)
-                .GroupBy(i => X[i, condFeature])
-                .Where(g => g.Count() > 5)
-                .ToList();
-
-            if (groups.Count == 0)
+            var groupMI = GroupedMutualInformation(FeatureBins(xBins, condFeature), featureBins, yBins, n, out bool anyGroup);
+            if (!anyGroup)
                 continue;
 
-            double condMI = 0;
-            foreach (var group in groups)
-            {
-                var indices = group.ToList();
-                int groupN = indices.Count;
-
-                var jointCounts = new Dictionary<(int, int), int>();
-                var xCounts = new int[_nBins];
-                var yCounts = new int[_nBins];
-
-                foreach (int i in indices)
-                {
-                    int xVal = X[i, feature];
-                    int yVal = y[i];
-                    xCounts[xVal]++;
-                    yCounts[yVal]++;
-                    var key = (xVal, yVal);
-                    jointCounts[key] = jointCounts.GetValueOrDefault(key) + 1;
-                }
-
-                double groupMI = 0;
-                foreach (var kvp in jointCounts)
-                {
-                    double pxy = (double)kvp.Value / groupN;
-                    double px = (double)xCounts[kvp.Key.Item1] / groupN;
-                    double py = (double)yCounts[kvp.Key.Item2] / groupN;
-                    if (pxy > 0 && px > 0 && py > 0)
-                        groupMI += pxy * Math.Log(pxy / (px * py));
-                }
-
-                condMI += groupMI * ((double)groupN / n);
-            }
-
-            totalMI += condMI;
+            total = total is null ? groupMI : engine.TensorAdd(total, groupMI);
             condCount++;
         }
 
-        return condCount > 0 ? totalMI / condCount : ComputeMutualInformation(X, y, feature, n);
+        return total is null
+            ? engine.TensorSum(unconditioned)
+            : NumOps.Divide(engine.TensorSum(total), NumOps.FromDouble(condCount));
+    }
+
+    /// <summary>
+    /// The sum over groups g with more than 5 rows of MI_g(x; y) * |g| / n, where the groups are the values of
+    /// the conditioning variable and MI_g uses the probabilities within the group. Returns a [1] tensor.
+    /// </summary>
+    private Tensor<T> GroupedMutualInformation(Tensor<T> groupBins, Tensor<T> featureBins, Tensor<T> yBins, int n, out bool anyGroup)
+    {
+        var engine = Engine;
+        int b = _nBins;
+        var cube = new[] { b, b, b };
+
+        // joint[g, x, y] counts from the row-wise outer product of the group and feature one-hots
+        var groupFeature = engine.TensorMultiply(
+            engine.TensorBroadcastTo(engine.Reshape(groupBins, new[] { n, b, 1 }), new[] { n, b, b }),
+            engine.TensorBroadcastTo(engine.Reshape(featureBins, new[] { n, 1, b }), new[] { n, b, b }));
+        var joint = engine.Reshape(
+            engine.TensorMatMul(engine.TensorTranspose(engine.Reshape(groupFeature, new[] { n, b * b })), yBins), cube);
+
+        var groupSize = engine.ReduceSum(joint, new[] { 1, 2 }, true);   // [b, 1, 1]
+        var xCounts = engine.ReduceSum(joint, new[] { 2 }, true);        // [b, b, 1]
+        var yCounts = engine.ReduceSum(joint, new[] { 1 }, true);        // [b, 1, b]
+        var size = engine.TensorBroadcastTo(groupSize, cube);
+        var pxy = engine.TensorDivide(joint, size);
+        var px = engine.TensorDivide(engine.TensorBroadcastTo(xCounts, cube), size);
+        var py = engine.TensorDivide(engine.TensorBroadcastTo(yCounts, cube), size);
+        var terms = engine.TensorMultiply(pxy, engine.TensorLog(engine.TensorDivide(pxy, engine.TensorMultiply(px, py))));
+        var cells = engine.TensorWhere(engine.TensorGreaterThan(joint, NumOps.Zero), terms, new Tensor<T>(cube));
+        var miPerGroup = engine.ReduceSum(cells, new[] { 1, 2 }, false);  // [b]
+
+        var sizes = engine.Reshape(groupSize, new[] { b });
+        var large = engine.TensorGreaterThan(sizes, NumOps.FromDouble(5));
+        anyGroup = PreprocessingTensorOps.CountNonZero(large) > 0;
+        var weighted = engine.TensorMultiply(engine.TensorMultiply(miPerGroup, large), engine.TensorDivideScalar(sizes, NumOps.FromDouble(n)));
+        return engine.ReduceSum(engine.Reshape(weighted, new[] { 1, b }), new[] { 1 }, false);
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)

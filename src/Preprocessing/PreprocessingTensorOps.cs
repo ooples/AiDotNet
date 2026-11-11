@@ -111,6 +111,25 @@ internal static class PreprocessingTensorOps
         return engine.TensorWhere(engine.TensorGreaterThan(sxx, eps), r, zeros);
     }
 
+    /// <summary>
+    /// Pearson correlation of every column of <paramref name="x"/> ([n, p]) with <paramref name="y"/> ([n]),
+    /// 0 where <c>sqrt(sxx * syy)</c> is not above <paramref name="epsilon"/> (both inputs are centred first).
+    /// </summary>
+    public static Tensor<T> CorrelationsWithDenominatorGuard<T>(Tensor<T> x, Tensor<T> y, double epsilon = 1e-10)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var xc = engine.TensorSubtract(x, engine.ReduceMean(x, new[] { 0 }, true));
+        var yc = engine.Reshape(engine.TensorSubtractScalar(y, engine.TensorMean(y)), new[] { n, 1 });
+        var sxy = engine.Reshape(engine.TensorMatMul(engine.TensorTranspose(xc), yc), new[] { p });
+        var sxx = engine.ReduceSum(engine.TensorSquare(xc), new[] { 0 }, false);
+        var denom = engine.TensorSqrt(engine.TensorMultiplyScalar(sxx, engine.TensorSumOfSquares(yc)));
+        return engine.TensorWhere(
+            engine.TensorGreaterThan(denom, ops.FromDouble(epsilon)), engine.TensorDivide(sxy, denom), new Tensor<T>(new[] { p }));
+    }
+
     /// <summary>Column-wise minimum of a 2-D tensor ([n, p] to [p]).</summary>
     public static Tensor<T> ColumnMin<T>(Tensor<T> x)
     {
@@ -189,10 +208,11 @@ internal static class PreprocessingTensorOps
 
     /// <summary>
     /// Histogram mutual information (in bits) between every column of A and every column of B, from their
-    /// one-hot bins (<see cref="EqualWidthBinOneHot{T}"/>): <c>sum pxy * log2(pxy / (px * py) + 1e-10)</c> over
-    /// the non-empty joint cells, clamped at 0. Returns [pa, pb].
+    /// one-hot bins (<see cref="EqualWidthBinOneHot{T}"/>): <c>sum pxy * log(pxy / (px * py) + logEpsilon)</c> over
+    /// the non-empty joint cells, in bits (log2) or nats, optionally clamped at 0. Returns [pa, pb].
     /// </summary>
-    public static Tensor<T> HistogramMutualInformation<T>(Tensor<T> oneHotA, Tensor<T> oneHotB, int bins)
+    public static Tensor<T> HistogramMutualInformation<T>(
+        Tensor<T> oneHotA, Tensor<T> oneHotB, int bins, bool bits = true, double logEpsilon = 1e-10, bool clampAtZero = true)
     {
         var engine = AiDotNetEngine.Current;
         var ops = MathHelper.GetNumericOperations<T>();
@@ -206,12 +226,15 @@ internal static class PreprocessingTensorOps
         var marginalB = engine.ReduceSum(oneHotB, new[] { 0 }, false);
         var pxy = engine.TensorDivideScalar(joint, count);
         var pxpy = engine.TensorDivideScalar(engine.TensorOuter(marginalA, marginalB), ops.Multiply(count, count));
-        var terms = engine.TensorDivideScalar(
-            engine.TensorMultiply(pxy, engine.TensorLog(engine.TensorAddScalar(engine.TensorDivide(pxy, pxpy), ops.FromDouble(1e-10)))),
-            ops.FromDouble(Math.Log(2)));
+        var ratio = engine.TensorDivide(pxy, pxpy);
+        if (logEpsilon != 0)
+            ratio = engine.TensorAddScalar(ratio, ops.FromDouble(logEpsilon));
+        var terms = engine.TensorMultiply(pxy, engine.TensorLog(ratio));
+        if (bits)
+            terms = engine.TensorDivideScalar(terms, ops.FromDouble(Math.Log(2)));
         var cells = engine.TensorWhere(engine.TensorGreaterThan(joint, ops.Zero), terms, new Tensor<T>(joint.Shape.ToArray()));
         var mi = engine.ReduceSum(engine.Reshape(cells, new[] { pa, bins, pb, bins }), new[] { 1, 3 }, false);
-        return engine.TensorMax(mi, ops.Zero);
+        return clampAtZero ? engine.TensorMax(mi, ops.Zero) : mi;
     }
 
     /// <summary>

@@ -31,13 +31,13 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int _nFeaturesToSelect;
     private readonly double _minAssociationThreshold;
 
-    private double[]? _associationScores;
+    private Vector<T>? _associationScores;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double MinAssociationThreshold => _minAssociationThreshold;
-    public double[]? AssociationScores => _associationScores;
+    public Vector<T>? AssociationScores => _associationScores;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
 
@@ -71,170 +71,90 @@ public class MMPCSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
-        var X = new double[n, p];
-        var y = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            y[i] = NumOps.ToDouble(target[i]);
-            for (int j = 0; j < p; j++)
-                X[i, j] = NumOps.ToDouble(data[i, j]);
-        }
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+        var y = Tensor<T>.FromVector(target);
+        var xc = engine.TensorSubtract(X, engine.ReduceMean(X, new[] { 0 }, true));
+        var yc = engine.TensorSubtractScalar(y, engine.TensorMean(y));
+        T threshold = NumOps.FromDouble(_minAssociationThreshold);
 
-        _associationScores = new double[p];
+        // Marginal association with the target
+        var scores = engine.TensorAbs(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(X, y));
+        _associationScores = scores.ToVector();
 
-        // Phase 1: Forward - find candidate parents/children
-        var candidates = new HashSet<int>();
-        var candidateScores = new Dictionary<int, double>();
+        // Phase 1: Forward - greedy min-max selection. minAssoc[j] is the smallest association of j with
+        // the target over the empty set and every single current candidate (partial association).
+        var candidates = new List<int>();
+        var isCandidate = new bool[p];
+        var partialColumns = new Dictionary<int, Tensor<T>>();
+        var excluded = PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(-1.0));
+        var minAssoc = scores;
 
-        // Initial pass: compute marginal association with target
-        for (int j = 0; j < p; j++)
-        {
-            var col = new double[n];
-            for (int i = 0; i < n; i++)
-                col[i] = X[i, j];
-
-            double assoc = ComputeAssociation(col, y);
-            _associationScores[j] = assoc;
-            candidateScores[j] = assoc;
-        }
-
-        // Greedy forward selection based on min-max criterion
         while (candidates.Count < Math.Min(_nFeaturesToSelect, p))
         {
-            int bestFeature = -1;
-            double bestMinAssoc = double.MinValue;
-
-            foreach (var j in Enumerable.Range(0, p).Where(j => !candidates.Contains(j)))
-            {
-                // Min association conditioned on current candidates
-                double minAssoc = candidateScores[j];
-
-                foreach (var s in candidates)
-                {
-                    // Compute partial correlation (conditional association)
-                    var colJ = new double[n];
-                    var colS = new double[n];
-                    for (int i = 0; i < n; i++)
-                    {
-                        colJ[i] = X[i, j];
-                        colS[i] = X[i, s];
-                    }
-
-                    double condAssoc = ComputePartialAssociation(colJ, y, colS);
-                    minAssoc = Math.Min(minAssoc, condAssoc);
-                }
-
-                if (minAssoc > bestMinAssoc)
-                {
-                    bestMinAssoc = minAssoc;
-                    bestFeature = j;
-                }
-            }
-
-            if (bestFeature < 0 || bestMinAssoc < _minAssociationThreshold)
+            var open = engine.TensorWhere(isCandidate, excluded, minAssoc);
+            int bestFeature = engine.TensorArgMax(open, 0).GetFlat(0);
+            if (PreprocessingTensorOps.IsBelow(engine.TensorMaxValue(open), threshold))
                 break;
 
             candidates.Add(bestFeature);
+            isCandidate[bestFeature] = true;
+            var partial = PartialAssociations(xc, yc, bestFeature);
+            partialColumns[bestFeature] = partial;
+            minAssoc = engine.TensorMin(minAssoc, partial);
         }
 
-        // Phase 2: Backward - remove false positives
-        var toRemove = new HashSet<int>();
-        foreach (var j in candidates)
+        // Phase 2: Backward - remove candidates whose association falls below the threshold given
+        // every other candidate.
+        if (candidates.Count > 1)
         {
-            var others = candidates.Where(k => k != j).ToList();
-            if (others.Count == 0) continue;
-
-            var colJ = new double[n];
-            for (int i = 0; i < n; i++)
-                colJ[i] = X[i, j];
-
-            // Check if j is conditionally independent of y given others
-            bool isIndependent = true;
-            foreach (var s in others)
-            {
-                var colS = new double[n];
-                for (int i = 0; i < n; i++)
-                    colS[i] = X[i, s];
-
-                double condAssoc = ComputePartialAssociation(colJ, y, colS);
-                if (condAssoc >= _minAssociationThreshold)
-                {
-                    isIndependent = false;
-                    break;
-                }
-            }
-
-            if (isIndependent)
-                toRemove.Add(j);
+            int m = candidates.Count;
+            var candidateIndex = new Tensor<int>(candidates.ToArray(), new[] { m });
+            var columns = new Tensor<T>[m];
+            for (int b = 0; b < m; b++)
+                columns[b] = engine.TensorIndexSelect(partialColumns[candidates[b]], candidateIndex, 0);
+            var pairwise = engine.TensorStack(columns, 1); // [a, b] = partial association of a given b
+            var offDiagonal = PreprocessingTensorOps.Not(engine.TensorEye<T>(m));
+            var dependent = engine.TensorMultiply(PreprocessingTensorOps.AtLeast(pairwise, threshold), offDiagonal);
+            var anyDependent = engine.ReduceMax(dependent, new[] { 1 }, false);
+            var independent = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(anyDependent));
+            var remove = new HashSet<int>(independent.Select(a => candidates[a]));
+            candidates.RemoveAll(remove.Contains);
+            foreach (int j in remove)
+                isCandidate[j] = false;
         }
-
-        foreach (var j in toRemove)
-            candidates.Remove(j);
 
         // If we have fewer than requested, add more by score
         if (candidates.Count < _nFeaturesToSelect)
         {
-            var remaining = Enumerable.Range(0, p)
-                .Where(j => !candidates.Contains(j))
-                .OrderByDescending(j => _associationScores[j])
-                .Take(_nFeaturesToSelect - candidates.Count);
-            foreach (var j in remaining)
-                candidates.Add(j);
+            int extra = Math.Min(_nFeaturesToSelect - candidates.Count, p - candidates.Count);
+            var open = engine.TensorWhere(isCandidate, excluded, scores);
+            candidates.AddRange(PreprocessingTensorOps.TopKIndicesSorted(open, extra));
         }
 
         _selectedIndices = candidates.OrderBy(x => x).ToArray();
         IsFitted = true;
     }
 
-    private double ComputeAssociation(double[] x, double[] y)
+    private Tensor<T> PartialAssociations(Tensor<T> xc, Tensor<T> yc, int conditioning)
     {
-        int n = x.Length;
-        double meanX = x.Average();
-        double meanY = y.Average();
-
-        double cov = 0, varX = 0, varY = 0;
-        for (int i = 0; i < n; i++)
+        // |corr(resid(x_j | z), resid(y | z))| for every column j, with z the conditioning column
+        var engine = Engine;
+        int n = xc.Shape[0];
+        var z = PreprocessingTensorOps.ColumnVector(xc, conditioning);
+        T varZ = engine.TensorSumOfSquares(z);
+        var residX = xc;
+        var residY = yc;
+        if (NumOps.GreaterThan(varZ, NumOps.FromDouble(1e-10)))
         {
-            double dx = x[i] - meanX;
-            double dy = y[i] - meanY;
-            cov += dx * dy;
-            varX += dx * dx;
-            varY += dy * dy;
+            var zColumn = engine.Reshape(z, new[] { n, 1 });
+            var slopeX = engine.TensorDivideScalar(engine.TensorMatMul(engine.TensorTranspose(zColumn), xc), varZ);
+            residX = engine.TensorSubtract(xc, engine.TensorMatMul(zColumn, slopeX));
+            T slopeY = NumOps.Divide(engine.TensorSum(engine.TensorMultiply(yc, z)), varZ);
+            residY = engine.TensorSubtract(yc, engine.TensorMultiplyScalar(z, slopeY));
         }
 
-        double denom = Math.Sqrt(varX * varY);
-        return denom > 1e-10 ? Math.Abs(cov / denom) : 0;
-    }
-
-    private double ComputePartialAssociation(double[] x, double[] y, double[] z)
-    {
-        int n = x.Length;
-
-        // Regress x on z
-        double meanZ = z.Average();
-        double meanX = x.Average();
-        double covXZ = 0, varZ = 0;
-        for (int i = 0; i < n; i++)
-        {
-            covXZ += (x[i] - meanX) * (z[i] - meanZ);
-            varZ += (z[i] - meanZ) * (z[i] - meanZ);
-        }
-        double slopeX = varZ > 1e-10 ? covXZ / varZ : 0;
-        var residX = new double[n];
-        for (int i = 0; i < n; i++)
-            residX[i] = x[i] - meanX - slopeX * (z[i] - meanZ);
-
-        // Regress y on z
-        double meanY = y.Average();
-        double covYZ = 0;
-        for (int i = 0; i < n; i++)
-            covYZ += (y[i] - meanY) * (z[i] - meanZ);
-        double slopeY = varZ > 1e-10 ? covYZ / varZ : 0;
-        var residY = new double[n];
-        for (int i = 0; i < n; i++)
-            residY[i] = y[i] - meanY - slopeY * (z[i] - meanZ);
-
-        return ComputeAssociation(residX, residY);
+        return engine.TensorAbs(PreprocessingTensorOps.CorrelationsWithDenominatorGuard(residX, residY));
     }
 
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
