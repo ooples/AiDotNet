@@ -656,6 +656,9 @@ internal static class CvTensorOps<T>
     /// </summary>
     public static double[] ToDoubleArray(Tensor<T> values) => Array.ConvertAll(values.ToArray(), NumOps.ToDouble);
 
+    /// <inheritdoc cref="ToDoubleArray(Tensor{T})"/>
+    public static double[] ToDoubleArray(T[] values) => Array.ConvertAll(values, NumOps.ToDouble);
+
     /// <summary>
     /// A tensor of <typeparamref name="T"/> from a <c>double[]</c> supplied through a public API or a literal
     /// coefficient table, converted in bulk.
