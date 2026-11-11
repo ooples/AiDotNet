@@ -140,8 +140,8 @@ public class Gsm8kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
 
         int qLen = _options.MaxQuestionLength;
         int aLen = _options.MaxAnswerLength;
-        var featuresData = new double[totalSamples * qLen];
-        var labelsData = new double[totalSamples * aLen];
+        var featuresData = new int[totalSamples * qLen];
+        var labelsData = new int[totalSamples * aLen];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -153,8 +153,8 @@ public class Gsm8kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             Array.Copy(aTok, 0, labelsData, aOff, aLen);
         }
 
-        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, qLen }).Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, aLen }).Cast<T>();
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, qLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, aLen }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

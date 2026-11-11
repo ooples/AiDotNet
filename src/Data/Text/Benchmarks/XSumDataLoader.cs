@@ -99,8 +99,8 @@ public class XSumDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         var vocabulary = TextLoaderHelper.BuildVocabulary(allTexts, allTexts.Count, _options.VocabularySize);
 
         int dLen = _options.MaxDocumentLength, sLen = _options.MaxSummaryLength;
-        var featuresData = new double[totalSamples * dLen];
-        var labelsData = new double[totalSamples * sLen];
+        var featuresData = new int[totalSamples * dLen];
+        var labelsData = new int[totalSamples * sLen];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -112,8 +112,8 @@ public class XSumDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             Array.Copy(sTok, 0, labelsData, sOff, sLen);
         }
 
-        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, dLen }).Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, sLen }).Cast<T>();
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, dLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, sLen }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

@@ -108,8 +108,8 @@ public class MbppDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         var vocabulary = TextLoaderHelper.BuildVocabulary(allTexts, allTexts.Count, _options.VocabularySize);
 
         int pLen = _options.MaxPromptLength, sLen = _options.MaxSolutionLength;
-        var featuresData = new double[totalSamples * pLen];
-        var labelsData = new double[totalSamples * sLen];
+        var featuresData = new int[totalSamples * pLen];
+        var labelsData = new int[totalSamples * sLen];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -121,8 +121,8 @@ public class MbppDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             Array.Copy(sTok, 0, labelsData, sOff, sLen);
         }
 
-        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, pLen }).Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, sLen }).Cast<T>();
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, pLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, sLen }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

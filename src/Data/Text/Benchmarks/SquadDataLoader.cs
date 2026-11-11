@@ -83,8 +83,8 @@ public class SquadDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
         }
         var vocabulary = TextLoaderHelper.BuildVocabulary(allTexts, allTexts.Count, _options.VocabularySize);
 
-        var featuresData = new double[totalSamples * _totalSeqLen];
-        var labelsData = new double[totalSamples * 2];
+        var featuresData = new int[totalSamples * _totalSeqLen];
+        var labelsData = new int[totalSamples * 2];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -106,8 +106,8 @@ public class SquadDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
             labelsData[i * 2 + 1] = Math.Min(tokenEnd, _options.MaxContextLength - 1);
         }
 
-        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, _totalSeqLen }).Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, 2 }).Cast<T>();
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, _totalSeqLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, 2 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

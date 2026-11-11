@@ -96,7 +96,7 @@ public class VoxPopuliDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         _sampleCount = totalSamples;
         var featuresData = new T[totalSamples * _maxAudioSamples];
         int maxTextLen = 256;
-        var labelsData = new double[totalSamples * maxTextLen];
+        var labelsData = new int[totalSamples * maxTextLen];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -115,7 +115,7 @@ public class VoxPopuliDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Te
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _maxAudioSamples });
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, maxTextLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, maxTextLen }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

@@ -115,7 +115,7 @@ public class DocVqaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         int featureSize = w * h * 3;
         int maxAnswerLen = _options.MaxAnswerLength;
         var featuresData = new T[totalSamples * featureSize];
-        var labelsData = new double[totalSamples * maxAnswerLen];
+        var labelsData = new int[totalSamples * maxAnswerLen];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -134,7 +134,7 @@ public class DocVqaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featureSize });
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, maxAnswerLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, maxAnswerLen }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

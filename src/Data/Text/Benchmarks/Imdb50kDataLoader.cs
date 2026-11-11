@@ -106,8 +106,8 @@ public class Imdb50kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
 
         // Tokenize and encode reviews
         int seqLen = _options.MaxSequenceLength;
-        var featuresData = new double[totalSamples * seqLen];
-        var labelsData = new double[totalSamples * 2];
+        var featuresData = new int[totalSamples * seqLen];
+        var labelsData = new int[totalSamples * 2];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -121,11 +121,11 @@ public class Imdb50kDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
             }
 
             // One-hot label: [negative, positive]
-            labelsData[i * 2 + labels[i]] = 1.0;
+            labelsData[i * 2 + labels[i]] = 1;
         }
 
-        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, seqLen }).Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, 2 }).Cast<T>();
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, seqLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, 2 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

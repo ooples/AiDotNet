@@ -130,8 +130,8 @@ public class AgNewsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
 
         var vocabulary = TextLoaderHelper.BuildVocabulary(texts, totalSamples, _options.VocabularySize);
         int seqLen = _options.MaxSequenceLength;
-        var featuresData = new double[totalSamples * seqLen];
-        var labelsData = new double[totalSamples * 4];
+        var featuresData = new int[totalSamples * seqLen];
+        var labelsData = new int[totalSamples * 4];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -142,11 +142,11 @@ public class AgNewsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
 
             // Class index is 1..4 in the source; convert to 0..3 for one-hot.
             int classIdx = Math.Min(3, Math.Max(0, labelClasses[i] - 1));
-            labelsData[i * 4 + classIdx] = 1.0;
+            labelsData[i * 4 + classIdx] = 1;
         }
 
-        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, seqLen }).Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, 4 }).Cast<T>();
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, seqLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, 4 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

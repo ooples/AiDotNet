@@ -52,18 +52,18 @@ public class Ucf101DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
 
         _sampleCount = totalSamples;
         var featuresData = new T[totalSamples * _featureSize];
-        var labelsData = new double[totalSamples * NumClasses];
+        var labelsData = new int[totalSamples * NumClasses];
 
         for (int i = 0; i < totalSamples; i++)
         {
             cancellationToken.ThrowIfCancellationRequested();
             VideoLoaderHelper.LoadFrames(samples[i].VideoDir, featuresData, i * _featureSize,
                 _options.FramesPerVideo, _options.FrameWidth, _options.FrameHeight, _options.Normalize, NumOps);
-            labelsData[i * NumClasses + samples[i].ClassIndex] = 1.0;
+            labelsData[i * NumClasses + samples[i].ClassIndex] = 1;
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _featureSize });
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
         await Task.CompletedTask;
     }

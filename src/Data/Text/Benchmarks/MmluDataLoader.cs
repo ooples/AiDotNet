@@ -119,8 +119,8 @@ public class MmluDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         var vocabulary = TextLoaderHelper.BuildVocabulary(allTexts, allTexts.Count, _options.VocabularySize);
 
         int seqLen = _options.MaxQuestionLength;
-        var featuresData = new double[totalSamples * Choices * seqLen];
-        var labelsData = new double[totalSamples * Choices];
+        var featuresData = new int[totalSamples * Choices * seqLen];
+        var labelsData = new int[totalSamples * Choices];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -131,11 +131,11 @@ public class MmluDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
                 int offset = (i * Choices + c) * seqLen;
                 Array.Copy(tok, 0, featuresData, offset, seqLen);
             }
-            labelsData[i * Choices + labels[i]] = 1.0;
+            labelsData[i * Choices + labels[i]] = 1;
         }
 
-        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, Choices, seqLen }).Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, Choices }).Cast<T>();
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, Choices, seqLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, Choices }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

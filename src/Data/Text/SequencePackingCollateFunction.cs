@@ -64,7 +64,7 @@ public class SequencePackingCollateFunction<T> : ICollateFunction<Tensor<T>, (Te
         int numBlocks = Math.Max(1, (totalTokens + _blockSize - 1) / _blockSize);
 
         var packedData = new T[numBlocks * _blockSize];
-        var maskData = new double[numBlocks * _blockSize];
+        var maskData = new int[numBlocks * _blockSize];
         T padToken = NumOps.FromDouble(_padTokenId);
 
         // Initialize with pad tokens
@@ -75,11 +75,11 @@ public class SequencePackingCollateFunction<T> : ICollateFunction<Tensor<T>, (Te
         for (int i = 0; i < totalTokens && i < numBlocks * _blockSize; i++)
         {
             packedData[i] = allTokens[i];
-            maskData[i] = 1.0;
+            maskData[i] = 1;
         }
 
         var packedTokens = new Tensor<T>(packedData, new[] { numBlocks, _blockSize });
-        var attentionMask = new Tensor<double>(maskData, new[] { numBlocks, _blockSize }).Cast<T>();
+        var attentionMask = new Tensor<int>(maskData, new[] { numBlocks, _blockSize }).Cast<T>();
 
         return (packedTokens, attentionMask);
     }

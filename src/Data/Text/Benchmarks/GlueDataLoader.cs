@@ -98,8 +98,8 @@ public class GlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
         var vocabulary = TextLoaderHelper.BuildVocabulary(texts, totalSamples, _options.VocabularySize);
 
         int seqLen = _options.MaxSequenceLength;
-        var featuresData = new double[totalSamples * seqLen];
-        var labelsData = new double[totalSamples * _numClasses];
+        var featuresData = new int[totalSamples * seqLen];
+        var labelsData = new T[totalSamples * _numClasses];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -111,19 +111,19 @@ public class GlueDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
             if (isRegression)
             {
                 // STS-B: store regression score directly (0-5 range)
-                labelsData[i] = labelValues[i];
+                labelsData[i] = NumOps.FromDouble(labelValues[i]);
             }
             else
             {
                 // Classification: one-hot encoding
                 int label = Math.Min((int)labelValues[i], _numClasses - 1);
                 if (label >= 0)
-                    labelsData[i * _numClasses + label] = 1.0;
+                    labelsData[i * _numClasses + label] = NumOps.One;
             }
         }
 
-        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, seqLen }).Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, _numClasses }).Cast<T>();
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSamples, seqLen }).Cast<T>();
+        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, _numClasses });
         InitializeIndices(totalSamples);
     }
 

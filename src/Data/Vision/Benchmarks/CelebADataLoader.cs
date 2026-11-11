@@ -115,7 +115,7 @@ public class CelebADataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         int featureSize = _options.ImageWidth * _options.ImageHeight * 3;
         int numAttrs = _options.NumAttributes;
         var featuresData = new T[totalSamples * featureSize];
-        var labelsData = new double[totalSamples * numAttrs];
+        var labelsData = new int[totalSamples * numAttrs];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -135,7 +135,7 @@ public class CelebADataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, featureSize });
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, numAttrs }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, numAttrs }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 

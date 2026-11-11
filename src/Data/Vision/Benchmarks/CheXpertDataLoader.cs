@@ -145,7 +145,7 @@ public class CheXpertDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
         if (totalFeaturesLong > int.MaxValue)
             throw new InvalidOperationException($"Total allocation too large: {totalSamples} samples x {pixelsPerImage} pixels exceeds max array size. Use MaxSamples to limit.");
         var featuresData = new T[totalFeaturesLong];
-        var labelsData = new double[totalSamples * NumClasses];
+        var labelsData = new T[totalSamples * NumClasses];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -162,11 +162,14 @@ public class CheXpertDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             }
 
             int labelOffset = i * NumClasses;
-            Array.Copy(labels, 0, labelsData, labelOffset, NumClasses);
+            for (int j = 0; j < NumClasses; j++)
+            {
+                labelsData[labelOffset + j] = NumOps.FromDouble(labels[j]);
+            }
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _imageSize, _imageSize, 1 });
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
+        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, NumClasses });
         InitializeIndices(totalSamples);
     }
 

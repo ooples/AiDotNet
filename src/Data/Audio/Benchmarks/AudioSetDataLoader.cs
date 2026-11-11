@@ -129,7 +129,7 @@ public class AudioSetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
 
         _sampleCount = totalSamples;
         var featuresData = new T[totalSamples * _maxAudioSamples];
-        var labelsData = new double[totalSamples * NumClasses];
+        var labelsData = new int[totalSamples * NumClasses];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -147,12 +147,12 @@ public class AudioSetDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Ten
             foreach (int idx in labelIndices)
             {
                 if (idx >= 0 && idx < NumClasses)
-                    labelsData[labelOffset + idx] = 1.0;
+                    labelsData[labelOffset + idx] = 1;
             }
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _maxAudioSamples });
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 
