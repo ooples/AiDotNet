@@ -190,7 +190,7 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     /// <summary>
     /// Element-wise <c>NumericalStabilityHelper.SafeLog</c>: log(max(x, epsilon)).
     /// </summary>
-    protected Tensor<T> SafeLogTensor(Tensor<T> values, double epsilon = NumericalStabilityHelper.DefaultEpsilon)
+    private protected Tensor<T> SafeLogTensor(Tensor<T> values, double epsilon = NumericalStabilityHelper.DefaultEpsilon)
     {
         return Engine.TensorLog(Engine.TensorClampMin(values, NumOps.FromDouble(epsilon)));
     }
@@ -199,7 +199,7 @@ public abstract class LossFunctionBase<T> : ILossFunction<T>
     /// Element-wise <c>NumericalStabilityHelper.SafeDiv</c>: a denominator whose
     /// magnitude is below epsilon is replaced by epsilon carrying the denominator's sign (+epsilon for 0).
     /// </summary>
-    protected Tensor<T> SafeDivideTensor(
+    private protected Tensor<T> SafeDivideTensor(
         Tensor<T> numerator, Tensor<T> denominator, double epsilon = NumericalStabilityHelper.DefaultEpsilon)
     {
         T eps = NumOps.FromDouble(epsilon);
