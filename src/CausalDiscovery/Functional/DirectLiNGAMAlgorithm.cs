@@ -163,7 +163,7 @@ public class DirectLiNGAMAlgorithm<T> : FunctionalBase<T>
         for (int idx = 1; idx < d; idx++)
             for (int pidx = 0; pidx < idx; pidx++)
                 earlierPairs.Add(causalOrder[pidx] * d + causalOrder[idx]);
-        var raw = CausalWeightScatter.KeepPositions(coefficients, earlierPairs);
+        var raw = CausalTensorHelpers.KeepPositions(coefficients, earlierPairs);
 
         var rawTensor = Tensor<T>.FromMatrix(raw);
         var keep = Engine.TensorGreaterEqual(Engine.TensorAbs(rawTensor),

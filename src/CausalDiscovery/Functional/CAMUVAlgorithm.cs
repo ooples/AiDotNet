@@ -114,6 +114,6 @@ public class CAMUVAlgorithm<T> : FunctionalBase<T>
             }
         }
 
-        return CausalWeightScatter.FromStatistics<T>(d, d, weights);
+        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
     }
 }

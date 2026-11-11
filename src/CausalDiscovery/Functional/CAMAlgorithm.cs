@@ -164,7 +164,7 @@ public class CAMAlgorithm<T> : FunctionalBase<T>
             }
         }
 
-        return CausalWeightScatter.FromStatistics<T>(d, d, weights);
+        return CausalTensorHelpers.FromStatistics<T>(d, d, weights);
     }
 
     private double ComputeAdditiveResidualVariance(Matrix<T> data, int n, int target, List<int> parents)
