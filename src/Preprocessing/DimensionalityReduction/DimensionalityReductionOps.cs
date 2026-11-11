@@ -187,6 +187,9 @@ internal static class DimensionalityReductionOps
     /// <summary>The inverse of a square matrix by LU with partial pivoting.</summary>
     internal static Tensor<T> Inverse<T>(Tensor<T> a) => Solve(a, Identity<T>(a.Shape[0]));
 
+    /// <summary>A loop-level constant (step size, weight) as T; one conversion per iteration, not per element.</summary>
+    internal static T Constant<T>(double value) => MathHelper.GetNumericOperations<T>().FromDouble(value);
+
     /// <summary>|a - b| &lt; tolerance: the scalar convergence test of an iterative fit (one call per iteration).</summary>
     internal static bool ChangeBelow<T>(T a, T b, T tolerance)
     {

@@ -40,8 +40,8 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly bool _shuffle;
 
     // Fitted parameters
-    private double[]? _mean;
-    private double[,]? _components;
+    private Vector<T>? _mean;
+    private Matrix<T>? _components;
     private int _nFeaturesIn;
     private int _nSamplesSeen;
 
@@ -68,12 +68,12 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the mean of each feature.
     /// </summary>
-    public double[]? Mean => _mean;
+    public Vector<T>? Mean => _mean;
 
     /// <summary>
     /// Gets the sparse components (each row is a component).
     /// </summary>
-    public double[,]? Components => _components;
+    public Matrix<T>? Components => _components;
 
     /// <summary>
     /// Gets the number of samples seen during fitting.
@@ -139,6 +139,7 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
+        var engine = Engine;
         _nFeaturesIn = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
@@ -148,47 +149,21 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             ? RandomHelper.CreateSeededRandom(_randomState.Value)
             : RandomHelper.CreateSeededRandom(42);
 
-        // Compute mean from entire dataset (or a large sample)
-        _mean = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                sum += NumOps.ToDouble(data[i, j]);
-            }
-            _mean[j] = sum / n;
-        }
+        // Compute mean and center the data once (each batch is gathered from the centered rows)
+        var x = Tensor<T>.FromMatrix(data);
+        var mean = DimensionalityReductionOps.ColumnMeans(x);
+        var centered = DimensionalityReductionOps.SubtractRow(x, mean);
+        _mean = mean.ToVector();
 
-        // Initialize components randomly
-        _components = new double[k, p];
-        for (int c = 0; c < k; c++)
-        {
-            double norm = 0;
-            for (int j = 0; j < p; j++)
-            {
-                _components[c, j] = random.NextDouble() - 0.5;
-                norm += _components[c, j] * _components[c, j];
-            }
-            norm = Math.Sqrt(norm);
-            if (norm > 1e-10)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    _components[c, j] /= norm;
-                }
-            }
-        }
+        // Initialize components randomly (uniform in [-0.5, 0.5), unit rows)
+        var components = DimensionalityReductionOps.NormalizeRows(
+            engine.TensorSubtractScalar(DimensionalityReductionOps.Uniform<T>(random, k, p), NumOps.FromDouble(0.5)));
 
-        // Online dictionary learning
-        var A = new double[k, k]; // Accumulator for code correlations
-        var B = new double[k, p]; // Accumulator for data-code correlations
-
-        // Initialize accumulators with small values for stability
-        for (int i = 0; i < k; i++)
-        {
-            A[i, i] = _ridge;
-        }
+        // Accumulators for online dictionary learning: A = codes^T codes (ridge on the diagonal), B = codes^T X
+        var a = engine.TensorMultiplyScalar(DimensionalityReductionOps.Identity<T>(k), NumOps.FromDouble(_ridge));
+        var b = new Tensor<T>(new[] { k, p });
+        T ridge = NumOps.FromDouble(_ridge);
+        T tol = NumOps.FromDouble(_tol);
 
         _nSamplesSeen = 0;
 
@@ -203,90 +178,49 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
                 ShuffleArray(indices, random);
             }
 
-            double[] prevComponents = new double[k * p];
-            for (int c = 0; c < k; c++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    prevComponents[c * p + j] = _components[c, j];
-                }
-            }
+            var prevComponents = components;
 
-            // Process data in mini-batches
+            // Process mini-batches
             for (int batchStart = 0; batchStart < n; batchStart += _batchSize)
             {
                 int batchEnd = Math.Min(batchStart + _batchSize, n);
                 int actualBatchSize = batchEnd - batchStart;
 
-                // Extract and center batch
-                var batchData = new double[actualBatchSize, p];
-                for (int i = 0; i < actualBatchSize; i++)
-                {
-                    int idx = indices[batchStart + i];
-                    for (int j = 0; j < p; j++)
-                    {
-                        batchData[i, j] = NumOps.ToDouble(data[idx, j]) - _mean[j];
-                    }
-                }
+                // Gather the batch rows (already centered)
+                var batchRows = new int[actualBatchSize];
+                Array.Copy(indices, batchStart, batchRows, 0, actualBatchSize);
+                var batchData = DimensionalityReductionOps.SelectRows(centered, DimensionalityReductionOps.IndexTensor(batchRows));
 
-                // Compute codes for batch using current dictionary
-                var batchCodes = ComputeCodes(batchData, actualBatchSize, p, k);
+                // Compute codes for this batch (ridge regression)
+                var batchCodes = ComputeCodes(batchData, components);
 
-                // Update accumulators
+                // Running averages A = (1 - w) A + w codes^T codes, B = (1 - w) B + w codes^T X
                 double weight = 1.0 / (_nSamplesSeen + actualBatchSize);
-
-                for (int i = 0; i < k; i++)
-                {
-                    for (int j = 0; j < k; j++)
-                    {
-                        double sum = 0;
-                        for (int b = 0; b < actualBatchSize; b++)
-                        {
-                            sum += batchCodes[b, i] * batchCodes[b, j];
-                        }
-                        A[i, j] = (1 - weight) * A[i, j] + weight * sum;
-                        if (i == j)
-                        {
-                            A[i, j] = Math.Max(A[i, j], _ridge);
-                        }
-                    }
-                }
-
-                for (int i = 0; i < k; i++)
-                {
-                    for (int j = 0; j < p; j++)
-                    {
-                        double sum = 0;
-                        for (int b = 0; b < actualBatchSize; b++)
-                        {
-                            sum += batchCodes[b, i] * batchData[b, j];
-                        }
-                        B[i, j] = (1 - weight) * B[i, j] + weight * sum;
-                    }
-                }
+                T keep = DimensionalityReductionOps.Constant<T>(1 - weight);
+                T add = DimensionalityReductionOps.Constant<T>(weight);
+                a = engine.TensorAdd(
+                    engine.TensorMultiplyScalar(a, keep),
+                    engine.TensorMultiplyScalar(DimensionalityReductionOps.TransposeMatMul(batchCodes, batchCodes), add));
+                var diagonal = engine.TensorDiagonal(a);
+                a = engine.TensorAdd(a, engine.TensorDiag(engine.TensorSubtract(engine.TensorClampMin(diagonal, ridge), diagonal)));
+                b = engine.TensorAdd(
+                    engine.TensorMultiplyScalar(b, keep),
+                    engine.TensorMultiplyScalar(DimensionalityReductionOps.TransposeMatMul(batchCodes, batchData), add));
 
                 _nSamplesSeen += actualBatchSize;
 
                 // Update dictionary using block coordinate descent
-                UpdateDictionaryFromAccumulators(A, B, k, p);
+                components = UpdateDictionaryFromAccumulators(a, b, components);
             }
 
             // Check convergence
-            double maxChange = 0;
-            for (int c = 0; c < k; c++)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    double change = Math.Abs(_components[c, j] - prevComponents[c * p + j]);
-                    maxChange = Math.Max(maxChange, change);
-                }
-            }
-
-            if (maxChange < _tol)
+            if (DimensionalityReductionOps.Below(DimensionalityReductionOps.MaxAbsDifference(components, prevComponents), tol))
             {
                 break;
             }
         }
+
+        _components = components.ToMatrix();
     }
 
     private static void ShuffleArray(int[] array, Random random)
@@ -298,190 +232,49 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
     }
 
-    private double[,] ComputeCodes(double[,] data, int n, int p, int k)
+    /// <summary>Ridge codes: X C^T (C C^T + ridge I)^-1.</summary>
+    private Tensor<T> ComputeCodes(Tensor<T> data, Tensor<T> components)
     {
-        // Compute codes using ridge regression: codes = data * D^T * (D * D^T + ridge*I)^-1
-        var gram = new double[k, k];
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                double sum = 0;
-                for (int f = 0; f < p; f++)
-                {
-                    sum += (_components ?? throw new InvalidOperationException("Components not initialized."))[i, f] * _components[j, f];
-                }
-                gram[i, j] = sum;
-                if (i == j)
-                {
-                    gram[i, j] += _ridge;
-                }
-            }
-        }
+        var engine = Engine;
+        int k = components.Shape[0];
 
-        var gramInv = InvertMatrix(gram, k);
+        var gram = engine.TensorAdd(
+            DimensionalityReductionOps.MatMulTranspose(components, components),
+            engine.TensorMultiplyScalar(DimensionalityReductionOps.Identity<T>(k), DimensionalityReductionOps.Constant<T>(_ridge)));
 
-        var dataProj = new double[n, k];
-        for (int i = 0; i < n; i++)
-        {
-            for (int c = 0; c < k; c++)
-            {
-                double sum = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    sum += data[i, j] * (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j];
-                }
-                dataProj[i, c] = sum;
-            }
-        }
-
-        var codes = new double[n, k];
-        for (int i = 0; i < n; i++)
-        {
-            for (int c = 0; c < k; c++)
-            {
-                double sum = 0;
-                for (int j = 0; j < k; j++)
-                {
-                    sum += dataProj[i, j] * gramInv[j, c];
-                }
-                codes[i, c] = sum;
-            }
-        }
-
-        return codes;
+        var dataProj = DimensionalityReductionOps.MatMulTranspose(data, components);
+        return engine.TensorTranspose(DimensionalityReductionOps.Solve(gram, engine.TensorTranspose(dataProj)));
     }
 
-    private void UpdateDictionaryFromAccumulators(double[,] A, double[,] B, int k, int p)
+    /// <summary>
+    /// One block coordinate descent sweep over the components from the accumulators:
+    /// C[c] = normalize(S((B[c] - sum_{o != c} A[c, o] C[o]) / A[c, c], alpha / A[c, c])) with A[c, c] floored at 1e-10.
+    /// </summary>
+    private Tensor<T> UpdateDictionaryFromAccumulators(Tensor<T> a, Tensor<T> b, Tensor<T> components)
     {
-        // Update each component using coordinate descent with L1 regularization
+        var engine = Engine;
+        int k = components.Shape[0];
+        var alpha = DimensionalityReductionOps.Scalar(DimensionalityReductionOps.Constant<T>(_alpha));
+        T floor = DimensionalityReductionOps.Constant<T>(1e-10);
+
         for (int c = 0; c < k; c++)
         {
-            // Solve: A[c,c] * D[c,:] = B[c,:] - sum_{j!=c} A[c,j] * D[j,:]
-            for (int j = 0; j < p; j++)
-            {
-                double rhs = B[c, j];
-                for (int other = 0; other < k; other++)
-                {
-                    if (other != c)
-                    {
-                        rhs -= A[c, other] * (_components ?? throw new InvalidOperationException("Components not initialized."))[other, j];
-                    }
-                }
+            var aRow = engine.TensorNarrow(a, 0, c, 1);                                // [1, k]
+            var aDiagonal = engine.TensorNarrow(aRow, 1, c, 1);                        // [1, 1]
+            var row = engine.TensorNarrow(components, 0, c, 1);                        // [1, p]
 
-                double denominator = A[c, c];
-                if (denominator < 1e-10)
-                {
-                    denominator = 1e-10;
-                }
+            // rhs = B[c] - A[c, :] C + A[c, c] C[c]
+            var rhs = engine.TensorAdd(
+                engine.TensorSubtract(engine.TensorNarrow(b, 0, c, 1), engine.TensorMatMul(aRow, components)),
+                engine.TensorMultiply(aDiagonal, row));
 
-                // Soft thresholding
-                double newValue = SoftThreshold(rhs / denominator, _alpha / denominator);
-                (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] = newValue;
-            }
-
-            // Normalize component
-            double norm = 0;
-            for (int j = 0; j < p; j++)
-            {
-                norm += (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] * _components[c, j];
-            }
-            norm = Math.Sqrt(norm);
-
-            if (norm > 1e-10)
-            {
-                for (int j = 0; j < p; j++)
-                {
-                    (_components ?? throw new InvalidOperationException("Components not initialized."))[c, j] /= norm;
-                }
-            }
-        }
-    }
-
-    private static double SoftThreshold(double x, double lambda)
-    {
-        if (x > lambda)
-        {
-            return x - lambda;
-        }
-        else if (x < -lambda)
-        {
-            return x + lambda;
-        }
-        else
-        {
-            return 0;
-        }
-    }
-
-    private static double[,] InvertMatrix(double[,] matrix, int n)
-    {
-        var result = new double[n, n];
-        var temp = new double[n, 2 * n];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                temp[i, j] = matrix[i, j];
-                temp[i, j + n] = (i == j) ? 1.0 : 0.0;
-            }
+            var denominator = engine.TensorClampMin(aDiagonal, floor);
+            var updated = DimensionalityReductionOps.NormalizeRows(DimensionalityReductionOps.SoftThreshold(
+                engine.TensorDivide(rhs, denominator), engine.TensorDivide(alpha, denominator)));
+            components = DimensionalityReductionOps.WithRow(components, c, updated);
         }
 
-        for (int i = 0; i < n; i++)
-        {
-            double maxVal = Math.Abs(temp[i, i]);
-            int maxRow = i;
-            for (int k = i + 1; k < n; k++)
-            {
-                if (Math.Abs(temp[k, i]) > maxVal)
-                {
-                    maxVal = Math.Abs(temp[k, i]);
-                    maxRow = k;
-                }
-            }
-
-            if (maxRow != i)
-            {
-                for (int j = 0; j < 2 * n; j++)
-                {
-                    (temp[i, j], temp[maxRow, j]) = (temp[maxRow, j], temp[i, j]);
-                }
-            }
-
-            double pivot = temp[i, i];
-            if (Math.Abs(pivot) < 1e-10)
-            {
-                pivot = 1e-10;
-            }
-
-            for (int j = 0; j < 2 * n; j++)
-            {
-                temp[i, j] /= pivot;
-            }
-
-            for (int k = 0; k < n; k++)
-            {
-                if (k != i)
-                {
-                    double factor = temp[k, i];
-                    for (int j = 0; j < 2 * n; j++)
-                    {
-                        temp[k, j] -= factor * temp[i, j];
-                    }
-                }
-            }
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                result[i, j] = temp[i, j + n];
-            }
-        }
-
-        return result;
+        return components;
     }
 
     /// <summary>
@@ -494,26 +287,8 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("MiniBatchSparsePCA has not been fitted.");
         }
 
-        int n = data.Rows;
-        int p = data.Columns;
-        int k = _components.GetLength(0);
-        var result = new T[n, k];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int c = 0; c < k; c++)
-            {
-                double sum = 0;
-                for (int j = 0; j < p; j++)
-                {
-                    double centered = NumOps.ToDouble(data[i, j]) - _mean[j];
-                    sum += centered * _components[c, j];
-                }
-                result[i, c] = NumOps.FromDouble(sum);
-            }
-        }
-
-        return new Matrix<T>(result);
+        var centered = DimensionalityReductionOps.SubtractRow(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(_mean));
+        return DimensionalityReductionOps.MatMulTranspose(centered, Tensor<T>.FromMatrix(_components)).ToMatrix();
     }
 
     /// <summary>
@@ -526,25 +301,10 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("MiniBatchSparsePCA has not been fitted.");
         }
 
-        int n = data.Rows;
-        int p = _nFeaturesIn;
-        int k = _components.GetLength(0);
-        var result = new T[n, p];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                double sum = _mean[j];
-                for (int c = 0; c < k; c++)
-                {
-                    sum += NumOps.ToDouble(data[i, c]) * _components[c, j];
-                }
-                result[i, j] = NumOps.FromDouble(sum);
-            }
-        }
-
-        return new Matrix<T>(result);
+        int k = _components.Rows;
+        var scores = DimensionalityReductionOps.FirstColumns(Tensor<T>.FromMatrix(data), k);
+        var reconstructed = Engine.TensorMatMul(scores, Tensor<T>.FromMatrix(_components));
+        return DimensionalityReductionOps.AddRow(reconstructed, Tensor<T>.FromVector(_mean)).ToMatrix();
     }
 
     /// <summary>
@@ -552,7 +312,7 @@ public class MiniBatchSparsePCA<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        int k = _components?.GetLength(0) ?? _nComponents;
+        int k = _components?.Rows ?? _nComponents;
         var names = new string[k];
         for (int i = 0; i < k; i++)
         {
