@@ -232,15 +232,16 @@ public partial class LabelPowerset<T> : MultiLabelClassifierBase<T>
         _classToLabels = new Dictionary<int, bool[]>();
 
         int nextClassIndex = 0;
+        var bits = BinarizeLabels(y, requireExactOne: false);
 
         for (int i = 0; i < y.Rows; i++)
         {
-            var labelKey = GetLabelKey(y, i);
+            var labelKey = GetLabelKey(bits, i, y.Columns);
 
             if (!_labelsToClass.ContainsKey(labelKey))
             {
                 _labelsToClass[labelKey] = nextClassIndex;
-                _classToLabels[nextClassIndex] = GetLabelArray(y, i);
+                _classToLabels[nextClassIndex] = GetLabelArray(bits, i, y.Columns);
                 nextClassIndex++;
             }
         }
@@ -260,14 +261,84 @@ public partial class LabelPowerset<T> : MultiLabelClassifierBase<T>
     /// we convert it to a string like "1,0,1,0". This makes it easy to use as a dictionary key.
     /// </para>
     /// </remarks>
-    private string GetLabelKey(Matrix<T> y, int row)
+    private static string GetLabelKey(int[] bits, int row, int columns)
     {
-        var parts = new string[y.Columns];
-        for (int j = 0; j < y.Columns; j++)
+        var parts = new string[columns];
+        for (int j = 0; j < columns; j++)
         {
-            parts[j] = NumOps.Compare(y[row, j], NumOps.FromDouble(0.5)) >= 0 ? "1" : "0";
+            parts[j] = bits[row * columns + j] == 1 ? "1" : "0";
         }
         return string.Join(",", parts);
+    }
+
+    /// <summary>
+    /// Binarizes every label value at once (row-major 0/1 ints): value &gt;= 0.5, or value == 1 when
+    /// <paramref name="requireExactOne"/> is set. NaN gives 0.
+    /// </summary>
+    private int[] BinarizeLabels(Matrix<T> y, bool requireExactOne)
+    {
+        if (y.Rows == 0 || y.Columns == 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        var engine = Engine;
+        var values = Tensor<T>.FromMatrix(y);
+        Tensor<T> present;
+        if (requireExactOne)
+        {
+            present = engine.TensorEquals(values, NumOps.One);
+        }
+        else
+        {
+            var half = new Tensor<T>(new[] { y.Rows, y.Columns });
+            engine.TensorFill(half, NumOps.FromDouble(0.5));
+            present = engine.TensorGreaterEqual(values, half);
+        }
+
+        // argmax over [1 - b, b] turns the exact 0/1 values into integer indicators
+        var absent = engine.ScalarMinusTensor(NumOps.One, present);
+        return engine.TensorArgMax(engine.TensorStack(new[] { absent, present }, 2), 2).ToArray();
+    }
+
+    /// <summary>
+    /// Class index values 0..count-1 as T, gathered for each entry of <paramref name="classIndices"/>.
+    /// </summary>
+    private Vector<T> ClassIndexValues(int[] classIndices, int count)
+    {
+        if (classIndices.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var range = Engine.TensorArange<T>(0, Math.Max(1, count));
+        return Engine.TensorGather(range, new Tensor<int>(classIndices, new[] { classIndices.Length }), 0).ToVector();
+    }
+
+    /// <summary>
+    /// The [count + 1, NumLabels] 0/1 label matrix of every class (row <paramref name="count"/> and unknown
+    /// classes are all zero).
+    /// </summary>
+    private Tensor<T> ClassLabelIndicators(int count)
+    {
+        var flags = new int[(count + 1) * NumLabels];
+        if (_classToLabels is not null)
+        {
+            for (int c = 0; c < count; c++)
+            {
+                if (_classToLabels.TryGetValue(c, out var labels))
+                {
+                    for (int l = 0; l < NumLabels && l < labels.Length; l++)
+                    {
+                        flags[c * NumLabels + l] = labels[l] ? 1 : 0;
+                    }
+                }
+            }
+        }
+
+        var zeroOne = Engine.TensorArange<T>(0, 2);
+        return Engine.TensorGather(zeroOne, new Tensor<int>(flags, new[] { flags.Length }), 0)
+            .Reshape(count + 1, NumLabels);
     }
 
     /// <summary>
@@ -282,12 +353,12 @@ public partial class LabelPowerset<T> : MultiLabelClassifierBase<T>
     /// [1.0, 0.0, 1.0] becomes [true, false, true].
     /// </para>
     /// </remarks>
-    private bool[] GetLabelArray(Matrix<T> y, int row)
+    private static bool[] GetLabelArray(int[] bits, int row, int columns)
     {
-        var labels = new bool[y.Columns];
-        for (int j = 0; j < y.Columns; j++)
+        var labels = new bool[columns];
+        for (int j = 0; j < columns; j++)
         {
-            labels[j] = NumOps.Compare(y[row, j], NumOps.FromDouble(0.5)) >= 0;
+            labels[j] = bits[row * columns + j] == 1;
         }
         return labels;
     }
@@ -305,16 +376,16 @@ public partial class LabelPowerset<T> : MultiLabelClassifierBase<T>
     /// </remarks>
     private Vector<T> TransformToClassLabels(Matrix<T> y)
     {
-        var classLabels = new Vector<T>(y.Rows);
+        var labelsToClass = _labelsToClass ?? throw new InvalidOperationException("_labelsToClass has not been initialized.");
+        var bits = BinarizeLabels(y, requireExactOne: false);
+        var classIndices = new int[y.Rows];
 
         for (int i = 0; i < y.Rows; i++)
         {
-            var labelKey = GetLabelKey(y, i);
-            int classIndex = (_labelsToClass ?? throw new InvalidOperationException("_labelsToClass has not been initialized."))[labelKey];
-            classLabels[i] = NumOps.FromDouble(classIndex);
+            classIndices[i] = labelsToClass[GetLabelKey(bits, i, y.Columns)];
         }
 
-        return classLabels;
+        return ClassIndexValues(classIndices, _numCombinations);
     }
 
     #endregion
@@ -347,52 +418,42 @@ public partial class LabelPowerset<T> : MultiLabelClassifierBase<T>
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
 
-        var probabilities = new Matrix<T>(input.Rows, NumLabels);
+        if (input.Rows == 0 || NumLabels == 0)
+        {
+            return new Matrix<T>(input.Rows, NumLabels);
+        }
 
+        var engine = Engine;
         if (_classifier is IProbabilisticClassifier<T> probabilisticClassifier)
         {
-            // Use class probabilities to compute label probabilities
+            // Use class probabilities to compute label probabilities:
+            // P(label) = sum of the probabilities of classes that include that label
             var classProbs = probabilisticClassifier.PredictProbabilities(input);
-
-            for (int i = 0; i < input.Rows; i++)
+            int usable = Math.Min(_numCombinations, classProbs.Columns);
+            if (usable == 0)
             {
-                // For each label, sum probabilities of classes that include that label
-                for (int labelIdx = 0; labelIdx < NumLabels; labelIdx++)
-                {
-                    T labelProb = NumOps.Zero;
-
-                    for (int classIdx = 0; classIdx < _numCombinations && classIdx < classProbs.Columns; classIdx++)
-                    {
-                        if (_classToLabels.TryGetValue(classIdx, out var labels) && labels[labelIdx])
-                        {
-                            labelProb = NumOps.Add(labelProb, classProbs[i, classIdx]);
-                        }
-                    }
-
-                    probabilities[i, labelIdx] = labelProb;
-                }
+                return new Matrix<T>(input.Rows, NumLabels);
             }
-        }
-        else
-        {
-            // Fall back to hard predictions
-            var predictions = _classifier.Predict(input);
 
-            for (int i = 0; i < input.Rows; i++)
+            var probs = Tensor<T>.FromMatrix(classProbs);
+            if (usable != classProbs.Columns)
             {
-                int classIdx = (int)NumOps.ToDouble(predictions[i]);
-
-                if (_classToLabels.TryGetValue(classIdx, out var labels))
-                {
-                    for (int labelIdx = 0; labelIdx < NumLabels; labelIdx++)
-                    {
-                        probabilities[i, labelIdx] = labels[labelIdx] ? NumOps.One : NumOps.Zero;
-                    }
-                }
+                probs = probs.Slice(1, 0, usable);
             }
+
+            var indicators = ClassLabelIndicators(usable).Slice(0, 0, usable);
+            return engine.TensorMatMul(probs, indicators).ToMatrix();
         }
 
-        return probabilities;
+        // Fall back to hard predictions: the labels of the predicted class (unknown classes give no labels)
+        var predictions = _classifier.Predict(input);
+        var classValues = engine.TensorArange<T>(0, _numCombinations + 1);
+        var rows = engine.TensorSubtractScalar(
+            engine.TensorSearchSorted(classValues, predictions.AsTensor(), true), 1);
+        var invalid = engine.TensorLessThan(rows, 0);
+        var safeRows = engine.TensorWhere(invalid,
+            engine.TensorAddScalar(engine.TensorMultiplyScalar(rows, 0), _numCombinations), rows);
+        return engine.TensorGather(ClassLabelIndicators(_numCombinations), safeRows, 0).ToMatrix();
     }
 
     #endregion
@@ -441,23 +502,19 @@ public partial class LabelPowerset<T> : MultiLabelClassifierBase<T>
         }
 
         // Convert multi-label target to class index vector
-        var classTargets = new Vector<T>(target.Rows);
+        var bits = BinarizeLabels(target, requireExactOne: true);
+        var classIndices = new int[target.Rows];
         for (int i = 0; i < target.Rows; i++)
         {
-            var labels = new bool[target.Columns];
-            for (int j = 0; j < target.Columns; j++)
-            {
-                // Use >= 0.5 for consistency with GetLabelKey
-                labels[j] = NumOps.Compare(target[i, j], NumOps.One) == 0;
-            }
-
-            var key = string.Join(",", labels.Select(l => l ? "1" : "0"));
+            var key = GetLabelKey(bits, i, target.Columns);
             if (!_labelsToClass.TryGetValue(key, out var classIdx))
             {
                 throw new ArgumentException($"Label combination '{key}' was not seen during training.", nameof(target));
             }
-            classTargets[i] = NumOps.FromDouble(classIdx);
+            classIndices[i] = classIdx;
         }
+
+        var classTargets = ClassIndexValues(classIndices, _numCombinations);
 
         return ((IGradientComputable<T, Matrix<T>, Vector<T>>)_classifier).ComputeGradients(input, classTargets, lossFunction);
     }
