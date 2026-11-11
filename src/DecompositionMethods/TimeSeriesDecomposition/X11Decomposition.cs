@@ -199,36 +199,46 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> EstimateSeasonalFactorsMultiplicative(Vector<T> seasonalIrregular)
     {
         int n = seasonalIrregular.Length;
-        Vector<T> seasonalFactors = new Vector<T>(n);
 
-        for (int i = 0; i < n; i++)
-        {
-            T product = NumOps.One;
-            int count = 0;
+        // Geometric mean of every phase: (prod of data[p], data[p + period], ...)^(1 / count), with
+        // the product as sign * exp(sum log|x|) so it reduces to phase-grid column sums.
+        var x = Tensor<T>.FromVector(seasonalIrregular);
+        var logMagnitude = Engine.TensorLog(Engine.TensorAbs(x)).ToVector();
+        var negative = Engine.TensorLessThan(x, NumOps.Zero).ToVector();
+        var zero = Engine.TensorEquals(x, NumOps.Zero).ToVector();
+        var ones = Engine.TensorOnesLike(x).ToVector();
 
-            for (int j = i % _seasonalPeriod; j < n; j += _seasonalPeriod)
-            {
-                product = NumOps.Multiply(product, seasonalIrregular[j]);
-                count++;
-            }
+        var logSum = PhaseSums(logMagnitude);
+        var negativeCount = PhaseSums(negative);
+        var zeroCount = PhaseSums(zero);
+        var count = PhaseSums(ones);
 
-            seasonalFactors[i] = NumOps.Power(product, NumOps.Divide(NumOps.One, NumOps.FromDouble(count)));
-        }
+        var geometricMean = Engine.TensorExp(DivideElementwise(logSum, count));
+        var oddNegatives = Engine.TensorRemainder(negativeCount, Engine.TensorFullLike(negativeCount, NumOps.FromDouble(2)));
+        var phaseFactors = Engine.TensorWhere(
+            Engine.TensorGreaterThan(oddNegatives, NumOps.FromDouble(0.5)),
+            Engine.TensorFullLike(geometricMean, NumOps.FromDouble(double.NaN)),
+            geometricMean);
+        phaseFactors = Engine.TensorWhere(
+            Engine.TensorGreaterThan(zeroCount, NumOps.FromDouble(0.5)), Engine.TensorZerosLike(phaseFactors), phaseFactors);
+        var seasonalFactors = Tensor<T>.FromVector(RepeatPeriodic(phaseFactors.ToVector(), n));
 
-        // Normalize seasonal factors
-        T totalFactor = NumOps.Zero;
-        for (int i = 0; i < _seasonalPeriod; i++)
-        {
-            totalFactor = NumOps.Add(totalFactor, seasonalFactors[i]);
-        }
+        // Normalize seasonal factors by the average over the first cycle
+        T totalFactor = Engine.TensorSum(Engine.TensorSlice(seasonalFactors, new[] { 0 }, new[] { _seasonalPeriod }));
         T averageFactor = NumOps.Divide(totalFactor, NumOps.FromDouble(_seasonalPeriod));
 
-        for (int i = 0; i < n; i++)
+        return DivideElementwise(seasonalFactors, Engine.TensorFullLike(seasonalFactors, averageFactor)).ToVector();
+    }
+
+    /// <summary>Sum of data[p], data[p + period], ... for every phase p in [0, period).</summary>
+    private Tensor<T> PhaseSums(Vector<T> data)
+    {
+        if (data.Length == 0)
         {
-            seasonalFactors[i] = NumOps.Divide(seasonalFactors[i], averageFactor);
+            return new Tensor<T>(new[] { _seasonalPeriod });
         }
 
-        return seasonalFactors;
+        return Engine.ReduceSum(ToPhaseGrid(data, _seasonalPeriod), new[] { 0 }, false);
     }
 
     /// <summary>
@@ -247,32 +257,8 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private Vector<T> HendersonMovingAverage(Vector<T> data, int terms)
     {
-        int n = data.Length;
-        Vector<T> result = new Vector<T>(n);
-        T[] weights = CalculateHendersonWeights(terms);
-
-        int halfTerms = terms / 2;
-
-        for (int i = 0; i < n; i++)
-        {
-            T sum = NumOps.Zero;
-            T weightSum = NumOps.Zero;
-
-            for (int j = -halfTerms; j <= halfTerms; j++)
-            {
-                int index = i + j;
-                if (index >= 0 && index < n)
-                {
-                    T weight = weights[j + halfTerms];
-                    sum = NumOps.Add(sum, NumOps.Multiply(data[index], weight));
-                    weightSum = NumOps.Add(weightSum, weight);
-                }
-            }
-
-            result[i] = NumOps.Divide(sum, weightSum);
-        }
-
-        return result;
+        // Henderson-weighted average over the centred window, renormalized where it is truncated.
+        return CenteredWindowAverage(data, CalculateHendersonWeights(terms));
     }
 
     /// <summary>
@@ -287,29 +273,26 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// follows the main direction of your data while ignoring random ups and downs.
     /// </para>
     /// </remarks>
-    private T[] CalculateHendersonWeights(int terms)
+    private Tensor<T> CalculateHendersonWeights(int terms)
     {
         int m = (terms - 1) / 2;
-        T[] weights = new T[terms];
 
-        for (int i = -m; i <= m; i++)
-        {
-            T t = NumOps.Divide(NumOps.FromDouble(i), NumOps.FromDouble(m + 1.0));
-            T tSquared = NumOps.Multiply(t, t);
+        // t = i / (m + 1) for i in [-m, m]
+        var offsets = Engine.TensorArange<T>(-m, m + 1, 1);
+        var t = Engine.TensorDivide(offsets, Engine.TensorFullLike(offsets, NumOps.FromDouble(m + 1.0)));
+        var tSquared = Engine.TensorMultiply(t, t);
 
-            T factor1 = NumOps.Subtract(NumOps.One, tSquared);
-            T factor2 = NumOps.Subtract(NumOps.One, NumOps.Multiply(NumOps.FromDouble(5), tSquared));
-            T factor3 = NumOps.Subtract(NumOps.One, NumOps.Multiply(NumOps.FromDouble(7), tSquared));
-            T factor4 = NumOps.Subtract(NumOps.One, NumOps.Multiply(NumOps.FromDouble(9), tSquared));
-            T factor5 = NumOps.Subtract(NumOps.One, NumOps.Multiply(NumOps.FromDouble(11), tSquared));
+        var factor1 = Engine.ScalarMinusTensor(NumOps.One, tSquared);
+        var factor2 = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorMultiplyScalar(tSquared, NumOps.FromDouble(5)));
+        var factor3 = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorMultiplyScalar(tSquared, NumOps.FromDouble(7)));
+        var factor4 = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorMultiplyScalar(tSquared, NumOps.FromDouble(9)));
+        var factor5 = Engine.ScalarMinusTensor(NumOps.One, Engine.TensorMultiplyScalar(tSquared, NumOps.FromDouble(11)));
 
-            T numerator = NumOps.Multiply(NumOps.FromDouble(315),
-                NumOps.Multiply(factor1, NumOps.Multiply(factor2, NumOps.Multiply(factor3, NumOps.Multiply(factor4, factor5)))));
+        var product = Engine.TensorMultiply(factor1,
+            Engine.TensorMultiply(factor2, Engine.TensorMultiply(factor3, Engine.TensorMultiply(factor4, factor5))));
+        var numerator = Engine.TensorMultiplyScalar(product, NumOps.FromDouble(315));
 
-            weights[i + m] = NumOps.Divide(numerator, NumOps.FromDouble(320.0));
-        }
-
-        return weights;
+        return Engine.TensorDivide(numerator, Engine.TensorFullLike(numerator, NumOps.FromDouble(320.0)));
     }
 
     /// <summary>
@@ -328,7 +311,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     private void DecomposeLogAdditive()
     {
         // Step 1: Apply logarithmic transformation to the time series
-        Vector<T> logTimeSeries = TimeSeries.Transform(x => NumOps.Log(x));
+        Vector<T> logTimeSeries = Engine.TensorLog(Tensor<T>.FromVector(TimeSeries)).ToVector();
 
         // Step 2: Initial trend-cycle estimate
         Vector<T> trendCycle = CenteredMovingAverage(logTimeSeries, _trendCycleMovingAverageWindow);
@@ -382,7 +365,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private Vector<T> ApplyExp(Vector<T> vector)
     {
-        return vector.Transform(x => NumOps.Exp(x));
+        return Engine.TensorExp(Tensor<T>.FromVector(vector)).ToVector();
     }
 
     /// <summary>
@@ -401,36 +384,20 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
         Vector<T> seasonal = (Vector<T>?)GetComponent(DecompositionComponentType.Seasonal) ?? new Vector<T>(TimeSeries.Length);
         Vector<T> irregular = (Vector<T>?)GetComponent(DecompositionComponentType.Irregular) ?? new Vector<T>(TimeSeries.Length);
 
-        Vector<T> reconstructed = new Vector<T>(TimeSeries.Length);
-        for (int i = 0; i < TimeSeries.Length; i++)
-        {
-            reconstructed[i] = NumOps.Multiply(NumOps.Multiply(trend[i], seasonal[i]), irregular[i]);
-        }
+        var trendTensor = Tensor<T>.FromVector(trend);
+        var seasonalTensor = Tensor<T>.FromVector(seasonal);
+        var irregularTensor = Tensor<T>.FromVector(irregular);
 
-        Vector<T> adjustmentFactor = new Vector<T>(TimeSeries.Length);
-        for (int i = 0; i < TimeSeries.Length; i++)
-        {
-            adjustmentFactor[i] = NumOps.Divide(TimeSeries[i], reconstructed[i]);
-        }
+        var reconstructed = Engine.TensorMultiply(Engine.TensorMultiply(trendTensor, seasonalTensor), irregularTensor);
+        var adjustmentFactor = DivideElementwise(Tensor<T>.FromVector(TimeSeries), reconstructed);
 
         // Distribute the adjustment factor equally among the components
         T cubicRoot = NumOps.FromDouble(1.0 / 3.0);
-        Vector<T> componentAdjustment = new Vector<T>(TimeSeries.Length);
-        for (int i = 0; i < TimeSeries.Length; i++)
-        {
-            componentAdjustment[i] = NumOps.Power(adjustmentFactor[i], cubicRoot);
-        }
+        var componentAdjustment = Engine.TensorPow(adjustmentFactor, cubicRoot);
 
-        Vector<T> adjustedTrend = new Vector<T>(TimeSeries.Length);
-        Vector<T> adjustedSeasonal = new Vector<T>(TimeSeries.Length);
-        Vector<T> adjustedIrregular = new Vector<T>(TimeSeries.Length);
-
-        for (int i = 0; i < TimeSeries.Length; i++)
-        {
-            adjustedTrend[i] = NumOps.Multiply(trend[i], componentAdjustment[i]);
-            adjustedSeasonal[i] = NumOps.Multiply(seasonal[i], componentAdjustment[i]);
-            adjustedIrregular[i] = NumOps.Multiply(irregular[i], componentAdjustment[i]);
-        }
+        Vector<T> adjustedTrend = Engine.TensorMultiply(trendTensor, componentAdjustment).ToVector();
+        Vector<T> adjustedSeasonal = Engine.TensorMultiply(seasonalTensor, componentAdjustment).ToVector();
+        Vector<T> adjustedIrregular = Engine.TensorMultiply(irregularTensor, componentAdjustment).ToVector();
 
         AddComponent(DecompositionComponentType.Trend, adjustedTrend);
         AddComponent(DecompositionComponentType.Seasonal, adjustedSeasonal);
@@ -455,28 +422,7 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private Vector<T> CenteredMovingAverage(Vector<T> data, int window)
     {
-        int n = data.Length;
-        Vector<T> result = new Vector<T>(n);
-
-        int halfWindow = window / 2;
-
-        for (int i = 0; i < n; i++)
-        {
-            int start = Math.Max(0, i - halfWindow);
-            int end = Math.Min(n - 1, i + halfWindow);
-            T sum = NumOps.Zero;
-            int count = 0;
-
-            for (int j = start; j <= end; j++)
-            {
-                sum = NumOps.Add(sum, data[j]);
-                count++;
-            }
-
-            result[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
-        }
-
-        return result;
+        return CenteredWindowAverage(data, BoxKernel(window / 2));
     }
 
     /// <summary>
@@ -500,38 +446,15 @@ public class X11Decomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> EstimateSeasonalFactors(Vector<T> seasonalIrregular)
     {
         int n = seasonalIrregular.Length;
-        Vector<T> seasonalFactors = new Vector<T>(n);
 
-        for (int i = 0; i < n; i++)
-        {
-            T sum = NumOps.Zero;
-            int count = 0;
-
-            // Group values by their position in the seasonal cycle
-            for (int j = i % _seasonalPeriod; j < n; j += _seasonalPeriod)
-            {
-                sum = NumOps.Add(sum, seasonalIrregular[j]);
-                count++;
-            }
-
-            // Calculate average for this seasonal position
-            seasonalFactors[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
-        }
+        // Group values by their position in the seasonal cycle and average each position
+        var seasonalFactors = Tensor<T>.FromVector(RepeatPeriodic(PhaseMeans(seasonalIrregular, _seasonalPeriod), n));
 
         // Normalize seasonal factors so they sum to zero over one complete cycle
-        T totalFactor = NumOps.Zero;
-        for (int i = 0; i < _seasonalPeriod; i++)
-        {
-            totalFactor = NumOps.Add(totalFactor, seasonalFactors[i]);
-        }
+        T totalFactor = Engine.TensorSum(Engine.TensorSlice(seasonalFactors, new[] { 0 }, new[] { _seasonalPeriod }));
         T averageFactor = NumOps.Divide(totalFactor, NumOps.FromDouble(_seasonalPeriod));
 
         // Subtract the average to ensure seasonal factors sum to zero
-        for (int i = 0; i < n; i++)
-        {
-            seasonalFactors[i] = NumOps.Subtract(seasonalFactors[i], averageFactor);
-        }
-
-        return seasonalFactors;
+        return Engine.TensorSubtractScalar(seasonalFactors, averageFactor).ToVector();
     }
 }

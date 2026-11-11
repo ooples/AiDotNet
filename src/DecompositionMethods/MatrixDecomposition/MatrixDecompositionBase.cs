@@ -166,20 +166,20 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
                 nameof(matrix));
         }
 
-        if (requireNonNegative)
+        if (requireNonNegative && matrix.Rows > 0 && matrix.Columns > 0)
         {
-            for (int i = 0; i < matrix.Rows; i++)
+            var values = Tensor<T>.FromMatrix(matrix);
+            if (NumOps.LessThan(Engine.TensorMinValue(values), NumOps.Zero))
             {
-                for (int j = 0; j < matrix.Columns; j++)
-                {
-                    if (NumOps.LessThan(matrix[i, j], NumOps.Zero))
-                    {
-                        throw new ArgumentException(
-                            $"Matrix must contain only non-negative values for this decomposition. " +
-                            $"Found negative value {matrix[i, j]} at position ({i}, {j}).",
-                            nameof(matrix));
-                    }
-                }
+                // Report the first negative entry in row-major order, as the scan did.
+                var negativeMask = Engine.TensorLessThan(values.Reshape(new[] { values.Length }), NumOps.Zero);
+                int flat = Engine.TensorArgMax(negativeMask, 0)[0];
+                int row = flat / matrix.Columns;
+                int col = flat % matrix.Columns;
+                throw new ArgumentException(
+                    $"Matrix must contain only non-negative values for this decomposition. " +
+                    $"Found negative value {matrix[row, col]} at position ({row}, {col}).",
+                    nameof(matrix));
             }
         }
 
@@ -192,20 +192,26 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
                     nameof(matrix));
             }
 
-            T tolerance = NumOps.FromDouble(1e-10);
-            for (int i = 0; i < matrix.Rows; i++)
+            if (matrix.Rows == 0)
             {
-                for (int j = i + 1; j < matrix.Columns; j++)
-                {
-                    T diff = NumOps.Abs(NumOps.Subtract(matrix[i, j], matrix[j, i]));
-                    if (NumOps.GreaterThan(diff, tolerance))
-                    {
-                        throw new ArgumentException(
-                            $"Matrix must be symmetric for this decomposition. " +
-                            $"Elements at ({i}, {j}) and ({j}, {i}) differ by {diff}.",
-                            nameof(matrix));
-                    }
-                }
+                return;
+            }
+
+            T tolerance = NumOps.FromDouble(1e-10);
+            var values = Tensor<T>.FromMatrix(matrix);
+            var asymmetry = Engine.TensorAbs(Engine.TensorSubtract(values, Engine.TensorTranspose(values)));
+            if (NumOps.GreaterThan(Engine.TensorMaxValue(asymmetry), tolerance))
+            {
+                // First offending (i, j) with j > i in row-major order, as the scan reported it.
+                var violations = Engine.TensorTriu(Engine.TensorGreaterThan(asymmetry, tolerance), 1);
+                int flat = Engine.TensorArgMax(violations.Reshape(new[] { violations.Length }), 0)[0];
+                int i = flat / matrix.Columns;
+                int j = flat % matrix.Columns;
+                T diff = asymmetry[i, j];
+                throw new ArgumentException(
+                    $"Matrix must be symmetric for this decomposition. " +
+                    $"Elements at ({i}, {j}) and ({j}, {i}) differ by {diff}.",
+                    nameof(matrix));
             }
         }
     }
@@ -233,18 +239,283 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// </remarks>
     protected T FrobeniusNorm(Matrix<T> matrix)
     {
-        T sumOfSquares = NumOps.Zero;
+        return NumOps.Sqrt(Engine.MatrixSumOfSquares(matrix));
+    }
 
-        // VECTORIZED: Process each row as a vector for SIMD optimization
-        for (int i = 0; i < matrix.Rows; i++)
+    /// <summary>
+    /// Unpivoted symmetric factorization A = L D L^T (L unit lower triangular, D diagonal) computed
+    /// with right-looking whole-block engine updates: for each pivot j, the column below the pivot
+    /// is scaled by 1 / D[j] and the trailing block receives the rank-1 update l c^T.
+    /// </summary>
+    /// <param name="matrix">The symmetric matrix to factor (only read, never modified).</param>
+    /// <returns>The unit lower triangular factor L and the diagonal D.</returns>
+    /// <remarks>
+    /// This is the same elimination as the left-looking dot-product form
+    /// (L[i,j] = (A[i,j] - sum_k L[i,k] L[j,k] D[k]) / D[j]); it works for indefinite matrices with
+    /// non-zero leading minors and, like that form, divides by a zero pivot rather than throwing.
+    /// </remarks>
+    private protected (Matrix<T> L, Vector<T> D) ComputeUnpivotedLdl(Matrix<T> matrix)
+    {
+        int n = matrix.Rows;
+        if (n == 0)
         {
-            Vector<T> row = matrix.GetRow(i);
-            // Dot product of row with itself gives sum of squares for that row
-            T rowSumOfSquares = row.DotProduct(row);
-            sumOfSquares = NumOps.Add(sumOfSquares, rowSumOfSquares);
+            return (new Matrix<T>(0, 0), new Vector<T>(0));
         }
 
-        return NumOps.Sqrt(sumOfSquares);
+        var work = Tensor<T>.FromMatrix(matrix.Clone());
+        var lower = Engine.TensorEye<T>(n);
+        var diagonal = new Tensor<T>(new[] { n });
+
+        for (int j = 0; j < n; j++)
+        {
+            var pivot = Engine.TensorSlice(work, new[] { j, j }, new[] { 1, 1 });
+            diagonal = Engine.TensorSetSlice(diagonal, pivot.Reshape(new[] { 1 }), new[] { j });
+
+            int rest = n - j - 1;
+            if (rest == 0)
+            {
+                break;
+            }
+
+            T inversePivot = Engine.TensorSum(Engine.TensorReciprocal(pivot));
+            var column = Engine.TensorSlice(work, new[] { j + 1, j }, new[] { rest, 1 });
+            var multipliers = Engine.TensorMultiplyScalar(column, inversePivot);
+            lower = Engine.TensorSetSlice(lower, multipliers, new[] { j + 1, j });
+
+            var trailing = Engine.TensorSlice(work, new[] { j + 1, j + 1 }, new[] { rest, rest });
+            trailing = Engine.TensorSubtract(trailing, Engine.TensorMatMul(multipliers, Engine.TensorTranspose(column)));
+            work = Engine.TensorSetSlice(work, trailing, new[] { j + 1, j + 1 });
+        }
+
+        return (lower.ToMatrix(), diagonal.ToVector());
+    }
+
+    /// <summary>
+    /// Solves (L D L^T) x = b with two unit-triangular engine solves and one diagonal scaling.
+    /// </summary>
+    private protected static Matrix<T> SolveLdlSystem(Matrix<T> unitLower, Vector<T> diagonal, Matrix<T> rhs)
+    {
+        var engine = AiDotNetEngine.Current;
+        var l = Tensor<T>.FromMatrix(unitLower);
+        var y = Linalg.SolveTriangular(l, Tensor<T>.FromMatrix(rhs), upper: false, unitDiagonal: true);
+        var d = engine.TensorBroadcastTo(
+            Tensor<T>.FromVector(diagonal, new[] { diagonal.Length, 1 }),
+            new[] { rhs.Rows, rhs.Columns });
+        y = engine.TensorMultiply(y, engine.TensorReciprocal(d));
+        return Linalg.SolveTriangular(engine.TensorTranspose(l), y, upper: true, unitDiagonal: true).ToMatrix();
+    }
+
+    /// <summary>
+    /// Orthogonal similarity reduction H = Q^T A Q by Householder reflectors applied to the columns
+    /// below the subdiagonal (upper Hessenberg form; tridiagonal for symmetric A), with Q e1 = e1.
+    /// </summary>
+    /// <param name="matrix">The square matrix to reduce (not modified).</param>
+    /// <returns>H (entries below the subdiagonal are rounding residue) and the orthogonal Q.</returns>
+    /// <remarks>
+    /// Step k reflects x = H[k+1:, k] onto alpha e1 with alpha = -sign(x0) ‖x‖ (sign(0) = +1),
+    /// using u = (x - alpha e1) / ‖x - alpha e1‖; steps whose ‖x‖ or ‖u‖ is below 1e-14 are
+    /// skipped. Each reflection is applied as two rank-1 whole-matrix engine updates.
+    /// </remarks>
+    private protected (Matrix<T> H, Matrix<T> Q) ReduceByHouseholderSimilarity(Matrix<T> matrix)
+    {
+        int n = matrix.Rows;
+        var h = Tensor<T>.FromMatrix(matrix.Clone());
+        var q = Engine.TensorEye<T>(n);
+        T tiny = NumOps.FromDouble(1e-14);
+        T two = NumOps.FromDouble(2);
+        T zero = NumOps.Zero;
+
+        for (int k = 0; k < n - 2; k++)
+        {
+            int length = n - k - 1;
+            var x = Engine.TensorSlice(h, new[] { k + 1, k }, new[] { length, 1 });
+            var xNorm = Engine.TensorNorm(x).Reshape(new[] { 1, 1 });
+            if (AnyBelow(xNorm, tiny))
+            {
+                continue;
+            }
+
+            // u0 = x0 - alpha = x0 + sign(x0) ‖x‖, sign(x0) = -1 for x0 < 0 and +1 otherwise.
+            var x0 = Engine.TensorSlice(x, new[] { 0, 0 }, new[] { 1, 1 });
+            var negative = Engine.TensorLessThan(x0, zero);
+            var sign = Engine.TensorSubtract(Engine.TensorOnesLike(negative), Engine.TensorMultiplyScalar(negative, two));
+            var u = Engine.TensorSetSlice(x, Engine.TensorAdd(x0, Engine.TensorMultiply(sign, xNorm)), new[] { 0, 0 });
+
+            var uNorm = Engine.TensorNorm(u).Reshape(new[] { 1, 1 });
+            if (AnyBelow(uNorm, tiny))
+            {
+                continue;
+            }
+
+            u = Engine.TensorMultiplyScalar(u, Engine.TensorSum(Engine.TensorReciprocal(uNorm)));
+            var v = Engine.TensorSetSlice(new Tensor<T>(new[] { n, 1 }), u, new[] { k + 1, 0 });
+            var vT = Engine.TensorTranspose(v);
+
+            // H <- P H P and Q <- Q P with P = I - 2 v v^T.
+            h = Engine.TensorSubtract(h, Engine.TensorMultiplyScalar(Engine.TensorMatMul(v, Engine.TensorMatMul(vT, h)), two));
+            h = Engine.TensorSubtract(h, Engine.TensorMultiplyScalar(Engine.TensorMatMul(Engine.TensorMatMul(h, v), vT), two));
+            q = Engine.TensorSubtract(q, Engine.TensorMultiplyScalar(Engine.TensorMatMul(Engine.TensorMatMul(q, v), vT), two));
+        }
+
+        return (h.ToMatrix(), q.ToMatrix());
+    }
+
+    /// <summary>
+    /// Rescales a reduction H = Q^T A Q by D = diag(±1) so that every subdiagonal entry
+    /// H[k+1,k] is non-negative (H' = D H D, Q' = Q D).
+    /// </summary>
+    /// <remarks>
+    /// Rotation-based (Givens) and Lanczos reductions produce non-negative subdiagonals
+    /// (r = sqrt(a^2 + b^2), beta = ‖w‖); by the implicit-Q theorem an unreduced reduction with
+    /// Q e1 = e1 is unique up to exactly this sign scaling. d_0 = 1 and d_(k+1) = d_k sign(H[k+1,k])
+    /// (sign(0) = +1), computed with an engine cumulative product.
+    /// </remarks>
+    private protected (Matrix<T> H, Matrix<T> Q) NormalizeSubdiagonalSigns(Matrix<T> hMatrix, Matrix<T> qMatrix)
+    {
+        int n = hMatrix.Rows;
+        if (n < 2)
+        {
+            return (hMatrix, qMatrix);
+        }
+
+        var h = Tensor<T>.FromMatrix(hMatrix);
+        var subdiagonal = Engine.TensorDiagonal(Engine.TensorSlice(h, new[] { 1, 0 }, new[] { n - 1, n - 1 }));
+        var signs = Engine.TensorSign(subdiagonal);
+        signs = Engine.TensorAdd(signs, Engine.TensorSubtract(Engine.TensorOnesLike(signs), Engine.TensorAbs(signs)));
+        var d = Engine.Concat(
+            new[] { Engine.TensorOnesLike(new Tensor<T>(new[] { 1 })), Engine.TensorCumProd(signs, 0) },
+            0);
+        var scaling = Engine.TensorDiagEmbed(d);
+
+        var scaledH = Engine.TensorMatMul(Engine.TensorMatMul(scaling, h), scaling);
+        var scaledQ = Engine.TensorMatMul(Tensor<T>.FromMatrix(qMatrix), scaling);
+        return (scaledH.ToMatrix(), scaledQ.ToMatrix());
+    }
+
+    /// <summary>
+    /// Solves a triangular system <c>T x = rhs</c> with one whole-matrix engine triangular solve.
+    /// </summary>
+    /// <param name="triangular">The square triangular coefficient matrix.</param>
+    /// <param name="rhs">The right-hand side vector.</param>
+    /// <param name="upper">True when <paramref name="triangular"/> is upper triangular; false for lower.</param>
+    /// <param name="unitDiagonal">True to treat the diagonal as all ones without reading it.</param>
+    /// <returns>The solution vector x.</returns>
+    private protected static Vector<T> SolveTriangularSystem(Matrix<T> triangular, Vector<T> rhs, bool upper, bool unitDiagonal = false)
+    {
+        var solution = Linalg.SolveTriangular(
+            Tensor<T>.FromMatrix(triangular),
+            Tensor<T>.FromVector(rhs, new[] { rhs.Length, 1 }),
+            upper,
+            unitDiagonal);
+        return solution.Reshape(new[] { rhs.Length }).ToVector();
+    }
+
+    /// <summary>
+    /// Solves a triangular system <c>T X = B</c> for every column of <paramref name="rhs"/> at once.
+    /// </summary>
+    private protected static Matrix<T> SolveTriangularSystem(Matrix<T> triangular, Matrix<T> rhs, bool upper, bool unitDiagonal = false)
+    {
+        return Linalg.SolveTriangular(
+            Tensor<T>.FromMatrix(triangular),
+            Tensor<T>.FromMatrix(rhs),
+            upper,
+            unitDiagonal).ToMatrix();
+    }
+
+    /// <summary>
+    /// True when any element of <paramref name="value"/> (typically a single-element tensor) is
+    /// strictly below <paramref name="threshold"/>; evaluated with an engine comparison.
+    /// </summary>
+    private protected bool AnyBelow(Tensor<T> value, T threshold)
+    {
+        return Engine.TensorCountNonzero(Engine.TensorLessThan(value, threshold)) > 0;
+    }
+
+    /// <summary>
+    /// True when any element of <paramref name="value"/> (typically a single-element tensor) is
+    /// strictly above <paramref name="threshold"/>; evaluated with an engine comparison.
+    /// </summary>
+    private protected bool AnyAbove(Tensor<T> value, T threshold)
+    {
+        return Engine.TensorCountNonzero(Engine.TensorGreaterThan(value, threshold)) > 0;
+    }
+
+    /// <summary>
+    /// Thin QR factorization with a non-negative diagonal in R, computed with one engine QR call.
+    /// </summary>
+    /// <param name="matrix">The m x n matrix to factor.</param>
+    /// <returns>
+    /// Q (m x n, orthonormal columns) and R (n x n, upper triangular, R[i,i] &gt;= 0) with A = QR.
+    /// When m &lt; n the trailing n - m columns of Q and rows of R are zero.
+    /// </returns>
+    /// <remarks>
+    /// The thin QR factorization of a full-column-rank matrix with a positive R diagonal is unique,
+    /// so this matches Gram-Schmidt orthogonalization (which produces R[j,j] = ‖v_j‖ &gt; 0).
+    /// The engine QR uses Householder reflections; its signs are normalized here by scaling
+    /// column j of Q and row j of R by sign(R[j,j]).
+    /// </remarks>
+    private protected (Matrix<T> Q, Matrix<T> R) ComputePositiveDiagonalQr(Matrix<T> matrix)
+    {
+        return ComputeSignNormalizedQr(matrix, complete: false, nonNegativeDiagonal: true);
+    }
+
+    /// <summary>
+    /// QR factorization from one engine QR call with a fixed sign convention on the R diagonal.
+    /// </summary>
+    /// <param name="matrix">The m x n matrix to factor.</param>
+    /// <param name="complete">
+    /// True for the complete factorization (Q m x m, R m x n); false for the thin one (Q m x n,
+    /// R n x n, zero-padded when m &lt; n).
+    /// </param>
+    /// <param name="nonNegativeDiagonal">
+    /// True to make R[j,j] &gt;= 0 (Gram-Schmidt, Givens); false to make R[j,j] &lt;= 0 (reflecting
+    /// each column with u = x + ‖x‖ e1).
+    /// </param>
+    /// <remarks>
+    /// Column j of Q and row j of R are scaled by the same sign, so A = QR is preserved. For a
+    /// full-column-rank matrix this pins down the leading min(m, n) columns of Q uniquely.
+    /// </remarks>
+    private protected (Matrix<T> Q, Matrix<T> R) ComputeSignNormalizedQr(Matrix<T> matrix, bool complete, bool nonNegativeDiagonal)
+    {
+        int m = matrix.Rows;
+        int n = matrix.Columns;
+        if (m == 0 || n == 0)
+        {
+            return complete
+                ? (Matrix<T>.CreateIdentity(m), new Matrix<T>(m, n))
+                : (new Matrix<T>(m, n), new Matrix<T>(n, n));
+        }
+
+        var (q, r) = Linalg.QR(Tensor<T>.FromMatrix(matrix), complete ? "complete" : "reduced");
+
+        // sign'(x) = +1 for x >= 0, -1 for x < 0 (sign(0) = 0 would erase the column).
+        var signs = Engine.TensorSign(Engine.TensorDiagonal(r));
+        signs = Engine.TensorAdd(signs, Engine.TensorSubtract(Engine.TensorOnesLike(signs), Engine.TensorAbs(signs)));
+        if (!nonNegativeDiagonal)
+        {
+            signs = Engine.TensorNegate(signs);
+        }
+
+        int qColumns = q.Shape[1];
+        if (signs.Length < qColumns)
+        {
+            signs = Engine.TensorSetSlice(Engine.TensorOnesLike(new Tensor<T>(new[] { qColumns })), signs, new[] { 0 });
+        }
+
+        var signMatrix = Engine.TensorDiagEmbed(signs);
+        q = Engine.TensorMatMul(q, signMatrix);
+        r = Engine.TensorMatMul(signMatrix, r);
+
+        if (complete || m >= n)
+        {
+            return (q.ToMatrix(), r.ToMatrix());
+        }
+
+        // Thin factorization with m < n: pad Q with zero columns and R with zero rows so the
+        // shapes stay m x n and n x n.
+        var paddedQ = Engine.TensorSetSlice(new Tensor<T>(new[] { m, n }), q, new[] { 0, 0 });
+        var paddedR = Engine.TensorSetSlice(new Tensor<T>(new[] { n, n }), r, new[] { 0, 0 });
+        return (paddedQ.ToMatrix(), paddedR.ToMatrix());
     }
 
     /// <summary>

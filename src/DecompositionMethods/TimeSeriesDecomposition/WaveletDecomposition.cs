@@ -160,13 +160,16 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
             return vector;
         }
 
-        var padded = new Vector<T>(length);
-        for (int i = 0; i < Math.Min(vector.Length, length); i++)
+        int kept = Math.Min(vector.Length, length);
+        var prefix = kept > 0
+            ? Engine.TensorSlice(Tensor<T>.FromVector(vector), new[] { 0 }, new[] { kept })
+            : new Tensor<T>(new[] { 0 });
+        if (kept == length)
         {
-            padded[i] = vector[i];
+            return prefix.ToVector();
         }
 
-        return padded;
+        return Engine.TensorConstantPad(prefix, new[] { 0, length - kept }, NumOps.Zero).ToVector();
     }
 
     /// <summary>
@@ -230,24 +233,41 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>A tuple containing the detail coefficients and approximation coefficients.</returns>
     private (Vector<T>, Vector<T>) MODWTStep(Vector<T> v, int j)
     {
-        var N = v.Length;
-        var wj = new Vector<T>(N);
-        var vj = new Vector<T>(N);
-
         var h = _wavelet.GetScalingCoefficients();
-        var g = _wavelet.GetWaveletCoefficients();
+        var g = PadToLength(_wavelet.GetWaveletCoefficients(), h.Length);
 
-        for (int t = 0; t < N; t++)
+        return CircularFilterPair(v, g, h, (int)Math.Pow(2, j - 1));
+    }
+
+    /// <summary>
+    /// Circular filtering of <paramref name="v"/> by two filters at once:
+    /// first[t] = sum_l a[l] v[(t - l * dilation) mod N] and second[t] likewise with b.
+    /// </summary>
+    private (Vector<T>, Vector<T>) CircularFilterPair(Vector<T> v, Vector<T> a, Vector<T> b, int dilation)
+    {
+        int n = v.Length;
+        int taps = a.Length;
+        if (n == 0 || taps == 0)
         {
-            for (int l = 0; l < h.Length; l++)
-            {
-                int index = (t - l * (int)Math.Pow(2, j - 1) + N) % N;
-                wj[t] = NumOps.Add(wj[t], NumOps.Multiply(g[l], v[index]));
-                vj[t] = NumOps.Add(vj[t], NumOps.Multiply(h[l], v[index]));
-            }
+            return (new Vector<T>(n), new Vector<T>(n));
         }
 
-        return (wj, vj);
+        // Periodically extend the signal on the left by (taps - 1) * dilation samples:
+        // extended[s] = v[(s - pad) mod N].
+        int pad = (taps - 1) * dilation;
+        var source = Engine.TensorArange<int>(-pad, n, 1);
+        var wrapped = Engine.TensorRemainder(source, Engine.TensorFullLike(source, n));
+        var extended = Engine.TensorIndexSelect(Tensor<T>.FromVector(v), wrapped, 0).Reshape(new[] { 1, 1, n + pad });
+
+        // Conv1D cross-correlates, so the reversed filters give sum_l f[l] v[t - l * dilation].
+        var kernel = Engine.TensorFlip(
+            Engine.TensorStack(new[] { Tensor<T>.FromVector(a), Tensor<T>.FromVector(b) }, 0), new[] { 1 })
+            .Reshape(new[] { 2, 1, taps });
+        var filtered = Engine.Conv1D(extended, kernel, 1, 0, dilation).Reshape(new[] { 2, n });
+
+        var first = Engine.TensorSlice(filtered, new[] { 0, 0 }, new[] { 1, n }).Reshape(new[] { n }).ToVector();
+        var second = Engine.TensorSlice(filtered, new[] { 1, 0 }, new[] { 1, n }).Reshape(new[] { n }).ToVector();
+        return (first, second);
     }
 
     /// <summary>
@@ -322,27 +342,13 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>A tuple containing the detail coefficients and approximation coefficients.</returns>
     private (Vector<T>, Vector<T>) SWTStep(Vector<T> v, int j)
     {
-        var N = v.Length;
-        var wj = new Vector<T>(N);
-        var vj = new Vector<T>(N);
-
         var h = _wavelet.GetScalingCoefficients();
         var g = _wavelet.GetWaveletCoefficients();
 
         var h_upsampled = UpsampleFilter(h, j);
-        var g_upsampled = UpsampleFilter(g, j);
+        var g_upsampled = PadToLength(UpsampleFilter(g, j), h_upsampled.Length);
 
-        for (int t = 0; t < N; t++)
-        {
-            for (int l = 0; l < h_upsampled.Length; l++)
-            {
-                int index = (t - l + N) % N;
-                wj[t] = NumOps.Add(wj[t], NumOps.Multiply(g_upsampled[l], v[index]));
-                vj[t] = NumOps.Add(vj[t], NumOps.Multiply(h_upsampled[l], v[index]));
-            }
-        }
-
-        return (wj, vj);
+        return CircularFilterPair(v, g_upsampled, h_upsampled, 1);
     }
 
     /// <summary>
@@ -363,12 +369,16 @@ public class WaveletDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// <returns>A new vector containing the upsampled filter.</returns>
     private Vector<T> UpsampleFilter(Vector<T> filter, int j)
     {
-        var upsampled = new Vector<T>((int)Math.Pow(2, j - 1) * filter.Length);
-        for (int i = 0; i < filter.Length; i++)
+        int factor = (int)Math.Pow(2, j - 1);
+        if (factor == 1 || filter.Length == 0)
         {
-            upsampled[i * (int)Math.Pow(2, j - 1)] = filter[i];
+            return new Vector<T>(filter);
         }
 
-        return upsampled;
+        // upsampled[i * factor] = filter[i]: the filter as the first column of a [length, factor]
+        // block of zeros, read row-major.
+        var column = Tensor<T>.FromVector(filter, new[] { filter.Length, 1 });
+        var block = Engine.TensorConcatenate(new[] { column, new Tensor<T>(new[] { filter.Length, factor - 1 }) }, 1);
+        return block.Reshape(new[] { filter.Length * factor }).ToVector();
     }
 }
