@@ -288,7 +288,7 @@ public class SplineTransformer<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         // Handle the last interval (include right endpoint)
         var atEnd = engine.TensorEquals(x, knots.GetFlat(nKnotValues - 1));
         var lastColumn = new Tensor<T>(new[] { 1, n });
-        lastColumn.AsSpan()[n - 1] = NumOps.One;
+        lastColumn.SetFlat(n - 1, NumOps.One);
         var setLast = engine.TensorMultiply(
             engine.TensorBroadcastTo(engine.Reshape(atEnd, new[] { rows, 1 }), shape),
             engine.TensorBroadcastTo(lastColumn, shape));
