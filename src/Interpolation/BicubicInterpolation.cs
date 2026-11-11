@@ -196,20 +196,31 @@ public partial class BicubicInterpolation<T> : I2DInterpolation<T>
     /// <returns>The 16 bicubic coefficients; entry i * 4 + j multiplies x^i * y^j.</returns>
     private Vector<T> CalculateBicubicCoefficients(Matrix<T> p)
     {
-        var engine = AiDotNetEngine.Current;
+        Vector<T> values = p.ToRowVector();
 
-        // Row index * 4 + j of the system samples the patch at grid offset (i - 1, j - 1); column k * 4 + l holds
-        // (i - 1)^k * (j - 1)^l. That is the Kronecker product of the 4x4 matrix V[i, k] = (i - 1)^k with itself.
+        // Solve the system; the default system is the same for every patch, so its factorization is shared
+        var decomposition = _decomposition ?? DefaultDecomposition.Value;
+        return MatrixSolutionHelper.SolveLinearSystem(values, decomposition);
+    }
+
+    /// <summary>
+    /// The LU factorization of the fixed 16x16 bicubic system, built once per numeric type.
+    /// </summary>
+    private static readonly Lazy<LuDecomposition<T>> DefaultDecomposition =
+        new Lazy<LuDecomposition<T>>(() => new LuDecomposition<T>(BuildCoefficientSystem()));
+
+    /// <summary>
+    /// The 16x16 bicubic system: row i * 4 + j samples the patch at grid offset (i - 1, j - 1) and column
+    /// k * 4 + l holds (i - 1)^k * (j - 1)^l, the Kronecker product of V[i, k] = (i - 1)^k with itself.
+    /// </summary>
+    private static Matrix<T> BuildCoefficientSystem()
+    {
+        var engine = AiDotNetEngine.Current;
         Tensor<T> offsets = new Tensor<int>(new[] { -1, 0, 1, 2 }, new[] { 4, 1 }).Cast<T>();
         Tensor<T> vandermonde = engine.TensorPower(
             engine.TensorBroadcastTo(offsets, new[] { 4, 4 }),
             engine.TensorBroadcastTo(CubicPowers().Reshape(1, 4), new[] { 4, 4 }));
-        Matrix<T> coefficients = engine.TensorKron(vandermonde, vandermonde).ToMatrix();
-        Vector<T> values = p.ToRowVector();
-
-        // Solve the system
-        var decomposition = _decomposition ?? new LuDecomposition<T>(coefficients);
-        return MatrixSolutionHelper.SolveLinearSystem(values, decomposition);
+        return engine.TensorKron(vandermonde, vandermonde).ToMatrix();
     }
 
     /// <summary>

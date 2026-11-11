@@ -212,16 +212,29 @@ public partial class KrigingInterpolation<T> : I2DInterpolation<T>
         Tensor<T> ys = _y.AsTensor();
         Tensor<T> zs = _z.AsTensor();
 
-        // Calculate distances and semivariances for every pair i < j, kept in row-major (i, then j) order
-        Tensor<T> dx = engine.TensorSubtract(xs.Reshape(n, 1), xs.Reshape(1, n));
-        Tensor<T> dy = engine.TensorSubtract(ys.Reshape(n, 1), ys.Reshape(1, n));
-        Tensor<T> dz = engine.TensorSubtract(zs.Reshape(n, 1), zs.Reshape(1, n));
-        Tensor<T> pairDistances = engine.TensorSqrt(engine.TensorAdd(engine.TensorMultiply(dx, dx), engine.TensorMultiply(dy, dy)));
-        Tensor<T> pairGammas = engine.TensorDivideScalar(engine.TensorMultiply(dz, dz), _numOps.FromDouble(2));
-        var aboveDiagonal = engine.TensorEqScalar(engine.TensorTriangularMask<T>(n, upper: true, diagonal: 1), _numOps.One);
+        // Calculate distances and semivariances for every pair i < j, kept in row-major (i, then j) order. Rows are
+        // processed in bounded tiles so only the kept pairs, not full [n, n] intermediates, are held at once.
+        var distances = new List<T>();
+        var gammas = new List<T>();
+        T two = _numOps.FromDouble(2);
+        Tensor<int> columns = engine.TensorArange<int>(0, n, 1).Reshape(1, n);
+        int block = Math.Max(1, Math.Min(n, PairTileElements / Math.Max(1, n)));
+        for (int start = 0; start < n; start += block)
+        {
+            int size = Math.Min(block, n - start);
+            int[] tileShape = { size, n };
+            Tensor<T> dx = TileDifferences(engine, xs, start, size, tileShape);
+            Tensor<T> dy = TileDifferences(engine, ys, start, size, tileShape);
+            Tensor<T> dz = TileDifferences(engine, zs, start, size, tileShape);
+            Tensor<T> pairDistances = engine.TensorSqrt(engine.TensorAdd(engine.TensorMultiply(dx, dx), engine.TensorMultiply(dy, dy)));
+            Tensor<T> pairGammas = engine.TensorDivideScalar(engine.TensorMultiply(dz, dz), two);
+            Tensor<int> rows = engine.TensorArange<int>(start, start + size, 1).Reshape(size, 1);
+            var aboveDiagonal = engine.TensorEqScalar(
+                engine.TensorGreaterThan(engine.TensorBroadcastTo(columns, tileShape), engine.TensorBroadcastTo(rows, tileShape)), 1);
 
-        var distances = new List<T>(engine.TensorMaskedSelect(pairDistances, aboveDiagonal).ToVector());
-        var gammas = new List<T>(engine.TensorMaskedSelect(pairGammas, aboveDiagonal).ToVector());
+            distances.AddRange(engine.TensorMaskedSelect(pairDistances, aboveDiagonal).ToVector());
+            gammas.AddRange(engine.TensorMaskedSelect(pairGammas, aboveDiagonal).ToVector());
+        }
 
         // Sort distances and gammas
         var sortedPairs = distances.Zip(gammas, (d, g) => new { Distance = d, Gamma = g })
@@ -241,6 +254,21 @@ public partial class KrigingInterpolation<T> : I2DInterpolation<T>
 
         // Fit exponential variogram model using least squares
         FitExponentialVariogram(binnedDistances, binnedGammas);
+    }
+
+    /// <summary>
+    /// Upper bound on the elements of one [rows, n] pair tile in <see cref="EstimateVariogramParameters"/>.
+    /// </summary>
+    private const int PairTileElements = 1 << 20;
+
+    /// <summary>
+    /// values[start + r] - values[j] for the tile rows r and every column j, broadcast explicitly to the tile shape.
+    /// </summary>
+    private static Tensor<T> TileDifferences(IEngine engine, Tensor<T> values, int start, int size, int[] tileShape)
+    {
+        return engine.TensorSubtract(
+            engine.TensorBroadcastTo(engine.TensorNarrow(values, 0, start, size).Reshape(size, 1), tileShape),
+            engine.TensorBroadcastTo(values.Reshape(1, values.Length), tileShape));
     }
 
     /// <summary>

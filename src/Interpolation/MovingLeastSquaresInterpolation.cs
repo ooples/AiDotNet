@@ -184,7 +184,8 @@ public partial class MovingLeastSquaresInterpolation<T> : I2DInterpolation<T>
         Tensor<T> yPowers = engine.TensorPower(
             engine.TensorBroadcastTo(ys.Reshape(n, 1), termShape),
             engine.TensorBroadcastTo(_yExponents.Reshape(1, basisSize), termShape));
-        var A = engine.TensorMultiply(weight.Reshape(n, 1), engine.TensorMultiply(xPowers, yPowers)).ToMatrix();
+        var A = engine.TensorMultiply(
+            engine.TensorBroadcastTo(weight.Reshape(n, 1), termShape), engine.TensorMultiply(xPowers, yPowers)).ToMatrix();
 
         var AtW = A.Transpose().Multiply(W);
         var AtWA = AtW.Multiply(A);

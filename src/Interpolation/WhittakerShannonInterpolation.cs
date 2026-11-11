@@ -130,11 +130,15 @@ public class WhittakerShannonInterpolation<T> : IInterpolation<T>
     {
         // sin(pi x) / (pi x), with the removable singularity at x = 0 filled by 1
         var engine = AiDotNetEngine.Current;
+        Tensor<T> atZero = engine.TensorEquals(x, _numOps.Zero);
         Tensor<T> piX = engine.TensorMultiplyScalar(x, MathHelper.Pi<T>());
-        Tensor<T> ratio = engine.TensorDivide(engine.TensorSin(piX), piX);
+
+        // piX is exactly 0 wherever atZero is 1, so adding the mask only replaces the zero denominators
+        // (a decimal 0 / 0 throws); the mask overrides those entries below
+        Tensor<T> ratio = engine.TensorDivide(engine.TensorSin(piX), engine.TensorAdd(piX, atZero));
 
         return engine.TensorWhere(
-            engine.TensorEquals(x, _numOps.Zero),
+            atZero,
             Tensor<T>.CreateDefault(new[] { x.Length }, _numOps.One),
             ratio);
     }

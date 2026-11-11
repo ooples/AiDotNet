@@ -204,7 +204,8 @@ public partial class CubicBSplineInterpolation<T> : IInterpolation<T>
         for (int j = 0; j < 4; j++)
         {
             Tensor<T> placement = engine.TensorOneHot<T>(engine.TensorAddScalar(spans, j - 3), coefficientCount);
-            system = engine.TensorAdd(system, engine.TensorMultiply(placement, basis[j].Reshape(n, 1)));
+            system = engine.TensorAdd(system, engine.TensorMultiply(
+                placement, engine.TensorBroadcastTo(basis[j].Reshape(n, 1), new[] { n, coefficientCount })));
         }
 
         Matrix<T> A = system.ToMatrix();

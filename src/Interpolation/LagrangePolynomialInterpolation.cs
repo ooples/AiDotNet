@@ -85,8 +85,8 @@ public class LagrangePolynomialInterpolation<T> : IInterpolation<T>
 
         // ratios[i, j] = (x - x[j]) / (x[i] - x[j]). The diagonal of x[i] - x[j] is exactly zero, so adding the
         // identity only gives those entries a harmless denominator; they are then set to 1 so the product skips j == i.
-        Tensor<T> differences = engine.TensorSubtract(knots.Reshape(n, 1), knots.Reshape(1, n));
-        Tensor<T> numerators = engine.ScalarMinusTensor(x, knots).Reshape(1, n);
+        Tensor<T> differences = InterpolationSearch.PairwiseDifferences(knots);
+        Tensor<T> numerators = engine.TensorBroadcastTo(engine.ScalarMinusTensor(x, knots).Reshape(1, n), new[] { n, n });
         Tensor<T> ratios = engine.TensorDivide(numerators, engine.TensorAdd(differences, diagonal));
         ratios = engine.TensorMaskedFill(ratios, engine.TensorEqScalar(diagonal, _numOps.One), _numOps.One);
 

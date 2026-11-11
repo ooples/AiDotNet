@@ -147,12 +147,15 @@ public partial class PchipInterpolation<T> : IInterpolation<T>
         Tensor<T> hRight = Slice(widths, 1, n - 2);
         Tensor<T> w1 = engine.TensorAdd(engine.TensorMultiplyScalar(hRight, _numOps.FromDouble(2)), hLeft);
         Tensor<T> w2 = engine.TensorAdd(hRight, engine.TensorMultiplyScalar(hLeft, _numOps.FromDouble(2)));
+        // Same-sign, nonzero neighbours keep the mean; a sign change or a flat neighbour is an extremum with slope 0.
+        // Masked-out secants are replaced by 1 before dividing (a decimal division by a zero secant throws).
+        Tensor<T> sameSign = engine.TensorGreaterThan(engine.TensorMultiply(left, right), _numOps.Zero);
+        Tensor<T> ones = engine.TensorOnesLike(left);
+        Tensor<T> safeLeft = engine.TensorWhere(sameSign, left, ones);
+        Tensor<T> safeRight = engine.TensorWhere(sameSign, right, ones);
         Tensor<T> interior = engine.TensorDivide(
             engine.TensorAdd(w1, w2),
-            engine.TensorAdd(engine.TensorDivide(w1, left), engine.TensorDivide(w2, right)));
-
-        // Same-sign, nonzero neighbours keep the mean; a sign change or a flat neighbour is an extremum with slope 0
-        Tensor<T> sameSign = engine.TensorGreaterThan(engine.TensorMultiply(left, right), _numOps.Zero);
+            engine.TensorAdd(engine.TensorDivide(w1, safeLeft), engine.TensorDivide(w2, safeRight)));
         interior = engine.TensorWhere(sameSign, interior, engine.TensorZerosLike(interior));
 
         var slopes = new[]
