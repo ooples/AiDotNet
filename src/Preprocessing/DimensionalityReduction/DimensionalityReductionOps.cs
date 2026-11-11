@@ -259,4 +259,66 @@ internal static class DimensionalityReductionOps
 
         return engine.TensorConcatenate(columns, 1);
     }
+
+    /// <summary>Soft thresholding sign(x) max(|x| - lambda, 0), with lambda broadcast against x.</summary>
+    internal static Tensor<T> SoftThreshold<T>(Tensor<T> x, Tensor<T> lambda)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var shrunk = engine.TensorClampMin(engine.TensorSubtract(engine.TensorAbs(x), lambda), numOps.Zero);
+        return engine.TensorMultiply(engine.TensorSign(x), shrunk);
+    }
+
+    /// <summary>Soft thresholding by a scalar lambda.</summary>
+    internal static Tensor<T> SoftThreshold<T>(Tensor<T> x, T lambda) => SoftThreshold(x, Scalar(lambda));
+
+    /// <summary>Divides every row by its Euclidean norm, leaving rows whose norm is at most <paramref name="tolerance"/> unchanged.</summary>
+    internal static Tensor<T> NormalizeRows<T>(Tensor<T> x, double tolerance = 1e-10)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(x), new[] { 1 }, true));
+        var divisor = engine.TensorWhere(
+            engine.TensorGreaterThan(norm, numOps.FromDouble(tolerance)), norm, engine.TensorOnesLike(norm));
+        return engine.TensorDivide(x, divisor);
+    }
+
+    /// <summary>Divides every column by its Euclidean norm, leaving columns whose norm is at most <paramref name="tolerance"/> unchanged.</summary>
+    internal static Tensor<T> NormalizeColumns<T>(Tensor<T> x, double tolerance = 1e-10)
+    {
+        var engine = Engine;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var norm = engine.TensorSqrt(engine.ReduceSum(engine.TensorSquare(x), new[] { 0 }, true));
+        var divisor = engine.TensorWhere(
+            engine.TensorGreaterThan(norm, numOps.FromDouble(tolerance)), norm, engine.TensorOnesLike(norm));
+        return engine.TensorDivide(x, divisor);
+    }
+
+    /// <summary>Largest absolute entry of a - b.</summary>
+    internal static T MaxAbsDifference<T>(Tensor<T> a, Tensor<T> b) =>
+        Engine.TensorMaxValue(Engine.TensorAbs(Engine.TensorSubtract(a, b)));
+
+    /// <summary>Replaces row <paramref name="row"/> of a [m, n] matrix with a [1, n] or [n] tensor (returns a new matrix).</summary>
+    internal static Tensor<T> WithRow<T>(Tensor<T> matrix, int row, Tensor<T> values)
+    {
+        var engine = Engine;
+        int m = matrix.Shape[0];
+        var parts = new List<Tensor<T>>(3);
+        if (row > 0) parts.Add(engine.TensorNarrow(matrix, 0, 0, row));
+        parts.Add(engine.Reshape(values, new[] { 1, matrix.Shape[1] }));
+        if (row + 1 < m) parts.Add(engine.TensorNarrow(matrix, 0, row + 1, m - row - 1));
+        return parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 0);
+    }
+
+    /// <summary>Replaces column <paramref name="column"/> of a [m, n] matrix with a [m, 1] or [m] tensor (returns a new matrix).</summary>
+    internal static Tensor<T> WithColumn<T>(Tensor<T> matrix, int column, Tensor<T> values)
+    {
+        var engine = Engine;
+        int n = matrix.Shape[1];
+        var parts = new List<Tensor<T>>(3);
+        if (column > 0) parts.Add(engine.TensorNarrow(matrix, 1, 0, column));
+        parts.Add(engine.Reshape(values, new[] { matrix.Shape[0], 1 }));
+        if (column + 1 < n) parts.Add(engine.TensorNarrow(matrix, 1, column + 1, n - column - 1));
+        return parts.Count == 1 ? parts[0] : engine.TensorConcatenate(parts.ToArray(), 1);
+    }
 }
