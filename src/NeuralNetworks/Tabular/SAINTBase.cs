@@ -119,10 +119,13 @@ public abstract partial class SAINTBase<T> : IParameterSource<T>
         }
     }
 
+    /// <inheritdoc />
     public virtual long ParameterCount => ParameterRegistry.ParameterCount;
 
+    /// <inheritdoc />
     public virtual Vector<T> GetParameters() => ParameterRegistry.GetParameters();
 
+    /// <inheritdoc />
     public virtual void SetParameters(Vector<T> parameters) => ParameterRegistry.SetParameters(parameters);
 
     /// <summary>

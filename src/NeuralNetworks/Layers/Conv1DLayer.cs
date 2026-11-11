@@ -109,6 +109,7 @@ public partial class Conv1DLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override bool HasUninitializedParameters => !IsShapeResolved;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>

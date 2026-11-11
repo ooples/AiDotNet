@@ -28,13 +28,21 @@ public class HuberLossMetric<T> : IRegressionMetric<T>
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private readonly double _delta;
 
+    /// <inheritdoc />
     public string Name => "HuberLoss";
+    /// <inheritdoc />
     public string Category => "Regression";
+    /// <inheritdoc />
     public string Description => "Robust loss function combining MSE and MAE.";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.LowerIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.Zero;
+    /// <inheritdoc />
     public T? MaxValue => default;
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
     /// <summary>
@@ -46,6 +54,7 @@ public class HuberLossMetric<T> : IRegressionMetric<T>
         _delta = Math.Max(0.001, delta);
     }
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         if (predictions.Length != actuals.Length)
@@ -74,6 +83,7 @@ public class HuberLossMetric<T> : IRegressionMetric<T>
         return NumOps.FromDouble(totalLoss / predictions.Length);
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
         ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

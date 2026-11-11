@@ -73,20 +73,24 @@ public partial class DiTToTTS<T> : TtsModelBase<T>, IEndToEndTts<T>
         for (int i = 0; i < waveLen; i++) { int fr = Math.Min(i / Math.Max(1, _options.HopSize), tF - 1); waveform[i] = NumOps.FromDouble(lat[fr] * Math.Sin(i * 0.006) * 0.85); }
         return waveform;
     }
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text) { int len = Math.Min(text.Length, _options.MaxTextLength); var t = new Tensor<T>([len]); for (int i = 0; i < len; i++) t[i] = NumOps.FromDouble(text[i] / 128.0); return t; } protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
     protected override void InitializeLayers() => InitializeLayersCore();
 
     // Constructors initialize this model's layers without dispatching into an unfinished derived instance.
     private void InitializeLayersCore() { if (!_useNativeMode) return; if (Architecture.Layers is not null && Architecture.Layers.Count > 0) Layers.AddRange(Architecture.Layers); else Layers.AddRange(LayerHelper<T>.CreateDefaultFlowMatchingTTSLayers(_options.EncoderDim, _options.FlowDim, _options.DecoderDim, _options.NumEncoderLayers, _options.NumFlowLayers, _options.NumHeads, _options.DropoutRate, inputFeatures: _options.MelChannels)); }
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxModel is not null) return OnnxModel.Run(input); SetTrainingMode(false); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
     /// <inheritdoc />
     /// <remarks>In this mode the weights belong to the loaded graph. The base refuses the
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() { return new ModelMetadata<T> { Name = _useNativeMode ? "DiTToTTS-Native" : "DiTToTTS-ONNX", Description = "DiTToTTS TTS", FeatureCount = _options.HiddenDim, AdditionalInfo = new Dictionary<string, object> { ["ModelType"] = "DiTToTTS", ["Mode"] = _useNativeMode ? "Native" : "ONNX", ["HiddenDim"] = _options.HiddenDim, ["EncoderDim"] = _options.EncoderDim, ["FlowDim"] = _options.FlowDim, ["DecoderDim"] = _options.DecoderDim, ["NumEncoderLayers"] = _options.NumEncoderLayers, ["NumFlowLayers"] = _options.NumFlowLayers, ["NumHeads"] = _options.NumHeads, ["SampleRate"] = _options.SampleRate, ["MelChannels"] = _options.MelChannels } }; }
 
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(DiTToTTS<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; _disposed = true; base.Dispose(disposing); }
 }

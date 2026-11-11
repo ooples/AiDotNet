@@ -176,6 +176,7 @@ public abstract partial class ModelWrapperBase<T, TInput, TOutput> : IFullModel<
         }
     }
 
+    /// <inheritdoc />
     public AiDotNet.Models.Parameters.ParameterLayoutSnapshot ParameterLayout
     {
         get

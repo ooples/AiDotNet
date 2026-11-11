@@ -426,6 +426,7 @@ public partial class BayesianRegression<T> : RegressionBase<T>
     }
 
 
+    /// <inheritdoc />
     public override byte[] Serialize()
     {
         using var stream = new MemoryStream();
@@ -439,6 +440,7 @@ public partial class BayesianRegression<T> : RegressionBase<T>
         return stream.ToArray();
     }
 
+    /// <inheritdoc />
     public override void Deserialize(byte[] modelData)
     {
         using var stream = new MemoryStream(modelData);

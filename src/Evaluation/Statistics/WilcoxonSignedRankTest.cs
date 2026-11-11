@@ -23,9 +23,12 @@ public class WilcoxonSignedRankTest<T> : IPairedTest<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "Wilcoxon Signed-Rank Test";
+    /// <inheritdoc />
     public string Description => "Non-parametric test for paired samples (robust to non-normality).";
 
+    /// <inheritdoc />
     public StatisticalTestResult<T> Test(T[] sample1, T[] sample2, double alpha = 0.05)
     {
         if (sample1.Length != sample2.Length)

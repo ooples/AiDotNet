@@ -44,8 +44,10 @@ public sealed class MultiOutputRegressor<T>
     /// <summary>Number of output columns (horizons) the last <see cref="Train"/> produced.</summary>
     public int OutputCount => _heads.Count;
 
+    /// <inheritdoc />
     public ILossFunction<T> DefaultLossFunction => new MeanSquaredErrorLoss<T>();
 
+    /// <inheritdoc />
     public void Train(Matrix<T> input, Matrix<T> expectedOutput)
     {
         if (expectedOutput.Columns < 1)
@@ -64,6 +66,7 @@ public sealed class MultiOutputRegressor<T>
         }
     }
 
+    /// <inheritdoc />
     public Matrix<T> Predict(Matrix<T> input)
     {
         if (_heads.Count == 0)
@@ -87,6 +90,7 @@ public sealed class MultiOutputRegressor<T>
         return result;
     }
 
+    /// <inheritdoc />
     public ModelMetadata<T> GetModelMetadata() => new()
     {
         Name = $"MultiOutputRegressor[{_heads.Count}]",
@@ -97,10 +101,13 @@ public sealed class MultiOutputRegressor<T>
 
     // --- IParameterizable: parameters are the concatenation of every head's parameters, in head order. ---
 
+    /// <inheritdoc />
     public long ParameterCount => _heads.Sum(h => AsParameterizable(h)?.ParameterCount ?? 0L);
 
+    /// <inheritdoc />
     public bool SupportsParameterInitialization => ParameterCount > 0;
 
+    /// <inheritdoc />
     public Vector<T> GetParameters()
     {
         var all = new List<Vector<T>>();
@@ -118,6 +125,7 @@ public sealed class MultiOutputRegressor<T>
         return all.Count == 0 ? new Vector<T>(0) : Vector<T>.Concatenate(all);
     }
 
+    /// <inheritdoc />
     public void SetParameters(Vector<T> parameters)
     {
         var offset = 0;
@@ -138,6 +146,7 @@ public sealed class MultiOutputRegressor<T>
     private static IParameterizable<T, Matrix<T>, Vector<T>>? AsParameterizable(
         IFullModel<T, Matrix<T>, Vector<T>> head) => head as IParameterizable<T, Matrix<T>, Vector<T>>;
 
+    /// <inheritdoc />
     public IFullModel<T, Matrix<T>, Matrix<T>> WithParameters(Vector<T> parameters)
     {
         var clone = (MultiOutputRegressor<T>)Clone();
@@ -145,10 +154,12 @@ public sealed class MultiOutputRegressor<T>
         return clone;
     }
 
+    /// <inheritdoc />
     public Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
     // --- IFeatureImportance: aggregate across heads. ---
 
+    /// <inheritdoc />
     public Dictionary<string, T> GetFeatureImportance()
     {
         var engine = AiDotNetEngine.Current;
@@ -191,6 +202,7 @@ public sealed class MultiOutputRegressor<T>
             .ToDictionary(kv => kv.Key, kv => kv.Value);
     }
 
+    /// <inheritdoc />
     public void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         var idx = featureIndices.ToList();
@@ -203,14 +215,17 @@ public sealed class MultiOutputRegressor<T>
         }
     }
 
+    /// <inheritdoc />
     public bool IsFeatureUsed(int featureIndex)
         => _heads.Any(h => h is IFeatureAware fa && fa.IsFeatureUsed(featureIndex));
 
+    /// <inheritdoc />
     public IEnumerable<int> GetActiveFeatureIndices()
         => _heads.OfType<IFeatureAware>().SelectMany(fa => fa.GetActiveFeatureIndices()).Distinct();
 
     // --- Serialization: length-prefixed concatenation of each head's bytes. ---
 
+    /// <inheritdoc />
     public byte[] Serialize()
     {
         using var ms = new MemoryStream();
@@ -226,6 +241,7 @@ public sealed class MultiOutputRegressor<T>
         return ms.ToArray();
     }
 
+    /// <inheritdoc />
     public void Deserialize(byte[] data)
     {
         using var ms = new MemoryStream(data);
@@ -242,10 +258,13 @@ public sealed class MultiOutputRegressor<T>
         }
     }
 
+    /// <inheritdoc />
     public void SaveModel(string filePath) => File.WriteAllBytes(filePath, Serialize());
 
+    /// <inheritdoc />
     public void LoadModel(string filePath) => Deserialize(File.ReadAllBytes(filePath));
 
+    /// <inheritdoc />
     public void SaveState(Stream stream)
     {
         // Delegate to the (verified round-tripping) Serialize path, length-prefixed so the stream can carry more.
@@ -256,6 +275,7 @@ public sealed class MultiOutputRegressor<T>
         w.Flush();
     }
 
+    /// <inheritdoc />
     public void LoadState(Stream stream)
     {
         var r = new BinaryReader(stream);
@@ -264,6 +284,7 @@ public sealed class MultiOutputRegressor<T>
         Deserialize(bytes);
     }
 
+    /// <inheritdoc />
     public IFullModel<T, Matrix<T>, Matrix<T>> Clone()
     {
         var clone = new MultiOutputRegressor<T>(_baseFactory);
@@ -275,6 +296,7 @@ public sealed class MultiOutputRegressor<T>
         return clone;
     }
 
+    /// <inheritdoc />
     public IFullModel<T, Matrix<T>, Matrix<T>> DeepCopy() => Clone();
 
     public void Dispose()

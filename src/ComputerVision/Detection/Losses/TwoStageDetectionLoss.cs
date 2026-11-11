@@ -314,6 +314,49 @@ public sealed class TwoStageDetectionLoss<T>
         return engine.TensorMultiplyScalar(engine.ReduceSum(tensor, null), NumOps.Zero);
     }
 
+    /// <summary>
+    /// Draws the RoIs a stage trains on, by the same rule <see cref="ComputeStageLoss(Tensor{T}, Tensor{T}, Tensor{T},
+    /// IReadOnlyList{double[]}, IReadOnlyList{int}, int, Random)"/> applies: up to the foreground fraction of the RoI
+    /// batch from proposals at or above the stage's IoU, the rest from the background band.
+    /// </summary>
+    /// <remarks>
+    /// A detector calls this before its RoI head so the head runs on the sampled rows only, as torchvision's
+    /// RoIHeads does. The stage loss then receives exactly that sample, which is within both limits, so it keeps every
+    /// row and draws nothing further from <paramref name="random"/>.
+    /// </remarks>
+    /// <returns>The sampled proposal rows, foreground first.</returns>
+    internal int[] SampleStageRois(Tensor<T> proposals, IReadOnlyList<double[]> gold, int stage, Random random)
+    {
+        if (proposals is null) throw new ArgumentNullException(nameof(proposals));
+        if (gold is null) throw new ArgumentNullException(nameof(gold));
+        if (random is null) throw new ArgumentNullException(nameof(random));
+        if (stage < 0 || stage >= _options.StageForegroundIoU.Length)
+            throw new ArgumentOutOfRangeException(nameof(stage));
+        if (proposals.Rank != 2 || proposals.Shape[1] != 4)
+            throw new ArgumentException("Proposals must be [proposals, 4].", nameof(proposals));
+
+        int count = proposals.Shape[0];
+        var values = proposals.ToArray();
+        var bestIoU = new double[count];
+        for (int r = 0; r < count; r++)
+        {
+            var box = new[]
+            {
+                NumOps.ToDouble(values[r * 4]), NumOps.ToDouble(values[r * 4 + 1]),
+                NumOps.ToDouble(values[r * 4 + 2]), NumOps.ToDouble(values[r * 4 + 3])
+            };
+            for (int g = 0; g < gold.Count; g++) bestIoU[r] = Math.Max(bestIoU[r], IoU(box, gold[g]));
+        }
+
+        double threshold = _options.StageForegroundIoU[stage];
+        var foregroundRows = Sample(Enumerable.Range(0, count).Where(r => gold.Count > 0 && bestIoU[r] >= threshold).ToList(),
+            (int)(_options.RoiBatchSizePerImage * _options.RoiForegroundFraction), random);
+        var background = Sample(Enumerable.Range(0, count)
+                .Where(r => (gold.Count == 0 || bestIoU[r] < threshold) && bestIoU[r] >= _options.RoiBackgroundIoULow).ToList(),
+            _options.RoiBatchSizePerImage - foregroundRows.Count, random);
+        return foregroundRows.Concat(background).ToArray();
+    }
+
     private static List<int> Sample(List<int> candidates, int limit, Random random)
     {
         if (limit <= 0) return new List<int>();

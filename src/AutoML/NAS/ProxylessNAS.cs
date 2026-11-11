@@ -63,8 +63,11 @@ namespace AiDotNet.AutoML.NAS
         private readonly bool _useBinarization;
         private T _binarizationTemperature;
 
+        /// <inheritdoc />
         protected override INumericOperations<T> NumOps => _ops;
+        /// <inheritdoc />
         protected override SearchSpaceBase<T> NasSearchSpace => _nasSearchSpace;
+        /// <inheritdoc />
         protected override int NasNumNodes => _numNodes;
 
         public ProxylessNAS(SearchSpaceBase<T> searchSpace, int numNodes = 4,
@@ -274,6 +277,7 @@ namespace AiDotNet.AutoML.NAS
             _binarizationTemperature = _ops.FromDouble(temperature);
         }
 
+        /// <inheritdoc />
         protected override Architecture<T> SearchArchitecture(
             Tensor<T> inputs,
             Tensor<T> targets,

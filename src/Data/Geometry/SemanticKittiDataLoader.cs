@@ -27,10 +27,15 @@ public class SemanticKittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "SemanticKITTI";
+    /// <inheritdoc />
     public override string Description => "SemanticKITTI per-point semantic segmentation";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.PointsPerSample * 3;
+    /// <inheritdoc />
     public override int OutputDimension => _options.PointsPerSample;
 
     public SemanticKittiDataLoader(SemanticKittiDataLoaderOptions? options = null)
@@ -39,6 +44,7 @@ public class SemanticKittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("semantic_kitti");
     }
 
+    /// <inheritdoc />
     protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
     {
         // SemanticKITTI uses sequence directories
@@ -152,11 +158,13 @@ public class SemanticKittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
         InitializeIndices(totalSamples);
     }
 
+    /// <inheritdoc />
     protected override void UnloadDataCore()
     {
         LoadedFeatures = default; LoadedLabels = default; Indices = null; _sampleCount = 0;
     }
 
+    /// <inheritdoc />
     protected override (Tensor<T> Features, Tensor<T> Labels) ExtractBatch(int[] indices)
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
@@ -175,6 +183,7 @@ public class SemanticKittiDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
         return (bf, bl);
     }
 
+    /// <inheritdoc />
     public override (IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Train,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Validation,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Test) Split(

@@ -260,6 +260,7 @@ public partial class MbPAAlgorithm<T, TInput, TOutput> : MetaLearnerBase<T, TInp
     protected override T ComputeLossFromOutput(TOutput predictions, TOutput expectedOutput)
         => ClassifierOutputs<T>.ProbabilityLoss(LossFunction, predictions, expectedOutput);
 
+    /// <inheritdoc />
     public override IModel<TInput, TOutput, ModelMetadata<T>> Adapt(IMetaLearningTask<T, TInput, TOutput> task)
     {
         // Adapt is public API, and both sibling algorithms (LFT, SparseMAML) guard this. Without

@@ -268,6 +268,7 @@ public class GradientSHAPExplainer<T> : ILocalExplainer<T, GradientSHAPExplanati
     public Vector<T> ComputeGlobalAttributions(Matrix<T> data)
         => AttributionAggregation.MeanAbsolute<T>(ExplainBatch(data));
 
+    /// <inheritdoc />
     public GradientSHAPExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         if (instances == null)

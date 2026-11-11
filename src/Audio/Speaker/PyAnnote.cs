@@ -66,9 +66,13 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
 
     #region ISpeakerDiarizer Properties
 
+    /// <inheritdoc />
     public new int SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public double MinSegmentDuration => _options.MinSegmentDuration;
+    /// <inheritdoc />
     public bool SupportsOverlapDetection => _options.EnableOverlapDetection;
+    /// <inheritdoc />
     public new bool IsOnnxMode => !_useNativeMode && OnnxEncoder is not null;
 
     #endregion
@@ -133,6 +137,7 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
 
     #region ISpeakerDiarizer
 
+    /// <inheritdoc />
     public DiarizationResult<T> Diarize(Tensor<T> audio, int? numSpeakers = null, int minSpeakers = 1, int maxSpeakers = 10)
     {
         ThrowIfDisposed();
@@ -170,9 +175,11 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
         };
     }
 
+    /// <inheritdoc />
     public Task<DiarizationResult<T>> DiarizeAsync(Tensor<T> audio, int? numSpeakers = null, int minSpeakers = 1, int maxSpeakers = 10, CancellationToken cancellationToken = default)
         => Task.Run(() => { cancellationToken.ThrowIfCancellationRequested(); return Diarize(audio, numSpeakers, minSpeakers, maxSpeakers); }, cancellationToken);
 
+    /// <inheritdoc />
     public DiarizationResult<T> DiarizeWithKnownSpeakers(Tensor<T> audio, IReadOnlyList<SpeakerProfile<T>> knownSpeakers, bool allowUnknownSpeakers = true)
     {
         ThrowIfDisposed();
@@ -215,6 +222,7 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
         };
     }
 
+    /// <inheritdoc />
     public IReadOnlyDictionary<string, Tensor<T>> ExtractSpeakerEmbeddings(Tensor<T> audio, DiarizationResult<T> diarizationResult)
     {
         ThrowIfDisposed();
@@ -240,6 +248,7 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
         return result;
     }
 
+    /// <inheritdoc />
     public DiarizationResult<T> RefineDiarization(Tensor<T> audio, DiarizationResult<T> previousResult, T mergeThreshold)
     {
         ThrowIfDisposed();
@@ -284,6 +293,7 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
             maxSpeakersPerChunk: _options.MaxSpeakersPerChunk, dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -336,14 +346,17 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio)
     {
         if (MfccExtractor is not null) return MfccExtractor.Extract(rawAudio);
         return rawAudio;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -566,6 +579,7 @@ public partial class PyAnnote<T> : SpeakerRecognitionBase<T>, ISpeakerDiarizer<T
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(PyAnnote<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

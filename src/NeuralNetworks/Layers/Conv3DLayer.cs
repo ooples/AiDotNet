@@ -164,6 +164,7 @@ public partial class Conv3DLayer<T> : LayerBase<T>, IShapeContract
     /// <value>Always <c>true</c> for Conv3DLayer as it has learnable parameters.</value>
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     public override void ClearGradients() { base.ClearGradients(); _kernelsGradient = null; _biasesGradient = null; }
 
     internal override Dictionary<string, string> GetMetadata()

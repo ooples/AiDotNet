@@ -681,6 +681,7 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
     /// </remarks>
     public override bool SupportsParameterInitialization => false;
 
+    /// <inheritdoc />
     public override IEnumerable<int> GetActiveFeatureIndices()
     {
         if (_useOLS && _olsCoefficients is not null)
@@ -698,6 +699,7 @@ public partial class NeuralNetworkRegression<T> : NonLinearRegressionBase<T>
         return base.GetActiveFeatureIndices();
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> X)
     {
         // OLS path for reliable regression predictions

@@ -583,6 +583,7 @@ public abstract partial class DecisionTreeRegressionBase<T> : ITreeBasedRegressi
             nameof(parameters));
     }
 
+    /// <inheritdoc />
     public virtual IFullModel<T, Matrix<T>, Vector<T>> WithParameters(Vector<T> parameters)
     {
         // Create a new instance with the same options
@@ -982,6 +983,7 @@ public abstract partial class DecisionTreeRegressionBase<T> : ITreeBasedRegressi
         return clone;
     }
 
+    /// <inheritdoc />
     public virtual long ParameterCount
     {
         get { return CountNodes(Root) * 4 + 1; }
@@ -1020,6 +1022,7 @@ public abstract partial class DecisionTreeRegressionBase<T> : ITreeBasedRegressi
     }
 
 
+    /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -1045,6 +1048,7 @@ public abstract partial class DecisionTreeRegressionBase<T> : ITreeBasedRegressi
         }
     }
 
+    /// <inheritdoc />
     public virtual void LoadModel(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))

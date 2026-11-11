@@ -52,6 +52,7 @@ public partial class RMSNormalizationLayer<T> : LayerBase<T>, IShapeContract
 
     private Tensor<T>? _gammaGradient;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>

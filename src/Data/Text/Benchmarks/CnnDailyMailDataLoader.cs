@@ -26,10 +26,15 @@ public class CnnDailyMailDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>,
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "CNN/DailyMail";
+    /// <inheritdoc />
     public override string Description => "CNN/DailyMail v3.0.0 abstractive summarization";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.MaxArticleLength;
+    /// <inheritdoc />
     public override int OutputDimension => _options.MaxSummaryLength;
 
     public CnnDailyMailDataLoader(CnnDailyMailDataLoaderOptions? options = null)

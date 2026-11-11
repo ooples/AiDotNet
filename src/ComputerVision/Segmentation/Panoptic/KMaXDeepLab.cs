@@ -174,6 +174,7 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         _ => ([256, 512, 1024, 2048], [3, 4, 6, 3], 256)
     };
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -183,6 +184,7 @@ public partial class KMaXDeepLab<T> : Common.PanopticSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

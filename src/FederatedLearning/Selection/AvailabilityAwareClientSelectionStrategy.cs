@@ -26,6 +26,7 @@ public sealed class AvailabilityAwareClientSelectionStrategy : ClientSelectionSt
         _availabilityThreshold = availabilityThreshold;
     }
 
+    /// <inheritdoc />
     public override List<int> SelectClients(ClientSelectionRequest request)
     {
         if (request == null)
@@ -94,6 +95,7 @@ public sealed class AvailabilityAwareClientSelectionStrategy : ClientSelectionSt
         return eligible;
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "AvailabilityAware";
 }
 

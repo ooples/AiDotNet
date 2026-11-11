@@ -463,6 +463,7 @@ public partial class ReconstructionLayer<T> : LayerBase<T>, IShapeContract
     }
 
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         _fc1.ClearGradients();

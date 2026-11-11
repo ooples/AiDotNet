@@ -30,9 +30,13 @@ public class LeveneTest<T> : IStatisticalTest<T>
     public enum CenterType { Mean, Median, TrimmedMean }
     private readonly CenterType _center;
 
+    /// <inheritdoc />
     public string Name => _center == CenterType.Median ? "Brown-Forsythe Test" : "Levene's Test";
+    /// <inheritdoc />
     public string Description => "Tests equality of variances across groups.";
+    /// <inheritdoc />
     public bool IsPaired => false;
+    /// <inheritdoc />
     public bool IsNonParametric => _center == CenterType.Median;
 
     /// <summary>

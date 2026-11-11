@@ -287,6 +287,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
     /// </remarks>
     public override bool HasUninitializedParameters => !IsShapeResolved;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -670,6 +671,7 @@ public partial class DeconvolutionalLayer<T> : LayerBase<T>, IShapeContract
         Engine.InvalidatePersistentTensor(_biases);
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         _kernelsGradient = null;

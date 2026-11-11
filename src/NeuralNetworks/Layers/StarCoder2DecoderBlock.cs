@@ -45,6 +45,7 @@ public partial class StarCoder2DecoderBlock<T> : LayerBase<T>, IShapeContract
     private readonly DenseLayer<T> _cProj;
     private readonly int _hiddenSize;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => false;
 
     /// <summary>Pre-attention LayerNorm (with bias).</summary>

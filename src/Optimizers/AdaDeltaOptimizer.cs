@@ -521,8 +521,10 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
     private IGpuBuffer? _gpuAccumulatedGrad;
     private IGpuBuffer? _gpuAccumulatedUpdate;
 
+    /// <inheritdoc />
     public override bool SupportsGpuUpdate => true;
 
+    /// <inheritdoc />
     public override void InitializeGpuState(int parameterCount, IDirectGpuBackend backend)
     {
         if (_gpuStateInitialized && _gpuAccumulatedGrad != null && _gpuAccumulatedUpdate != null)
@@ -761,6 +763,7 @@ public partial class AdaDeltaOptimizer<T, TInput, TOutput> : GradientBasedOptimi
         return $"{baseKey}_AdaDelta_{_options.Rho}_{_options.Epsilon}";
     }
 
+    /// <inheritdoc />
     public override void DisposeGpuState()
     {
         _gpuAccumulatedGrad?.Dispose();

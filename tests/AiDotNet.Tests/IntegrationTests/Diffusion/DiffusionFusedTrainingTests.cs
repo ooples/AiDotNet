@@ -116,4 +116,60 @@ public class DiffusionFusedTrainingTests
             TensorCodecOptions.SetCurrent(original);
         }
     }
+
+    [Fact(Timeout = 600000)]
+    public async Task DDPM_TrainsABatchFused_AsTheEagerStepDoes()
+    {
+        // DDPM did not declare that it predicts from a timestep tensor, so it never trained fused, and a batch ran
+        // one U-Net forward per element. Both paths now run the batch through one forward.
+        await Task.Yield();
+        var eager = TrainDdpm(compile: false);
+        var fused = TrainDdpm(compile: true);
+
+        Assert.Equal(0, eager.FusedSteps);
+        Assert.Equal(Steps, eager.EagerSteps);
+        Assert.Equal(0, fused.EagerSteps);
+        Assert.Equal(Steps, fused.FusedSteps);
+
+        double scale = 0.0, worst = 0.0;
+        for (int i = 0; i < eager.Parameters.Length; i++)
+        {
+            scale = Math.Max(scale, Math.Abs(eager.Parameters[i]));
+            worst = Math.Max(worst, Math.Abs(eager.Parameters[i] - fused.Parameters[i]));
+        }
+
+        Assert.True(worst <= RelativeTolerance * Math.Max(scale, 1.0),
+            $"fused DDPM training diverged from eager by {worst:G6} (parameter scale {scale:G6}).");
+    }
+
+    private static RunResult TrainDdpm(bool compile)
+    {
+        var original = TensorCodecOptions.Current;
+        try
+        {
+            TensorCodecOptions.SetCurrent(new TensorCodecOptions { EnableCompilation = compile });
+            CompiledTapeTrainingStep<double>.Invalidate();
+            var unet = new UNetNoisePredictor<double>(inputChannels: 3, outputChannels: 3, baseChannels: 32,
+                channelMultipliers: [1, 2], numResBlocks: 1, attentionResolutions: [1], contextDim: 0, numHeads: 2,
+                inputHeight: 8, seed: 42);
+            var model = new AiDotNet.Diffusion.DDPMModel<double>(unet: unet, channels: 3, imageSize: 8, seed: 42,
+                options: new AiDotNet.Models.Options.DiffusionModelOptions<double>
+                {
+                    TrainTimesteps = 1000, BetaStart = 1e-4, BetaEnd = 0.02,
+                    BetaSchedule = AiDotNet.Enums.BetaSchedule.Linear, LearningRate = 2e-4, Seed = 5,
+                });
+
+            var rng = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(9);
+            var images = new Tensor<double>([3, 3, 8, 8]);
+            for (int i = 0; i < images.Length; i++) images[i] = rng.NextDouble() * 2 - 1;
+            for (int step = 0; step < Steps; step++) model.Train(images, images);
+
+            return new RunResult(model.GetParameters(), model.FusedTrainingStepCount, model.EagerTrainingStepCount);
+        }
+        finally
+        {
+            TensorCodecOptions.SetCurrent(original);
+            CompiledTapeTrainingStep<double>.Invalidate();
+        }
+    }
 }

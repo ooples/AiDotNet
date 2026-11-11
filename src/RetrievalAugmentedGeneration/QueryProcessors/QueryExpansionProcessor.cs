@@ -41,6 +41,7 @@ public class QueryExpansionProcessor : QueryProcessorBase
         _includeOriginal = includeOriginal;
     }
 
+    /// <inheritdoc />
     protected override string ProcessQueryCore(string query)
     {
         if (string.IsNullOrWhiteSpace(query))

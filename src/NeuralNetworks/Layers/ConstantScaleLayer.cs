@@ -39,6 +39,7 @@ public partial class ConstantScaleLayer<T> : LayerBase<T>, IShapeContract
     [Buffer]
     private readonly Tensor<T> _scaleTensor;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => false;
 
     public ConstantScaleLayer(double scale)

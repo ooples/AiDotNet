@@ -109,9 +109,12 @@ public partial class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourc
 
     #region IMusicSourceSeparator
 
+    /// <inheritdoc />
     public IReadOnlyList<string> SupportedSources => _options.Sources;
+    /// <inheritdoc />
     public int NumStems => _options.NumStems;
 
+    /// <inheritdoc />
     public SourceSeparationResult<T> Separate(Tensor<T> audio)
     {
         ThrowIfDisposed(); var stft = ComputeSTFT(audio);
@@ -119,10 +122,13 @@ public partial class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourc
         return BuildResult(audio, stft, masks);
     }
 
+    /// <inheritdoc />
     public Task<SourceSeparationResult<T>> SeparateAsync(Tensor<T> audio, CancellationToken ct = default) => Task.Run(() => Separate(audio), ct);
 
+    /// <inheritdoc />
     public Tensor<T> ExtractSource(Tensor<T> audio, string source) => Separate(audio).GetSource(source);
 
+    /// <inheritdoc />
     public Tensor<T> RemoveSource(Tensor<T> audio, string source)
     {
         var r = Separate(audio); var o = new Tensor<T>([audio.Length]);
@@ -131,6 +137,7 @@ public partial class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourc
         return o;
     }
 
+    /// <inheritdoc />
     public Tensor<T> GetSourceMask(Tensor<T> audio, string source)
     {
         var stft = ComputeSTFT(audio);
@@ -142,6 +149,7 @@ public partial class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourc
         return mask;
     }
 
+    /// <inheritdoc />
     public Tensor<T> Remix(SourceSeparationResult<T> sep, IReadOnlyDictionary<string, double> vols)
     {
         int len = 0; foreach (var s in sep.Sources.Values) if (s.Length > len) len = s.Length;
@@ -179,6 +187,7 @@ public partial class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourc
             numStems: _options.NumStems, numFreqBins: _options.NumFreqBins, dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) { ThrowIfDisposed(); if (IsOnnxMode && OnnxEncoder is not null) return OnnxEncoder.Run(input); var c = input; foreach (var l in Layers) c = l.Forward(c); return c; }
 
     /// <inheritdoc />
@@ -186,9 +195,12 @@ public partial class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourc
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessAudio(Tensor<T> rawAudio) => ComputeSTFT(rawAudio);
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T> { Name = _useNativeMode ? "MelBand-RoFormer-Native" : "MelBand-RoFormer-ONNX", Description = "MelBand-RoFormer Mel-Band Source Separation (2024)", FeatureCount = _options.NumFreqBins, Complexity = _options.NumTransformerLayers };
@@ -250,6 +262,7 @@ public partial class MelBandRoFormer<T> : AudioNeuralNetworkBase<T>, IMusicSourc
     #region Disposal
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(MelBandRoFormer<T>)); }
+    /// <inheritdoc />
     protected override void Dispose(bool disposing) { if (_disposed) return; if (disposing) OnnxEncoder?.Dispose(); _disposed = true; base.Dispose(disposing); }
 
     #endregion

@@ -43,6 +43,7 @@ public sealed partial class ColumnParallelLinear<T> : LayerBase<T>, IShapeContra
     private Tensor<T> _weightShard;   // [localOutputSize, inputSize]
     private Tensor<T> _biasShard;     // [localOutputSize]
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
     public int LocalOutputSize => _localOutputSize;
 
@@ -128,6 +129,7 @@ public sealed partial class ColumnParallelLinear<T> : LayerBase<T>, IShapeContra
         };
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         // f: identity forward, all-reduce backward (sums this region's input-gradient contributions).
@@ -157,10 +159,12 @@ public sealed partial class ColumnParallelLinear<T> : LayerBase<T>, IShapeContra
     // Tape-native layer: the collected trainable shards (GetTrainableParameters) are updated by the
     // optimizer's Step(TapeStepContext); the manual per-layer update is the framework's legacy path
     // and is unused here (mirrors FullyConnectedLayer, whose gradient field is likewise never set).
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
         => throw new System.InvalidOperationException(
             "ColumnParallelLinear is tape-native: parameters are updated by the optimizer's tape Step " +
             "on the registered trainable shards, not by the legacy per-layer UpdateParameters.");
 
+    /// <inheritdoc />
     public override void ResetState() { }
 }
