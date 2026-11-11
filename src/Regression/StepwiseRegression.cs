@@ -269,13 +269,8 @@ public partial class StepwiseRegression<T> : RegressionBase<T>
         // prediction bug: when selection kept every feature the lengths matched, so Predict's fast
         // path applied those coefficients to the columns in their original order and paired every
         // one with the wrong feature.
-        var expanded = new Vector<T>(x.Columns);
-        for (int i = 0; i < _selectedFeatures.Count; i++)
-        {
-            expanded[_selectedFeatures[i]] = finalRegression.Coefficients[i];
-        }
-
-        Coefficients = expanded;
+        Coefficients = RegressionEngineOps2.ScatterToLength(
+            x.Columns, _selectedFeatures, finalRegression.Coefficients.GetSubVector(0, _selectedFeatures.Count));
         Intercept = finalRegression.Intercept;
     }
 
