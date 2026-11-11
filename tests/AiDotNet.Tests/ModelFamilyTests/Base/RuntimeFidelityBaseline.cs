@@ -4709,7 +4709,6 @@ public static class RuntimeFidelityBaseline
             { "AiDotNet.Video.FrameInterpolation.SwinVFI`1::EncoderLayerCount", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.FrameInterpolation.TLBVFI`1::EncoderLayerCount", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.FrameInterpolation.ToonCrafter`1::EncoderLayerCount", OptionSensitivityOutcome.Insensitive },
-            { "AiDotNet.Video.FrameInterpolation.UPRNet`1::EncoderLayerCount", OptionSensitivityOutcome.OptionsNotRouted },
             { "AiDotNet.Video.FrameInterpolation.VFIMamba`1::EncoderLayerCount", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.FrameInterpolation.VFIT`1::EncoderLayerCount", OptionSensitivityOutcome.Insensitive },
             { "AiDotNet.Video.FrameInterpolation.VFIformer`1::EncoderLayerCount", OptionSensitivityOutcome.Insensitive },

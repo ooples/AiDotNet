@@ -41,5 +41,8 @@ public class NeuralNetworkOptions : ModelOptions
     /// </para>
     /// </remarks>
     [AiDotNet.Attributes.OptionBehaviourExempt("Synthetic tabular GANs use separate generator and critic networks rather than an encoder/decoder layer split; native generator schema tests exercise inherited split metadata.", ModelType = typeof(AiDotNet.NeuralNetworks.SyntheticData.NeuralSyntheticTabularGeneratorBase<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("IconVSR is bidirectional recurrent propagation with keyframe refill and an upsampler, not an encoder/decoder stack; its custom-layer path runs the supplied layers in sequence, so no layer index marks an encoder end.", ModelType = typeof(AiDotNet.Video.Enhancement.IconVSR<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("UPRNet is a recurrent pyramid of shared flow and synthesis modules, not an encoder/decoder stack; its custom-layer path runs the supplied layers in sequence, so no layer index marks an encoder end.", ModelType = typeof(AiDotNet.Video.FrameInterpolation.UPRNet<>))]
+    [AiDotNet.Attributes.OptionBehaviourExempt("A detection backbone is an encoder only: it returns the multi-scale feature maps for a detection head, so there is no decoder for an encoder/decoder split to separate.", ModelType = typeof(AiDotNet.ComputerVision.Detection.Backbones.VGG16Backbone<>))]
     public int? EncoderLayerCount { get; set; }
 }
