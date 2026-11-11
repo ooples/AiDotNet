@@ -61,9 +61,9 @@ public partial class CLIQUE<T> : ClusteringBase<T>
     /// <inheritdoc/>
     public override ModelOptions GetOptions() => _options;
     private List<SubspaceClusterInternal>? _subspaceClustersInternal;
-    private double[] _minBounds = Array.Empty<double>();
-    private double[] _maxBounds = Array.Empty<double>();
-    private double[] _intervalWidths = Array.Empty<double>();
+    private Vector<T> _minBounds = new Vector<T>(0);
+    private Vector<T> _maxBounds = new Vector<T>(0);
+    private Vector<T> _intervalWidths = new Vector<T>(0);
 
     /// <summary>
     /// Internal cluster representation with dense units for prediction.
@@ -115,8 +115,9 @@ public partial class CLIQUE<T> : ClusteringBase<T>
         int d = x.Columns;
         NumFeatures = d;
 
-        // Compute data bounds
+        // Compute data bounds and the grid cell of every value
         ComputeBounds(x);
+        var cells = CellIndices(x);
 
         // Compute density threshold as absolute count
         int densityThreshold = _options.MinPoints > 0
@@ -124,7 +125,7 @@ public partial class CLIQUE<T> : ClusteringBase<T>
             : Math.Max(1, (int)(n * _options.DensityThreshold));
 
         // Find dense 1-D units
-        var denseUnits = FindDenseUnits1D(x, densityThreshold);
+        var denseUnits = FindDenseUnits1D(cells, n, d, densityThreshold);
 
         // Find dense k-D units using Apriori principle
         int maxDim = _options.MaxSubspaceDimensions > 0
@@ -136,7 +137,7 @@ public partial class CLIQUE<T> : ClusteringBase<T>
 
         for (int k = 2; k <= maxDim && currentLevelUnits.Count > 0; k++)
         {
-            var nextLevelUnits = FindDenseUnitsKD(x, currentLevelUnits, k, densityThreshold);
+            var nextLevelUnits = FindDenseUnitsKD(cells, n, d, currentLevelUnits, k, densityThreshold);
             if (nextLevelUnits.Count == 0) break;
 
             allDenseUnits.AddRange(nextLevelUnits);
@@ -147,19 +148,11 @@ public partial class CLIQUE<T> : ClusteringBase<T>
         _subspaceClustersInternal = MergeIntoSubspaceClusters(allDenseUnits);
 
         // Assign labels based on highest-dimensional subspace cluster membership
-        Labels = AssignLabels(x, _subspaceClustersInternal);
+        var labelIds = AssignLabels(n, _subspaceClustersInternal);
+        Labels = ClusteringTensorOps.FromIntArray<T>(labelIds);
 
         // Count unique clusters
-        var uniqueLabels = new HashSet<int>();
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)NumOps.ToDouble(Labels[i]);
-            if (label >= 0)
-            {
-                uniqueLabels.Add(label);
-            }
-        }
-        NumClusters = uniqueLabels.Count;
+        NumClusters = labelIds.Where(label => label >= 0).Distinct().Count();
 
         // Compute cluster centers
         ComputeClusterCenters(x);
@@ -171,10 +164,11 @@ public partial class CLIQUE<T> : ClusteringBase<T>
         if (NumClusters < premergeK && _subspaceClustersInternal is not null && Labels is not null)
         {
             // Build old→new label map from the merged Labels
+            var mergedIds = ClusteringTensorOps.ToIntArray(Labels);
             var oldToNew = new Dictionary<int, int>();
-            for (int i = 0; i < Labels.Length; i++)
+            for (int i = 0; i < mergedIds.Length; i++)
             {
-                int newLabel = (int)Math.Round(NumOps.ToDouble(Labels[i]));
+                int newLabel = mergedIds[i];
                 // Find which subspace cluster originally owned this point
                 foreach (var sc in _subspaceClustersInternal)
                 {
@@ -208,12 +202,7 @@ public partial class CLIQUE<T> : ClusteringBase<T>
 
         if (_subspaceClustersInternal is null || _subspaceClustersInternal.Count == 0)
         {
-            var noise = new Vector<T>(x.Rows);
-            for (int i = 0; i < x.Rows; i++)
-            {
-                noise[i] = NumOps.FromDouble(-1);
-            }
-            return noise;
+            return Engine.Fill(x.Rows, NumOps.FromDouble(-1));
         }
 
         return AssignLabelsForNewData(x);
@@ -225,12 +214,14 @@ public partial class CLIQUE<T> : ClusteringBase<T>
     private Vector<T> AssignLabelsForNewData(Matrix<T> x)
     {
         int n = x.Rows;
-        var labels = new Vector<T>(n);
+        int d = x.Columns;
+        var cells = CellIndices(x);
 
         // Initialize as noise
+        var labels = new int[n];
         for (int i = 0; i < n; i++)
         {
-            labels[i] = NumOps.FromDouble(-1);
+            labels[i] = -1;
         }
 
         // Sort clusters by dimensionality (prefer higher dimensional matches)
@@ -249,22 +240,7 @@ public partial class CLIQUE<T> : ClusteringBase<T>
 
                 foreach (var denseUnit in cluster.DenseUnits)
                 {
-                    bool inUnit = true;
-
-                    for (int j = 0; j < denseUnit.Dimensions.Length; j++)
-                    {
-                        int dim = denseUnit.Dimensions[j];
-                        double val = NumOps.ToDouble(x[i, dim]);
-                        int cell = GetCellIndex(val, dim);
-
-                        if (cell != denseUnit.Cells[j])
-                        {
-                            inUnit = false;
-                            break;
-                        }
-                    }
-
-                    if (inUnit)
+                    if (InUnit(cells, i, d, denseUnit.Dimensions, denseUnit.Cells))
                     {
                         inCluster = true;
                         break;
@@ -273,56 +249,65 @@ public partial class CLIQUE<T> : ClusteringBase<T>
 
                 if (inCluster)
                 {
-                    labels[i] = NumOps.FromDouble(cluster.ClusterId);
+                    labels[i] = cluster.ClusterId;
                     break; // Assigned to highest-dimensional cluster
                 }
             }
         }
 
-        return labels;
+        return ClusteringTensorOps.FromIntArray<T>(labels);
+    }
+
+    /// <summary>True when point <paramref name="row"/> lies in the given cell of every listed dimension.</summary>
+    private static bool InUnit(int[] cells, int row, int d, int[] dimensions, int[] unitCells)
+    {
+        for (int j = 0; j < dimensions.Length; j++)
+        {
+            if (cells[row * d + dimensions[j]] != unitCells[j])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private void ComputeBounds(Matrix<T> x)
     {
-        int n = x.Rows;
-        int d = x.Columns;
+        var data = Tensor<T>.FromMatrix(x);
+        var minBounds = Engine.TensorAmin(data, new[] { 0 }, false);
+        var maxBounds = Engine.ReduceMax(data, new[] { 0 }, false);
+        var range = Engine.TensorSubtract(maxBounds, minBounds);
 
-        _minBounds = new double[d];
-        _maxBounds = new double[d];
-        _intervalWidths = new double[d];
+        // Width of one interval per dimension (1 for constant dimensions)
+        var widths = Engine.TensorWhere(
+            Engine.TensorGreaterThan(range, NumOps.Zero),
+            Engine.TensorDivideScalar(range, NumOps.FromDouble(_options.NumIntervals)),
+            Engine.TensorOnesLike(range));
 
-        for (int j = 0; j < d; j++)
-        {
-            _minBounds[j] = double.MaxValue;
-            _maxBounds[j] = double.MinValue;
-
-            for (int i = 0; i < n; i++)
-            {
-                double val = NumOps.ToDouble(x[i, j]);
-                _minBounds[j] = Math.Min(_minBounds[j], val);
-                _maxBounds[j] = Math.Max(_maxBounds[j], val);
-            }
-
-            double range = _maxBounds[j] - _minBounds[j];
-            _intervalWidths[j] = range > 0 ? range / _options.NumIntervals : 1;
-        }
+        _minBounds = minBounds.ToVector();
+        _maxBounds = maxBounds.ToVector();
+        _intervalWidths = widths.ToVector();
     }
 
-    private int GetCellIndex(double value, int dimension)
-    {
-        if (_intervalWidths[dimension] == 0)
-        {
-            return 0;
-        }
-
-        int idx = (int)((value - _minBounds[dimension]) / _intervalWidths[dimension]);
-        return Math.Max(0, Math.Min(_options.NumIntervals - 1, idx));
-    }
-
-    private List<DenseUnit> FindDenseUnits1D(Matrix<T> x, int densityThreshold)
+    /// <summary>
+    /// Grid cell of every value, row-major [n * d]: floor((value - min) / width) clamped to [0, NumIntervals - 1].
+    /// </summary>
+    private int[] CellIndices(Matrix<T> x)
     {
         int n = x.Rows;
         int d = x.Columns;
+        var shape = new[] { n, d };
+        var offsets = Engine.TensorSubtract(
+            Tensor<T>.FromMatrix(x), Engine.TensorBroadcastTo(Tensor<T>.FromVector(_minBounds, new[] { 1, d }), shape));
+        var scaled = Engine.TensorDivide(
+            offsets, Engine.TensorBroadcastTo(Tensor<T>.FromVector(_intervalWidths, new[] { 1, d }), shape));
+        var cells = Engine.TensorClamp(Engine.TensorFloor(scaled), NumOps.Zero, NumOps.FromDouble(_options.NumIntervals - 1));
+        return ClusteringTensorOps.ToIntArray(Engine.Reshape(cells, new[] { n * d }).ToVector());
+    }
+
+    private List<DenseUnit> FindDenseUnits1D(int[] cells, int n, int d, int densityThreshold)
+    {
         var denseUnits = new List<DenseUnit>();
 
         for (int dim = 0; dim < d; dim++)
@@ -338,8 +323,7 @@ public partial class CLIQUE<T> : ClusteringBase<T>
 
             for (int i = 0; i < n; i++)
             {
-                double val = NumOps.ToDouble(x[i, dim]);
-                int cell = GetCellIndex(val, dim);
+                int cell = cells[i * d + dim];
                 cellCounts[cell]++;
                 cellPoints[cell].Add(i);
             }
@@ -363,9 +347,8 @@ public partial class CLIQUE<T> : ClusteringBase<T>
         return denseUnits;
     }
 
-    private List<DenseUnit> FindDenseUnitsKD(Matrix<T> x, List<DenseUnit> previousLevel, int k, int densityThreshold)
+    private List<DenseUnit> FindDenseUnitsKD(int[] cells, int n, int d, List<DenseUnit> previousLevel, int k, int densityThreshold)
     {
-        int n = x.Rows;
         var candidates = GenerateCandidates(previousLevel, k);
         var denseUnits = new List<DenseUnit>();
 
@@ -376,22 +359,7 @@ public partial class CLIQUE<T> : ClusteringBase<T>
 
             for (int i = 0; i < n; i++)
             {
-                bool inCell = true;
-
-                for (int j = 0; j < candidate.Dimensions.Length; j++)
-                {
-                    int dim = candidate.Dimensions[j];
-                    double val = NumOps.ToDouble(x[i, dim]);
-                    int cell = GetCellIndex(val, dim);
-
-                    if (cell != candidate.Cells[j])
-                    {
-                        inCell = false;
-                        break;
-                    }
-                }
-
-                if (inCell)
+                if (InUnit(cells, i, d, candidate.Dimensions, candidate.Cells))
                 {
                     points.Add(i);
                 }
@@ -545,15 +513,13 @@ public partial class CLIQUE<T> : ClusteringBase<T>
         return diffCount == 1;
     }
 
-    private Vector<T> AssignLabels(Matrix<T> x, List<SubspaceClusterInternal> clusters)
+    private int[] AssignLabels(int n, List<SubspaceClusterInternal> clusters)
     {
-        int n = x.Rows;
-        var labels = new Vector<T>(n);
-
         // Initialize as noise
+        var labels = new int[n];
         for (int i = 0; i < n; i++)
         {
-            labels[i] = NumOps.FromDouble(-1);
+            labels[i] = -1;
         }
 
         if (clusters.Count == 0)
@@ -571,7 +537,7 @@ public partial class CLIQUE<T> : ClusteringBase<T>
             {
                 if (cluster.Points.Contains(i))
                 {
-                    labels[i] = NumOps.FromDouble(cluster.ClusterId);
+                    labels[i] = cluster.ClusterId;
                     break;
                 }
             }
@@ -588,34 +554,9 @@ public partial class CLIQUE<T> : ClusteringBase<T>
             return;
         }
 
-        int d = x.Columns;
-        ClusterCenters = new Matrix<T>(NumClusters, d);
-        var counts = new int[NumClusters];
-
-        int n = x.Rows;
-        for (int i = 0; i < n; i++)
-        {
-            int label = (int)NumOps.ToDouble((Labels ?? throw new InvalidOperationException("Labels has not been initialized."))[i]);
-            if (label >= 0 && label < NumClusters)
-            {
-                counts[label]++;
-                for (int j = 0; j < d; j++)
-                {
-                    ClusterCenters[label, j] = NumOps.Add(ClusterCenters[label, j], x[i, j]);
-                }
-            }
-        }
-
-        for (int k = 0; k < NumClusters; k++)
-        {
-            if (counts[k] > 0)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    ClusterCenters[k, j] = NumOps.Divide(ClusterCenters[k, j], NumOps.FromDouble(counts[k]));
-                }
-            }
-        }
+        // Mean of each cluster's members (labels outside [0, NumClusters) are ignored, empty clusters stay zero)
+        ClusterCenters = ClusteringTensorOps.ClusterMeans(
+            x, Labels ?? throw new InvalidOperationException("Labels has not been initialized."), NumClusters, out _);
     }
 
     private void ValidateInputData(Matrix<T> x)
