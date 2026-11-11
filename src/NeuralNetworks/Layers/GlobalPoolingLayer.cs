@@ -524,6 +524,12 @@ public partial class GlobalPoolingLayer<T> : LayerBase<T>, IShapeContract
     }
 
     /// <summary>
+    /// Pooling reads only its input; nothing it computes is kept for a later call. Only this exact type has been checked:
+    /// a derived layer may keep more, so it counts as keeping a result.
+    /// </summary>
+    internal override bool KeepsResultsBetweenCalls => GetType() != typeof(GlobalPoolingLayer<T>);
+
+    /// <summary>
     /// Resets the internal state of the layer.
     /// </summary>
     /// <remarks>

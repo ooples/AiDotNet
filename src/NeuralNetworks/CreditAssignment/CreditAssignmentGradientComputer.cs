@@ -85,9 +85,12 @@ internal static class CreditAssignmentGradientComputer<T>
                     outputs[i] = current;
                 }
 
-                var predConst = Detach(current);
+                // Constants for the rule: StopGradient is a device copy with no backward (no host round-trip);
+                // Retain keeps them alive past the capture tape's disposal, which releases tape-owned intermediates.
+                var captureEngine = AiDotNetEngine.Current;
+                var predConst = Keep(captureTape, captureEngine.StopGradient(current));
                 targetTensor = BuildTargetTensor(target, predConst.Shape.ToArray());
-                outputError = SubtractConst(predConst, targetTensor);
+                outputError = Keep(captureTape, captureEngine.TensorSubtract(predConst, targetTensor));
 
                 for (int i = 0; i < layers.Count; i++)
                 {
@@ -95,8 +98,8 @@ internal static class CreditAssignmentGradientComputer<T>
                     if (ps.Count == 0) continue;
                     trainableLayers.Add(layers[i]);
                     trainableParams.Add(ps);
-                    trainableInputs.Add(Detach(inputs[i]));
-                    trainableOutputs.Add(Detach(outputs[i]));
+                    trainableInputs.Add(Keep(captureTape, captureEngine.StopGradient(inputs[i])));
+                    trainableOutputs.Add(Keep(captureTape, captureEngine.StopGradient(outputs[i])));
                     trainableLayerIndex.Add(i);
                 }
             }
@@ -151,7 +154,7 @@ internal static class CreditAssignmentGradientComputer<T>
             for (int i = 0; i < layers.Count; i++)
             {
                 if (isTrainable[i])
-                    current2 = Detach(current2); // isolate this trainable layer's params from everything below
+                    current2 = engine.StopGradient(current2); // isolate this trainable layer's params from everything below
                 current2 = layers[i].Forward(current2);
                 if (isTrainable[i])
                     trainOutputNode[trainOrderOf[i]] = current2;
@@ -240,16 +243,10 @@ internal static class CreditAssignmentGradientComputer<T>
         return m;
     }
 
-    private static Tensor<T> Detach(Tensor<T> t) => new Tensor<T>(t.Shape.ToArray(), t.ToVector());
-
-    private static Tensor<T> SubtractConst(Tensor<T> a, Tensor<T> b)
+    private static Tensor<T> Keep(GradientTape<T> tape, Tensor<T> t)
     {
-        var va = a.ToVector();
-        var vb = b.ToVector();
-        var r = new Vector<T>(va.Length);
-        for (int i = 0; i < va.Length; i++)
-            r[i] = Ops.Subtract(va[i], vb[i]);
-        return new Tensor<T>(a.Shape.ToArray(), r);
+        tape.Retain(t);
+        return t;
     }
 
     /// <summary>Aligns the target to the prediction shape (one-hot expanding class-index targets), as a constant tensor.</summary>

@@ -25,10 +25,24 @@ jobs:
         with:
           path: library
           persist-credentials: false
+      # The companion source is the release Directory.Packages.props references, read from the file
+      # rather than pinned here: a hard-coded commit went stale when the package moved to 0.149.0,
+      # and the build then failed on an API that only 0.149.0 has.
+      - name: Read the referenced AiDotNet.Tensors version
+        id: tensors
+        shell: bash
+        # Runs in the job default working directory, the library checkout.
+        run: |
+          version=$(sed -n 's/.*Include="AiDotNet.Tensors" Version="\([^"]*\)".*/\1/p' Directory.Packages.props)
+          if [ -z "$version" ]; then
+            echo "::error::No AiDotNet.Tensors version in Directory.Packages.props."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ooples/AiDotNet.Tensors
-          ref: 46e1069bc677f60b386fbfb8d9c184f4fe6eaad2 # v0.148.0, the AiDotNet.Tensors version Directory.Packages.props references
+          ref: v${{ steps.tensors.outputs.version }}
           path: companion-tensors
           persist-credentials: false
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0

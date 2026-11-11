@@ -69,8 +69,11 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <summary>
     /// The generated feed-forward CNN keeps nothing between calls, so each Predict frees its GPU intermediates when it
     /// ends. Caller-supplied <c>Architecture.Layers</c> may carry a tensor between calls, so they keep the default.
+    /// So do layers added to the generated stack afterwards, and a derived model may override Predict and keep a result
+    /// itself: only this exact type, holding the stack it generated, opts in.
     /// </summary>
-    protected override bool ReleasesInferenceIntermediates => Architecture.Layers is not { Count: > 0 };
+    protected override bool ReleasesInferenceIntermediates =>
+        GetType() == typeof(ResNetNetwork<T>) && Architecture.Layers is not { Count: > 0 } && LayersMatchTheGeneratedStack();
 
     private readonly ResNetOptions _options;
 
@@ -289,6 +292,7 @@ public partial class ResNetNetwork<T> : ImageClassifierModelLayoutBase<T>
             TextToSpeech.CodecBased.TorchParameters.Linear(Engine, Classifier, inputs, config.NumClasses, w, b);
         }
         Layers.AddRange(layers);
+        RecordGeneratedLayerTypes();
     }
 
     /// <summary>Loads a torchvision ResNet state dict (the trunk, then <c>fc.weight</c> and <c>fc.bias</c>).</summary>

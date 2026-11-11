@@ -62,6 +62,9 @@ namespace AiDotNet.LossFunctions;
 /// </remarks>
 public class AdversarialLoss<T> : LossFunctionBase<T>
 {
+    /// <summary>It runs a discriminator layer the caller supplies, which may keep a GPU result between calls; nothing here can check that.</summary>
+    internal override bool KeepsResultsBetweenCalls => true;
+
     #region Constants
 
     /// <summary>

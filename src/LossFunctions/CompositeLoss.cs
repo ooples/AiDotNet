@@ -38,6 +38,21 @@ namespace AiDotNet.LossFunctions;
 public class CompositeLoss<T> : LossFunctionBase<T>
 {
     private readonly LossFunctionBase<T>[] _losses;
+
+    /// <summary>It keeps a result between calls when any of its terms does.</summary>
+    internal override bool KeepsResultsBetweenCalls
+    {
+        get
+        {
+            if (GetType() != typeof(CompositeLoss<T>)) return true;
+            foreach (var loss in _losses)
+            {
+                if (loss.KeepsResultsBetweenCalls) return true;
+            }
+
+            return false;
+        }
+    }
     private readonly T[] _weights;
 
     /// <summary>

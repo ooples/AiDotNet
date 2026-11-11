@@ -76,8 +76,11 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// The generated DenseNet keeps nothing between calls, so each Predict frees its GPU intermediates when it ends
     /// (#2383: without it every op allocated a fresh device buffer and process memory grew to 4.6-7.4 GB at b1-b16).
     /// Caller-supplied <c>Architecture.Layers</c> may carry a tensor between calls, so they keep the default.
+    /// So do layers added to the generated stack afterwards, and a derived model may override Predict and keep a result
+    /// itself: only this exact type, holding the stack it generated, opts in.
     /// </summary>
-    protected override bool ReleasesInferenceIntermediates => Architecture.Layers is not { Count: > 0 };
+    protected override bool ReleasesInferenceIntermediates =>
+        GetType() == typeof(DenseNetNetwork<T>) && Architecture.Layers is not { Count: > 0 } && LayersMatchTheGeneratedStack();
 
     /// <inheritdoc/>
     /// <remarks>Its layers are sized from its options, not its architecture (#2147).</remarks>
@@ -283,6 +286,7 @@ public partial class DenseNetNetwork<T> : ImageClassifierModelLayoutBase<T>
         {
             // Use DenseNet-specific layer configuration
             Layers.AddRange(LayerHelper<T>.CreateDefaultDenseNetLayers(_configuration));
+            RecordGeneratedLayerTypes();
         }
     }
 
