@@ -109,29 +109,23 @@ public class DocumentPreprocessor<T> : IDisposable
     public Tensor<T> ToGrayscale(Tensor<T> image)
     {
         if (image.Shape.Length < 3 || image.Shape[0] == 1)
+        {
             return image; // Already grayscale
+        }
 
+        var engine = AiDotNetEngine.Current;
         int channels = image.Shape[0];
         int height = image.Shape[1];
         int width = image.Shape[2];
 
-        var result = new T[height * width];
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                // Luminance formula: 0.299*R + 0.587*G + 0.114*B
-                double r = _numOps.ToDouble(image[0, y, x]);
-                double g = channels > 1 ? _numOps.ToDouble(image[1, y, x]) : r;
-                double b = channels > 2 ? _numOps.ToDouble(image[2, y, x]) : r;
-
-                double gray = 0.299 * r + 0.587 * g + 0.114 * b;
-                result[y * width + x] = _numOps.FromDouble(gray);
-            }
-        }
-
-        return new Tensor<T>([1, height, width], new Vector<T>(result));
+        // Luminance formula: 0.299*R + 0.587*G + 0.114*B
+        var r = engine.TensorNarrow(image, 0, 0, 1);
+        var g = channels > 1 ? engine.TensorNarrow(image, 0, 1, 1) : r;
+        var b = channels > 2 ? engine.TensorNarrow(image, 0, 2, 1) : r;
+        var gray = engine.TensorAdd(
+            engine.TensorAdd(engine.TensorMultiplyScalar(r, _numOps.FromDouble(0.299)), engine.TensorMultiplyScalar(g, _numOps.FromDouble(0.587))),
+            engine.TensorMultiplyScalar(b, _numOps.FromDouble(0.114)));
+        return engine.Reshape(gray, new[] { 1, height, width });
     }
 
     /// <summary>
@@ -139,38 +133,43 @@ public class DocumentPreprocessor<T> : IDisposable
     /// </summary>
     public Tensor<T> Resize(Tensor<T> image, int targetWidth, int targetHeight, InterpolationMethod method = InterpolationMethod.Bilinear)
     {
-        int channels = image.Shape[0];
+        var engine = AiDotNetEngine.Current;
         int srcHeight = image.Shape[1];
         int srcWidth = image.Shape[2];
 
-        var result = new T[channels * targetHeight * targetWidth];
+        // Source coordinates srcX = x * (srcWidth / targetWidth), srcY = y * (srcHeight / targetHeight)
+        var srcX = engine.TensorMultiplyScalar(Range(targetWidth), _numOps.FromDouble((double)srcWidth / targetWidth));
+        var srcY = engine.TensorMultiplyScalar(Range(targetHeight), _numOps.FromDouble((double)srcHeight / targetHeight));
 
-        double scaleX = (double)srcWidth / targetWidth;
-        double scaleY = (double)srcHeight / targetHeight;
-
-        for (int c = 0; c < channels; c++)
+        if (method == InterpolationMethod.Nearest)
         {
-            for (int y = 0; y < targetHeight; y++)
-            {
-                for (int x = 0; x < targetWidth; x++)
-                {
-                    double srcX = x * scaleX;
-                    double srcY = y * scaleY;
-
-                    T value = method switch
-                    {
-                        InterpolationMethod.Nearest => SampleNearest(image, c, srcX, srcY),
-                        InterpolationMethod.Bilinear => SampleBilinear(image, c, srcX, srcY),
-                        _ => SampleBilinear(image, c, srcX, srcY)
-                    };
-
-                    int idx = c * targetHeight * targetWidth + y * targetWidth + x;
-                    result[idx] = value;
-                }
-            }
+            var nearestY = ClampIndex(engine.TensorRound(srcY), srcHeight);
+            var nearestX = ClampIndex(engine.TensorRound(srcX), srcWidth);
+            return engine.TensorIndexSelect(engine.TensorIndexSelect(image, nearestY.Cast<int>(), 1), nearestX.Cast<int>(), 2);
         }
 
-        return new Tensor<T>([channels, targetHeight, targetWidth], new Vector<T>(result));
+        // Bilinear interpolation from the clamped neighbours
+        var x0 = ClampIndex(engine.TensorFloor(srcX), srcWidth);
+        var y0 = ClampIndex(engine.TensorFloor(srcY), srcHeight);
+        var x1 = ClampIndex(engine.TensorAddScalar(x0, _numOps.One), srcWidth);
+        var y1 = ClampIndex(engine.TensorAddScalar(y0, _numOps.One), srcHeight);
+        var fx = engine.Reshape(engine.TensorSubtract(srcX, x0), new[] { 1, 1, targetWidth });
+        var fy = engine.Reshape(engine.TensorSubtract(srcY, y0), new[] { 1, targetHeight, 1 });
+
+        var rows0 = engine.TensorIndexSelect(image, y0.Cast<int>(), 1);
+        var rows1 = engine.TensorIndexSelect(image, y1.Cast<int>(), 1);
+        var x0Index = x0.Cast<int>();
+        var x1Index = x1.Cast<int>();
+        var oneMinusFx = engine.TensorSubtract(engine.TensorOnesLike(fx), fx);
+        var oneMinusFy = engine.TensorSubtract(engine.TensorOnesLike(fy), fy);
+
+        var top = engine.TensorAdd(
+            engine.TensorMultiply(engine.TensorIndexSelect(rows0, x0Index, 2), oneMinusFx),
+            engine.TensorMultiply(engine.TensorIndexSelect(rows0, x1Index, 2), fx));
+        var bottom = engine.TensorAdd(
+            engine.TensorMultiply(engine.TensorIndexSelect(rows1, x0Index, 2), oneMinusFx),
+            engine.TensorMultiply(engine.TensorIndexSelect(rows1, x1Index, 2), fx));
+        return engine.TensorAdd(engine.TensorMultiply(top, oneMinusFy), engine.TensorMultiply(bottom, fy));
     }
 
     /// <summary>
@@ -178,35 +177,9 @@ public class DocumentPreprocessor<T> : IDisposable
     /// </summary>
     public Tensor<T> Pad(Tensor<T> image, int targetWidth, int targetHeight, T paddingValue)
     {
-        int channels = image.Shape[0];
-        int height = image.Shape[1];
-        int width = image.Shape[2];
-
-        int padLeft = (targetWidth - width) / 2;
-        int padTop = (targetHeight - height) / 2;
-
-        var result = new T[channels * targetHeight * targetWidth];
-        PreprocessingHelpers.Fill(result, paddingValue);
-
-        for (int c = 0; c < channels; c++)
-        {
-            for (int y = 0; y < height; y++)
-            {
-                for (int x = 0; x < width; x++)
-                {
-                    int newY = y + padTop;
-                    int newX = x + padLeft;
-
-                    if (newY >= 0 && newY < targetHeight && newX >= 0 && newX < targetWidth)
-                    {
-                        int idx = c * targetHeight * targetWidth + newY * targetWidth + newX;
-                        result[idx] = image[c, y, x];
-                    }
-                }
-            }
-        }
-
-        return new Tensor<T>([channels, targetHeight, targetWidth], new Vector<T>(result));
+        int padLeft = (targetWidth - image.Shape[2]) / 2;
+        int padTop = (targetHeight - image.Shape[1]) / 2;
+        return Place(image, targetWidth, targetHeight, padTop, padLeft, paddingValue);
     }
 
     /// <summary>
@@ -214,34 +187,9 @@ public class DocumentPreprocessor<T> : IDisposable
     /// </summary>
     public Tensor<T> CenterCrop(Tensor<T> image, int targetWidth, int targetHeight)
     {
-        int channels = image.Shape[0];
-        int height = image.Shape[1];
-        int width = image.Shape[2];
-
-        int cropLeft = (width - targetWidth) / 2;
-        int cropTop = (height - targetHeight) / 2;
-
-        var result = new T[channels * targetHeight * targetWidth];
-
-        for (int c = 0; c < channels; c++)
-        {
-            for (int y = 0; y < targetHeight; y++)
-            {
-                for (int x = 0; x < targetWidth; x++)
-                {
-                    int srcY = y + cropTop;
-                    int srcX = x + cropLeft;
-
-                    if (srcY >= 0 && srcY < height && srcX >= 0 && srcX < width)
-                    {
-                        int idx = c * targetHeight * targetWidth + y * targetWidth + x;
-                        result[idx] = image[c, srcY, srcX];
-                    }
-                }
-            }
-        }
-
-        return new Tensor<T>([channels, targetHeight, targetWidth], new Vector<T>(result));
+        int cropLeft = (image.Shape[2] - targetWidth) / 2;
+        int cropTop = (image.Shape[1] - targetHeight) / 2;
+        return Place(image, targetWidth, targetHeight, -cropTop, -cropLeft, _numOps.Zero);
     }
 
     #endregion
@@ -250,58 +198,65 @@ public class DocumentPreprocessor<T> : IDisposable
 
     private Tensor<T> NormalizeIntensity(Tensor<T> image)
     {
-        // Find min and max
-        double min = double.MaxValue;
-        double max = double.MinValue;
+        var engine = AiDotNetEngine.Current;
+        var flat = engine.Reshape(image, new[] { image.Length });
 
-        for (int i = 0; i < image.Length; i++)
-        {
-            double val = _numOps.ToDouble(image.Data.Span[i]);
-            if (val < min) min = val;
-            if (val > max) max = val;
-        }
+        // Find min and max
+        T min = _numOps.Negate(engine.ReduceMax(engine.TensorNegate(flat), new[] { 0 }, false)[0]);
+        T max = engine.ReduceMax(flat, new[] { 0 }, false)[0];
 
         // Normalize to 0-1 range
-        double range = max - min;
-        if (range < 1e-10) range = 1.0;
-
-        var result = new T[image.Length];
-        for (int i = 0; i < image.Length; i++)
+        T range = _numOps.Subtract(max, min);
+        if (_numOps.LessThan(range, _numOps.FromDouble(1e-10)))
         {
-            double val = _numOps.ToDouble(image.Data.Span[i]);
-            result[i] = _numOps.FromDouble((val - min) / range);
+            range = _numOps.One;
         }
 
-        return new Tensor<T>(image._shape, new Vector<T>(result));
+        return engine.TensorDivideScalar(engine.TensorSubtractScalar(image, min), range);
     }
 
-    private T SampleNearest(Tensor<T> image, int channel, double x, double y)
+    /// <summary>0, 1, ..., count - 1 as T.</summary>
+    private static Tensor<T> Range(int count) =>
+        Tensor<int>.FromVector(new Vector<int>(Enumerable.Range(0, count))).Cast<T>();
+
+    /// <summary>Clamps index values to [0, size - 1].</summary>
+    private Tensor<T> ClampIndex(Tensor<T> index, int size) =>
+        AiDotNetEngine.Current.TensorClamp(index, _numOps.Zero, _numOps.FromDouble(size - 1));
+
+    /// <summary>
+    /// A [channels, targetHeight, targetWidth] canvas filled with <paramref name="fill"/> holding
+    /// image[c, y - offsetY, x - offsetX] wherever that source pixel exists.
+    /// </summary>
+    private Tensor<T> Place(Tensor<T> image, int targetWidth, int targetHeight, int offsetY, int offsetX, T fill)
     {
-        int ix = PreprocessingHelpers.Clamp((int)Math.Round(x), 0, image.Shape[2] - 1);
-        int iy = PreprocessingHelpers.Clamp((int)Math.Round(y), 0, image.Shape[1] - 1);
-        return image[channel, iy, ix];
+        var engine = AiDotNetEngine.Current;
+        int channels = image.Shape[0];
+        var (rowSource, rowValid) = SourceIndices(targetHeight, offsetY, image.Shape[1]);
+        var (columnSource, columnValid) = SourceIndices(targetWidth, offsetX, image.Shape[2]);
+
+        var gathered = engine.TensorIndexSelect(engine.TensorIndexSelect(image, rowSource, 1), columnSource, 2);
+        var valid = engine.TensorMultiply(
+            engine.Reshape(rowValid.Cast<T>(), new[] { 1, targetHeight, 1 }),
+            engine.Reshape(columnValid.Cast<T>(), new[] { 1, 1, targetWidth }));
+        var canvas = Tensor<T>.CreateDefault(new[] { channels, targetHeight, targetWidth }, fill);
+        return engine.TensorWhere(engine.TensorMultiply(engine.TensorOnesLike(canvas), valid), gathered, canvas);
     }
 
-    private T SampleBilinear(Tensor<T> image, int channel, double x, double y)
+    /// <summary>
+    /// For target positions 0..count-1 the clamped source index position - offset and whether it lies in [0, size).
+    /// </summary>
+    private static (Tensor<int> Source, Tensor<int> Valid) SourceIndices(int count, int offset, int size)
     {
-        int x0 = PreprocessingHelpers.Clamp((int)Math.Floor(x), 0, image.Shape[2] - 1);
-        int x1 = PreprocessingHelpers.Clamp(x0 + 1, 0, image.Shape[2] - 1);
-        int y0 = PreprocessingHelpers.Clamp((int)Math.Floor(y), 0, image.Shape[1] - 1);
-        int y1 = PreprocessingHelpers.Clamp(y0 + 1, 0, image.Shape[1] - 1);
+        var source = new int[count];
+        var valid = new int[count];
+        for (int i = 0; i < count; i++)
+        {
+            int s = i - offset;
+            valid[i] = s >= 0 && s < size ? 1 : 0;
+            source[i] = Math.Max(0, Math.Min(size - 1, s));
+        }
 
-        double dx = x - x0;
-        double dy = y - y0;
-
-        double v00 = _numOps.ToDouble(image[channel, y0, x0]);
-        double v01 = _numOps.ToDouble(image[channel, y0, x1]);
-        double v10 = _numOps.ToDouble(image[channel, y1, x0]);
-        double v11 = _numOps.ToDouble(image[channel, y1, x1]);
-
-        double top = v00 * (1 - dx) + v01 * dx;
-        double bottom = v10 * (1 - dx) + v11 * dx;
-        double result = top * (1 - dy) + bottom * dy;
-
-        return _numOps.FromDouble(result);
+        return (new Tensor<int>(source, new[] { count }), new Tensor<int>(valid, new[] { count }));
     }
 
     #endregion
