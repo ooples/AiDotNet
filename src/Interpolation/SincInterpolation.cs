@@ -49,7 +49,7 @@ public class SincInterpolation<T> : IInterpolation<T>
     /// <param name="y">The y-values at each data point.</param>
     /// <param name="cutoffFrequency">
     /// The cutoff frequency that controls the bandwidth of the interpolation.
-    /// Default is 1.0.
+    /// The two-argument constructor uses 1.
     /// </param>
     /// <exception cref="ArgumentException">
     /// Thrown when the input collections have different lengths.
@@ -71,19 +71,28 @@ public class SincInterpolation<T> : IInterpolation<T>
     /// If it's too smooth and misses important details, try increasing it.
     /// </para>
     /// </remarks>
-    public SincInterpolation(IEnumerable<double> x, IEnumerable<double> y, double cutoffFrequency = 1.0)
+    public SincInterpolation(Vector<T> x, Vector<T> y, T cutoffFrequency)
     {
-        _numOps = MathHelper.GetNumericOperations<T>();
-
-        var xList = x.ToList();
-        var yList = y.ToList();
-
-        if (xList.Count != yList.Count)
+        Guard.NotNull(x);
+        Guard.NotNull(y);
+        if (x.Length != y.Length)
             throw new ArgumentException("Input vectors must have the same length.");
 
-        _x = new Vector<double>(xList).AsTensor().Cast<T>().ToVector();
-        _y = new Vector<double>(yList).AsTensor().Cast<T>().ToVector();
-        _cutoffFrequency = _numOps.FromDouble(cutoffFrequency);
+        _numOps = MathHelper.GetNumericOperations<T>();
+        _x = x;
+        _y = y;
+        _cutoffFrequency = cutoffFrequency;
+    }
+
+    /// <summary>
+    /// Creates a Sinc interpolation with a cutoff frequency of 1.
+    /// </summary>
+    /// <param name="x">The x-coordinates of the data points.</param>
+    /// <param name="y">The y-coordinates (values) of the data points.</param>
+    /// <exception cref="ArgumentException">Thrown when the input vectors have different lengths.</exception>
+    public SincInterpolation(Vector<T> x, Vector<T> y)
+        : this(x, y, MathHelper.GetNumericOperations<T>().One)
+    {
     }
 
     /// <summary>
