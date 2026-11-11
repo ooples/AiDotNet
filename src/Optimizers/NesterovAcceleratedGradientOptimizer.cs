@@ -388,24 +388,14 @@ public partial class NesterovAcceleratedGradientOptimizer<T, TInput, TOutput> : 
         // Note lr is no longer folded into the velocity. That matters beyond tidiness: with lr inside
         // v, a moving learning rate rescales the whole accumulated history rather than just the
         // current step, so a schedule would silently change the meaning of the stored state.
-        var updatedParameters = new Vector<T>(parameters.Length, skipZeroInit: true);
-        var parameterSpan = parameters.AsSpan();
-        var gradientSpan = gradient.AsSpan();
-        var velocitySpan = _velocity.AsWritableSpan();
-        var updatedSpan = updatedParameters.AsWritableSpan();
-
-        for (int i = 0; i < updatedSpan.Length; i++)
-        {
-            T velocity = NumOps.Add(
-                NumOps.Multiply(CurrentMomentum, velocitySpan[i]),
-                gradientSpan[i]);
-            velocitySpan[i] = velocity;
-
-            T update = NumOps.Add(gradientSpan[i], NumOps.Multiply(CurrentMomentum, velocity));
-            updatedSpan[i] = NumOps.Subtract(parameterSpan[i], NumOps.Multiply(CurrentLearningRate, update));
-        }
-
-        return updatedParameters;
+        // v = mu * v + g ; update = g + mu * v ; p -= lr * update
+        var engine = Engine;
+        var g = gradient.AsTensor();
+        var velocityState = _velocity.AsTensor();
+        var velocity = engine.TensorAdd(engine.TensorMultiplyScalar(velocityState, CurrentMomentum), g);
+        engine.TensorCopy(velocity, velocityState);
+        var update = engine.TensorAdd(g, engine.TensorMultiplyScalar(velocity, CurrentMomentum));
+        return engine.TensorSubtract(parameters.AsTensor(), engine.TensorMultiplyScalar(update, CurrentLearningRate)).AsVector();
     }
 
     // Per-parameter velocity for tape-based NAG training
