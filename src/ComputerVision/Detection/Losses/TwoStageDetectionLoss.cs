@@ -71,10 +71,9 @@ public sealed class TwoStageDetectionLoss<T>
             throw new ArgumentException("Deltas must be [anchors, 4].", nameof(deltas));
         if (anchorsPerLocation < 1) throw new ArgumentOutOfRangeException(nameof(anchorsPerLocation));
 
-        var anchorBoxes = anchors.Select(anchor => new[]
-        {
-            NumOps.ToDouble(anchor.X1), NumOps.ToDouble(anchor.Y1), NumOps.ToDouble(anchor.X2), NumOps.ToDouble(anchor.Y2)
-        }).ToArray();
+        var anchorBoxes = CornerRows(count == 0
+            ? new Tensor<T>(new[] { 0, 4 })
+            : CvTensorOps<T>.FromRows(anchors.Select(anchor => new[] { anchor.X1, anchor.Y1, anchor.X2, anchor.Y2 }).ToArray(), 4));
         var labels = new int[count]; // -1 ignored, 0 background, 1 object
         var match = new int[count];
         for (int a = 0; a < count; a++) labels[a] = -1;
@@ -123,12 +122,13 @@ public sealed class TwoStageDetectionLoss<T>
         if (positives.Count == 0)
             return engine.TensorAdd(classification, ZeroConnected(deltas));
 
-        var targets = new T[positives.Count * 4];
+        var targetValues = new double[positives.Count * 4];
         for (int i = 0; i < positives.Count; i++)
-            WriteDeltas(targets, i * 4, anchorBoxes[positives[i]], gold[match[positives[i]]]);
+            Array.Copy(EncodeDeltas(anchorBoxes[positives[i]], gold[match[positives[i]]]), 0, targetValues, i * 4, 4);
+        var targets = CvTensorOps<T>.FromDoubleArray(targetValues, new[] { positives.Count, 4 });
         double locations = Math.Max(1.0, count / (double)anchorsPerLocation);
         var regression = engine.TensorMultiplyScalar(
-            SmoothL1Sum(CvTensorOps<T>.Select(deltas, positives.ToArray(), 0), new Tensor<T>(targets, new[] { positives.Count, 4 })),
+            SmoothL1Sum(CvTensorOps<T>.Select(deltas, positives.ToArray(), 0), targets),
             NumOps.FromDouble(_options.RpnRegressionWeight / locations));
         return engine.TensorAdd(classification, regression);
     }
@@ -181,17 +181,11 @@ public sealed class TwoStageDetectionLoss<T>
                 throw new ArgumentException("Every object class must be a foreground class of the detector.", nameof(goldClasses));
 
         var engine = AiDotNetEngine.Current;
-        var proposalValues = proposals.ToArray();
-        var boxes = new double[count][];
+        var boxes = CornerRows(proposals);
         var bestIoU = new double[count];
         var match = new int[count];
         for (int r = 0; r < count; r++)
         {
-            boxes[r] = new[]
-            {
-                NumOps.ToDouble(proposalValues[r * 4]), NumOps.ToDouble(proposalValues[r * 4 + 1]),
-                NumOps.ToDouble(proposalValues[r * 4 + 2]), NumOps.ToDouble(proposalValues[r * 4 + 3])
-            };
             for (int g = 0; g < gold.Count; g++)
             {
                 double iou = IoU(boxes[r], gold[g]);
@@ -218,7 +212,7 @@ public sealed class TwoStageDetectionLoss<T>
         if (foregroundRows.Count > 0)
         {
             var deltaIndices = new int[foregroundRows.Count * 4];
-            var targets = new T[foregroundRows.Count * 4];
+            var targetValues = new double[foregroundRows.Count * 4];
             var regressionWeights = _options.BoxRegressionWeights(stage);
             for (int i = 0; i < foregroundRows.Count; i++)
             {
@@ -226,12 +220,13 @@ public sealed class TwoStageDetectionLoss<T>
                 int column = classAgnostic ? 0 : (goldClasses[match[r]] + 1) * 4;
                 for (int k = 0; k < 4; k++) deltaIndices[i * 4 + k] = r * deltaWidth + column + k;
                 var delta = EncodeDeltas(boxes[r], gold[match[r]]);
-                for (int k = 0; k < 4; k++) targets[i * 4 + k] = NumOps.FromDouble(delta[k] * regressionWeights[k]);
+                for (int k = 0; k < 4; k++) targetValues[i * 4 + k] = delta[k] * regressionWeights[k];
             }
+            var targets = CvTensorOps<T>.FromDoubleArray(targetValues, new[] { foregroundRows.Count, 4 });
             var flat = engine.Reshape(boxDeltas, new[] { boxDeltas.Length });
             var predicted = engine.Reshape(CvTensorOps<T>.Select(flat, deltaIndices, 0), new[] { foregroundRows.Count, 4 });
             var regression = engine.TensorMultiplyScalar(
-                SmoothL1Sum(predicted, new Tensor<T>(targets, new[] { foregroundRows.Count, 4 })),
+                SmoothL1Sum(predicted, targets),
                 NumOps.FromDouble(_options.RoiRegressionWeight / sampled));
             loss = engine.TensorAdd(loss, regression);
         }
@@ -266,10 +261,21 @@ public sealed class TwoStageDetectionLoss<T>
         };
     }
 
-    private static void WriteDeltas(T[] destination, int offset, double[] reference, double[] gold)
+    /// <summary>
+    /// The rows of corner boxes <c>[N, 4]</c> as <see cref="double"/> quadruples, for the IoU matching and sampling
+    /// that compare them with the object boxes (supplied as <c>double[]</c>). One bulk conversion.
+    /// </summary>
+    private static double[][] CornerRows(Tensor<T> boxes)
     {
-        var delta = EncodeDeltas(reference, gold);
-        for (int k = 0; k < 4; k++) destination[offset + k] = NumOps.FromDouble(delta[k]);
+        var values = CvTensorOps<T>.ToDoubleArray(boxes);
+        var rows = new double[values.Length / 4][];
+        for (int r = 0; r < rows.Length; r++)
+        {
+            rows[r] = new double[4];
+            Array.Copy(values, r * 4, rows[r], 0, 4);
+        }
+
+        return rows;
     }
 
     /// <summary>Sum over selected rows of -log softmax(logits)[class], gathered to avoid 0 * -inf.</summary>
@@ -291,19 +297,14 @@ public sealed class TwoStageDetectionLoss<T>
     {
         var engine = AiDotNetEngine.Current;
         var difference = engine.TensorSubtract(predicted, target);
-        var values = difference.ToArray();
-        var quadraticMask = new T[values.Length];
-        var linearMask = new T[values.Length];
-        for (int i = 0; i < values.Length; i++)
-        {
-            bool quadratic = Math.Abs(NumOps.ToDouble(values[i])) < 1;
-            quadraticMask[i] = quadratic ? NumOps.One : NumOps.Zero;
-            linearMask[i] = quadratic ? NumOps.Zero : NumOps.One;
-        }
-        var shape = difference.Shape.ToArray();
-        var quadraticPart = engine.TensorMultiply(new Tensor<T>(quadraticMask, shape),
+
+        // |x| < 1 selects the quadratic branch (NaN does not). The masks are built from a detached copy of the
+        // values, so they are constants to the tape.
+        var quadraticMask = engine.TensorLessThan(engine.TensorAbs(new Tensor<T>(difference.ToArray(), difference.Shape.ToArray())), NumOps.One);
+        var linearMask = engine.ScalarMinusTensor(NumOps.One, quadraticMask);
+        var quadraticPart = engine.TensorMultiply(quadraticMask,
             engine.TensorMultiplyScalar(engine.TensorMultiply(difference, difference), NumOps.FromDouble(0.5)));
-        var linearPart = engine.TensorMultiply(new Tensor<T>(linearMask, shape),
+        var linearPart = engine.TensorMultiply(linearMask,
             engine.TensorAddScalar(engine.TensorAbs(difference), NumOps.FromDouble(-0.5)));
         return engine.ReduceSum(engine.TensorAdd(quadraticPart, linearPart), null);
     }
@@ -336,16 +337,11 @@ public sealed class TwoStageDetectionLoss<T>
             throw new ArgumentException("Proposals must be [proposals, 4].", nameof(proposals));
 
         int count = proposals.Shape[0];
-        var values = proposals.ToArray();
+        var boxes = CornerRows(proposals);
         var bestIoU = new double[count];
         for (int r = 0; r < count; r++)
         {
-            var box = new[]
-            {
-                NumOps.ToDouble(values[r * 4]), NumOps.ToDouble(values[r * 4 + 1]),
-                NumOps.ToDouble(values[r * 4 + 2]), NumOps.ToDouble(values[r * 4 + 3])
-            };
-            for (int g = 0; g < gold.Count; g++) bestIoU[r] = Math.Max(bestIoU[r], IoU(box, gold[g]));
+            for (int g = 0; g < gold.Count; g++) bestIoU[r] = Math.Max(bestIoU[r], IoU(boxes[r], gold[g]));
         }
 
         double threshold = _options.StageForegroundIoU[stage];
