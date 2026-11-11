@@ -16403,6 +16403,10 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     // samples (16 codec frames at the fixture's hop of 4).
                     sb.AppendLine("    protected override int[] InputShape => new[] { 8 };");
                     sb.AppendLine("    protected override int[] OutputShape => new[] { 64 };");
+                    // Each training step draws its prompt length, mask and diffusion layer afresh, so GetLastLoss() is one draw
+                    // of the objective; the memorization probe compares EvaluateTrainingObjective's seeded draw instead, as for
+                    // FastSpeech 2 and E2 TTS. The 1 % threshold is unchanged.
+                    sb.AppendLine("    protected override bool MemorizationTaskUsesDeterministicEvalLoss => true;");
                     // An untrained discrete diffusion over 16-code books can sample the same codes for two constant
                     // texts, trained or not; the input-sensitivity probes compare the deterministic objective.
                     AppendObjectiveSensitivityProbes(sb, new[]
@@ -16955,7 +16959,8 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     // and stays clear at 10, 15 and 20, and the whole 15-step probe still runs in
                     // under a second, so the added steps are free. Fifteen matches the window its
                     // twelve siblings above already use. The DEFAULT 1 % threshold is untouched.
-                    // NaturalSpeech 3's first AdamW update past its one warm-up step rose 13.2129 -> 14.1458 at step 2.
+                    // NaturalSpeech 3's training loss is one draw of prompt, mask and diffusion layer per step: 13.2129 at step 1,
+                    // 14.1458 at 2, 13.7123 at 15. Its probe compares the seeded objective (see its branch below).
                     // StyleTTS trains at the paper's 1e-4 with beta1 = 0 against a discriminator updated each step; its
                     // reported objective (reconstruction and aligner losses) falls steadily but slowly at this fixture's size,
                     // measured on one smooth sample 2.8274, 2.8216, 2.8156, 2.8073, 2.7976 (step 20), ..., 2.6995 (step 40)
