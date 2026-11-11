@@ -66,6 +66,10 @@ public class VolumeChange<T> : AudioAugmenterBase<T>
 
         int samples = GetSampleCount(waveform);
         var result = waveform.Clone();
+        if (samples == 0)
+        {
+            return result;
+        }
 
         // Scale the first `samples` elements and clip to valid range [-1, 1]
         var engine = Engine;
