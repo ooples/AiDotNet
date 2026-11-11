@@ -99,14 +99,7 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
         }
 
         // Convert labels to +1/-1 for binary classification
-        T positiveClass = ClassLabels[ClassLabels.Length - 1];
-        var yRegression = new Vector<T>(y.Length);
-        for (int i = 0; i < y.Length; i++)
-        {
-            yRegression[i] = NumOps.Compare(y[i], positiveClass) == 0
-                ? NumOps.One
-                : NumOps.Negate(NumOps.One);
-        }
+        var yRegression = SignedBinaryTargets(y);
 
         // Center the data if fitting intercept
         var xCentered = x;
@@ -132,13 +125,8 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
         var xtxTensor = Engine.TensorMatMul(xTranspose, xTensor);
 
         // Convert to Matrix and add regularization to diagonal
-        var xtx = new Matrix<T>(NumFeatures, NumFeatures);
-        for (int i = 0; i < NumFeatures; i++)
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                xtx[i, j] = xtxTensor[i, j];
-                if (i == j) xtx[i, j] = NumOps.Add(xtx[i, j], alpha);
-            }
+        var xtx = Engine.TensorAdd(xtxTensor,
+            Engine.TensorMultiplyScalar(Engine.TensorEye<T>(NumFeatures), alpha)).ToMatrix();
 
         // Vectorized: X'y = X^T @ y
         var yTensor = Tensor<T>.FromVector(yRegression).Reshape(x.Rows, 1);
@@ -165,17 +153,12 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
     /// </summary>
     private Vector<T> ComputeMean(Matrix<T> x)
     {
-        var mean = new Vector<T>(x.Columns);
-        for (int j = 0; j < x.Columns; j++)
+        if (x.Rows == 0)
         {
-            T sum = NumOps.Zero;
-            for (int i = 0; i < x.Rows; i++)
-            {
-                sum = NumOps.Add(sum, x[i, j]);
-            }
-            mean[j] = NumOps.Divide(sum, NumOps.FromDouble(x.Rows));
+            return new Vector<T>(x.Columns);
         }
-        return mean;
+
+        return Engine.ReduceMean(Tensor<T>.FromMatrix(x), new[] { 0 }, false).ToVector();
     }
 
     /// <summary>
@@ -183,12 +166,7 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
     /// </summary>
     private T ComputeMean(Vector<T> v)
     {
-        T sum = NumOps.Zero;
-        for (int i = 0; i < v.Length; i++)
-        {
-            sum = NumOps.Add(sum, v[i]);
-        }
-        return NumOps.Divide(sum, NumOps.FromDouble(v.Length));
+        return v.Length == 0 ? NumOps.Divide(NumOps.Zero, NumOps.Zero) : Engine.Mean(v);
     }
 
     /// <summary>
@@ -196,15 +174,12 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
     /// </summary>
     private Matrix<T> CenterMatrix(Matrix<T> x, Vector<T> mean)
     {
-        var centered = new Matrix<T>(x.Rows, x.Columns);
-        for (int i = 0; i < x.Rows; i++)
+        if (x.Rows == 0)
         {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                centered[i, j] = NumOps.Subtract(x[i, j], mean[j]);
-            }
+            return new Matrix<T>(0, x.Columns);
         }
-        return centered;
+
+        return Engine.TensorSubtract(Tensor<T>.FromMatrix(x), mean.AsTensor().Reshape(1, mean.Length)).ToMatrix();
     }
 
     /// <summary>
@@ -212,12 +187,7 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
     /// </summary>
     private Vector<T> CenterVector(Vector<T> v, T mean)
     {
-        var centered = new Vector<T>(v.Length);
-        for (int i = 0; i < v.Length; i++)
-        {
-            centered[i] = NumOps.Subtract(v[i], mean);
-        }
-        return centered;
+        return v.Length == 0 ? new Vector<T>(0) : Engine.TensorSubtractScalar(v.AsTensor(), mean).ToVector();
     }
 
     /// <summary>
@@ -226,88 +196,17 @@ public class RidgeClassifier<T> : LinearClassifierBase<T>
     private Vector<T> SolveLinearSystem(Matrix<T> a, Vector<T> b)
     {
         int n = a.Rows;
-
-        // Create augmented matrix [A | b]
-        var aug = new Matrix<T>(n, n + 1);
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            for (int j = 0; j < n; j++)
-            {
-                aug[i, j] = a[i, j];
-            }
-            aug[i, n] = b[i];
+            return new Vector<T>(0);
         }
 
-        // Forward elimination with partial pivoting
-        for (int col = 0; col < n; col++)
-        {
-            // Find pivot
-            int maxRow = col;
-            T maxVal = NumOps.Abs(aug[col, col]);
-            for (int row = col + 1; row < n; row++)
-            {
-                T val = NumOps.Abs(aug[row, col]);
-                if (NumOps.Compare(val, maxVal) > 0)
-                {
-                    maxVal = val;
-                    maxRow = row;
-                }
-            }
-
-            // Swap rows
-            if (maxRow != col)
-            {
-                for (int j = 0; j <= n; j++)
-                {
-                    T temp = aug[col, j];
-                    aug[col, j] = aug[maxRow, j];
-                    aug[maxRow, j] = temp;
-                }
-            }
-
-            // Eliminate below
-            T pivot = aug[col, col];
-            T minPivot = NumOps.FromDouble(1e-12);
-            if (NumOps.Compare(NumOps.Abs(pivot), minPivot) < 0)
-            {
-                // Matrix may be singular or ill-conditioned
-                // Preserve sign of original pivot for numerical stability, or use positive minPivot if zero
-                T sign = NumOps.Compare(pivot, NumOps.Zero) >= 0 ? NumOps.One : NumOps.Negate(NumOps.One);
-                if (NumOps.Compare(pivot, NumOps.Zero) == 0)
-                {
-                    sign = NumOps.One;
-                }
-                pivot = NumOps.Multiply(sign, minPivot);
-            }
-
-            for (int row = col + 1; row < n; row++)
-            {
-                T factor = NumOps.Divide(aug[row, col], pivot);
-                for (int j = col; j <= n; j++)
-                {
-                    aug[row, j] = NumOps.Subtract(aug[row, j], NumOps.Multiply(factor, aug[col, j]));
-                }
-            }
-        }
-
-        // Back substitution
-        var x = new Vector<T>(n);
-        for (int i = n - 1; i >= 0; i--)
-        {
-            T sum = aug[i, n];
-            for (int j = i + 1; j < n; j++)
-            {
-                sum = NumOps.Subtract(sum, NumOps.Multiply(aug[i, j], x[j]));
-            }
-
-            T diag = aug[i, i];
-            if (NumOps.Compare(NumOps.Abs(diag), NumOps.FromDouble(1e-12)) < 0)
-            {
-                diag = NumOps.FromDouble(1e-12);
-            }
-            x[i] = NumOps.Divide(sum, diag);
-        }
-
-        return x;
+        // LU solve with partial pivoting; a singular system falls back to the pseudo-inverse solution
+        var aTensor = Tensor<T>.FromMatrix(a);
+        var bColumn = b.AsTensor().Reshape(n, 1);
+        var (solution, info) = Linalg.SolveEx(aTensor, bColumn);
+        bool singular = info.Length > 0 && info.ToArray()[0] != 0;
+        var result = singular ? Engine.TensorMatMul(Linalg.Pinv(aTensor), bColumn) : solution;
+        return result.Reshape(n).ToVector();
     }
 }
