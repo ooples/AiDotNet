@@ -35,6 +35,7 @@ namespace AiDotNet.Data.Formats;
 /// </remarks>
 public class MemoryMappedDataset<T> : IDisposable
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
     /// <summary>
     /// Size in bytes of each element stored on disk (double = 8 bytes).
@@ -117,13 +118,16 @@ public class MemoryMappedDataset<T> : IDisposable
         if (index < 0 || index >= _numSamples)
             throw new ArgumentOutOfRangeException(nameof(index), $"Index must be in [0, {_numSamples - 1}].");
 
+        var data = new T[_elementsPerSample];
         long baseOffset = HeaderSize + (long)index * _elementsPerSample * ElementSize;
-        var values = new double[_elementsPerSample];
-        int read = _accessor.ReadArray(baseOffset, values, 0, _elementsPerSample);
-        if (read != _elementsPerSample)
-            throw new EndOfStreamException("Memory-mapped file ended before the sample was fully read.");
 
-        return DoubleStorage.ToArray<T>(values);
+        for (int i = 0; i < _elementsPerSample; i++)
+        {
+            double value = _accessor.ReadDouble(baseOffset + (long)i * ElementSize);
+            data[i] = NumOps.FromDouble(value);
+        }
+
+        return data;
     }
 
     /// <summary>
@@ -250,7 +254,12 @@ public class MemoryMappedDataset<T> : IDisposable
         writer.Write(elementsPerSample);
 
         // Write data as doubles
-        DoubleStorage.WriteDoubles(writer, DoubleStorage.ToDoubles(data));
+        var dataSpan = data.Data.Span;
+        for (int i = 0; i < dataSpan.Length; i++)
+        {
+            double value = NumOps.ToDouble(dataSpan[i]);
+            writer.Write(value);
+        }
     }
 
     /// <inheritdoc/>

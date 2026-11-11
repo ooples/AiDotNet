@@ -23,6 +23,7 @@ namespace AiDotNet.Data.Formats;
 /// <typeparam name="T">The numeric type for values.</typeparam>
 public class LmdbDataset<T> : IDisposable
 {
+    private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("LMDB");
 
     private readonly LmdbDatasetOptions _options;
@@ -78,7 +79,14 @@ public class LmdbDataset<T> : IDisposable
         if (bytes == null) return null;
 
         int numElements = bytes.Length / 8;
-        return DoubleStorage.ToArray<T>(DoubleStorage.FromNativeBytes(bytes, 0, numElements));
+        var result = new T[numElements];
+        for (int i = 0; i < numElements; i++)
+        {
+            double value = BitConverter.ToDouble(bytes, i * 8);
+            result[i] = NumOps.FromDouble(value);
+        }
+
+        return result;
     }
 
     /// <summary>

@@ -138,11 +138,9 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
         _sampleCount = dataRows.Count;
         _featureCount = columnCount - 1;
 
-        // Build features matrix and labels vector: stage the parsed doubles (feature columns are the row
-        // minus the label column, copied as the two runs either side of it) and cast to T once.
-        var featureData = new double[_sampleCount * _featureCount];
-        var labelData = new double[_sampleCount];
-        int afterLabel = columnCount - labelCol - 1;
+        // Build features matrix and labels vector
+        var features = new Matrix<T>(_sampleCount, _featureCount);
+        var labels = new Vector<T>(_sampleCount);
 
         for (int row = 0; row < _sampleCount; row++)
         {
@@ -153,15 +151,18 @@ public class CsvDataLoader<T> : InputOutputDataLoaderBase<T, Matrix<T>, Vector<T
                     $"Row {row + startLine + 1} has {rowData.Length} columns, expected {columnCount}.");
             }
 
-            labelData[row] = rowData[labelCol];
+            labels[row] = NumOps.FromDouble(rowData[labelCol]);
 
-            int featureOffset = row * _featureCount;
-            Array.Copy(rowData, 0, featureData, featureOffset, labelCol);
-            Array.Copy(rowData, labelCol + 1, featureData, featureOffset + labelCol, afterLabel);
+            int featureIdx = 0;
+            for (int col = 0; col < columnCount; col++)
+            {
+                if (col != labelCol)
+                {
+                    features[row, featureIdx] = NumOps.FromDouble(rowData[col]);
+                    featureIdx++;
+                }
+            }
         }
-
-        var features = Matrix<T>.FromMemory(DoubleStorage.ToArray<T>(featureData), _sampleCount, _featureCount);
-        var labels = Vector<T>.FromArray(DoubleStorage.ToArray<T>(labelData));
 
         LoadedFeatures = features;
         LoadedLabels = labels;

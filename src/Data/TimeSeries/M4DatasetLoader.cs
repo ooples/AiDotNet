@@ -415,7 +415,7 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
 
             // Remove quotes from series ID (e.g., "Y1" -> Y1)
             var seriesId = parts[0].Trim('"');
-            var parsedValues = new List<double>();
+            var values = new List<T>();
 
             for (int j = 1; j < parts.Length; j++)
             {
@@ -424,14 +424,12 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
 
                 if (double.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
                 {
-                    parsedValues.Add(value);
+                    values.Add(NumOps.FromDouble(value));
                 }
             }
 
-            if (parsedValues.Count > 0)
+            if (values.Count > 0)
             {
-                // Convert the parsed series to T in one bulk cast
-                var values = new List<T>(DoubleStorage.ToArray<T>(parsedValues.ToArray()));
                 series.Add(new M4TimeSeries<T>(seriesId, values, _frequency));
             }
         }

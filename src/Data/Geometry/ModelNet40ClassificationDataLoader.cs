@@ -71,8 +71,8 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
         }
 
         int featureDim = _options.IncludeNormals ? 6 : 3;
-        var featuresData = new double[samples.Count * _options.PointsPerSample * featureDim];
-        var labelsData = new double[samples.Count * _classNames.Count];
+        var featuresData = new T[samples.Count * _options.PointsPerSample * featureDim];
+        var labelsData = new T[samples.Count * _classNames.Count];
 
         var random = _options.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
@@ -89,11 +89,11 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
             FillSampleFeatures(rows, indices, featureDim, sampleIndex, featuresData);
 
             int labelOffset = sampleIndex * _classNames.Count;
-            labelsData[labelOffset + sample.ClassIndex] = 1.0;
+            labelsData[labelOffset + sample.ClassIndex] = NumOps.One;
         }
 
-        var features = new Tensor<double>(featuresData, new[] { samples.Count, _options.PointsPerSample, featureDim }).Cast<T>();
-        var labels = new Tensor<double>(labelsData, new[] { samples.Count, _classNames.Count }).Cast<T>();
+        var features = new Tensor<T>(featuresData, new[] { samples.Count, _options.PointsPerSample, featureDim });
+        var labels = new Tensor<T>(labelsData, new[] { samples.Count, _classNames.Count });
         SetLoadedData(features, labels);
     }
 
@@ -105,7 +105,7 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
         _classNames = new List<string>();
     }
 
-    private void FillSampleFeatures(List<double[]> rows, int[] indices, int featureDim, int sampleIndex, double[] featuresData)
+    private void FillSampleFeatures(List<double[]> rows, int[] indices, int featureDim, int sampleIndex, T[] featuresData)
     {
         int sampleOffset = sampleIndex * _options.PointsPerSample * featureDim;
         for (int i = 0; i < indices.Length; i++)
@@ -123,9 +123,9 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
             double y = row.Length > 1 ? row[1] : 0.0;
             double z = row.Length > 2 ? row[2] : 0.0;
 
-            featuresData[destOffset] = x;
-            featuresData[destOffset + 1] = y;
-            featuresData[destOffset + 2] = z;
+            featuresData[destOffset] = NumOps.FromDouble(x);
+            featuresData[destOffset + 1] = NumOps.FromDouble(y);
+            featuresData[destOffset + 2] = NumOps.FromDouble(z);
 
             if (_options.IncludeNormals)
             {
@@ -133,9 +133,9 @@ public sealed class ModelNet40ClassificationDataLoader<T> : PointCloudDatasetLoa
                 double ny = row.Length > 4 ? row[4] : 0.0;
                 double nz = row.Length > 5 ? row[5] : 0.0;
 
-                featuresData[destOffset + 3] = nx;
-                featuresData[destOffset + 4] = ny;
-                featuresData[destOffset + 5] = nz;
+                featuresData[destOffset + 3] = NumOps.FromDouble(nx);
+                featuresData[destOffset + 4] = NumOps.FromDouble(ny);
+                featuresData[destOffset + 5] = NumOps.FromDouble(nz);
             }
         }
     }

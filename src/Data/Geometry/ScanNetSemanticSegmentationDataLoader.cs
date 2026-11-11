@@ -94,8 +94,8 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
         int featureDim = 3 + (_options.IncludeColors ? 3 : 0) + (_options.IncludeNormals ? 3 : 0);
         int numClasses = GetNumClasses();
 
-        var featuresData = new double[sceneIds.Count * _options.PointsPerSample * featureDim];
-        var labelsData = new double[sceneIds.Count * _options.PointsPerSample];
+        var featuresData = new T[sceneIds.Count * _options.PointsPerSample * featureDim];
+        var labelsData = new T[sceneIds.Count * _options.PointsPerSample];
 
         var random = _options.RandomSeed.HasValue
             ? RandomHelper.CreateSeededRandom(_options.RandomSeed.Value)
@@ -148,8 +148,8 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
             }
         }
 
-        var features = new Tensor<double>(featuresData, new[] { sceneIds.Count, _options.PointsPerSample, featureDim }).Cast<T>();
-        var labels = new Tensor<double>(labelsData, new[] { sceneIds.Count, _options.PointsPerSample }).Cast<T>();
+        var features = new Tensor<T>(featuresData, new[] { sceneIds.Count, _options.PointsPerSample, featureDim });
+        var labels = new Tensor<T>(labelsData, new[] { sceneIds.Count, _options.PointsPerSample });
         SetLoadedData(features, labels);
     }
 
@@ -168,8 +168,8 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
         int numClasses,
         int sampleIndex,
         Random random,
-        double[] featuresData,
-        double[] labelsData)
+        T[] featuresData,
+        T[] labelsData)
     {
         int pointCount = points.Count;
         int[] indices = BuildSampleIndices(pointCount, _options.PointsPerSample, _options.SamplingStrategy, _options.PaddingStrategy, random);
@@ -186,24 +186,24 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
             }
 
             var point = points.GetPoint(rowIndex);
-            featuresData[destOffset] = point.X;
-            featuresData[destOffset + 1] = point.Y;
-            featuresData[destOffset + 2] = point.Z;
+            featuresData[destOffset] = NumOps.FromDouble(point.X);
+            featuresData[destOffset + 1] = NumOps.FromDouble(point.Y);
+            featuresData[destOffset + 2] = NumOps.FromDouble(point.Z);
 
             int offset = destOffset + 3;
             if (_options.IncludeColors)
             {
-                featuresData[offset] = NormalizeColor(point.R);
-                featuresData[offset + 1] = NormalizeColor(point.G);
-                featuresData[offset + 2] = NormalizeColor(point.B);
+                featuresData[offset] = NumOps.FromDouble(NormalizeColor(point.R));
+                featuresData[offset + 1] = NumOps.FromDouble(NormalizeColor(point.G));
+                featuresData[offset + 2] = NumOps.FromDouble(NormalizeColor(point.B));
                 offset += 3;
             }
 
             if (_options.IncludeNormals)
             {
-                featuresData[offset] = point.Nx;
-                featuresData[offset + 1] = point.Ny;
-                featuresData[offset + 2] = point.Nz;
+                featuresData[offset] = NumOps.FromDouble(point.Nx);
+                featuresData[offset + 1] = NumOps.FromDouble(point.Ny);
+                featuresData[offset + 2] = NumOps.FromDouble(point.Nz);
             }
         }
 
@@ -226,7 +226,7 @@ public sealed class ScanNetSemanticSegmentationDataLoader<T> : PointCloudDataset
                 labelValue = numClasses - 1;
             }
 
-            labelsData[labelOffset + i] = labelValue;
+            labelsData[labelOffset + i] = NumOps.FromDouble(labelValue);
         }
     }
 
