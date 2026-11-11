@@ -283,6 +283,125 @@ public class DimensionalityReductionReferenceTests
         Assert.True(Math.Min(firstBlockShare[0], firstBlockShare[1]) < 0.1, "No topic owns the second vocabulary.");
     }
 
+    [Fact(Timeout = 120000)]
+    public async Task FastICA_Parallel_RecoversSklearnSources()
+    {
+        await Task.Yield();
+
+        // t = 0.1 i (i < 60), sources (sin 2t, sign sin 3t) mixed by [[1, 1], [0.5, 2]]. Reference:
+        // sklearn.decomposition.FastICA(2, algorithm='parallel', whiten='unit-variance', fun='logcosh', tol=1e-10,
+        // max_iter=1000, random_state=0).fit_transform(X), each column divided by its (ddof 0) std. Other seeds
+        // agree with it to 1.2e-6 up to order and sign.
+        var expected = new double[,]
+        {
+            { -0.084956108348, -0.025138672860 }, { 0.934165951042, 0.261745076932 }, { 0.940478753393, 0.527389816965 },
+            { 0.946277762771, 0.771413984539 }, { 0.951331790973, 0.984089106154 }, { 0.955439349842, 1.156936495847 },
+            { 0.958436683970, 1.283065273642 }, { 0.960204299102, 1.357447083191 }, { 0.960671726001, 1.377116556472 },
+            { 0.959820329832, 1.341289533657 }, { 0.957684053074, 1.251394325087 }, { -1.070746208809, 1.090597059461 },
+            { -1.075148918097, 0.905329645855 }, { -1.080442823812, 0.682560401820 }, { -1.086416874640, 0.431170434126 },
+            { -1.092832904026, 0.161181867479 }, { -1.099435125126, -0.116641705968 }, { -1.105960328218, -0.391224337063 },
+            { -1.112148374048, -0.651619282802 }, { -1.117752564754, -0.887445418421 }, { -1.122549478940, -1.089301100086 },
+            { 0.898746392375, -1.228721269175 }, { 0.896097937109, -1.340169113034 }, { 0.894705011963, -1.398783848238 },
+            { 0.894623148468, -1.402228690262 }, { 0.895855610263, -1.350366304126 }, { 0.898353262986, -1.245264279505 },
+            { 0.902016533103, -1.091112702452 }, { 0.906699377597, -0.894057109889 }, { 0.912215106233, -0.661953486448 },
+            { 0.918343824318, -0.404055071150 }, { 0.924841199202, -0.130643459967 }, { -1.093646070097, 0.126963579378 },
+            { -1.087192841596, 0.398517496673 }, { -1.081150656299, 0.652774584588 }, { -1.075760397068, 0.879598415383 },
+            { -1.071236956526, 1.069946238708 }, { -1.067760669976, 1.216229487525 }, { -1.065470125990, 1.312616310326 },
+            { -1.064456641330, 1.355264068653 }, { -1.064760620431, 1.342472530963 }, { -1.066369944605, 1.274751655500 },
+            { 0.955873815973, 1.175218969445 }, { 0.951895759866, 1.007821097380 }, { 0.946948750767, 0.799649373793 },
+            { 0.941230010317, 0.559002948380 }, { 0.934967526652, 0.295475634718 }, { 0.928410965232, 0.019573435195 },
+            { 0.921821715471, -0.257704300155 }, { 0.915462469965, -0.525303383023 }, { 0.909586751762, -0.772555482433 },
+            { 0.904428807206, -0.989603437431 }, { 0.900194267270, -1.167794230985 }, { -1.128042321451, -1.320441668055 },
+            { -1.129967142374, -1.401438747512 }, { -1.130597730111, -1.427974080983 }, { -1.129908945120, -1.398989788460 },
+            { -1.127928247084, -1.315641382220 }, { -1.124734600183, -1.181251700200 }, { -1.120455325042, -1.001178434930 },
+        };
+
+        var x = new double[60, 2];
+        for (int i = 0; i < 60; i++)
+        {
+            double t = 0.1 * i;
+            double s1 = Math.Sin(2 * t);
+            double s2 = Math.Sign(Math.Sin(3 * t));
+            x[i, 0] = s1 + s2;
+            x[i, 1] = 0.5 * s1 + 2 * s2;
+        }
+
+        var ica = new FastICA<double>(
+            nComponents: 2, algorithm: ICAAlgorithm.Parallel, maxIterations: 1000, tolerance: 1e-10, randomState: 0);
+        var sources = Standardize(ica.FitTransform(new Matrix<double>(x)));
+
+        // Match the component order by correlation, then compare up to sign
+        double direct = Math.Abs(Correlation(sources, 0, expected, 0)) + Math.Abs(Correlation(sources, 1, expected, 1));
+        double swapped = Math.Abs(Correlation(sources, 0, expected, 1)) + Math.Abs(Correlation(sources, 1, expected, 0));
+        var order = direct >= swapped ? new[] { 0, 1 } : new[] { 1, 0 };
+        for (int c = 0; c < 2; c++)
+        {
+            double sign = Correlation(sources, order[c], expected, c) >= 0 ? 1 : -1;
+            for (int i = 0; i < 60; i++)
+            {
+                Assert.Equal(expected[i, c], sign * sources[i, order[c]], 1e-5);
+            }
+        }
+    }
+
+    [Theory(Timeout = 120000)]
+    [InlineData(1.0, 0.1, 1.5769434607659205, 0.8950608782088149)]
+    [InlineData(2.0, 0.5, 0.2588787407930196, 1.057499700228411)]
+    public async Task UMAP_FindAbParams_MatchesUmapLearn(double spread, double minDist, double expectedA, double expectedB)
+    {
+        await Task.Yield();
+
+        // umap-learn 0.6.0 umap.umap_.find_ab_params(spread, min_dist) (scipy 1.18.1 curve_fit). scipy stops at
+        // its default ftol, 1.6e-7 from the tight least-squares optimum, hence the 1e-6 tolerance.
+        var (a, b) = UMAP<double>.FindAbParams(spread, minDist);
+        Assert.Equal(expectedA, a, 1e-6);
+        Assert.Equal(expectedB, b, 1e-6);
+    }
+
+    [Fact(Timeout = 120000)]
+    public async Task LaplacianEigenmaps_Rbf_MatchesSklearnSpectralEmbedding()
+    {
+        await Task.Yield();
+
+        // sklearn.manifold.SpectralEmbedding(2, affinity='rbf', gamma=0.5, random_state=0).fit_transform(Data)
+        // (norm_laplacian=True: eigenvectors of the normalized Laplacian scaled by D^(-1/2))
+        var expected = new double[,]
+        {
+            { -0.153003174602, 0.040916844969 }, { 0.283193490985, 0.267735157612 },
+            { -0.181120433049, 0.126434866121 }, { -0.056882259004, -0.163944630329 },
+            { -0.227533456210, 0.278522881152 }, { -0.147400387874, -0.012511377851 },
+            { 0.046636490441, -0.264265255972 }, { 0.209662920119, 0.104497930563 },
+            { 0.094264528077, -0.163372702115 }, { 0.231562413785, 0.099632204160 },
+        };
+
+        var embedding = new LaplacianEigenmaps<double>(
+            nComponents: 2, affinity: LaplacianAffinityType.RBF, gamma: 0.5).FitTransform(new Matrix<double>(Data));
+        AssertColumnsEqualUpToSign(expected, embedding, 1e-8);
+    }
+
+    private static double[,] Standardize(Matrix<double> m)
+    {
+        var result = new double[m.Rows, m.Columns];
+        for (int c = 0; c < m.Columns; c++)
+        {
+            double mean = 0;
+            for (int i = 0; i < m.Rows; i++) mean += m[i, c] / m.Rows;
+            double variance = 0;
+            for (int i = 0; i < m.Rows; i++) variance += (m[i, c] - mean) * (m[i, c] - mean) / m.Rows;
+            double std = Math.Sqrt(variance);
+            for (int i = 0; i < m.Rows; i++) result[i, c] = (m[i, c] - mean) / std;
+        }
+
+        return result;
+    }
+
+    private static double Correlation(double[,] a, int ca, double[,] b, int cb)
+    {
+        double sum = 0;
+        for (int i = 0; i < a.GetLength(0); i++) sum += a[i, ca] * b[i, cb];
+        return sum / a.GetLength(0);
+    }
+
     private static double[,] Rows(int start, int count)
     {
         var rows = new double[count, Data.GetLength(1)];
