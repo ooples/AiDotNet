@@ -336,7 +336,14 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
         int numNodes = nodeFeatures.Count;
         int numFeatures = nodeFeatures.Count > 0 ? nodeFeatures[0].Length : DatasetStats.GetValueOrDefault(_datasetName).features;
 
-        var nodeFeatureTensor = GraphTensorHelper.PaddedRows<T>(nodeFeatures, 0, numNodes, numFeatures);
+        var nodeFeatureTensor = new Tensor<T>([numNodes, numFeatures]);
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numFeatures && j < nodeFeatures[i].Length; j++)
+            {
+                nodeFeatureTensor[i, j] = NumOps.FromDouble(nodeFeatures[i][j]);
+            }
+        }
 
         var edgeIndex = GraphTensorHelper.EdgeIndex<T>(edges);
 
@@ -644,7 +651,16 @@ public class OGBDatasetLoader<T> : GraphDataLoaderBase<T>
 
             // Build node features
             int numFeatures = allNodeFeatures.Count > nodeStart ? allNodeFeatures[nodeStart].Length : 9;
-            var nodeFeatures = GraphTensorHelper.PaddedRows<T>(allNodeFeatures, nodeStart, nodeCount, numFeatures);
+            var nodeFeatures = new Tensor<T>([nodeCount, numFeatures]);
+
+            for (int i = 0; i < nodeCount && nodeStart + i < allNodeFeatures.Count; i++)
+            {
+                var features = allNodeFeatures[nodeStart + i];
+                for (int j = 0; j < numFeatures && j < features.Length; j++)
+                {
+                    nodeFeatures[i, j] = NumOps.FromDouble(features[j]);
+                }
+            }
 
             // Build edge index
             var edgeIndex = GraphTensorHelper.EdgeIndex<T>(graphEdges);

@@ -33,41 +33,6 @@ internal static class GraphTensorHelper
     }
 
     /// <summary>
-    /// Builds a <c>[rows.Count, width]</c> tensor from equally sized double rows with one bulk cast.
-    /// </summary>
-    internal static Tensor<T> Rows<T>(IReadOnlyList<double[]> rows, int width)
-    {
-        var flat = new double[rows.Count * width];
-        for (int i = 0; i < rows.Count; i++)
-        {
-            double[] row = rows[i];
-            if (row.Length < width)
-                throw new ArgumentException(
-                    $"Row {i} has {row.Length} values but {width} are required.");
-            Array.Copy(row, 0, flat, i * width, width);
-        }
-
-        return new Tensor<double>(flat, new[] { rows.Count, width }).Cast<T>();
-    }
-
-    /// <summary>
-    /// Builds a <c>[count, width]</c> tensor from rows <c>start .. start + count - 1</c> of a possibly ragged
-    /// row list: each row contributes its first <c>min(width, row.Length)</c> values and rows past the end of
-    /// the list stay zero. One bulk cast.
-    /// </summary>
-    internal static Tensor<T> PaddedRows<T>(IReadOnlyList<double[]> rows, int start, int count, int width)
-    {
-        var flat = new double[count * width];
-        for (int i = 0; i < count && start + i < rows.Count; i++)
-        {
-            double[] row = rows[start + i];
-            Array.Copy(row, 0, flat, i * width, Math.Min(width, row.Length));
-        }
-
-        return new Tensor<double>(flat, new[] { count, width }).Cast<T>();
-    }
-
-    /// <summary>
     /// One-hot encodes <paramref name="classIndices"/> into a <c>[count, depth]</c> tensor with the engine.
     /// Every index must lie in <c>[0, depth)</c>.
     /// </summary>

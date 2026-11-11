@@ -362,7 +362,14 @@ public class CitationNetworkLoader<T> : GraphDataLoaderBase<T>
         _numClasses = classLabels.Count;
 
         // Build node features tensor
-        var nodeFeatures = GraphTensorHelper.Rows<T>(features, numFeatures);
+        var nodeFeatures = new Tensor<T>([numNodes, numFeatures]);
+        for (int i = 0; i < numNodes; i++)
+        {
+            for (int j = 0; j < numFeatures; j++)
+            {
+                nodeFeatures[i, j] = NumOps.FromDouble(features[i][j]);
+            }
+        }
 
         // Build edge index tensor (COO format)
         var edgeIndex = GraphTensorHelper.EdgeIndex<T>(edges);

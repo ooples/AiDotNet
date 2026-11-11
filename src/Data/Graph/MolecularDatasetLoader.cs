@@ -938,8 +938,8 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
         int numAtoms = atomTypes.Count;
         int numAtomFeatures = AtomTypeMap.Count + 4; // One-hot atom type + additional features
 
-        // Build node features in a double staging buffer; cast to T once below.
-        var nodeFeatureData = new double[numAtoms * numAtomFeatures];
+        // Build the integral node features (one-hot type, degree) as int; cast to T once below.
+        var nodeFeatureData = new int[numAtoms * numAtomFeatures];
         for (int i = 0; i < numAtoms; i++)
         {
             // One-hot encode atom type
@@ -948,7 +948,7 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
             {
                 if (atomType < 0)
                     throw new ArgumentOutOfRangeException(nameof(atomTypes), $"Atom type {atomType} is negative.");
-                nodeFeatureData[i * numAtomFeatures + atomType] = 1.0;
+                nodeFeatureData[i * numAtomFeatures + atomType] = 1;
             }
 
             // Additional features (degree will be computed after bonds)
@@ -968,7 +968,7 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
             nodeFeatureData[i * numAtomFeatures + AtomTypeMap.Count] = degree[i];
         }
 
-        var nodeFeatures = new Tensor<double>(nodeFeatureData, new[] { numAtoms, numAtomFeatures }).Cast<T>();
+        var nodeFeatures = new Tensor<int>(nodeFeatureData, new[] { numAtoms, numAtomFeatures }).Cast<T>();
 
         // Build edge index (undirected - add both directions)
         var edgeList = new List<(int, int)>();
@@ -1179,25 +1179,26 @@ public class MolecularDatasetLoader<T> : GraphDataLoaderBase<T>
     /// </summary>
     private Tensor<T> CreateGraphLabels(int numGraphs, int numTargets, bool isRegression, Random random)
     {
-        // Labels are drawn into a double staging buffer (same RNG draw order) and cast to T once.
-        var labelData = new double[numGraphs * numTargets];
-
-        for (int i = 0; i < numGraphs; i++)
+        if (isRegression)
         {
-            if (isRegression)
+            var labels = new Tensor<T>([numGraphs, numTargets]);
+            for (int i = 0; i < numGraphs; i++)
             {
                 // Continuous property values (e.g., energy, dipole moment)
-                labelData[i * numTargets] = random.NextDouble() * 10.0 - 5.0;
+                labels[i, 0] = NumOps.FromDouble(random.NextDouble() * 10.0 - 5.0);
             }
-            else
-            {
-                // Binary classification (e.g., toxic/non-toxic)
-                int classIdx = random.Next(numTargets);
-                labelData[i * numTargets + classIdx] = 1.0;
-            }
+
+            return labels;
         }
 
-        return new Tensor<double>(labelData, new[] { numGraphs, numTargets }).Cast<T>();
+        // Binary classification (e.g., toxic/non-toxic): draw the class ids (same RNG order), then one-hot
+        var classIndices = new int[numGraphs];
+        for (int i = 0; i < numGraphs; i++)
+        {
+            classIndices[i] = random.Next(numTargets);
+        }
+
+        return GraphTensorHelper.OneHot<T>(classIndices, numTargets);
     }
 
     /// <summary>

@@ -113,17 +113,34 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
 
         int totalSamples = interactions.Count;
         _sampleCount = totalSamples;
-        var featuresData = new double[totalSamples * totalFeatDim];
-        var labelsData = new double[totalSamples];
+        var featuresData = new T[totalSamples * totalFeatDim];
+        var labelsData = new int[totalSamples];
 
-        // Hash embedding for unknown nodes: sin((node + 1) * (f + 1)), f = 0 .. halfNode - 1,
-        // computed with engine ops from a shared (f + 1) ramp.
-        var engine = AiDotNetEngine.Current;
+        // Hash embedding for unknown nodes: sin((node + 1) * (f + 1)), f = 0 .. halfNode - 1, for every
+        // distinct unknown node at once as one engine outer product in T; rows are then copied out.
         int halfNodeDim = nodeFeatDim / 2;
-        var ramp = new double[halfNodeDim];
-        for (int f = 0; f < halfNodeDim; f++)
-            ramp[f] = f + 1.0;
-        var rampTensor = new Tensor<double>(ramp, new[] { halfNodeDim });
+        var hashRow = new Dictionary<int, int>();
+        var hashNodes = new List<int>();
+        foreach (var interaction in interactions)
+        {
+            foreach (int node in new[] { interaction.src, interaction.dst })
+            {
+                if (!nodeFeatureMap.ContainsKey(node) && !hashRow.ContainsKey(node))
+                {
+                    hashRow[node] = hashNodes.Count;
+                    hashNodes.Add(node + 1);
+                }
+            }
+        }
+
+        var hashEmbeddings = new T[0];
+        if (halfNodeDim > 0 && hashNodes.Count > 0)
+        {
+            var engine = AiDotNetEngine.Current;
+            var ramp = new Tensor<int>(Enumerable.Range(1, halfNodeDim).ToArray(), new[] { halfNodeDim }).Cast<T>();
+            var nodes = new Tensor<int>(hashNodes.ToArray(), new[] { hashNodes.Count }).Cast<T>();
+            hashEmbeddings = engine.TensorSin(engine.TensorOuter(nodes, ramp)).Contiguous().AsSpan().ToArray();
+        }
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -136,35 +153,36 @@ public class TemporalGraphDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>
             int halfNode = nodeFeatDim / 2;
             if (nodeFeatureMap.TryGetValue(src, out var srcFeats))
             {
-                Array.Copy(srcFeats, 0, featuresData, featOff, Math.Min(halfNode, srcFeats.Length));
+                for (int f = 0; f < Math.Min(halfNode, srcFeats.Length); f++)
+                    featuresData[featOff + f] = NumOps.FromDouble(srcFeats[f]);
             }
             else
             {
                 // Simple hash embedding for unknown nodes
                 if (halfNode > 0)
-                    engine.TensorSin(engine.TensorMultiplyScalar(rampTensor, src + 1.0))
-                        .AsSpan().CopyTo(featuresData.AsSpan(featOff, halfNode));
+                    Array.Copy(hashEmbeddings, hashRow[src] * halfNode, featuresData, featOff, halfNode);
             }
 
             if (nodeFeatureMap.TryGetValue(dst, out var dstFeats))
             {
-                Array.Copy(dstFeats, 0, featuresData, featOff + halfNode, Math.Min(halfNode, dstFeats.Length));
+                for (int f = 0; f < Math.Min(halfNode, dstFeats.Length); f++)
+                    featuresData[featOff + halfNode + f] = NumOps.FromDouble(dstFeats[f]);
             }
             else
             {
                 if (halfNode > 0)
-                    engine.TensorSin(engine.TensorMultiplyScalar(rampTensor, dst + 1.0))
-                        .AsSpan().CopyTo(featuresData.AsSpan(featOff + halfNode, halfNode));
+                    Array.Copy(hashEmbeddings, hashRow[dst] * halfNode, featuresData, featOff + halfNode, halfNode);
             }
 
             // Edge features
-            Array.Copy(edgeFeats, 0, featuresData, featOff + nodeFeatDim, edgeFeatDim);
+            for (int f = 0; f < edgeFeatDim; f++)
+                featuresData[featOff + nodeFeatDim + f] = NumOps.FromDouble(edgeFeats[f]);
 
             labelsData[i] = label;
         }
 
-        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, totalFeatDim }).Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, 1 }).Cast<T>();
+        LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, totalFeatDim });
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSamples, 1 }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 
