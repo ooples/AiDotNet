@@ -197,26 +197,52 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> CycleSubseriesSmoothing(Vector<T> data, int period)
     {
         int n = data.Length;
-        Vector<T> smoothed = new Vector<T>(n);
-
-        for (int i = 0; i < period; i++)
+        if (n == 0)
         {
-            List<(T x, T y)> subseries = new List<(T x, T y)>();
-            for (int j = i; j < n; j += period)
-            {
-                subseries.Add((NumOps.FromDouble(j), data[j]));
-            }
-
-            Vector<T> smoothedSubseries = LoessSmoothing(subseries, 0.75);
-
-            int index = 0;
-            for (int j = i; j < n; j += period)
-            {
-                smoothed[j] = smoothedSubseries[index++];
-            }
+            return new Vector<T>(0);
         }
 
-        return smoothed;
+        // Column p of the phase grid is the subseries data[p], data[p + period], ...; the first
+        // fullPhases columns have `rows` members and the rest have rows - 1.
+        int rows = (n + period - 1) / period;
+        int fullPhases = n - (rows - 1) * period;
+        var grid = ToPhaseGrid(data, period);
+        var smoothed = SmoothSubseriesColumns(grid, period);
+
+        if (fullPhases < period && rows > 1)
+        {
+            var top = Engine.TensorSlice(grid, new[] { 0, 0 }, new[] { rows - 1, period });
+            var shortSmoothed = Engine.TensorConcatenate(
+                new[] { SmoothSubseriesColumns(top, period), new Tensor<T>(new[] { 1, period }) }, 0);
+            var phase = Engine.TensorBroadcastTo(
+                Engine.TensorArange<T>(0, period, 1).Reshape(new[] { 1, period }), new[] { rows, period });
+            smoothed = Engine.TensorWhere(
+                Engine.TensorLessThan(phase, NumOps.FromDouble(fullPhases)), smoothed, shortSmoothed);
+        }
+
+        return Engine.TensorSlice(smoothed.Reshape(new[] { rows * period }), new[] { 0 }, new[] { n }).ToVector();
+    }
+
+    /// <summary>
+    /// LOESS (span 0.75, tri-cube weights) of every column of <paramref name="grid"/>, where all
+    /// columns are subseries of the same length whose members are <paramref name="period"/> apart.
+    /// </summary>
+    private Tensor<T> SmoothSubseriesColumns(Tensor<T> grid, int period)
+    {
+        int count = grid.Shape[0];
+        int windowSize = (int)(0.75 * count);
+
+        // Pairwise distances |x_a - x_b| = period * |a - b| scaled by the half window.
+        var index = Engine.TensorArange<T>(0, count, 1);
+        var rowsIndex = Engine.TensorBroadcastTo(index.Reshape(new[] { count, 1 }), new[] { count, count });
+        var colsIndex = Engine.TensorBroadcastTo(index.Reshape(new[] { 1, count }), new[] { count, count });
+        var distance = Engine.TensorMultiplyScalar(
+            Engine.TensorAbs(Engine.TensorSubtract(colsIndex, rowsIndex)), NumOps.FromDouble(period));
+        var weights = TriCube(Engine.TensorMultiplyScalar(distance, NumOps.FromDouble(1.0 / (windowSize / 2.0))));
+
+        var weightedSums = Engine.TensorMatMul(weights, grid);
+        var totals = Engine.TensorMatMul(weights, Engine.TensorOnesLike(grid));
+        return Engine.TensorMultiply(weightedSums, Engine.TensorReciprocal(totals));
     }
 
     /// <summary>
@@ -232,27 +258,8 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private Vector<T> LowPassFilter(Vector<T> data, int period)
     {
-        int n = data.Length;
-        Vector<T> filtered = new Vector<T>(n);
         int windowSize = period + 1;
-
-        for (int i = 0; i < n; i++)
-        {
-            int start = Math.Max(0, i - windowSize / 2);
-            int end = Math.Min(n - 1, i + windowSize / 2);
-            T sum = NumOps.Zero;
-            int count = 0;
-
-            for (int j = start; j <= end; j++)
-            {
-                sum = NumOps.Add(sum, data[j]);
-                count++;
-            }
-
-            filtered[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
-        }
-
-        return filtered;
+        return CenteredWindowAverage(data, BoxKernel(windowSize / 2));
     }
 
     /// <summary>
@@ -269,105 +276,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private Vector<T> LoessSmoothing(Vector<T> data, int windowSize)
     {
-        int n = data.Length;
-        Vector<T> smoothed = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
-        {
-            int start = Math.Max(0, i - windowSize / 2);
-            int end = Math.Min(n - 1, i + windowSize / 2);
-            List<(T distance, T weight, T y)> weightedPoints = new List<(T distance, T weight, T y)>();
-
-            for (int j = start; j <= end; j++)
-            {
-                T distance = NumOps.Abs(NumOps.Subtract(NumOps.FromDouble(j), NumOps.FromDouble(i)));
-                T weight = TriCube(NumOps.Divide(distance, NumOps.FromDouble(windowSize / 2)));
-                weightedPoints.Add((distance, weight, data[j]));
-            }
-
-            smoothed[i] = WeightedLeastSquares(weightedPoints);
-        }
-
-        return smoothed;
-    }
-
-    /// <summary>
-    /// Applies LOESS smoothing to a list of (x,y) data points
-    /// </summary>
-    /// <param name="data">The data points to smooth, as (x,y) pairs</param>
-    /// <param name="span">The proportion of data to include in each local regression (0-1)</param>
-    /// <returns>A smoothed version of the input data</returns>
-    /// <remarks>
-    /// This overload works with arbitrary x-coordinates, while the other version assumes
-    /// evenly spaced data points.
-    /// </remarks>
-    private Vector<T> LoessSmoothing(List<(T x, T y)> data, double span)
-    {
-        int n = data.Count;
-        Vector<T> smoothed = new Vector<T>(n);
-        int windowSize = (int)(span * n);
-
-        for (int i = 0; i < n; i++)
-        {
-            List<(T distance, T weight, T y)> weightedPoints = new List<(T distance, T weight, T y)>();
-
-            for (int j = 0; j < n; j++)
-            {
-                T distance = NumOps.Abs(NumOps.Subtract(data[j].x, data[i].x));
-                T weight = TriCube(NumOps.Divide(distance, NumOps.FromDouble(windowSize / 2.0)));
-                weightedPoints.Add((distance, weight, data[j].y));
-            }
-
-            smoothed[i] = WeightedLeastSquares(weightedPoints);
-        }
-
-        return smoothed;
-    }
-
-    /// <summary>
-    /// Calculates the tri-cube weight function used in LOESS smoothing
-    /// </summary>
-    /// <param name="x">The normalized distance value (0-1)</param>
-    /// <returns>The weight value, with higher weights for smaller distances</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This function determines how much influence each nearby point has
-    /// when calculating a smoothed value. Points that are closer get higher weights (more influence),
-    /// while points farther away get lower weights (less influence). Points beyond a certain
-    /// distance get zero weight (no influence).
-    /// </remarks>
-    private T TriCube(T x)
-    {
-        if (NumOps.GreaterThan(x, NumOps.One))
-        {
-            return NumOps.Zero;
-        }
-        T oneMinusX = NumOps.Subtract(NumOps.One, x);
-
-        return NumOps.Multiply(NumOps.Multiply(oneMinusX, oneMinusX), oneMinusX);
-    }
-
-    /// <summary>
-    /// Calculates a weighted average of data points
-    /// </summary>
-    /// <param name="weightedPoints">List of points with their distances, weights, and values</param>
-    /// <returns>The weighted average value</returns>
-    /// <remarks>
-    /// <b>For Beginners:</b> This method calculates an average where some values count more than others.
-    /// Each data point is multiplied by its weight, then all these weighted values are added up
-    /// and divided by the sum of all weights. This gives more importance to points with higher weights.
-    /// </remarks>
-    private T WeightedLeastSquares(List<(T distance, T weight, T y)> weightedPoints)
-    {
-        T sumWeights = NumOps.Zero;
-        T sumWeightedY = NumOps.Zero;
-
-        foreach (var (_, weight, y) in weightedPoints)
-        {
-            sumWeights = NumOps.Add(sumWeights, weight);
-            sumWeightedY = NumOps.Add(sumWeightedY, NumOps.Multiply(weight, y));
-        }
-
-        return NumOps.Divide(sumWeightedY, sumWeights);
+        return CenteredWindowAverage(data, TriCubeKernel(windowSize / 2));
     }
 
     /// <summary>
@@ -383,25 +292,7 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     private Vector<T> CalculateTrendMovingAverage()
     {
         int _windowSize = 7;
-        Vector<T> trend = new Vector<T>(TimeSeries.Length);
-
-        for (int i = 0; i < TimeSeries.Length; i++)
-        {
-            int start = Math.Max(0, i - _windowSize / 2);
-            int end = Math.Min(TimeSeries.Length - 1, i + _windowSize / 2);
-            T sum = NumOps.Zero;
-            int count = 0;
-
-            for (int j = start; j <= end; j++)
-            {
-                sum = NumOps.Add(sum, TimeSeries[j]);
-                count++;
-            }
-
-            trend[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
-        }
-
-        return trend;
+        return CenteredWindowAverage(TimeSeries, BoxKernel(_windowSize / 2));
     }
 
     /// <summary>
@@ -421,35 +312,11 @@ public class AdditiveDecomposition<T> : TimeSeriesDecompositionBase<T>
     /// </remarks>
     private Vector<T> CalculateSeasonalMovingAverage(Vector<T> trend)
     {
-        Vector<T> seasonal = new Vector<T>(TimeSeries.Length);
         int _seasonalPeriod = 12;
+        Vector<T> detrended = Engine.Subtract(TimeSeries, trend);
 
-        for (int i = 0; i < TimeSeries.Length; i++)
-        {
-            seasonal[i] = NumOps.Subtract(TimeSeries[i], trend[i]);
-        }
-
-        // Calculate average seasonal component for each period
-        Vector<T> _averageSeasonal = new Vector<T>(_seasonalPeriod);
-        for (int i = 0; i < _seasonalPeriod; i++)
-        {
-            T sum = NumOps.Zero;
-            int count = 0;
-            for (int j = i; j < TimeSeries.Length; j += _seasonalPeriod)
-            {
-                sum = NumOps.Add(sum, seasonal[j]);
-                count++;
-            }
-            _averageSeasonal[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
-        }
-
-        // Normalize seasonal component
-        for (int i = 0; i < TimeSeries.Length; i++)
-        {
-            seasonal[i] = _averageSeasonal[i % _seasonalPeriod];
-        }
-
-        return seasonal;
+        // Average seasonal component for each period, repeated over the series.
+        return RepeatPeriodic(PhaseMeans(detrended, _seasonalPeriod), TimeSeries.Length);
     }
 
     /// <summary>

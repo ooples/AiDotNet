@@ -184,4 +184,106 @@ public abstract class TimeSeriesDecompositionBase<T> : ITimeSeriesDecomposition<
     {
         return Engine.Subtract(TimeSeries, Engine.Add(trend, seasonal));
     }
+
+    /// <summary>
+    /// Weighted average of <paramref name="data"/> over the centred window of the odd-length,
+    /// symmetric <paramref name="kernel"/>: positions outside the series are dropped and the result is
+    /// renormalized by the kernel weight that falls inside the series.
+    /// </summary>
+    protected Vector<T> CenteredWindowAverage(Vector<T> data, Tensor<T> kernel)
+    {
+        int n = data.Length;
+        if (n == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        int width = kernel.Length;
+        int half = width / 2;
+        var k = kernel.Reshape(new[] { 1, 1, width });
+        var x = Tensor<T>.FromVector(data, new[] { 1, 1, n });
+        var sums = Engine.Conv1D(x, k, 1, half);
+        var weights = Engine.Conv1D(Engine.TensorOnesLike(x), k, 1, half);
+        return Engine.TensorMultiply(sums, Engine.TensorReciprocal(weights)).Reshape(new[] { n }).ToVector();
+    }
+
+    /// <summary>Unit weights over the window [-halfWidth, halfWidth] (a plain moving average).</summary>
+    protected Tensor<T> BoxKernel(int halfWidth)
+    {
+        return Engine.TensorOnesLike(new Tensor<T>(new[] { 2 * halfWidth + 1 }));
+    }
+
+    /// <summary>
+    /// Tri-cube weights (1 - |d| / halfWidth)^3 for the offsets d in [-halfWidth, halfWidth].
+    /// </summary>
+    protected Tensor<T> TriCubeKernel(int halfWidth)
+    {
+        var offsets = Engine.TensorArange<T>(-halfWidth, halfWidth + 1, 1);
+        var scaled = Engine.TensorMultiplyScalar(Engine.TensorAbs(offsets), NumOps.FromDouble(1.0 / halfWidth));
+        return TriCube(scaled);
+    }
+
+    /// <summary>
+    /// Tri-cube weight function, element-wise: 0 where x &gt; 1, otherwise (1 - x)^3.
+    /// </summary>
+    protected Tensor<T> TriCube(Tensor<T> x)
+    {
+        var oneMinusX = Engine.ScalarMinusTensor(NumOps.One, x);
+        var cube = Engine.TensorMultiply(Engine.TensorMultiply(oneMinusX, oneMinusX), oneMinusX);
+        return Engine.TensorWhere(Engine.TensorGreaterThan(x, NumOps.One), Engine.TensorZerosLike(x), cube);
+    }
+
+    /// <summary>
+    /// Lays the series out row-major in a [ceil(n / period), period] grid (zero padded), so that
+    /// column p holds data[p], data[p + period], ...
+    /// </summary>
+    protected Tensor<T> ToPhaseGrid(Vector<T> data, int period)
+    {
+        int n = data.Length;
+        int rows = (n + period - 1) / period;
+        var padded = Engine.TensorConstantPad(Tensor<T>.FromVector(data), new[] { 0, rows * period - n }, NumOps.Zero);
+        return padded.Reshape(new[] { rows, period });
+    }
+
+    /// <summary>Mean of data[p], data[p + period], ... for every phase p in [0, period).</summary>
+    protected Vector<T> PhaseMeans(Vector<T> data, int period)
+    {
+        int n = data.Length;
+        if (n == 0)
+        {
+            return new Vector<T>(period);
+        }
+
+        var grid = ToPhaseGrid(data, period);
+        var counts = ToPhaseGrid(Engine.TensorOnesLike(Tensor<T>.FromVector(data)).ToVector(), period);
+        var sums = Engine.ReduceSum(grid, new[] { 0 }, false);
+        var totals = Engine.ReduceSum(counts, new[] { 0 }, false);
+        return Engine.TensorMultiply(sums, Engine.TensorReciprocal(totals)).ToVector();
+    }
+
+    /// <summary>Repeats <paramref name="pattern"/> cyclically to length <paramref name="length"/>.</summary>
+    protected Vector<T> RepeatPeriodic(Vector<T> pattern, int length)
+    {
+        int period = pattern.Length;
+        if (length == 0 || period == 0)
+        {
+            return new Vector<T>(length);
+        }
+
+        int repeats = (length + period - 1) / period;
+        var tiled = Engine.TensorTile(Tensor<T>.FromVector(pattern), new[] { repeats });
+        return Engine.TensorSlice(tiled, new[] { 0 }, new[] { length }).ToVector();
+    }
+
+    /// <summary>True when any element of <paramref name="value"/> is below <paramref name="threshold"/>.</summary>
+    protected bool AnyBelow(Tensor<T> value, T threshold)
+    {
+        return Engine.TensorCountNonzero(Engine.TensorLessThan(value, threshold)) > 0;
+    }
+
+    /// <summary>True when any element of <paramref name="value"/> is above <paramref name="threshold"/>.</summary>
+    protected bool AnyAbove(Tensor<T> value, T threshold)
+    {
+        return Engine.TensorCountNonzero(Engine.TensorGreaterThan(value, threshold)) > 0;
+    }
 }
