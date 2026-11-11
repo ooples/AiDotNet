@@ -322,14 +322,8 @@ public partial class TiedEmbeddingHeadLayer<T> : LayerBase<T>, ILayerGraphBindin
         for (int axis = 0; axis < target.Rank; axis++)
             if (target.Shape[axis] != inputShape[axis]) return null;
 
-        int rows = target.Length;
-        var ids = new Tensor<int>(new[] { rows });
-        for (int r = 0; r < rows; r++)
-        {
-            double id = NumOps.ToDouble(target.GetFlat(r));
-            if (!(id >= 0 && id < _vocabularySize) || Math.Floor(id) < id) return null;
-            ids.SetFlat(r, (int)id);
-        }
+        var ids = FusedReadoutClassIndices.TryRead(target, _vocabularySize);
+        if (ids is null) return null;
 
         vocabularySize = _vocabularySize;
         return ids;

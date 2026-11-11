@@ -359,14 +359,8 @@ public partial class DenseLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, IShap
         for (int axis = 0; axis < target.Rank; axis++)
             if (target.Shape[axis] != inputShape[axis]) return null;
 
-        int rows = target.Length;
-        var ids = new Tensor<int>(new[] { rows });
-        for (int r = 0; r < rows; r++)
-        {
-            double id = NumOps.ToDouble(target.GetFlat(r));
-            if (!(id >= 0 && id < outputSize) || Math.Floor(id) < id) return null;
-            ids.SetFlat(r, (int)id);
-        }
+        var ids = FusedReadoutClassIndices.TryRead(target, outputSize);
+        if (ids is null) return null;
 
         vocabularySize = outputSize;
         return ids;

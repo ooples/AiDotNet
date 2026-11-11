@@ -452,26 +452,24 @@ internal static class LocalObjectiveGradientComputer<T>
                         }
                         else
                         {
-                            var numOps = MathHelper.GetNumericOperations<T>();
                             var stackedInputs = new Tensor<T>[m];
                             int hCount = hiddenIdx.Count;
+                            var scales = progressive ? ProgressiveScales(selectedHidden, m, hCount, baseWeight) : null;
                             for (int j = 0; j < m; j++)
                             {
                                 int k = selectedHidden[j];
                                 var hk = hiddenOut[hiddenIdx[k]]!;
-                                if (progressive)
+                                if (scales is not null)
                                 {
                                     // detach == true is guaranteed here. Rescale backward Jacobian by w_j while
                                     // preserving bit-identical forward values tilde_h == hk (zero ULP drift).
-                                    double depthFrac = (k + 1.0) / hCount;
-                                    double w = baseWeight * depthFrac * depthFrac;
-                                    if (BitConverter.DoubleToInt64Bits(w) == BitConverter.DoubleToInt64Bits(1.0))
+                                    if (scales[j].IsIdentity)
                                     {
                                         stackedInputs[j] = hk;
                                     }
                                     else
                                     {
-                                        var scaled = engine.TensorMultiplyScalar(hk, numOps.FromDouble(w));
+                                        var scaled = engine.TensorMultiplyScalar(hk, scales[j].Value);
                                         var delta = engine.TensorSubtract(scaled, engine.StopGradient(scaled));
                                         stackedInputs[j] = engine.TensorAdd(engine.StopGradient(hk), delta);
                                     }
@@ -707,5 +705,25 @@ internal static class LocalObjectiveGradientComputer<T>
                 foreach (var sub in lb.GetSubLayers())
                     Collect(sub, acc, seen);
         }
+    }
+
+    /// <summary>
+    /// The progressive per-layer gradient scale w_j = base * ((k_j + 1) / hiddenCount)^2 of each selected hidden layer,
+    /// with whether it is exactly 1 (the input is then used as-is, so its forward value is untouched).
+    /// </summary>
+    [AiDotNet.Attributes.ScalarKernel("One scale per selected hidden layer (a handful), not one per tensor element.")]
+    private static (T Value, bool IsIdentity)[] ProgressiveScales(List<int> selectedHidden, int count, int hiddenCount,
+        double baseWeight)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var scales = new (T Value, bool IsIdentity)[count];
+        for (int j = 0; j < count; j++)
+        {
+            double depthFrac = (selectedHidden[j] + 1.0) / hiddenCount;
+            double w = baseWeight * depthFrac * depthFrac;
+            scales[j] = (numOps.FromDouble(w),
+                BitConverter.DoubleToInt64Bits(w) == BitConverter.DoubleToInt64Bits(1.0));
+        }
+        return scales;
     }
 }
