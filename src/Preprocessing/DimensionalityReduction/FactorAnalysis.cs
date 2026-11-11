@@ -41,10 +41,10 @@ public class FactorAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly int? _randomState;
 
     // Fitted parameters
-    private double[]? _mean;
-    private double[,]? _components; // Factor loadings (features x factors)
-    private double[]? _noiseVariance; // Unique variances (psi)
-    private double[,]? _rotatedComponents;
+    private Vector<T>? _mean;
+    private Matrix<T>? _components; // Factor loadings (features x factors)
+    private Vector<T>? _noiseVariance; // Unique variances (psi)
+    private Matrix<T>? _rotatedComponents;
     private int _nFeaturesIn;
 
     /// <summary>
@@ -60,17 +60,17 @@ public class FactorAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the mean of each feature.
     /// </summary>
-    public double[]? Mean => _mean;
+    public Vector<T>? Mean => _mean;
 
     /// <summary>
     /// Gets the factor loadings (each column is a factor).
     /// </summary>
-    public double[,]? Components => _rotation == FactorRotation.None ? _components : _rotatedComponents;
+    public Matrix<T>? Components => _rotation == FactorRotation.None ? _components : _rotatedComponents;
 
     /// <summary>
     /// Gets the unique variance (noise) for each feature.
     /// </summary>
-    public double[]? NoiseVariance => _noiseVariance;
+    public Vector<T>? NoiseVariance => _noiseVariance;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -112,6 +112,7 @@ public class FactorAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     protected override void FitCore(Matrix<T> data)
     {
+        var engine = Engine;
         _nFeaturesIn = data.Columns;
         int n = data.Rows;
         int p = data.Columns;
@@ -124,263 +125,103 @@ public class FactorAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int k = Math.Min(_nComponents, p);
 
         // Center the data
-        _mean = new double[p];
-        var centered = new double[n, p];
+        var x = Tensor<T>.FromMatrix(data);
+        var mean = DimensionalityReductionOps.ColumnMeans(x);
+        var centered = DimensionalityReductionOps.SubtractRow(x, mean);
+        _mean = mean.ToVector();
 
-        for (int j = 0; j < p; j++)
-        {
-            double sum = 0;
-            for (int i = 0; i < n; i++)
-            {
-                sum += NumOps.ToDouble(data[i, j]);
-            }
-            _mean[j] = sum / n;
-        }
+        // Compute sample covariance matrix
+        var s = engine.TensorDivideScalar(DimensionalityReductionOps.TransposeMatMul(centered, centered), NumOps.FromDouble(n - 1));
+        var sDiagonal = engine.TensorDiagonal(s);
 
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                centered[i, j] = NumOps.ToDouble(data[i, j]) - _mean[j];
-            }
-        }
+        // Initialize loadings using PCA: W = U_k sqrt(max(lambda, 1e-10))
+        var (eigenvalues, eigenvectors) = DimensionalityReductionOps.SymmetricEigen(s, descending: true);
+        var scale = engine.TensorSqrt(engine.TensorClampMin(engine.TensorNarrow(eigenvalues, 0, 0, k), NumOps.FromDouble(1e-10)));
+        var loadings = DimensionalityReductionOps.ScaleColumns(DimensionalityReductionOps.FirstColumns(eigenvectors, k), scale);
 
-        // Compute sample covariance
-        var S = new double[p, p];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = i; j < p; j++)
-            {
-                double sum = 0;
-                for (int s = 0; s < n; s++)
-                {
-                    sum += centered[s, i] * centered[s, j];
-                }
-                S[i, j] = sum / (n - 1);
-                S[j, i] = S[i, j];
-            }
-        }
+        // Initialize noise variances: psi = max(S_ii - communality, 1e-6)
+        T psiFloor = NumOps.FromDouble(1e-6);
+        var noiseVariance = engine.TensorClampMin(
+            engine.TensorSubtract(sDiagonal, DimensionalityReductionOps.RowSums(engine.TensorSquare(loadings))), psiFloor);
 
-        // Initialize using PCA
-        var random = _randomState.HasValue
-            ? RandomHelper.CreateSeededRandom(_randomState.Value)
-            : RandomHelper.CreateSeededRandom(42);
-
-        // Get initial factor loadings from PCA
-        var (eigenvalues, eigenvectors) = ComputeEigen(S, p);
-
-        // Sort by eigenvalue descending
-        var indices = Enumerable.Range(0, p)
-            .OrderByDescending(i => eigenvalues[i])
-            .ToArray();
-
-        // Initialize loadings
-        _components = new double[p, k];
-        for (int j = 0; j < k; j++)
-        {
-            int idx = indices[j];
-            double scale = Math.Sqrt(Math.Max(eigenvalues[idx], 1e-10));
-            for (int i = 0; i < p; i++)
-            {
-                _components[i, j] = eigenvectors[idx, i] * scale;
-            }
-        }
-
-        // Initialize noise variances
-        _noiseVariance = new double[p];
-        for (int i = 0; i < p; i++)
-        {
-            double communality = 0;
-            for (int j = 0; j < k; j++)
-            {
-                communality += _components[i, j] * _components[i, j];
-            }
-            _noiseVariance[i] = Math.Max(S[i, i] - communality, 1e-6);
-        }
+        T tol = NumOps.FromDouble(_tol);
+        var identity = DimensionalityReductionOps.Identity<T>(k);
+        var count = DimensionalityReductionOps.Scalar(NumOps.FromDouble(n));
 
         // EM algorithm
         for (int iter = 0; iter < _maxIter; iter++)
         {
-            var oldLoadings = new double[p, k];
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    oldLoadings[i, j] = _components[i, j];
-                }
-            }
+            var oldLoadings = loadings;
 
-            // E-step: Compute expected latent factors
-            // E[F|X] = (W^T Ψ^-1 W + I)^-1 W^T Ψ^-1 X
-            var WtPsiInv = new double[k, p];
-            for (int j = 0; j < k; j++)
-            {
-                for (int i = 0; i < p; i++)
-                {
-                    WtPsiInv[j, i] = _components[i, j] / _noiseVariance[i];
-                }
-            }
+            // E-step: W^T Psi^-1, M = I + W^T Psi^-1 W, E[F] = Xc (M^-1 W^T Psi^-1)^T
+            var wtPsiInv = engine.TensorTranspose(engine.TensorDivide(loadings, DimensionalityReductionOps.AsColumn(noiseVariance)));
+            var m = engine.TensorAdd(engine.TensorMatMul(wtPsiInv, loadings), identity);
+            var projection = DimensionalityReductionOps.Solve(m, wtPsiInv);                          // M^-1 W^T Psi^-1 [k, p]
+            var expectedF = DimensionalityReductionOps.MatMulTranspose(centered, projection);       // [n, k]
 
-            // WtPsiInvW + I
-            var M = new double[k, k];
-            for (int i = 0; i < k; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double sum = 0;
-                    for (int l = 0; l < p; l++)
-                    {
-                        sum += WtPsiInv[i, l] * _components[l, j];
-                    }
-                    M[i, j] = sum;
-                    if (i == j)
-                    {
-                        M[i, j] += 1.0;
-                    }
-                }
-            }
+            // E[F F^T] = n M^-1 + E[F]^T E[F]
+            var expectedFFt = engine.TensorAdd(
+                engine.TensorMultiply(DimensionalityReductionOps.Inverse(m), count),
+                DimensionalityReductionOps.TransposeMatMul(expectedF, expectedF));
 
-            var MInv = InvertMatrix(M, k);
+            // E[X F^T] = Xc^T E[F]
+            var expectedXFt = DimensionalityReductionOps.TransposeMatMul(centered, expectedF);       // [p, k]
 
-            // Compute expected factor scores E[F|X]
-            var expectedF = new double[n, k];
-            for (int s = 0; s < n; s++)
-            {
-                // WtPsiInv * x
-                var temp = new double[k];
-                for (int j = 0; j < k; j++)
-                {
-                    double sum = 0;
-                    for (int i = 0; i < p; i++)
-                    {
-                        sum += WtPsiInv[j, i] * centered[s, i];
-                    }
-                    temp[j] = sum;
-                }
+            // M-step: W = E[X F^T] E[F F^T]^-1 (E[F F^T] is symmetric)
+            loadings = engine.TensorTranspose(DimensionalityReductionOps.Solve(expectedFFt, engine.TensorTranspose(expectedXFt)));
 
-                // MInv * temp
-                for (int j = 0; j < k; j++)
-                {
-                    double sum = 0;
-                    for (int l = 0; l < k; l++)
-                    {
-                        sum += MInv[j, l] * temp[l];
-                    }
-                    expectedF[s, j] = sum;
-                }
-            }
-
-            // E[FF^T|X] = MInv + E[F|X]E[F|X]^T
-            var expectedFFt = new double[k, k];
-            for (int i = 0; i < k; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double sum = n * MInv[i, j];
-                    for (int s = 0; s < n; s++)
-                    {
-                        sum += expectedF[s, i] * expectedF[s, j];
-                    }
-                    expectedFFt[i, j] = sum;
-                }
-            }
-
-            // E[XF^T]
-            var expectedXFt = new double[p, k];
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double sum = 0;
-                    for (int s = 0; s < n; s++)
-                    {
-                        sum += centered[s, i] * expectedF[s, j];
-                    }
-                    expectedXFt[i, j] = sum;
-                }
-            }
-
-            // M-step: Update loadings and noise variances
-            // W = E[XF^T] * E[FF^T]^-1
-            var expectedFFtInv = InvertMatrix(expectedFFt, k);
-
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double sum = 0;
-                    for (int l = 0; l < k; l++)
-                    {
-                        sum += expectedXFt[i, l] * expectedFFtInv[l, j];
-                    }
-                    _components[i, j] = sum;
-                }
-            }
-
-            // Update noise variances
-            // Ψ = diag(S - W * E[XF^T]^T / n)
-            for (int i = 0; i < p; i++)
-            {
-                double reconstructed = 0;
-                for (int j = 0; j < k; j++)
-                {
-                    reconstructed += _components[i, j] * expectedXFt[i, j];
-                }
-                _noiseVariance[i] = Math.Max(S[i, i] - reconstructed / n, 1e-6);
-            }
+            // psi = max(S_ii - sum_j W_ij E[X F^T]_ij / n, 1e-6)
+            var reconstructed = engine.TensorDivide(
+                DimensionalityReductionOps.RowSums(engine.TensorMultiply(loadings, expectedXFt)), count);
+            noiseVariance = engine.TensorClampMin(engine.TensorSubtract(sDiagonal, reconstructed), psiFloor);
 
             // Check convergence
-            double maxChange = 0;
-            for (int i = 0; i < p; i++)
-            {
-                for (int j = 0; j < k; j++)
-                {
-                    double change = Math.Abs(_components[i, j] - oldLoadings[i, j]);
-                    maxChange = Math.Max(maxChange, change);
-                }
-            }
-
-            if (maxChange < _tol)
+            if (DimensionalityReductionOps.Below(DimensionalityReductionOps.MaxAbsDifference(loadings, oldLoadings), tol))
             {
                 break;
             }
         }
 
+        _components = loadings.ToMatrix();
+        _noiseVariance = noiseVariance.ToVector();
+
         // Apply rotation if requested
         if (_rotation != FactorRotation.None)
         {
-            _rotatedComponents = ApplyRotation(_components, p, k);
+            _rotatedComponents = ApplyRotation(loadings).ToMatrix();
         }
     }
 
-    private double[,] ApplyRotation(double[,] loadings, int p, int k)
+    private Tensor<T> ApplyRotation(Tensor<T> loadings)
     {
-        var rotated = new double[p, k];
-
         switch (_rotation)
         {
             case FactorRotation.Varimax:
-                return ApplyVarimax(loadings, p, k);
+                return ApplyPairwiseRotation(loadings, gamma: 1.0);
+
             case FactorRotation.Quartimax:
-                return ApplyQuartimax(loadings, p, k);
+                return ApplyPairwiseRotation(loadings, gamma: 0.0);
+
             default:
-                // Copy original
-                for (int i = 0; i < p; i++)
-                {
-                    for (int j = 0; j < k; j++)
-                    {
-                        rotated[i, j] = loadings[i, j];
-                    }
-                }
-                return rotated;
+                return loadings.Clone();
         }
     }
 
-    private double[,] ApplyVarimax(double[,] loadings, int p, int k)
+    /// <summary>
+    /// Orthomax rotation by planar rotations of every column pair (i, j), 100 sweeps. For each pair, with
+    /// u = L_i^2 - L_j^2 and v = 2 L_i L_j summed over rows: angle = atan2(sum 2uv - 2 gamma (sum u)(sum v) / p,
+    /// sum (u^2 - v^2) - gamma ((sum u)^2 - (sum v)^2) / p) / 4. gamma = 1 is varimax, gamma = 0 quartimax.
+    /// </summary>
+    private Tensor<T> ApplyPairwiseRotation(Tensor<T> loadings, double gamma)
     {
-        // Varimax rotation maximizes variance of squared loadings
-        var rotated = (double[,])loadings.Clone();
-        double gamma = 1.0; // Varimax uses gamma = 1
+        var engine = Engine;
+        int p = loadings.Shape[0];
+        int k = loadings.Shape[1];
+        T two = NumOps.FromDouble(2.0);
+        T quarter = NumOps.FromDouble(0.25);
+        T gammaOverP = NumOps.FromDouble(gamma / p);
+        T twoGammaOverP = NumOps.FromDouble(2.0 * gamma / p);
+        var rotated = loadings;
 
         for (int iter = 0; iter < 100; iter++)
         {
@@ -388,221 +229,32 @@ public class FactorAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             {
                 for (int j = i + 1; j < k; j++)
                 {
-                    // Compute rotation angle for columns i and j
-                    double a = 0, b = 0, c = 0, d = 0;
+                    var li = engine.TensorNarrow(rotated, 1, i, 1);
+                    var lj = engine.TensorNarrow(rotated, 1, j, 1);
 
-                    for (int l = 0; l < p; l++)
-                    {
-                        double u = rotated[l, i] * rotated[l, i] - rotated[l, j] * rotated[l, j];
-                        double v = 2 * rotated[l, i] * rotated[l, j];
-                        a += u;
-                        b += v;
-                        c += u * u - v * v;
-                        d += 2 * u * v;
-                    }
+                    var u = engine.TensorSubtract(engine.TensorSquare(li), engine.TensorSquare(lj));
+                    var v = engine.TensorMultiplyScalar(engine.TensorMultiply(li, lj), two);
+                    var a = engine.ReduceSum(u, new[] { 0 }, true);
+                    var b = engine.ReduceSum(v, new[] { 0 }, true);
+                    var c = engine.ReduceSum(engine.TensorSubtract(engine.TensorSquare(u), engine.TensorSquare(v)), new[] { 0 }, true);
+                    var d = engine.ReduceSum(engine.TensorMultiplyScalar(engine.TensorMultiply(u, v), two), new[] { 0 }, true);
 
-                    double num = d - 2 * gamma * a * b / p;
-                    double den = c - gamma * (a * a - b * b) / p;
-                    double angle = 0.25 * Math.Atan2(num, den);
+                    var num = engine.TensorSubtract(d, engine.TensorMultiplyScalar(engine.TensorMultiply(a, b), twoGammaOverP));
+                    var den = engine.TensorSubtract(c, engine.TensorMultiplyScalar(
+                        engine.TensorSubtract(engine.TensorSquare(a), engine.TensorSquare(b)), gammaOverP));
+                    var angle = engine.TensorMultiplyScalar(engine.TensorAtan2(num, den), quarter);
+                    var cos = engine.TensorCos(angle);
+                    var sin = engine.TensorSin(angle);
 
                     // Rotate columns i and j
-                    double cos = Math.Cos(angle);
-                    double sin = Math.Sin(angle);
-
-                    for (int l = 0; l < p; l++)
-                    {
-                        double temp = rotated[l, i] * cos + rotated[l, j] * sin;
-                        rotated[l, j] = -rotated[l, i] * sin + rotated[l, j] * cos;
-                        rotated[l, i] = temp;
-                    }
+                    var newI = engine.TensorAdd(engine.TensorMultiply(li, cos), engine.TensorMultiply(lj, sin));
+                    var newJ = engine.TensorSubtract(engine.TensorMultiply(lj, cos), engine.TensorMultiply(li, sin));
+                    rotated = DimensionalityReductionOps.WithColumn(DimensionalityReductionOps.WithColumn(rotated, i, newI), j, newJ);
                 }
             }
         }
 
         return rotated;
-    }
-
-    private double[,] ApplyQuartimax(double[,] loadings, int p, int k)
-    {
-        // Quartimax is like varimax but with gamma = 0
-        var rotated = (double[,])loadings.Clone();
-
-        for (int iter = 0; iter < 100; iter++)
-        {
-            for (int i = 0; i < k - 1; i++)
-            {
-                for (int j = i + 1; j < k; j++)
-                {
-                    double c = 0, d = 0;
-
-                    for (int l = 0; l < p; l++)
-                    {
-                        double u = rotated[l, i] * rotated[l, i] - rotated[l, j] * rotated[l, j];
-                        double v = 2 * rotated[l, i] * rotated[l, j];
-                        c += u * u - v * v;
-                        d += 2 * u * v;
-                    }
-
-                    double angle = 0.25 * Math.Atan2(d, c);
-
-                    double cos = Math.Cos(angle);
-                    double sin = Math.Sin(angle);
-
-                    for (int l = 0; l < p; l++)
-                    {
-                        double temp = rotated[l, i] * cos + rotated[l, j] * sin;
-                        rotated[l, j] = -rotated[l, i] * sin + rotated[l, j] * cos;
-                        rotated[l, i] = temp;
-                    }
-                }
-            }
-        }
-
-        return rotated;
-    }
-
-    private (double[] Eigenvalues, double[,] Eigenvectors) ComputeEigen(double[,] matrix, int n)
-    {
-        var eigenvalues = new double[n];
-        var eigenvectors = new double[n, n];
-        var A = (double[,])matrix.Clone();
-
-        for (int k = 0; k < n; k++)
-        {
-            var v = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                v[i] = 1.0 / Math.Sqrt(n);
-            }
-
-            for (int iter = 0; iter < 100; iter++)
-            {
-                var Av = new double[n];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        Av[i] += A[i, j] * v[j];
-                    }
-                }
-
-                double norm = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    norm += Av[i] * Av[i];
-                }
-                norm = Math.Sqrt(norm);
-
-                if (norm < 1e-10) break;
-
-                for (int i = 0; i < n; i++)
-                {
-                    v[i] = Av[i] / norm;
-                }
-            }
-
-            var Av2 = new double[n];
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    Av2[i] += A[i, j] * v[j];
-                }
-            }
-
-            double eigenvalue = 0;
-            for (int i = 0; i < n; i++)
-            {
-                eigenvalue += v[i] * Av2[i];
-            }
-
-            eigenvalues[k] = Math.Max(0, eigenvalue);
-            for (int i = 0; i < n; i++)
-            {
-                eigenvectors[k, i] = v[i];
-            }
-
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = 0; j < n; j++)
-                {
-                    A[i, j] -= eigenvalue * v[i] * v[j];
-                }
-            }
-        }
-
-        return (eigenvalues, eigenvectors);
-    }
-
-    private static double[,] InvertMatrix(double[,] matrix, int n)
-    {
-        var result = new double[n, n];
-        var temp = new double[n, 2 * n];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                temp[i, j] = matrix[i, j];
-                temp[i, j + n] = (i == j) ? 1.0 : 0.0;
-            }
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            double maxVal = Math.Abs(temp[i, i]);
-            int maxRow = i;
-            for (int k = i + 1; k < n; k++)
-            {
-                if (Math.Abs(temp[k, i]) > maxVal)
-                {
-                    maxVal = Math.Abs(temp[k, i]);
-                    maxRow = k;
-                }
-            }
-
-            if (maxRow != i)
-            {
-                for (int j = 0; j < 2 * n; j++)
-                {
-                    (temp[i, j], temp[maxRow, j]) = (temp[maxRow, j], temp[i, j]);
-                }
-            }
-
-            double pivot = temp[i, i];
-            if (Math.Abs(pivot) < 1e-10)
-            {
-                throw new InvalidOperationException(
-                    $"Matrix is singular or near-singular at row {i}. Factor Analysis may not be applicable to this data.");
-            }
-
-            for (int j = 0; j < 2 * n; j++)
-            {
-                temp[i, j] /= pivot;
-            }
-
-            for (int k = 0; k < n; k++)
-            {
-                if (k != i)
-                {
-                    double factor = temp[k, i];
-                    for (int j = 0; j < 2 * n; j++)
-                    {
-                        temp[k, j] -= factor * temp[i, j];
-                    }
-                }
-            }
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                result[i, j] = temp[i, j + n];
-            }
-        }
-
-        return result;
     }
 
     /// <summary>
@@ -615,73 +267,19 @@ public class FactorAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("FactorAnalysis has not been fitted.");
         }
 
-        int n = data.Rows;
-        int p = data.Columns;
-        int k = _components.GetLength(1);
+        var engine = Engine;
+        var loadingsMatrix = (_rotation == FactorRotation.None ? _components : _rotatedComponents)
+            ?? throw new InvalidOperationException("loadings is null where it is required.");
+        var loadings = Tensor<T>.FromMatrix(loadingsMatrix);
 
-        var loadings = _rotation == FactorRotation.None ? _components : _rotatedComponents;
+        // Bartlett scores: (W^T Psi^-1 W)^-1 W^T Psi^-1 (x - mu)
+        var wtPsiInv = engine.TensorTranspose(engine.TensorDivide(
+            loadings, DimensionalityReductionOps.AsColumn(Tensor<T>.FromVector(_noiseVariance))));
+        var wtPsiInvW = engine.TensorMatMul(wtPsiInv, loadings);
+        var projection = DimensionalityReductionOps.Solve(wtPsiInvW, wtPsiInv);                     // [k, p]
 
-        // Compute factor scores using Bartlett method: F = (W^T Ψ^-1 W)^-1 W^T Ψ^-1 X
-        var WtPsiInv = new double[k, p];
-        for (int j = 0; j < k; j++)
-        {
-            for (int i = 0; i < p; i++)
-            {
-                WtPsiInv[j, i] = (loadings ?? throw new InvalidOperationException("loadings is null where it is required."))[i, j] / _noiseVariance[i];
-            }
-        }
-
-        var WtPsiInvW = new double[k, k];
-        for (int i = 0; i < k; i++)
-        {
-            for (int j = 0; j < k; j++)
-            {
-                double sum = 0;
-                for (int l = 0; l < p; l++)
-                {
-                    sum += WtPsiInv[i, l] * (loadings ?? throw new InvalidOperationException("loadings is null where it is required."))[l, j];
-                }
-                WtPsiInvW[i, j] = sum;
-            }
-        }
-
-        var WtPsiInvWInv = InvertMatrix(WtPsiInvW, k);
-
-        var result = new T[n, k];
-        for (int s = 0; s < n; s++)
-        {
-            // Center the sample
-            var centered = new double[p];
-            for (int j = 0; j < p; j++)
-            {
-                centered[j] = NumOps.ToDouble(data[s, j]) - _mean[j];
-            }
-
-            // WtPsiInv * centered
-            var temp = new double[k];
-            for (int j = 0; j < k; j++)
-            {
-                double sum = 0;
-                for (int i = 0; i < p; i++)
-                {
-                    sum += WtPsiInv[j, i] * centered[i];
-                }
-                temp[j] = sum;
-            }
-
-            // WtPsiInvWInv * temp
-            for (int j = 0; j < k; j++)
-            {
-                double sum = 0;
-                for (int l = 0; l < k; l++)
-                {
-                    sum += WtPsiInvWInv[j, l] * temp[l];
-                }
-                result[s, j] = NumOps.FromDouble(sum);
-            }
-        }
-
-        return new Matrix<T>(result);
+        var centered = DimensionalityReductionOps.SubtractRow(Tensor<T>.FromMatrix(data), Tensor<T>.FromVector(_mean));
+        return DimensionalityReductionOps.MatMulTranspose(centered, projection).ToMatrix();
     }
 
     /// <summary>
@@ -697,7 +295,7 @@ public class FactorAnalysis<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// </summary>
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
-        int k = _components?.GetLength(1) ?? _nComponents;
+        int k = _components?.Columns ?? _nComponents;
         var names = new string[k];
         for (int i = 0; i < k; i++)
         {
