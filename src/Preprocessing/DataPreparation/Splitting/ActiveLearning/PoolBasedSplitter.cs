@@ -181,7 +181,7 @@ public class PoolBasedSplitter<T> : DataSplitterBase<T>
         {
             var labeledMask = new Tensor<int>(isLabeled, new[] { nSamples }).Cast<T>();
             var candidates = engine.TensorWhere(labeledMask, minusOne, minDistance);
-            int bestCandidate = engine.TensorArgMax(engine.Reshape(candidates, new[] { 1, nSamples }), 1).AsSpan()[0];
+            int bestCandidate = PreprocessingTensorOps.FirstArgMax(candidates);
 
             labeled.Add(bestCandidate);
             unlabeled.Remove(bestCandidate);

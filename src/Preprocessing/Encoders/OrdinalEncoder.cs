@@ -125,8 +125,11 @@ public class OrdinalEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             }
             else
             {
-                var (sorted, order) = Engine.TensorSort(categoryOrder, 0, false);
-                _sortedCategories.Add(sorted);
+                // A repeated category keeps its last ordinal (later entries overwrite earlier ones): ties are
+                // ordered last index first, so the lookup finds the last occurrence
+                var orderIndex = PreprocessingTensorOps.StableOrder(categoryOrder, descending: false, lastAmongTies: true);
+                var order = new Tensor<int>(orderIndex, new[] { orderIndex.Length });
+                _sortedCategories.Add(Engine.TensorIndexSelect(categoryOrder, order, 0));
                 _sortedOrdinals.Add(order.Cast<T>());
             }
         }

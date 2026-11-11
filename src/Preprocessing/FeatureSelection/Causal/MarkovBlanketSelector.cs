@@ -83,7 +83,7 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Grow-Shrink algorithm for Markov blanket
         var blanket = new HashSet<int>();
-        var candidates = engine.TensorArgsort(relevance, 0, true).AsSpan().ToArray();
+        var candidates = PreprocessingTensorOps.StableOrder(relevance, descending: true);
         T threshold = NumOps.FromDouble(_threshold);
 
         // Growing phase: add features that increase conditional MI

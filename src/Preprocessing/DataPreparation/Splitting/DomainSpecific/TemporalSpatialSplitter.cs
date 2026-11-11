@@ -111,7 +111,7 @@ public class TemporalSpatialSplitter<T> : DataSplitterBase<T>
             engine.TensorMultiplyScalar(spatialDist, NumOps.FromDouble(_spatialWeight)));
 
         // Sort by combined score
-        var sortedIndices = engine.TensorArgsort(scores, 0, false).AsSpan().ToArray();
+        var sortedIndices = PreprocessingTensorOps.StableOrder(scores, descending: false);
 
         // Split: earlier/closer samples for training, later/farther for testing
         var trainIndices = sortedIndices.Take(nSamples - targetTestSize).ToArray();
