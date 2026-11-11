@@ -174,18 +174,25 @@ internal sealed class MoshiLanguageModel<T>
     {
         var c = Configuration;
         int l = context.Shape[0], dd = c.Depth.Dim, k = c.DepthStreams;
-        var outputs = new Tensor<T>[l];
-        for (int t = 0; t < l; t++)
+        // Every frame's Depth Transformer runs at once, the frames as its batch (the release's depformer folds time into
+        // the batch the same way): one op per stream instead of one per stream and frame, so the tape stays the size of a
+        // frame's pass rather than growing with the sequence.
+        var inputs = new Tensor<T>[k];
+        for (int s = 0; s < k; s++)
         {
-            var z = _engine.TensorSlice(context, new[] { t, 0 }, new[] { 1, c.Temporal.Dim });
-            var inputs = new Tensor<T>[k];
-            for (int s = 0; s < k; s++) inputs[s] = DepthInput(s, stepTokens[s, t], z);
-            var h = Depth.Forward(_engine.TensorConcatenate(inputs, 0));                                        // [K, dd]
-            var logits = new Tensor<T>[k];
-            for (int s = 0; s < k; s++) logits[s] = Heads[s].Forward(_engine.TensorSlice(h, new[] { s, 0 }, new[] { 1, dd }));
-            outputs[t] = _engine.Reshape(_engine.TensorConcatenate(logits, 0), new[] { k, 1, c.AudioCardinality });
+            var previous = new int[l];
+            for (int t = 0; t < l; t++) previous[t] = stepTokens[s, t];
+            var token = s == 0
+                ? Embed(DepthTextEmbedding, previous, c.TextCardinality + 1, dd)
+                : Embed(DepthEmbeddings[s - 1], previous, c.AudioCardinality + 1, dd);
+            inputs[s] = _engine.Reshape(_engine.TensorAdd(DepthIn[DepthIn.Length == 1 ? 0 : s].Forward(context), token), new[] { 1, l, dd });
         }
-        return l == 1 ? outputs[0] : _engine.TensorConcatenate(outputs, 1);
+        var h = Depth.ForwardSequences(k == 1 ? inputs[0] : _engine.TensorConcatenate(inputs, 0));            // [K, L, dd]
+        var logits = new Tensor<T>[k];
+        for (int s = 0; s < k; s++)
+            logits[s] = _engine.Reshape(Heads[s].Forward(_engine.Reshape(_engine.TensorSlice(h, new[] { s, 0, 0 }, new[] { 1, l, dd }), new[] { l, dd })),
+                new[] { 1, l, c.AudioCardinality });
+        return k == 1 ? logits[0] : _engine.TensorConcatenate(logits, 0);
     }
 
     /// <summary>The Depth Transformer's input <c>[1, depth dim]</c> for predicted stream <paramref name="s"/>: the context

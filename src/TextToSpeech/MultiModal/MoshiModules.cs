@@ -97,11 +97,73 @@ internal sealed class MoshiTransformer<T>
     /// <summary>RMSNorm (<c>x · α / √(mean(x²) + ε)</c>) of rows <c>[L, D]</c>.</summary>
     internal Tensor<T> RmsNorm(BiasFreeLinearLayer<T> alpha, Tensor<T> x)
     {
-        var meanSquare = _engine.ReduceMean(_engine.TensorMultiply(x, x), new[] { 1 }, true);
+        int last = x.Rank - 1;
+        var meanSquare = _engine.ReduceMean(_engine.TensorMultiply(x, x), new[] { last }, true);
         var inverse = _engine.TensorPower(_engine.TensorAddScalar(meanSquare, NumOps.FromDouble(Configuration.NormEpsilon)), NumOps.FromDouble(-0.5));
         var shape = x.Shape.ToArray();
+        var alphaShape = Enumerable.Repeat(1, x.Rank).ToArray();
+        alphaShape[last] = shape[last];
         return _engine.TensorMultiply(_engine.TensorMultiply(x, _engine.TensorBroadcastTo(inverse, shape)),
-            _engine.TensorBroadcastTo(_engine.Reshape(Value(alpha), new[] { 1, shape[1] }), shape));
+            _engine.TensorBroadcastTo(_engine.Reshape(Value(alpha), alphaShape), shape));
+    }
+
+    // Positions through per-step linears for a batch of sequences, x [S, L, width] position-major: position s of every
+    // sequence uses linears[s] (one linear when shared), one op per position rather than per row.
+    private Tensor<T> PerStepSequences(BiasFreeLinearLayer<T>[] linears, Tensor<T> x)
+    {
+        int steps = x.Shape[0], l = x.Shape[1], width = x.Shape[2];
+        if (linears.Length == 1)
+        {
+            var all = linears[0].Forward(_engine.Reshape(x, new[] { steps * l, width }));
+            return _engine.Reshape(all, new[] { steps, l, all.Shape[1] });
+        }
+        if (steps > linears.Length) throw new InvalidOperationException($"Position {linears.Length} has no weights (the transformer holds {linears.Length} steps).");
+        var parts = new Tensor<T>[steps];
+        for (int s = 0; s < steps; s++)
+        {
+            var row = linears[s].Forward(_engine.Reshape(_engine.TensorSlice(x, new[] { s, 0, 0 }, new[] { 1, l, width }), new[] { l, width }));
+            parts[s] = _engine.Reshape(row, new[] { 1, l, row.Shape[1] });
+        }
+        return steps == 1 ? parts[0] : _engine.TensorConcatenate(parts, 0);
+    }
+
+    /// <summary>
+    /// The transformer on <c>L</c> independent sequences at once, <c>x [S, L, D]</c> position-major from position 0: each
+    /// sequence attends causally within itself, exactly as <see cref="Forward"/> on each <c>[S, D]</c> sequence. Training
+    /// runs the Depth Transformer of every frame this way, the frames as its batch.
+    /// </summary>
+    public Tensor<T> ForwardSequences(Tensor<T> x)
+    {
+        var c = Configuration;
+        if (c.Rotary) throw new NotSupportedException("Batched sequences are the Depth Transformer's, which has no rotary embedding.");
+        int steps = x.Shape[0], l = x.Shape[1], heads = c.Heads, hd = c.Dim / heads, batch = l * heads;
+        var bias = new Tensor<T>(new[] { 1, steps, steps });
+        var blocked = NumOps.FromDouble(double.NegativeInfinity);
+        for (int qi = 0; qi < steps; qi++)
+            for (int ki = 0; ki < steps; ki++)
+                if (ki > qi || (c.Context > 0 && qi - ki >= c.Context)) bias[0, qi, ki] = blocked;
+        var mask = _engine.TensorBroadcastTo(bias, new[] { batch, steps, steps });
+        var scale = NumOps.FromDouble(1.0 / Math.Sqrt(hd));
+        foreach (var layer in Layers)
+        {
+            var projected = PerStepSequences(layer.InProj, RmsNorm(layer.Norm1, x));                          // [S, L, 3D]
+            // [S, L, D] -> [S, L·H, hd] -> [L·H, S, hd]: each frame's heads become the batch.
+            Tensor<T> Part(int p) => _engine.TensorPermute(_engine.Reshape(
+                _engine.TensorSlice(projected, new[] { 0, 0, p * c.Dim }, new[] { steps, l, c.Dim }), new[] { steps, batch, hd }), new[] { 1, 0, 2 });
+            var q = Part(0);
+            var k = Part(1);
+            var v = Part(2);
+            var scores = _engine.TensorAdd(_engine.TensorMultiplyScalar(_engine.BatchMatMul(q, _engine.TensorPermute(k, new[] { 0, 2, 1 })), scale), mask);
+            var context = _engine.Reshape(_engine.TensorPermute(_engine.BatchMatMul(_engine.Softmax(scores, axis: 2), v), new[] { 1, 0, 2 }),
+                new[] { steps, l, c.Dim });
+            x = _engine.TensorAdd(x, PerStepSequences(layer.OutProj, context));
+            var g = PerStepSequences(layer.GateIn, RmsNorm(layer.Norm2, x));                                   // [S, L, 2H]
+            int hidden = c.GateHidden;
+            var gated = _engine.TensorMultiply(_engine.Swish(_engine.TensorSlice(g, new[] { 0, 0, 0 }, new[] { steps, l, hidden })),
+                _engine.TensorSlice(g, new[] { 0, 0, hidden }, new[] { steps, l, hidden }));
+            x = _engine.TensorAdd(x, PerStepSequences(layer.GateOut, gated));
+        }
+        return x;
     }
 
     // Rows through per-step linears: row t uses linears[min(offset + t, steps − 1)] (one linear when shared).
