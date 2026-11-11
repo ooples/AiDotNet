@@ -112,73 +112,37 @@ public partial class GaussianNaiveBayes<T> : NaiveBayesBase<T>
     /// <param name="y">The target class labels vector.</param>
     protected override void ComputeClassParameters(Matrix<T> x, Vector<T> y)
     {
-        _means = new Matrix<T>(NumClasses, NumFeatures);
-        _variances = new Matrix<T>(NumClasses, NumFeatures);
-
-        // For each class, compute the mean and variance of each feature
-        for (int c = 0; c < NumClasses; c++)
+        var engine = Engine;
+        T minVar = NumOps.FromDouble(Options.MinVariance);
+        if (NumClasses == 0 || NumFeatures == 0 || y.Length == 0)
         {
-            // Collect all samples belonging to this class
-            var classIndices = new List<int>();
-            for (int i = 0; i < y.Length; i++)
-            {
-                if (GetClassIndex(y[i]) == c)
-                {
-                    classIndices.Add(i);
-                }
-            }
-
-            int classCount = classIndices.Count;
-
-            // Check for empty class to prevent division by zero
-            if (classCount == 0)
-            {
-                // Use zero mean and minimum variance for classes with no samples
-                T minVar = NumOps.FromDouble(Options.MinVariance);
-                for (int f = 0; f < NumFeatures; f++)
-                {
-                    _means[c, f] = NumOps.Zero;
-                    _variances[c, f] = minVar;
-                }
-                continue;
-            }
-
-            // Compute mean for each feature
-            for (int f = 0; f < NumFeatures; f++)
-            {
-                T sum = NumOps.Zero;
-                foreach (int idx in classIndices)
-                {
-                    sum = NumOps.Add(sum, x[idx, f]);
-                }
-                _means[c, f] = NumOps.Divide(sum, NumOps.FromDouble(classCount));
-            }
-
-            // Compute variance for each feature (using n, not n-1, for sklearn compatibility)
-            for (int f = 0; f < NumFeatures; f++)
-            {
-                T sumSquaredDiff = NumOps.Zero;
-                T mean = _means[c, f];
-
-                foreach (int idx in classIndices)
-                {
-                    T diff = NumOps.Subtract(x[idx, f], mean);
-                    sumSquaredDiff = NumOps.Add(sumSquaredDiff, NumOps.Multiply(diff, diff));
-                }
-
-                // Use n instead of n-1 for consistency with sklearn
-                T variance = NumOps.Divide(sumSquaredDiff, NumOps.FromDouble(classCount));
-
-                // Apply minimum variance to prevent division by zero
-                T minVar = NumOps.FromDouble(Options.MinVariance);
-                if (NumOps.Compare(variance, minVar) < 0)
-                {
-                    variance = minVar;
-                }
-
-                _variances[c, f] = variance;
-            }
+            // Zero mean and minimum variance for classes with no samples
+            _means = new Matrix<T>(NumClasses, NumFeatures);
+            var empty = new Tensor<T>(new[] { NumClasses, NumFeatures });
+            engine.TensorFill(empty, minVar);
+            _variances = empty.ToMatrix();
+            return;
         }
+
+        // Per-class sample counts and feature sums via the one-hot membership matrix
+        var membership = ClassMembership(y);
+        var membershipT = engine.TensorTranspose(membership);
+        var features = Tensor<T>.FromMatrix(x);
+        var counts = engine.TensorClampMin(engine.ReduceSum(membership, new[] { 0 }, false), NumOps.One)
+            .Reshape(NumClasses, 1);
+
+        // Mean of each feature (zero for classes with no samples)
+        var means = engine.TensorDivide(engine.TensorMatMul(membershipT, features), counts);
+
+        // Variance of each feature around its class mean (using n, not n-1, for sklearn compatibility)
+        var sampleMeans = engine.TensorGather(means, GetClassIndexTensor(y), 0);
+        var centered = engine.TensorSubtract(features, sampleMeans);
+        var variances = engine.TensorDivide(
+            engine.TensorMatMul(membershipT, engine.TensorMultiply(centered, centered)), counts);
+
+        // Apply minimum variance to prevent division by zero (classes with no samples get exactly the minimum)
+        _means = means.ToMatrix();
+        _variances = engine.TensorClampMin(variances, minVar).ToMatrix();
     }
 
     /// <summary>
@@ -198,37 +162,47 @@ public partial class GaussianNaiveBayes<T> : NaiveBayesBase<T>
     /// </remarks>
     protected override T ComputeLogLikelihood(Vector<T> sample, int classIndex)
     {
+        return SingleSampleLogLikelihood(sample, classIndex);
+    }
+
+    /// <inheritdoc/>
+    protected override Tensor<T> ComputeLogLikelihoods(Matrix<T> input)
+    {
         if (_means == null || _variances == null)
         {
             throw new InvalidOperationException("Model must be trained before computing log-likelihood.");
         }
 
-        T logLikelihood = NumOps.Zero;
-        T half = NumOps.FromDouble(0.5);
-
-        for (int f = 0; f < NumFeatures; f++)
+        var engine = Engine;
+        int n = input.Rows;
+        if (n == 0 || NumClasses == 0)
         {
-            T mean = _means[classIndex, f];
-            T variance = _variances[classIndex, f];
-
-            // Compute (x - mean)^2 / variance
-            T diff = NumOps.Subtract(sample[f], mean);
-            T squaredDiff = NumOps.Multiply(diff, diff);
-            T normalizedSquaredDiff = NumOps.Divide(squaredDiff, variance);
-
-            // Compute log(variance)
-            T logVariance = NumOps.Log(variance);
-
-            // log P(x|c) for this feature: -0.5 * (log(2*pi) + log(variance) + (x-mean)^2/variance)
-            T featureLogLikelihood = NumOps.Multiply(
-                NumOps.Negate(half),
-                NumOps.Add(NumOps.Add(_log2Pi, logVariance), normalizedSquaredDiff)
-            );
-
-            logLikelihood = NumOps.Add(logLikelihood, featureLogLikelihood);
+            return new Tensor<T>(new[] { n, NumClasses });
         }
 
-        return logLikelihood;
+        // log P(x|c) per feature: -0.5 * (log(2*pi) + log(variance) + (x-mean)^2/variance), summed over features
+        var means = Tensor<T>.FromMatrix(_means).Reshape(1, NumClasses, NumFeatures);
+        var variances = Tensor<T>.FromMatrix(_variances).Reshape(1, NumClasses, NumFeatures);
+        var logNormalizer = engine.TensorAddScalar(engine.TensorLog(variances), _log2Pi);
+        var features = Tensor<T>.FromMatrix(input);
+        if (input.Columns != NumFeatures)
+        {
+            features = features.Slice(1, 0, NumFeatures);
+        }
+
+        T negHalf = NumOps.Negate(NumOps.FromDouble(0.5));
+        int batch = Math.Max(1, (1 << 22) / Math.Max(1, NumClasses * NumFeatures));
+        var blocks = new List<Tensor<T>>();
+        for (int start = 0; start < n; start += batch)
+        {
+            int rows = Math.Min(batch, n - start);
+            var block = features.Slice(0, start, start + rows).Reshape(rows, 1, NumFeatures);
+            var diff = engine.TensorSubtract(block, means);
+            var terms = engine.TensorAdd(engine.TensorDivide(engine.TensorMultiply(diff, diff), variances), logNormalizer);
+            blocks.Add(engine.TensorMultiplyScalar(engine.ReduceSum(terms, new[] { 2 }, false), negHalf));
+        }
+
+        return blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
     }
 
     /// <inheritdoc/>

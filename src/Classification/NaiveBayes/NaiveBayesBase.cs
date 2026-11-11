@@ -202,6 +202,26 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     /// </remarks>
     protected virtual Tensor<T> ComputeLogLikelihoods(Matrix<T> input)
     {
+        return PerSampleLogLikelihoods(input);
+    }
+
+    /// <summary>
+    /// log P(sample | class) through the batched <see cref="ComputeLogLikelihoods"/> on a single row.
+    /// </summary>
+    /// <param name="sample">The sample's features.</param>
+    /// <param name="classIndex">The class index.</param>
+    /// <returns>The log-likelihood.</returns>
+    protected T SingleSampleLogLikelihood(Vector<T> sample, int classIndex)
+    {
+        var row = sample.AsTensor().Reshape(1, sample.Length).ToMatrix();
+        return ComputeLogLikelihoods(row)[0, classIndex];
+    }
+
+    /// <summary>
+    /// Evaluates <see cref="ComputeLogLikelihood"/> sample by sample (for derived classes without a batch form).
+    /// </summary>
+    private Tensor<T> PerSampleLogLikelihoods(Matrix<T> input)
+    {
         var values = new T[input.Rows * NumClasses];
         for (int i = 0; i < input.Rows; i++)
         {
