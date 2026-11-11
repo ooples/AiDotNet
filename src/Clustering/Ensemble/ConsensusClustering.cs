@@ -126,11 +126,7 @@ public partial class ConsensusClustering<T> : ClusteringBase<T>
 
         // Set results
         NumClusters = finalLabels.Distinct().Where(l => l >= 0).Count();
-        Labels = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            Labels[i] = _numOps.FromDouble(finalLabels[i]);
-        }
+        Labels = ClusteringTensorOps.FromIntArray<T>(finalLabels);
 
         // Compute cluster centers
         ComputeClusterCenters(x, finalLabels, n, d);
@@ -153,61 +149,32 @@ public partial class ConsensusClustering<T> : ClusteringBase<T>
         });
 
         kmeans.Train(x);
-        var labels = kmeans.Labels ?? new Vector<T>(n);
-
-        var result = new int[n];
-        for (int i = 0; i < n; i++)
-        {
-            result[i] = (int)_numOps.ToDouble(labels[i]);
-        }
-
-        return result;
+        return ClusteringTensorOps.ToIntArray(kmeans.Labels ?? new Vector<T>(n));
     }
 
     private Matrix<T> BuildCoAssociationMatrix(List<int[]> clusterings, int n)
     {
-        var matrix = new Matrix<T>(n, n);
-
+        // Fraction of clusterings that put each pair together: sum_b M_b M_b^T / B (M_b one-hot memberships)
+        var together = Tensor<T>.CreateZeros(new[] { n, n });
         foreach (var clustering in clusterings)
         {
-            for (int i = 0; i < n; i++)
-            {
-                for (int j = i; j < n; j++)
-                {
-                    if (clustering[i] == clustering[j])
-                    {
-                        matrix[i, j] = _numOps.Add(matrix[i, j], _numOps.One);
-                        if (i != j)
-                        {
-                            matrix[j, i] = _numOps.Add(matrix[j, i], _numOps.One);
-                        }
-                    }
-                }
-            }
+            if (n == 0) break;
+
+            var members = ClusteringTensorOps.OneHotMask(ClusteringTensorOps.FromIntArray<T>(clustering), clustering.Max() + 1);
+            together = Engine.TensorAdd(together, Engine.TensorMatMul(members, Engine.TensorTranspose(members)));
         }
 
-        // Normalize by number of clusterings
-        T numClusterings = _numOps.FromDouble(clusterings.Count);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                matrix[i, j] = _numOps.Divide(matrix[i, j], numClusterings);
-            }
-        }
-
-        return matrix;
+        return Engine.TensorDivideScalar(together, _numOps.FromDouble(clusterings.Count)).ToMatrix();
     }
 
     private int EstimateNumClusters(Matrix<T> coAssoc, int n)
     {
-        // Use eigenvalue analysis or simple heuristic
-        // Here we use a simple heuristic based on the matrix structure
-
-        // Count distinct "strong" groups (high co-association)
+        // Simple heuristic based on the matrix structure:
+        // count distinct "strong" groups (high co-association)
         var visited = new bool[n];
         int numClusters = 0;
-        T threshold = _numOps.FromDouble(0.5);
+        var strong = ClusteringTensorOps.ToBoolArray(
+            Engine.TensorGreaterThan(Tensor<T>.FromMatrix(coAssoc), _numOps.FromDouble(0.5)).ToVector());
 
         for (int i = 0; i < n; i++)
         {
@@ -219,7 +186,7 @@ public partial class ConsensusClustering<T> : ClusteringBase<T>
             // Mark all strongly connected points
             for (int j = i + 1; j < n; j++)
             {
-                if (!visited[j] && _numOps.GreaterThan(coAssoc[i, j], threshold))
+                if (!visited[j] && strong[i * n + j])
                 {
                     visited[j] = true;
                 }
@@ -232,20 +199,13 @@ public partial class ConsensusClustering<T> : ClusteringBase<T>
     private int[] ApplyFinalClustering(Matrix<T> coAssoc, int n, int numClusters)
     {
         // Convert co-association to distance (1 - similarity)
-        var distMatrix = new double[n, n];
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                distMatrix[i, j] = 1 - _numOps.ToDouble(coAssoc[i, j]);
-            }
-        }
+        var distMatrix = Engine.ScalarMinusTensor(_numOps.One, Tensor<T>.FromMatrix(coAssoc));
 
         // Use hierarchical clustering (average linkage)
         return AgglomerativeCluster(distMatrix, n, numClusters);
     }
 
-    private int[] AgglomerativeCluster(double[,] distMatrix, int n, int numClusters)
+    private int[] AgglomerativeCluster(Tensor<T> distMatrix, int n, int numClusters)
     {
         // Initialize: each point is its own cluster
         var clusterAssignments = new int[n];
@@ -255,8 +215,8 @@ public partial class ConsensusClustering<T> : ClusteringBase<T>
         }
 
         var activeClusters = new HashSet<int>(Enumerable.Range(0, n));
-        var clusterDist = new double[n, n];
-        Array.Copy(distMatrix, clusterDist, n * n);
+        var clusterDist = distMatrix;
+        var active = n == 0 ? new Vector<T>(0) : Engine.Fill(n, _numOps.One);
 
         // Track merge history: when cluster B merges into A, record mergedInto[B] = A
         var mergedInto = new Dictionary<int, int>();
@@ -265,27 +225,7 @@ public partial class ConsensusClustering<T> : ClusteringBase<T>
         while (activeClusters.Count > numClusters)
         {
             // Find closest pair
-            double minDist = double.MaxValue;
-            int merge1 = -1, merge2 = -1;
-
-            var activeList = activeClusters.ToList();
-            for (int i = 0; i < activeList.Count; i++)
-            {
-                for (int j = i + 1; j < activeList.Count; j++)
-                {
-                    int c1 = activeList[i];
-                    int c2 = activeList[j];
-
-                    if (clusterDist[c1, c2] < minDist)
-                    {
-                        minDist = clusterDist[c1, c2];
-                        merge1 = c1;
-                        merge2 = c2;
-                    }
-                }
-            }
-
-            if (merge1 < 0) break;
+            if (!TryFindClosestPair(clusterDist, active, out int merge1, out int merge2)) break;
 
             // Track the merge before updating assignments
             mergedInto[merge2] = merge1;
@@ -300,14 +240,8 @@ public partial class ConsensusClustering<T> : ClusteringBase<T>
             }
 
             // Update distances (average linkage)
-            foreach (int c in activeClusters)
-            {
-                if (c != merge1 && c != merge2)
-                {
-                    clusterDist[merge1, c] = (clusterDist[merge1, c] + clusterDist[merge2, c]) / 2;
-                    clusterDist[c, merge1] = clusterDist[merge1, c];
-                }
-            }
+            clusterDist = AverageLinkageMerge(clusterDist, merge1, merge2);
+            active = Deactivate(active, merge2);
 
             activeClusters.Remove(merge2);
         }
@@ -343,40 +277,73 @@ public partial class ConsensusClustering<T> : ClusteringBase<T>
         return result;
     }
 
+    /// <summary>
+    /// The closest pair of distinct active clusters (first in row-major order on ties, so merge1 &lt; merge2);
+    /// false when no pair has a distance below MaxValue.
+    /// </summary>
+    private bool TryFindClosestPair(Tensor<T> clusterDist, Vector<T> active, out int merge1, out int merge2)
+    {
+        int n = active.Length;
+        merge1 = -1;
+        merge2 = -1;
+        if (n < 2)
+        {
+            return false;
+        }
+
+        var shape = new[] { n, n };
+        var activeRows = Engine.TensorBroadcastTo(Tensor<T>.FromVector(active, new[] { n, 1 }), shape);
+        var activeColumns = Engine.TensorBroadcastTo(Tensor<T>.FromVector(active, new[] { 1, n }), shape);
+        var offDiagonal = Engine.ScalarMinusTensor(_numOps.One, Engine.TensorEye<T>(n));
+        var valid = Engine.TensorMultiply(Engine.TensorMultiply(activeRows, activeColumns), offDiagonal);
+        var candidates = Engine.TensorWhere(valid, clusterDist, Engine.TensorFullLike(clusterDist, _numOps.MaxValue));
+
+        var flat = Engine.Reshape(candidates, new[] { n * n }).ToVector();
+        int best = ClusteringTensorOps.ArgMin(flat);
+        if (!_numOps.LessThan(flat[best], _numOps.MaxValue))
+        {
+            return false;
+        }
+
+        merge1 = best / n;
+        merge2 = best % n;
+        return true;
+    }
+
+    /// <summary>Marks a cluster as merged away.</summary>
+    private Vector<T> Deactivate(Vector<T> active, int index)
+        => Engine.Scatter(active.AsTensor(), Vector<int>.Wrap(new[] { index }).AsTensor(), Tensor<T>.CreateZeros(new[] { 1 }), 0).ToVector();
+
+    /// <summary>Average linkage: d(merge1, c) = (d(merge1, c) + d(merge2, c)) / 2 for every other cluster c.</summary>
+    private Tensor<T> AverageLinkageMerge(Tensor<T> clusterDist, int merge1, int merge2)
+    {
+        int n = clusterDist.Shape[0];
+        var shape = new[] { n, n };
+        var distances = clusterDist.ToMatrix();
+        var merged = Engine.TensorMultiplyScalar(
+            Engine.TensorAdd(distances.GetRow(merge1).AsTensor(), distances.GetRow(merge2).AsTensor()), _numOps.FromDouble(0.5));
+
+        // Keep the merged clusters' own entries (the diagonal and the merge1/merge2 pair) unchanged
+        var ids = Engine.TensorArange<T>(0, n, 1);
+        var keep = Engine.TensorAdd(
+            Engine.TensorEquals(ids, _numOps.FromDouble(merge1)),
+            Engine.TensorEquals(ids, _numOps.FromDouble(merge2)));
+        var update = Engine.TensorWhere(keep, distances.GetRow(merge1).AsTensor(), merged);
+
+        var rowMask = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorEquals(ids, _numOps.FromDouble(merge1)), new[] { n, 1 }), shape);
+        var columnMask = Engine.TensorBroadcastTo(
+            Engine.Reshape(Engine.TensorEquals(ids, _numOps.FromDouble(merge1)), new[] { 1, n }), shape);
+        var withRow = Engine.TensorWhere(rowMask, Engine.TensorBroadcastTo(Engine.Reshape(update, new[] { 1, n }), shape), clusterDist);
+        return Engine.TensorWhere(columnMask, Engine.TensorBroadcastTo(Engine.Reshape(update, new[] { n, 1 }), shape), withRow);
+    }
+
     private void ComputeClusterCenters(Matrix<T> x, int[] labels, int n, int d)
     {
-        if (NumClusters == 0)
-        {
-            ClusterCenters = new Matrix<T>(0, d);
-            return;
-        }
-
-        ClusterCenters = new Matrix<T>(NumClusters, d);
-        var counts = new int[NumClusters];
-
-        for (int i = 0; i < n; i++)
-        {
-            int label = labels[i];
-            if (label >= 0 && label < NumClusters)
-            {
-                counts[label]++;
-                for (int j = 0; j < d; j++)
-                {
-                    ClusterCenters[label, j] = NumOps.Add(ClusterCenters[label, j], x[i, j]);
-                }
-            }
-        }
-
-        for (int k = 0; k < NumClusters; k++)
-        {
-            if (counts[k] > 0)
-            {
-                for (int j = 0; j < d; j++)
-                {
-                    ClusterCenters[k, j] = NumOps.Divide(ClusterCenters[k, j], NumOps.FromDouble(counts[k]));
-                }
-            }
-        }
+        // Mean of each cluster's members (empty clusters stay at zero)
+        ClusterCenters = NumClusters == 0
+            ? new Matrix<T>(0, d)
+            : ClusteringTensorOps.ClusterMeans(x, ClusteringTensorOps.FromIntArray<T>(labels), NumClusters, out _);
     }
 
     /// <inheritdoc />
@@ -384,38 +351,17 @@ public partial class ConsensusClustering<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        var labels = new Vector<T>(x.Rows);
-
-        for (int i = 0; i < x.Rows; i++)
+        if (ClusterCenters is null || NumClusters == 0)
         {
-            var point = GetRow(x, i);
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = 0;
-
-            if (ClusterCenters is not null)
-            {
-                for (int k = 0; k < NumClusters; k++)
-                {
-                    var center = GetRow(ClusterCenters, k);
-                    T dist = NumOps.Zero;
-                    for (int j = 0; j < point.Length; j++)
-                    {
-                        T diff = NumOps.Subtract(point[j], center[j]);
-                        dist = NumOps.Add(dist, NumOps.Multiply(diff, diff));
-                    }
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = k;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            return new Vector<T>(x.Rows);
         }
 
-        return labels;
+        // Nearest center by squared Euclidean distance (first on ties)
+        var centers = ClusterCenters.Rows == NumClusters
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, ClusterCenters.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(
+            ClusteringTensorOps.ArgMinRows(ClusteringTensorOps.SquaredDistances(x, centers)));
     }
 
     /// <inheritdoc />
