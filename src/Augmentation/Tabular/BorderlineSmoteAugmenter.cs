@@ -206,7 +206,15 @@ public class BorderlineSmoteAugmenter<T> : TabularAugmenterBase<T>
 
         // Calculate how many synthetic samples to generate
         int numSynthetic = (int)Math.Ceiling(dangerIndices.Count * SamplingRatio);
-        var syntheticSamples = new Matrix<T>(numSynthetic, cols);
+        var sources = new int[numSynthetic];
+        var targets = new int[numSynthetic];
+        var gaps = new double[numSynthetic];
+
+        // Minority rows followed by majority rows, so a majority neighbor index
+        // (minorityCount + majority row) addresses this matrix directly
+        var candidates = majorityData is not null && majorityData.Rows > 0
+            ? TabularEngineOps<T>.ConcatenateRows(minorityData, majorityData)
+            : minorityData;
 
         // Precompute minority distances for neighbor finding
         var minorityDistances = ComputeDistanceMatrix(minorityData);
@@ -243,29 +251,14 @@ public class BorderlineSmoteAugmenter<T> : TabularAugmenterBase<T>
                 gap *= 0.5;
             }
 
-            for (int c = 0; c < cols; c++)
-            {
-                double val1 = NumOps.ToDouble(minorityData[dangerIdx, c]);
-                double val2;
-
-                if (isMajorityNeighbor && majorityData is not null)
-                {
-                    // neighborIdx is in majority data
-                    val2 = NumOps.ToDouble(majorityData[neighborIdx - minorityCount, c]);
-                }
-                else
-                {
-                    val2 = NumOps.ToDouble(minorityData[neighborIdx, c]);
-                }
-
-                double synthetic = val1 + gap * (val2 - val1);
-                syntheticSamples[syntheticIndex, c] = NumOps.FromDouble(synthetic);
-            }
+            sources[syntheticIndex] = dangerIdx;
+            targets[syntheticIndex] = neighborIdx;
+            gaps[syntheticIndex] = gap;
 
             syntheticIndex++;
         }
 
-        return syntheticSamples;
+        return TabularEngineOps<T>.InterpolateRows(candidates, sources, targets, gaps, numSynthetic);
     }
 
     /// <summary>
