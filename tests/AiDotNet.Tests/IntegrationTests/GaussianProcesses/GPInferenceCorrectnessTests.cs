@@ -724,5 +724,81 @@ public class GPInferenceCorrectnessTests
         Assert.Contains(5, outlierIndices);
     }
 
+    /// <summary>
+    /// As nu grows the Student-t likelihood tends to N(y | f, scale^2), for which EP is exact: every site becomes
+    /// tau = 1/scale^2, nu_site = y/scale^2, and the EP predictive distribution (Rasmussen &amp; Williams, GPML,
+    /// Alg. 3.5/3.6) equals GP regression with noise scale^2 (GPML eqs. 2.25-2.26):
+    /// mean k*^T (K + s^2 I)^-1 y and latent variance k** - k*^T (K + s^2 I)^-1 k*; the model adds scale^2.
+    /// The reference is computed by hand with a dense 3x3 Cholesky. At nu = 1e6 the likelihood differs from the
+    /// Gaussian by O(1/nu), hence the 1e-4 tolerance.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task StudentTGP_LargeNu_MatchesGaussianLikelihoodEpReference()
+    {
+        var kernel = new GaussianKernel<double>(1.0);
+        double scale = 1.0;
+        var gp = new StudentTGaussianProcess<double>(
+            kernel, nu: 1e6, scale: scale, maxIterations: 100, tolerance: 1e-12, damping: 1.0, jitter: 1e-12);
+
+        var X = new Matrix<double>(3, 1);
+        X[0, 0] = 0.0; X[1, 0] = 0.8; X[2, 0] = 1.7;
+        var y = new Vector<double>(new[] { 0.4, -0.3, 0.9 });
+        gp.Fit(X, y);
+
+        var xStar = new Vector<double>(new[] { 1.1 });
+        var (mean, variance) = gp.Predict(xStar);
+
+        // A = K + scale^2 I, factor A = L L^T by hand
+        var A = new double[3, 3];
+        var kStar = new double[3];
+        for (int i = 0; i < 3; i++)
+        {
+            kStar[i] = kernel.Calculate(X.GetRow(i), xStar);
+            for (int j = 0; j < 3; j++)
+            {
+                A[i, j] = kernel.Calculate(X.GetRow(i), X.GetRow(j)) + (i == j ? scale * scale : 0.0);
+            }
+        }
+
+        var L = new double[3, 3];
+        for (int j = 0; j < 3; j++)
+        {
+            double pivot = A[j, j];
+            for (int k = 0; k < j; k++) pivot -= L[j, k] * L[j, k];
+            L[j, j] = Math.Sqrt(pivot);
+            for (int i = j + 1; i < 3; i++)
+            {
+                double sum = A[i, j];
+                for (int k = 0; k < j; k++) sum -= L[i, k] * L[j, k];
+                L[i, j] = sum / L[j, j];
+            }
+        }
+
+        double[] ForwardSolve(double[] b)
+        {
+            var z = new double[3];
+            for (int i = 0; i < 3; i++)
+            {
+                double sum = b[i];
+                for (int k = 0; k < i; k++) sum -= L[i, k] * z[k];
+                z[i] = sum / L[i, i];
+            }
+            return z;
+        }
+
+        var zy = ForwardSolve(new[] { y[0], y[1], y[2] });
+        var zk = ForwardSolve(kStar);
+        double expectedMean = 0, reduction = 0;
+        for (int i = 0; i < 3; i++)
+        {
+            expectedMean += zk[i] * zy[i];
+            reduction += zk[i] * zk[i];
+        }
+        double expectedVariance = kernel.Calculate(xStar, xStar) - reduction + scale * scale;
+
+        Assert.True(Math.Abs(mean - expectedMean) < 1e-4, $"mean: expected {expectedMean}, got {mean}");
+        Assert.True(Math.Abs(variance - expectedVariance) < 1e-4, $"variance: expected {expectedVariance}, got {variance}");
+    }
+
     #endregion
 }

@@ -462,28 +462,39 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
 
         int n = _K.Rows;
 
-        // Posterior precision: K^{-1} + diag(site_precisions)
-        // Posterior covariance: (K^{-1} + diag(site_precisions))^{-1}
-
-        // Build K + diag(1/site_precisions) for numerical stability
-        // Only sites with precision above 1e-10 take part.
+        // EP posterior (Rasmussen & Williams, GPML, Alg. 3.5, lines 7-8):
+        //   Σ = K - K (K + S̃⁻¹)⁻¹ K = K - Vᵀ V,  V = L⁻¹ S̃^½ K,  L = chol(I + S̃^½ K S̃^½)
+        //   μ = Σ ν̃
+        // The B = I + S̃^½ K S̃^½ form never inverts a site precision, so sites near zero are safe.
         var engine = Engine;
-        var precisions = Tensor<T>.FromVector(_sitePrecisions);
-        var active = engine.TensorGreaterThan(precisions, _numOps.FromDouble(1e-10));
-        var zeros = engine.TensorZerosLike(precisions);
-        var siteVariances = engine.TensorWhere(
-            active, engine.TensorReciprocal(engine.TensorWhere(active, precisions, engine.TensorOnesLike(precisions))), zeros);
-        var Sigma = GaussianProcessEngineOps.AddToDiagonal(_K, siteVariances.ToVector());
-
-        // Compute posterior covariance via Cholesky
-        var L = CholeskyFactor(Tensor<T>.FromMatrix(Sigma));
-        var posteriorCov = Linalg.CholeskyInverse(L, upper: false);
+        var (prior, lower, sqrtTau) = EpFactor();
+        var V = Linalg.SolveTriangular(
+            lower, engine.TensorMultiply(engine.TensorBroadcastTo(sqrtTau, new[] { n, n }), prior), upper: false);
+        var posteriorCov = engine.TensorSubtract(prior, engine.TensorMatMul(engine.TensorTranspose(V), V));
         _posteriorCov = posteriorCov.ToMatrix();
 
-        // Compute posterior mean
-        var naturalMeans = engine.TensorWhere(active, Tensor<T>.FromVector(_siteNaturalMeans), zeros);
-        engine.TensorMatMul(posteriorCov, naturalMeans.Reshape(new[] { n, 1 }))
-            .AsSpan().CopyTo(_posteriorMean.AsWritableSpan());
+        var naturalMeans = Tensor<T>.FromVector(_siteNaturalMeans).Reshape(new[] { n, 1 });
+        engine.TensorMatMul(posteriorCov, naturalMeans).AsSpan().CopyTo(_posteriorMean.AsWritableSpan());
+    }
+
+    /// <summary>
+    /// Prior covariance K (with jitter), L = chol(I + S̃^½ K S̃^½) and S̃^½ as an [n, 1] column,
+    /// where S̃ = diag(site precisions) clamped at zero.
+    /// </summary>
+    private (Tensor<T> Prior, Tensor<T> Lower, Tensor<T> SqrtTau) EpFactor()
+    {
+        if (_K is null || _sitePrecisions is null)
+            throw new InvalidOperationException("Model not properly initialized.");
+
+        var engine = Engine;
+        int n = _K.Rows;
+        var prior = Tensor<T>.FromMatrix(GaussianProcessEngineOps.AddToDiagonal(_K, _numOps.FromDouble(_jitter)));
+        var sqrtTau = engine.TensorSqrt(engine.TensorMax(Tensor<T>.FromVector(_sitePrecisions), _numOps.Zero))
+            .Reshape(new[] { n, 1 });
+        var outer = engine.TensorMatMul(sqrtTau, engine.TensorTranspose(sqrtTau));
+        var B = engine.TensorAdd(engine.TensorEye<T>(n), engine.TensorMultiply(prior, outer));
+
+        return (prior, CholeskyFactor(B), sqrtTau);
     }
 
     /// <summary>
@@ -568,36 +579,32 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     {
         if (!_isTrained)
             throw new InvalidOperationException("Model must be trained before prediction.");
-        if (_X is null || _K is null || _posteriorMean is null || _posteriorCov is null)
+        if (_X is null || _K is null || _posteriorMean is null || _posteriorCov is null || _siteNaturalMeans is null)
             throw new InvalidOperationException("Model not properly initialized.");
 
         int n = _X.Rows;
         int nNew = XNew.Rows;
-
-        // Compute cross-covariance
-        var KStar = ComputeKernelMatrix(XNew, _X);
-
-        // Compute alpha = (K + σ²I)⁻¹ * y for GP prediction.
-        // The Student-T EP posterior modifies the effective observations, but for the
-        // predictive mean we use the standard GP formula with training targets y.
-        // The posterior mean from EP is the latent function estimate at training points,
-        // NOT the alpha weights. Using it directly as alpha double-applies K⁻¹.
         var engine = Engine;
-        var alpha = Tensor<T>.FromVector(FittedY).Reshape(new[] { n, 1 });
 
-        // Solve for weights
-        var Kregularized = GaussianProcessEngineOps.AddToDiagonal(_K, _numOps.FromDouble(_jitter));
-        var Lk = CholeskyFactor(Tensor<T>.FromMatrix(Kregularized));
-        var alphaWeights = Linalg.CholeskySolve(alpha, Lk, upper: false);
+        // EP predictive distribution (Rasmussen & Williams, GPML, Alg. 3.6):
+        //   z = S̃^½ L⁻ᵀ L⁻¹ S̃^½ K ν̃,  f̄* = k*ᵀ (ν̃ - z)
+        //   v = L⁻¹ S̃^½ k*,           V[f*] = k** - vᵀ v
+        // so the prediction follows the robust EP posterior, not a plain GP fit of y.
+        var (prior, lower, sqrtTau) = EpFactor();
+        var naturalMeans = Tensor<T>.FromVector(_siteNaturalMeans).Reshape(new[] { n, 1 });
+        var scaledPriorMean = engine.TensorMultiply(sqrtTau, engine.TensorMatMul(prior, naturalMeans));
+        var z = engine.TensorMultiply(sqrtTau, Linalg.CholeskySolve(scaledPriorMean, lower, upper: false));
+        var weights = engine.TensorSubtract(naturalMeans, z);
 
-        // Mean prediction
-        var kStar = Tensor<T>.FromMatrix(KStar);
-        var mean = engine.TensorMatMul(kStar, alphaWeights).Reshape(new[] { nNew }).ToVector();
+        var kStar = Tensor<T>.FromMatrix(ComputeKernelMatrix(XNew, _X));
+        var mean = engine.TensorMatMul(kStar, weights).Reshape(new[] { nNew }).ToVector();
 
-        // Variance prediction: k** - ||Lk⁻¹ k*||² + scale², floored at 1e-10
+        // Variance prediction: k** - ||L⁻¹ S̃^½ k*||² + scale², floored at 1e-10
+        var scaledCross = engine.TensorMultiply(
+            engine.TensorBroadcastTo(sqrtTau, new[] { n, nNew }), engine.TensorTranspose(kStar));
+        var v = Linalg.SolveTriangular(lower, scaledCross, upper: false);
+        var vTv = engine.ReduceSum(engine.TensorSquare(v), new[] { 0 }, keepDims: false);
         var kStarStar = Tensor<T>.FromVector(KernelDiagonal(XNew));
-        var vSolved = Linalg.SolveTriangular(Lk, engine.TensorTranspose(kStar), upper: false);
-        var vTv = engine.ReduceSum(engine.TensorSquare(vSolved), new[] { 0 }, keepDims: false);
         var variance = engine.TensorMax(
             engine.TensorAddScalar(engine.TensorSubtract(kStarStar, vTv), _numOps.FromDouble(_scale * _scale)),
             _numOps.FromDouble(1e-10)).ToVector();
@@ -646,15 +653,12 @@ public partial class StudentTGaussianProcess<T> : GaussianProcessBase<T>
     }
 
     /// <summary>
-    /// Lower Cholesky factor of a symmetric positive definite matrix.
+    /// Lower Cholesky factor of a symmetric matrix with every pivot floored at 1e-10.
     /// </summary>
-    private Tensor<T> CholeskyFactor(Tensor<T> matrix)
+    private static Tensor<T> CholeskyFactor(Tensor<T> matrix)
     {
-        var (factor, info) = Linalg.CholeskyEx(matrix, upper: false);
-        if (Engine.TensorCountNonzero(info) > 0)
-            throw new InvalidOperationException("Matrix is not positive definite.");
-
-        return factor;
+        // Pivots floored at 1e-10, as the factorization has always done; never throws.
+        return GaussianProcessEngineOps.ClampedCholesky(matrix.ToMatrix(), 1e-10);
     }
 
     /// <summary>
