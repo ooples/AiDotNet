@@ -131,7 +131,6 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     protected (double Loss, Matrix<T> Gradient) ComputeL2Loss(Matrix<T> X, Matrix<T> W)
     {
         int n = X.Rows;
-        int d = X.Columns;
 
         // Vectorized: R = X - X @ W using Engine.TensorMatMul
         var xTensor = Tensor<T>.FromMatrix(X);
@@ -140,12 +139,7 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         var rTensor = Engine.TensorSubtract(xTensor, xwTensor);
 
         // Loss = (1/2n) * ||R||²_F
-        double loss = 0;
-        for (int i = 0; i < rTensor.Length; i++)
-        {
-            double r = NumOps.ToDouble(rTensor[i]);
-            loss += r * r;
-        }
+        double loss = NumOps.ToDouble(Engine.TensorSum(Engine.TensorSquare(rTensor)));
         loss *= 0.5 / n;
 
         // Vectorized: Gradient = -(1/n) * X^T @ R
@@ -154,13 +148,7 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         T negInvN = NumOps.Negate(NumOps.FromDouble(1.0 / n));
         gradTensor = Engine.TensorMultiplyScalar<T>(gradTensor, negInvN);
 
-        // Convert back to Matrix
-        var grad = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                grad[i, j] = gradTensor[i, j];
-
-        return (loss, grad);
+        return (loss, gradTensor.ToMatrix());
     }
 
     /// <summary>
@@ -175,10 +163,8 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         int d = W.Rows;
 
         // W ∘ W (element-wise square)
-        var wSquared = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                wSquared[i, j] = NumOps.Multiply(W[i, j], W[i, j]);
+        var wTensor = Tensor<T>.FromMatrix(W);
+        var wSquared = Engine.TensorMultiply(wTensor, wTensor).ToMatrix();
 
         // e^(W∘W) via shared MatrixExponential extension
         var expMatrix = wSquared.MatrixExponential(taylorOrder);
@@ -192,12 +178,10 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
         // without the transpose flips the derivative direction and steers NOTEARS away
         // from the acyclic optimum.
         T two = NumOps.FromDouble(2.0);
-        var gradient = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                gradient[i, j] = NumOps.Multiply(two, NumOps.Multiply(expMatrix[j, i], W[i, j]));
+        var gradient = Engine.TensorMultiplyScalar(
+            Engine.TensorMultiply(Engine.TensorTranspose(Tensor<T>.FromMatrix(expMatrix)), wTensor), two);
 
-        return (h, gradient);
+        return (h, gradient.ToMatrix());
     }
 
     /// <summary>
@@ -205,12 +189,7 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected double ComputeL1Norm(Matrix<T> W)
     {
-        int d = W.Rows;
-        double sum = 0;
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                sum += Math.Abs(NumOps.ToDouble(W[i, j]));
-        return sum;
+        return NumOps.ToDouble(Engine.TensorSum(Engine.TensorAbs(Tensor<T>.FromMatrix(W))));
     }
 
     /// <summary>
@@ -219,15 +198,20 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected Matrix<T> ThresholdAndClean(Matrix<T> W, double threshold)
     {
-        int d = W.Rows;
-        var result = new Matrix<T>(d, d);
+        var values = Tensor<T>.FromMatrix(W);
+        var keep = Engine.TensorMultiply(
+            Engine.TensorGreaterEqual(Engine.TensorAbs(values), Engine.TensorFullLike(values, NumOps.FromDouble(threshold))),
+            OffDiagonalMask(W.Rows));
+        return Engine.TensorWhere(keep, values, Engine.TensorZerosLike(values)).ToMatrix();
+    }
 
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                if (i != j && Math.Abs(NumOps.ToDouble(W[i, j])) >= threshold)
-                    result[i, j] = W[i, j];
-
-        return result;
+    /// <summary>
+    /// A [d x d] tensor of ones with a zero diagonal.
+    /// </summary>
+    private protected Tensor<T> OffDiagonalMask(int d)
+    {
+        var identity = Engine.TensorEye<T>(d);
+        return Engine.TensorSubtract(Engine.TensorOnesLike(identity), identity);
     }
 
     /// <summary>
@@ -257,43 +241,49 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     protected Matrix<T> EnforceAcyclic(Matrix<T> weights)
     {
         int d = weights.Rows;
-        var edges = new List<(int From, int To, T Weight, double Magnitude)>();
-        for (int from = 0; from < d; from++)
+        var flat = Tensor<T>.FromMatrix(weights).Reshape(new[] { d * d });
+        var magnitude = Engine.TensorAbs(flat);
+
+        // Candidate edges: off-diagonal entries with a non-zero magnitude, in row-major (from, to) order.
+        var candidate = Engine.TensorMultiply(
+            Engine.TensorGreaterThan(magnitude, NumOps.Zero), OffDiagonalMask(d).Reshape(new[] { d * d }));
+        int[] positions = Engine.TensorNonzero(candidate).ToArray();
+        var dag = new Tensor<T>(new[] { d * d });
+        if (positions.Length == 0)
+            return dag.Reshape(new[] { d, d }).ToMatrix();
+
+        // Strongest first; the stable sort keeps (from, to) order among equal magnitudes.
+        var positionIndex = new Tensor<int>(positions, new[] { positions.Length });
+        int[] order = Engine.TensorArgsort(Engine.TensorIndexSelect(magnitude, positionIndex, 0), -1, true).ToArray();
+
+        var reachable = new bool[d, d];
+        var kept = new List<int>();
+        foreach (int rank in order)
         {
-            for (int to = 0; to < d; to++)
+            int position = positions[rank];
+            int from = position / d, to = position % d;
+
+            // Adding from -> to creates a cycle exactly when to already reaches from.
+            if (!HasDirectedPath(reachable, to, from))
             {
-                if (from == to) continue;
-                T weight = weights[from, to];
-                double magnitude = Math.Abs(NumOps.ToDouble(weight));
-                if (magnitude > 0.0)
-                    edges.Add((from, to, weight, magnitude));
+                reachable[from, to] = true;
+                kept.Add(position);
             }
         }
 
-        edges.Sort((left, right) =>
-        {
-            int byMagnitude = right.Magnitude.CompareTo(left.Magnitude);
-            if (byMagnitude != 0) return byMagnitude;
-            int bySource = left.From.CompareTo(right.From);
-            return bySource != 0 ? bySource : left.To.CompareTo(right.To);
-        });
+        if (kept.Count == 0)
+            return dag.Reshape(new[] { d, d }).ToMatrix();
 
-        var dag = new Matrix<T>(d, d);
-        foreach (var edge in edges)
-        {
-            // Adding from -> to creates a cycle exactly when to already reaches from.
-            if (!HasDirectedPath(dag, edge.To, edge.From))
-                dag[edge.From, edge.To] = edge.Weight;
-        }
-
-        return dag;
+        var keptIndex = new Tensor<int>(kept.ToArray(), new[] { kept.Count });
+        dag = Engine.TensorScatter(dag, keptIndex, Engine.TensorIndexSelect(flat, keptIndex, 0), 0);
+        return dag.Reshape(new[] { d, d }).ToMatrix();
     }
 
-    private bool HasDirectedPath(Matrix<T> graph, int start, int target)
+    private static bool HasDirectedPath(bool[,] graph, int start, int target)
     {
         if (start == target) return true;
 
-        int d = graph.Rows;
+        int d = graph.GetLength(0);
         var visited = new bool[d];
         var pending = new Stack<int>();
         pending.Push(start);
@@ -307,7 +297,7 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
 
             for (int next = 0; next < d; next++)
             {
-                if (!visited[next] && Math.Abs(NumOps.ToDouble(graph[node, next])) > 0.0)
+                if (!visited[next] && graph[node, next])
                     pending.Push(next);
             }
         }
@@ -325,11 +315,9 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
 
         // Check if any edges survived
         int d = W.Rows;
-        bool hasEdges = false;
-        for (int i = 0; i < d && !hasEdges; i++)
-            for (int j = 0; j < d && !hasEdges; j++)
-                if (i != j && NumOps.ToDouble(result[i, j]) != 0)
-                    hasEdges = true;
+        var offDiagonal = OffDiagonalMask(d);
+        bool hasEdges = Engine.TensorCountNonzero(
+            Engine.TensorMultiply(Tensor<T>.FromMatrix(result), offDiagonal)) > 0;
 
         if (!hasEdges)
         {
@@ -341,35 +329,46 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
             var cov = ComputeCovarianceMatrix(data);
 
             // Compute precision matrix via regularized inverse
-            var precision = InvertWithRidge(cov, d, NumOps.FromDouble(1e-4));
+            var precision = Tensor<T>.FromMatrix(InvertWithRidge(cov, d, NumOps.FromDouble(1e-4)));
+            var covariance = Tensor<T>.FromMatrix(cov);
+            var shape = new[] { d, d };
+            var ones = Engine.TensorOnesLike(precision);
 
-            for (int i = 0; i < d; i++)
-                for (int j = 0; j < d; j++)
-                {
-                    if (i == j) continue;
-                    double pii = NumOps.ToDouble(precision[i, i]);
-                    double pjj = NumOps.ToDouble(precision[j, j]);
-                    if (pii <= 0 || pjj <= 0) continue;
+            // Pairs need a positive precision diagonal on both ends (an entry with P[i,i] <= 0 is skipped).
+            var precisionDiagonal = Engine.TensorDiagonal(precision);
+            var positive = Engine.TensorSubtract(Engine.TensorOnesLike(precisionDiagonal),
+                Engine.TensorLessEqual(precisionDiagonal, Engine.TensorZerosLike(precisionDiagonal)));
+            var include = Engine.TensorMultiply(Engine.TensorOuter(positive, positive), offDiagonal);
 
-                    // Partial correlation from precision matrix:
-                    // pcor(i,j) = -P[i,j] / sqrt(P[i,i] * P[j,j])
-                    double partialCorr = -NumOps.ToDouble(precision[i, j]) / Math.Sqrt(pii * pjj);
-                    if (Math.Abs(partialCorr) < threshold) continue;
+            // Partial correlation from precision matrix:
+            // pcor(i,j) = -P[i,j] / sqrt(P[i,i] * P[j,j])
+            var precisionScale = Engine.TensorSqrt(Engine.TensorOuter(precisionDiagonal, precisionDiagonal));
+            var partialCorr = Engine.TensorDivide(Engine.TensorNegate(precision),
+                Engine.TensorWhere(include, precisionScale, ones));
+            include = Engine.TensorMultiply(include, Engine.TensorSubtract(ones,
+                Engine.TensorLessThan(Engine.TensorAbs(partialCorr), Engine.TensorFullLike(partialCorr, NumOps.FromDouble(threshold)))));
 
-                    // Direction: use variance ratio from raw covariance
-                    double varI = NumOps.ToDouble(cov[i, i]);
-                    double varJ = NumOps.ToDouble(cov[j, j]);
-                    double covIJ = NumOps.ToDouble(cov[i, j]);
-                    if (varI < 1e-10) continue;
+            // Direction: use variance ratio from raw covariance (varI = cov[i,i] per row, varJ = cov[j,j] per column)
+            var variance = Engine.TensorDiagonal(covariance);
+            var varI = Engine.TensorBroadcastTo(variance.Reshape(new[] { d, 1 }), shape);
+            var varJ = Engine.TensorBroadcastTo(variance.Reshape(new[] { 1, d }), shape);
+            var tiny = Engine.TensorFullLike(precision, NumOps.FromDouble(1e-10));
+            include = Engine.TensorMultiply(include, Engine.TensorSubtract(ones, Engine.TensorLessThan(varI, tiny)));
 
-                    double weight = covIJ / varI;
-                    double reverseWeight = varJ > 1e-10 ? Math.Abs(covIJ / varJ) : 0;
+            var weight = Engine.TensorDivide(covariance, Engine.TensorWhere(include, varI, ones));
+            var reverseValid = Engine.TensorGreaterThan(varJ, tiny);
+            var reverseWeight = Engine.TensorWhere(reverseValid,
+                Engine.TensorAbs(Engine.TensorDivide(covariance, Engine.TensorWhere(reverseValid, varJ, ones))),
+                Engine.TensorZerosLike(precision));
 
-                    if (Math.Abs(weight) > reverseWeight)
-                        result[i, j] = NumOps.FromDouble(weight);
-                    else if (Math.Abs(Math.Abs(weight) - reverseWeight) < 1e-10 && i < j)
-                        result[i, j] = NumOps.FromDouble(weight);
-                }
+            var absWeight = Engine.TensorAbs(weight);
+            var stronger = Engine.TensorGreaterThan(absWeight, reverseWeight);
+            var tiedUpper = Engine.TensorMultiply(
+                Engine.TensorLessThan(Engine.TensorAbs(Engine.TensorSubtract(absWeight, reverseWeight)), tiny),
+                Engine.TensorTriu(ones, 1));
+            var assign = Engine.TensorMultiply(include, Engine.TensorMax(stronger, tiedUpper));
+
+            result = Engine.TensorWhere(assign, weight, Tensor<T>.FromMatrix(result)).ToMatrix();
         }
 
         return result;
@@ -399,39 +398,28 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     {
         int n = data.Rows;
         int d = data.Columns;
-        var result = new Matrix<T>(n, d);
-        T nT = NumOps.FromDouble(n);
+        var shape = new[] { n, d };
 
+        var centered = CenterColumns(Tensor<T>.FromMatrix(data));
+        var variance = Engine.ReduceMean(Engine.TensorSquare(centered), new[] { 0 }, true);
+        var std = Engine.TensorSqrt(Engine.TensorAddScalar(variance, NumOps.FromDouble(1e-15)));
+
+        // Standardize and add tiny column-specific perturbation to break exact collinearity.
+        // The perturbation must stay numerically negligible regardless of dimensionality,
+        // so we use a small base step and modulo-cycle the column index by a prime
+        // (PerturbationCycleModulus = 97). This keeps the maximum perturbation bounded
+        // at ~ 1e-6 even at d ≈ 100 columns, instead of growing linearly to 1e-2 with
+        // the previous (1 + 1e-4 * (j+1)) scheme.
+        const double perturbBase = 1e-8;
+        var cycle = new int[d];
         for (int j = 0; j < d; j++)
-        {
-            T mean = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-                mean = NumOps.Add(mean, data[i, j]);
-            mean = NumOps.Divide(mean, nT);
+            cycle[j] = (j % PerturbationCycleModulus) + 1;
+        var perturbScale = Engine.TensorAddScalar(
+            Engine.TensorMultiplyScalar(new Tensor<int>(cycle, new[] { 1, d }).Cast<T>(), NumOps.FromDouble(perturbBase)),
+            NumOps.One);
 
-            T variance = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                T diff = NumOps.Subtract(data[i, j], mean);
-                variance = NumOps.Add(variance, NumOps.Multiply(diff, diff));
-            }
-            variance = NumOps.Divide(variance, nT);
-            T std = NumOps.Sqrt(NumOps.Add(variance, NumOps.FromDouble(1e-15)));
-
-            // Standardize and add tiny column-specific perturbation to break exact collinearity.
-            // The perturbation must stay numerically negligible regardless of dimensionality,
-            // so we use a small base step and modulo-cycle the column index by a prime
-            // (PerturbationCycleModulus = 97). This keeps the maximum perturbation bounded
-            // at ~ 1e-6 even at d ≈ 100 columns, instead of growing linearly to 1e-2 with
-            // the previous (1 + 1e-4 * (j+1)) scheme.
-            const double perturbBase = 1e-8;
-            double perturbScale = 1.0 + perturbBase * ((j % PerturbationCycleModulus) + 1);
-            T perturbT = NumOps.FromDouble(perturbScale);
-            for (int i = 0; i < n; i++)
-                result[i, j] = NumOps.Multiply(NumOps.Divide(NumOps.Subtract(data[i, j], mean), std), perturbT);
-        }
-
-        return result;
+        var standardized = Engine.TensorDivide(centered, Engine.TensorBroadcastTo(std, shape));
+        return Engine.TensorMultiply(standardized, Engine.TensorBroadcastTo(perturbScale, shape)).ToMatrix();
     }
 
     /// <summary>
@@ -440,49 +428,12 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     /// </summary>
     protected Matrix<T> FallbackCorrelationGraph(Matrix<T> data)
     {
-        int n = data.Rows;
-        int d = data.Columns;
-        T nT = NumOps.FromDouble(n);
-        var result = new Matrix<T>(d, d);
-
-        // Compute column means
-        var means = new T[d];
-        for (int j = 0; j < d; j++)
-        {
-            means[j] = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-                means[j] = NumOps.Add(means[j], data[i, j]);
-            means[j] = NumOps.Divide(means[j], nT);
-        }
-
-        // Compute pairwise correlations
-        for (int a = 0; a < d; a++)
-        {
-            for (int b = a + 1; b < d; b++)
-            {
-                // Vectorized correlation using Engine.DotProduct
-                var centA = new Vector<T>(n);
-                var centB = new Vector<T>(n);
-                for (int i = 0; i < n; i++)
-                {
-                    centA[i] = NumOps.Subtract(data[i, a], means[a]);
-                    centB[i] = NumOps.Subtract(data[i, b], means[b]);
-                }
-                T sxy = Engine.DotProduct(centA, centB);
-                T sxx = Engine.DotProduct(centA, centA);
-                T syy = Engine.DotProduct(centB, centB);
-
-                double sxxD = NumOps.ToDouble(sxx), syyD = NumOps.ToDouble(syy);
-                if (sxxD > 1e-10 && syyD > 1e-10)
-                {
-                    double corr = Math.Abs(NumOps.ToDouble(sxy) / Math.Sqrt(sxxD * syyD));
-                    if (corr >= WThreshold)
-                        result[a, b] = NumOps.FromDouble(corr);
-                }
-            }
-        }
-
-        return result;
+        // |corr(a, b)| for a < b, kept when it reaches WThreshold.
+        var correlation = Tensor<T>.FromMatrix(ComputeAbsoluteCorrelationMatrix(data));
+        var keep = Engine.TensorMultiply(
+            Engine.TensorGreaterEqual(correlation, Engine.TensorFullLike(correlation, NumOps.FromDouble(WThreshold))),
+            Engine.TensorTriu(Engine.TensorOnesLike(correlation), 1));
+        return Engine.TensorWhere(keep, correlation, Engine.TensorZerosLike(correlation)).ToMatrix();
     }
 
     /// <summary>
@@ -495,31 +446,9 @@ public abstract class ContinuousOptimizationBase<T> : CausalDiscoveryBase<T>
     /// <returns>The precision matrix (S + ridge*I)^{-1}.</returns>
     private Matrix<T> InvertWithRidge(Matrix<T> S, int d, T ridge)
     {
-        // Build regularized matrix: S + ridge * I
-        var regularized = new Matrix<T>(d, d);
-        for (int i = 0; i < d; i++)
-            for (int j = 0; j < d; j++)
-                regularized[i, j] = i == j
-                    ? NumOps.Add(S[i, j], ridge)
-                    : S[i, j];
-
-        // Decompose once, then solve for each column of the identity matrix.
-        // This avoids recomputing LU decomposition d times.
-        var lu = new LuDecomposition<T>(regularized);
-        var precision = new Matrix<T>(d, d);
-        var rhs = new Vector<T>(d);
-        for (int col = 0; col < d; col++)
-        {
-            // Reset rhs to the col-th unit vector
-            if (col > 0) rhs[col - 1] = NumOps.Zero;
-            rhs[col] = NumOps.One;
-
-            var solution = lu.Solve(rhs);
-
-            for (int row = 0; row < d; row++)
-                precision[row, col] = solution[row];
-        }
-
-        return precision;
+        // (S + ridge * I)^{-1} through the library's LU-based inverse.
+        var regularized = Engine.TensorAdd(Tensor<T>.FromMatrix(S),
+            Engine.TensorMultiplyScalar(Engine.TensorEye<T>(d), ridge));
+        return LinalgDispatch<T>.Inv(regularized).ToMatrix();
     }
 }
