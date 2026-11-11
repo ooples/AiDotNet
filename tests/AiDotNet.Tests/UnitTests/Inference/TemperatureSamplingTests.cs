@@ -136,6 +136,44 @@ public class TemperatureSamplingTests
         Assert.Equal(1, TemperatureSampling<double>.Sample(p, random));
     }
 
+    [Fact]
+    public void CountAccepted_MatchesTheScalarRule_AndDrawsOnlyForPositiveDraftProbabilities()
+    {
+        var target = new Vector<double>(new[] { 0.5, 0.0, 0.9, 0.2, 0.7 });
+        var draft = new Vector<double>(new[] { 0.25, 0.0, 0.0, 0.8, 0.1 });
+        var random = new CountingRandom(new[] { 0.1, 0.3 });
+
+        // 0: ratio 2 -> accept (draw 0.1). 1: draft 0, target 0 -> reject without a draw.
+        Assert.Equal(1, TemperatureSampling<double>.CountAccepted(target, draft, random));
+        Assert.Equal(1, random.Draws);
+
+        var noMassOnDraft = new Vector<double>(new[] { 0.25, 0.0, 0.0, 0.8 });
+        var withMass = new Vector<double>(new[] { 0.5, 0.4, 0.9, 0.2 });
+        random = new CountingRandom(new[] { 0.1, 0.3 });
+
+        // 0: accept (0.1). 1, 2: draft 0 but target has mass -> accept without draws. 3: ratio 0.25 < draw 0.3 -> reject.
+        Assert.Equal(3, TemperatureSampling<double>.CountAccepted(withMass, noMassOnDraft, random));
+        Assert.Equal(2, random.Draws);
+    }
+
+    [Fact]
+    public void CountAccepted_StopsAfterAnAcceptedStopToken()
+    {
+        var probabilities = new Vector<double>(new[] { 0.5, 0.5, 0.5 });
+        var random = new CountingRandom(new[] { 0.0, 0.0, 0.0 });
+
+        Assert.Equal(2, TemperatureSampling<double>.CountAccepted(probabilities, probabilities, random, new[] { 4, 9, 4 }, 9));
+        Assert.Equal(2, random.Draws);
+    }
+
+    private sealed class CountingRandom : Random
+    {
+        private readonly double[] _values;
+        public CountingRandom(double[] values) => _values = values;
+        public int Draws { get; private set; }
+        public override double NextDouble() => _values[Draws++];
+    }
+
     private sealed class FixedRandom : Random
     {
         private readonly double _value;
