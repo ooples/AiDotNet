@@ -148,24 +148,22 @@ public class NGramDraftModel<T> : IDraftModel<T>
 
     private Vector<T> GetDistribution(List<int> context, T temperature)
     {
-        var distribution = new Vector<T>(_vocabSize);
-        var contextKey = GetContext(context);
-
-        if (_ngrams.TryGetValue(contextKey, out var counts))
+        // Relative frequencies of the tokens seen after this context, uniform for an unseen context.
+        var frequencies = new double[_vocabSize];
+        if (_ngrams.TryGetValue(GetContext(context), out var counts))
         {
-            int total = counts.Values.Sum();
+            double total = counts.Values.Sum();
             foreach (var kvp in counts)
             {
-                int token = kvp.Key;
-                int count = kvp.Value;
-                distribution[token] = NumOps.FromDouble((double)count / total);
+                frequencies[kvp.Key] = kvp.Value / total;
             }
         }
         else
         {
-            // Uniform distribution if unseen context
-            distribution.Fill(NumOps.FromDouble(1.0 / _vocabSize));
+            frequencies.AsSpan().Fill(1.0 / _vocabSize);
         }
+
+        var distribution = Vector<double>.Wrap(frequencies).Transform(NumOps.FromDouble);
 
         // Temperature 0 collapses to the greedy one-hot rather than dividing by zero.
         return TemperatureSampling<T>.Apply(distribution, temperature);

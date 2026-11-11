@@ -148,14 +148,18 @@ internal class TreeSpeculativeDecoder<T>
             if (bestPathIdx >= 0 && bestAcceptedLength > 0)
             {
                 var bestPath = paths[bestPathIdx];
-                for (int i = 0; i < bestAcceptedLength; i++)
+                int[] bestTokens = bestPath.ToArray();
+                int kept = bestAcceptedLength;
+                if (eosToken.HasValue)
                 {
-                    tokens.Add(bestPath[i]);
-                    generated++;
-
-                    if (eosToken.HasValue && bestPath[i] == eosToken.Value)
-                        goto done;
+                    int eosAt = Array.IndexOf(bestTokens, eosToken.Value, 0, bestAcceptedLength);
+                    if (eosAt >= 0) kept = eosAt + 1;
                 }
+
+                tokens.AddRange(new ArraySegment<int>(bestTokens, 0, kept));
+                generated += kept;
+                if (kept < bestAcceptedLength || (eosToken.HasValue && bestTokens[kept - 1] == eosToken.Value))
+                    goto done;
 
                 // If all accepted, add bonus token
                 if (bestAcceptedLength == bestPath.Length && generated < maxNewTokens)
@@ -278,8 +282,8 @@ internal class TreeSpeculativeDecoder<T>
 
                 var child = new TreeNode<T>
                 {
-                    Token = draft.Tokens[0],
-                    Probability = draft.TokenProbabilities[0],
+                    Token = draft.Tokens.AsSpan()[0],
+                    Probability = draft.TokenProbabilities.AsSpan()[0],
                     Depth = node.Depth + 1,
                     Parent = node
                 };
@@ -320,39 +324,25 @@ internal class TreeSpeculativeDecoder<T>
         int contextLength,
         T temperature)
     {
-        int accepted = 0;
+        // Path token i is checked against target row contextLength + i - 1; only rows the target produced count.
+        int firstRow = contextLength - 1;
+        int verifiable = firstRow < 0 ? 0 : Math.Max(0, Math.Min(path.Length, targetProbs.Rows - firstRow));
+        var tokens = path.AsSpan();
 
-        for (int i = 0; i < path.Length; i++)
+        // Compare against the target under the same temperature as the draft (one-hot when greedy).
+        var pTarget = new T[verifiable];
+        for (int i = 0; i < verifiable; i++)
         {
-            int token = path[i];
-            int targetPos = contextLength + i - 1;
-
-            if (targetPos < 0 || targetPos >= targetProbs.Rows)
-                break;
-
-            // Compare against the target under the same temperature as the draft (one-hot when greedy).
-            T pTarget = TemperatureSampling<T>.Apply(targetProbs.GetRow(targetPos), temperature)[token];
-            T pDraft = i < draftProbs.Length ? draftProbs[i] : NumOps.FromDouble(0.01);
-
-            if (NumOps.LessThanOrEquals(pDraft, NumOps.Zero))
-            {
-                if (NumOps.GreaterThan(pTarget, NumOps.Zero))
-                    accepted++;
-                else
-                    break;
-            }
-            else
-            {
-                T ratio = NumOps.Divide(pTarget, pDraft);
-                T acceptProb = NumOps.LessThan(ratio, NumOps.One) ? ratio : NumOps.One;
-                if (_random.NextDouble() < NumOps.ToDouble(acceptProb))
-                    accepted++;
-                else
-                    break;
-            }
+            pTarget[i] = TemperatureSampling<T>.Apply(targetProbs.GetRow(firstRow + i), temperature).AsSpan()[tokens[i]];
         }
 
-        return accepted;
+        // A path longer than its recorded draft probabilities uses 0.01 for the rest.
+        var pDraft = new T[verifiable];
+        int recorded = Math.Min(verifiable, draftProbs.Length);
+        draftProbs.AsSpan().Slice(0, recorded).CopyTo(pDraft);
+        pDraft.AsSpan(recorded).Fill(NumOps.FromDouble(0.01));
+
+        return TemperatureSampling<T>.CountAccepted(Vector<T>.Wrap(pTarget), Vector<T>.Wrap(pDraft), _random);
     }
 
     /// <summary>

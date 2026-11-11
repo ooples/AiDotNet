@@ -173,74 +173,58 @@ internal class SpeculativeDecoder<T>
 
             _totalVerificationCalls++;
 
-            // Accept/reject loop
-            int accepted = 0;
-            for (int i = 0; i < draft.NumTokens; i++)
+            // Draft token i is checked against target row tokens.Count + i - 1; only rows the target produced count.
+            int firstRow = tokens.Count - 1;
+            int verifiable = firstRow < 0 ? 0 : Math.Max(0, Math.Min(draft.NumTokens, targetProbs.Rows - firstRow));
+            int[] draftTokens = draft.Tokens.ToArray();
+
+            // Speculative sampling compares the target and draft under the SAME temperature: the draft
+            // probabilities are already tempered, so the target rows must be too (one-hot when greedy, which makes
+            // acceptance exact: accept iff the draft token is the target's argmax).
+            var targetDists = new Vector<T>[verifiable];
+            var pTarget = new T[verifiable];
+            for (int i = 0; i < verifiable; i++)
             {
-                int draftToken = draft.Tokens[i];
-                int targetPos = tokens.Count + i - 1; // Position in target output
+                targetDists[i] = TemperatureSampling<T>.Apply(targetProbs.GetRow(firstRow + i), temperature);
+                pTarget[i] = targetDists[i].AsSpan()[draftTokens[i]];
+            }
 
-                if (targetPos < 0 || targetPos >= targetProbs.Rows)
-                    break;
+            int accepted = TemperatureSampling<T>.CountAccepted(
+                Vector<T>.Wrap(pTarget), draft.TokenProbabilities.GetSubVector(0, verifiable), _random, draftTokens, eosToken);
+            tokens.AddRange(new ArraySegment<int>(draftTokens, 0, accepted));
+            generated += accepted;
 
-                // Speculative sampling compares the target and draft under the SAME temperature: the draft
-                // probabilities are already tempered, so the target row must be too (one-hot when greedy,
-                // which makes acceptance exact: accept iff the draft token is the target's argmax).
-                var targetDist = TemperatureSampling<T>.Apply(targetProbs.GetRow(targetPos), temperature);
-                T pTarget = targetDist[draftToken];
-                T pDraft = draft.TokenProbabilities[i];
-
-                // Speculative acceptance: accept with probability min(1, p_target / p_draft)
-                bool accept;
-                if (NumOps.LessThanOrEquals(pDraft, NumOps.Zero))
+            if (accepted > 0 && eosToken.HasValue && draftTokens[accepted - 1] == eosToken.Value)
+            {
+                stepStats.Add(new StepStatistics
                 {
-                    accept = NumOps.GreaterThan(pTarget, NumOps.Zero);
-                }
-                else
+                    DraftTokens = accepted,
+                    AcceptedTokens = accepted,
+                    ResampledToken = false
+                });
+                _acceptedDraftTokens += accepted;
+                goto done;
+            }
+
+            if (accepted < verifiable)
+            {
+                // Rejection: sample from the residual max(0, p_target - p_draft), both tempered.
+                var adjustedDist = ComputeAdjustedDistribution(targetDists[accepted], draft.Probabilities.GetRow(accepted));
+                int resampledToken = TemperatureSampling<T>.Sample(adjustedDist, _random);
+                tokens.Add(resampledToken);
+                generated++;
+
+                stepStats.Add(new StepStatistics
                 {
-                    T ratio = NumOps.Divide(pTarget, pDraft);
-                    T acceptProb = NumOps.LessThan(ratio, NumOps.One) ? ratio : NumOps.One;
-                    accept = _random.NextDouble() < NumOps.ToDouble(acceptProb);
-                }
+                    DraftTokens = accepted + 1,
+                    AcceptedTokens = accepted,
+                    ResampledToken = true
+                });
 
-                if (accept)
+                if (eosToken.HasValue && resampledToken == eosToken.Value)
                 {
-                    tokens.Add(draftToken);
-                    accepted++;
-                    generated++;
-
-                    if (eosToken.HasValue && draftToken == eosToken.Value)
-                    {
-                        stepStats.Add(new StepStatistics
-                        {
-                            DraftTokens = i + 1,
-                            AcceptedTokens = accepted,
-                            ResampledToken = false
-                        });
-                        goto done;
-                    }
-                }
-                else
-                {
-                    // Rejection: sample from the residual max(0, p_target - p_draft), both tempered.
-                    var draftDist = draft.Probabilities.GetRow(i);
-                    var adjustedDist = ComputeAdjustedDistribution(targetDist, draftDist);
-
-                    int resampledToken = TemperatureSampling<T>.Sample(adjustedDist, _random);
-                    tokens.Add(resampledToken);
-                    generated++;
-
-                    stepStats.Add(new StepStatistics
-                    {
-                        DraftTokens = i + 1,
-                        AcceptedTokens = accepted,
-                        ResampledToken = true
-                    });
-
-                    if (eosToken.HasValue && resampledToken == eosToken.Value)
-                        goto done;
-
-                    break; // Stop accepting after rejection
+                    _acceptedDraftTokens += accepted;
+                    goto done;
                 }
             }
 

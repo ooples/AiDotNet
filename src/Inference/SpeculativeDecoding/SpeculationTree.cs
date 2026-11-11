@@ -59,8 +59,9 @@ internal class SpeculationTree<T>
         if (pathIndex >= allPaths.Count)
             return new Vector<T>(0);
 
-        var path = allPaths[pathIndex];
-        var probs = new Vector<T>(path.Length);
+        var path = allPaths[pathIndex].ToArray();
+        var probs = new T[path.Length];
+        T missing = NumOps.FromDouble(0.01); // Default probability
 
         // Traverse tree to collect probabilities
         var node = Root;
@@ -83,11 +84,11 @@ internal class SpeculationTree<T>
             }
             else
             {
-                probs[i] = NumOps.FromDouble(0.01); // Default probability
+                probs[i] = missing;
             }
         }
 
-        return probs;
+        return Vector<T>.Wrap(probs);
     }
 
     private void CollectPaths(TreeNode<T> node, List<int> current, List<Vector<int>> paths)

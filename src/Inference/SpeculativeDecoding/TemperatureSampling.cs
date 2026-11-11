@@ -79,6 +79,29 @@ internal static class TemperatureSampling<T>
         return lastWithMass >= 0 ? lastWithMass : ArgMax(distribution);
     }
 
+    /// <summary>
+    /// Speculative acceptance over a run of draft tokens: token <c>i</c> is accepted with probability
+    /// <c>min(1, p_target[i] / p_draft[i])</c>, and a draft probability at or below zero accepts exactly when the
+    /// target gives the token mass, without a random draw. Stops at the first rejection, and after an accepted
+    /// <paramref name="stopToken"/>.
+    /// </summary>
+    /// <returns>The number of leading draft tokens accepted.</returns>
+    public static int CountAccepted(Vector<T> targetProbabilities, Vector<T> draftProbabilities, Random random,
+        int[]? tokens = null, int? stopToken = null)
+    {
+        double[] target = targetProbabilities.Transform(NumOps.ToDouble).ToArray();
+        double[] draft = draftProbabilities.Transform(NumOps.ToDouble).ToArray();
+        for (int i = 0; i < target.Length; i++)
+        {
+            double ratio = draft[i] > 0 ? target[i] / draft[i] : 0;
+            bool accept = draft[i] <= 0 ? target[i] > 0 : random.NextDouble() < (ratio < 1 ? ratio : 1);
+            if (!accept) return i;
+            if (stopToken.HasValue && tokens is not null && tokens[i] == stopToken.Value) return i + 1;
+        }
+
+        return target.Length;
+    }
+
     /// <summary>Index of the largest entry (the first one on ties).</summary>
     public static int ArgMax(Vector<T> distribution) => distribution.Length == 0 ? 0 : distribution.IndexOfMax();
 }
