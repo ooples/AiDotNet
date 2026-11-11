@@ -114,21 +114,8 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
     private class ClassStatistics
     {
         public long Count { get; set; }
-        public double[]? Means { get; set; }
-        public double[]? M2 { get; set; } // For Welford's algorithm
-        public double[]? Variances => ComputeVariances();
-
-        private double[]? ComputeVariances()
-        {
-            if (M2 is null || Count < 2) return null;
-
-            var variances = new double[M2.Length];
-            for (int i = 0; i < M2.Length; i++)
-            {
-                variances[i] = M2[i] / (Count - 1);
-            }
-            return variances;
-        }
+        public Vector<T>? Means { get; set; }
+        public Vector<T>? M2 { get; set; } // For Welford's algorithm
     }
 
     /// <summary>
@@ -170,23 +157,23 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
         {
             _classStats[classIdx] = new ClassStatistics
             {
-                Means = new double[features.Length],
-                M2 = new double[features.Length]
+                Means = new Vector<T>(features.Length),
+                M2 = new Vector<T>(features.Length)
             };
         }
 
         var stats = _classStats[classIdx];
         stats.Count++;
 
-        // Welford's online algorithm for mean and variance
-        for (int f = 0; f < features.Length; f++)
-        {
-            double value = NumOps.ToDouble(features[f]);
-            double delta = value - (stats.Means ?? throw new InvalidOperationException("Means has not been initialized."))[f];
-            stats.Means[f] += delta / stats.Count;
-            double delta2 = value - stats.Means[f];
-            (stats.M2 ?? throw new InvalidOperationException("M2 has not been initialized."))[f] += delta * delta2;
-        }
+        // Welford's online algorithm for mean and variance:
+        // delta = x - mean; mean += delta / n; M2 += delta * (x - mean)
+        var engine = Engine;
+        var means = stats.Means ?? throw new InvalidOperationException("Means has not been initialized.");
+        var m2 = stats.M2 ?? throw new InvalidOperationException("M2 has not been initialized.");
+        var delta = engine.Subtract(features, means);
+        stats.Means = engine.Add(means, engine.Divide(delta, NumOps.FromDouble(stats.Count)));
+        var delta2 = engine.Subtract(features, stats.Means);
+        stats.M2 = engine.Add(m2, engine.Multiply(delta, delta2));
 
         SamplesSeen++;
     }
@@ -196,14 +183,10 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
     /// </summary>
     public void PartialFit(Matrix<T> features, Vector<T> labels)
     {
+        var labelValues = labels.ToArray();
         for (int i = 0; i < features.Rows; i++)
         {
-            var sample = new Vector<T>(features.Columns);
-            for (int j = 0; j < features.Columns; j++)
-            {
-                sample[j] = features[i, j];
-            }
-            PartialFit(sample, labels[i]);
+            PartialFit(features.GetRow(i), labelValues[i]);
         }
     }
 
@@ -216,19 +199,14 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
     /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> input)
     {
-        var predictions = new Vector<T>(input.Rows);
+        var predictions = new T[input.Rows];
 
         for (int i = 0; i < input.Rows; i++)
         {
-            var features = new Vector<T>(input.Columns);
-            for (int j = 0; j < input.Columns; j++)
-            {
-                features[j] = input[i, j];
-            }
-            predictions[i] = PredictSingle(features);
+            predictions[i] = PredictSingle(input.GetRow(i));
         }
 
-        return predictions;
+        return Vector<T>.Wrap(predictions);
     }
 
     private T PredictSingle(Vector<T> features)
@@ -238,64 +216,76 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
             throw new InvalidOperationException("No known classes available for prediction. The classifier must be trained first.");
         }
 
-        double bestLogProb = double.NegativeInfinity;
-        int bestClass = 0;
-
-        for (int c = 0; c < _knownClasses.Count; c++)
-        {
-            double logProb = ComputeLogPosterior(features, c);
-            if (logProb > bestLogProb)
-            {
-                bestLogProb = logProb;
-                bestClass = c;
-            }
-        }
-
+        // Class with the highest log posterior (the first one wins ties)
+        var logPosteriors = ComputeLogPosteriors(features);
+        int bestClass = Engine.TensorArgMax(logPosteriors.AsTensor().Reshape(1, logPosteriors.Length), 1).ToArray()[0];
         return _knownClasses[bestClass];
     }
 
-    private double ComputeLogPosterior(Vector<T> features, int classIdx)
+    private T ComputeLogPosterior(Vector<T> features, int classIdx)
     {
         if (!_classStats.ContainsKey(classIdx))
         {
-            return double.NegativeInfinity;
+            return NumOps.FromDouble(double.NegativeInfinity);
         }
 
+        var engine = Engine;
         var stats = _classStats[classIdx];
+        var means = stats.Means ?? throw new InvalidOperationException("Means has not been initialized.");
 
         // Log prior: log(P(class))
-        double logPrior = Math.Log((double)stats.Count / SamplesSeen);
+        T logPrior = NumOps.Log(NumOps.Divide(NumOps.FromDouble(stats.Count), NumOps.FromDouble(SamplesSeen)));
+
+        // Variances (1 until two samples were seen), plus a small floor to prevent division by zero
+        var variances = GetVariances(stats) ?? FilledVector(features.Length, NumOps.One);
+        var variance = engine.TensorClampMin(variances.AsTensor(), NumOps.FromDouble(1e-9));
+        var diff = engine.TensorSubtract(features.AsTensor(), means.AsTensor());
 
         // Log likelihood: sum of log(P(xi|class))
-        double logLikelihood = 0;
-        var variances = stats.Variances;
-
-        for (int f = 0; f < features.Length; f++)
+        Tensor<T> logP;
+        if (_options.UseGaussian)
         {
-            double x = NumOps.ToDouble(features[f]);
-            double mean = (stats.Means ?? throw new InvalidOperationException("Means has not been initialized."))[f];
-            double variance = variances?[f] ?? 1.0;
-
-            // Add small constant to prevent division by zero
-            variance = Math.Max(variance, 1e-9);
-
-            if (_options.UseGaussian)
-            {
-                // Gaussian log probability
-                double logP = -0.5 * Math.Log(2 * Math.PI * variance) -
-                             0.5 * (x - mean) * (x - mean) / variance;
-                logLikelihood += logP;
-            }
-            else
-            {
-                // Simple smoothed probability based on distance from mean
-                double distance = Math.Abs(x - mean) / Math.Sqrt(variance);
-                double logP = -distance - Math.Log(_options.Alpha + distance);
-                logLikelihood += logP;
-            }
+            // Gaussian log probability: -0.5 * log(2*pi*variance) - 0.5 * (x - mean)^2 / variance
+            T negHalf = NumOps.FromDouble(-0.5);
+            var logNorm = engine.TensorMultiplyScalar(
+                engine.TensorLog(engine.TensorMultiplyScalar(variance, NumOps.FromDouble(2 * Math.PI))), negHalf);
+            var quadratic = engine.TensorMultiplyScalar(
+                engine.TensorDivide(engine.TensorMultiply(diff, diff), variance), negHalf);
+            logP = engine.TensorAdd(logNorm, quadratic);
+        }
+        else
+        {
+            // Simple smoothed probability based on distance from mean: -d - log(alpha + d)
+            var distance = engine.TensorDivide(engine.TensorAbs(diff), engine.TensorSqrt(variance));
+            var penalty = engine.TensorLog(engine.TensorAddScalar(distance, NumOps.FromDouble(_options.Alpha)));
+            logP = engine.TensorNegate(engine.TensorAdd(distance, penalty));
         }
 
-        return logPrior + logLikelihood;
+        T logLikelihood = features.Length == 0 ? NumOps.Zero : engine.TensorSum(logP);
+        return NumOps.Add(logPrior, logLikelihood);
+    }
+
+    /// <summary>
+    /// Log posterior of every known class for one sample.
+    /// </summary>
+    private Vector<T> ComputeLogPosteriors(Vector<T> features)
+    {
+        var values = new T[_knownClasses.Count];
+        for (int c = 0; c < values.Length; c++)
+        {
+            values[c] = ComputeLogPosterior(features, c);
+        }
+
+        return Vector<T>.Wrap(values);
+    }
+
+    /// <summary>
+    /// M2 / (n - 1), or null before two samples of the class were seen.
+    /// </summary>
+    private Vector<T>? GetVariances(ClassStatistics stats)
+    {
+        if (stats.M2 is null || stats.Count < 2) return null;
+        return Engine.Divide(stats.M2, NumOps.FromDouble(stats.Count - 1));
     }
 
     /// <summary>
@@ -308,39 +298,19 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
             return new Vector<T>(0);
         }
 
-        var logProbs = new double[_knownClasses.Count];
-        double maxLogProb = double.NegativeInfinity;
-
-        for (int c = 0; c < _knownClasses.Count; c++)
-        {
-            logProbs[c] = ComputeLogPosterior(features, c);
-            maxLogProb = Math.Max(maxLogProb, logProbs[c]);
-        }
-
-        // Convert to probabilities using log-sum-exp trick
-        double sumExp = 0;
-        for (int c = 0; c < logProbs.Length; c++)
-        {
-            sumExp += Math.Exp(logProbs[c] - maxLogProb);
-        }
-
-        var probs = new Vector<T>(_knownClasses.Count);
-        for (int c = 0; c < logProbs.Length; c++)
-        {
-            double prob = Math.Exp(logProbs[c] - maxLogProb) / sumExp;
-            probs[c] = NumOps.FromDouble(prob);
-        }
-
-        return probs;
+        // Convert to probabilities using the log-sum-exp (softmax) trick
+        return Engine.Softmax(ComputeLogPosteriors(features));
     }
 
     private int GetOrCreateClassIndex(T label)
     {
-        for (int i = 0; i < _knownClasses.Count; i++)
+        // Known classes are stored in first-seen order; equality test against all of them at once
+        if (_knownClasses.Count > 0)
         {
-            if (NumOps.Compare(_knownClasses[i], label) == 0)
+            var matches = Engine.TensorEquals(Vector<T>.Wrap(_knownClasses.ToArray()).AsTensor(), label);
+            if (NumOps.Compare(Engine.TensorSum(matches), NumOps.Zero) != 0)
             {
-                return i;
+                return Engine.TensorArgMax(matches.Reshape(1, _knownClasses.Count), 1).ToArray()[0];
             }
         }
 
@@ -359,33 +329,24 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
             return new Vector<T>(0);
         }
 
-        int paramsPerClass = NumFeatures * 2; // mean + variance
-        var parameters = new Vector<T>(_knownClasses.Count * paramsPerClass);
-
-        int idx = 0;
+        // [means | variances] per known class (zeros for classes without statistics)
+        var blocks = new Tensor<T>[_knownClasses.Count * 2];
         for (int c = 0; c < _knownClasses.Count; c++)
         {
-            if (_classStats.ContainsKey(c))
+            var means = new Vector<T>(NumFeatures);
+            var variances = new Vector<T>(NumFeatures);
+            if (_classStats.TryGetValue(c, out var stats))
             {
-                var stats = _classStats[c];
-                var variances = stats.Variances ?? new double[NumFeatures];
+                means = stats.Means is null ? means : FitToLength(stats.Means, NumFeatures);
+                var classVariances = GetVariances(stats);
+                variances = classVariances is null ? variances : FitToLength(classVariances, NumFeatures);
+            }
 
-                for (int f = 0; f < NumFeatures; f++)
-                {
-                    parameters[idx++] = NumOps.FromDouble(stats.Means?[f] ?? 0);
-                }
-                for (int f = 0; f < NumFeatures; f++)
-                {
-                    parameters[idx++] = NumOps.FromDouble(variances[f]);
-                }
-            }
-            else
-            {
-                idx += paramsPerClass;
-            }
+            blocks[2 * c] = means.AsTensor();
+            blocks[2 * c + 1] = variances.AsTensor();
         }
 
-        return parameters;
+        return Engine.TensorConcatenate(blocks, 0).ToVector();
     }
 
     /// <inheritdoc />
@@ -405,25 +366,20 @@ public partial class OnlineNaiveBayesClassifier<T> : ClassifierBase<T>, IOnlineC
             {
                 _classStats[c] = new ClassStatistics
                 {
-                    Means = new double[NumFeatures],
-                    M2 = new double[NumFeatures],
+                    Means = new Vector<T>(NumFeatures),
+                    M2 = new Vector<T>(NumFeatures),
                     Count = 2 // Minimum count so Variances is defined (variance = M2 / (Count - 1))
                 };
             }
 
             var stats = _classStats[c];
 
-            for (int f = 0; f < NumFeatures; f++)
-            {
-                (stats.Means ?? throw new InvalidOperationException("Means has not been initialized."))[f] = NumOps.ToDouble(parameters[idx++]);
-            }
+            stats.Means = parameters.GetSubVector(idx, NumFeatures);
+            idx += NumFeatures;
 
             // Set M2 based on variance (reverse Welford)
-            for (int f = 0; f < NumFeatures; f++)
-            {
-                double variance = NumOps.ToDouble(parameters[idx++]);
-                (stats.M2 ?? throw new InvalidOperationException("M2 has not been initialized."))[f] = variance * (stats.Count - 1);
-            }
+            stats.M2 = Engine.Multiply(parameters.GetSubVector(idx, NumFeatures), NumOps.FromDouble(stats.Count - 1));
+            idx += NumFeatures;
         }
 
         // Recompute SamplesSeen from class counts
