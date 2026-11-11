@@ -143,6 +143,11 @@ public partial class PoissonRegression<T> : RegressionBase<T>
 
         Matrix<T> xWithIntercept = x.AddColumn(Vector<T>.CreateDefault(x.Rows, NumOps.One));
 
+        // Ridge regularization added to the diagonal for numerical stability (loop invariant)
+        var minRegularization = MinSafeValue;
+        var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
+        var effectiveStrength = NumOps.FromDouble(Math.Max(minRegularization, userStrength));
+
         for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
         {
             Vector<T> currentCoefficients = new([.. Coefficients, Intercept]);
@@ -156,9 +161,6 @@ public partial class PoissonRegression<T> : RegressionBase<T>
 
             // Add ridge regularization to ensure numerical stability
             // This adds a small value to the diagonal to prevent singularity
-            var minRegularization = MinSafeValue;
-            var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
-            var effectiveStrength = NumOps.FromDouble(Math.Max(minRegularization, userStrength));
             xTwx = RegressionEngineOps2.AddDiagonal(xTwx, effectiveStrength);
 
             Vector<T> newCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTwx, xTwz, _options.DecompositionType);
