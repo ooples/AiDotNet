@@ -194,13 +194,13 @@ public class AudioNoise<T> : AudioAugmenterBase<T>
 
         // Carry entering each block: c[0] = 0, c[b + 1] = d^Block * c[b] + local[b, Block - 1]
         T blockDecay = NumOps.FromDouble(Math.Exp(Block * logDecay));
-        var lastLocal = engine.TensorNarrow(local, 1, Block - 1, 1);
+        var lastLocal = engine.TensorNarrow(local, 1, Block - 1, 1).Contiguous();
         var carries = new Tensor<T>[blocks];
         var carry = new Tensor<T>([1, 1]);
         for (int b = 0; b < blocks; b++)
         {
             carries[b] = carry;
-            carry = engine.TensorAdd(engine.TensorMultiplyScalar(carry, blockDecay), engine.TensorNarrow(lastLocal, 0, b, 1));
+            carry = engine.TensorAdd(engine.TensorMultiplyScalar(carry, blockDecay), engine.TensorNarrow(lastLocal, 0, b, 1).Contiguous());
         }
 
         var carried = engine.TensorBroadcastTo(engine.TensorConcatenate(carries, 0), gridShape);

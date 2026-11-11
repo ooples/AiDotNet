@@ -267,7 +267,7 @@ public partial class KrigingInterpolation<T> : I2DInterpolation<T>
     private static Tensor<T> TileDifferences(IEngine engine, Tensor<T> values, int start, int size, int[] tileShape)
     {
         return engine.TensorSubtract(
-            engine.TensorBroadcastTo(engine.TensorNarrow(values, 0, start, size).Reshape(size, 1), tileShape),
+            engine.TensorBroadcastTo(engine.TensorNarrow(values, 0, start, size).Contiguous().Reshape(size, 1), tileShape),
             engine.TensorBroadcastTo(values.Reshape(1, values.Length), tileShape));
     }
 

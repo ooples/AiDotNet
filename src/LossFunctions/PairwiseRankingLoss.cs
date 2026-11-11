@@ -153,7 +153,7 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
         var pairShape = new[] { rows, n };
         var columnShape = new[] { rows, 1 };
         var rowShape = new[] { 1, n };
-        var blockActual = Engine.TensorNarrow(actual, 0, start, rows);
+        var blockActual = Engine.TensorNarrow(actual, 0, start, rows).Contiguous();
 
         // Only ordered pairs where i is the true winner contribute; ties contribute nothing.
         var winner = Engine.TensorGreaterThan(
@@ -166,7 +166,7 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
         }
 
         var pairExtremity = Engine.TensorMax(
-            Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorNarrow(extremity, 0, start, rows), columnShape), pairShape),
+            Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorNarrow(extremity, 0, start, rows).Contiguous(), columnShape), pairShape),
             Engine.TensorBroadcastTo(Engine.Reshape(extremity, rowShape), pairShape));
         var tailWeight = Engine.TensorPower(
             Engine.TensorAddScalar(pairExtremity, NumOps.One), NumOps.FromDouble(_tailWeightPower));
@@ -221,7 +221,7 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
             int rows = Math.Min(block, n - start);
             var pairShape = new[] { rows, n };
             var weights = ComputePairWeights(targets, extremity, start, rows);
-            var sI = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorNarrow(scores, 0, start, rows), new[] { rows, 1 }), pairShape);
+            var sI = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorNarrow(scores, 0, start, rows).Contiguous(), new[] { rows, 1 }), pairShape);
             var sJ = Engine.TensorBroadcastTo(Engine.Reshape(scores, new[] { 1, n }), pairShape);
             var negDiff = Engine.TensorNegate(Engine.TensorSubtract(sI, sJ));
             weightSum = NumOps.Add(weightSum, Engine.TensorSum(weights));
