@@ -68,27 +68,16 @@ public abstract class ProbabilisticClassifierBase<T> : ClassifierBase<T>, IProba
         }
 
         var probabilities = PredictProbabilities(input);
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            // Find the class with the highest probability (argmax)
-            int bestClass = 0;
-            T bestProb = probabilities[i, 0];
-
-            for (int j = 1; j < NumClasses; j++)
-            {
-                if (NumOps.Compare(probabilities[i, j], bestProb) > 0)
-                {
-                    bestProb = probabilities[i, j];
-                    bestClass = j;
-                }
-            }
-
-            predictions[i] = NumOps.FromDouble(bestClass);
+            return new Vector<T>(0);
         }
 
-        return predictions;
+        // Arg-max over the first NumClasses columns, returned as the class index value.
+        var classScores = probabilities.Columns == NumClasses
+            ? probabilities
+            : probabilities.GetSubMatrix(0, 0, probabilities.Rows, NumClasses);
+        return ClassIndicesToValues(ArgMaxRows(classScores), NumClasses);
     }
 
     /// <summary>
@@ -145,21 +134,15 @@ public abstract class ProbabilisticClassifierBase<T> : ClassifierBase<T>, IProba
     public virtual Matrix<T> PredictLogProbabilities(Matrix<T> input)
     {
         var probabilities = PredictProbabilities(input);
-        var logProbabilities = new Matrix<T>(probabilities.Rows, probabilities.Columns);
-
-        for (int i = 0; i < probabilities.Rows; i++)
+        if (probabilities.Rows == 0 || probabilities.Columns == 0)
         {
-            for (int j = 0; j < probabilities.Columns; j++)
-            {
-                // Compute log(p) with a small epsilon to avoid log(0)
-                T p = probabilities[i, j];
-                T epsilon = NumOps.FromDouble(1e-15);
-                T clampedP = NumOps.Compare(p, epsilon) < 0 ? epsilon : p;
-                logProbabilities[i, j] = NumOps.Log(clampedP);
-            }
+            return new Matrix<T>(probabilities.Rows, probabilities.Columns);
         }
 
-        return logProbabilities;
+        // Compute log(p) with a small epsilon to avoid log(0)
+        var engine = Engine;
+        var clamped = engine.TensorClampMin(Tensor<T>.FromMatrix(probabilities), NumOps.FromDouble(1e-15));
+        return engine.TensorLog(clamped).ToMatrix();
     }
 
     /// <summary>
@@ -191,37 +174,13 @@ public abstract class ProbabilisticClassifierBase<T> : ClassifierBase<T>, IProba
     /// </remarks>
     protected Matrix<T> ApplySoftmax(Matrix<T> scores)
     {
-        var probabilities = new Matrix<T>(scores.Rows, scores.Columns);
-
-        for (int i = 0; i < scores.Rows; i++)
+        if (scores.Rows == 0 || scores.Columns == 0)
         {
-            // Find max for numerical stability (subtract max before exp)
-            T max = scores[i, 0];
-            for (int j = 1; j < scores.Columns; j++)
-            {
-                if (NumOps.Compare(scores[i, j], max) > 0)
-                {
-                    max = scores[i, j];
-                }
-            }
-
-            // Compute exp(score - max) and sum
-            T sum = NumOps.Zero;
-            var expScores = new T[scores.Columns];
-            for (int j = 0; j < scores.Columns; j++)
-            {
-                expScores[j] = NumOps.Exp(NumOps.Subtract(scores[i, j], max));
-                sum = NumOps.Add(sum, expScores[j]);
-            }
-
-            // Normalize to get probabilities
-            for (int j = 0; j < scores.Columns; j++)
-            {
-                probabilities[i, j] = NumOps.Divide(expScores[j], sum);
-            }
+            return new Matrix<T>(scores.Rows, scores.Columns);
         }
 
-        return probabilities;
+        // Row-wise softmax; the engine subtracts the row max before exp for numerical stability.
+        return Engine.Softmax(Tensor<T>.FromMatrix(scores), 1).ToMatrix();
     }
 
     /// <summary>
@@ -251,30 +210,13 @@ public abstract class ProbabilisticClassifierBase<T> : ClassifierBase<T>, IProba
     /// </remarks>
     protected Vector<T> ApplySigmoid(Vector<T> scores)
     {
-        var probabilities = new Vector<T>(scores.Length);
-
-        for (int i = 0; i < scores.Length; i++)
+        if (scores.Length == 0)
         {
-            // sigmoid(x) = 1 / (1 + exp(-x))
-            // For numerical stability, use: sigmoid(x) = exp(x) / (1 + exp(x)) when x >= 0
-            T x = scores[i];
-            T negX = NumOps.Negate(x);
-
-            if (NumOps.Compare(x, NumOps.Zero) >= 0)
-            {
-                // Use standard formula for positive x
-                T expNegX = NumOps.Exp(negX);
-                probabilities[i] = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
-            }
-            else
-            {
-                // Use exp(x) / (1 + exp(x)) for negative x
-                T expX = NumOps.Exp(x);
-                probabilities[i] = NumOps.Divide(expX, NumOps.Add(NumOps.One, expX));
-            }
+            return new Vector<T>(0);
         }
 
-        return probabilities;
+        // sigmoid(x) = 1 / (1 + exp(-x)), evaluated by the engine over the whole vector.
+        return Engine.Sigmoid(scores);
     }
 
     /// <inheritdoc/>

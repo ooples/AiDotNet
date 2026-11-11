@@ -408,6 +408,55 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
+    /// Returns, for each row of <paramref name="scores"/>, the column holding the largest value
+    /// (the first one on ties), as a rank-1 index tensor.
+    /// </summary>
+    /// <param name="scores">A [samples, classes] score or probability matrix.</param>
+    /// <returns>The arg-max column of each row.</returns>
+    protected Tensor<int> ArgMaxRows(Matrix<T> scores)
+    {
+        return Engine.TensorArgMax(Tensor<T>.FromMatrix(scores), 1);
+    }
+
+    /// <summary>
+    /// Converts class indices to their numeric index values (0, 1, 2, ...) as a <see cref="Vector{T}"/>,
+    /// by gathering from the index range rather than converting one element at a time.
+    /// </summary>
+    /// <param name="indices">Class indices in [0, <paramref name="numClasses"/>).</param>
+    /// <param name="numClasses">The number of classes.</param>
+    /// <returns>The index values as T.</returns>
+    protected Vector<T> ClassIndicesToValues(Tensor<int> indices, int numClasses)
+    {
+        if (indices.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var range = Engine.TensorArange<T>(0, Math.Max(1, numClasses));
+        return Engine.TensorGather(range, indices.Reshape(indices.Length), 0).AsVector();
+    }
+
+    /// <summary>
+    /// Converts class indices to their class label values from <see cref="ClassLabels"/>.
+    /// </summary>
+    /// <param name="indices">Class indices in [0, ClassLabels.Length).</param>
+    /// <returns>The class labels as T.</returns>
+    protected Vector<T> ClassIndicesToLabels(Tensor<int> indices)
+    {
+        if (ClassLabels is null || ClassLabels.Length == 0)
+        {
+            return ClassIndicesToValues(indices, NumClasses);
+        }
+
+        if (indices.Length == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        return Engine.TensorGather(ClassLabels.AsTensor(), indices.Reshape(indices.Length), 0).AsVector();
+    }
+
+    /// <summary>
     /// Gets metadata about the model.
     /// </summary>
     /// <returns>A ModelMetadata object containing information about the model.</returns>
