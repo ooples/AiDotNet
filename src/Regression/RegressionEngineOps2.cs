@@ -183,39 +183,9 @@ internal static class RegressionEngineOps2
     /// </summary>
     public static Matrix<T> PairwiseDistances<T>(Matrix<T> left, Matrix<T> right)
     {
-        if (left.Columns != right.Columns)
-        {
-            throw new ArgumentException(
-                $"Vectors must have the same length. Got {left.Columns} and {right.Columns}.", nameof(right));
-        }
-
-        if (left.Rows == 0 || right.Rows == 0 || left.Columns == 0)
-        {
-            return new Matrix<T>(left.Rows, right.Rows);
-        }
-
-        var engine = AiDotNetEngine.Current;
-        int d = left.Columns;
-        long perRow = Math.Max(1L, (long)right.Rows * Math.Max(1, d));
-        int blockRows = (int)Math.Max(1L, Math.Min(left.Rows, PairwiseBlockElements / perRow));
-        var rightBroadcastSource = engine.Reshape(Tensor<T>.FromMatrix(right), new[] { 1, right.Rows, d });
-        var blocks = new List<Tensor<T>>();
-        for (int start = 0; start < left.Rows; start += blockRows)
-        {
-            int count = Math.Min(blockRows, left.Rows - start);
-            var block = count == left.Rows ? left : left.GetSubMatrix(start, 0, count, d);
-            var shape = new[] { count, right.Rows, d };
-            var l = engine.TensorBroadcastTo(engine.Reshape(Tensor<T>.FromMatrix(block), new[] { count, 1, d }), shape);
-            var r = engine.TensorBroadcastTo(rightBroadcastSource, shape);
-            var squared = engine.TensorSquare(engine.TensorSubtract(l, r));
-            blocks.Add(engine.ReduceSum(squared, new[] { 2 }, keepDims: false));
-        }
-
-        var sumSq = blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
-        return engine.TensorSqrt(sumSq).ToMatrix();
+        return AiDotNetEngine.Current.TensorSqrt(
+            Tensor<T>.FromMatrix(RegressionEngineOps.PairwiseDistanceSums(left, right, absolute: false))).ToMatrix();
     }
-
-    private const long PairwiseBlockElements = 1L << 24;
 
     /// <summary>
     /// A one-row matrix holding <paramref name="row"/>.
@@ -292,26 +262,9 @@ internal static class RegressionEngineOps2
                 $"Vectors must have the same length. Got {right.Columns} and {left.Columns}.", nameof(right));
         }
 
+        // Distance kernels go through the shared pairwise reduction, which blocks both row axes.
         var engine = AiDotNetEngine.Current;
         var numOps = MathHelper.GetNumericOperations<T>();
-        bool distanceKernel = options.KernelType is KernelType.RBF or KernelType.Laplacian;
-        long perRow = Math.Max(1L, (long)right.Rows * Math.Max(1, left.Columns));
-        int blockRows = distanceKernel
-            ? (int)Math.Max(1L, Math.Min(left.Rows, PairwiseBlockElements / perRow))
-            : left.Rows;
-        if (blockRows < left.Rows)
-        {
-            var blocks = new List<Tensor<T>>();
-            for (int start = 0; start < left.Rows; start += blockRows)
-            {
-                int count = Math.Min(blockRows, left.Rows - start);
-                blocks.Add(Tensor<T>.FromMatrix(
-                    KernelMatrix(left.GetSubMatrix(start, 0, count, left.Columns), right, options)));
-            }
-
-            return engine.TensorConcatenate(blocks.ToArray(), 0).ToMatrix();
-        }
-
         T gamma = numOps.FromDouble(options.Gamma);
         T negativeGamma = numOps.FromDouble(-options.Gamma);
         T coef0 = numOps.FromDouble(options.Coef0);
@@ -319,29 +272,29 @@ internal static class RegressionEngineOps2
         switch (options.KernelType)
         {
             case KernelType.Linear:
-                gram = CrossDotProducts(left, right);
+                gram = RegressionEngineOps.CrossDotProducts(left, right);
                 break;
 
             case KernelType.RBF:
                 gram = engine.TensorExp(engine.TensorMultiplyScalar(
-                    ReduceLastAxis(engine.TensorSquare(PairwiseDifferences(left, right)), left.Rows, right.Rows),
+                    Tensor<T>.FromMatrix(RegressionEngineOps.PairwiseDistanceSums(left, right, absolute: false)),
                     negativeGamma));
                 break;
 
             case KernelType.Polynomial:
                 gram = engine.TensorPower(
-                    engine.TensorAddScalar(engine.TensorMultiplyScalar(CrossDotProducts(left, right), gamma), coef0),
+                    engine.TensorAddScalar(engine.TensorMultiplyScalar(RegressionEngineOps.CrossDotProducts(left, right), gamma), coef0),
                     numOps.FromDouble(options.PolynomialDegree));
                 break;
 
             case KernelType.Sigmoid:
                 gram = engine.TensorTanh(
-                    engine.TensorAddScalar(engine.TensorMultiplyScalar(CrossDotProducts(left, right), gamma), coef0));
+                    engine.TensorAddScalar(engine.TensorMultiplyScalar(RegressionEngineOps.CrossDotProducts(left, right), gamma), coef0));
                 break;
 
             case KernelType.Laplacian:
                 gram = engine.TensorExp(engine.TensorMultiplyScalar(
-                    ReduceLastAxis(engine.TensorAbs(PairwiseDifferences(left, right)), left.Rows, right.Rows),
+                    Tensor<T>.FromMatrix(RegressionEngineOps.PairwiseDistanceSums(left, right, absolute: true)),
                     negativeGamma));
                 break;
 
@@ -363,34 +316,6 @@ internal static class RegressionEngineOps2
         var lower = engine.TensorTril(t, 0);
         var strictlyLower = engine.TensorTril(t, -1);
         return engine.TensorAdd(lower, engine.TensorTranspose(strictlyLower)).ToMatrix();
-    }
-
-    private static Tensor<T> PairwiseDifferences<T>(Matrix<T> left, Matrix<T> right)
-    {
-        var engine = AiDotNetEngine.Current;
-        int m = left.Rows;
-        int n = right.Rows;
-        int d = left.Columns;
-        var shape = new[] { m, n, d };
-        var l = engine.TensorBroadcastTo(engine.Reshape(Tensor<T>.FromMatrix(left), new[] { m, 1, d }), shape);
-        var r = engine.TensorBroadcastTo(engine.Reshape(Tensor<T>.FromMatrix(right), new[] { 1, n, d }), shape);
-        return engine.TensorSubtract(l, r);
-    }
-
-    private static Tensor<T> ReduceLastAxis<T>(Tensor<T> values, int rows, int columns)
-    {
-        if (values.Length == 0)
-        {
-            return new Tensor<T>(new[] { rows, columns });
-        }
-
-        return AiDotNetEngine.Current.ReduceSum(values, new[] { 2 }, keepDims: false);
-    }
-
-    private static Tensor<T> CrossDotProducts<T>(Matrix<T> left, Matrix<T> right)
-    {
-        var engine = AiDotNetEngine.Current;
-        return engine.TensorMatMul(Tensor<T>.FromMatrix(left), Tensor<T>.FromMatrix(engine.MatrixTranspose(right)));
     }
 
     /// <summary>
@@ -488,41 +413,9 @@ internal static class RegressionEngineOps2
     /// </summary>
     private static Matrix<T> GaussJordanEliminate<T>(Matrix<T> augmented, int n, T pivotFloor)
     {
-        var engine = AiDotNetEngine.Current;
-        int width = augmented.Columns;
-
         for (int col = 0; col < n; col++)
         {
-            // Pivot: first row at or below col with the largest |value| in this column.
-            var column = augmented.GetColumn(col);
-            var candidates = engine.Abs(column.GetSubVector(col, n - col));
-            int maxRow = col + engine.TensorArgMax(candidates.AsTensor(), 0).ToArray()[0];
-            if (maxRow != col)
-            {
-                var pivotCandidate = augmented.GetRow(maxRow);
-                augmented.SetRow(maxRow, augmented.GetRow(col));
-                augmented.SetRow(col, pivotCandidate);
-                column = augmented.GetColumn(col);
-            }
-
-            // Scale the pivot row by its pivot, a pivot below the floor in magnitude becoming the floor.
-            var pivotRow = augmented.GetRow(col);
-            var pivot = pivotRow.GetSubVector(col, 1).AsTensor();
-            var safePivot = engine.TensorWhere(
-                engine.TensorLessThan(engine.TensorAbs(pivot), pivotFloor),
-                engine.Fill(1, pivotFloor).AsTensor(),
-                pivot);
-            var scaledPivotRow = engine.TensorDivide(
-                pivotRow.AsTensor(), engine.TensorBroadcastTo(safePivot, new[] { width })).ToVector();
-
-            // row -= row[col] * scaledPivotRow for every row != col
-            var factors = Vector<T>.Concatenate(
-                column.GetSubVector(0, col), engine.FillZero<T>(1), column.GetSubVector(col + 1, n - col - 1));
-            var update = engine.MatrixMultiply(
-                new Tensor<T>(new[] { n, 1 }, factors).ToMatrix(),
-                new Tensor<T>(new[] { 1, width }, scaledPivotRow).ToMatrix());
-            augmented = engine.MatrixSubtract(augmented, update);
-            augmented.SetRow(col, scaledPivotRow);
+            augmented = RegressionEngineOps.GaussJordanStep(augmented, col, n, pivotFloor);
         }
 
         return augmented;

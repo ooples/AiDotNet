@@ -233,29 +233,55 @@ internal static class RegressionEngineOps
 
     /// <summary>
     /// Squared Euclidean distances ||left[i] - right[j]||^2 as a [left.Rows, right.Rows] matrix,
-    /// summed in feature order. Left rows are processed in blocks so the intermediate difference
-    /// tensor stays bounded.
+    /// summed in feature order.
     /// </summary>
     public static Matrix<T> PairwiseSquaredDistances<T>(Matrix<T> left, Matrix<T> right)
     {
-        if (left.Rows == 0 || right.Rows == 0)
+        return PairwiseDistanceSums(left, right, absolute: false);
+    }
+
+    /// <summary>
+    /// Per-pair sums over features of (left[i, f] - right[j, f])^2, or of |left[i, f] - right[j, f]|
+    /// when <paramref name="absolute"/> is true, as a [left.Rows, right.Rows] matrix summed in feature
+    /// order. Both row axes are processed in blocks so the [rows, columns, features] difference tensor
+    /// stays within the block budget however many rows either operand has.
+    /// </summary>
+    public static Matrix<T> PairwiseDistanceSums<T>(Matrix<T> left, Matrix<T> right, bool absolute)
+    {
+        if (left.Columns != right.Columns)
+        {
+            throw new ArgumentException(
+                $"Vectors must have the same length. Got {left.Columns} and {right.Columns}.", nameof(right));
+        }
+
+        if (left.Rows == 0 || right.Rows == 0 || left.Columns == 0)
         {
             return new Matrix<T>(left.Rows, right.Rows);
         }
 
         var engine = AiDotNetEngine.Current;
-        long perRow = Math.Max(1L, (long)right.Rows * Math.Max(1, left.Columns));
-        int blockRows = (int)Math.Max(1L, Math.Min(left.Rows, PairwiseBlockElements / perRow));
-        var blocks = new List<Tensor<T>>();
-        for (int start = 0; start < left.Rows; start += blockRows)
+        int d = left.Columns;
+        int blockColumns = (int)Math.Max(1L, Math.Min(right.Rows, PairwiseBlockElements / d));
+        int blockRows = (int)Math.Max(1L, Math.Min(left.Rows, PairwiseBlockElements / ((long)blockColumns * d)));
+        var rowBlocks = new List<Tensor<T>>();
+        for (int rowStart = 0; rowStart < left.Rows; rowStart += blockRows)
         {
-            int count = Math.Min(blockRows, left.Rows - start);
-            var block = count == left.Rows ? left : left.GetSubMatrix(start, 0, count, left.Columns);
-            blocks.Add(engine.ReduceSum(
-                engine.TensorSquare(PairwiseDifferences(block, right)), new[] { 2 }, keepDims: false));
+            int rowCount = Math.Min(blockRows, left.Rows - rowStart);
+            var leftBlock = rowCount == left.Rows ? left : left.GetSubMatrix(rowStart, 0, rowCount, d);
+            var columnBlocks = new List<Tensor<T>>();
+            for (int columnStart = 0; columnStart < right.Rows; columnStart += blockColumns)
+            {
+                int columnCount = Math.Min(blockColumns, right.Rows - columnStart);
+                var rightBlock = columnCount == right.Rows ? right : right.GetSubMatrix(columnStart, 0, columnCount, d);
+                var differences = PairwiseDifferences(leftBlock, rightBlock);
+                var terms = absolute ? engine.TensorAbs(differences) : engine.TensorSquare(differences);
+                columnBlocks.Add(engine.ReduceSum(terms, new[] { 2 }, keepDims: false));
+            }
+
+            rowBlocks.Add(columnBlocks.Count == 1 ? columnBlocks[0] : engine.TensorConcatenate(columnBlocks.ToArray(), 1));
         }
 
-        var result = blocks.Count == 1 ? blocks[0] : engine.TensorConcatenate(blocks.ToArray(), 0);
+        var result = rowBlocks.Count == 1 ? rowBlocks[0] : engine.TensorConcatenate(rowBlocks.ToArray(), 0);
         return result.ToMatrix();
     }
 
@@ -330,13 +356,6 @@ internal static class RegressionEngineOps
     /// </summary>
     public static Vector<T> Gather<T>(Vector<T> source, int[] indices)
     {
-        if (indices.Length == 0)
-        {
-            return new Vector<T>(0);
-        }
-
-        return AiDotNetEngine.Current.TensorGather(
-            Tensor<T>.FromVector(source),
-            new Tensor<int>(indices, new[] { indices.Length })).ToVector();
+        return RegressionEngineOps2.Gather(source, indices);
     }
 }
