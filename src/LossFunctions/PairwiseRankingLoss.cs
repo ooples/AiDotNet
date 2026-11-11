@@ -105,65 +105,63 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
     /// 1 at the most extreme top/bottom target. Returns all-ones when tail weighting is disabled
     /// or the spread is degenerate, so the loss reduces exactly to standard RankNet.
     /// </summary>
-    private double[] ComputeExtremities(Vector<T> actual)
+    private Tensor<T> ComputeExtremities(Tensor<T> actual)
     {
         int n = actual.Length;
-        var extremity = new double[n];
 
-        if (_tailWeightPower == 0.0)
+        if (_tailWeightPower == 0.0 || n == 0)
         {
-            for (int i = 0; i < n; i++) extremity[i] = 0.0;
-            return extremity;
+            return new Tensor<T>(new[] { n });
         }
 
         // Median of the target values (robust center for "how extreme" each name is).
-        var sorted = new double[n];
-        for (int i = 0; i < n; i++) sorted[i] = NumOps.ToDouble(actual[i]);
-        Array.Sort(sorted);
-        double median = (n % 2 == 1)
-            ? sorted[n / 2]
-            : 0.5 * (sorted[(n / 2) - 1] + sorted[n / 2]);
+        var sorted = Engine.TensorSort(actual, 0, descending: false).Values;
+        T median = (n % 2 == 1)
+            ? sorted.GetFlat(n / 2)
+            : NumOps.Multiply(NumOps.FromDouble(0.5), NumOps.Add(sorted.GetFlat((n / 2) - 1), sorted.GetFlat(n / 2)));
 
         // Largest absolute deviation from the median normalizes extremity to [0, 1].
-        double maxDev = 0.0;
-        for (int i = 0; i < n; i++)
-        {
-            double dev = Math.Abs(NumOps.ToDouble(actual[i]) - median);
-            if (dev > maxDev) maxDev = dev;
-        }
+        var deviation = Engine.TensorAbs(Engine.TensorSubtractScalar(actual, median));
+        T maxDev = Engine.TensorMaxValue(deviation);
 
-        if (maxDev <= 0.0)
+        if (!NumOps.GreaterThan(maxDev, NumOps.Zero))
         {
             // All targets identical: no tails to emphasize.
-            for (int i = 0; i < n; i++) extremity[i] = 0.0;
-            return extremity;
+            return new Tensor<T>(new[] { n });
         }
 
-        for (int i = 0; i < n; i++)
+        return Engine.TensorDivideScalar(deviation, maxDev);
+    }
+
+    /// <summary>
+    /// Pair weights W[i, j]: the tail weight (1 + max(e_i, e_j))^power where a_i &gt; a_j, and 0
+    /// elsewhere, so ties and reversed pairs contribute nothing. With tail weighting disabled the
+    /// weight of every ordered pair is exactly 1 (standard RankNet).
+    /// </summary>
+    private Tensor<T> ComputePairWeights(Tensor<T> actual)
+    {
+        int n = actual.Length;
+        var pairShape = new[] { n, n };
+        var columnShape = new[] { n, 1 };
+        var rowShape = new[] { 1, n };
+
+        // Only ordered pairs where i is the true winner contribute; ties contribute nothing.
+        var winner = Engine.TensorGreaterThan(
+            Engine.TensorBroadcastTo(Engine.Reshape(actual, columnShape), pairShape),
+            Engine.TensorBroadcastTo(Engine.Reshape(actual, rowShape), pairShape));
+
+        if (_tailWeightPower == 0.0)
         {
-            extremity[i] = Math.Abs(NumOps.ToDouble(actual[i]) - median) / maxDev;
+            return winner;
         }
 
-        return extremity;
-    }
-
-    /// <summary>
-    /// Weight of the pair (i, j) given the precomputed per-item extremities.
-    /// </summary>
-    private double PairWeight(double[] extremity, int i, int j)
-    {
-        if (_tailWeightPower == 0.0) return 1.0;
-        double e = Math.Max(extremity[i], extremity[j]);
-        return Math.Pow(1.0 + e, _tailWeightPower);
-    }
-
-    /// <summary>
-    /// Numerically stable softplus: log(1 + exp(x)) = max(x, 0) + log(1 + exp(-|x|)).
-    /// </summary>
-    private static double Softplus(double x)
-    {
-        double ax = Math.Abs(x);
-        return Math.Max(x, 0.0) + Math.Log(1.0 + Math.Exp(-ax));
+        var extremity = ComputeExtremities(actual);
+        var pairExtremity = Engine.TensorMax(
+            Engine.TensorBroadcastTo(Engine.Reshape(extremity, columnShape), pairShape),
+            Engine.TensorBroadcastTo(Engine.Reshape(extremity, rowShape), pairShape));
+        var tailWeight = Engine.TensorPower(
+            Engine.TensorAddScalar(pairExtremity, NumOps.One), NumOps.FromDouble(_tailWeightPower));
+        return Engine.TensorMultiply(winner, tailWeight);
     }
 
     /// <summary>
@@ -194,37 +192,25 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
         ValidateVectorLengths(predicted, actual);
 
         int n = predicted.Length;
-        var extremity = ComputeExtremities(actual);
+        if (n == 0) return NumOps.Zero;
 
-        double lossSum = 0.0;
-        double weightSum = 0.0;
+        var weights = ComputePairWeights(actual.AsTensor());
+        if (!NumOps.GreaterThan(Engine.TensorSum(weights), NumOps.Zero)) return NumOps.Zero;
 
-        for (int i = 0; i < n; i++)
-        {
-            double ai = NumOps.ToDouble(actual[i]);
-            double si = NumOps.ToDouble(predicted[i]);
-            for (int j = 0; j < n; j++)
-            {
-                double aj = NumOps.ToDouble(actual[j]);
-                // Only count ordered pairs where i is the true winner. Ties contribute nothing.
-                if (ai <= aj) continue;
+        // L = (1/n) * sum_ij W[i,j] * softplus(-(s_i - s_j))
+        var scores = predicted.AsTensor();
+        var pairShape = new[] { n, n };
+        var sI = Engine.TensorBroadcastTo(Engine.Reshape(scores, new[] { n, 1 }), pairShape);
+        var sJ = Engine.TensorBroadcastTo(Engine.Reshape(scores, new[] { 1, n }), pairShape);
+        var negDiff = Engine.TensorNegate(Engine.TensorSubtract(sI, sJ));
+        T lossSum = Engine.TensorSum(Engine.TensorMultiply(Engine.Softplus(negDiff), weights));
 
-                double sj = NumOps.ToDouble(predicted[j]);
-                double w = PairWeight(extremity, i, j);
-
-                // log(1 + exp(-(s_i - s_j)))
-                lossSum += w * Softplus(-(si - sj));
-                weightSum += w;
-            }
-        }
-
-        if (weightSum <= 0.0) return NumOps.Zero;
         // Normalize by the ITEM count n, not the pair count (~n^2). The original RankNet (Burges et al.
         // 2005) accumulates per-pair gradients (sum); dividing by the pair count shrinks the per-item
         // gradient to O(1/n), too weak for the optimizer to learn on larger groups (the constant-output
         // collapse). Per-item normalization keeps the gradient O(1) at any group size while staying
         // consistent with CalculateDerivative below.
-        return NumOps.FromDouble(lossSum / n);
+        return NumOps.Divide(lossSum, NumOps.FromDouble(n));
     }
 
     /// <summary>
@@ -267,26 +253,10 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
         }
 
         // Pair weights are a function of the targets alone, so they are a tape constant.
-        var extremity = ComputeExtremities(targetVec);
-        var weights = new Tensor<T>(new[] { n, n });
-        for (int i = 0; i < n; i++)
-        {
-            double ai = NumOps.ToDouble(targetVec[i]);
-            for (int j = 0; j < n; j++)
-            {
-                // Only ordered pairs where i is the true winner contribute; ties contribute nothing.
-                if (ai <= NumOps.ToDouble(targetVec[j])) continue;
-                weights[(i * n) + j] = NumOps.FromDouble(PairWeight(extremity, i, j));
-            }
-        }
+        var weights = ComputePairWeights(targetVec.AsTensor());
 
-        var onesRow = new Tensor<T>(new[] { 1, n });
-        var onesCol = new Tensor<T>(new[] { n, 1 });
-        for (int k = 0; k < n; k++)
-        {
-            onesRow[k] = NumOps.One;
-            onesCol[k] = NumOps.One;
-        }
+        var onesRow = Tensor<T>.CreateDefault(new[] { 1, n }, NumOps.One);
+        var onesCol = Tensor<T>.CreateDefault(new[] { n, 1 }, NumOps.One);
 
         var scoreCol = Engine.Reshape(predicted, new[] { n, 1 });
         var scoreRow = Engine.Reshape(predicted, new[] { 1, n });
