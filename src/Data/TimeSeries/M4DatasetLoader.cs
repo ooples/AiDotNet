@@ -415,7 +415,7 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
 
             // Remove quotes from series ID (e.g., "Y1" -> Y1)
             var seriesId = parts[0].Trim('"');
-            var values = new List<T>();
+            var parsedValues = new List<double>();
 
             for (int j = 1; j < parts.Length; j++)
             {
@@ -424,17 +424,24 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
 
                 if (double.TryParse(valueStr, NumberStyles.Float, CultureInfo.InvariantCulture, out double value))
                 {
-                    values.Add(NumOps.FromDouble(value));
+                    parsedValues.Add(value);
                 }
             }
 
-            if (values.Count > 0)
+            if (parsedValues.Count > 0)
             {
+                // Convert the parsed series to T in one bulk cast
+                var values = new List<T>(DoubleStorage.ToArray<T>(parsedValues.ToArray()));
                 series.Add(new M4TimeSeries<T>(seriesId, values, _frequency));
             }
         }
 
         return series;
+    }
+
+    private static Tensor<T> ToTensor(IReadOnlyList<T> values)
+    {
+        return new Tensor<T>(values.ToArray(), new[] { values.Count });
     }
 
     /// <summary>
@@ -454,19 +461,22 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
         if (forecast.Count != actual.Count)
             throw new ArgumentException("Forecast and actual must have the same length.");
 
-        var sum = NumOps.Zero;
         int n = forecast.Count;
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            var absError = NumOps.Abs(NumOps.Subtract(forecast[i], actual[i]));
-            var denominator = NumOps.Add(NumOps.Abs(forecast[i]), NumOps.Abs(actual[i]));
-
-            if (NumOps.GreaterThan(denominator, NumOps.FromDouble(1e-10)))
-            {
-                sum = NumOps.Add(sum, NumOps.Divide(absError, denominator));
-            }
+            return NumOps.Multiply(NumOps.FromDouble(200.0 / n), NumOps.Zero);
         }
+
+        var engine = AiDotNetEngine.Current;
+        var f = ToTensor(forecast);
+        var a = ToTensor(actual);
+        var absError = engine.TensorAbs(engine.TensorSubtract(f, a));
+        var denominator = engine.TensorAdd(engine.TensorAbs(f), engine.TensorAbs(a));
+
+        // Terms whose denominator is not above 1e-10 contribute nothing (selected away, so 0/0 never leaks in)
+        var valid = engine.TensorEqScalar(engine.TensorGreaterThan(denominator, NumOps.FromDouble(1e-10)), NumOps.One);
+        var terms = engine.TensorWhere(valid, engine.TensorDivide(absError, denominator), new Tensor<T>(new[] { n }));
+        var sum = engine.TensorSum(terms);
 
         return NumOps.Multiply(NumOps.FromDouble(200.0 / n), sum);
     }
@@ -491,26 +501,28 @@ public class M4DatasetLoader<T> : DataLoaderBase<T>
         if (forecast.Count != actual.Count)
             throw new ArgumentException("Forecast and actual must have the same length.");
 
-        // Calculate the scaling factor from training data (mean absolute error of seasonal naive forecast)
-        var scalingSum = NumOps.Zero;
-        int scalingCount = 0;
+        // A negative period indexed before the start of the training data.
+        if (seasonalPeriod < 0)
+            throw new ArgumentOutOfRangeException(nameof(seasonalPeriod), "Seasonal period must be non-negative.");
 
-        for (int i = seasonalPeriod; i < trainingData.Count; i++)
-        {
-            scalingSum = NumOps.Add(scalingSum, NumOps.Abs(NumOps.Subtract(trainingData[i], trainingData[i - seasonalPeriod])));
-            scalingCount++;
-        }
-
+        // Calculate the scaling factor from training data (mean absolute error of seasonal naive forecast):
+        // |train[s..] - train[..n-s]| summed with the engine.
+        int scalingCount = Math.Max(0, trainingData.Count - seasonalPeriod);
         if (scalingCount == 0) return NumOps.MaxValue;
+
+        var engine = AiDotNetEngine.Current;
+        var training = ToTensor(trainingData);
+        var seasonalDiff = engine.TensorSubtract(
+            training.Slice(0, seasonalPeriod, trainingData.Count).Contiguous(),
+            training.Slice(0, 0, scalingCount).Contiguous());
+        var scalingSum = engine.TensorSum(engine.TensorAbs(seasonalDiff));
 
         var scalingFactor = NumOps.Divide(scalingSum, NumOps.FromDouble(scalingCount));
 
         // Calculate MAE of forecast
-        var maeSum = NumOps.Zero;
-        for (int i = 0; i < forecast.Count; i++)
-        {
-            maeSum = NumOps.Add(maeSum, NumOps.Abs(NumOps.Subtract(forecast[i], actual[i])));
-        }
+        var maeSum = forecast.Count == 0
+            ? NumOps.Zero
+            : engine.TensorSum(engine.TensorAbs(engine.TensorSubtract(ToTensor(forecast), ToTensor(actual))));
         var mae = NumOps.Divide(maeSum, NumOps.FromDouble(forecast.Count));
 
         // MASE = MAE / scaling factor

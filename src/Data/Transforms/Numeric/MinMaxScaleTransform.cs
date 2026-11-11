@@ -63,30 +63,19 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
             }
         }
 
-        _min = new double[featureCount];
-        _max = new double[featureCount];
-
-        for (int j = 0; j < featureCount; j++)
+        if (featureCount == 0)
         {
-            _min[j] = double.MaxValue;
-            _max[j] = double.MinValue;
+            _min = new double[0];
+            _max = new double[0];
         }
-
-        for (int i = 0; i < referenceData.Length; i++)
+        else
         {
-            for (int j = 0; j < featureCount; j++)
-            {
-                double val = NumOps.ToDouble(referenceData[i][j]);
-                if (val < _min[j])
-                {
-                    _min[j] = val;
-                }
-
-                if (val > _max[j])
-                {
-                    _max[j] = val;
-                }
-            }
+            // Column-wise min and max (min = -max(-x)) with engine axis reductions
+            var engine = AiDotNetEngine.Current;
+            var data = TransformTensors.RowsAsDouble(referenceData, featureCount);
+            var axis0 = new[] { 0 };
+            _max = engine.ReduceMax(data, axis0, false).AsSpan().ToArray();
+            _min = engine.TensorNegate(engine.ReduceMax(engine.TensorNegate(data), axis0, false)).AsSpan().ToArray();
         }
     }
 
@@ -139,28 +128,25 @@ public class MinMaxScaleTransform<T> : ITransform<T[], T[]>
         var result = new T[input.Length];
         double targetRange = _targetMax - _targetMin;
 
-        for (int i = 0; i < len; i++)
+        if (len > 0)
         {
-            double val = NumOps.ToDouble(input[i]);
-            double range = _max[i] - _min[i];
-
-            double scaled;
-            if (Math.Abs(range) < 1e-12)
-            {
-                scaled = _targetMin;
-            }
-            else
-            {
-                scaled = ((val - _min[i]) / range) * targetRange + _targetMin;
-            }
-
-            result[i] = NumOps.FromDouble(scaled);
+            // ((x - min) / (max - min)) * targetRange + targetMin in double; constant features map to targetMin
+            var engine = AiDotNetEngine.Current;
+            var shape = new[] { len };
+            var min = new Tensor<double>(TransformTensors.Prefix(_min, len), shape);
+            var range = engine.TensorSubtract(new Tensor<double>(TransformTensors.Prefix(_max, len), shape), min);
+            var values = new Tensor<double>(TransformTensors.PrefixAsDouble(input, len), shape);
+            var scaled = engine.TensorAddScalar(
+                engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(values, min), range), targetRange),
+                _targetMin);
+            var constant = engine.TensorEqScalar(engine.TensorLessThan(engine.TensorAbs(range), 1e-12), 1.0);
+            var targetMinFill = new Tensor<double>(shape);
+            targetMinFill.Fill(_targetMin);
+            engine.TensorWhere(constant, targetMinFill, scaled).Cast<T>().AsSpan().CopyTo(result.AsSpan(0, len));
         }
 
-        for (int i = len; i < input.Length; i++)
-        {
-            result[i] = input[i];
-        }
+        // Features beyond the fitted statistics pass through unchanged
+        Array.Copy(input, len, result, len, input.Length - len);
 
         return result;
     }

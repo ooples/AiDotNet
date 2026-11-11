@@ -52,36 +52,32 @@ public class StandardScaleTransform<T> : ITransform<T[], T[]>
             }
         }
 
-        _mean = new double[featureCount];
-        _std = new double[featureCount];
-
-        // Compute mean
-        for (int j = 0; j < featureCount; j++)
+        int rows = referenceData.Length;
+        if (featureCount == 0)
         {
-            double sum = 0;
-            for (int i = 0; i < referenceData.Length; i++)
-            {
-                sum += NumOps.ToDouble(referenceData[i][j]);
-            }
-
-            _mean[j] = sum / referenceData.Length;
+            _mean = new double[0];
+            _std = new double[0];
         }
-
-        // Compute standard deviation
-        for (int j = 0; j < featureCount; j++)
+        else
         {
-            double sumSqDiff = 0;
-            for (int i = 0; i < referenceData.Length; i++)
-            {
-                double diff = NumOps.ToDouble(referenceData[i][j]) - _mean[j];
-                sumSqDiff += diff * diff;
-            }
+            var engine = AiDotNetEngine.Current;
+            var data = TransformTensors.RowsAsDouble(referenceData, featureCount);
+            var shape = new[] { rows, featureCount };
 
-            _std[j] = Math.Sqrt(sumSqDiff / referenceData.Length);
-            if (_std[j] < 1e-12)
-            {
-                _std[j] = 1.0;
-            }
+            // Compute mean (column sums / rows)
+            var mean = engine.TensorDivideScalar(engine.ReduceSum(data, new[] { 0 }, keepDims: true), (double)rows);
+
+            // Compute (population) standard deviation; near-zero deviations fall back to 1
+            var centered = engine.TensorSubtract(data, engine.TensorBroadcastTo(mean, shape));
+            var variance = engine.TensorDivideScalar(
+                engine.ReduceSum(engine.TensorMultiply(centered, centered), new[] { 0 }, keepDims: false), (double)rows);
+            var std = engine.TensorSqrt(variance);
+            var tiny = engine.TensorEqScalar(engine.TensorLessThan(std, 1e-12), 1.0);
+            var ones = new Tensor<double>(new[] { featureCount });
+            ones.Fill(1.0);
+
+            _mean = mean.AsSpan().ToArray();
+            _std = engine.TensorWhere(tiny, ones, std).AsSpan().ToArray();
         }
     }
 
@@ -124,17 +120,20 @@ public class StandardScaleTransform<T> : ITransform<T[], T[]>
         int len = Math.Min(input.Length, _mean.Length);
         var result = new T[input.Length];
 
-        for (int i = 0; i < len; i++)
+        if (len > 0)
         {
-            double val = NumOps.ToDouble(input[i]);
-            double normalized = (val - _mean[i]) / _std[i];
-            result[i] = NumOps.FromDouble(normalized);
+            // (x - mean) / std over the first len features, computed in double and cast back once
+            var engine = AiDotNetEngine.Current;
+            var shape = new[] { len };
+            var values = new Tensor<double>(TransformTensors.PrefixAsDouble(input, len), shape);
+            var normalized = engine.TensorDivide(
+                engine.TensorSubtract(values, new Tensor<double>(TransformTensors.Prefix(_mean, len), shape)),
+                new Tensor<double>(TransformTensors.Prefix(_std, len), shape));
+            normalized.Cast<T>().AsSpan().CopyTo(result.AsSpan(0, len));
         }
 
-        for (int i = len; i < input.Length; i++)
-        {
-            result[i] = input[i];
-        }
+        // Features beyond the fitted statistics pass through unchanged
+        Array.Copy(input, len, result, len, input.Length - len);
 
         return result;
     }

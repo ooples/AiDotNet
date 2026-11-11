@@ -84,22 +84,21 @@ public class NormalizeTransform<T> : ITransform<T[], T[]>
                 nameof(input));
         }
 
-        var result = new T[input.Length];
-
-        for (int i = 0; i < input.Length; i++)
+        if (input.Length == 0)
         {
-            T diff = NumOps.Subtract(input[i], _mean[i]);
-            double stdVal = NumOps.ToDouble(_std[i]);
-            if (Math.Abs(stdVal) < 1e-12)
-            {
-                result[i] = diff;
-            }
-            else
-            {
-                result[i] = NumOps.Divide(diff, _std[i]);
-            }
+            return new T[0];
         }
 
-        return result;
+        var engine = AiDotNetEngine.Current;
+        var shape = new[] { input.Length };
+        var std = new Tensor<T>(_std, shape);
+        var diff = engine.TensorSubtract(new Tensor<T>(input, shape), new Tensor<T>(_mean, shape));
+
+        // Features whose std is (numerically) zero are only centred, not divided; the test runs in double.
+        var stdDouble = new Tensor<double>(DoubleStorage.ToDoubles(_std), shape);
+        var zeroStd = engine.TensorEqScalar(engine.TensorLessThan(engine.TensorAbs(stdDouble), 1e-12), 1.0);
+        var result = engine.TensorWhere(zeroStd, diff, engine.TensorDivide(diff, std));
+
+        return result.AsSpan().ToArray();
     }
 }
