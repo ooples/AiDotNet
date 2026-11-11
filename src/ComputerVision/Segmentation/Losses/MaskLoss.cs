@@ -38,11 +38,13 @@ public class MaskBCELoss<T>
             throw new ArgumentException("Predicted and target must have same shape");
 
         double loss = 0;
+        var predValues = CvTensorOps<T>.ToDoubleArray(predicted);
+        var targetValues = CvTensorOps<T>.ToDoubleArray(target);
 
         for (int i = 0; i < predicted.Length; i++)
         {
-            double p = MathHelper.Clamp(_numOps.ToDouble(predicted[i]), _eps, 1 - _eps);
-            double t = _numOps.ToDouble(target[i]);
+            double p = MathHelper.Clamp(predValues[i], _eps, 1 - _eps);
+            double t = targetValues[i];
 
             loss -= t * Math.Log(p) + (1 - t) * Math.Log(1 - p);
         }
@@ -85,11 +87,13 @@ public class MaskDiceLoss<T>
         double intersection = 0;
         double predSum = 0;
         double targetSum = 0;
+        var predValues = CvTensorOps<T>.ToDoubleArray(predicted);
+        var targetValues = CvTensorOps<T>.ToDoubleArray(target);
 
         for (int i = 0; i < predicted.Length; i++)
         {
-            double p = _numOps.ToDouble(predicted[i]);
-            double t = _numOps.ToDouble(target[i]);
+            double p = predValues[i];
+            double t = targetValues[i];
 
             intersection += p * t;
             predSum += p * p;
@@ -137,11 +141,13 @@ public class MaskFocalLoss<T>
     public T Compute(Tensor<T> predicted, Tensor<T> target)
     {
         double loss = 0;
+        var predValues = CvTensorOps<T>.ToDoubleArray(predicted);
+        var targetValues = CvTensorOps<T>.ToDoubleArray(target);
 
         for (int i = 0; i < predicted.Length; i++)
         {
-            double p = MathHelper.Clamp(_numOps.ToDouble(predicted[i]), _eps, 1 - _eps);
-            double t = _numOps.ToDouble(target[i]);
+            double p = MathHelper.Clamp(predValues[i], _eps, 1 - _eps);
+            double t = targetValues[i];
 
             // Focal loss: -alpha * (1-pt)^gamma * log(pt)
             double pt = t * p + (1 - t) * (1 - p);
