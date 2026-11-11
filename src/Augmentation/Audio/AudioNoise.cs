@@ -82,7 +82,7 @@ public class AudioNoise<T> : AudioAugmenterBase<T>
 
         // The power is accumulated in double (a Half sum of squares overflows at 65504) and only the
         // final noise scale is converted to T
-        var signalWide = signal.Cast<double>();
+        var signalWide = signal.Contiguous().Cast<double>();
         double signalPower = engine.TensorSum(engine.TensorSquare(signalWide)) / samples;
 
         // Convert SNR from dB to linear ratio

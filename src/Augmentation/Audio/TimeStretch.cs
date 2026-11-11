@@ -115,7 +115,7 @@ public class TimeStretch<T> : AudioAugmenterBase<T>
         var frac = engine.TensorMultiply(engine.TensorSubtract(srcPos, srcFloor), engine.ScalarMinusTensor(1.0, atEnd));
 
         int[] outShape = [outerElements, newLength];
-        var wide = rows.Cast<double>();
+        var wide = rows.Contiguous().Cast<double>();
         var val1 = engine.TensorIndexSelect(wide, lower, 1);
         var val2 = engine.TensorIndexSelect(wide, upper, 1);
         var weight = engine.TensorBroadcastTo(engine.Reshape(frac, [1, newLength]), outShape);
