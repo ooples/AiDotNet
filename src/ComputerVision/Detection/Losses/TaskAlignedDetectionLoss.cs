@@ -90,13 +90,9 @@ public sealed class TaskAlignedDetectionLoss<T>
         }
         int anchors = levelStart[levels];
 
-        var classData = new T[levels][];
-        var distributionData = new T[levels][];
-        for (int level = 0; level < levels; level++)
-        {
-            classData[level] = classLevels[level].ToArray();
-            distributionData[level] = distributionLevels[level].ToArray();
-        }
+        // The assignment runs in double, as before; each level converts in one bulk pass.
+        var classData = classLevels.Select(CvTensorOps<T>.ToDoubleArray).ToArray();
+        var distributionData = distributionLevels.Select(CvTensorOps<T>.ToDoubleArray).ToArray();
 
         var positives = new List<Positive>();
         double targetMass = 0;
@@ -110,12 +106,12 @@ public sealed class TaskAlignedDetectionLoss<T>
         var byLevel = positives.GroupBy(positive => positive.Level).ToDictionary(group => group.Key, group => group.ToArray());
         for (int level = 0; level < levels; level++)
         {
-            var targetValues = new T[classLevels[level].Length];
+            var targetValues = new double[classLevels[level].Length];
             if (byLevel.TryGetValue(level, out var levelPositives))
                 foreach (var positive in levelPositives)
-                    targetValues[(positive.Image * _numClasses + positive.ClassId) * cells[level] + positive.Cell] = NumOps.FromDouble(positive.Target);
+                    targetValues[(positive.Image * _numClasses + positive.ClassId) * cells[level] + positive.Cell] = positive.Target;
             var logits = classLevels[level];
-            var targetTensor = new Tensor<T>(targetValues, logits.Shape.ToArray());
+            var targetTensor = CvTensorOps<T>.FromDoubleArray(targetValues, logits.Shape.ToArray());
             var bce = engine.ReduceSum(engine.TensorSubtract(engine.Softplus(logits), engine.TensorMultiply(targetTensor, logits)), null);
             classification = classification is null ? bce : engine.TensorAdd(classification, bce);
         }
@@ -150,31 +146,29 @@ public sealed class TaskAlignedDetectionLoss<T>
             new[] { count * 4, bins });
 
         // Decoded distances: the expectation of each side's softmax distribution, in stride units.
-        var binValues = new T[count * 4 * bins];
-        for (int row = 0; row < count * 4; row++)
-            for (int bin = 0; bin < bins; bin++)
-                binValues[row * bins + bin] = NumOps.FromDouble(bin);
+        var binValues = engine.TensorBroadcastTo(
+            engine.Reshape(engine.TensorArange<T>(0, bins, 1), new[] { 1, bins }), new[] { count * 4, bins });
         var distances = engine.Reshape(engine.ReduceSum(
-            engine.TensorMultiply(engine.TensorSoftmax(rows, 1), new Tensor<T>(binValues, new[] { count * 4, bins })),
+            engine.TensorMultiply(engine.TensorSoftmax(rows, 1), binValues),
             new[] { 1 }, false), new[] { count, 4 });
 
-        var anchorX = new T[count];
-        var anchorY = new T[count];
-        var goldBoxes = new T[count * 4];
-        var weights = new T[count];
+        var anchorX = new double[count];
+        var anchorY = new double[count];
+        var goldBoxes = new double[count * 4];
+        var weights = new double[count];
         var dflIndices = new int[count * 8];
-        var dflWeights = new T[count * 8];
+        var dflWeights = new double[count * 8];
         for (int index = 0; index < count; index++)
         {
             var positive = ordered[index];
             double stride = strides[positive.Level];
             double gridX = positive.AnchorX / stride;
             double gridY = positive.AnchorY / stride;
-            anchorX[index] = NumOps.FromDouble(gridX);
-            anchorY[index] = NumOps.FromDouble(gridY);
+            anchorX[index] = gridX;
+            anchorY[index] = gridY;
             var gold = new[] { positive.Gold[0] / stride, positive.Gold[1] / stride, positive.Gold[2] / stride, positive.Gold[3] / stride };
-            for (int coordinate = 0; coordinate < 4; coordinate++) goldBoxes[index * 4 + coordinate] = NumOps.FromDouble(gold[coordinate]);
-            weights[index] = NumOps.FromDouble(positive.Target);
+            Array.Copy(gold, 0, goldBoxes, index * 4, 4);
+            weights[index] = positive.Target;
 
             var sides = new[] { gridX - gold[0], gridY - gold[1], gold[2] - gridX, gold[3] - gridY };
             for (int side = 0; side < 4; side++)
@@ -185,14 +179,14 @@ public sealed class TaskAlignedDetectionLoss<T>
                 double sideWeight = positive.Target / 4;
                 dflIndices[row * 2] = row * bins + lower;
                 dflIndices[row * 2 + 1] = row * bins + lower + 1;
-                dflWeights[row * 2] = NumOps.FromDouble((lower + 1 - distance) * sideWeight);
-                dflWeights[row * 2 + 1] = NumOps.FromDouble((distance - lower) * sideWeight);
+                dflWeights[row * 2] = (lower + 1 - distance) * sideWeight;
+                dflWeights[row * 2 + 1] = (distance - lower) * sideWeight;
             }
         }
 
         var column = new[] { count, 1 };
-        var x = new Tensor<T>(anchorX, column);
-        var y = new Tensor<T>(anchorY, column);
+        var x = CvTensorOps<T>.FromDoubleArray(anchorX, column);
+        var y = CvTensorOps<T>.FromDoubleArray(anchorY, column);
         var predicted = engine.TensorConcatenate(new[]
         {
             engine.TensorSubtract(x, engine.TensorNarrow(distances, 1, 0, 1)),
@@ -200,14 +194,14 @@ public sealed class TaskAlignedDetectionLoss<T>
             engine.TensorAdd(x, engine.TensorNarrow(distances, 1, 2, 1)),
             engine.TensorAdd(y, engine.TensorNarrow(distances, 1, 3, 1))
         }, 1);
-        var ciou = engine.TensorCIoULoss(predicted, new Tensor<T>(goldBoxes, new[] { count, 4 }));
-        var box = engine.ReduceSum(engine.TensorMultiply(engine.Reshape(ciou, new[] { count }), new Tensor<T>(weights, new[] { count })), null);
+        var ciou = engine.TensorCIoULoss(predicted, CvTensorOps<T>.FromDoubleArray(goldBoxes, new[] { count, 4 }));
+        var box = engine.ReduceSum(engine.TensorMultiply(engine.Reshape(ciou, new[] { count }), CvTensorOps<T>.FromDoubleArray(weights, new[] { count })), null);
         loss = engine.TensorAdd(loss, engine.TensorMultiplyScalar(box, NumOps.FromDouble(_options.BoxGain / normalizer)));
 
         // Gather only the two neighbouring bins, so an extreme finite logit elsewhere cannot turn 0 * -inf into NaN.
         var logProbabilities = engine.Reshape(engine.TensorLogSoftmax(rows, 1), new[] { count * 4 * bins });
         var dfl = engine.TensorNegate(engine.ReduceSum(engine.TensorMultiply(
-            CvTensorOps<T>.Select(logProbabilities, dflIndices, 0), new Tensor<T>(dflWeights, new[] { dflWeights.Length })), null));
+            CvTensorOps<T>.Select(logProbabilities, dflIndices, 0), CvTensorOps<T>.FromDoubleArray(dflWeights, new[] { dflWeights.Length })), null));
         loss = engine.TensorAdd(loss, engine.TensorMultiplyScalar(dfl, NumOps.FromDouble(_options.DflGain / normalizer)));
 
         // A level can hold no positives (always true for most levels under top-1). Its distribution logits
@@ -217,7 +211,7 @@ public sealed class TaskAlignedDetectionLoss<T>
         return loss;
     }
 
-    private double Assign(int image, IReadOnlyList<DetectionTrainingTarget<T>> objects, T[][] classData, T[][] distributionData,
+    private double Assign(int image, IReadOnlyList<DetectionTrainingTarget<T>> objects, double[][] classData, double[][] distributionData,
         IReadOnlyList<int> strides, int[] cells, int[] widths, int[] levelStart, int imageHeight, int imageWidth, int topK,
         List<Positive> positives)
     {
@@ -250,6 +244,8 @@ public sealed class TaskAlignedDetectionLoss<T>
         }
 
         var gold = new double[objects.Count][];
+        var normalizedBoxes = CvTensorOps<T>.ToDoubleArray(
+            objects.SelectMany(target => new[] { target.CenterX, target.CenterY, target.Width, target.Height }).ToArray());
         var assigned = new int[anchors];
         var assignedIoU = new double[anchors];
         var assignedMetric = new double[anchors];
@@ -257,10 +253,10 @@ public sealed class TaskAlignedDetectionLoss<T>
         for (int index = 0; index < objects.Count; index++)
         {
             var target = objects[index];
-            double cx = NumOps.ToDouble(target.CenterX) * imageWidth;
-            double cy = NumOps.ToDouble(target.CenterY) * imageHeight;
-            double halfWidth = NumOps.ToDouble(target.Width) * imageWidth / 2;
-            double halfHeight = NumOps.ToDouble(target.Height) * imageHeight / 2;
+            double cx = normalizedBoxes[index * 4] * imageWidth;
+            double cy = normalizedBoxes[index * 4 + 1] * imageHeight;
+            double halfWidth = normalizedBoxes[index * 4 + 2] * imageWidth / 2;
+            double halfHeight = normalizedBoxes[index * 4 + 3] * imageHeight / 2;
             gold[index] = new[] { cx - halfWidth, cy - halfHeight, cx + halfWidth, cy + halfHeight };
 
             var candidates = new List<(int Anchor, double Metric, double IoU)>();
@@ -271,7 +267,7 @@ public sealed class TaskAlignedDetectionLoss<T>
                 if (inside <= InsideEpsilon) continue;
                 int level = anchorLevel[anchor];
                 int cell = anchor - levelStart[level];
-                double score = Logistic(NumOps.ToDouble(classData[level][(image * _numClasses + target.ClassId) * cells[level] + cell]));
+                double score = Logistic(classData[level][(image * _numClasses + target.ClassId) * cells[level] + cell]);
                 double iou = IoU(predicted, anchor, gold[index]);
                 candidates.Add((anchor, Math.Pow(score, _options.Alpha) * Math.Pow(iou, _options.Beta), iou));
             }
@@ -308,16 +304,16 @@ public sealed class TaskAlignedDetectionLoss<T>
         return mass;
     }
 
-    private double ExpectedBin(T[] distribution, int image, int side, int cells, int cell)
+    private double ExpectedBin(double[] distribution, int image, int side, int cells, int cell)
     {
         double maximum = double.NegativeInfinity;
         for (int bin = 0; bin < _regMax; bin++)
-            maximum = Math.Max(maximum, NumOps.ToDouble(distribution[(image * 4 * _regMax + side * _regMax + bin) * cells + cell]));
+            maximum = Math.Max(maximum, distribution[(image * 4 * _regMax + side * _regMax + bin) * cells + cell]);
         double total = 0;
         double weighted = 0;
         for (int bin = 0; bin < _regMax; bin++)
         {
-            double value = Math.Exp(NumOps.ToDouble(distribution[(image * 4 * _regMax + side * _regMax + bin) * cells + cell]) - maximum);
+            double value = Math.Exp(distribution[(image * 4 * _regMax + side * _regMax + bin) * cells + cell] - maximum);
             total += value;
             weighted += value * bin;
         }
