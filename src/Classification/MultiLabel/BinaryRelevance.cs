@@ -170,15 +170,8 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
             // Create a binary classifier for this label
             var classifier = _classifierFactory();
 
-            // Extract the binary labels for this label column
-            var binaryLabels = new Vector<T>(y.Rows);
-            for (int i = 0; i < y.Rows; i++)
-            {
-                binaryLabels[i] = y[i, labelIndex];
-            }
-
-            // Train the classifier
-            classifier.Train(x, binaryLabels);
+            // Train the classifier on the binary labels of this label column
+            classifier.Train(x, y.GetColumn(labelIndex));
             _labelClassifiers[labelIndex] = classifier;
         }
     }
@@ -210,7 +203,7 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
             throw new InvalidOperationException("Model must be trained before making predictions.");
         }
 
-        var probabilities = new Matrix<T>(input.Rows, NumLabels);
+        var columns = new Vector<T>[NumLabels];
 
         for (int labelIndex = 0; labelIndex < NumLabels; labelIndex++)
         {
@@ -222,28 +215,17 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
                 // Get probability of the positive class (label present)
                 var labelProbs = probabilisticClassifier.PredictProbabilities(input);
 
-                for (int i = 0; i < input.Rows; i++)
-                {
-                    // Assuming binary classification, column 1 is probability of class 1 (label present)
-                    probabilities[i, labelIndex] = labelProbs.Columns > 1
-                        ? labelProbs[i, 1]
-                        : labelProbs[i, 0];
-                }
+                // Assuming binary classification, column 1 is probability of class 1 (label present)
+                columns[labelIndex] = labelProbs.GetColumn(labelProbs.Columns > 1 ? 1 : 0);
             }
             else
             {
-                // Fall back to binary predictions
-                var predictions = classifier.Predict(input);
-                for (int i = 0; i < input.Rows; i++)
-                {
-                    probabilities[i, labelIndex] = NumOps.Compare(predictions[i], NumOps.One) >= 0
-                        ? NumOps.One
-                        : NumOps.Zero;
-                }
+                // Fall back to binary predictions: 1 when prediction >= 1
+                columns[labelIndex] = AtLeast(classifier.Predict(input), NumOps.One);
             }
         }
 
-        return probabilities;
+        return NumLabels == 0 ? new Matrix<T>(input.Rows, 0) : StackColumns(columns);
     }
 
     #endregion
@@ -294,26 +276,24 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
             return new Vector<T>(0);
         }
 
-        var allGradients = new List<T>();
+        var allGradients = new List<Tensor<T>>();
         for (int labelIndex = 0; labelIndex < NumLabels && labelIndex < _labelClassifiers.Length; labelIndex++)
         {
             var classifier = _labelClassifiers[labelIndex];
 
-            // Extract binary labels for this label column
-            var binaryTarget = new Vector<T>(target.Rows);
-            for (int i = 0; i < target.Rows; i++)
-            {
-                binaryTarget[i] = target[i, labelIndex];
-            }
+            // Binary labels for this label column
+            var binaryTarget = target.GetColumn(labelIndex);
 
             var gradients = ((IGradientComputable<T, Matrix<T>, Vector<T>>)classifier).ComputeGradients(input, binaryTarget, lossFunction);
-            for (int i = 0; i < gradients.Length; i++)
+            if (gradients.Length > 0)
             {
-                allGradients.Add(gradients[i]);
+                allGradients.Add(gradients.AsTensor());
             }
         }
 
-        return new Vector<T>(allGradients.ToArray());
+        return allGradients.Count == 0
+            ? new Vector<T>(0)
+            : Engine.TensorConcatenate(allGradients.ToArray(), 0).ToVector();
     }
 
     /// <summary>
@@ -337,12 +317,12 @@ public class BinaryRelevance<T> : MultiLabelClassifierBase<T>
         foreach (var classifier in _labelClassifiers)
         {
             var classifierParams = ((IParameterizable<T, Matrix<T>, Vector<T>>)classifier).GetParameters();
-            var classifierGradients = new Vector<T>(classifierParams.Length);
-
-            for (int i = 0; i < classifierParams.Length && gradIndex < gradients.Length; i++)
-            {
-                classifierGradients[i] = gradients[gradIndex++];
-            }
+            // This classifier's slice of the gradients (zero-padded when the gradients run out)
+            int taken = Math.Min(classifierParams.Length, gradients.Length - gradIndex);
+            var classifierGradients = taken <= 0
+                ? new Vector<T>(classifierParams.Length)
+                : FitToLength(gradients.GetSubVector(gradIndex, taken), classifierParams.Length);
+            gradIndex += Math.Max(0, taken);
 
             ((IGradientComputable<T, Matrix<T>, Vector<T>>)classifier).ApplyGradients(classifierGradients, learningRate);
         }
