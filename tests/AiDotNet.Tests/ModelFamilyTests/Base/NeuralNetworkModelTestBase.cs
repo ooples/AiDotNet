@@ -7870,7 +7870,11 @@ public abstract class NeuralNetworkModelTestBase<T> : IAsyncLifetime
                     AiDotNet.Tests.IntegrationTests.SyntheticData.SyntheticGanOptionFixture.Train(network);
                     return;
                 }
-                if (TrainingInvariantsNotApplicable(network)) return;
+                // A detection backbone trains inside its detector, so the invariants skip it; its own clip threshold
+                // only acts when it is trained, so that one probe trains it directly.
+                bool backboneClip = network is AiDotNet.Interfaces.IDetectionBackbone<T> && option == "MaxGradNorm"
+                    && network is AiDotNet.NeuralNetworks.NeuralNetworkBase<T> { SupportsTraining: true };
+                if (TrainingInvariantsNotApplicable(network) && !backboneClip) return;
                 network.SetTrainingMode(true);
                 PrepareForSupervisedTrainingInvariant(network, input);
                 var objectiveTarget = ResolveTrainingObjectiveTarget(network, input, target);

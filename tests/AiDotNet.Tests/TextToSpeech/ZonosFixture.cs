@@ -69,7 +69,7 @@ internal static class ZonosFixture
             for (int seed = 0; seed < 32; seed++) values.AddRange(model.SampleFrame(logits, history, 6, new Random(seed)).Select(code => (double)code));
             return ModelFamilyTests.Base.OptionSensitivityHarness.Fingerprint(values);
         }
-        if (option is "CtcLoss" or "DnsmosOverall" or "VqScore" or "SpeakerNoised" or "ChunkSize")
+        if (option is "CtcLoss" or "DnsmosOverall" or "VqScore" or "SpeakerNoised" or "ChunkSize" or "PitchStd")
         {
             var ids = input.Select(value => (int)ops.ToDouble(value)).ToArray();
             var prefix = model.Conditioner.Forward(model.ConditionInputs(ids, null));

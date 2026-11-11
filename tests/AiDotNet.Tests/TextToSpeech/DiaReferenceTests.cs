@@ -80,7 +80,7 @@ public class DiaReferenceTests
     {
         VocabSize = 256, HiddenDim = 16, EncoderLayers = 2, EncoderHeads = 2, EncoderKeyValueHeads = 2, EncoderHeadDim = 8, EncoderIntermediate = 24,
         DecoderHidden = 16, DecoderLayers = 2, DecoderHeads = 4, DecoderKeyValueHeads = 2, DecoderHeadDim = 8, CrossHeads = 2, CrossKeyValueHeads = 2,
-        CrossHeadDim = 8, DecoderIntermediate = 24, AudioVocabSize = 20, Channels = 3, DelayPattern = new[] { 0, 2, 3 }, EndToken = 16, PadToken = 17,
+        CrossHeadDim = 8, DecoderIntermediate = 24, AudioVocabSize = 20, DelayPattern = new[] { 0, 2, 3 }, EndToken = 16, PadToken = 17,
         BeginToken = 18, MaxAudioTokens = 16, Temperature = 0, CfgScale = 3, CfgFilterTopK = 5, TopP = 0.95, SampleRate = 16000, HopSize = 8,
         Codec = new AiDotNet.Audio.Effects.DACOptions
         {

@@ -54,7 +54,7 @@ public class IndexTtsReferenceTests
     {
         HiddenDim = 32, NumHeads = 2, Layers = 2, MaxTextLength = 20, MaxMelTokens = 40, VocabSize = 20, MelCodes = 24,
         ConditionLatents = 32, ConditionDim = 16, ConditionLinearUnits = 32, ConditionHeads = 2, ConditionBlocks = 2, PerceiverMultiple = 2,
-        DvaeHidden = 8, DvaeLayers = 2, DvaeResBlocks = 1, DvaeCodebookDim = 6, DvaeKernel = 3,
+        DvaeHidden = 8, DvaeResBlocks = 1, DvaeCodebookDim = 6, DvaeKernel = 3,
         VocoderInitialChannels = 64, VocoderResBlockKernels = new[] { 3 }, VocoderResBlockDilations = new[] { new[] { 1, 3, 5 } },
         SpeakerEmbeddingDim = 6, SpeakerEncoderChannels = new[] { 16, 16, 16, 16, 48 }, SpeakerEncoderAttentionChannels = 8,
         SpeakerEncoderSeChannels = 8, SpeakerEncoderScale = 8,

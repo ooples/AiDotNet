@@ -120,6 +120,9 @@ internal static class MegaTtsOptionFixture
     {
         if (model.GetOptions() is MegaTTS2Options options)
             options.Stage = languageModels ? MegaTts2Stage.LanguageModels : MegaTts2Stage.Acoustic;
+        // Mega-TTS trains its prosody language model (section 3.3) as a separate stage after the acoustic model.
+        if (model.GetOptions() is MegaTTSOptions first)
+            first.Stage = languageModels ? MegaTtsStage.ProsodyLanguageModel : MegaTtsStage.Acoustic;
     }
 
     private static long Fingerprint<T>(Tensor<T> values)

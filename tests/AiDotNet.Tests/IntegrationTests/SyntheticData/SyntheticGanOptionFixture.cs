@@ -7,7 +7,8 @@ namespace AiDotNet.Tests.IntegrationTests.SyntheticData;
 
 internal static class SyntheticGanOptionFixture
 {
-    internal static bool Handles<T>(INeuralNetworkModel<T> model) => model is CTABGANPlusGenerator<T> or CopulaGANGenerator<T> or CausalGANGenerator<T> or PATEGANGenerator<T>;
+    internal static bool Handles<T>(INeuralNetworkModel<T> model) => model is CTABGANPlusGenerator<T> or CopulaGANGenerator<T> or CausalGANGenerator<T> or PATEGANGenerator<T>
+        or OCTGANGenerator<T>;
 
     internal static void PrepareOptions(ModelOptions options, string option)
     {
@@ -25,14 +26,17 @@ internal static class SyntheticGanOptionFixture
             if (option == "Epochs") type.GetProperty("Epsilon")!.SetValue(options, 100.0);
             return;
         }
-        if (definition != typeof(CTABGANPlusOptions<>) && definition != typeof(CopulaGANOptions<>) && definition != typeof(CausalGANOptions<>)) return;
+        if (definition != typeof(CTABGANPlusOptions<>) && definition != typeof(CopulaGANOptions<>) && definition != typeof(CausalGANOptions<>)
+            && definition != typeof(OCTGANOptions<>)) return;
         void Set(string name, object value) => type.GetProperty(name)?.SetValue(options, value);
         Set("EmbeddingDimension", 4);
         Set("GeneratorDimensions", new[] { 8, 8 });
         Set("DiscriminatorDimensions", new[] { 8, 8 });
         Set("HiddenDimensions", new[] { 8, 8 });
         Set("BatchSize", 4);
-        Set("Epochs", 2);
+        // OCT-GAN decays its rate every LearningRateDecayPeriod (2) epochs: four epochs cross a decay.
+        Set("Epochs", definition == typeof(OCTGANOptions<>) ? 4 : 2);
+        Set("OdeSolverSteps", 1);
         Set("VGMModes", 2);
         Set("PacSize", 1);
         Set("DiscriminatorSteps", 1);
@@ -69,13 +73,15 @@ internal static class SyntheticGanOptionFixture
             case CopulaGANGenerator<T> copula: copula.Fit(data, columns); break;
             case CausalGANGenerator<T> causal: causal.Fit(data, columns); break;
             case PATEGANGenerator<T> pate: pate.Fit(data, columns); break;
+            case OCTGANGenerator<T> oct: oct.Fit(data, columns); break;
         }
     }
 
     internal static long Observe<T>(INeuralNetworkModel<T> model)
     {
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        bool fitted = model switch { CTABGANPlusGenerator<T> ctab => ctab.IsFitted, CopulaGANGenerator<T> copula => copula.IsFitted, CausalGANGenerator<T> causal => causal.IsFitted, PATEGANGenerator<T> pate => pate.IsFitted, _ => false };
+        bool fitted = model switch { CTABGANPlusGenerator<T> ctab => ctab.IsFitted, CopulaGANGenerator<T> copula => copula.IsFitted, CausalGANGenerator<T> causal => causal.IsFitted, PATEGANGenerator<T> pate => pate.IsFitted,
+            OCTGANGenerator<T> oct => oct.IsFitted, _ => false };
         if (fitted)
         {
             var rows = ((ISyntheticTabularGenerator<T>)model).Generate(4);

@@ -19,7 +19,7 @@ public class ChatTTSPaperTests
     private static ChatTTSOptions Tiny() => new()
     {
         HiddenDim = 16, NumHeads = 2, NumDecoderLayers = 1, IntermediateSize = 32, FsqLevels = new[] { 3, 3 }, DvaeDim = 8,
-        DvaeEncoderHidden = 8, DvaeDecoderHidden = 8, DvaeLayers = 1, DvaeBottleneck = 8, DecoderDim = 8, DecoderHidden = 8,
+        DvaeEncoderHidden = 8, DvaeDecoderHidden = 8, DvaeLayers = 1, DvaeBottleneck = 8, DecoderHidden = 8,
         DecoderLayers = 1, DecoderBottleneck = 8, VocosDim = 8, VocosIntermediate = 16, VocosLayers = 1, FftSize = 64, HopSize = 16,
         MelChannels = 8, MaxNewRefineTokens = 3, MaxNewCodeTokens = 4, MaxTextLength = 32,
     };

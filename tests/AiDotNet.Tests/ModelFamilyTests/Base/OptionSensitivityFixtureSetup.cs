@@ -221,11 +221,29 @@ internal static class OptionSensitivityFixtureSetup
             OptionSensitivityHarness.Fingerprint(Enumerable.Range(0, parameters.Length).Select(i => ops.ToDouble(parameters[i]))));
     }
 
+    /// <summary>Several sentences, with Chinese numbers for the normalizer.</summary>
+    private const string FishLongText = "Today is 2024年1月5日, it is 3.5 degrees. We walked to the station. The train was late again. " +
+        "Then it rained for 12 hours. Everyone went home early. 第3章 starts tomorrow.";
+
+    /// <summary>The models that run openai-whisper's native network and its transcribe() decoding loop.</summary>
+    private static readonly HashSet<string> OpenAiWhisperNetworks = new(StringComparer.Ordinal)
+    {
+        "GladiaASR`1", "GroqWhisper`1", "NoiseRobustASR`1", "WhisperCPP`1", "DistilWhisper`1", "FasterWhisper`1",
+        "KotobaWhisper`1", "WhisperLargeV3`1", "WhisperLargeV3Turbo`1", "WhisperLive`1", "WhisperTimestamped`1", "WhisperX`1",
+    };
+
     /// <summary>A deterministic 10-second, 16 kHz waveform of shape [1, 160000].</summary>
     private static Tensor<T> LongWaveform<T>()
     {
+        var waveform = Waveform<T>(160000);
+        return new Tensor<T>(new[] { 1, 160000 }, waveform.ToVector());
+    }
+
+    /// <summary>A deterministic waveform of shape [samples].</summary>
+    private static Tensor<T> Waveform<T>(int samples)
+    {
         var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
-        var waveform = new Tensor<T>(new[] { 1, 160000 });
+        var waveform = new Tensor<T>(new[] { samples });
         for (int i = 0; i < waveform.Length; i++) waveform[i] = ops.FromDouble(0.4 * Math.Sin(i * .13) + 0.2 * Math.Cos(i * .37));
         return waveform;
     }
@@ -254,6 +272,221 @@ internal static class OptionSensitivityFixtureSetup
             return OptionSensitivityHarness.Fingerprint(wavLm.ForwardForTraining(LongWaveform<T>())
                 .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
         }
+        if (network is AiDotNet.Interfaces.ISpeechRecognizer<T> whisper && option is "Temperatures" or "WordTimestamps"
+            && OpenAiWhisperNetworks.Contains(network.GetType().Name))
+        {
+            // openai-whisper's decoding options: transcribe() retries a failed window at the next temperature and
+            // word_timestamps splits segments by word. Both act in Transcribe; Predict returns the decoder's logits.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var result = whisper.Transcribe(Waveform<T>(16000));
+            var values = result.Text.Select(character => (double)character).Append(result.Text.Length).ToList();
+            foreach (var segment in result.Segments)
+            {
+                values.Add(segment.StartTime);
+                values.Add(segment.EndTime);
+                values.Add(segment.Text.Length);
+                values.Add(ops.ToDouble(segment.Confidence));
+            }
+            return OptionSensitivityHarness.Fingerprint(values);
+        }
+        if (option is "AttentionChunkSeconds" or "CodeDim" or "MaskLength" or "MaskNoiseStd" or "MaskProbability" or "StackedFrames"
+            && network switch
+            {
+                AiDotNet.SpeechRecognition.Multilingual.USM<T> usm => (Func<Tensor<T>, Random, T>?)((a, r) => usm.PretrainingLoss(a, r)),
+                AiDotNet.SpeechRecognition.ProprietaryAPI.GoogleSpeechV2<T> googleV2 => (a, r) => googleV2.PretrainingLoss(a, r),
+                AiDotNet.SpeechRecognition.Multilingual.Chirp<T> chirp => (a, r) => chirp.PretrainingLoss(a, r),
+                AiDotNet.SpeechRecognition.Multilingual.Chirp2<T> chirp2 => (a, r) => chirp2.PretrainingLoss(a, r),
+                AiDotNet.SpeechRecognition.Multilingual.Chirp3<T> chirp3 => (a, r) => chirp3.PretrainingLoss(a, r),
+                _ => null,
+            } is { } bestRqLoss)
+            // BEST-RQ pre-training options (Zhang et al. 2023, section 2.2): they act in the model's pre-training loss,
+            // which the probe's supervised CTC step never runs. A 10-second waveform spans more than one 8-second
+            // attention chunk and holds masked spans at the 0.01 probability; the mask and noise draws are seeded.
+            return OptionSensitivityHarness.Fingerprint(new[]
+            {
+                AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble(
+                    bestRqLoss(LongWaveform<T>(), AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7))),
+            });
+        if (network is AiDotNet.Audio.Generation.EnCodec<T> encodec && option is "ChunkSeconds" or "ChunkOverlap")
+        {
+            // Chunked coding (section 3.1 "non-streamable") applies in EncodeFrames, not in the probe's Predict.
+            var frames = encodec.EncodeFrames(LongWaveform<T>());
+            var values = new List<double>();
+            foreach (var frame in frames)
+            {
+                values.Add(frame.Scale);
+                foreach (int code in frame.Codes) values.Add(code);
+            }
+            return OptionSensitivityHarness.Fingerprint(values);
+        }
+        if (network is AiDotNet.Audio.Classification.AudioEventDetector<T> events && option == "PatchFrames")
+            // A recording becomes one PatchFrames-frame log-mel patch (Hershey et al.'s 960 ms window); the fixture
+            // feeds ready-made patches. The ResNet's global average pooling takes any patch length.
+            return OptionSensitivityHarness.Fingerprint(events.GetEventProbabilities(LongWaveform<T>())
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS<T> styleMel && option == "WindowLength")
+            // The analysis window acts in the model's mel front end (torchaudio MelSpectrogram), which the probe's
+            // ready-made mel targets bypass.
+            return OptionSensitivityHarness.Fingerprint(styleMel.ComputeMel(Waveform<T>(16000))
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.Audio.Classification.GenreClassifier<T> genre && option is "BeatWindow" or "BeatHop" or "TextureWindowFrames")
+            // Tzanetakis and Cook's beat histogram reads 65,536-sample windows every 32,768 samples, and the texture
+            // window spans 43 analysis frames; the fixture's clip is shorter than one beat window. Twelve seconds at
+            // 22.05 kHz hold several of each.
+            return OptionSensitivityHarness.Fingerprint(genre.Classify(Waveform<T>(262144)).AllProbabilities
+                .OrderBy(p => p.Key, StringComparer.Ordinal).Select(p => AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble(p.Value)));
+        if (network is AiDotNet.Audio.Speaker.SpeakerEmbeddingExtractor<T> or AiDotNet.Audio.Speaker.SpeakerVerifier<T>
+            && option is "SampleRate" or "FftSize" or "HopLength" or "NormalizationWindowFrames")
+            // The MFCC front end (Kaldi's 25 ms / 10 ms frames, 3-second sliding mean normalization) runs on a waveform;
+            // the fixture's ready-made feature frames bypass it. Four seconds span more than the normalization window.
+            return OptionSensitivityHarness.Fingerprint(network.Predict(Waveform<T>(64000))
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.SpeechRecognition.LLMIntegrated.SALM<T> && option == "NumAdapterHeads")
+            // The modality adapter attends after the encoder's 8x and its own 4x subsampling: the fixture's 0.2 s are
+            // one adapter frame, where every head count attends to itself. One second gives several frames.
+            return observe(network, Waveform<T>(16000));
+        if (network is AiDotNet.Video.Enhancement.TTVSR<T> && option == "KeyframeStride")
+        {
+            // Keyframes fall every KeyframeStride frames from the first; the fixture's two frames hold only frame 0
+            // at every stride. Seven 16 x 16 frames place them at 0, 3, 6 against 0, 2, 4, 6 or 0, 4.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var clip = new Tensor<T>(new[] { 7, 3, 16, 16 });
+            for (int i = 0; i < clip.Length; i++) clip[i] = ops.FromDouble(127.5 + 100 * Math.Sin(i * .07));
+            return observe(network, clip);
+        }
+        if (network is AiDotNet.Video.Enhancement.MGLDVSR<T> && option is "GuidanceScale" or "FlowIterations")
+        {
+            // Motion guidance steps the latents along the warping-error gradient of RAFT flows computed on the LQ clip at
+            // a quarter of its size. The fixture's 8 x 8 frames give 2 x 2 flows, at which every pixel is occluded and the
+            // gradient vanishes. Two 32 x 32 frames of a pattern shifted one pixel give RAFT a visible motion.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var clip = new Tensor<T>(new[] { 2, 3, 32, 32 });
+            for (int f = 0; f < 2; f++)
+                for (int c = 0; c < 3; c++)
+                    for (int y = 0; y < 32; y++)
+                        for (int x = 0; x < 32; x++)
+                            clip[((f * 3 + c) * 32 + y) * 32 + x] = ops.FromDouble(127.5 + 100 * Math.Sin((x + f) * .4 + c) * Math.Cos(y * .3));
+            return observe(network, clip);
+        }
+        if (network is AiDotNet.Video.Enhancement.StreamDiffVSR<T> streamDiff && option == "AttentionHeads")
+        {
+            // The heads act only in cross-attention to the frozen empty-prompt embedding. The fixture's embedding is
+            // all zeros, so every key is the same and each head count attends uniformly; OpenCLIP's embedding of the
+            // empty prompt differs per token. Give the probe a token-varying embedding.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var embedding = streamDiff.PromptEmbeddingLayer().GetParameters();
+            var varying = new AiDotNet.Tensors.LinearAlgebra.Vector<T>(embedding.Length);
+            for (int i = 0; i < varying.Length; i++) varying[i] = ops.FromDouble(Math.Sin(i * .37));
+            streamDiff.PromptEmbeddingLayer().SetParameters(varying);
+            return observe(network, input);
+        }
+        if (network is AiDotNet.Video.Enhancement.SeedVR<T> seedVr && option is "WindowRows" or "WindowColumns")
+        {
+            // SeedVR sizes its windows on the grid resized to 720p's 45 x 80 tokens (window.py 720pwin_by_size_bysize),
+            // so the fixture's 2 x 2-token grid is one window at every count. A 30 x 30-token grid (60 x 60 latents)
+            // resizes to 60 x 60, which three windows per axis cut into 20-token windows.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var latents = new Tensor<T>(new[] { 1, seedVr.LatentChannelCount, 1, 60, 60 });
+            for (int i = 0; i < latents.Length; i++) latents[i] = ops.FromDouble(Math.Sin(i * .07));
+            return OptionSensitivityHarness.Fingerprint(seedVr.LatentVelocity(latents, 500).Select(ops.ToDouble));
+        }
+        if (option == "HubertHeads" && network switch
+            {
+                AiDotNet.TextToSpeech.MultiModal.SpeechGPT<T> speechGpt => speechGpt.Core.Units,
+                AiDotNet.TextToSpeech.MultiModal.LlamaOmni<T> llamaOmni => llamaOmni.UnitExtractor,
+                AiDotNet.SpeechRecognition.Specialized.VoxtLM<T> voxtLm => voxtLm.Network?.Units,
+                _ => null,
+            } is { } unitExtractor)
+            // The frozen HuBERT tokenizer's heads act on the features its k-means quantizes; at fixture scale every head
+            // count snaps a second of audio to the same few centroids, so observe the features themselves.
+            return OptionSensitivityHarness.Fingerprint(unitExtractor.LayerFeatures(Waveform<T>(16000))
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.ComputerVision.Segmentation.Medical.MedicalSAM2<T> medicalSam
+            && option is "MemoryBankCapacity" or "MemoryBankRule" or "MemoryResampling" or "ConfidenceThreshold")
+        {
+            // The self-sorting memory bank (Zhu et al. 2024, section 3.2) fills, filters and resamples while an image set
+            // is segmented from one prompted template; Predict segments a single image with an empty bank. Eight
+            // distinct 64-pixel images overfill the fixture's four-entry bank.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var images = new List<Tensor<T>>();
+            for (int k = 0; k < 8; k++)
+            {
+                var image = new Tensor<T>(new[] { 3, 64, 64 });
+                for (int i = 0; i < image.Length; i++) image[i] = ops.FromDouble(0.5 + 0.4 * Math.Sin(i * (0.011 + 0.003 * k) + k));
+                images.Add(image);
+            }
+            var masks = medicalSam.SegmentImageSet(images, 0, new float[,] { { 32f, 32f } }, new[] { 1 });
+            return OptionSensitivityHarness.Fingerprint(masks.SelectMany(mask => mask.Select(ops.ToDouble)));
+        }
+        if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fishText && option is "NormalizeChineseText" or "ChunkLength")
+        {
+            // Both act on the text Synthesize speaks (clean_text's number normalizer, split_text); Predict takes ids.
+            var segments = fishText.SplitText(FishLongText);
+            return OptionSensitivityHarness.Fingerprint(segments.SelectMany(segment => segment.Select(character => (double)character))
+                .Concat(segments.Select(segment => (double)segment.Length)));
+        }
+        if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fishHistory && option == "ContextLength")
+            // The context budget trims the earlier segments' history in long-form synthesis; PrepareOptions shrinks it
+            // to a few tokens and the chunk length to a few words so the text spans several segments.
+            return OptionSensitivityHarness.Fingerprint(fishHistory.Synthesize(FishLongText)
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
+        if (network is AiDotNet.TextToSpeech.CodecBased.IndexTTS<T> indexSilence
+            && option is "SilentCode" or "MaxSilentCodes" or "KeptSilentCodes")
+        {
+            // remove_long_silence acts on generated codes; the fixture's eight generated codes never hold 30 silent ones.
+            // Runs of 31 52s and 35 each of 53 and 51 sit on either side of every threshold the perturbations reach.
+            var codes = new List<int> { 7 };
+            codes.AddRange(Enumerable.Repeat(52, 31));
+            codes.Add(8);
+            codes.AddRange(Enumerable.Repeat(53, 35));
+            codes.Add(9);
+            codes.AddRange(Enumerable.Repeat(51, 35));
+            codes.Add(10);
+            return OptionSensitivityHarness.Fingerprint(indexSilence.RemoveLongSilence(codes).Select(code => (double)code));
+        }
+        if (network is AiDotNet.TextToSpeech.Latest.IndexTTS2<T> index2 && option is "MaxPromptSeconds" or "SegmentSilenceMilliseconds" or "EmotionMaxTokens")
+        {
+            // Each acts outside Predict's single segment: the prompt reader's cut (here a 20-second recording at 100 Hz),
+            // the silence between long-form segments, and the emotion model's answer budget.
+            if (option == "MaxPromptSeconds")
+                return OptionSensitivityHarness.Fingerprint(index2.CutPrompt(
+                    Enumerable.Range(0, 2000).Select(i => Math.Sin(i * .1)).ToArray(), 100));
+            if (option == "SegmentSilenceMilliseconds")
+                return OptionSensitivityHarness.Fingerprint(index2.JoinSegments(new List<double[]>
+                {
+                    Enumerable.Range(0, 64).Select(i => Math.Sin(i * .2)).ToArray(),
+                    Enumerable.Range(0, 64).Select(i => Math.Cos(i * .3)).ToArray(),
+                }));
+            return OptionSensitivityHarness.Fingerprint(index2.EmotionAnswer("I am so happy today!").Select(character => (double)character));
+        }
+        if (network is AiDotNet.TextToSpeech.MultiModal.LlamaOmni<T> omni && option is "Temperature" or "TopP" or "MaxNewTokens" or "EncoderHeads")
+        {
+            // Decoding acts in Chat's text generation (Algorithm 1) and the Whisper encoder's heads in the speech
+            // embeddings Chat feeds the LLM; Predict reads text ids aloud.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            if (option == "EncoderHeads")
+                return OptionSensitivityHarness.Fingerprint(omni.SpeechEmbeddings(Waveform<T>(16000)).Select(ops.ToDouble));
+            var response = omni.Chat(Waveform<T>(16000));
+            return OptionSensitivityHarness.Fingerprint(response.Text.Select(character => (double)character)
+                .Concat(response.Units.Select(unit => (double)unit)).Concat(response.Audio.Select(ops.ToDouble)));
+        }
+        if (network is AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T> seacoFilter && option == "AttentionFilterTopK")
+        {
+            // The filter keeps the top-k hotwords by decoder attention only when the list is longer than k (section 2.3);
+            // 120 hotwords exceed every k the probe tries (up to 100), and the bias decoder's probabilities show the kept set.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            // Without a vocabulary each character's code point is its token; the 16-token fixture vocabulary has eight
+            // non-whitespace ids above the end token, so three-character words give 120 distinct hotwords.
+            var ids = new[] { 3, 4, 5, 6, 7, 8, 14, 15 };
+            var hotwords = Enumerable.Range(0, 120)
+                .Select(i => new string(new[] { (char)ids[i % 8], (char)ids[i / 8 % 8], (char)ids[i / 64 % 8] })).ToList();
+            var probabilities = seacoFilter.BiasProbabilities(Waveform<T>(16000), hotwords);
+            return OptionSensitivityHarness.Fingerprint(probabilities is null ? Array.Empty<double>() : probabilities.Select(ops.ToDouble));
+        }
+        if (network is AiDotNet.TextToSpeech.EndToEnd.MeloTTS<T> melo && option == "BertHeads")
+            // The BERT features condition the text encoder only when text is synthesized; Predict takes phone ids.
+            return OptionSensitivityHarness.Fingerprint(melo.Synthesize("Hello there, how are you today?")
+                .Select(AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>().ToDouble));
         if (network is AiDotNet.Audio.Classification.SceneClassifier<T> scene && option == "ContextFrames")
             // The fixture feeds ready-made context vectors; the option sizes the vectors a recording becomes.
             return OptionSensitivityHarness.Fingerprint(scene.ContextFeatures(LongWaveform<T>())
@@ -588,7 +821,9 @@ internal static class OptionSensitivityFixtureSetup
             return OptionSensitivityHarness.Combine(fingerprint,
                 OptionSensitivityHarness.Fingerprint(detections.SelectMany(d => d.Phrase.Select(c => (double)c).Append(-1.0))));
         }
-        if (network is AiDotNet.SpeechRecognition.ConformerFamily.ConvTransformer<T> convTransformer && option == "MaxTextLength")
+        if (network is AiDotNet.SpeechRecognition.ConformerFamily.ConvTransformer<T> or AiDotNet.SpeechRecognition.ConformerFamily.EBranchformer<T>
+                or AiDotNet.SpeechRecognition.ConformerFamily.Branchformer<T>
+            && network is AiDotNet.Interfaces.ISpeechRecognizer<T> convTransformer && option == "MaxTextLength")
         {
             // MaxTextLength bounds the greedy attention decode inside Transcribe; Predict returns encoder logits and
             // never decodes. An untrained decoder rarely emits the end token, so the transcript runs to the bound.
@@ -896,8 +1131,11 @@ internal static class OptionSensitivityFixtureSetup
             phone[0] = input[0];
             return phone;
         }
+        // Recognizers live under AiDotNet.SpeechRecognition and, for the classic ones (Conformer), AiDotNet.Audio.SpeechRecognition.
         if (option != "MaxAudioLengthSeconds" || input.Length == 0
-            || network.GetType().Namespace?.StartsWith("AiDotNet.SpeechRecognition", StringComparison.Ordinal) != true)
+            || network.GetType().Namespace is not { } recognizerNamespace
+            || !(recognizerNamespace.StartsWith("AiDotNet.SpeechRecognition", StringComparison.Ordinal)
+                || recognizerNamespace.StartsWith("AiDotNet.Audio.SpeechRecognition", StringComparison.Ordinal)))
             return input;
         var options = network.GetType().GetMethod("GetOptions", Type.EmptyTypes)?.Invoke(network, null);
         if (options?.GetType().GetProperty("SampleRate")?.GetValue(options) is not int sampleRate || sampleRate < 1)
@@ -1000,6 +1238,10 @@ internal static class OptionSensitivityFixtureSetup
 
         if (network is AiDotNet.TextToSpeech.Classic.AlignTTS<T> align && option == "LearningRate")
             align.CurrentPhase = AiDotNet.TextToSpeech.Classic.AlignTTSTrainingPhase.JointFineTuning;
+        if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS<T> styleTts && option is "MaxStretch" or "DropoutRate")
+            // Section II-B's second stage trains the prosody predictor, with the duration-stretch augmentation and the
+            // predictor's dropout; the first (reconstruction) stage uses neither.
+            styleTts.CurrentStage = AiDotNet.TextToSpeech.StyleEmotion.StyleTtsTrainingStage.Prosody;
         if (network is AiDotNet.TextToSpeech.StyleEmotion.StyleTTS2<T> style && IsStyleTts2JointOption(option))
             style.CurrentStage = AiDotNet.TextToSpeech.StyleEmotion.StyleTts2TrainingStage.Joint;
         if (network is AiDotNet.TextToSpeech.CodecBased.CosyVoiceBase<T> cosy && IsCosyFlowOption(option))
@@ -1021,6 +1263,89 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static bool TryTrainOption<T>(INeuralNetworkModel<T> network, Tensor<T> input, string option)
     {
+        if (network is AiDotNet.Finance.Forecasting.Foundation.Chronos<T> chronos && option is "BatchSize" or "MinPast" or "MissingValueProbability")
+        {
+            // The batch, the earliest split point and the missing-value augmentation shape the windows the paper's
+            // recipe samples from a long series; a supervised step on a ready-made window has none of them.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var series = new Tensor<T>(new[] { 240 });
+            for (int i = 0; i < series.Length; i++) series[i] = ops.FromDouble(10 + Math.Sin(i * .21) + .3 * Math.Cos(i * .05));
+            chronos.TrainOnSeries(series);
+            return true;
+        }
+        if (network is AiDotNet.SpeechRecognition.Robust.RobustConformer<T> robust && option is "DiversityWeight" or "ReconstructionWeight")
+        {
+            // λ1 and λ2 weight the continual pre-training loss (Equation 4), which supervised fine-tuning does not use.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var clean = Waveform<T>(32000);
+            var noisy = new Tensor<T>(clean.Shape.ToArray());
+            for (int i = 0; i < noisy.Length; i++) noisy[i] = ops.FromDouble(ops.ToDouble(clean[i]) + 0.05 * Math.Sin(i * 1.7));
+            robust.ContinualPretrain(noisy, clean);
+            robust.ContinualPretrain(noisy, clean);
+            return true;
+        }
+        if (network is AiDotNet.SpeechRecognition.Robust.AVHuBERT<T> avHubert
+            && avHubert.GetOptions() is AiDotNet.SpeechRecognition.Robust.AVHuBERTOptions avOptions
+            && option is "LipSize" or "LogitTemperature" or "AudioMaskLength" or "AudioMaskProbability" or "VideoMaskLength"
+                or "VideoMaskProbability" or "ModalityDropout" or "AudioDropout" or "FeaturePenaltyWeight")
+        {
+            // The masks, modality dropout, cluster logits and feature penalty act in masked multimodal cluster
+            // prediction (section 3), on half a second of audio and its 12 mouth crops of LipSize at 25 Hz.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var audio = Waveform<T>(8000);
+            int side = avOptions.LipSize;
+            var lips = new Tensor<T>(new[] { 12, side, side });
+            for (int i = 0; i < lips.Length; i++) lips[i] = ops.FromDouble(0.5 + 0.4 * Math.Sin(i * 0.37));
+            var targets = Enumerable.Range(0, 12).Select(t => (t / 2) % avOptions.NumClusters).ToArray();
+            avHubert.Pretrain(audio, lips, targets);
+            avHubert.Pretrain(audio, lips, targets);
+            return true;
+        }
+        if (network is AiDotNet.Video.FrameInterpolation.VFIformer<T> vfiformer && option == "FlowWeight" && input.Rank == 3 && input.Shape[0] == 6)
+        {
+            // The flow distillation term needs the midpoint's flows to both frames, four channels after the frame pair.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            int h = input.Shape[1], w = input.Shape[2];
+            var withFlows = new Tensor<T>(new[] { 10, h, w });
+            for (int i = 0; i < input.Length; i++) withFlows[i] = input[i];
+            for (int i = input.Length; i < withFlows.Length; i++) withFlows[i] = ops.FromDouble(1.5 * Math.Sin(i * 0.11));
+            var prediction = vfiformer.Predict(input);
+            var target = new Tensor<T>(prediction.Shape.ToArray());
+            for (int i = 0; i < target.Length; i++) target[i] = ops.FromDouble(0.9 * ops.ToDouble(prediction[i]) + 5 * Math.Sin(i));
+            vfiformer.Train(withFlows, target);
+            vfiformer.Train(withFlows, target);
+            return true;
+        }
+        if (network is AiDotNet.Video.FrameInterpolation.XVFI<T> xvfi && option is "LearningRateDecay" or "SmoothnessWeight")
+        {
+            // MultiStepLR steps per epoch, so the decay applies from the step after the first epoch ends. The refined
+            // flow starts at zero, where the smoothness term has no gradient, so the weight shows once a step has moved it.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var prediction = xvfi.Predict(input);
+            var target = new Tensor<T>(prediction.Shape.ToArray());
+            for (int i = 0; i < target.Length; i++) target[i] = ops.FromDouble(0.9 * ops.ToDouble(prediction[i]) + 0.05 * Math.Sin(i));
+            for (int epoch = 0; epoch < 3; epoch++)
+            {
+                xvfi.Train(input, target);
+                xvfi.EndEpoch();
+            }
+            return true;
+        }
+        if (network is AiDotNet.Video.FrameInterpolation.FLAVR<T> flavr && option is "PlateauFactor" or "PlateauPatience")
+        {
+            // ReduceLROnPlateau steps once per epoch on the validation loss. Eight epochs of a plateaued loss cross every
+            // patience the probe tries, with a training step after the drop.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var prediction = flavr.Predict(input);
+            var target = new Tensor<T>(prediction.Shape.ToArray());
+            for (int i = 0; i < target.Length; i++) target[i] = ops.FromDouble(0.9 * ops.ToDouble(prediction[i]) + 0.05 * Math.Sin(i));
+            for (int epoch = 0; epoch < 8; epoch++)
+            {
+                flavr.Train(input, target);
+                flavr.EndEpoch(1.0);
+            }
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.Vocoders.WaveRNN<T> waveRnn && IsWaveRnnTrainingOption(option))
         {
             var audio = new Tensor<T>(new[] { 4096 });
@@ -1175,6 +1500,26 @@ internal static class OptionSensitivityFixtureSetup
                 AiDotNet.TextToSpeech.CodecBased.SparkTTSControlLevel.High, 2, 3);
             return true;
         }
+        if (network is AiDotNet.TextToSpeech.CodecBased.FishSpeechBase<T> fishPreference && option is "DpoBeta" or "ReferenceFreeDpoBeta")
+        {
+            // Preference tuning (the standard DPO and the release's reference-free objective) on a pair of recordings of
+            // the same text; the probe's supervised step never reads either beta.
+            var ops = AiDotNet.Tensors.Helpers.MathHelper.GetNumericOperations<T>();
+            var rejectedAudio = new Tensor<T>(new[] { 8192 });
+            for (int i = 0; i < rejectedAudio.Length; i++) rejectedAudio[i] = ops.FromDouble(0.3 * Math.Sin(i * .05));
+            var chosen = new AiDotNet.TextToSpeech.TtsTrainingSample<T> { Tokens = input, Audio = Waveform<T>(8192) };
+            var rejected = new AiDotNet.TextToSpeech.TtsTrainingSample<T> { Tokens = input, Audio = rejectedAudio };
+            if (option == "DpoBeta") fishPreference.TrainPreference(chosen, rejected);
+            else fishPreference.TrainPreferenceReferenceFree(chosen, rejected);
+            return true;
+        }
+        if (network is AiDotNet.TextToSpeech.MultiModal.SpeechGPT<T> speechGptVocoder
+            && option is "VocoderLearningRate" or "VocoderLearningRateDecay" or "VocoderSegmentSize" or "VocoderUpdatesPerEpoch")
+        {
+            // The unit vocoder trains apart from the language model (section 4.1; speech-resynthesis' train.py).
+            speechGptVocoder.TrainVocoder(Waveform<T>(16000));
+            return true;
+        }
         if (network is AiDotNet.TextToSpeech.MultiModal.SpiritLM<T> spirit)
         {
             if (option is "VocoderLearningRate" or "VocoderLearningRateDecay" or "VocoderUpdatesPerEpoch")
@@ -1211,7 +1556,8 @@ internal static class OptionSensitivityFixtureSetup
                 || network is AiDotNet.TextToSpeech.Vocoders.WaveNet<T> && IsWaveNetTrainingOption(option)
                 || network is AiDotNet.TextToSpeech.Vocoders.HiFiGAN<T> && IsHiFiGanTrainingOption(option)
                 || network is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGAN<T> && option is "SegmentSize" or "SamplingSeed"
-                || network is AiDotNet.TextToSpeech.Vocoders.BigVGAN<T> && option == "SegmentSize")
+                || network is AiDotNet.TextToSpeech.Vocoders.BigVGAN<T> && option == "SegmentSize"
+                || network is AiDotNet.TextToSpeech.Vocoders.ISTFTNet<T> && option == "SegmentSize")
             && network is AiDotNet.TextToSpeech.TtsModelBase<T> vocoder
             && vocoder.GetOptions() is AiDotNet.TextToSpeech.Vocoders.VocoderOptions options)
         {
@@ -1279,6 +1625,22 @@ internal static class OptionSensitivityFixtureSetup
             if (option == "HopSize" && parler.HopSize > 0) { codec.EncoderRates = [parler.HopSize]; codec.DecoderRates = [parler.HopSize]; }
             parler.Codec = codec;
         }
+        // medGAN's generator adds each layer's output to its input, so the prior, every generator width and the
+        // autoencoder's code share one width (Choi et al. 2017, section 3.2).
+        if (IsGenericOptions(options, typeof(AiDotNet.Models.Options.MedGANOptions<>)))
+        {
+            var type = options.GetType();
+            int embedding = (int)(type.GetProperty("EmbeddingDimension")?.GetValue(options) ?? 0);
+            int? noise = (int?)type.GetProperty("NoiseDimension")?.GetValue(options);
+            int width = option == "NoiseDimension" && noise is int n ? n : embedding;
+            if (option is "EmbeddingDimension" or "NoiseDimension")
+            {
+                SetOption(options, "EmbeddingDimension", width);
+                if (noise is not null) SetOption(options, "NoiseDimension", (int?)width);
+                var generator = (int[]?)type.GetProperty("GeneratorDimensions")?.GetValue(options) ?? Array.Empty<int>();
+                SetOption(options, "GeneratorDimensions", generator.Select(_ => width).ToArray());
+            }
+        }
         // PromptTTS's style and content representations share one width (§4.1).
         if (options is AiDotNet.TextToSpeech.DescriptionBased.PromptTTSOptions prompt)
         {
@@ -1286,6 +1648,12 @@ internal static class OptionSensitivityFixtureSetup
             else if (option == "EncoderDim") prompt.HiddenDim = prompt.EncoderDim;
         }
     }
+
+    private static bool IsGenericOptions(AiDotNet.Models.Options.ModelOptions options, Type definition)
+        => options.GetType().IsGenericType && options.GetType().GetGenericTypeDefinition() == definition;
+
+    private static void SetOption(AiDotNet.Models.Options.ModelOptions options, string name, object? value)
+        => options.GetType().GetProperty(name)?.SetValue(options, value);
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
@@ -1424,9 +1792,242 @@ internal static class OptionSensitivityFixtureSetup
         if (options is AiDotNet.TextToSpeech.CodecBased.OrpheusTTSOptions orpheus && option == "MaxGradNorm")
             // Bind the actual optimizer clip in the compact LM; the release threshold can exceed every test gradient.
             orpheus.MaxGradNorm = 1e-12;
-        if (options is AiDotNet.ComputerVision.Detection.Backbones.VGG16BackboneOptions vgg && option == "MaxGradNorm")
-            // The fixture's gradient norm is below every perturbation of 1.0 (even 0.5), so the clip never binds.
-            vgg.MaxGradNorm = 1e-6;
+        if (options is AiDotNet.Audio.Generation.EnCodecOptions encodecOptions)
+        {
+            // Residual unit j dilates by DilationBase^j; with the paper's single unit per block (j = 0) every base
+            // gives dilation 1. Two units reach the base.
+            if (option == "DilationBase") encodecOptions.ResidualLayers = 2;
+            // The paper's 1-second chunks, so the overlap has chunks to overlap.
+            if (option == "ChunkOverlap") encodecOptions.ChunkSeconds = 1.0;
+        }
+        if (option == "SACAlpha" && options.GetType().GetProperty("AutoTuneAlpha") is { CanWrite: true } autoTune
+            && autoTune.PropertyType == typeof(bool))
+            // SACAlpha is the fixed temperature (Haarnoja et al. 2018a); with the learned temperature it is unused.
+            autoTune.SetValue(options, false);
+        if (options is AiDotNet.ComputerVision.Segmentation.Semantic.SegNeXtOptions segNeXt && option == "WarmupStartFactor")
+            // The fixture drops the 1500-iteration warmup the factor starts; restore a two-step ramp.
+            segNeXt.WarmupIterations = 2;
+        if (options is AiDotNet.Video.Options.ABMEOptions abme)
+        {
+            // Each motion stage decays its rate at its own milestones (100k+ iterations); train the stage the
+            // option schedules, with a milestone the two probe steps reach.
+            if (option == "SymmetricMilestones")
+            {
+                abme.Stage = AiDotNet.Enums.AbmeTrainingStage.SymmetricMotion;
+                abme.SymmetricMilestones = new[] { 1 };
+            }
+            if (option == "AsymmetricMilestones")
+            {
+                abme.Stage = AiDotNet.Enums.AbmeTrainingStage.AsymmetricMotion;
+                abme.AsymmetricMilestones = new[] { 1 };
+            }
+        }
+        if (options is AiDotNet.SpeechRecognition.AlibabaASR.FunASRNanoOptions funAsrNano && option == "InverseTextNormalization")
+            // The instruction is ChatML text in Qwen3's vocabulary; the 16-token test vocabulary has no prompt text, so
+            // this probe uses the release's vocabulary (at the test width) where the instruction is tokenized.
+            funAsrNano.VocabSize = 151936;
+        if (options is AiDotNet.Video.Options.FlashVSROptions flash)
+        {
+            // FlashVSR trains in stages (decoder, dense teacher, sparse-causal student, distillation) of
+            // 20000/20000/10000 iterations. Start each option's probe at the stage where it first acts.
+            if (option is "TeacherIterations" or "NumTrainTimesteps" or "SigmaShift") flash.DecoderIterations = 0;
+            if (option is "SparseIterations" or "SparseRatio" or "KvCacheChunks" or "LocalRange")
+            {
+                flash.DecoderIterations = 0;
+                flash.TeacherIterations = 0;
+            }
+            // The LR projection's depth is bounded by the DiT's; the one-block test DiT admits only one projection layer.
+            if (option == "LqProjectionLayers") flash.NumLayers = Math.Max(flash.NumLayers, 3);
+        }
+        if (options is AiDotNet.Video.Options.DOVEOptions dove && option is "FrameDifferenceWeight" or "ImageRatio" or "RefinementLearningRate")
+        {
+            // These act in the second (pixel-space refinement) stage, which follows 10000 adaptation iterations.
+            dove.AdaptationIterations = 0;
+            // The frame-difference loss needs a clip; the image branch trains on one frame.
+            if (option == "FrameDifferenceWeight") dove.ImageRatio = 0;
+        }
+        if (options is AiDotNet.SpeechRecognition.AlibabaASR.SeACoOptions seaco && option is "BiasLabelSmoothing" or "HotwordMaskTokenId")
+            // The bias decoder's loss (its smoothing and its no-bias class) trains in the separate bias stage that follows
+            // backbone training with the Paraformer frozen.
+            seaco.TrainingStage = AiDotNet.Enums.SeACoTrainingStage.Bias;
+        if (options is AiDotNet.SpeechRecognition.Specialized.MedicalASROptions medicalAsr)
+        {
+            // Scheduled sampling ramps linearly from 0 over 100,000 steps, so the probe's first steps sample with
+            // probability ~0. Hold the probability, or ramp over one step.
+            if (option == "ScheduledSamplingProbability") medicalAsr.ScheduledSamplingRampSteps = 0;
+            if (option == "ScheduledSamplingRampSteps") medicalAsr.ScheduledSamplingRampSteps = 1;
+            // The output delay belongs to the unidirectional CTC arm (section 4.1); the bidirectional LAS ignores it.
+            if (option == "OutputDelay")
+            {
+                medicalAsr.DecoderType = AiDotNet.Enums.MedicalAsrDecoderType.Ctc;
+                medicalAsr.Bidirectional = false;
+            }
+        }
+        if (IsGenericOptions(options, typeof(AiDotNet.Models.Options.ChronosFinanceOptions<>)))
+        {
+            // One recipe step of four windows per TrainOnSeries call; the probe's own steps call it again.
+            if (option is "BatchSize" or "MinPast" or "MissingValueProbability")
+            {
+                SetOption(options, "TrainingSteps", 1);
+                SetOption(options, "BatchSize", 4);
+            }
+            // Start below the probe's gradient norm so the clip binds.
+            if (option == "MaxGradNorm") SetOption(options, "MaxGradNorm", 1e-8);
+        }
+        if (options is AiDotNet.SpeechRecognition.LLMIntegrated.Phi4AudioOptions phi4 && option == "UseLongRope")
+        {
+            // The release's LongRoPE factors cover 48 rotary frequencies: Phi-4-mini's 128-wide heads at a 0.75 partial
+            // rotary factor. One 128-wide head keeps the fixture small.
+            phi4.LlmDim = 128;
+            phi4.NumLlmAttentionHeads = 1;
+            phi4.NumLlmKvHeads = 1;
+        }
+        if (options is AiDotNet.TextToSpeech.EndToEnd.MeloTTSOptions meloOptions && option == "BertHeads")
+            // MeloTTS reads BERT's hidden_states[-3]: the fixture's two layers stop at the embeddings, before any
+            // attention. Three layers put one attention layer in front of the features.
+            meloOptions.BertLayers = 3;
+        if (options is AiDotNet.Video.Options.ShiftNetOptions shiftNet && option is "CosineIterations" or "MinLearningRate")
+            // Over 450,000 iterations the cosine moves the rate by ~1e-11 of itself in the probe's steps; a four-step
+            // cosine decays at once and reaches its floor.
+            shiftNet.CosineIterations = 4;
+        if (options is AiDotNet.Video.Options.PSRTOptions psrt && option == "FlowFreezeIterations")
+            // SPyNet joins training after 5,000 iterations; from one, the probe's second step trains it.
+            psrt.FlowFreezeIterations = 1;
+        if (options is AiDotNet.Video.Options.DualXVSROptions dualX
+            && option is "AdversarialLearningRate" or "DiscriminatorLearningRate" or "AdversarialPixelWeight" or "GANWeight")
+            // These act in the GAN stage, which follows 650,000 Charbonnier iterations.
+            dualX.ReconstructionIterations = 0;
+        if (options is AiDotNet.Video.Options.StreamDiffVSROptions streamDiff)
+        {
+            // The adversarial term joins at iteration 20,000 on every DiscriminatorInterval-th step (step 0 is one).
+            if (option == "GanWeight") streamDiff.GanStartIteration = 0;
+            // From step 1 the first adversarial step is excluded; half of it (0) includes it.
+            if (option == "GanStartIteration") streamDiff.GanStartIteration = 1;
+        }
+        if (options is AiDotNet.Video.Options.MGLDVSROptions mgld)
+        {
+            // The decoder stage follows 100,000 diffusion iterations, and its discriminator joins at decoder step 501.
+            if (option is "DecoderLearningRate" or "DifferenceWeight" or "EdgeWeight" or "TrainingFusionWeight"
+                or "DiscriminatorStart" or "DiscriminatorWeight")
+                mgld.DiffusionIterations = 0;
+            if (option == "DiscriminatorWeight") mgld.DiscriminatorStart = 0;
+            // From decoder step 1 the first step is excluded; half of it (0) includes it.
+            if (option == "DiscriminatorStart") mgld.DiscriminatorStart = 1;
+            // The upscale is max(MinimumSide / shorter side, ScaleFactor); the fixture's 8-pixel frames at 4x give 32, so
+            // a minimum side only acts above 32.
+            if (option == "MinimumSide") mgld.MinimumSide = 40;
+        }
+        if (options is AiDotNet.Video.Options.DAMVSROptions damVsr)
+        {
+            // The three stages run 60,000 ControlNet, 45,000 backward and then decoder iterations. Start each option's
+            // probe where it acts: the backward stage for one step, or the decoder stage.
+            if (option == "BackwardIterations")
+            {
+                damVsr.ControlNetIterations = 0;
+                damVsr.BackwardIterations = 1;
+            }
+            if (option is "GANWeight" or "DecoderSamplingSteps")
+            {
+                damVsr.ControlNetIterations = 0;
+                damVsr.BackwardIterations = 0;
+            }
+            // SDEdit at strength 0.6 over the fixture's two steps enters at the last, SigmaMin, where the Karras
+            // schedule's maximum and exponent cancel. Four steps enter at an interior sigma both set.
+            if (option is "SigmaMax" or "KarrasRho") damVsr.NumInferenceSteps = 4;
+        }
+        if (options is AiDotNet.Models.Options.DetectionBackboneOptions backbone && option == "MaxGradNorm")
+            // Start below the fixture's gradient norm so the clip binds in the probe's training steps.
+            backbone.MaxGradNorm = 1e-6;
+        if (options is AiDotNet.SpeechRecognition.Specialized.CodeSwitchingASROptions codeSwitching
+            && option is "MandarinCharVocabSize" or "EnglishBpeVocabSize")
+        {
+            // The fixture's 15-token inventory as 6 Mandarin characters, 8 English units and the blank, so the
+            // per-language sizes place the Mandarin/English boundary.
+            codeSwitching.MandarinCharVocabSize = 6;
+            codeSwitching.EnglishBpeVocabSize = 8;
+        }
+        if (options is AiDotNet.ComputerVision.Segmentation.Foundation.ISam2Settings)
+        {
+            // DropPath and ImageSize default to null (the size preset's rate, the architecture's side); the generic
+            // perturbations of null (1, 2) are out of range, so start each from an explicit value.
+            if (option == "DropPath")
+            {
+                if (options is AiDotNet.Video.Options.SAM2Options sam2Drop) sam2Drop.DropPath = 0.1;
+                if (options is AiDotNet.ComputerVision.Segmentation.Foundation.SAM21Options sam21Drop) sam21Drop.DropPath = 0.1;
+                if (options is AiDotNet.ComputerVision.Segmentation.Medical.MedicalSAM2Options medicalDrop) medicalDrop.DropPath = 0.1;
+            }
+            if (option == "ImageSize")
+            {
+                if (options is AiDotNet.Video.Options.SAM2Options sam2Side) sam2Side.ImageSize = 32;
+                if (options is AiDotNet.ComputerVision.Segmentation.Foundation.SAM21Options sam21Side) sam21Side.ImageSize = 64;
+            }
+            // SAM 2's 32-pixel fixture gives Hiera stage maps of 8, 4, 2 and 1 tokens, each inside its {8, 4, 2, 1}
+            // window, so a global block attends exactly as a windowed one. Halve the windows so they cut the maps.
+            if (option == "HieraGlobalAttentionBlockIndexes" && options is AiDotNet.Video.Options.SAM2Options sam2Windows)
+                sam2Windows.HieraWindowSizes = new[] { 4, 2, 1, 1 };
+            // The fixture's explicit depths and global blocks override the size preset; leave them to the preset.
+            if (option == "ModelSize" && options is AiDotNet.ComputerVision.Segmentation.Medical.MedicalSAM2Options medicalSize)
+            {
+                medicalSize.HieraStageDepths = null;
+                medicalSize.HieraGlobalAttentionBlockIndexes = null;
+            }
+        }
+        if (options is AiDotNet.TextToSpeech.CodecBased.FishSpeechFamilyOptions fishOptions)
+        {
+            if (option == "ContextLength")
+            {
+                // A budget of 30 tokens past the release's 1,024 reserve, over segments of a few words.
+                fishOptions.ContextLength = 1054;
+                fishOptions.ChunkLength = 24;
+            }
+            // Fish Speech 1.5 trains without dropout, so its training seed would draw nothing.
+            if (option == "TrainingSeed") fishOptions.DropoutRate = 0.1;
+        }
+        // The emotion model answers until its budget; a short one keeps the probe's generation cheap.
+        if (options is AiDotNet.TextToSpeech.Latest.IndexTTS2Options index2Options && option == "EmotionMaxTokens")
+            index2Options.EmotionMaxTokens = 6;
+        if (options is AiDotNet.TextToSpeech.MultiModal.LlamaOmniOptions omniOptions)
+        {
+            // The CTC weight scales the speech loss only in the release's joint stage; top-p applies only when sampling.
+            if (option == "CtcLossWeight") omniOptions.Stage = AiDotNet.TextToSpeech.MultiModal.LlamaOmniTrainingStage.Joint;
+            if (option == "TopP") omniOptions.Temperature = 1.0;
+        }
+        // The prefix MLP's width exists only when P-tuning v2 reparameterizes the prefixes (prefix_projection).
+        if (options is AiDotNet.TextToSpeech.DescriptionBased.PromptTTSOptions promptTts && option == "PrefixHiddenSize")
+            promptTts.PrefixProjection = true;
+        if (options is AiDotNet.TextToSpeech.StyleEmotion.StyleTTSZSOptions styleZsIstft && option is "DecoderType" or "IstftFftSize")
+        {
+            // iSTFTNet's hop is UpsampleRates' product times IstftHopSize and must equal the mel hop; an iSTFT hop of 1
+            // keeps the fixture's 8-sample hop for both decoders, so the decoder type and the iSTFT size can change.
+            styleZsIstft.IstftHopSize = 1;
+            if (option == "IstftFftSize") styleZsIstft.DecoderType = AiDotNet.TextToSpeech.StyleEmotion.StyleTts2DecoderType.IstftNet;
+        }
+        if (options is AiDotNet.TextToSpeech.MultiModal.SpeechGPTOptions speechGptOptions)
+        {
+            // The LoRA adapters exist only in the chain-of-modality stage (section 3.3); the vocoder's GAN step needs its
+            // discriminators, and its per-epoch decay acts within the probe's steps only at one update per epoch.
+            if (option is "LoraRank" or "LoraAlpha" or "LoraDropout")
+                speechGptOptions.Stage = AiDotNet.TextToSpeech.MultiModal.SpeechGptTrainingStage.ChainOfModality;
+            if (option is "VocoderLearningRate" or "VocoderLearningRateDecay" or "VocoderSegmentSize" or "VocoderUpdatesPerEpoch")
+                speechGptOptions.IncludeVocoderDiscriminators = true;
+            if (option == "VocoderLearningRateDecay") speechGptOptions.VocoderUpdatesPerEpoch = 1;
+        }
+        if (options is AiDotNet.TextToSpeech.CodecBased.ChatTTSOptions chatTts && option == "CodeTopK")
+        {
+            // The fixture's 3 x 3 FSQ gives 10 codes, below every top-k, so the TopKLogitsWarper never cuts. 5 x 5 levels
+            // give 26 codes; top-p 1 leaves top-k as the only cut; the code-path mel makes Predict read the sampled codes
+            // (the hidden-state path reads only the states before each sample).
+            chatTts.FsqLevels = new[] { 5, 5 };
+            chatTts.CodeTopP = 1.0;
+            chatTts.UseHiddenStateDecoder = false;
+        }
+        if (options is AiDotNet.TextToSpeech.CodecBased.DiaOptions dia && option == "EndToken")
+        {
+            // The fixture's 20-token tables hold the 16 codec codes and end/padding/start at 16-18, so every other end
+            // token collides. Move padding and start to 18 and 19 so the end token has a free slot at 17.
+            dia.PadToken = 18;
+            dia.BeginToken = 19;
+        }
         if (options is AiDotNet.Video.Options.RealBasicVSROptions realBasic && option == "InferenceCleaningThreshold")
             // The compact cleaning module's mean |residue| is below every perturbation of 1.5/255, so each threshold
             // stops after the first pass. From 0 (run every pass) the +0.1 perturbation stops after one.
@@ -1638,7 +2239,7 @@ internal static class OptionSensitivityFixtureSetup
                 stagedIndex.SpeakerCount = 2; // One class has identically zero cross-entropy.
             }
         }
-        if (options is AiDotNet.TextToSpeech.Latest.IndexTTS2Options index && IsIndexEmotionArchitecture(option))
+        if (options is AiDotNet.TextToSpeech.Latest.IndexTTS2Options index && (IsIndexEmotionArchitecture(option) || option == "EmotionMaxTokens"))
         {
             index.EmotionHidden = 16;
             index.EmotionLayers = 1;
@@ -1647,7 +2248,7 @@ internal static class OptionSensitivityFixtureSetup
             index.EmotionHeadDim = 8;
             index.EmotionIntermediate = 32;
             index.EmotionLoraRank = 2;
-            index.EmotionMaxTokens = 1;
+            if (option != "EmotionMaxTokens") index.EmotionMaxTokens = 1;
         }
         if (options is AiDotNet.TextToSpeech.CodecBased.NaturalSpeechOptions natural)
         {
@@ -1665,6 +2266,9 @@ internal static class OptionSensitivityFixtureSetup
         }
         if (options is AiDotNet.TextToSpeech.Vocoders.BigVGANOptions bigVgan && option == "SegmentSize")
             bigVgan.SegmentSize = checked(2 * bigVgan.HopSize);
+        // The training crop acts only on a recording longer than it; two hops crop the fixture's eight-hop recording.
+        if (options is AiDotNet.TextToSpeech.Vocoders.ISTFTNetOptions istftNet && option == "SegmentSize")
+            istftNet.SegmentSize = checked(2 * istftNet.HopSize);
 
         if (options is AiDotNet.TextToSpeech.Vocoders.MultiBandMelGANOptions gan)
         {
@@ -1746,6 +2350,10 @@ internal static class OptionSensitivityFixtureSetup
             var property = options.GetType().GetProperty(dependency);
             if (property?.PropertyType == typeof(int) && property.CanWrite) property.SetValue(options, 1);
         }
+        if (option == "TimeMasks" && options.GetType().GetProperty("TimeMaskRatio") is { CanWrite: true } ratio
+            && ratio.PropertyType == typeof(double))
+            // A time mask is at most TimeMaskRatio of the frames wide; 5% of a few fixture frames rounds to zero width.
+            ratio.SetValue(options, 0.5);
         if (options is AiDotNet.SpeechRecognition.Foundation.SPIRALOptions spiral && IsSpiralPretrainingOption(option))
         {
             spiral.PretrainingSteps = 4; // The third student step observes the teacher's changing EMA schedule.
@@ -1819,9 +2427,21 @@ internal static class OptionSensitivityFixtureSetup
         if (network is not AiDotNet.TextToSpeech.TtsModelBase<T>
             and not AiDotNet.Audio.Codecs.NeuralAudioCodecBase<T>
             and not AiDotNet.SpeechRecognition.NeMo.CanaryQwen<T>
-            and not AiDotNet.SpeechRecognition.NeMo.NemotronSpeech<T>) return;
-        // The generated fixtures inject constant-rate optimizers for convergence invariants.
-        // Reconstruct option probes without that override so the paper optimizer reads its settings.
+            and not AiDotNet.SpeechRecognition.NeMo.NemotronSpeech<T>
+            and not AiDotNet.SpeechRecognition.AlibabaASR.Paraformer<T>
+            and not AiDotNet.SpeechRecognition.AlibabaASR.ParaformerLarge<T>
+            and not AiDotNet.SpeechRecognition.AlibabaASR.SeACo<T>
+            and not AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASR<T>
+            and not AiDotNet.SpeechRecognition.AlibabaASR.Qwen3ASRSmall<T>
+            and not AiDotNet.SpeechRecognition.AlibabaASR.FunASRNano<T>
+            and not AiDotNet.SpeechRecognition.LLMIntegrated.GraniteSpeech<T>
+            and not AiDotNet.SpeechRecognition.LLMIntegrated.SALM<T>
+            and not AiDotNet.SpeechRecognition.Specialized.VoxtLM<T>
+            and not AiDotNet.Finance.Forecasting.Foundation.Chronos<T>
+            and not AiDotNet.Video.Denoising.ShiftNet<T>) return;
+        // The generated fixtures inject constant-rate optimizers for convergence invariants, and a rebuilt probe
+        // inherits the shell's optimizer, whose schedule was built from the shell's options (an ASR model's
+        // WarmupSteps). Reconstruct option probes without that override so the paper optimizer reads its settings.
         const System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance
             | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.DeclaredOnly;
         for (var type = network.GetType(); type is not null; type = type.BaseType)

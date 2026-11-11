@@ -51,7 +51,7 @@ public class ChatTTSReferenceTests
             HiddenDim = hidden, NumHeads = (int)f["heads"]!, NumDecoderLayers = (int)f["layers"]!, IntermediateSize = (int)f["intermediate"]!,
             FsqLevels = f["levels"]!.Select(v => (int)v).ToArray(), FsqGroups = (int)f["groups"]!, FsqResiduals = (int)f["residuals"]!,
             DvaeDim = dvae, DvaeEncoderHidden = stackHidden, DvaeDecoderHidden = stackHidden, DvaeLayers = layers, DvaeBottleneck = bottleneck,
-            DecoderDim = hidden / 2, DecoderHidden = stackHidden, DecoderLayers = layers, DecoderBottleneck = bottleneck,
+            DecoderHidden = stackHidden, DecoderLayers = layers, DecoderBottleneck = bottleneck,
             VocosDim = 8, VocosIntermediate = 16, VocosLayers = 1,
         };
         var model = new ChatTTS<double>(new NeuralNetworkArchitecture<double>(InputType.OneDimensional, NeuralNetworkTaskType.Regression,
