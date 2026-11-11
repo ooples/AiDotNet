@@ -154,18 +154,9 @@ public class InputGradientHelper<T>
         else if (_tensorPredictFunction != null)
         {
             // Convert vector to tensor and back
-            var tensor = new Tensor<T>(new[] { 1, input.Length });
-            for (int i = 0; i < input.Length; i++)
-            {
-                tensor[0, i] = input[i];
-            }
+            var tensor = new Tensor<T>(new[] { 1, input.Length }, input.Clone());
             var gradTensor = ComputeGradientTensor(tensor, outputIndex);
-            var grad = new Vector<T>(input.Length);
-            for (int i = 0; i < input.Length; i++)
-            {
-                grad[i] = gradTensor[0, i];
-            }
-            return grad;
+            return FirstRow(gradTensor, input.Length);
         }
 
         throw new InvalidOperationException("No prediction method configured.");
@@ -196,15 +187,9 @@ public class InputGradientHelper<T>
         else if (_predictFunction != null)
         {
             // Flatten tensor, compute vector gradient, reshape back
-            int total = input.Length;
             var flatInput = input.ToVector();
             var grad = ComputeNumericalGradient(flatInput, outputIndex);
-            var gradTensor = new Tensor<T>(input._shape);
-            for (int i = 0; i < total; i++)
-            {
-                gradTensor[i] = grad[i];
-            }
-            return gradTensor;
+            return new Tensor<T>(input._shape, grad);
         }
 
         throw new InvalidOperationException("No prediction method configured.");
@@ -230,11 +215,7 @@ public class InputGradientHelper<T>
     private Vector<T> ComputeGradientViaBackprop(Vector<T> input, int outputIndex)
     {
         // Convert vector to tensor for neural network
-        var inputTensor = new Tensor<T>(new[] { 1, input.Length });
-        for (int i = 0; i < input.Length; i++)
-        {
-            inputTensor[0, i] = input[i];
-        }
+        var inputTensor = new Tensor<T>(new[] { 1, input.Length }, input.Clone());
 
         // Compute gradient of specific output w.r.t. input using tape
         var eng = AiDotNetEngine.Current;
@@ -253,13 +234,16 @@ public class InputGradientHelper<T>
         var gradTensor = grads.TryGetValue(inputTensor, out var g) ? g : new Tensor<T>(inputTensor._shape);
 
         // Extract gradient vector from tensor
-        var gradient = new Vector<T>(input.Length);
-        for (int i = 0; i < input.Length; i++)
-        {
-            gradient[i] = gradTensor[0, i];
-        }
+        return FirstRow(gradTensor, input.Length);
+    }
 
-        return gradient;
+    /// <summary>
+    /// The first <paramref name="length"/> entries of row 0 of a [1, n] gradient tensor.
+    /// </summary>
+    private static Vector<T> FirstRow(Tensor<T> gradTensor, int length)
+    {
+        var row = AiDotNetEngine.Current.TensorSliceAxis(gradTensor, 0, 0).ToVector();
+        return row.Length == length ? row : row.GetSubVector(0, length);
     }
 
     /// <summary>
@@ -285,31 +269,20 @@ public class InputGradientHelper<T>
         if (_predictFunction == null)
             throw new InvalidOperationException("Predict function not configured.");
 
-        int n = input.Length;
-        var gradient = new Vector<T>(n);
+        var engine = AiDotNetEngine.Current;
+        T epsilon = NumOps.FromDouble(_epsilon);
+        var inputTensor = input.AsTensor();
+        var plusAll = engine.TensorAddScalar(inputTensor, epsilon);
+        var minusAll = engine.TensorSubtractScalar(inputTensor, epsilon);
+        var positions = engine.TensorArange<int>(0, input.Length, 1);
+        Func<Vector<T>, Vector<T>> predict = _predictFunction;
 
-        for (int i = 0; i < n; i++)
-        {
-            // Create perturbed inputs using Vector<T>
-            var inputPlus = input.Clone();
-            var inputMinus = input.Clone();
-
-            inputPlus[i] = NumOps.FromDouble(NumOps.ToDouble(input[i]) + _epsilon);
-            inputMinus[i] = NumOps.FromDouble(NumOps.ToDouble(input[i]) - _epsilon);
-
-            // Compute predictions
-            var predPlus = _predictFunction(inputPlus);
-            var predMinus = _predictFunction(inputMinus);
-
-            // Extract target output values
-            double valPlus = outputIndex < predPlus.Length ? NumOps.ToDouble(predPlus[outputIndex]) : 0;
-            double valMinus = outputIndex < predMinus.Length ? NumOps.ToDouble(predMinus[outputIndex]) : 0;
-
-            // Central difference
-            gradient[i] = NumOps.FromDouble((valPlus - valMinus) / (2 * _epsilon));
-        }
-
-        return gradient;
+        // Feature i is perturbed on its own: one-hot select of the shifted values.
+        return CentralDifferences(
+            input.Length,
+            i => predict(engine.TensorWhere(engine.TensorEqScalar(positions, i), plusAll, inputTensor).ToVector()),
+            i => predict(engine.TensorWhere(engine.TensorEqScalar(positions, i), minusAll, inputTensor).ToVector()),
+            outputIndex);
     }
 
     /// <summary>
@@ -333,38 +306,53 @@ public class InputGradientHelper<T>
         if (_tensorPredictFunction == null)
             throw new InvalidOperationException("Tensor predict function not configured.");
 
-        var gradient = new Tensor<T>(input._shape);
-        var inputArray = input.ToArray();
-        int total = input.Length;
+        var engine = AiDotNetEngine.Current;
+        T epsilon = NumOps.FromDouble(_epsilon);
+        var plusAll = engine.TensorAddScalar(input, epsilon);
+        var minusAll = engine.TensorSubtractScalar(input, epsilon);
+        var positions = engine.TensorArange<int>(0, input.Length, 1).Reshape(input._shape);
+        Func<Tensor<T>, Tensor<T>> predict = _tensorPredictFunction;
 
-        for (int i = 0; i < total; i++)
+        // Element i is perturbed on its own: one-hot select of the shifted values.
+        var gradient = CentralDifferences(
+            input.Length,
+            i => predict(engine.TensorWhere(engine.TensorEqScalar(positions, i), plusAll, input)).ToVector(),
+            i => predict(engine.TensorWhere(engine.TensorEqScalar(positions, i), minusAll, input)).ToVector(),
+            outputIndex);
+        return new Tensor<T>(input._shape, gradient);
+    }
+
+    /// <summary>
+    /// Central differences (f(x + eps e_i) - f(x - eps e_i)) / (2 eps) of output <paramref name="outputIndex"/> for
+    /// every element i, evaluating plus then minus for each element in turn. An output index past the end of the
+    /// prediction contributes 0.
+    /// </summary>
+    private Vector<T> CentralDifferences(int count, Func<int, Vector<T>> plus, Func<int, Vector<T>> minus, int outputIndex)
+    {
+        var plusOutputs = new List<Vector<T>>(count);
+        var minusOutputs = new List<Vector<T>>(count);
+        for (int i = 0; i < count; i++)
         {
-            // Create perturbed inputs
-            var inputPlus = new Tensor<T>(input._shape);
-            var inputMinus = new Tensor<T>(input._shape);
-
-            for (int j = 0; j < total; j++)
-            {
-                inputPlus[j] = inputArray[j];
-                inputMinus[j] = inputArray[j];
-            }
-
-            inputPlus[i] = NumOps.FromDouble(NumOps.ToDouble(inputArray[i]) + _epsilon);
-            inputMinus[i] = NumOps.FromDouble(NumOps.ToDouble(inputArray[i]) - _epsilon);
-
-            // Compute predictions
-            var predPlus = _tensorPredictFunction(inputPlus);
-            var predMinus = _tensorPredictFunction(inputMinus);
-
-            // Extract target output values
-            double valPlus = outputIndex < predPlus.Length ? NumOps.ToDouble(predPlus.ToArray()[outputIndex]) : 0;
-            double valMinus = outputIndex < predMinus.Length ? NumOps.ToDouble(predMinus.ToArray()[outputIndex]) : 0;
-
-            // Central difference
-            gradient[i] = NumOps.FromDouble((valPlus - valMinus) / (2 * _epsilon));
+            plusOutputs.Add(plus(i));
+            minusOutputs.Add(minus(i));
         }
 
-        return gradient;
+        var engine = AiDotNetEngine.Current;
+        var difference = engine.Subtract(SelectOutput(plusOutputs, outputIndex), SelectOutput(minusOutputs, outputIndex));
+        return engine.Divide(difference, NumOps.FromDouble(2 * _epsilon));
+    }
+
+    /// <summary>
+    /// Output <paramref name="outputIndex"/> of each prediction (0 where the prediction is shorter).
+    /// </summary>
+    private static Vector<T> SelectOutput(List<Vector<T>> outputs, int outputIndex)
+    {
+        if (outputs.Count == 0 || outputIndex >= outputs[0].Length)
+            return new Vector<T>(outputs.Count);
+
+        var engine = AiDotNetEngine.Current;
+        var stacked = engine.TensorStack(outputs.Select(o => o.AsTensor()).ToArray(), 0);
+        return engine.TensorSliceAxis(stacked, 1, outputIndex).ToVector();
     }
 
     /// <summary>
@@ -433,22 +421,19 @@ public class InputGradientHelper<T>
         int outputIndex = 0)
     {
         var gradients = new Vector<T>[numSteps];
-        int n = input.Length;
+        if (numSteps == 0)
+            return gradients;
+
+        // Interpolate between baseline and input: row s = baseline + alpha_s * (input - baseline),
+        // alpha_s = s / (numSteps - 1)
+        var engine = AiDotNetEngine.Current;
+        var alphas = engine.TensorDivideScalar(engine.TensorArange<T>(0, numSteps, 1), NumOps.FromDouble(numSteps - 1));
+        var offsets = engine.TensorOuter(alphas, engine.Subtract(input, baseline).AsTensor());
+        var path = engine.TensorAdd(offsets, engine.TensorBroadcastTo(baseline.AsTensor().Reshape(new[] { 1, input.Length }), offsets.Shape));
 
         for (int step = 0; step < numSteps; step++)
         {
-            double alpha = (double)step / (numSteps - 1);
-
-            // Interpolate between baseline and input
-            var interpolated = new Vector<T>(n);
-            for (int i = 0; i < n; i++)
-            {
-                double baseVal = NumOps.ToDouble(baseline[i]);
-                double inputVal = NumOps.ToDouble(input[i]);
-                interpolated[i] = NumOps.FromDouble(baseVal + alpha * (inputVal - baseVal));
-            }
-
-            gradients[step] = ComputeGradient(interpolated, outputIndex);
+            gradients[step] = ComputeGradient(path.GetSlice(step).ToVector(), outputIndex);
         }
 
         return gradients;
@@ -480,31 +465,20 @@ public class InputGradientHelper<T>
         int numSteps = 50,
         int outputIndex = 0)
     {
-        int n = input.Length;
-        var attributions = new double[n];
+        var engine = AiDotNetEngine.Current;
 
         // Compute path gradients
         var pathGradients = ComputePathGradients(input, baseline, numSteps + 1, outputIndex);
 
-        // Integrate using trapezoidal rule
-        for (int step = 0; step <= numSteps; step++)
-        {
-            double weight = (step == 0 || step == numSteps) ? 0.5 : 1.0;
-
-            for (int i = 0; i < n; i++)
-            {
-                attributions[i] += weight * NumOps.ToDouble(pathGradients[step][i]) / numSteps;
-            }
-        }
+        // Integrate using trapezoidal rule: end points weigh 0.5, interior points 1, all over numSteps
+        var weights = engine.Fill(numSteps + 1, NumOps.Divide(NumOps.One, NumOps.FromDouble(numSteps)));
+        T halfWeight = NumOps.Divide(NumOps.FromDouble(0.5), NumOps.FromDouble(numSteps));
+        weights[0] = halfWeight;
+        weights[numSteps] = halfWeight;
+        var stacked = engine.TensorStack(pathGradients.Select(g => g.AsTensor()).ToArray(), 0);
+        var attributions = engine.TensorMatMul(weights.AsTensor().Reshape(new[] { 1, numSteps + 1 }), stacked).ToVector();
 
         // Multiply by (input - baseline)
-        var result = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            double diff = NumOps.ToDouble(input[i]) - NumOps.ToDouble(baseline[i]);
-            result[i] = NumOps.FromDouble(attributions[i] * diff);
-        }
-
-        return result;
+        return engine.Multiply(attributions, engine.Subtract(input, baseline));
     }
 }
