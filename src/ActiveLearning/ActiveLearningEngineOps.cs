@@ -136,6 +136,86 @@ internal static class ActiveLearningEngineOps
     }
 
     /// <summary>
+    /// Number of rows per block for blockwise pairwise computations on a [n, d] tensor, sized so
+    /// that a [rows, n, d] intermediate stays around four million elements.
+    /// </summary>
+    internal static int PairwiseBlockRows(int n, int d)
+    {
+        long perRow = Math.Max(1L, (long)n * Math.Max(1, d));
+        long rows = (1L << 22) / perRow;
+        return (int)Math.Max(1L, Math.Min(n, rows));
+    }
+
+    /// <summary>
+    /// Exact Euclidean distances between rows [start, start + count) of a [n, d] tensor and all of
+    /// its rows, computed as sqrt(sum((a - b)^2)) without the Gram-matrix shortcut.
+    /// </summary>
+    /// <returns>A [count, n] tensor.</returns>
+    internal static Tensor<T> DistanceBlock<T>(Tensor<T> rows, int start, int count)
+    {
+        var engine = AiDotNetEngine.Current;
+        int n = rows.Shape[0];
+        int d = rows.Shape[1];
+        if (d == 0)
+        {
+            return new Tensor<T>(new[] { count, n });
+        }
+
+        var shape = new[] { count, n, d };
+        var block = engine.TensorSlice(rows, new[] { start, 0 }, new[] { count, d }).Reshape(new[] { count, 1, d });
+        var all = rows.Reshape(new[] { 1, n, d });
+        var diff = engine.TensorSubtract(engine.TensorBroadcastTo(block, shape), engine.TensorBroadcastTo(all, shape));
+        return engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(diff, diff), new[] { 2 }, keepDims: false));
+    }
+
+    /// <summary>
+    /// Dot products between rows [start, start + count) of a [n, d] tensor and all of its rows.
+    /// </summary>
+    /// <returns>A [count, n] tensor.</returns>
+    internal static Tensor<T> DotBlock<T>(Tensor<T> rows, int start, int count)
+    {
+        var engine = AiDotNetEngine.Current;
+        int d = rows.Shape[1];
+        if (d == 0)
+        {
+            return new Tensor<T>(new[] { count, rows.Shape[0] });
+        }
+
+        var block = engine.TensorSlice(rows, new[] { start, 0 }, new[] { count, d });
+        return engine.TensorMatMul(block, engine.TensorTranspose(rows));
+    }
+
+    /// <summary>
+    /// Euclidean norm of every row of a [n, d] tensor.
+    /// </summary>
+    /// <returns>A [n] tensor.</returns>
+    internal static Tensor<T> RowNorms<T>(Tensor<T> rows)
+    {
+        var engine = AiDotNetEngine.Current;
+        if (rows.Shape[1] == 0)
+        {
+            return new Tensor<T>(new[] { rows.Shape[0] });
+        }
+
+        return engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(rows, rows), new[] { 1 }, keepDims: false));
+    }
+
+    /// <summary>
+    /// Mask over a [count, n] block that is true where the block row is the same sample as the
+    /// column (row r of the block is sample start + r).
+    /// </summary>
+    internal static bool[] SelfMask(int start, int count, int n)
+    {
+        var mask = new bool[count * n];
+        for (int r = 0; r < count && start + r < n; r++)
+        {
+            mask[r * n + start + r] = true;
+        }
+
+        return mask;
+    }
+
+    /// <summary>
     /// Computes min, max and mean of a non-empty score vector.
     /// </summary>
     internal static (T Min, T Max, T Mean) Statistics<T>(Vector<T> scores)

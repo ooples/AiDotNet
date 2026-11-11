@@ -116,27 +116,18 @@ public class DensityWeightedSampling<T> : IActiveLearningStrategy<T>
         var numSamples = unlabeledPool.Shape[0];
         var numClasses = predictions.Length / numSamples;
         var featureSize = unlabeledPool.Length / numSamples;
-        var scores = new Vector<T>(numSamples);
+        var engine = AiDotNetEngine.Current;
 
         // Compute uncertainty scores (using entropy)
-        var uncertaintyScores = new Vector<T>(numSamples);
-        for (int i = 0; i < numSamples; i++)
-        {
-            var probs = ExtractProbabilities(predictions, i, numClasses);
-            uncertaintyScores[i] = ComputeEntropy(probs);
-        }
+        var probs = ActiveLearningEngineOps.SoftmaxRows(predictions, numSamples, numClasses);
+        var uncertaintyScores = ActiveLearningEngineOps.EntropyRows(probs, _numOps.FromDouble(1e-10));
 
         // Compute density scores
         var densityScores = ComputeDensityScores(unlabeledPool, numSamples, featureSize);
 
         // Combine: Score = Uncertainty × Density^β
-        for (int i = 0; i < numSamples; i++)
-        {
-            var uncertainty = _numOps.ToDouble(uncertaintyScores[i]);
-            var density = _numOps.ToDouble(densityScores[i]);
-            var weightedDensity = Math.Pow(density, _beta);
-            scores[i] = _numOps.FromDouble(uncertainty * weightedDensity);
-        }
+        var weightedDensity = engine.TensorPower(densityScores, _numOps.FromDouble(_beta));
+        var scores = engine.TensorMultiply(uncertaintyScores, weightedDensity).ToVector();
 
         UpdateStatistics(scores);
         return scores;
@@ -157,116 +148,59 @@ public class DensityWeightedSampling<T> : IActiveLearningStrategy<T>
     /// Computes density scores based on average distance to k nearest neighbors.
     /// Higher density = more neighbors nearby = more representative.
     /// </summary>
-    private Vector<T> ComputeDensityScores(Tensor<T> pool, int numSamples, int featureSize)
+    private Tensor<T> ComputeDensityScores(Tensor<T> pool, int numSamples, int featureSize)
     {
-        var densityScores = new Vector<T>(numSamples);
+        var engine = AiDotNetEngine.Current;
         var k = Math.Min(_kNeighbors, numSamples - 1);
+        Tensor<T> avgDist;
 
-        for (int i = 0; i < numSamples; i++)
+        if (k > 0)
         {
-            // Compute distances to all other samples
-            var distances = new List<double>();
-            for (int j = 0; j < numSamples; j++)
+            // Average of the k smallest distances to the other samples. The k + 1 smallest
+            // distances of a row include the sample's zero distance to itself, so their sum is
+            // the sum of the k nearest neighbours.
+            var rows = ActiveLearningEngineOps.AsRows(pool, numSamples, featureSize);
+            var blockRows = ActiveLearningEngineOps.PairwiseBlockRows(numSamples, featureSize);
+            var sums = new List<Tensor<T>>();
+            for (int start = 0; start < numSamples; start += blockRows)
             {
-                if (i != j)
-                {
-                    var dist = _numOps.ToDouble(ComputeEuclideanDistance(pool, i, j, featureSize));
-                    distances.Add(dist);
-                }
+                int count = Math.Min(blockRows, numSamples - start);
+                var distances = ActiveLearningEngineOps.DistanceBlock(rows, start, count);
+                var (nearest, _) = engine.TopK(distances, k + 1, 1, false);
+                sums.Add(engine.ReduceSum(nearest, new[] { 1 }, keepDims: false));
             }
 
-            // Get average of k smallest distances
-            distances.Sort();
-            var kDistances = distances.Take(k).ToList();
-            var avgDist = kDistances.Count > 0 ? kDistances.Average() : 1.0;
-
-            // Convert to density (inverse of average distance)
-            // Add small epsilon to avoid division by zero
-            var density = 1.0 / (avgDist + 1e-10);
-            densityScores[i] = _numOps.FromDouble(density);
+            avgDist = engine.TensorDivideScalar(engine.TensorConcatenate(sums.ToArray(), 0), _numOps.FromDouble(k));
+        }
+        else
+        {
+            avgDist = new Tensor<T>(new[] { numSamples });
+            avgDist.Fill(_numOps.One);
         }
 
-        // Normalize density scores to [0, 1]
-        NormalizeDensityScores(densityScores);
+        // Convert to density (inverse of average distance)
+        // Add small epsilon to avoid division by zero
+        var density = engine.TensorReciprocal(engine.TensorAddScalar(avgDist, _numOps.FromDouble(1e-10)));
 
-        return densityScores;
+        // Normalize density scores to [0, 1]
+        return NormalizeDensityScores(density);
     }
 
     /// <summary>
     /// Normalizes density scores to [0, 1] range.
     /// </summary>
-    private void NormalizeDensityScores(Vector<T> scores)
+    private Tensor<T> NormalizeDensityScores(Tensor<T> scores)
     {
-        var maxDensity = _numOps.Zero;
-        for (int i = 0; i < scores.Length; i++)
+        if (scores.Length == 0)
         {
-            if (_numOps.GreaterThan(scores[i], maxDensity))
-            {
-                maxDensity = scores[i];
-            }
+            return scores;
         }
 
-        if (_numOps.ToDouble(maxDensity) > 1e-10)
-        {
-            for (int i = 0; i < scores.Length; i++)
-            {
-                scores[i] = _numOps.Divide(scores[i], maxDensity);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Computes entropy for uncertainty estimation.
-    /// </summary>
-    private T ComputeEntropy(Vector<T> probabilities)
-    {
-        var entropy = _numOps.Zero;
-        var epsilon = _numOps.FromDouble(1e-10);
-
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            var p = _numOps.Add(probabilities[i], epsilon);
-            var logP = _numOps.FromDouble(Math.Log(_numOps.ToDouble(p)));
-            var term = _numOps.Multiply(p, logP);
-            entropy = _numOps.Subtract(entropy, term);
-        }
-
-        return entropy;
-    }
-
-    /// <summary>
-    /// Extracts probabilities for a single sample from batch predictions.
-    /// </summary>
-    private Vector<T> ExtractProbabilities(Tensor<T> predictions, int sampleIndex, int numClasses)
-    {
-        var probs = new Vector<T>(numClasses);
-        var startIdx = sampleIndex * numClasses;
-
-        // Apply softmax to get probabilities
-        var maxLogit = _numOps.MinValue;
-        for (int c = 0; c < numClasses; c++)
-        {
-            if (_numOps.GreaterThan(predictions[startIdx + c], maxLogit))
-            {
-                maxLogit = predictions[startIdx + c];
-            }
-        }
-
-        var expSum = _numOps.Zero;
-        for (int c = 0; c < numClasses; c++)
-        {
-            var shifted = _numOps.Subtract(predictions[startIdx + c], maxLogit);
-            var expVal = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
-            probs[c] = expVal;
-            expSum = _numOps.Add(expSum, expVal);
-        }
-
-        for (int c = 0; c < numClasses; c++)
-        {
-            probs[c] = _numOps.Divide(probs[c], expSum);
-        }
-
-        return probs;
+        var engine = AiDotNetEngine.Current;
+        var maxDensity = engine.TensorMaxValue(scores);
+        return _numOps.GreaterThan(maxDensity, _numOps.FromDouble(1e-10))
+            ? engine.TensorDivideScalar(scores, maxDensity)
+            : scores;
     }
 
     /// <summary>
@@ -283,25 +217,6 @@ public class DensityWeightedSampling<T> : IActiveLearningStrategy<T>
     private static int[] SelectWithDiversity(Vector<T> scores, Tensor<T> pool, int batchSize)
     {
         return ActiveLearningEngineOps.SelectWithDiversity(scores, pool, batchSize);
-    }
-
-    /// <summary>
-    /// Computes Euclidean distance between two samples.
-    /// </summary>
-    private T ComputeEuclideanDistance(Tensor<T> pool, int idx1, int idx2, int featureSize)
-    {
-        var sumSquared = _numOps.Zero;
-        var start1 = idx1 * featureSize;
-        var start2 = idx2 * featureSize;
-
-        for (int i = 0; i < featureSize; i++)
-        {
-            var diff = _numOps.Subtract(pool[start1 + i], pool[start2 + i]);
-            var squared = _numOps.Multiply(diff, diff);
-            sumSquared = _numOps.Add(sumSquared, squared);
-        }
-
-        return _numOps.FromDouble(Math.Sqrt(_numOps.ToDouble(sumSquared)));
     }
 
     /// <summary>
