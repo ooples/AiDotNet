@@ -1155,3 +1155,5 @@ AiDotNet.Interpretability.FaithfulnessReport<T>.InsertionAuc.get -> T
 AiDotNet.Interpretability.FaithfulnessReport<T>.Sufficiency.get -> T
 *REMOVED*AiDotNet.Interpretability.Explainers.TreeSHAPExplanation<T>.GetSumError() -> double
 AiDotNet.Interpretability.Explainers.TreeSHAPExplanation<T>.GetSumError() -> T
+*REMOVED*AiDotNet.Interpretability.Explainers.DeepSHAPExplanation<T>.GetSumError() -> double
+AiDotNet.Interpretability.Explainers.DeepSHAPExplanation<T>.GetSumError() -> T
