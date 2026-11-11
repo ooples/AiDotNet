@@ -140,84 +140,21 @@ public partial class HDBSCAN<T> : ClusteringBase<T>
         ComputeProbabilitiesAndOutlierScores(clusterLabels, _condensedTree, n);
 
         // Set labels
-        Labels = new Vector<T>(n);
-        int maxLabel = -1;
-        for (int i = 0; i < n; i++)
-        {
-            Labels[i] = NumOps.FromDouble(clusterLabels[i]);
-            if (clusterLabels[i] > maxLabel) maxLabel = clusterLabels[i];
-        }
+        Labels = ClusteringTensorOps.FromIntArray<T>(clusterLabels);
+        NumClusters = clusterLabels.Length == 0 ? 0 : Math.Max(-1, clusterLabels.Max()) + 1;
 
-        NumClusters = maxLabel + 1;
-
-        // Compute cluster centers (mean of each cluster)
-        if (NumClusters > 0)
-        {
-            ClusterCenters = new Matrix<T>(NumClusters, d);
-            var clusterCounts = new int[NumClusters];
-            var clusterSums = new T[NumClusters, d];
-            for (int k = 0; k < NumClusters; k++)
-                for (int j = 0; j < d; j++)
-                    clusterSums[k, j] = NumOps.Zero;
-
-            for (int i = 0; i < n; i++)
-            {
-                int label = clusterLabels[i];
-                if (label >= 0)
-                {
-                    clusterCounts[label]++;
-                    for (int j = 0; j < d; j++)
-                    {
-                        clusterSums[label, j] = NumOps.Add(clusterSums[label, j], x[i, j]);
-                    }
-                }
-            }
-
-            for (int k = 0; k < NumClusters; k++)
-            {
-                if (clusterCounts[k] > 0)
-                {
-                    T countT = NumOps.FromDouble(clusterCounts[k]);
-                    for (int j = 0; j < d; j++)
-                    {
-                        ClusterCenters[k, j] = NumOps.Divide(clusterSums[k, j], countT);
-                    }
-                }
-            }
-        }
-        else
-        {
-            ClusterCenters = new Matrix<T>(0, d);
-        }
+        // Compute cluster centers (mean of each cluster; noise is ignored)
+        ClusterCenters = NumClusters > 0
+            ? ClusteringTensorOps.ClusterMeans(x, Labels, NumClusters, out _)
+            : new Matrix<T>(0, d);
 
         IsTrained = true;
     }
 
-    private T[,] ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
+    private Tensor<T> ComputeDistanceMatrix(Matrix<T> x, int n, IDistanceMetric<T> metric)
     {
-        int d = x.Columns;
-        var distMatrix = new T[n, n];
-
-        // Cache rows as arrays for allocation-free distance
-        var rowArrays = new T[n][];
-        for (int i = 0; i < n; i++)
-        {
-            rowArrays[i] = new T[d];
-            for (int c = 0; c < d; c++)
-                rowArrays[i][c] = x[i, c];
-        }
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                T dist = metric.ComputeInline(rowArrays[i], rowArrays[j], d);
-                distMatrix[i, j] = dist;
-                distMatrix[j, i] = dist;
-            }
-        }
-
-        return distMatrix;
+        // Symmetric pairwise distances with a zero diagonal
+        return Tensor<T>.FromMatrix(metric.ComputePairwise(x));
     }
 
     /// <summary>
@@ -244,100 +181,52 @@ public partial class HDBSCAN<T> : ClusteringBase<T>
         }
     }
 
-    private T[] ComputeCoreDistances(T[,] distMatrix, int n, int minSamples)
+    private Vector<T> ComputeCoreDistances(Tensor<T> distMatrix, int n, int minSamples)
     {
-        var coreDistances = new T[n];
+        // Core distance is the distance to the k-th nearest other point (zero when k is not positive)
         int k = Math.Min(minSamples, n - 1);
-
-        for (int i = 0; i < n; i++)
+        if (k <= 0)
         {
-            // Get distances to all other points
-            var distances = new List<T>(n);
-            for (int j = 0; j < n; j++)
-            {
-                if (i != j)
-                {
-                    distances.Add(distMatrix[i, j]);
-                }
-            }
-
-            distances.Sort((a, b) => NumOps.Compare(a, b));
-
-            // Core distance is distance to k-th nearest neighbor
-            coreDistances[i] = k > 0 && k <= distances.Count ? distances[k - 1] : NumOps.Zero;
+            return new Vector<T>(n);
         }
 
-        return coreDistances;
+        // Push the self-distance past every other one; the matrix is symmetric so column-wise sorting suffices
+        var eye = Engine.TensorEye<T>(n);
+        var others = Engine.TensorWhere(eye, Engine.TensorFullLike(distMatrix, NumOps.MaxValue), distMatrix);
+        return Engine.TensorMsort(others).ToMatrix().GetRow(k - 1);
     }
 
-    private T[,] ComputeMutualReachabilityDistances(T[,] distMatrix, T[] coreDistances, int n)
+    private Matrix<T> ComputeMutualReachabilityDistances(Tensor<T> distMatrix, Vector<T> coreDistances, int n)
     {
-        var mrdMatrix = new T[n, n];
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = i + 1; j < n; j++)
-            {
-                // Mutual reachability distance = max(core_dist[i], core_dist[j], dist[i,j])
-                T mrd = coreDistances[i];
-                if (NumOps.GreaterThan(coreDistances[j], mrd)) mrd = coreDistances[j];
-                if (NumOps.GreaterThan(distMatrix[i, j], mrd)) mrd = distMatrix[i, j];
-                mrdMatrix[i, j] = mrd;
-                mrdMatrix[j, i] = mrd;
-            }
-        }
-
-        return mrdMatrix;
+        // Mutual reachability distance = max(core_dist[i], core_dist[j], dist[i,j]); zero on the diagonal
+        var shape = new[] { n, n };
+        var rowCore = Engine.TensorBroadcastTo(Tensor<T>.FromVector(coreDistances, new[] { n, 1 }), shape);
+        var columnCore = Engine.TensorBroadcastTo(Tensor<T>.FromVector(coreDistances, new[] { 1, n }), shape);
+        var mrd = Engine.TensorMax(Engine.TensorMax(rowCore, columnCore), distMatrix);
+        var eye = Engine.TensorEye<T>(n);
+        return Engine.TensorWhere(eye, Engine.TensorZerosLike(mrd), mrd).ToMatrix();
     }
 
-    private List<MSTEdge> BuildMinimumSpanningTree(T[,] mrdMatrix, int n)
+    private List<MSTEdge> BuildMinimumSpanningTree(Matrix<T> mrdMatrix, int n)
     {
         // Prim's algorithm for MST
         var mst = new List<MSTEdge>();
-        var inTree = new bool[n];
-        var minDist = new T[n];
-        var minFrom = new int[n];
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            minDist[i] = NumOps.MaxValue;
-            minFrom[i] = -1;
+            return mst;
         }
 
+        var state = new PrimState(Engine.Fill(n, NumOps.MaxValue));
+
         // Start from node 0
-        minDist[0] = NumOps.Zero;
+        state.MinDist[0] = NumOps.Zero;
 
         for (int count = 0; count < n; count++)
         {
             // Find minimum distance node not in tree
-            int u = -1;
-            T minVal = NumOps.MaxValue;
-            for (int i = 0; i < n; i++)
+            if (!TryAddNearestNode(state, mrdMatrix, mst))
             {
-                if (!inTree[i] && NumOps.LessThan(minDist[i], minVal))
-                {
-                    minVal = minDist[i];
-                    u = i;
-                }
-            }
-
-            if (u == -1) break;
-
-            inTree[u] = true;
-
-            if (minFrom[u] >= 0)
-            {
-                mst.Add(new MSTEdge(minFrom[u], u, minDist[u]));
-            }
-
-            // Update distances
-            for (int v = 0; v < n; v++)
-            {
-                if (!inTree[v] && NumOps.LessThan(mrdMatrix[u, v], minDist[v]))
-                {
-                    minDist[v] = mrdMatrix[u, v];
-                    minFrom[v] = u;
-                }
+                break;
             }
         }
 
@@ -346,6 +235,105 @@ public partial class HDBSCAN<T> : ClusteringBase<T>
 
         return mst;
     }
+
+    /// <summary>Prim's working state: tentative distances, their source nodes and tree membership (1 = in tree).</summary>
+    private sealed class PrimState
+    {
+        public PrimState(Vector<T> initialDistances)
+        {
+            int n = initialDistances.Length;
+            MinDist = initialDistances;
+            InTree = new Vector<T>(n);
+            MinFrom = new int[n];
+            for (int i = 0; i < n; i++)
+            {
+                MinFrom[i] = -1;
+            }
+        }
+
+        public Vector<T> MinDist { get; set; }
+
+        public Vector<T> InTree { get; }
+
+        public int[] MinFrom { get; }
+    }
+
+    /// <summary>
+    /// One Prim step: adds the closest node outside the tree (first on ties) and relaxes the remaining distances;
+    /// false when no node outside the tree is reachable.
+    /// </summary>
+    private bool TryAddNearestNode(PrimState state, Matrix<T> mrdMatrix, List<MSTEdge> mst)
+    {
+        var inTree = state.InTree.AsTensor();
+        var candidates = Engine.TensorWhere(inTree, Engine.TensorFullLike(inTree, NumOps.MaxValue), state.MinDist.AsTensor()).ToVector();
+        int u = ClusteringTensorOps.ArgMin(candidates);
+        T best = candidates[u];
+        if (!NumOps.LessThan(best, NumOps.MaxValue))
+        {
+            return false;
+        }
+
+        state.InTree[u] = NumOps.One;
+        if (state.MinFrom[u] >= 0)
+        {
+            mst.Add(new MSTEdge(state.MinFrom[u], u, best));
+        }
+
+        // Update distances of the nodes outside the tree
+        var row = mrdMatrix.GetRow(u).AsTensor();
+        var outside = Engine.ScalarMinusTensor(NumOps.One, state.InTree.AsTensor());
+        var improved = Engine.TensorMultiply(outside, Engine.TensorLessThan(row, state.MinDist.AsTensor()));
+        state.MinDist = Engine.TensorWhere(improved, row, state.MinDist.AsTensor()).ToVector();
+
+        var improvedFlags = ClusteringTensorOps.ToBoolArray(improved.ToVector());
+        for (int v = 0; v < improvedFlags.Length; v++)
+        {
+            if (improvedFlags[v])
+            {
+                state.MinFrom[v] = u;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Lambda per MST edge: 1 / weight for positive weights, MaxValue otherwise.</summary>
+    private T[] EdgeLambdas(List<MSTEdge> mst)
+    {
+        if (mst.Count == 0)
+        {
+            return Array.Empty<T>();
+        }
+
+        var weights = Vector<T>.FromArray(mst.Select(edge => edge.Weight).ToArray()).AsTensor();
+        var positive = Engine.TensorGreaterThan(weights, NumOps.Zero);
+        var safe = Engine.TensorWhere(positive, weights, Engine.TensorOnesLike(weights));
+        return Engine.TensorWhere(positive, Engine.TensorReciprocal(safe), Engine.TensorFullLike(weights, NumOps.MaxValue)).ToArray();
+    }
+
+    /// <summary>Smallest lambda at which a cluster appears as a child.</summary>
+    private T BirthLambda(T[] lambdas) => Engine.TensorMinValue(Vector<T>.FromArray(lambdas).AsTensor());
+
+    /// <summary>True for a birth lambda that was never lowered below MaxValue.</summary>
+    private bool IsUnset(T lambda) => NumOps.Equals(lambda, NumOps.MaxValue);
+
+    /// <summary>
+    /// Sum over the condensed-tree entries under a cluster of (lambda - birth) * size, with lambdas below the
+    /// birth lambda clamped to it.
+    /// </summary>
+    private T ClusterStability(T birth, List<CondensedTreeNode> entries)
+    {
+        var lambdas = Vector<T>.FromArray(entries.Select(node => node.Lambda).ToArray()).AsTensor();
+        var sizes = ClusteringTensorOps.FromIntArray<T>(entries.Select(node => node.Size).ToArray()).AsTensor();
+        var excess = Engine.TensorSubtractScalar(Engine.TensorMax(lambdas, birth), birth);
+        return Engine.TensorSum(Engine.TensorMultiply(excess, sizes));
+    }
+
+    /// <summary>Sum of the given values (zero when empty).</summary>
+    private T SumOf(T[] values) => values.Length == 0 ? NumOps.Zero : Engine.TensorSum(Vector<T>.FromArray(values).AsTensor());
+
+    /// <summary>Scalar comparison of two stabilities.</summary>
+    private bool IsHigher(T candidate, T reference) => NumOps.GreaterThan(candidate, reference);
 
     private (List<CondensedTreeNode> tree, int[] finalParent) BuildCondensedTree(List<MSTEdge> mst, int n, int minClusterSize)
     {
@@ -379,16 +367,18 @@ public partial class HDBSCAN<T> : ClusteringBase<T>
 
         int nextCluster = n;
 
-        foreach (var edge in mst)
+        // lambda = 1 / weight for positive weights, MaxValue otherwise
+        var edgeLambdas = EdgeLambdas(mst);
+
+        for (int e = 0; e < mst.Count; e++)
         {
+            var edge = mst[e];
             int root1 = Find(parent, edge.U);
             int root2 = Find(parent, edge.V);
 
             if (root1 == root2) continue;
 
-            T edgeLambda = NumOps.GreaterThan(edge.Weight, NumOps.Zero)
-                ? NumOps.Divide(NumOps.One, edge.Weight)
-                : NumOps.MaxValue;
+            T edgeLambda = edgeLambdas[e];
 
             int size1 = size[root1];
             int size2 = size[root2];
@@ -546,17 +536,16 @@ public partial class HDBSCAN<T> : ClusteringBase<T>
             // it first appears in the condensed tree (minimum lambda across all its entries).
             foreach (var node in condensedTree)
             {
-                // Birth lambda of a cluster = minimum lambda at which it appears as a child
-                if (birthLambda.ContainsKey(node.Child))
-                {
-                    T current = birthLambda[node.Child];
-                    if (NumOps.LessThan(node.Lambda, current))
-                        birthLambda[node.Child] = node.Lambda;
-                }
                 if (children.ContainsKey(node.Parent))
                 {
                     children[node.Parent].Add(node.Child);
                 }
+            }
+
+            // Birth lambda of a cluster = minimum lambda at which it appears as a child
+            foreach (var group in condensedTree.Where(node => birthLambda.ContainsKey(node.Child)).GroupBy(node => node.Child))
+            {
+                birthLambda[group.Key] = BirthLambda(group.Select(node => node.Lambda).ToArray());
             }
 
             // Per scikit-learn reference: clusters that never appeared as a child
@@ -564,28 +553,17 @@ public partial class HDBSCAN<T> : ClusteringBase<T>
             // stability is always 0, causing systematic over-segmentation.
             foreach (int cluster in clusterNodes)
             {
-                if (NumOps.Equals(birthLambda[cluster], NumOps.MaxValue))
+                if (IsUnset(birthLambda[cluster]))
                     birthLambda[cluster] = NumOps.Zero;
             }
 
             // Pass 2: Compute stability per Campello et al. 2013 / scikit-learn.
             // Stability of cluster C = Σ (lambda_p - lambda_birth(C)) * size_p
             // for ALL entries in the condensed tree under parent C.
-            foreach (var node in condensedTree)
+            // Clamp: if birth > lambda (shouldn't happen with correct tree), treat as zero contribution
+            foreach (var group in condensedTree.Where(node => stability.ContainsKey(node.Parent)).GroupBy(node => node.Parent))
             {
-                if (stability.ContainsKey(node.Parent))
-                {
-                    T birth = birthLambda[node.Parent];
-                    T lambda = node.Lambda;
-                    // Clamp: if birth > lambda (shouldn't happen with correct tree),
-                    // treat as zero contribution rather than negative
-                    if (NumOps.GreaterThan(birth, lambda))
-                        lambda = birth;
-                    T contribution = NumOps.Multiply(
-                        NumOps.Subtract(lambda, birth),
-                        NumOps.FromDouble(node.Size));
-                    stability[node.Parent] = NumOps.Add(stability[node.Parent], contribution);
-                }
+                stability[group.Key] = ClusterStability(birthLambda[group.Key], group.ToList());
             }
 
             // Select clusters with max stability
@@ -603,21 +581,16 @@ public partial class HDBSCAN<T> : ClusteringBase<T>
 
             foreach (int cluster in clusterList)
             {
-                T childStability = NumOps.Zero;
-                bool hasClusterChildren = false;
-                if (children.ContainsKey(cluster))
-                {
-                    foreach (int c in children[cluster].Where(c => clusterNodes.Contains(c)))
-                    {
-                        hasClusterChildren = true;
-                        childStability = NumOps.Add(childStability, stability[c]);
-                    }
-                }
+                var clusterChildren = children.TryGetValue(cluster, out var kids)
+                    ? kids.Where(c => clusterNodes.Contains(c)).ToList()
+                    : new List<int>();
 
-                if (!hasClusterChildren)
+                if (clusterChildren.Count == 0)
                     continue; // leaf cluster — stays selected
 
-                if (NumOps.GreaterThan(stability[cluster], childStability))
+                T childStability = SumOf(clusterChildren.Select(c => stability[c]).ToArray());
+
+                if (IsHigher(stability[cluster], childStability))
                 {
                     // Parent wins — deselect ALL descendants
                     isCluster[cluster] = true;
@@ -777,32 +750,13 @@ public partial class HDBSCAN<T> : ClusteringBase<T>
 
     private void ComputeProbabilitiesAndOutlierScores(int[] labels, List<CondensedTreeNode> condensedTree, int n)
     {
-        _probabilities = new T[n];
-        _outlierScores = new T[n];
-
-        // Initialize every point from its final label so that points recovered via the
-        // union-find fallback (which never appear as a direct child in the condensed tree)
-        // still receive proper probability/outlier metadata. Points labeled to a cluster
-        // get probability=1, outlier=0; noise points (label = -1) get probability=0, outlier=1.
-        for (int i = 0; i < n; i++)
-        {
-            bool inCluster = labels[i] >= 0;
-            _probabilities[i] = inCluster ? NumOps.One : NumOps.Zero;
-            _outlierScores[i] = inCluster ? NumOps.Zero : NumOps.One;
-        }
-
-        // Refine from the condensed tree for points that were directly recorded there.
-        // (Currently uses the same {0,1} scheme as the initial pass; future work can
-        // derive richer per-point probability from the lambda at which the point left
-        // its cluster, but that refinement still benefits from the all-points init above.)
-        foreach (var node in condensedTree)
-        {
-            if (node.Child < n)
-            {
-                _probabilities[node.Child] = labels[node.Child] >= 0 ? NumOps.One : NumOps.Zero;
-                _outlierScores[node.Child] = labels[node.Child] >= 0 ? NumOps.Zero : NumOps.One;
-            }
-        }
+        // Points labeled to a cluster get probability=1, outlier=0; noise points (label = -1) get probability=0,
+        // outlier=1. This covers points recovered via the union-find fallback (which never appear as a direct child
+        // in the condensed tree) as well as the points recorded there, which use the same {0,1} scheme.
+        // (Future work can derive richer per-point probability from the lambda at which the point left its cluster.)
+        var inCluster = Engine.TensorGreaterThan(ClusteringTensorOps.FromIntArray<T>(labels).AsTensor(), NumOps.FromDouble(-0.5));
+        _probabilities = inCluster.ToArray();
+        _outlierScores = Engine.ScalarMinusTensor(NumOps.One, inCluster).ToArray();
     }
 
     /// <inheritdoc />
@@ -810,34 +764,20 @@ public partial class HDBSCAN<T> : ClusteringBase<T>
     {
         ValidateIsTrained();
 
-        var labels = new Vector<T>(x.Rows);
-        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
-
-        for (int i = 0; i < x.Rows; i++)
+        if (ClusterCenters is null || NumClusters <= 0 || x.Rows == 0)
         {
-            var point = GetRow(x, i);
-            T minDist = NumOps.MaxValue;
-            int nearestCluster = -1;
-
-            if (ClusterCenters is not null && NumClusters > 0)
-            {
-                for (int k = 0; k < NumClusters; k++)
-                {
-                    var center = GetRow(ClusterCenters, k);
-                    T dist = metric.Compute(point, center);
-
-                    if (NumOps.LessThan(dist, minDist))
-                    {
-                        minDist = dist;
-                        nearestCluster = k;
-                    }
-                }
-            }
-
-            labels[i] = NumOps.FromDouble(nearestCluster);
+            // No clusters: every point is unassigned
+            var unassigned = new Vector<T>(x.Rows);
+            return x.Rows == 0
+                ? unassigned
+                : Engine.TensorFullLike(unassigned.AsTensor(), NumOps.FromDouble(-1)).ToVector();
         }
 
-        return labels;
+        var metric = _options.DistanceMetric ?? new EuclideanDistance<T>();
+        var centers = ClusterCenters.Rows == NumClusters
+            ? ClusterCenters
+            : ClusterCenters.GetSubMatrix(0, 0, NumClusters, ClusterCenters.Columns);
+        return ClusteringTensorOps.FromIntArray<T>(ClusteringTensorOps.NearestCenters(metric, x, centers));
     }
 
     /// <inheritdoc />
