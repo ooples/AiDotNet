@@ -173,14 +173,12 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
         int cols = GetFeatureCount(minorityData);
         var engine = Engine;
 
-        // The centroid proxy and the SVM run in double, as the generator draws and the hyper-parameters
-        // are: an integral or narrow T would truncate the learning rate, the centroid and the margins.
-        var minorityValues = Tensor<T>.FromMatrix(minorityData).Cast<double>();
+        var minorityValues = Tensor<T>.FromMatrix(minorityData);
 
         if (majorityData is null || GetSampleCount(majorityData) == 0)
         {
             // Without majority data, use distance to centroid as proxy for "borderline"
-            var centroid = engine.TensorDivideScalar(engine.ReduceSum(minorityValues, [0], true), (double)minorityCount);
+            var centroid = engine.TensorDivideScalar(engine.ReduceSum(minorityValues, [0], true), NumOps.FromDouble(minorityCount));
 
             // Calculate distances to centroid
             var offsets = engine.TensorSubtract(minorityValues, engine.TensorBroadcastTo(centroid, [minorityCount, cols]));
@@ -197,13 +195,15 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
         // Train simplified linear SVM to identify support vectors
         int majorityCount = GetSampleCount(majorityData);
         int totalSamples = minorityCount + majorityCount;
-        var samples = Tensor<T>.FromMatrix(TabularEngineOps<T>.ConcatenateRows(minorityData, majorityData))
-            .Cast<double>().ToMatrix();
+        var samples = TabularEngineOps<T>.ConcatenateRows(minorityData, majorityData);
 
-        // Initialize weights
-        var weights = new Vector<double>(cols);
-        double bias = 0;
-        const double learningRate = 0.01;
+        // Initialize weights; the hyper-parameters are converted to T once
+        var weights = new Vector<T>(cols);
+        T bias = NumOps.Zero;
+        T learningRate = NumOps.FromDouble(0.01);
+        T svmC = NumOps.FromDouble(SvmC);
+        T one = NumOps.One;
+        T negativeOne = NumOps.Negate(NumOps.One);
 
         // SGD training for linear SVM: each update depends on the previous one, so samples are visited
         // in order and only the taken branch is evaluated
@@ -211,20 +211,20 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
         {
             for (int i = 0; i < totalSamples; i++)
             {
-                double label = i < minorityCount ? 1.0 : -1.0;
+                T label = i < minorityCount ? one : negativeOne;
                 var sample = samples.GetRow(i);
-                double decision = bias + engine.DotProduct(weights, sample);
+                T decision = NumOps.Add(bias, engine.DotProduct(weights, sample));
 
                 // Hinge loss gradient: w += lr * (label * x - w / C); otherwise w -= lr * w / C
-                if (label * decision < 1)
+                if (NumOps.LessThan(NumOps.Multiply(label, decision), one))
                 {
                     weights = engine.Add(weights, engine.Multiply(
-                        engine.Subtract(engine.Multiply(sample, label), engine.Divide(weights, SvmC)), learningRate));
-                    bias += learningRate * label;
+                        engine.Subtract(engine.Multiply(sample, label), engine.Divide(weights, svmC)), learningRate));
+                    bias = NumOps.Add(bias, NumOps.Multiply(learningRate, label));
                 }
                 else
                 {
-                    weights = engine.Subtract(weights, engine.Divide(engine.Multiply(weights, learningRate), SvmC));
+                    weights = engine.Subtract(weights, engine.Divide(engine.Multiply(weights, learningRate), svmC));
                 }
             }
         }
@@ -232,7 +232,7 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
         // Identify support vectors from minority class: margin = 1 * decision (label = 1 for minority);
         // within or slightly beyond the margin means margin <= 1.5
         var margins = engine.TensorAddScalar(engine.MatrixVectorMultiply(minorityValues.ToMatrix(), weights).AsTensor(), bias);
-        var withinMargin = engine.ScalarMinusTensor(1.0, engine.TensorGreaterThan(margins, 1.5));
+        var withinMargin = engine.ScalarMinusTensor(one, engine.TensorGreaterThan(margins, NumOps.FromDouble(1.5)));
         supportVectorIndices.AddRange(engine.TensorNonzero(withinMargin).ToArray());
 
         return supportVectorIndices;
@@ -241,7 +241,7 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
     /// <summary>
     /// Computes the distance matrix for all pairs of samples.
     /// </summary>
-    private static Tensor<double> ComputeDistanceMatrix(Matrix<T> data)
+    private static Tensor<T> ComputeDistanceMatrix(Matrix<T> data)
     {
         return TabularEngineOps<T>.PairwiseDistances(data);
     }
@@ -249,7 +249,7 @@ public class SvmSmoteAugmenter<T> : TabularAugmenterBase<T>
     /// <summary>
     /// Gets the k nearest neighbors for a given sample.
     /// </summary>
-    private static int[] GetKNearestNeighbors(Tensor<double> distances, int sampleIdx, int k)
+    private static int[] GetKNearestNeighbors(Tensor<T> distances, int sampleIdx, int k)
     {
         return TabularEngineOps<T>.NearestNeighbors(distances, sampleIdx, k);
     }

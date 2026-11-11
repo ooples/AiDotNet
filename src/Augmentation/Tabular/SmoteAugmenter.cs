@@ -182,12 +182,12 @@ public class SmoteAugmenter<T> : TabularAugmenterBase<T>
         return (combinedData, combinedLabels);
     }
 
-    private static Tensor<double> ComputeDistanceMatrix(Matrix<T> data)
+    private static Tensor<T> ComputeDistanceMatrix(Matrix<T> data)
     {
         return TabularEngineOps<T>.PairwiseDistances(data);
     }
 
-    private static int[] GetKNearestNeighbors(Tensor<double> distances, int sampleIdx, int k)
+    private static int[] GetKNearestNeighbors(Tensor<T> distances, int sampleIdx, int k)
     {
         return TabularEngineOps<T>.NearestNeighbors(distances, sampleIdx, k);
     }

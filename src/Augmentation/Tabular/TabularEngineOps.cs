@@ -17,28 +17,26 @@ internal static class TabularEngineOps<T>
     private const int PairwiseTileElements = 1 << 22;
 
     /// <summary>
-    /// Euclidean distance between every pair of rows, as a [rows, rows] tensor of doubles.
+    /// Euclidean distance between every pair of rows, as a [rows, rows] tensor.
     /// </summary>
     /// <remarks>
-    /// Feature values are converted to double before subtraction and the distances stay in double, so
-    /// squaring cannot overflow an integral or float <typeparamref name="T"/> and neighbor ranking sees
-    /// the same distances as the double computation. Rows are processed in bounded tiles.
+    /// Rows are processed in bounded tiles, so only one [block, rows, columns] difference tile exists at a time.
     /// </remarks>
-    internal static Tensor<double> PairwiseDistances(Matrix<T> data)
+    internal static Tensor<T> PairwiseDistances(Matrix<T> data)
     {
         var engine = AiDotNetEngine.Current;
         int rows = data.Rows;
         int cols = data.Columns;
         if (rows == 0)
         {
-            return new Tensor<double>([0, 0]);
+            return new Tensor<T>([0, 0]);
         }
 
-        var values = Tensor<T>.FromMatrix(data).Cast<double>();
+        var values = Tensor<T>.FromMatrix(data);
         var right = engine.Reshape(values, [1, rows, cols]);
         long perRow = Math.Max(1L, (long)rows * cols);
         int block = (int)Math.Max(1L, Math.Min(rows, PairwiseTileElements / perRow));
-        var tiles = new List<Tensor<double>>();
+        var tiles = new List<Tensor<T>>();
         for (int start = 0; start < rows; start += block)
         {
             int count = Math.Min(block, rows - start);
@@ -67,15 +65,14 @@ internal static class TabularEngineOps<T>
             return new Matrix<T>(totalRows, cols);
         }
 
-        // Evaluated in double and converted to T once at the end, as a per-feature double computation
-        // would be: the gaps lie in [0, 1), so converting them to an integral T first zeroes every step.
-        var values = Tensor<T>.FromMatrix(data).Cast<double>();
+        // The generator draws are converted to T once, in bulk; the interpolation itself runs in T.
+        var values = Tensor<T>.FromMatrix(data);
         var start = engine.TensorIndexSelect(values, new Tensor<int>(from, [count]), 0);
         var end = engine.TensorIndexSelect(values, new Tensor<int>(to, [count]), 0);
         var step = engine.TensorMultiply(
-            engine.TensorBroadcastTo(new Tensor<double>(gaps, [count, 1]), [count, cols]),
+            engine.TensorBroadcastTo(new Tensor<double>(gaps, [count, 1]).Cast<T>(), [count, cols]),
             engine.TensorSubtract(end, start));
-        var synthetic = engine.TensorAdd(start, step).Cast<T>();
+        var synthetic = engine.TensorAdd(start, step);
         if (count < totalRows)
         {
             synthetic = engine.TensorConcatenate([synthetic, new Tensor<T>([totalRows - count, cols])], 0);
@@ -119,7 +116,7 @@ internal static class TabularEngineOps<T>
     }
     /// tensor, excluding the sample itself, closest first (ties by row order).
     /// </summary>
-    internal static int[] NearestNeighbors(Tensor<double> distances, int sampleIdx, int k)
+    internal static int[] NearestNeighbors(Tensor<T> distances, int sampleIdx, int k)
     {
         var engine = AiDotNetEngine.Current;
         int rows = distances.Shape[0];
