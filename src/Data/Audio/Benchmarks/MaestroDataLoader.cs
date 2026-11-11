@@ -115,7 +115,7 @@ public class MaestroDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
 
         _sampleCount = totalSamples;
         var featuresData = new T[totalSamples * _maxAudioSamples];
-        var labelsData = new T[totalSamples * MidiNotes];
+        var labelsData = new double[totalSamples * MidiNotes];
 
         for (int i = 0; i < totalSamples; i++)
         {
@@ -138,7 +138,7 @@ public class MaestroDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         }
 
         LoadedFeatures = new Tensor<T>(featuresData, new[] { totalSamples, _maxAudioSamples });
-        LoadedLabels = new Tensor<T>(labelsData, new[] { totalSamples, MidiNotes });
+        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, MidiNotes }).Cast<T>();
         InitializeIndices(totalSamples);
     }
 
@@ -208,7 +208,7 @@ public class MaestroDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         return fields;
     }
 
-    private void ExtractMidiNotes(byte[] midiBytes, T[] target, int offset)
+    private void ExtractMidiNotes(byte[] midiBytes, double[] target, int offset)
     {
         // MIDI parsing: locate MTrk chunks and walk events with variable-length delta times.
         // This is more robust than raw byte scanning which produces false positives.
@@ -261,7 +261,7 @@ public class MaestroDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
                     int note = midiBytes[tp] & 0x7F;
                     int velocity = midiBytes[tp + 1] & 0x7F;
                     if (velocity > 0 && note < MidiNotes)
-                        target[offset + note] = NumOps.FromDouble(1.0);
+                        target[offset + note] = 1.0;
                     tp += 2;
                 }
                 else if (cmd == 0x80 || cmd == 0xA0 || cmd == 0xB0 || cmd == 0xE0)

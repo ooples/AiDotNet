@@ -16,15 +16,15 @@ internal static class FlacDecoder
     /// <summary>
     /// Decodes FLAC audio bytes into a target array of normalized [-1, 1] mono samples.
     /// </summary>
-    internal static void DecodeFlac<T>(byte[] flacBytes, T[] target, int offset, int maxSamples,
-        INumericOperations<T> numOps)
+    /// <returns>The number of samples written, starting at <paramref name="offset"/>.</returns>
+    internal static int DecodeFlac(byte[] flacBytes, double[] target, int offset, int maxSamples)
     {
-        if (flacBytes.Length < 42) return; // Minimum FLAC: 4 magic + 38 STREAMINFO
+        if (flacBytes.Length < 42) return 0; // Minimum FLAC: 4 magic + 38 STREAMINFO
 
         // Verify "fLaC" magic
         if (flacBytes[0] != (byte)'f' || flacBytes[1] != (byte)'L' ||
             flacBytes[2] != (byte)'a' || flacBytes[3] != (byte)'C')
-            return;
+            return 0;
 
         // Parse metadata blocks to find STREAMINFO
         int pos = 4;
@@ -86,7 +86,7 @@ internal static class FlacDecoder
             try
             {
                 int written = DecodeFrame(reader, numChannels, bitsPerSample, normFactor,
-                    target, offset + samplesWritten, maxSamples - samplesWritten, numOps);
+                    target, offset + samplesWritten, maxSamples - samplesWritten);
                 samplesWritten += written;
                 pos = reader.BytePosition;
                 // Align to byte boundary and skip CRC-16
@@ -102,10 +102,12 @@ internal static class FlacDecoder
                 pos = frameStart + 2;
             }
         }
+
+        return samplesWritten;
     }
 
-    private static int DecodeFrame<T>(BitReader reader, int streamChannels, int streamBps,
-        double normFactor, T[] target, int offset, int maxSamples, INumericOperations<T> numOps)
+    private static int DecodeFrame(BitReader reader, int streamChannels, int streamBps,
+        double normFactor, double[] target, int offset, int maxSamples)
     {
         // Frame header
         reader.ReadBits(14); // sync code
@@ -229,7 +231,7 @@ internal static class FlacDecoder
                 sample = (sum / numChannels) * normFactor;
             }
 
-            target[offset + i] = numOps.FromDouble(Math.Max(-1.0, Math.Min(1.0, sample)));
+            target[offset + i] = Math.Max(-1.0, Math.Min(1.0, sample));
         }
 
         return samplesToWrite;

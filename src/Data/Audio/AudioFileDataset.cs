@@ -149,7 +149,7 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         }
 
         // Build tensors: features [N, SamplesPerFile], labels [N, NumClasses]
-        var featuresData = new T[_sampleCount * _samplesPerFile];
+        var featuresData = new double[_sampleCount * _samplesPerFile];
         var labelsData = new double[_sampleCount * _numClasses];
 
         for (int i = 0; i < _sampleCount; i++)
@@ -167,7 +167,7 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             labelsData[labelOffset + classIndex] = 1.0;
         }
 
-        var features = new Tensor<T>(featuresData, new[] { _sampleCount, _samplesPerFile });
+        var features = new Tensor<double>(featuresData, new[] { _sampleCount, _samplesPerFile }).Cast<T>();
         var labels = new Tensor<double>(labelsData, new[] { _sampleCount, _numClasses }).Cast<T>();
 
         LoadedFeatures = features;
@@ -230,10 +230,10 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
             ExtractTensorBatch((LoadedLabels ?? throw new InvalidOperationException("LoadedLabels is null where it is required.")), indices));
     }
 
-    private T[] LoadAudioSamples(string filePath)
+    private double[] LoadAudioSamples(string filePath)
     {
         byte[] rawBytes = File.ReadAllBytes(filePath);
-        var samples = new T[_samplesPerFile];
+        var samples = new double[_samplesPerFile];
 
         string ext = Path.GetExtension(filePath);
         if (ext.Equals(".wav", StringComparison.OrdinalIgnoreCase))
@@ -249,7 +249,7 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         return samples;
     }
 
-    private void LoadWavSamples(byte[] rawBytes, T[] samples)
+    private void LoadWavSamples(byte[] rawBytes, double[] samples)
     {
         // Parse RIFF/WAVE header properly
         if (rawBytes.Length < 12)
@@ -310,7 +310,7 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
     }
 
     private void LoadPcmSamples(byte[] rawBytes, int dataOffset, int dataSize, int bitsPerSample,
-        int numChannels, T[] samples)
+        int numChannels, double[] samples)
     {
         int bytesPerSample = bitsPerSample / 8;
         int bytesPerFrame = bytesPerSample * numChannels;
@@ -405,7 +405,7 @@ public class AudioFileDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
                 value = sum / numChannels;
             }
 
-            samples[i] = NumOps.FromDouble(value);
+            samples[i] = value;
         }
     }
 

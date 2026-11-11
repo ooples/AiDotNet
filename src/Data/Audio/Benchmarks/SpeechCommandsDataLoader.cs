@@ -591,32 +591,48 @@ public class SpeechCommandsDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T
         int lastIdx = nativeBuf.Length - 1;
         if (nativeRate == targetRate)
         {
-            // No resampling — still respect the offset (used for silence crops).
-            for (int t = 0; t < targetLen; t++)
-            {
-                int idx = nativeOffset + t;
-                if (idx > lastIdx) idx = lastIdx;
-                dst[dstOffset + t] = nativeBuf[idx];
-            }
+            // No resampling — still respect the offset (used for silence crops). Indices past the
+            // end of the buffer clamp to the last sample, so copy the in-range run in bulk and
+            // fill the tail with the last sample.
+            int inRange = Math.Max(0, Math.Min(targetLen, lastIdx + 1 - nativeOffset));
+            if (inRange > 0)
+                Array.Copy(nativeBuf, nativeOffset, dst, dstOffset, inRange);
+            if (inRange < targetLen)
+                dst.AsSpan(dstOffset + inRange, targetLen - inRange).Fill(nativeBuf[lastIdx]);
             return;
         }
 
+        if (targetLen <= 0) return;
+
+        // Linear interpolation: gather the floor/ceil neighbours with the engine and blend them
+        // with per-output weights (1 - frac, frac). The index bookkeeping is integer-only.
         double rateRatio = (double)nativeRate / targetRate;
+        var floorIdx = new int[targetLen];
+        var ceilIdx = new int[targetLen];
+        var w0 = new double[targetLen];
+        var w1 = new double[targetLen];
         for (int t = 0; t < targetLen; t++)
         {
             double srcPos = nativeOffset + t * rateRatio;
-            int floorIdx = (int)Math.Floor(srcPos);
-            // frac = srcPos - floor(srcPos); reuse floorIdx to avoid a second
-            // Math.Floor call per sample in this hot resampling loop.
-            double frac = srcPos - floorIdx;
-            int ceilIdx = floorIdx + 1;
-            if (floorIdx > lastIdx) floorIdx = lastIdx;
-            if (ceilIdx > lastIdx) ceilIdx = lastIdx;
-
-            double v0 = NumOps.ToDouble(nativeBuf[floorIdx]);
-            double v1 = NumOps.ToDouble(nativeBuf[ceilIdx]);
-            dst[dstOffset + t] = NumOps.FromDouble(v0 * (1.0 - frac) + v1 * frac);
+            int f = (int)Math.Floor(srcPos);
+            // frac = srcPos - floor(srcPos); reuse f to avoid a second Math.Floor call.
+            double frac = srcPos - f;
+            int c = f + 1;
+            floorIdx[t] = f > lastIdx ? lastIdx : f;
+            ceilIdx[t] = c > lastIdx ? lastIdx : c;
+            w0[t] = 1.0 - frac;
+            w1[t] = frac;
         }
+
+        var engine = AiDotNetEngine.Current;
+        var source = new Tensor<T>(nativeBuf, new[] { nativeBuf.Length });
+        var shape = new[] { targetLen };
+        var v0 = engine.TensorIndexSelect(source, new Tensor<int>(floorIdx, shape), 0);
+        var v1 = engine.TensorIndexSelect(source, new Tensor<int>(ceilIdx, shape), 0);
+        var blended = engine.TensorAdd(
+            engine.TensorMultiply(v0, new Tensor<double>(w0, shape).Cast<T>()),
+            engine.TensorMultiply(v1, new Tensor<double>(w1, shape).Cast<T>()));
+        blended.AsSpan().CopyTo(dst.AsSpan(dstOffset, targetLen));
     }
 
     /// <inheritdoc/>

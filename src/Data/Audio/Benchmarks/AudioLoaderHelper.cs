@@ -15,19 +15,36 @@ internal static class AudioLoaderHelper
     /// WAV: RIFF/WAVE chunk-based parsing. FLAC: full decode via <see cref="FlacDecoder"/>.
     /// Output is normalized to [-1, 1], multi-channel averaged to mono.
     /// </summary>
+    /// <remarks>
+    /// Samples are decoded into a double staging buffer and converted to <typeparamref name="T"/> with a
+    /// single bulk <c>Tensor&lt;double&gt;.Cast&lt;T&gt;()</c>; only the decoded prefix is written into
+    /// <paramref name="target"/>, so the remainder keeps its existing (zero) padding.
+    /// </remarks>
     internal static void LoadAudioSamples<T>(byte[] audioBytes, T[] target, int offset, int maxSamples,
         INumericOperations<T> numOps)
+    {
+        if (maxSamples <= 0) return;
+        var staging = new double[maxSamples];
+        int written = LoadAudioSamples(audioBytes, staging, 0, maxSamples);
+        if (written <= 0) return;
+        var converted = new Tensor<double>(staging, new[] { maxSamples }).Cast<T>();
+        converted.AsSpan().Slice(0, written).CopyTo(target.AsSpan(offset, written));
+    }
+
+    /// <summary>
+    /// Auto-detects audio format (WAV or FLAC) and decodes normalized [-1, 1] mono samples into
+    /// <paramref name="target"/>. Returns the number of samples written starting at <paramref name="offset"/>.
+    /// </summary>
+    internal static int LoadAudioSamples(byte[] audioBytes, double[] target, int offset, int maxSamples)
     {
         if (audioBytes.Length >= 4 &&
             audioBytes[0] == (byte)'f' && audioBytes[1] == (byte)'L' &&
             audioBytes[2] == (byte)'a' && audioBytes[3] == (byte)'C')
         {
-            FlacDecoder.DecodeFlac(audioBytes, target, offset, maxSamples, numOps);
+            return FlacDecoder.DecodeFlac(audioBytes, target, offset, maxSamples);
         }
-        else
-        {
-            LoadWavSamples(audioBytes, target, offset, maxSamples, numOps);
-        }
+
+        return LoadWavSamples(audioBytes, target, offset, maxSamples);
     }
 
     /// <summary>
@@ -36,10 +53,9 @@ internal static class AudioLoaderHelper
     /// Supports 8/16/24/32-bit PCM. Multi-channel audio is averaged to mono.
     /// Pads with zeros if audio is shorter than maxSamples.
     /// </summary>
-    internal static void LoadWavSamples<T>(byte[] wavBytes, T[] target, int offset, int maxSamples,
-        INumericOperations<T> numOps)
+    internal static int LoadWavSamples(byte[] wavBytes, double[] target, int offset, int maxSamples)
     {
-        if (wavBytes.Length < 12) return;
+        if (wavBytes.Length < 12) return 0;
 
         // Validate RIFF/WAVE header
         string riffTag = System.Text.Encoding.ASCII.GetString(wavBytes, 0, 4);
@@ -47,8 +63,7 @@ internal static class AudioLoaderHelper
         if (riffTag != "RIFF" || waveTag != "WAVE")
         {
             // Not a valid WAV — fall back to raw 16-bit PCM
-            LoadRaw16BitFallback(wavBytes, target, offset, maxSamples, numOps);
-            return;
+            return LoadRaw16BitFallback(wavBytes, target, offset, maxSamples);
         }
 
         // Walk through chunks to find 'fmt ' and 'data'
@@ -90,29 +105,28 @@ internal static class AudioLoaderHelper
         if (dataOffset < 0)
         {
             // No data chunk found — fall back
-            LoadRaw16BitFallback(wavBytes, target, offset, maxSamples, numOps);
-            return;
+            return LoadRaw16BitFallback(wavBytes, target, offset, maxSamples);
         }
 
-        LoadPcmSamples(wavBytes, dataOffset, dataSize, bitsPerSample, numChannels,
-            target, offset, maxSamples, numOps);
+        return LoadPcmSamples(wavBytes, dataOffset, dataSize, bitsPerSample, numChannels,
+            target, offset, maxSamples);
     }
 
     /// <summary>
     /// Decodes PCM audio data at the specified bit depth with optional multi-channel to mono averaging.
     /// All samples are normalized to the [-1, 1] range.
     /// </summary>
-    private static void LoadPcmSamples<T>(byte[] rawBytes, int dataOffset, int dataSize,
-        int bitsPerSample, int numChannels, T[] target, int targetOffset, int maxSamples,
-        INumericOperations<T> numOps)
+    private static int LoadPcmSamples(byte[] rawBytes, int dataOffset, int dataSize,
+        int bitsPerSample, int numChannels, double[] target, int targetOffset, int maxSamples)
     {
         int bytesPerSample = bitsPerSample / 8;
         int bytesPerFrame = bytesPerSample * numChannels;
-        if (bytesPerFrame == 0) return;
+        if (bytesPerFrame == 0) return 0;
 
         int totalFrames = dataSize / bytesPerFrame;
         int framesToRead = Math.Min(totalFrames, maxSamples);
 
+        int written = 0;
         for (int i = 0; i < framesToRead; i++)
         {
             int frameOffset = dataOffset + i * bytesPerFrame;
@@ -133,8 +147,11 @@ internal static class AudioLoaderHelper
                 value = sum / numChannels;
             }
 
-            target[targetOffset + i] = numOps.FromDouble(value);
+            target[targetOffset + i] = value;
+            written = i + 1;
         }
+
+        return written;
     }
 
     /// <summary>
@@ -176,12 +193,12 @@ internal static class AudioLoaderHelper
     /// <summary>
     /// Fallback for files without valid RIFF headers — treats raw bytes as 16-bit signed PCM.
     /// </summary>
-    private static void LoadRaw16BitFallback<T>(byte[] wavBytes, T[] target, int offset, int maxSamples,
-        INumericOperations<T> numOps)
+    private static int LoadRaw16BitFallback(byte[] wavBytes, double[] target, int offset, int maxSamples)
     {
         int bytesPerSample = 2;
         int numSamples = Math.Min(wavBytes.Length / bytesPerSample, maxSamples);
 
+        int written = 0;
         for (int s = 0; s < numSamples; s++)
         {
             int byteIdx = s * bytesPerSample;
@@ -189,8 +206,11 @@ internal static class AudioLoaderHelper
 
             short sample = (short)(wavBytes[byteIdx] | (wavBytes[byteIdx + 1] << 8));
             double normalized = sample / 32768.0;
-            target[offset + s] = numOps.FromDouble(normalized);
+            target[offset + s] = normalized;
+            written = s + 1;
         }
+
+        return written;
     }
 
     /// <summary>
