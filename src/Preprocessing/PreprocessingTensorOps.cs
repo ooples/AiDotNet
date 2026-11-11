@@ -181,6 +181,25 @@ internal static class PreprocessingTensorOps
     }
 
     /// <summary>
+    /// Range-scaled bins of every column of <paramref name="x"/> ([n, p]):
+    /// <c>bin = min(floor((x - min) / (max - min) * (bins - 1)), bins - 1)</c>, 0 for a column whose range is not
+    /// above 1e-10. Returns the bins one-hot as [n, p * bins].
+    /// </summary>
+    public static Tensor<T> RangeScaledBinOneHot<T>(Tensor<T> x, int bins)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int n = x.Shape[0];
+        int p = x.Shape[1];
+        var min = engine.Reshape(ColumnMin(x), new[] { 1, p });
+        var range = engine.TensorSubtract(engine.Reshape(ColumnMax(x), new[] { 1, p }), min);
+        var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(x, min), range), ops.FromDouble(bins - 1));
+        var binIndex = engine.TensorMin(engine.TensorFloor(scaled), ops.FromDouble(bins - 1));
+        var varying = engine.TensorBroadcastTo(engine.TensorGreaterThan(range, ops.FromDouble(1e-10)), new[] { n, p });
+        return OneHotBins(engine.TensorWhere(varying, binIndex, new Tensor<T>(new[] { n, p })), bins);
+    }
+
+    /// <summary>
     /// One-hot of integral bin indices held in T (each element of the [n, p] tensor is in 0..bins-1):
     /// returns [n, p * bins] where column j owns entries j * bins .. j * bins + bins - 1.
     /// </summary>
@@ -306,6 +325,9 @@ internal static class PreprocessingTensorOps
 
     /// <summary>A per-iteration scalar decision: whether <paramref name="value"/> is above <paramref name="limit"/>.</summary>
     public static bool IsAbove<T>(T value, T limit) => MathHelper.GetNumericOperations<T>().GreaterThan(value, limit);
+
+    /// <summary>A count (or other integer) as a scalar of type T.</summary>
+    public static T CountAsScalar<T>(int value) => MathHelper.GetNumericOperations<T>().FromDouble(value);
 
     /// <summary><c>max(a, b)</c> of two scalars.</summary>
     public static T ScalarMax<T>(T a, T b)

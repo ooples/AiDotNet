@@ -28,14 +28,14 @@ public class FoldChangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly double _minFoldChange;
     private readonly bool _logTransform;
 
-    private double[]? _foldChanges;
-    private double[]? _log2FoldChanges;
+    private Vector<T>? _foldChanges;
+    private Vector<T>? _log2FoldChanges;
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
     public int NFeaturesToSelect => _nFeaturesToSelect;
-    public double[]? FoldChanges => _foldChanges;
-    public double[]? Log2FoldChanges => _log2FoldChanges;
+    public Vector<T>? FoldChanges => _foldChanges;
+    public Vector<T>? Log2FoldChanges => _log2FoldChanges;
     public int[]? SelectedIndices => _selectedIndices;
     public override bool SupportsInverseTransform => false;
 
@@ -71,81 +71,51 @@ public class FoldChangeSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         int n = data.Rows;
         int p = data.Columns;
 
+        var engine = Engine;
+        var X = Tensor<T>.FromMatrix(data);
+
         // Separate samples by class
-        var class0 = new List<int>();
-        var class1 = new List<int>();
+        var class1Mask = PreprocessingTensorOps.Not(engine.TensorLessThan(Tensor<T>.FromVector(target), NumOps.FromDouble(0.5)));
+        var class0Mask = PreprocessingTensorOps.Not(class1Mask);
+        int class1Count = PreprocessingTensorOps.CountNonZero(class1Mask);
+        int class0Count = n - class1Count;
 
-        for (int i = 0; i < n; i++)
-        {
-            if (NumOps.LessThan(target[i], NumOps.FromDouble(0.5)))
-                class0.Add(i);
-            else
-                class1.Add(i);
-        }
-
-        if (class0.Count == 0 || class1.Count == 0)
+        if (class0Count == 0 || class1Count == 0)
             throw new ArgumentException("Both classes must have at least one sample.");
 
-        _foldChanges = new double[p];
-        _log2FoldChanges = new double[p];
+        // Class means, floored at a small value to avoid division by zero
+        T eps = NumOps.FromDouble(1e-10);
+        var mean0 = engine.TensorMax(engine.TensorDivideScalar(
+            engine.Reshape(engine.TensorMatMul(engine.Reshape(class0Mask, new[] { 1, n }), X), new[] { p }),
+            NumOps.FromDouble(class0Count)), eps);
+        var mean1 = engine.TensorMax(engine.TensorDivideScalar(
+            engine.Reshape(engine.TensorMatMul(engine.Reshape(class1Mask, new[] { 1, n }), X), new[] { p }),
+            NumOps.FromDouble(class1Count)), eps);
 
-        for (int j = 0; j < p; j++)
-        {
-            // Compute means for each class
-            double mean0 = 0, mean1 = 0;
-            foreach (int i in class0)
-                mean0 += NumOps.ToDouble(data[i, j]);
-            foreach (int i in class1)
-                mean1 += NumOps.ToDouble(data[i, j]);
-
-            mean0 /= class0.Count;
-            mean1 /= class1.Count;
-
-            // Add small value to avoid division by zero
-            double eps = 1e-10;
-            mean0 = Math.Max(eps, mean0);
-            mean1 = Math.Max(eps, mean1);
-
-            // Compute fold change (larger / smaller)
-            if (mean1 >= mean0)
-            {
-                _foldChanges[j] = mean1 / mean0;
-                _log2FoldChanges[j] = Math.Log(mean1 / mean0) / Math.Log(2);
-            }
-            else
-            {
-                _foldChanges[j] = mean0 / mean1;
-                _log2FoldChanges[j] = -Math.Log(mean0 / mean1) / Math.Log(2);
-            }
-        }
+        // Fold change (larger / smaller) and its signed log2
+        T ln2 = NumOps.FromDouble(Math.Log(2));
+        var up = PreprocessingTensorOps.Not(engine.TensorLessThan(mean1, mean0));
+        var upRatio = engine.TensorDivide(mean1, mean0);
+        var downRatio = engine.TensorDivide(mean0, mean1);
+        var foldChanges = engine.TensorWhere(up, upRatio, downRatio);
+        var log2FoldChanges = engine.TensorWhere(up,
+            engine.TensorDivideScalar(engine.TensorLog(upRatio), ln2),
+            engine.TensorNegate(engine.TensorDivideScalar(engine.TensorLog(downRatio), ln2)));
+        _foldChanges = foldChanges.ToVector();
+        _log2FoldChanges = log2FoldChanges.ToVector();
 
         // Select features with high fold change
-        var candidateFeatures = new List<(int Index, double AbsFC)>();
-        for (int j = 0; j < p; j++)
+        var candidates = PreprocessingTensorOps.AtLeast(foldChanges, NumOps.FromDouble(_minFoldChange));
+        if (PreprocessingTensorOps.CountNonZero(candidates) >= _nFeaturesToSelect)
         {
-            if (_foldChanges[j] >= _minFoldChange)
-                candidateFeatures.Add((j, Math.Abs(_log2FoldChanges[j])));
-        }
-
-        if (candidateFeatures.Count >= _nFeaturesToSelect)
-        {
-            _selectedIndices = candidateFeatures
-                .OrderByDescending(x => x.AbsFC)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
+            var ranked = engine.TensorWhere(candidates, engine.TensorAbs(log2FoldChanges),
+                PreprocessingTensorOps.Filled(new[] { p }, NumOps.FromDouble(-1.0)));
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(ranked, _nFeaturesToSelect);
         }
         else
         {
             // Fall back to top by fold change
-            _selectedIndices = _foldChanges
-                .Select((fc, idx) => (FC: fc, Index: idx))
-                .OrderByDescending(x => x.FC)
-                .Take(_nFeaturesToSelect)
-                .Select(x => x.Index)
-                .OrderBy(x => x)
-                .ToArray();
+            _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(foldChanges, _nFeaturesToSelect);
         }
 
         IsFitted = true;

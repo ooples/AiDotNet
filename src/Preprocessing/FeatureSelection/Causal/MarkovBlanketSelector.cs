@@ -72,8 +72,8 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         // Discretize data (one-hot bins per feature) and the target
         var engine = Engine;
-        var xBins = Discretize(Tensor<T>.FromMatrix(data));
-        var yBins = Discretize(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }));
+        var xBins = PreprocessingTensorOps.RangeScaledBinOneHot(Tensor<T>.FromMatrix(data), _nBins);
+        var yBins = PreprocessingTensorOps.RangeScaledBinOneHot(engine.Reshape(Tensor<T>.FromVector(target), new[] { n, 1 }), _nBins);
 
         // Mutual information with target for each feature
         var relevance = engine.Reshape(
@@ -113,23 +113,6 @@ public class MarkovBlanketSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             _selectedIndices = PreprocessingTensorOps.TopKIndicesSorted(relevance, Math.Min(Math.Min(5, p), _maxFeatures));
 
         IsFitted = true;
-    }
-
-    /// <summary>
-    /// Equal-width bins over [min, max] with <c>bin = min(floor((x - min) / range * (nBins - 1)), nBins - 1)</c>
-    /// (0 for a constant column), returned one-hot as [n, columns * nBins].
-    /// </summary>
-    private Tensor<T> Discretize(Tensor<T> x)
-    {
-        var engine = Engine;
-        int n = x.Shape[0];
-        int p = x.Shape[1];
-        var min = engine.Reshape(PreprocessingTensorOps.ColumnMin(x), new[] { 1, p });
-        var range = engine.TensorSubtract(engine.Reshape(PreprocessingTensorOps.ColumnMax(x), new[] { 1, p }), min);
-        var scaled = engine.TensorMultiplyScalar(engine.TensorDivide(engine.TensorSubtract(x, min), range), NumOps.FromDouble(_nBins - 1));
-        var bins = engine.TensorMin(engine.TensorFloor(scaled), NumOps.FromDouble(_nBins - 1));
-        var varying = engine.TensorBroadcastTo(engine.TensorGreaterThan(range, NumOps.FromDouble(1e-10)), new[] { n, p });
-        return PreprocessingTensorOps.OneHotBins(engine.TensorWhere(varying, bins, new Tensor<T>(new[] { n, p })), _nBins);
     }
 
     private Tensor<T> FeatureBins(Tensor<T> bins, int feature) =>
