@@ -116,34 +116,26 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private void DecomposeCrout()
     {
-        int n = A.Rows;
+        (U, D) = ComputeUnpivotedUdu(A);
+    }
 
-        // Work backwards from the last row for UDU^T decomposition
-        for (int j = n - 1; j >= 0; j--)
+    /// <summary>
+    /// A = U D U^T (U unit upper triangular) from the unpivoted L D L^T of the index-reversed
+    /// matrix: with J the exchange matrix, J A J = L' D' L'^T gives U = J L' J and D = J D'.
+    /// </summary>
+    private (Matrix<T> U, Vector<T> D) ComputeUnpivotedUdu(Matrix<T> matrix)
+    {
+        int n = matrix.Rows;
+        if (n == 0)
         {
-            // Set diagonal of U to 1
-            U[j, j] = NumOps.One;
-
-            // Calculate D[j] = A[j,j] - sum_{k=j+1}^{n-1} U[j,k]^2 * D[k]
-            T sum = NumOps.Zero;
-            for (int k = j + 1; k < n; k++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[j, k], U[j, k]), D[k]));
-            }
-            D[j] = NumOps.Subtract(A[j, j], sum);
-
-            // Calculate U[i,j] for i < j
-            for (int i = 0; i < j; i++)
-            {
-                // U[i,j] = (A[i,j] - sum_{k=j+1}^{n-1} U[i,k]*U[j,k]*D[k]) / D[j]
-                sum = NumOps.Zero;
-                for (int k = j + 1; k < n; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[i, k], U[j, k]), D[k]));
-                }
-                U[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
-            }
+            return (new Matrix<T>(0, 0), new Vector<T>(0));
         }
+
+        var reversed = Engine.TensorFlip(Tensor<T>.FromMatrix(matrix), new[] { 0, 1 }).ToMatrix();
+        var (lower, diagonal) = ComputeUnpivotedLdl(reversed);
+        var upper = Engine.TensorFlip(Tensor<T>.FromMatrix(lower), new[] { 0, 1 }).ToMatrix();
+        var d = Engine.TensorFlip(Tensor<T>.FromVector(diagonal), new[] { 0 }).ToVector();
+        return (upper, d);
     }
 
     /// <summary>
@@ -158,35 +150,8 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private void DecomposeDoolittle()
     {
-        int n = A.Rows;
-
-        // Doolittle variant - also works backwards for UDU^T
-        // Uses the same recurrence as Crout but with a different initialization strategy
-        for (int j = n - 1; j >= 0; j--)
-        {
-            // Set diagonal of U to 1
-            U[j, j] = NumOps.One;
-
-            // Calculate D[j] = A[j,j] - sum_{k=j+1}^{n-1} U[j,k]^2 * D[k]
-            T sum = NumOps.Zero;
-            for (int k = j + 1; k < n; k++)
-            {
-                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[j, k], U[j, k]), D[k]));
-            }
-            D[j] = NumOps.Subtract(A[j, j], sum);
-
-            // For each row i < j, calculate U[i,j]
-            for (int i = j - 1; i >= 0; i--)
-            {
-                // U[i,j] = (A[i,j] - sum_{k=j+1}^{n-1} U[i,k]*U[j,k]*D[k]) / D[j]
-                sum = NumOps.Zero;
-                for (int k = j + 1; k < n; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(U[i, k], U[j, k]), D[k]));
-                }
-                U[i, j] = NumOps.Divide(NumOps.Subtract(A[i, j], sum), D[j]);
-            }
-        }
+        // Same factors as the Crout ordering (rows within a column are computed bottom-up).
+        (U, D) = ComputeUnpivotedUdu(A);
     }
 
     /// <summary>
@@ -209,55 +174,25 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
         if (b.Length != A.Rows)
             throw new ArgumentException("Vector b must have the same length as the number of rows in matrix A.");
 
-        // Forward substitution
-        Vector<T> y = new Vector<T>(b.Length);
-        for (int i = 0; i < b.Length; i++)
+        if (b.Length == 0)
         {
-            // VECTORIZED: Use dot product for sum computation
-            T sum = NumOps.Zero;
-            if (i > 0)
-            {
-                var colSlice = new T[i];
-                var ySlice = new T[i];
-                for (int k = 0; k < i; k++)
-                {
-                    colSlice[k] = U[k, i];
-                    ySlice[k] = y[k];
-                }
-                var colVec = new Vector<T>(colSlice);
-                var yVec = new Vector<T>(ySlice);
-                sum = colVec.DotProduct(yVec);
-            }
-            y[i] = NumOps.Subtract(b[i], sum);
+            return new Vector<T>(0);
         }
 
-        // VECTORIZED: Diagonal scaling using vector division
-        y = y.ElementwiseDivide(D);
+        return SolveFactored(Tensor<T>.FromVector(b, new[] { b.Length, 1 }).ToMatrix()).GetColumn(0);
+    }
 
-        // Backward substitution
-        Vector<T> x = new Vector<T>(b.Length);
-        for (int i = b.Length - 1; i >= 0; i--)
-        {
-            // VECTORIZED: Use dot product for sum computation
-            T sum = NumOps.Zero;
-            if (i < b.Length - 1)
-            {
-                int remaining = b.Length - i - 1;
-                var rowSlice = new T[remaining];
-                var xSlice = new T[remaining];
-                for (int k = 0; k < remaining; k++)
-                {
-                    rowSlice[k] = U[i, i + 1 + k];
-                    xSlice[k] = x[i + 1 + k];
-                }
-                var rowVec = new Vector<T>(rowSlice);
-                var xVec = new Vector<T>(xSlice);
-                sum = rowVec.DotProduct(xVec);
-            }
-            x[i] = NumOps.Subtract(y[i], sum);
-        }
-
-        return x;
+    /// <summary>
+    /// Forward substitution with U^T (unit lower), division by D, then back substitution with U
+    /// (unit upper), for every column of <paramref name="rhs"/> at once.
+    /// </summary>
+    private Matrix<T> SolveFactored(Matrix<T> rhs)
+    {
+        var u = Tensor<T>.FromMatrix(U);
+        var y = Linalg.SolveTriangular(Engine.TensorTranspose(u), Tensor<T>.FromMatrix(rhs), upper: false, unitDiagonal: true);
+        var d = Engine.TensorBroadcastTo(Tensor<T>.FromVector(D, new[] { D.Length, 1 }), new[] { rhs.Rows, rhs.Columns });
+        y = Engine.TensorMultiply(y, Engine.TensorReciprocal(d));
+        return Linalg.SolveTriangular(u, y, upper: true, unitDiagonal: true).ToMatrix();
     }
 
     /// <summary>
@@ -275,20 +210,13 @@ public class UduDecomposition<T> : MatrixDecompositionBase<T>
     public override Matrix<T> Invert()
     {
         int n = A.Rows;
-        Matrix<T> inverse = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            Vector<T> ei = new Vector<T>(n);
-            ei[i] = NumOps.One;
-            Vector<T> column = Solve(ei);
-            for (int j = 0; j < n; j++)
-            {
-                inverse[j, i] = column[j];
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return inverse;
+        // Solve for every column of the identity at once.
+        return SolveFactored(Matrix<T>.CreateIdentity(n));
     }
 
     /// <summary>
