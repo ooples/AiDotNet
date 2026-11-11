@@ -23,6 +23,9 @@ internal static class LinalgDispatch<T>
     private static Func<Tensor<T>, Tensor<T>, bool, bool, Tensor<T>>? _solveTriangular;
     private static Func<Tensor<T>, bool, (Tensor<T>, Tensor<T>, Tensor<T>)>? _svd;
     private static Func<Tensor<T>, int, int, int, Tensor<T>>? _diagonal;
+    private static Func<Tensor<T>, Tensor<T>, bool, Tensor<T>>? _choleskySolve;
+    private static Func<Tensor<T>, bool, Tensor<T>>? _choleskyInverse;
+    private static Func<Tensor<T>, Tensor<T>, Tensor<T>>? _solve;
 
     /// <summary>Cholesky factor with per-matrix failure info (<c>Linalg.CholeskyEx</c>).</summary>
     internal static (Tensor<T> L, Tensor<int> Info) CholeskyEx(Tensor<T> input, bool upper = false)
@@ -73,6 +76,20 @@ internal static class LinalgDispatch<T>
     internal static Tensor<T> Diagonal(Tensor<T> input, int offset = 0, int dim1 = -2, int dim2 = -1)
         => (_diagonal ??= Bind<Func<Tensor<T>, int, int, int, Tensor<T>>>(
             nameof(Linalg.Diagonal), 4))(input, offset, dim1, dim2);
+
+    /// <summary>Solve from a Cholesky factor (<c>Linalg.CholeskySolve</c>).</summary>
+    internal static Tensor<T> CholeskySolve(Tensor<T> b, Tensor<T> factor, bool upper = false)
+        => (_choleskySolve ??= Bind<Func<Tensor<T>, Tensor<T>, bool, Tensor<T>>>(
+            nameof(Linalg.CholeskySolve), 3))(b, factor, upper);
+
+    /// <summary>Inverse from a Cholesky factor (<c>Linalg.CholeskyInverse</c>).</summary>
+    internal static Tensor<T> CholeskyInverse(Tensor<T> factor, bool upper = false)
+        => (_choleskyInverse ??= Bind<Func<Tensor<T>, bool, Tensor<T>>>(
+            nameof(Linalg.CholeskyInverse), 2))(factor, upper);
+
+    /// <summary>Linear solve (<c>Linalg.Solve</c>).</summary>
+    internal static Tensor<T> Solve(Tensor<T> a, Tensor<T> b)
+        => (_solve ??= Bind<Func<Tensor<T>, Tensor<T>, Tensor<T>>>(nameof(Linalg.Solve), 2))(a, b);
 
     private static TDelegate Bind<TDelegate>(string name, int parameterCount) where TDelegate : Delegate
     {
