@@ -143,8 +143,15 @@ public class LaplacianEigenmaps<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             columns[k] = k + 1 < n ? k + 1 : k;
         }
 
-        _embedding = DimensionalityReductionOps.SelectColumns(
-            eigenvectors, DimensionalityReductionOps.IndexTensor(columns)).ToMatrix();
+        // Step 6: Undo the symmetric normalisation, y = D^(-1/2) v, so the embedding solves the generalized
+        // problem L y = lambda D y (sklearn spectral_embedding with norm_laplacian=True)
+        var rootDegree = engine.TensorSqrt(degree);
+        var inverseRootDegree = engine.TensorWhere(
+            engine.TensorGreaterThan(rootDegree, zero),
+            engine.TensorReciprocal(rootDegree),
+            engine.TensorOnesLike(rootDegree));
+        var selected = DimensionalityReductionOps.SelectColumns(eigenvectors, DimensionalityReductionOps.IndexTensor(columns));
+        _embedding = DimensionalityReductionOps.ScaleRows(selected, inverseRootDegree).ToMatrix();
     }
 
     private Tensor<T> ComputeAffinityMatrix(Tensor<T> x, int n)
