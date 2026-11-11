@@ -232,6 +232,23 @@ internal static class RLTensorOps
         return ops.Subtract(ops.Subtract(logits[index], max), ops.Log(sum));
     }
 
+    /// <summary>
+    /// Diagonal-Gaussian log-density summed over dimensions:
+    /// sum_i [-0.5 ((x_i - mu_i) / sigma_i)^2 - log sigma_i - 0.5 log(2 pi)], sigma = exp(log_std).
+    /// </summary>
+    internal static T GaussianLogProb<T>(Vector<T> mean, Vector<T> logStd, Vector<T> value)
+    {
+        if (mean is null)
+        {
+            throw new ArgumentNullException(nameof(mean));
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        var z = Engine.Divide(Engine.Subtract(value, mean), Engine.Exp(logStd));
+        var perDimension = Engine.Subtract(Engine.Multiply(Engine.Multiply(z, z), ops.FromDouble(-0.5)), logStd);
+        return ops.Subtract(Engine.Sum(perDimension), ops.FromDouble(0.5 * Math.Log(2.0 * Math.PI) * mean.Length));
+    }
+
     /// <summary>A one-hot vector of the given length with a one at <paramref name="index"/>.</summary>
     internal static Vector<T> OneHot<T>(int length, int index)
     {
