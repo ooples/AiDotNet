@@ -271,6 +271,51 @@ internal static class RegressionEngineOps
     }
 
     /// <summary>
+    /// One Gauss-Jordan step: swap in the row with the largest |value| in <paramref name="col"/>
+    /// (first such row from <paramref name="col"/> down), scale it by its pivot (clamped up to
+    /// <paramref name="pivotThreshold"/> when |pivot| is below it), and eliminate the column from
+    /// every other of the first <paramref name="n"/> rows.
+    /// </summary>
+    public static Matrix<T> GaussJordanStep<T>(Matrix<T> augmented, int col, int n, T pivotThreshold)
+    {
+        var engine = AiDotNetengine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+
+        // Find pivot
+        var candidates = engine.Abs(augmented.GetColumn(col).GetSubVector(col, n - col));
+        int maxRow = col + RegressionEngineOps.ArgMaxFirst(candidates);
+
+        // Swap rows
+        if (maxRow != col)
+        {
+            var pivotCandidate = augmented.GetRow(maxRow);
+            augmented.SetRow(maxRow, augmented.GetRow(col));
+            augmented.SetRow(col, pivotCandidate);
+        }
+
+        // Scale pivot row
+        var pivotRow = augmented.GetRow(col);
+        T pivot = pivotRow[col];
+        if (numOps.LessThan(numOps.Abs(pivot), pivotThreshold))
+        {
+            pivot = pivotThreshold;
+        }
+
+        var scaledPivotRow = engine.Divide(pivotRow, pivot);
+
+        // Eliminate column: row -= factor * scaledPivotRow for every row != col, factor = row[col]
+        var factors = augmented.GetColumn(col);
+        factors.AsWritableSpan().Slice(col, 1).Clear();
+        int width = augmented.Columns;
+        var update = engine.MatrixMultiply(
+            new Tensor<T>(new[] { n, 1 }, factors).ToMatrix(),
+            new Tensor<T>(new[] { 1, width }, scaledPivotRow).ToMatrix());
+        var eliminated = engine.TensorSubtract(Tensor<T>.FromMatrix(augmented), Tensor<T>.FromMatrix(update)).ToMatrix();
+        eliminated.SetRow(col, scaledPivotRow);
+        return eliminated;
+    }
+
+    /// <summary>
     /// Copies <paramref name="matrix"/> into a vector in row-major order (bulk copy, no arithmetic).
     /// </summary>
     public static Vector<T> FlattenRowMajor<T>(Matrix<T> matrix)

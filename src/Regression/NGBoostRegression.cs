@@ -581,53 +581,11 @@ public partial class NGBoostRegression<T> : AsyncDecisionTreeRegressionBase<T>
         // Forward elimination, one pivot column at a time
         for (int col = 0; col < n; col++)
         {
-            augmented = EliminateColumn(augmented, col, n, pivotThreshold);
+            augmented = RegressionEngineOps.GaussJordanStep(augmented, col, n, pivotThreshold);
         }
 
         // Extract inverse
         return augmented.GetSubMatrix(0, n, n, n);
-    }
-
-    /// <summary>
-    /// One Gauss-Jordan step: swap in the row with the largest |value| in <paramref name="col"/>
-    /// (first such row from <paramref name="col"/> down), scale it by its pivot (clamped up to
-    /// <paramref name="pivotThreshold"/> when |pivot| is below it), and eliminate the column from
-    /// every other row.
-    /// </summary>
-    private Matrix<T> EliminateColumn(Matrix<T> augmented, int col, int n, T pivotThreshold)
-    {
-        // Find pivot
-        var candidates = Engine.Abs(augmented.GetColumn(col).GetSubVector(col, n - col));
-        int maxRow = col + RegressionEngineOps.ArgMaxFirst(candidates);
-
-        // Swap rows
-        if (maxRow != col)
-        {
-            var pivotCandidate = augmented.GetRow(maxRow);
-            augmented.SetRow(maxRow, augmented.GetRow(col));
-            augmented.SetRow(col, pivotCandidate);
-        }
-
-        // Scale pivot row
-        var pivotRow = augmented.GetRow(col);
-        T pivot = pivotRow[col];
-        if (NumOps.LessThan(NumOps.Abs(pivot), pivotThreshold))
-        {
-            pivot = pivotThreshold;
-        }
-
-        var scaledPivotRow = Engine.Divide(pivotRow, pivot);
-
-        // Eliminate column: row -= factor * scaledPivotRow for every row != col, factor = row[col]
-        var factors = augmented.GetColumn(col);
-        factors.AsWritableSpan().Slice(col, 1).Clear();
-        int width = augmented.Columns;
-        var update = Engine.MatrixMultiply(
-            new Tensor<T>(new[] { n, 1 }, factors).ToMatrix(),
-            new Tensor<T>(new[] { 1, width }, scaledPivotRow).ToMatrix());
-        var eliminated = Engine.TensorSubtract(Tensor<T>.FromMatrix(augmented), Tensor<T>.FromMatrix(update)).ToMatrix();
-        eliminated.SetRow(col, scaledPivotRow);
-        return eliminated;
     }
 
     /// <summary>
