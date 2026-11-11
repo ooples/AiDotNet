@@ -329,7 +329,10 @@ public sealed partial class APNet2GeneratorLoss<T> : LossFunctionBase<T>
         Tensor<T> window;
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            window = Engine.TensorHannWindow<T>(_fftSize, true);
+            var sampleIndex = Engine.TensorArange<T>(0, _fftSize, 1);
+            var angle = Engine.TensorMultiplyScalar(sampleIndex, NumOps.FromDouble(TwoPi / _fftSize));
+            window = Engine.ScalarMinusTensor(
+                NumOps.FromDouble(0.5), Engine.TensorMultiplyScalar(Engine.TensorCos(angle), NumOps.FromDouble(0.5)));
         }
 
         _window = window;
