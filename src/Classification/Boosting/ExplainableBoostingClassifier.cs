@@ -188,15 +188,12 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
             ? RandomHelper.CreateSeededRandom(_options.Seed.Value)
             : RandomHelper.CreateSecureRandom();
 
+        var engine = Engine;
+
         // Convert to binary labels
-        var yBinary = new Vector<T>(n);
         T positiveClass = ClassLabels[ClassLabels.Length - 1];
-        int posCount = 0;
-        for (int i = 0; i < n; i++)
-        {
-            yBinary[i] = NumOps.Compare(y[i], positiveClass) == 0 ? NumOps.One : NumOps.Zero;
-            if (NumOps.Compare(yBinary[i], NumOps.One) == 0) posCount++;
-        }
+        var yBinary = engine.TensorEquals(y.AsTensor(), positiveClass).ToVector();
+        int posCount = engine.TensorCountNonzero(yBinary.AsTensor());
 
         // Initialize intercept as log-odds of prior
         double p = Math.Max(1e-10, Math.Min(1 - 1e-10, (double)posCount / n));
@@ -209,26 +206,17 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
         _shapeFunctions = new List<Vector<T>>(_numFeatures);
         for (int f = 0; f < _numFeatures; f++)
         {
-            var sf = new Vector<T>(_binEdges[f].Length + 1);
-            for (int b = 0; b <= _binEdges[f].Length; b++)
-            {
-                sf[b] = NumOps.Zero;
-            }
-            _shapeFunctions.Add(sf);
+            _shapeFunctions.Add(new Vector<T>(_binEdges[f].Length + 1));
         }
 
         // Initialize interaction terms
         _interactionTerms = new Dictionary<(int, int), Matrix<T>>();
 
         // Map samples to bins for each feature
-        var sampleBins = new int[_numFeatures][];
+        var sampleBins = new Tensor<int>[_numFeatures];
         for (int f = 0; f < _numFeatures; f++)
         {
-            sampleBins[f] = new int[n];
-            for (int i = 0; i < n; i++)
-            {
-                sampleBins[f][i] = GetBinIndex(x[i, f], f);
-            }
+            sampleBins[f] = GetBinIndices(x.GetColumn(f), f);
         }
 
         // Cyclic boosting over features
@@ -236,15 +224,7 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
         int roundsWithoutImprovement = 0;
 
         // Maintain running log-odds to avoid recomputing from scratch each iteration
-        var runningLogOdds = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            runningLogOdds[i] = _intercept;
-            for (int f = 0; f < _numFeatures; f++)
-            {
-                runningLogOdds[i] = NumOps.Add(runningLogOdds[i], _shapeFunctions[f][sampleBins[f][i]]);
-            }
-        }
+        var runningLogOdds = ComputeLogOdds(sampleBins, n);
 
         T learningRate = NumOps.FromDouble(_options.LearningRate);
         T l2Reg = NumOps.FromDouble(_options.L2Regularization);
@@ -258,71 +238,24 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
                 for (int f = 0; f < _numFeatures; f++)
                 {
                     int numBins = _binEdges[f].Length + 1;
-                    // Compute gradient and hessian for each bin using running log-odds
-                    var binGradients = new T[numBins];
-                    var binHessians = new T[numBins];
-                    for (int b = 0; b < numBins; b++)
-                    {
-                        binGradients[b] = NumOps.Zero;
-                        binHessians[b] = NumOps.Zero;
-                    }
 
-                    for (int i = 0; i < n; i++)
-                    {
-                        T prob = Sigmoid(runningLogOdds[i]);
-                        T grad = NumOps.Subtract(yBinary[i], prob);
-                        T hess = NumOps.Multiply(prob, NumOps.Subtract(NumOps.One, prob));
-
-                        int bin = sampleBins[f][i];
-                        binGradients[bin] = NumOps.Add(binGradients[bin], grad);
-                        binHessians[bin] = NumOps.Add(binHessians[bin], hess);
-                    }
+                    // Newton step per bin (zero where the bin's hessian is not above eps)
+                    var binUpdates = ComputeBinUpdates(runningLogOdds, yBinary, sampleBins[f], numBins,
+                        learningRate, l2Reg, eps);
 
                     // Update shape function for this feature and adjust running log-odds
-                    var binUpdates = new T[numBins];
-                    for (int b = 0; b < numBins; b++)
-                    {
-                        binUpdates[b] = NumOps.Zero;
-                        if (NumOps.GreaterThan(binHessians[b], eps))
-                        {
-                            // Newton step with L2 regularization
-                            T update = NumOps.Multiply(
-                                NumOps.Divide(binGradients[b], NumOps.Add(binHessians[b], l2Reg)),
-                                learningRate);
-                            _shapeFunctions[f][b] = NumOps.Add(_shapeFunctions[f][b], update);
-                            binUpdates[b] = update;
-                        }
-                    }
-
-                    // Update running log-odds incrementally for this feature's changes
-                    for (int i = 0; i < n; i++)
-                    {
-                        int bin = sampleBins[f][i];
-                        runningLogOdds[i] = NumOps.Add(runningLogOdds[i], binUpdates[bin]);
-                    }
+                    _shapeFunctions[f] = engine.Add(_shapeFunctions[f], binUpdates);
+                    runningLogOdds = engine.Add(runningLogOdds,
+                        engine.TensorGather(binUpdates.AsTensor(), sampleBins[f], 0).ToVector());
                 }
             }
 
             // Early stopping check
-            if (_options.EarlyStoppingRounds.HasValue)
+            if (_options.EarlyStoppingRounds.HasValue
+                && ShouldStopEarly(ComputeLogLoss(runningLogOdds, yBinary), ref bestLoss, ref roundsWithoutImprovement))
             {
-                T loss = ComputeLogLoss(runningLogOdds, yBinary);
-
-                if (NumOps.LessThan(loss, bestLoss))
-                {
-                    bestLoss = loss;
-                    roundsWithoutImprovement = 0;
-                }
-                else
-                {
-                    roundsWithoutImprovement++;
-                    if (roundsWithoutImprovement >= _options.EarlyStoppingRounds.Value)
-                    {
-                        break;
-                    }
-                }
+                break;
             }
-
         }
 
         // Detect and add interaction terms if enabled
@@ -343,19 +276,7 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
     /// </summary>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        var probs = PredictProbabilities(input);
-        var predictions = new Vector<T>(input.Rows);
-
-        var classLabels = ClassLabels ?? throw new InvalidOperationException("Model must be trained before making predictions.");
-        T threshold = NumOps.FromDouble(0.5);
-        for (int i = 0; i < input.Rows; i++)
-        {
-            predictions[i] = NumOps.Compare(probs[i, 1], threshold) >= 0
-                ? classLabels[classLabels.Length - 1]
-                : classLabels[0];
-        }
-
-        return predictions;
+        return PredictBinaryLabels(PredictProbabilities(input));
     }
 
     /// <summary>
@@ -376,42 +297,29 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
         }
 
         int n = input.Rows;
-        var probs = new Matrix<T>(n, NumClasses);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            T logOdds = _intercept;
-
-            // Add main effects
-            for (int f = 0; f < _numFeatures; f++)
-            {
-                int bin = GetBinIndex(input[i, f], f);
-                logOdds = NumOps.Add(logOdds, _shapeFunctions[f][bin]);
-            }
-
-            // Add interaction effects
-            foreach (var kvp in _interactionTerms)
-            {
-                int f1 = kvp.Key.Item1;
-                int f2 = kvp.Key.Item2;
-                int bin1 = GetBinIndex(input[i, f1], f1);
-                int bin2 = GetBinIndex(input[i, f2], f2);
-
-                // Ensure we don't go out of bounds
-                int maxBin1 = kvp.Value.Rows - 1;
-                int maxBin2 = kvp.Value.Columns - 1;
-                bin1 = Math.Min(bin1, maxBin1);
-                bin2 = Math.Min(bin2, maxBin2);
-
-                logOdds = NumOps.Add(logOdds, kvp.Value[bin1, bin2]);
-            }
-
-            T prob1 = Sigmoid(logOdds);
-            probs[i, 0] = NumOps.Subtract(NumOps.One, prob1);
-            probs[i, 1] = prob1;
+            return new Matrix<T>(0, NumClasses);
         }
 
-        return probs;
+        var engine = Engine;
+        var bins = new Tensor<int>[_numFeatures];
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            bins[f] = GetBinIndices(input.GetColumn(f), f);
+        }
+
+        // Main effects
+        var logOdds = ComputeLogOdds(bins, n);
+
+        // Interaction effects (bins clamped to the term's grid)
+        foreach (var kvp in _interactionTerms)
+        {
+            var cells = InteractionCells(bins[kvp.Key.Item1], bins[kvp.Key.Item2], kvp.Value.Rows, kvp.Value.Columns);
+            logOdds = engine.Add(logOdds, engine.TensorGather(FlattenMatrix(kvp.Value), cells, 0).ToVector());
+        }
+
+        return BinaryProbabilitiesFromLogOdds(logOdds);
     }
 
     /// <summary>
@@ -427,11 +335,17 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
             ["intercept"] = _intercept
         };
 
+        var engine = Engine;
+        var bins = new Tensor<int>[_numFeatures];
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            bins[f] = GetBinIndices(sample.GetSubVector(f, 1), f);
+        }
+
         // Main effects
         for (int f = 0; f < _numFeatures; f++)
         {
-            int bin = GetBinIndex(sample[f], f);
-            contributions[$"feature_{f}"] = _shapeFunctions[f][bin];
+            contributions[$"feature_{f}"] = engine.TensorGather(_shapeFunctions[f].AsTensor(), bins[f], 0).ToArray()[0];
         }
 
         // Interaction effects
@@ -439,15 +353,8 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
         {
             int f1 = kvp.Key.Item1;
             int f2 = kvp.Key.Item2;
-            int bin1 = GetBinIndex(sample[f1], f1);
-            int bin2 = GetBinIndex(sample[f2], f2);
-
-            int maxBin1 = kvp.Value.Rows - 1;
-            int maxBin2 = kvp.Value.Columns - 1;
-            bin1 = Math.Min(bin1, maxBin1);
-            bin2 = Math.Min(bin2, maxBin2);
-
-            contributions[$"interaction_{f1}x{f2}"] = kvp.Value[bin1, bin2];
+            var cell = InteractionCells(bins[f1], bins[f2], kvp.Value.Rows, kvp.Value.Columns);
+            contributions[$"interaction_{f1}x{f2}"] = engine.TensorGather(FlattenMatrix(kvp.Value), cell, 0).ToArray()[0];
         }
 
         return contributions;
@@ -459,141 +366,149 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
     private void CreateBins(Matrix<T> x)
     {
         _binEdges = new List<Vector<T>>(_numFeatures);
+        var engine = Engine;
 
         for (int f = 0; f < _numFeatures; f++)
         {
-            // Collect unique values
-            var values = new List<T>();
-            for (int i = 0; i < x.Rows; i++)
-            {
-                values.Add(x[i, f]);
-            }
-            values.Sort((a, b) => NumOps.Compare(a, b));
-            var distinctValues = new List<T>();
-            for (int i = 0; i < values.Count; i++)
-            {
-                if (i == 0 || NumOps.Compare(values[i], values[i - 1]) != 0)
-                {
-                    distinctValues.Add(values[i]);
-                }
-            }
+            // Sorted distinct values of the feature
+            var distinctValues = x.Rows == 0
+                ? new Tensor<T>(new[] { 0 })
+                : engine.TensorUnique(x.GetColumn(f).AsTensor(), sorted: true);
+            int distinctCount = distinctValues.Length;
 
             // Create quantile-based bins
-            int numBins = Math.Min(_options.MaxBins, distinctValues.Count);
+            int numBins = Math.Min(_options.MaxBins, distinctCount);
             if (numBins <= 1)
             {
                 _binEdges.Add(new Vector<T>(0));
                 continue;
             }
 
-            var edges = new List<T>();
+            // Edge b sits at the b/numBins quantile position of the distinct values
+            var edgePositions = new int[numBins - 1];
             for (int b = 1; b < numBins; b++)
             {
-                int idx = (int)((double)b / numBins * distinctValues.Count);
-                idx = Math.Max(0, Math.Min(idx, distinctValues.Count - 1));
-                edges.Add(distinctValues[idx]);
+                int idx = (int)((double)b / numBins * distinctCount);
+                edgePositions[b - 1] = Math.Max(0, Math.Min(idx, distinctCount - 1));
             }
-            // Deduplicate edges
-            var uniqueEdges = new List<T>();
-            for (int i = 0; i < edges.Count; i++)
-            {
-                if (i == 0 || NumOps.Compare(edges[i], edges[i - 1]) != 0)
-                {
-                    uniqueEdges.Add(edges[i]);
-                }
-            }
-            _binEdges.Add(new Vector<T>(uniqueEdges));
+
+            var edges = engine.TensorGather(distinctValues, new Tensor<int>(edgePositions, new[] { edgePositions.Length }), 0);
+
+            // Deduplicate edges (they are sorted, so duplicates are consecutive)
+            _binEdges.Add(engine.TensorUniqueConsecutive(edges).ToVector());
         }
     }
 
     /// <summary>
-    /// Gets the bin index for a value.
+    /// Gets the bin index of every value: the number of bin edges that are &lt;= the value.
     /// </summary>
-    private int GetBinIndex(T value, int featureIndex)
+    private Tensor<int> GetBinIndices(Vector<T> values, int featureIndex)
     {
         var edges = _binEdges[featureIndex];
-        for (int i = 0; i < edges.Length; i++)
+        if (edges.Length == 0 || values.Length == 0)
         {
-            if (NumOps.LessThan(value, edges[i]))
-            {
-                return i;
-            }
+            return new Tensor<int>(new[] { values.Length });
         }
-        return edges.Length;
+
+        return Engine.TensorSearchSorted(edges.AsTensor(), values.AsTensor(), right: true);
     }
 
     /// <summary>
-    /// Computes log-odds for all samples.
+    /// Computes log-odds for all samples: intercept plus every feature's shape value at its bin.
     /// </summary>
-    private Vector<T> ComputeLogOdds(Matrix<T> x, int[][] sampleBins)
+    private Vector<T> ComputeLogOdds(Tensor<int>[] sampleBins, int n)
     {
-        int n = x.Rows;
-        var logOdds = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
+        var engine = Engine;
+        var logOdds = FilledVector(n, _intercept);
+        if (n == 0)
         {
-            logOdds[i] = _intercept;
-            for (int f = 0; f < _numFeatures; f++)
-            {
-                logOdds[i] = NumOps.Add(logOdds[i], _shapeFunctions[f][sampleBins[f][i]]);
-            }
+            return logOdds;
+        }
+
+        for (int f = 0; f < _numFeatures; f++)
+        {
+            logOdds = engine.Add(logOdds, engine.TensorGather(_shapeFunctions[f].AsTensor(), sampleBins[f], 0).ToVector());
         }
 
         return logOdds;
     }
 
     /// <summary>
-    /// Sigmoid function.
+    /// Per-bin Newton step lr * G_b / (H_b + l2) from the gradients y - p and hessians p(1 - p) summed per bin,
+    /// zero for bins whose hessian is not above <paramref name="eps"/>.
     /// </summary>
-    private T Sigmoid(T x)
+    private Vector<T> ComputeBinUpdates(Vector<T> logOdds, Vector<T> yBinary, Tensor<int> bins, int numBins,
+        T learningRate, T l2Reg, T eps)
     {
-        if (NumOps.GreaterThanOrEquals(x, NumOps.Zero))
+        var engine = Engine;
+        var zeros = new Tensor<T>(new[] { numBins });
+        if (logOdds.Length == 0)
         {
-            T ez = NumOps.Exp(NumOps.Negate(x));
-            return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, ez));
+            return zeros.ToVector();
         }
-        else
+
+        var prob = engine.Sigmoid(logOdds).AsTensor();
+        var grad = engine.TensorSubtract(yBinary.AsTensor(), prob);
+        var hess = engine.TensorMultiply(prob, engine.ScalarMinusTensor(NumOps.One, prob));
+
+        var binGradients = engine.TensorScatterAdd(zeros, bins, grad, 0);
+        var binHessians = engine.TensorScatterAdd(zeros, bins, hess, 0);
+
+        var step = engine.TensorMultiplyScalar(
+            engine.TensorDivide(binGradients, engine.TensorAddScalar(binHessians, l2Reg)), learningRate);
+        return engine.TensorWhere(engine.TensorGreaterThan(binHessians, eps), step, zeros).ToVector();
+    }
+
+    /// <summary>
+    /// Flat cell index min(b1, rows - 1) * columns + min(b2, columns - 1) of each sample in an interaction grid.
+    /// </summary>
+    private Tensor<int> InteractionCells(Tensor<int> bins1, Tensor<int> bins2, int rows, int columns)
+    {
+        var engine = Engine;
+        var b1 = engine.TensorClampMax(bins1, rows - 1);
+        var b2 = engine.TensorClampMax(bins2, columns - 1);
+        return engine.TensorAdd(engine.TensorMultiplyScalar(b1, columns), b2);
+    }
+
+    /// <summary>
+    /// Row-major rank-1 view of a matrix's values.
+    /// </summary>
+    private static Tensor<T> FlattenMatrix(Matrix<T> matrix)
+    {
+        return Tensor<T>.FromMatrix(matrix).Reshape(matrix.Rows * matrix.Columns);
+    }
+
+    /// <summary>
+    /// Early-stopping bookkeeping: records an improvement or counts a stale round.
+    /// </summary>
+    /// <returns>True when training should stop.</returns>
+    private bool ShouldStopEarly(T loss, ref T bestLoss, ref int roundsWithoutImprovement)
+    {
+        if (NumOps.LessThan(loss, bestLoss))
         {
-            T ez = NumOps.Exp(x);
-            return NumOps.Divide(ez, NumOps.Add(NumOps.One, ez));
+            bestLoss = loss;
+            roundsWithoutImprovement = 0;
+            return false;
         }
+
+        roundsWithoutImprovement++;
+        return roundsWithoutImprovement >= (_options.EarlyStoppingRounds ?? int.MaxValue);
     }
 
     /// <summary>
     /// Computes log loss.
     /// </summary>
-    private T ComputeLogLoss(Vector<T> logOdds, Vector<T> yBinary)
-    {
-        T eps = NumOps.FromDouble(1e-10);
-        T oneMinusEps = NumOps.Subtract(NumOps.One, eps);
-        T loss = NumOps.Zero;
-        for (int i = 0; i < logOdds.Length; i++)
-        {
-            T p = Sigmoid(logOdds[i]);
-            if (NumOps.LessThan(p, eps)) p = eps;
-            if (NumOps.GreaterThan(p, oneMinusEps)) p = oneMinusEps;
-            // loss -= y * log(p) + (1 - y) * log(1 - p)
-            loss = NumOps.Subtract(loss,
-                NumOps.Add(
-                    NumOps.Multiply(yBinary[i], NumOps.Log(p)),
-                    NumOps.Multiply(NumOps.Subtract(NumOps.One, yBinary[i]),
-                        NumOps.Log(NumOps.Subtract(NumOps.One, p)))));
-        }
-        return NumOps.Divide(loss, NumOps.FromDouble(logOdds.Length));
-    }
+    private T ComputeLogLoss(Vector<T> logOdds, Vector<T> yBinary) => ComputeBinaryLogLoss(logOdds, yBinary);
 
     /// <summary>
     /// Detects important pairwise interactions and trains them with cyclic boosting.
     /// </summary>
-    private void DetectInteractions(Matrix<T> x, int[][] sampleBins, Vector<T> yBinary)
+    private void DetectInteractions(Matrix<T> x, Tensor<int>[] sampleBins, Vector<T> yBinary)
     {
         int n = x.Rows;
-        var logOdds = ComputeLogOdds(x, sampleBins);
-        var residuals = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            residuals[i] = NumOps.Subtract(yBinary[i], Sigmoid(logOdds[i]));
-        }
+        var engine = Engine;
+        var logOdds = ComputeLogOdds(sampleBins, n);
+        var residuals = engine.Subtract(yBinary, engine.Sigmoid(logOdds));
 
         // Check top feature pairs
         var candidates = new List<(int, int, T)>();
@@ -608,7 +523,7 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
         {
             for (int f2 = f1 + 1; f2 < maxFeaturesToConsider; f2++)
             {
-                T score = ComputeInteractionScore(sampleBins[f1], sampleBins[f2], residuals);
+                T score = ComputeInteractionScore(sampleBins[f1], sampleBins[f2], _binEdges[f2].Length + 1, residuals);
                 candidates.Add((f1, f2, score));
             }
         }
@@ -628,151 +543,99 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
         if (_interactionTerms.Count == 0) return;
 
         // Recompute running log-odds including main effects
-        var runningLogOdds = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            runningLogOdds[i] = logOdds[i];
-        }
+        var runningLogOdds = logOdds.Clone();
 
         T learningRate = NumOps.FromDouble(_options.LearningRate);
         T l2Reg = NumOps.FromDouble(_options.L2Regularization);
         T eps = NumOps.FromDouble(1e-10);
 
         // Cyclic boosting over interaction terms (same structure as main effect training)
+        var keys = _interactionTerms.Keys.ToList();
         for (int outer = 0; outer < _options.InnerBags; outer++)
         {
-            foreach (var kvp in _interactionTerms)
+            foreach (var key in keys)
             {
-                int f1 = kvp.Key.Item1;
-                int f2 = kvp.Key.Item2;
-                var term = kvp.Value;
+                var term = _interactionTerms[key];
                 int numBins1 = term.Rows;
                 int numBins2 = term.Columns;
+                var cells = InteractionCells(sampleBins[key.Item1], sampleBins[key.Item2], numBins1, numBins2);
 
-                var binGradients = new T[numBins1, numBins2];
-                var binHessians = new T[numBins1, numBins2];
-                for (int b1 = 0; b1 < numBins1; b1++)
-                {
-                    for (int b2 = 0; b2 < numBins2; b2++)
-                    {
-                        binGradients[b1, b2] = NumOps.Zero;
-                        binHessians[b1, b2] = NumOps.Zero;
-                    }
-                }
+                var cellUpdates = ComputeBinUpdates(runningLogOdds, yBinary, cells, numBins1 * numBins2,
+                    learningRate, l2Reg, eps);
 
-                for (int i = 0; i < n; i++)
-                {
-                    T prob = Sigmoid(runningLogOdds[i]);
-                    T grad = NumOps.Subtract(yBinary[i], prob);
-                    T hess = NumOps.Multiply(prob, NumOps.Subtract(NumOps.One, prob));
-
-                    int b1 = Math.Min(sampleBins[f1][i], numBins1 - 1);
-                    int b2 = Math.Min(sampleBins[f2][i], numBins2 - 1);
-                    binGradients[b1, b2] = NumOps.Add(binGradients[b1, b2], grad);
-                    binHessians[b1, b2] = NumOps.Add(binHessians[b1, b2], hess);
-                }
-
-                var binUpdates = new T[numBins1, numBins2];
-                for (int b1 = 0; b1 < numBins1; b1++)
-                {
-                    for (int b2 = 0; b2 < numBins2; b2++)
-                    {
-                        binUpdates[b1, b2] = NumOps.Zero;
-                        if (NumOps.GreaterThan(binHessians[b1, b2], eps))
-                        {
-                            T update = NumOps.Multiply(
-                                NumOps.Divide(binGradients[b1, b2],
-                                    NumOps.Add(binHessians[b1, b2], l2Reg)),
-                                learningRate);
-                            term[b1, b2] = NumOps.Add(term[b1, b2], update);
-                            binUpdates[b1, b2] = update;
-                        }
-                    }
-                }
+                var updated = engine.TensorAdd(FlattenMatrix(term), cellUpdates.AsTensor());
+                _interactionTerms[key] = updated.Reshape(numBins1, numBins2).ToMatrix();
 
                 // Update running log-odds for this interaction's changes
-                for (int i = 0; i < n; i++)
-                {
-                    int b1 = Math.Min(sampleBins[f1][i], numBins1 - 1);
-                    int b2 = Math.Min(sampleBins[f2][i], numBins2 - 1);
-                    runningLogOdds[i] = NumOps.Add(runningLogOdds[i], binUpdates[b1, b2]);
-                }
+                runningLogOdds = engine.Add(runningLogOdds,
+                    engine.TensorGather(cellUpdates.AsTensor(), cells, 0).ToVector());
             }
         }
     }
 
     /// <summary>
-    /// Computes interaction score (variance reduction).
+    /// Computes interaction score (variance reduction): total variance of the residuals minus the
+    /// sample-weighted variance inside each (bin1, bin2) group.
     /// </summary>
-    private T ComputeInteractionScore(int[] bins1, int[] bins2, Vector<T> residuals)
+    private T ComputeInteractionScore(Tensor<int> bins1, Tensor<int> bins2, int numBins2, Vector<T> residuals)
     {
-        // Group residuals by bin pair and compute variance reduction
-        var groups = new Dictionary<(int, int), List<T>>();
-        for (int i = 0; i < residuals.Length; i++)
+        int n = residuals.Length;
+        T totalVar = ComputeVariance(residuals);
+        if (n < 2)
         {
-            var key = (bins1[i], bins2[i]);
-            if (!groups.ContainsKey(key))
-            {
-                groups[key] = [];
-            }
-            groups[key].Add(residuals[i]);
+            return totalVar;
         }
 
-        T totalVar = ComputeVariance(residuals);
-        T withinVar = NumOps.Zero;
-        foreach (var g in groups.Values)
-        {
-            if (g.Count > 1)
-            {
-                var gVec = new Vector<T>(g);
-                T gVar = ComputeVariance(gVec);
-                withinVar = NumOps.Add(withinVar,
-                    NumOps.Multiply(gVar, NumOps.FromDouble((double)g.Count / residuals.Length)));
-            }
-        }
+        // Group id of each sample; the bins are in [0, edges + 1), so this is a unique id per pair.
+        var engine = Engine;
+        var groupIds = engine.TensorAdd(engine.TensorMultiplyScalar(bins1, numBins2), bins2);
+        int numGroups = engine.TensorMaxValue(groupIds) + 1;
+
+        // sum_g (|g| / n) * Var(g) = sum_i (r_i - mean_{g(i)})^2 / n; singleton groups contribute zero.
+        var r = residuals.AsTensor();
+        var zeros = new Tensor<T>(new[] { numGroups });
+        var groupSums = engine.TensorScatterAdd(zeros, groupIds, r, 0);
+        var groupCounts = engine.TensorScatterAdd(zeros, groupIds, FilledVector(n, NumOps.One).AsTensor(), 0);
+        var groupMeans = engine.TensorDivide(groupSums, engine.TensorClampMin(groupCounts, NumOps.One));
+        var deviation = engine.TensorSubtract(r, engine.TensorGather(groupMeans, groupIds, 0));
+        T withinVar = NumOps.Divide(engine.TensorSumOfSquares(deviation), NumOps.FromDouble(n));
 
         return NumOps.Subtract(totalVar, withinVar);
     }
 
     /// <summary>
-    /// Computes variance.
+    /// Computes the population variance.
     /// </summary>
     private T ComputeVariance(Vector<T> values)
     {
         if (values.Length < 2) return NumOps.Zero;
-        T sum = NumOps.Zero;
-        for (int i = 0; i < values.Length; i++) sum = NumOps.Add(sum, values[i]);
-        T mean = NumOps.Divide(sum, NumOps.FromDouble(values.Length));
-        T sqSum = NumOps.Zero;
-        for (int i = 0; i < values.Length; i++)
-        {
-            T diff = NumOps.Subtract(values[i], mean);
-            sqSum = NumOps.Add(sqSum, NumOps.Multiply(diff, diff));
-        }
-        return NumOps.Divide(sqSum, NumOps.FromDouble(values.Length));
+        var engine = Engine;
+        T mean = engine.Mean(values);
+        var diff = engine.TensorSubtractScalar(values.AsTensor(), mean);
+        return NumOps.Divide(engine.TensorSumOfSquares(diff), NumOps.FromDouble(values.Length));
     }
 
     /// <summary>
     /// Centers shape functions by subtracting their weighted mean.
     /// </summary>
-    private void CenterShapeFunctions(int[][] sampleBins, int n)
+    private void CenterShapeFunctions(Tensor<int>[] sampleBins, int n)
     {
+        var engine = Engine;
+        var means = new List<T>(_numFeatures);
         for (int f = 0; f < _numFeatures; f++)
         {
-            // Compute weighted mean of shape function
-            T weightedSum = NumOps.Zero;
-            for (int i = 0; i < n; i++)
-            {
-                weightedSum = NumOps.Add(weightedSum, _shapeFunctions[f][sampleBins[f][i]]);
-            }
-            T mean = NumOps.Divide(weightedSum, NumOps.FromDouble(n));
+            // Weighted mean of the shape function = mean of its value at each sample's bin
+            var sf = _shapeFunctions[f];
+            T mean = n == 0 ? NumOps.Zero : engine.TensorMean(engine.TensorGather(sf.AsTensor(), sampleBins[f], 0));
 
-            // Subtract mean and add to intercept
-            for (int b = 0; b < _shapeFunctions[f].Length; b++)
-            {
-                _shapeFunctions[f][b] = NumOps.Subtract(_shapeFunctions[f][b], mean);
-            }
-            _intercept = NumOps.Add(_intercept, mean);
+            // Subtract mean (the means are added to the intercept below)
+            _shapeFunctions[f] = engine.TensorSubtractScalar(sf.AsTensor(), mean).ToVector();
+            means.Add(mean);
+        }
+
+        if (means.Count > 0)
+        {
+            _intercept = NumOps.Add(_intercept, engine.Sum(Vector<T>.FromList(means)));
         }
     }
 
@@ -781,34 +644,24 @@ public partial class ExplainableBoostingClassifier<T> : EnsembleClassifierBase<T
     /// </summary>
     private void CalculateFeatureImportances()
     {
-        var importances = new Vector<T>(_numFeatures);
+        var engine = Engine;
 
-        for (int f = 0; f < _numFeatures; f++)
+        // Importance = range of shape function values
+        var maxima = new List<T>(_numFeatures);
+        var minima = new List<T>(_numFeatures);
+        foreach (var sf in _shapeFunctions)
         {
-            // Importance = range of shape function values
-            T min = NumOps.MaxValue;
-            T max = NumOps.MinValue;
-            for (int b = 0; b < _shapeFunctions[f].Length; b++)
-            {
-                T v = _shapeFunctions[f][b];
-                if (NumOps.LessThan(v, min)) min = v;
-                if (NumOps.GreaterThan(v, max)) max = v;
-            }
-            importances[f] = NumOps.Subtract(max, min);
+            maxima.Add(engine.TensorMaxValue(sf.AsTensor()));
+            minima.Add(engine.TensorMinValue(sf.AsTensor()));
         }
+
+        var importances = engine.Subtract(Vector<T>.FromList(maxima), Vector<T>.FromList(minima));
 
         // Normalize
-        T sum = NumOps.Zero;
-        for (int f = 0; f < _numFeatures; f++)
-        {
-            sum = NumOps.Add(sum, importances[f]);
-        }
+        T sum = _numFeatures == 0 ? NumOps.Zero : engine.Sum(importances);
         if (NumOps.GreaterThan(sum, NumOps.Zero))
         {
-            for (int f = 0; f < _numFeatures; f++)
-            {
-                importances[f] = NumOps.Divide(importances[f], sum);
-            }
+            importances = engine.Divide(importances, sum);
         }
 
         FeatureImportances = importances;

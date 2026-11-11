@@ -463,6 +463,85 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
+    /// Creates a vector of <paramref name="length"/> elements all equal to <paramref name="value"/>.
+    /// </summary>
+    protected static Vector<T> FilledVector(int length, T value)
+    {
+        var result = new Vector<T>(length);
+        if (length > 0)
+        {
+            result.Fill(value);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Binary decision from a [samples, 2] probability matrix: P(positive) &gt;= 0.5 selects the last class
+    /// label, otherwise the first.
+    /// </summary>
+    /// <param name="probabilities">The probability matrix; column 1 holds P(positive).</param>
+    /// <returns>The predicted class labels.</returns>
+    protected Vector<T> PredictBinaryLabels(Matrix<T> probabilities)
+    {
+        var classLabels = ClassLabels ?? throw new InvalidOperationException("Model must be trained before making predictions.");
+        int n = probabilities.Rows;
+        if (n == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var engine = Engine;
+        var below = engine.TensorLessThan(probabilities.GetColumn(1).AsTensor(), NumOps.FromDouble(0.5));
+        var negative = FilledVector(n, classLabels[0]);
+        var positive = FilledVector(n, classLabels[classLabels.Length - 1]);
+        return engine.TensorWhere(below, negative.AsTensor(), positive.AsTensor()).ToVector();
+    }
+
+    /// <summary>
+    /// Converts log-odds to a [samples, 2] probability matrix [1 - sigmoid(z), sigmoid(z)].
+    /// </summary>
+    /// <param name="logOdds">The log-odds of the positive class per sample.</param>
+    /// <returns>The probability matrix.</returns>
+    protected Matrix<T> BinaryProbabilitiesFromLogOdds(Vector<T> logOdds)
+    {
+        if (logOdds.Length == 0)
+        {
+            return new Matrix<T>(0, 2);
+        }
+
+        var engine = Engine;
+        var prob1 = engine.Sigmoid(logOdds);
+        var prob0 = engine.ScalarMinusTensor(NumOps.One, prob1.AsTensor()).ToVector();
+        return StackColumns(new[] { prob0, prob1 });
+    }
+
+    /// <summary>
+    /// Mean binary log loss -mean(y * log(p) + (1 - y) * log(1 - p)) with p = sigmoid(logOdds) clamped to
+    /// [1e-10, 1 - 1e-10].
+    /// </summary>
+    /// <param name="logOdds">The log-odds of the positive class per sample.</param>
+    /// <param name="yBinary">The 0/1 targets.</param>
+    /// <returns>The mean log loss (zero for no samples).</returns>
+    protected T ComputeBinaryLogLoss(Vector<T> logOdds, Vector<T> yBinary)
+    {
+        if (logOdds.Length == 0)
+        {
+            return NumOps.Zero;
+        }
+
+        var engine = Engine;
+        T eps = NumOps.FromDouble(1e-10);
+        var p = engine.TensorClamp(engine.Sigmoid(logOdds).AsTensor(), eps, NumOps.Subtract(NumOps.One, eps));
+        var yT = yBinary.AsTensor();
+        var oneMinusY = engine.ScalarMinusTensor(NumOps.One, yT);
+        var logP = engine.TensorLog(p);
+        var logOneMinusP = engine.TensorLog(engine.ScalarMinusTensor(NumOps.One, p));
+        var perSample = engine.TensorAdd(engine.TensorMultiply(yT, logP), engine.TensorMultiply(oneMinusY, logOneMinusP));
+        return NumOps.Negate(engine.TensorMean(perSample));
+    }
+
+    /// <summary>
     /// Stacks equal-length column vectors into a [length, columns.Count] matrix.
     /// </summary>
     /// <param name="columns">The columns, in order.</param>

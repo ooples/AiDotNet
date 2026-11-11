@@ -235,22 +235,8 @@ public partial class DARTClassifier<T> : EnsembleClassifierBase<T>
     /// </summary>
     public override Vector<T> Predict(Matrix<T> input)
     {
-        var probs = PredictProbabilities(input);
-        var classLabels = ClassLabels ?? throw new InvalidOperationException("Model must be trained before making predictions.");
-        int n = input.Rows;
-        if (n == 0)
-        {
-            return new Vector<T>(0);
-        }
-
         // Binary classification: P(positive) >= 0.5 selects the last label, otherwise the first.
-        var engine = Engine;
-        var below = engine.TensorLessThan(probs.GetColumn(1).AsTensor(), NumOps.FromDouble(0.5));
-        var negative = new Vector<T>(n);
-        negative.Fill(classLabels[0]);
-        var positive = new Vector<T>(n);
-        positive.Fill(classLabels[classLabels.Length - 1]);
-        return engine.TensorWhere(below, negative.AsTensor(), positive.AsTensor()).ToVector();
+        return PredictBinaryLabels(PredictProbabilities(input));
     }
 
     /// <summary>
@@ -280,14 +266,10 @@ public partial class DARTClassifier<T> : EnsembleClassifierBase<T>
         }
 
         var weights = engine.Multiply(Vector<T>.FromList(_treeWeights), NumOps.FromDouble(_options.LearningRate));
-        var initial = new Vector<T>(n);
-        initial.Fill(_initPrediction);
-        var logOdds = engine.Add(initial, WeightedSumOfVectors(treePreds, weights, n));
+        var logOdds = engine.Add(FilledVector(n, _initPrediction), WeightedSumOfVectors(treePreds, weights, n));
 
         // Convert to probabilities
-        var prob1 = engine.Sigmoid(logOdds);
-        var prob0 = engine.ScalarMinusTensor(NumOps.One, prob1.AsTensor()).ToVector();
-        return StackColumns(new[] { prob0, prob1 });
+        return BinaryProbabilitiesFromLogOdds(logOdds);
     }
 
     /// <summary>
@@ -395,24 +377,7 @@ public partial class DARTClassifier<T> : EnsembleClassifierBase<T>
     /// <summary>
     /// Computes log loss for current predictions.
     /// </summary>
-    private T ComputeLoss(Vector<T> logOdds, Vector<T> yBinary)
-    {
-        if (logOdds.Length == 0)
-        {
-            return NumOps.Zero;
-        }
-
-        // loss = -mean(y * log(p) + (1 - y) * log(1 - p)), p = sigmoid(logOdds) clamped to [eps, 1-eps]
-        var engine = Engine;
-        T eps = NumOps.FromDouble(1e-10);
-        var p = engine.TensorClamp(engine.Sigmoid(logOdds).AsTensor(), eps, NumOps.Subtract(NumOps.One, eps));
-        var yT = yBinary.AsTensor();
-        var oneMinusY = engine.ScalarMinusTensor(NumOps.One, yT);
-        var logP = engine.TensorLog(p);
-        var logOneMinusP = engine.TensorLog(engine.ScalarMinusTensor(NumOps.One, p));
-        var perSample = engine.TensorAdd(engine.TensorMultiply(yT, logP), engine.TensorMultiply(oneMinusY, logOneMinusP));
-        return NumOps.Negate(engine.TensorMean(perSample));
-    }
+    private T ComputeLoss(Vector<T> logOdds, Vector<T> yBinary) => ComputeBinaryLogLoss(logOdds, yBinary);
 
     /// <summary>
     /// Calculates feature importances from all trees.
