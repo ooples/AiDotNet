@@ -114,6 +114,9 @@ internal static class TabularEngineOps<T>
         var key = engine.TensorAdd(engine.TensorMultiplyScalar(before.Cast<long>(), (long)count), position);
         return engine.TensorArgsort(key, 0, false).ToArray();
     }
+
+    /// <summary>
+    /// The <paramref name="k"/> rows nearest to <paramref name="sampleIdx"/> in a [rows, rows] distance
     /// tensor, excluding the sample itself, closest first (ties by row order).
     /// </summary>
     internal static int[] NearestNeighbors(Tensor<T> distances, int sampleIdx, int k)
