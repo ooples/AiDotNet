@@ -1324,6 +1324,11 @@ jobs:
           $workloads = Split-CiWorkloads -Shards @($matrixShards)
           $plan = Get-SelfHostedShardPlan -Config $env:SELF_HOSTED_RUNNERS `
               -Runners (Get-SelfHostedRunners -Repository $env:GITHUB_REPOSITORY -Token $env:SELF_HOSTED_RUNNER_TOKEN)
+          if ($plan.Count -gt 0) {
+            $pending = Get-SelfHostedPendingJobs -Repository $env:GITHUB_REPOSITORY -Token $env:SELF_HOSTED_RUNNER_TOKEN -Label $plan.Label
+            $plan = Get-SelfHostedShardPlan -Config $env:SELF_HOSTED_RUNNERS -Pending $pending `
+                -Runners (Get-SelfHostedRunners -Repository $env:GITHUB_REPOSITORY -Token $env:SELF_HOSTED_RUNNER_TOKEN)
+          }
           Write-Host "Self-hosted routing: $($plan.Count) shard(s). $($plan.Reason)"
           if ($plan.Warning) { Write-Host "::warning::Self-hosted routing is off: $($plan.Reason)" }
           "self_hosted_shards=$($plan.Count)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
