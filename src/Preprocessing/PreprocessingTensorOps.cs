@@ -309,6 +309,83 @@ internal static class PreprocessingTensorOps
         return (ColumnMin(engine.TensorWhere(mask, x, high)), ColumnMax(engine.TensorWhere(mask, x, low)));
     }
 
+    /// <summary>The sorted distinct values of a 1-D tensor.</summary>
+    public static Tensor<T> SortedUnique<T>(Tensor<T> values) =>
+        values.Length == 0 ? new Tensor<T>(new[] { 0 }) : AiDotNetEngine.Current.TensorUnique(values, true);
+
+    /// <summary>
+    /// Looks every value up in a sorted list of distinct categories: returns each value's category position
+    /// (clamped into range for values that are not categories) and, in <paramref name="found"/>, a 0/1 mask of
+    /// the values that are categories.
+    /// </summary>
+    public static Tensor<int> LookupSorted<T>(Tensor<T> sortedCategories, Tensor<T> values, out Tensor<T> found)
+    {
+        var engine = AiDotNetEngine.Current;
+        int k = sortedCategories.Length;
+        if (k == 0 || values.Length == 0)
+        {
+            found = new Tensor<T>(values.Shape.ToArray());
+            return new Tensor<int>(values.Shape.ToArray());
+        }
+
+        var positions = engine.TensorSearchSorted(sortedCategories, values, false).AsSpan().ToArray();
+        for (int i = 0; i < positions.Length; i++)
+            positions[i] = Math.Min(positions[i], k - 1);
+        var index = new Tensor<int>(positions, values.Shape.ToArray());
+        found = engine.TensorEquals(engine.TensorIndexSelect(sortedCategories, index, 0), values);
+        return index;
+    }
+
+    /// <summary>
+    /// Inverse of a label lookup: each label (truncated toward zero) in 0..categories-1 becomes that category;
+    /// any other label keeps its value.
+    /// </summary>
+    public static Tensor<T> GatherCategories<T>(Tensor<T> categories, Tensor<T> labels)
+    {
+        var engine = AiDotNetEngine.Current;
+        var ops = MathHelper.GetNumericOperations<T>();
+        int k = categories.Length;
+        if (k == 0 || labels.Length == 0)
+            return labels;
+
+        var truncated = engine.TensorTrunc(labels);
+        var valid = engine.TensorMultiply(
+            AtLeast(truncated, ops.Zero), engine.TensorLessThan(truncated, ops.FromDouble(k)));
+        var index = engine.TensorClamp(truncated, ops.Zero, ops.FromDouble(k - 1)).Cast<int>();
+        return engine.TensorWhere(valid, engine.TensorIndexSelect(categories, index, 0), labels);
+    }
+
+    /// <summary>Per-category sums of <paramref name="values"/> ([n]) for category positions <paramref name="index"/>.</summary>
+    public static Tensor<T> CategorySums<T>(Tensor<int> index, Tensor<T> values, int categories)
+    {
+        var engine = AiDotNetEngine.Current;
+        if (values.Length == 0)
+            return new Tensor<T>(new[] { categories });
+        var oneHot = engine.TensorOneHot<T>(index, categories); // [n, k]
+        return engine.Reshape(
+            engine.TensorMatMul(engine.Reshape(values, new[] { 1, values.Length }), oneHot), new[] { categories });
+    }
+
+    /// <summary>Per-category row counts for category positions <paramref name="index"/>.</summary>
+    public static Tensor<T> CategoryCounts<T>(Tensor<int> index, int categories)
+    {
+        var engine = AiDotNetEngine.Current;
+        if (index.Length == 0)
+            return new Tensor<T>(new[] { categories });
+        return engine.ReduceSum(engine.TensorOneHot<T>(index, categories), new[] { 0 }, false);
+    }
+
+    /// <summary>Stacks [n] column tensors into an [n, columns] matrix.</summary>
+    public static Matrix<T> StackColumns<T>(IReadOnlyList<Tensor<T>> columns, int rows)
+    {
+        if (columns.Count == 0)
+            return new Matrix<T>(rows, 0);
+        return AiDotNetEngine.Current.TensorStack(columns.ToArray(), 1).ToMatrix();
+    }
+
+    /// <summary>Column <paramref name="column"/> of a matrix as an [n] tensor.</summary>
+    public static Tensor<T> Column<T>(Matrix<T> data, int column) => Tensor<T>.FromVector(data.GetColumn(column));
+
     /// <summary>The positions where a 0/1 mask tensor is non-zero, in ascending order.</summary>
     public static int[] MaskPositions<T>(Tensor<T> mask)
     {
