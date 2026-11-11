@@ -501,6 +501,142 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
+    /// Class counts of the samples in <paramref name="samples"/> (class indices outside [0, NumClasses) are ignored).
+    /// </summary>
+    /// <param name="classes">The class index of every training sample.</param>
+    /// <param name="samples">The samples to count.</param>
+    /// <returns>The [NumClasses] counts.</returns>
+    private protected Tensor<T> ClassCounts(Tensor<int> classes, int[] samples)
+    {
+        var engine = Engine;
+        if (samples.Length == 0 || NumClasses == 0)
+        {
+            return new Tensor<T>(new[] { NumClasses });
+        }
+
+        // Shift by one so -1 (unknown) lands in a dropped bin; indices >= NumClasses land in a dropped last bin
+        var selected = engine.TensorGather(classes, new Tensor<int>(samples, new[] { samples.Length }), 0);
+        var shifted = engine.TensorClamp(engine.TensorAddScalar(selected, 1), 0, NumClasses + 1);
+        var counts = engine.TensorScatterAdd(new Tensor<T>(new[] { NumClasses + 2 }), shifted,
+            FilledVector(samples.Length, NumOps.One).AsTensor(), 0);
+        return counts.Slice(0, 1, NumClasses + 1);
+    }
+
+    /// <summary>
+    /// The best axis-aligned split of <paramref name="samples"/> by weighted Gini impurity.
+    /// </summary>
+    /// <remarks>
+    /// Candidate thresholds are the midpoints between consecutive distinct feature values; a sample goes
+    /// left when its value is &lt;= the threshold. Splits leaving fewer than <paramref name="minSamplesLeaf"/>
+    /// samples on a side are skipped. Features are tried in the given order and thresholds in increasing
+    /// order; the first strictly lowest weighted Gini wins.
+    /// </remarks>
+    /// <param name="x">The [n, features] training features.</param>
+    /// <param name="classes">The class index of every training sample.</param>
+    /// <param name="samples">The samples at this node.</param>
+    /// <param name="features">The features to try, in order.</param>
+    /// <param name="minSamplesLeaf">The minimum number of samples on each side.</param>
+    /// <returns>The feature (-1 when no valid split exists) and threshold.</returns>
+    private protected (int Feature, T Threshold) BestGiniSplit(Tensor<T> x, Tensor<int> classes, int[] samples,
+        IEnumerable<int> features, int minSamplesLeaf)
+    {
+        var engine = Engine;
+        int total = samples.Length;
+        int bestFeature = -1;
+        T bestThreshold = NumOps.Zero;
+        T bestGini = NumOps.MaxValue;
+        if (total < 2 || NumClasses == 0)
+        {
+            return (bestFeature, bestThreshold);
+        }
+
+        var sampleTensor = new Tensor<int>(samples, new[] { total });
+        var nodeClasses = engine.TensorClamp(engine.TensorGather(classes, sampleTensor, 0), -1, NumClasses);
+        var nodeRows = engine.TensorGather(x, sampleTensor, 0);
+        T totalCount = NumOps.FromDouble(total);
+        T half = NumOps.FromDouble(0.5);
+        T minLeaf = NumOps.FromDouble(minSamplesLeaf);
+
+        foreach (int j in features)
+        {
+            // Sorted values and the class membership of each sorted sample (out-of-range classes count for none)
+            var column = nodeRows.Slice(1, j, j + 1).Reshape(total);
+            var (sortedValues, order) = engine.TensorSort(column, 0, false);
+            var distinct = engine.TensorUniqueConsecutive(sortedValues);
+            int numDistinct = distinct.Length;
+            if (numDistinct < 2)
+            {
+                continue;
+            }
+
+            var sortedClasses = engine.TensorAddScalar(engine.TensorGather(nodeClasses, order, 0), 1);
+            var membership = engine.TensorOneHot<T>(sortedClasses, NumClasses + 2).Slice(1, 1, NumClasses + 1);
+
+            // Left side of the split after distinct value v: every sample with value <= distinct[v]
+            var candidates = distinct.Slice(0, 0, numDistinct - 1);
+            var lastLeft = engine.TensorAddScalar(engine.TensorSearchSorted(sortedValues, candidates, true), -1);
+            var leftCounts = engine.TensorGather(engine.TensorCumSum(membership, 0), lastLeft, 0);
+            var leftTotal = engine.TensorGather(engine.TensorArange<T>(1, total + 1), lastLeft, 0).Reshape(numDistinct - 1, 1);
+            var rightCounts = engine.TensorSubtract(engine.ReduceSum(membership, new[] { 0 }, true), leftCounts);
+            var rightTotal = engine.ScalarMinusTensor(totalCount, leftTotal);
+
+            // weighted Gini = (nL / n) * (1 - sum pL^2) + (nR / n) * (1 - sum pR^2)
+            var leftShare = engine.TensorDivide(leftCounts, leftTotal);
+            var rightShare = engine.TensorDivide(rightCounts, rightTotal);
+            var leftGini = engine.ScalarMinusTensor(NumOps.One, engine.ReduceSum(engine.TensorMultiply(leftShare, leftShare), new[] { 1 }, true));
+            var rightGini = engine.ScalarMinusTensor(NumOps.One, engine.ReduceSum(engine.TensorMultiply(rightShare, rightShare), new[] { 1 }, true));
+            var weighted = engine.TensorAdd(
+                engine.TensorMultiply(engine.TensorDivideScalar(leftTotal, totalCount), leftGini),
+                engine.TensorMultiply(engine.TensorDivideScalar(rightTotal, totalCount), rightGini)).Reshape(numDistinct - 1);
+
+            var allowed = engine.TensorMultiply(
+                engine.TensorGreaterEqual(leftTotal, engine.TensorAddScalar(new Tensor<T>(new[] { numDistinct - 1, 1 }), minLeaf)),
+                engine.TensorGreaterEqual(rightTotal, engine.TensorAddScalar(new Tensor<T>(new[] { numDistinct - 1, 1 }), minLeaf))).Reshape(numDistinct - 1);
+            var maxValues = FilledVector(numDistinct - 1, NumOps.MaxValue).AsTensor();
+            var scores = engine.TensorWhere(allowed, weighted, maxValues);
+            int v = engine.TensorArgMin(scores, 0).ToArray()[0];
+            if (NumOps.Compare(allowed[v], NumOps.Zero) != 0 && NumOps.Compare(scores[v], bestGini) < 0)
+            {
+                bestGini = scores[v];
+                bestFeature = j;
+                bestThreshold = NumOps.Multiply(NumOps.Add(distinct[v], distinct[v + 1]), half);
+            }
+        }
+
+        return (bestFeature, bestThreshold);
+    }
+
+    /// <summary>
+    /// Splits <paramref name="samples"/> into those with x[i, feature] &lt;= threshold and the rest, keeping order.
+    /// </summary>
+    private protected (int[] Left, int[] Right) PartitionByThreshold(Tensor<T> x, int[] samples, int feature, T threshold)
+    {
+        if (samples.Length == 0)
+        {
+            return (Array.Empty<int>(), Array.Empty<int>());
+        }
+
+        var engine = Engine;
+        var column = engine.TensorGather(x.Slice(1, feature, feature + 1).Reshape(x.Shape[0]),
+            new Tensor<int>(samples, new[] { samples.Length }), 0);
+        var goesLeft = engine.TensorLessEqual(column, FilledVector(samples.Length, threshold).AsTensor());
+        var sampleTensor = new Tensor<int>(samples, new[] { samples.Length });
+        return (SelectWhereNonzero(sampleTensor, goesLeft), SelectWhereNonzero(sampleTensor, engine.ScalarMinusTensor(NumOps.One, goesLeft)));
+    }
+
+    /// <summary>
+    /// The entries of <paramref name="values"/> whose 0/1 <paramref name="mask"/> entry is nonzero, in order.
+    /// </summary>
+    private int[] SelectWhereNonzero(Tensor<int> values, Tensor<T> mask)
+    {
+        var engine = Engine;
+        var positions = engine.TensorNonzero(mask);
+        return positions.Length == 0
+            ? Array.Empty<int>()
+            : engine.TensorGather(values, positions.Reshape(positions.Length), 0).ToArray();
+    }
+
+    /// <summary>
     /// Inverts a square matrix by Gauss-Jordan elimination with partial pivoting. A pivot smaller than
     /// 1e-12 in magnitude is replaced by +/-1e-12 (keeping its sign, + for zero), so a singular matrix
     /// yields a large but finite result instead of an exception.
