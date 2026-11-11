@@ -166,20 +166,20 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
                 nameof(matrix));
         }
 
-        if (requireNonNegative)
+        if (requireNonNegative && matrix.Rows > 0 && matrix.Columns > 0)
         {
-            for (int i = 0; i < matrix.Rows; i++)
+            var values = Tensor<T>.FromMatrix(matrix);
+            if (NumOps.LessThan(Engine.TensorMinValue(values), NumOps.Zero))
             {
-                for (int j = 0; j < matrix.Columns; j++)
-                {
-                    if (NumOps.LessThan(matrix[i, j], NumOps.Zero))
-                    {
-                        throw new ArgumentException(
-                            $"Matrix must contain only non-negative values for this decomposition. " +
-                            $"Found negative value {matrix[i, j]} at position ({i}, {j}).",
-                            nameof(matrix));
-                    }
-                }
+                // Report the first negative entry in row-major order, as the scan did.
+                var negativeMask = Engine.TensorLessThan(values.Reshape(new[] { values.Length }), NumOps.Zero);
+                int flat = Engine.TensorArgMax(negativeMask, 0)[0];
+                int row = flat / matrix.Columns;
+                int col = flat % matrix.Columns;
+                throw new ArgumentException(
+                    $"Matrix must contain only non-negative values for this decomposition. " +
+                    $"Found negative value {matrix[row, col]} at position ({row}, {col}).",
+                    nameof(matrix));
             }
         }
 
@@ -192,20 +192,26 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
                     nameof(matrix));
             }
 
-            T tolerance = NumOps.FromDouble(1e-10);
-            for (int i = 0; i < matrix.Rows; i++)
+            if (matrix.Rows == 0)
             {
-                for (int j = i + 1; j < matrix.Columns; j++)
-                {
-                    T diff = NumOps.Abs(NumOps.Subtract(matrix[i, j], matrix[j, i]));
-                    if (NumOps.GreaterThan(diff, tolerance))
-                    {
-                        throw new ArgumentException(
-                            $"Matrix must be symmetric for this decomposition. " +
-                            $"Elements at ({i}, {j}) and ({j}, {i}) differ by {diff}.",
-                            nameof(matrix));
-                    }
-                }
+                return;
+            }
+
+            T tolerance = NumOps.FromDouble(1e-10);
+            var values = Tensor<T>.FromMatrix(matrix);
+            var asymmetry = Engine.TensorAbs(Engine.TensorSubtract(values, Engine.TensorTranspose(values)));
+            if (NumOps.GreaterThan(Engine.TensorMaxValue(asymmetry), tolerance))
+            {
+                // First offending (i, j) with j > i in row-major order, as the scan reported it.
+                var violations = Engine.TensorTriu(Engine.TensorGreaterThan(asymmetry, tolerance), 1);
+                int flat = Engine.TensorArgMax(violations.Reshape(new[] { violations.Length }), 0)[0];
+                int i = flat / matrix.Columns;
+                int j = flat % matrix.Columns;
+                T diff = asymmetry[i, j];
+                throw new ArgumentException(
+                    $"Matrix must be symmetric for this decomposition. " +
+                    $"Elements at ({i}, {j}) and ({j}, {i}) differ by {diff}.",
+                    nameof(matrix));
             }
         }
     }
@@ -233,18 +239,37 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     /// </remarks>
     protected T FrobeniusNorm(Matrix<T> matrix)
     {
-        T sumOfSquares = NumOps.Zero;
+        return NumOps.Sqrt(Engine.MatrixSumOfSquares(matrix));
+    }
 
-        // VECTORIZED: Process each row as a vector for SIMD optimization
-        for (int i = 0; i < matrix.Rows; i++)
-        {
-            Vector<T> row = matrix.GetRow(i);
-            // Dot product of row with itself gives sum of squares for that row
-            T rowSumOfSquares = row.DotProduct(row);
-            sumOfSquares = NumOps.Add(sumOfSquares, rowSumOfSquares);
-        }
+    /// <summary>
+    /// Solves a triangular system <c>T x = rhs</c> with one whole-matrix engine triangular solve.
+    /// </summary>
+    /// <param name="triangular">The square triangular coefficient matrix.</param>
+    /// <param name="rhs">The right-hand side vector.</param>
+    /// <param name="upper">True when <paramref name="triangular"/> is upper triangular; false for lower.</param>
+    /// <param name="unitDiagonal">True to treat the diagonal as all ones without reading it.</param>
+    /// <returns>The solution vector x.</returns>
+    protected static Vector<T> SolveTriangularSystem(Matrix<T> triangular, Vector<T> rhs, bool upper, bool unitDiagonal = false)
+    {
+        var solution = Linalg.SolveTriangular(
+            Tensor<T>.FromMatrix(triangular),
+            Tensor<T>.FromVector(rhs, new[] { rhs.Length, 1 }),
+            upper,
+            unitDiagonal);
+        return solution.Reshape(new[] { rhs.Length }).ToVector();
+    }
 
-        return NumOps.Sqrt(sumOfSquares);
+    /// <summary>
+    /// Solves a triangular system <c>T X = B</c> for every column of <paramref name="rhs"/> at once.
+    /// </summary>
+    protected static Matrix<T> SolveTriangularSystem(Matrix<T> triangular, Matrix<T> rhs, bool upper, bool unitDiagonal = false)
+    {
+        return Linalg.SolveTriangular(
+            Tensor<T>.FromMatrix(triangular),
+            Tensor<T>.FromMatrix(rhs),
+            upper,
+            unitDiagonal).ToMatrix();
     }
 
     /// <summary>
