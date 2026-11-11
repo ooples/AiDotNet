@@ -271,6 +271,16 @@ internal static class RegressionEngineOps
     }
 
     /// <summary>
+    /// Copies <paramref name="matrix"/> into a vector in row-major order (bulk copy, no arithmetic).
+    /// </summary>
+    public static Vector<T> FlattenRowMajor<T>(Matrix<T> matrix)
+    {
+        var flat = new Vector<T>(matrix.Rows * matrix.Columns);
+        matrix.AsSpan().CopyTo(flat.AsWritableSpan());
+        return flat;
+    }
+
+    /// <summary>
     /// Gathers <paramref name="source"/> at <paramref name="indices"/> (in the given order).
     /// </summary>
     public static Vector<T> Gather<T>(Vector<T> source, int[] indices)
