@@ -19,31 +19,37 @@ public class MultiObjectiveRealIndividual : RealValuedIndividual, IMultiObjectiv
     {
     }
 
+    /// <inheritdoc />
     public ICollection<double> GetObjectiveValues()
     {
         return _objectiveValues;
     }
 
+    /// <inheritdoc />
     public void SetObjectiveValues(ICollection<double> values)
     {
         _objectiveValues = [.. values];
     }
 
+    /// <inheritdoc />
     public int GetRank()
     {
         return _rank;
     }
 
+    /// <inheritdoc />
     public void SetRank(int rank)
     {
         _rank = rank;
     }
 
+    /// <inheritdoc />
     public double GetCrowdingDistance()
     {
         return _crowdingDistance;
     }
 
+    /// <inheritdoc />
     public void SetCrowdingDistance(double distance)
     {
         _crowdingDistance = distance;

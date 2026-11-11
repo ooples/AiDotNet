@@ -97,6 +97,7 @@ public partial class ByteTrack<T> : NeuralNetworkBase<T>
     #region Properties
 
     internal bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
     internal int NumClasses => _numClasses;
     internal double HighThreshold => _highThreshold;
@@ -358,6 +359,7 @@ public partial class ByteTrack<T> : NeuralNetworkBase<T>
         return intersection / (union + 1e-8);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => Forward(input);
 
     #endregion
@@ -382,6 +384,7 @@ public partial class ByteTrack<T> : NeuralNetworkBase<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

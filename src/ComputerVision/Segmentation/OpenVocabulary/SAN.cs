@@ -159,6 +159,7 @@ public partial class SAN<T> : Common.OpenVocabSegmentationBase<T>
     #endregion
 
     #region Private Methods
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -168,6 +169,7 @@ public partial class SAN<T> : Common.OpenVocabSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

@@ -17,28 +17,26 @@ namespace AiDotNet.Tests.Generators;
 public class ModelCoverageBaselineTests
 {
     /// <summary>
-    /// Models with model-family test coverage: the recorded measurement is 1814 of 1820 (99.7%)
-    /// from the AiDotNetTests compilation's TestCoverage (read by reflection from the built
-    /// net10.0 assembly of fix/streaming-validation-tensor-loss, 2026-11-05; the 6 untested are
-    /// exactly DefectBaselines.UntestedModels, the cloud TTS wrappers). The baseline had stayed at 1485 of 1816 (81.8%, commit
-    /// e9d417a583444fc52c33fcb1c495cf1404d73443, 2026-09-09) while AIDN040 and the generated test
-    /// families (#2139) closed the gap, so the gate would have let 328 models lose their tests
-    /// unnoticed (#2394). Earlier measurements: 1466 after the instrument fix, 1482 after the
-    /// diffusion routing guard, 1485 after the TimeSeries I/O guard (#2091). These are
-    /// generator-attribution counts, not the separate whole-word reference-count estimate over
-    /// hand-written and generated tests.
+    /// Models with model-family test coverage: the recorded measurement is 1822 of 1822 (100%) from the
+    /// AiDotNetTests compilation's TestCoverage (read by reflection from the built net10.0 assembly), measured
+    /// 2026-11-08 on fix/v1-epic-2397 merged with master at 3ddd0c6b54. Master alone measured 1814 of 1820 on
+    /// 2026-11-05, its 6 untested being the proprietary-API TTS wrappers that gained fixtures on this branch
+    /// (#2394). The earlier recorded measurement was 1485 of 1816 (commit
+    /// e9d417a583444fc52c33fcb1c495cf1404d73443, 2026-09-09, #2091), after 1466 at the instrument fix and 1482
+    /// after the diffusion routing guard. These are generator-attribution counts, not the separate whole-word
+    /// reference-count estimate over hand-written and generated tests.
     ///
     /// Record the measured report and its source whenever changing this baseline. LOWERING it
     /// means models that were covered no longer are: establish why before editing this constant,
     /// because the point of the gate is that the number cannot quietly fall.
     /// </summary>
-    private const int BaselineTestedCount = 1814;
+    private const int BaselineTestedCount = 1822;
 
     /// <summary>
     /// Total annotated models at the same measurement. Only a floor: the census grows as models are
     /// added, and a growing census must not by itself trip the tested-count gate.
     /// </summary>
-    private const int BaselineTotalModels = 1820;
+    private const int BaselineTotalModels = 1822;
 
     [Fact]
     public void ThisAssemblyPublishesAMeasuredCoverageFigure()

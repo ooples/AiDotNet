@@ -85,6 +85,7 @@ public class TemporalConsistencyDetector<T> : VideoSafetyModuleBase<T>
     /// <remarks>Temporal consistency compares consecutive frames, so it needs at least two.</remarks>
     public override int MinimumFrames => 2;
 
+    /// <inheritdoc />
     public override IReadOnlyList<SafetyFinding> EvaluateVideo(IReadOnlyList<Tensor<T>> frames, double frameRate)
     {
         var findings = new List<SafetyFinding>();

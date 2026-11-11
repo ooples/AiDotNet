@@ -978,6 +978,23 @@ AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.IsEx
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.Name.get -> string!
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.ReadoutLayerCount.get -> int
 AiDotNet.NeuralNetworks.CreditAssignment.TiedReadoutLocalErrorCreditRule<T>.TiedReadoutLocalErrorCreditRule(int readoutLayerCount = 2, double localWeight = 1) -> void
+AiDotNet.Interfaces.IFeatureSelector<T>
+AiDotNet.Interfaces.IFeatureSelector<T>.GetSupportMask() -> bool[]!
+AiDotNet.Interfaces.IFeatureSelector<T>.SelectedIndices.get -> int[]?
+AiDotNet.Interfaces.IFixedCountFeatureSelector<T>
+AiDotNet.Interfaces.IFixedCountFeatureSelector<T>.NFeaturesToSelect.get -> int
+AiDotNet.Interfaces.ISupervisedFeatureSelector<T>
+AiDotNet.Interfaces.ISupervisedFeatureSelector<T>.Fit(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! target) -> void
+AiDotNet.Interfaces.ISupervisedFeatureSelector<T>.FitTransform(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! data, AiDotNet.Tensors.LinearAlgebra.Vector<T>! target) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.NeuralNetworks.GraphNeuralNetwork<T>.SetAdjacencyMatrix(AiDotNet.Tensors.LinearAlgebra.Tensor<T>? adjacencyMatrix) -> void
+AiDotNet.Clustering.Options.KMeansOptions<T>.KMeansPlusPlusLocalTrials.get -> int?
+AiDotNet.Clustering.Options.KMeansOptions<T>.KMeansPlusPlusLocalTrials.set -> void
+AiDotNet.Models.Options.LogisticRegressionOptions<T>.Solver.get -> AiDotNet.Interfaces.IFunctionOptimizer<T>?
+AiDotNet.Models.Options.LogisticRegressionOptions<T>.Solver.set -> void
+AiDotNet.Regression.LogisticRegression<T>.CreateGradientDescentSolver() -> AiDotNet.Interfaces.IFunctionOptimizer<T>!
+AiDotNet.Classification.Boosting.HistGradientBoostingClassifier<T>.NJobs.get -> int
+AiDotNet.Classification.Boosting.HistGradientBoostingClassifier<T>.NJobs.set -> void
+override AiDotNet.Classification.Ensemble.RandomForestClassifier<T>.PredictProbabilities(AiDotNet.Tensors.LinearAlgebra.Matrix<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
 override AiDotNet.Audio.Fingerprinting.CLAPModel<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.NeuralNetworks.WGANGP<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
 override AiDotNet.VisionLanguage.Document.GOTOCR2<T>.ForwardForTraining(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
@@ -1131,6 +1148,9 @@ AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossDelaySteps.set -> void
 AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossRampSteps.get -> int
 AiDotNet.Safety.Watermarking.StegaStampOptions.EdgeLossRampSteps.set -> void
 AiDotNet.NeuralNetworks.Layers.DenseLayer<T>.TryComputeFusedLoss(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! target, AiDotNet.Interfaces.ILossFunction<T>! loss) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>?
+virtual AiDotNet.Diffusion.DiffusionModelBase<T>.GetLastLoss() -> T
+AiDotNet.Diffusion.Attention.DiffusionAttention<T>.DiffusionAttention(int channels, int numHeads = 8, int spatialSize = 64, bool useCausalMask = false, bool residualGroupNorm = false) -> void
+*REMOVED*AiDotNet.Diffusion.Attention.DiffusionAttention<T>.DiffusionAttention(int channels, int numHeads = 8, int spatialSize = 64, int flashAttentionThreshold = 256, bool useCausalMask = false) -> void
 override AiDotNet.NeuralNetworks.NeuralNetwork<T>.ReleasesInferenceIntermediates.get -> bool
 override AiDotNet.NeuralNetworks.FeedForwardNeuralNetwork<T>.ReleasesInferenceIntermediates.get -> bool
 override AiDotNet.NeuralNetworks.Transformer<T>.ReleasesInferenceIntermediates.get -> bool
@@ -1142,3 +1162,61 @@ AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.Us
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
 AiDotNet.Data.Sampling.WeightedSamplerBase<T>.CumulativeProbabilities -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.Diffusion.DDPMModel<T>.CanPredictFromTimestepTensor.get -> bool
+override AiDotNet.Diffusion.DDPMModel<T>.PredictTrainingNoise(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! noisySample, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! timesteps, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input, AiDotNet.Tensors.LinearAlgebra.Tensor<T>! expectedOutput) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultConformerLayers(int encoderDim = 512, int numLayers = 18, int numAttentionHeads = 8, int feedForwardExpansionFactor = 4, int numMels = 80, int vocabSize = 5000, double dropoutRate = 0.1, int maxSequenceLength = 750, int convKernelSize = 31) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+*REMOVED*static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultConformerLayers(int encoderDim = 512, int numLayers = 18, int numAttentionHeads = 8, int feedForwardExpansionFactor = 4, int numMels = 80, int vocabSize = 5000, double dropoutRate = 0.1, int maxSequenceLength = 750) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
+AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>
+const AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.MinimumExtent = 7 -> int
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.SupportsTraining.get -> bool
+AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.ConvSubsamplingLayer(int inputFeatures, int modelDim) -> void
+static AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.Subsampled(int extent) -> int
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.ForwardTraced(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.UpdateParameters(T learningRate) -> void
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.ResetState() -> void
+AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.AppendDeclaredParameterComponents(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>.DeclaredParameterComponent>! components) -> void
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.EnsureInitialized() -> void
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.GetSubLayers() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>!
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.HasCompleteConstructionObjectState.get -> bool
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.HasDeclaredSubLayerStructure.get -> bool
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.WriteConstructionObjects(System.Collections.Generic.Dictionary<string!, object!>! __values) -> void
+override AiDotNet.NeuralNetworks.Layers.ConvSubsamplingLayer<T>.WriteConstructionState(System.Collections.Generic.Dictionary<string!, string!>! __metadata) -> void
+AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.AppendDeclaredParameterComponents(System.Collections.Generic.List<AiDotNet.NeuralNetworks.Layers.LayerBase<T>.DeclaredParameterComponent>! components) -> void
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.EnsureInitialized() -> void
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.GetSubLayers() -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.ILayer<T>!>!
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.HasCompleteConstructionObjectState.get -> bool
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.HasDeclaredSubLayerStructure.get -> bool
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.WriteConstructionObjects(System.Collections.Generic.Dictionary<string!, object!>! __values) -> void
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.WriteConstructionState(System.Collections.Generic.Dictionary<string!, string!>! __metadata) -> void
+AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.SupportsTraining.get -> bool
+AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.WhisperConvStemLayer(int numMels, int width) -> void
+static AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.OutputFrames(int frames) -> int
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.ForwardTraced(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! input) -> AiDotNet.Tensors.LinearAlgebra.Tensor<T>!
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.UpdateParameters(T learningRate) -> void
+override AiDotNet.NeuralNetworks.Layers.WhisperConvStemLayer<T>.ResetState() -> void
+static AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>.WithInputDepth(int inputDepth, int outputDepth, int kernelSize, int stride = 1, int padding = 0, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null, AiDotNet.Initialization.IInitializationStrategy<T>? initializationStrategy = null, AiDotNet.Interfaces.IActivationFunction<T>? nonlinearityForInit = null, int groups = 1, AiDotNet.Enums.BiasMode biasMode = AiDotNet.Enums.BiasMode.Auto) -> AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>!
+*REMOVED*static AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>.WithInputDepth(int inputDepth, int outputDepth, int kernelSize, int stride = 1, int padding = 0, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null, AiDotNet.Initialization.IInitializationStrategy<T>? initializationStrategy = null, AiDotNet.Interfaces.IActivationFunction<T>? nonlinearityForInit = null, int groups = 1) -> AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>!
+AiDotNet.NeuralNetworks.NeuralNetworkBase<T>.TrainableParameterCount.get -> long
+AiDotNet.Models.ModelBase<T, TInput, TOutput>.TrainableParameterCount.get -> long
+AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0, AiDotNet.Interfaces.IActivationFunction<T>? ffnActivation = null) -> void
+*REMOVED*AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0) -> void
+AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.ConfigureProjectionBiases(bool query, bool value) -> AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>!
+AiDotNet.NeuralNetworks.Layers.MultiHeadAttentionLayer<T>.HasProjectionBiases.get -> bool
+AiDotNet.Attributes.ScalarKernelAttribute
+AiDotNet.Attributes.ScalarKernelAttribute.ScalarKernelAttribute(string! reason) -> void
+AiDotNet.Attributes.ScalarKernelAttribute.Reason.get -> string!
+AiDotNet.ComputerVision.Detection.ObjectDetection.ObjectDetectorBase<T>.DetectEachImage(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, double confidenceThreshold, double nmsThreshold) -> AiDotNet.ComputerVision.Detection.ObjectDetection.BatchDetectionResult<T>!
+override AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.CascadeRCNN<T>.DetectBatch(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, double confidenceThreshold, double nmsThreshold) -> AiDotNet.ComputerVision.Detection.ObjectDetection.BatchDetectionResult<T>!
+override AiDotNet.ComputerVision.Detection.ObjectDetection.RCNN.FasterRCNN<T>.DetectBatch(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! images, double confidenceThreshold, double nmsThreshold) -> AiDotNet.ComputerVision.Detection.ObjectDetection.BatchDetectionResult<T>!
+override AiDotNet.Diffusion.LatentDiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
+virtual AiDotNet.Diffusion.DiffusionModelBase<T>.IsBatchedTrainingSample(AiDotNet.Tensors.LinearAlgebra.Tensor<T>! sample) -> bool
+override AiDotNet.ComputerVision.Detection.Backbones.ResNet<T>.SetTrainingMode(bool isTraining) -> void
+override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.SetTrainingMode(bool training) -> void
+AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.get -> double
+AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.BoxScoreThreshold.set -> void
+override AiDotNet.ComputerVision.Detection.TextDetection.EAST<T>.RegisterGeneratedState(AiDotNet.Models.ModelStateRegistry<T>! state) -> void
+*REMOVED*AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double
+AiDotNet.Document.Options.DocBankOptions.LearningRate.get -> double?

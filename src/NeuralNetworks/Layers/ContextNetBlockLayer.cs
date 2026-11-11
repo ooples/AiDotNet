@@ -146,6 +146,7 @@ public partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSerialization
         if (_residualBatchNorm is not null) yield return _residualBatchNorm;
     }
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <inheritdoc />
@@ -197,6 +198,7 @@ public partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSerialization
         };
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank != 3)
@@ -249,11 +251,13 @@ public partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSerialization
         return _dropout is null ? hidden : _dropout.Forward(hidden);
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         foreach (var layer in TrainableSubLayers()) layer.UpdateParameters(learningRate);
     }
 
+    /// <inheritdoc />
     public override void SetTrainingMode(bool isTraining)
     {
         base.SetTrainingMode(isTraining);
@@ -261,6 +265,7 @@ public partial class ContextNetBlockLayer<T> : LayerBase<T>, ILayerSerialization
         _dropout?.SetTrainingMode(isTraining);
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         foreach (var layer in TrainableSubLayers()) layer.ResetState();

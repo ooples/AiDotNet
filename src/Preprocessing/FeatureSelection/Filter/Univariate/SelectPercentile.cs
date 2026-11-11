@@ -26,7 +26,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Filter.Univariate;
 /// <typeparam name="T">The numeric type for calculations (e.g., float, double).</typeparam>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SelectPercentile<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>
 {
     private readonly double _percentile;
     private readonly SelectKBestScoreFunc _scoringFunction;

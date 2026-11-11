@@ -21,10 +21,15 @@ public class TruthfulQaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "TruthfulQA";
+    /// <inheritdoc />
     public override string Description => "TruthfulQA truthfulness benchmark (817 questions, 38 categories)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.MaxQuestionLength;
+    /// <inheritdoc />
     public override int OutputDimension => _options.MaxAnswerLength;
 
     public TruthfulQaDataLoader(TruthfulQaDataLoaderOptions? options = null)

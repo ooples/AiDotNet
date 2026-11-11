@@ -16,6 +16,7 @@ namespace AiDotNet.FederatedLearning.Heterogeneity;
 [PipelineStage(PipelineStage.Training)]
 public sealed class FedNovaHeterogeneityCorrection<T> : FederatedHeterogeneityCorrectionBase<T>
 {
+    /// <inheritdoc />
     public override Vector<T> Correct(int clientId, int roundNumber, Vector<T> globalParameters, Vector<T> localParameters, int localEpochs)
     {
         if (globalParameters.Length != localParameters.Length)
@@ -37,6 +38,7 @@ public sealed class FedNovaHeterogeneityCorrection<T> : FederatedHeterogeneityCo
         return corrected;
     }
 
+    /// <inheritdoc />
     public override string GetCorrectionName() => "FedNova";
 }
 

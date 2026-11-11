@@ -75,10 +75,15 @@ public class CityscapesDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
     private int _h;
     private int _w;
 
+    /// <inheritdoc />
     public override string Name => "Cityscapes";
+    /// <inheritdoc />
     public override string Description => "Cityscapes urban-driving semantic segmentation (fine annotations)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _h * _w * 3;
+    /// <inheritdoc />
     public override int OutputDimension => _h * _w; // per-pixel int labels (not one-hot)
 
     public CityscapesDataLoader(CityscapesDataLoaderOptions? options = null)

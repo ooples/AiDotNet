@@ -14,10 +14,15 @@ public class SomethingSomethingV2DataLoader<T> : InputOutputDataLoaderBase<T, Te
     private int _sampleCount;
     private int _featureSize;
 
+    /// <inheritdoc />
     public override string Name => "SomethingSomethingV2";
+    /// <inheritdoc />
     public override string Description => "Something-Something V2 action recognition (174 classes)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _featureSize;
+    /// <inheritdoc />
     public override int OutputDimension => NumClasses;
 
     public SomethingSomethingV2DataLoader(SomethingSomethingV2DataLoaderOptions? options = null)
@@ -27,6 +32,7 @@ public class SomethingSomethingV2DataLoader<T> : InputOutputDataLoaderBase<T, Te
         _featureSize = _options.FramesPerVideo * _options.FrameHeight * _options.FrameWidth * 3;
     }
 
+    /// <inheritdoc />
     protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
     {
         // Expects JSON label files + frame directories
@@ -156,11 +162,13 @@ public class SomethingSomethingV2DataLoader<T> : InputOutputDataLoaderBase<T, Te
         InitializeIndices(totalSamples);
     }
 
+    /// <inheritdoc />
     protected override void UnloadDataCore()
     {
         LoadedFeatures = default; LoadedLabels = default; Indices = null; _sampleCount = 0;
     }
 
+    /// <inheritdoc />
     protected override (Tensor<T> Features, Tensor<T> Labels) ExtractBatch(int[] indices)
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
@@ -168,6 +176,7 @@ public class SomethingSomethingV2DataLoader<T> : InputOutputDataLoaderBase<T, Te
         return (VideoLoaderHelper.ExtractTensorBatch(features, indices), VideoLoaderHelper.ExtractTensorBatch(labels, indices));
     }
 
+    /// <inheritdoc />
     public override (IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Train,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Validation,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Test) Split(

@@ -12,6 +12,7 @@ public class ChannelShuffle<T> : ImageAugmenterBase<T>
 {
     public ChannelShuffle(double probability = 0.5) : base(probability) { }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         if (data.Channels < 2) return data.Clone();

@@ -21,10 +21,15 @@ public class StreamingTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "StreamingText";
+    /// <inheritdoc />
     public override string Description => "Streaming text dataset for LLM training";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.SequenceLength;
+    /// <inheritdoc />
     public override int OutputDimension => _options.SequenceLength;
 
     public StreamingTextDataset(StreamingTextDatasetOptions? options = null)
@@ -33,6 +38,7 @@ public class StreamingTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("streaming_text");
     }
 
+    /// <inheritdoc />
     protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
     {
         if (!Directory.Exists(_dataPath))
@@ -110,11 +116,13 @@ public class StreamingTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         InitializeIndices(totalSeqs);
     }
 
+    /// <inheritdoc />
     protected override void UnloadDataCore()
     {
         LoadedFeatures = default; LoadedLabels = default; Indices = null; _sampleCount = 0;
     }
 
+    /// <inheritdoc />
     protected override (Tensor<T> Features, Tensor<T> Labels) ExtractBatch(int[] indices)
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
@@ -133,6 +141,7 @@ public class StreamingTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         return (bf, bl);
     }
 
+    /// <inheritdoc />
     public override (IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Train,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Validation,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Test) Split(

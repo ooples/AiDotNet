@@ -973,6 +973,7 @@ public partial class VectorModel<T> : ModelBase<T, Matrix<T>, Vector<T>>, IInter
         }
     }
 
+    /// <inheritdoc />
     public override void SetActiveFeatureIndices(IEnumerable<int> featureIndices)
     {
         if (featureIndices == null)

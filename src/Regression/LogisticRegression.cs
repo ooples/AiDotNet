@@ -1,5 +1,6 @@
 using AiDotNet.Attributes;
 using AiDotNet.Enums;
+using AiDotNet.Optimizers;
 
 namespace AiDotNet.Regression;
 
@@ -145,6 +146,7 @@ public partial class LogisticRegression<T> : RegressionBase<T>
 
     private List<T> _classLabels = new List<T>();
 
+    /// <inheritdoc />
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         if (x.Rows != y.Length)
@@ -173,41 +175,24 @@ public partial class LogisticRegression<T> : RegressionBase<T>
         // which is exactly why standardization is the standing advice for gradient-based logistic
         // regression. The back-transform at the end keeps Coefficients and Intercept meaningful on the
         // caller's own scale, so nothing outside this method has to know.
-        var (featureMean, featureStd) = ComputeStandardization(x, p);
-        Matrix<T> xStandardized = Standardize(x, featureMean, featureStd);
+        var (standardized, targets, featureMean, featureStd) = StandardizedData(x, y);
+
+        // One objective for every solver: the mean log loss plus the regularization penalty, over [coefficients,
+        // intercept]. This was a hand-written gradient ascent of 1,000 fixed steps, 160x slower than scikit-learn's
+        // L-BFGS on 20,000 rows to the same accuracy, and it added the penalty's gradient with the ascent's sign, so
+        // regularization pushed the coefficients AWAY from zero during the fit and a single shrink at the end stood
+        // in for it. As a term of the minimized objective the penalty now acts throughout.
+        var solver = _options.Solver ?? LBFGSOptimizer<T, Matrix<T>, Vector<T>>.CreateForFunction();
+        var solution = solver.Minimize(
+            new Vector<T>(p + 1),
+            weights => LogLossAndGradient(weights, standardized, targets, p),
+            _options.MaxIterations,
+            NumOps.FromDouble(_options.Tolerance));
 
         Coefficients = new Vector<T>(p);
-        Intercept = NumOps.Zero;
-        // Note: Do NOT apply Regularize(x) to the input matrix - it returns a penalty, not regularized data
-        // Scale learning rate by sample count for stable convergence
-        T scaledLearningRate = NumOps.Divide(NumOps.FromDouble(_options.LearningRate), NumOps.FromDouble(n));
-        T interceptLearningRate = NumOps.FromDouble(_options.LearningRate);
-        for (int iteration = 0; iteration < _options.MaxIterations; iteration++)
-        {
-            Vector<T> predictions = Predict(xStandardized);
-            Vector<T> errors = y.Subtract(predictions);
-            // Calculate gradient: X^T * (y - predictions)
-            Matrix<T> xTranspose = xStandardized.Transpose();
-            Vector<T> gradient = xTranspose.Multiply(errors);
-            // Apply regularization to the gradient (adds penalty term)
-            if (Regularization != null)
-            {
-                gradient = ApplyRegularizationGradient(gradient);
-            }
-            // Update coefficients with scaled learning rate for stable convergence
-            Vector<T> gradientUpdate = gradient.Multiply(scaledLearningRate);
-            Coefficients = Coefficients.Add(gradientUpdate);
-            // Update intercept with original learning rate (averaged error)
-            T avgError = NumOps.Divide(errors.Sum(), NumOps.FromDouble(n));
-            Intercept = NumOps.Add(Intercept, NumOps.Multiply(interceptLearningRate, avgError));
-            if (HasConvergedScaled(gradient, n))
-                break;
-        }
-        // Apply final regularization to coefficients
-        if (Regularization != null)
-        {
-            Coefficients = Regularization.Regularize(Coefficients);
-        }
+        for (int j = 0; j < p; j++)
+            Coefficients[j] = solution[j];
+        Intercept = solution[p];
 
         // Back to the caller's scale: a standardized fit b*(x - mu)/sigma + a is the same linear
         // predictor as (b/sigma) * x + (a - sum(b * mu / sigma)).
@@ -225,88 +210,209 @@ public partial class LogisticRegression<T> : RegressionBase<T>
     }
 
     /// <summary>
-    /// Computes the per-feature mean and standard deviation used to standardize the design matrix.
+    /// Creates a fixed-step gradient descent solver at this model's <see cref="LogisticRegressionOptions{T}.LearningRate"/>,
+    /// for <see cref="LogisticRegressionOptions{T}.Solver"/>.
     /// </summary>
-    /// <param name="x">The design matrix.</param>
-    /// <param name="featureCount">Number of columns in <paramref name="x"/>.</param>
-    /// <returns>The per-feature mean and standard deviation; a constant column gets a deviation of 1.</returns>
-    private (Vector<T> Mean, Vector<T> Std) ComputeStandardization(Matrix<T> x, int featureCount)
-    {
-        var mean = new Vector<T>(featureCount);
-        var std = new Vector<T>(featureCount);
-        int n = x.Rows;
-
-        for (int j = 0; j < featureCount; j++)
-        {
-            double sum = 0.0;
-            for (int i = 0; i < n; i++)
-            {
-                sum += NumOps.ToDouble(x[i, j]);
-            }
-            double m = sum / n;
-
-            double sq = 0.0;
-            for (int i = 0; i < n; i++)
-            {
-                double d = NumOps.ToDouble(x[i, j]) - m;
-                sq += d * d;
-            }
-            double s = Math.Sqrt(sq / n);
-            if (s < 1e-10) s = 1.0;
-
-            mean[j] = NumOps.FromDouble(m);
-            std[j] = NumOps.FromDouble(s);
-        }
-
-        return (mean, std);
-    }
-
-    /// <summary>
-    /// Returns a copy of the design matrix with each column centered and scaled.
-    /// </summary>
-    private Matrix<T> Standardize(Matrix<T> x, Vector<T> mean, Vector<T> std)
-    {
-        var result = new Matrix<T>(x.Rows, x.Columns);
-        for (int i = 0; i < x.Rows; i++)
-        {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                result[i, j] = NumOps.Divide(NumOps.Subtract(x[i, j], mean[j]), std[j]);
-            }
-        }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Applies regularization to the gradient during training.
-    /// </summary>
-    /// <param name="gradient">The current gradient to be regularized.</param>
-    /// <returns>The regularized gradient.</returns>
+    /// <returns>A gradient descent optimizer configured for function minimization.</returns>
     /// <remarks>
     /// <para>
-    /// This method applies regularization to the gradient during the training process if a regularization method is specified.
-    /// Regularization modifies the gradient to penalize large coefficient values, helping to prevent overfitting.
+    /// This is how the model was fitted before L-BFGS became the default. It reaches the same minimum given enough
+    /// iterations, but typically needs many more of them.
     /// </para>
-    /// <para><b>For Beginners:</b> This adjusts how the model learns to prevent it from becoming too complex.
-    /// 
-    /// Regularization works by:
-    /// - Adding a penalty for large coefficient values
-    /// - Encouraging the model to use smaller, more balanced values
-    /// - Helping the model focus on the most important features
-    /// 
-    /// This is like teaching the model to prefer simpler explanations over complicated ones,
-    /// which typically leads to better performance on new data.
+    /// <para><b>For Beginners:</b> Only use this if you specifically want plain gradient descent:
+    /// <code>
+    /// var options = new LogisticRegressionOptions&lt;double&gt; { LearningRate = 0.05, MaxIterations = 5000 };
+    /// var model = new LogisticRegression&lt;double&gt;(options);
+    /// options.Solver = model.CreateGradientDescentSolver();
+    /// </code>
     /// </para>
     /// </remarks>
-    private Vector<T> ApplyRegularizationGradient(Vector<T> gradient)
+    public IFunctionOptimizer<T> CreateGradientDescentSolver()
+        => GradientDescentOptimizer<T, Matrix<T>, Vector<T>>.CreateForFunction(
+            new GradientDescentOptimizerOptions<T, Matrix<T>, Vector<T>> { InitialLearningRate = _options.LearningRate });
+
+    /// <summary>Rows per block of the objective's parallel pass.</summary>
+    private const int LossBlockRows = 2048;
+
+    /// <summary>
+    /// The objective every solver minimizes, and its gradient, at <paramref name="weights"/> = [coefficients, intercept].
+    /// </summary>
+    /// <remarks>
+    /// The mean log loss uses <c>softplus(z) - y z</c>, which stays finite for any margin <c>z</c>. The penalty's value is
+    /// recovered from the regularizer's gradient by integrating along the ray from zero, <c>integral over t in [0, 1] of
+    /// beta . g(t beta)</c>, with the midpoint rule <c>beta . g(beta / 2)</c>: exact for L1, L2 and elastic net, whose
+    /// penalty gradients are constant or linear along that ray for t &gt; 0. A rule that samples t = 0 is not exact for L1,
+    /// whose gradient there is the subgradient 0 rather than the constant it takes on the rest of the ray. The objective and gradient must agree for a line search to work, and
+    /// <see cref="IRegularization{T, TInput, TOutput}"/> exposes only the gradient. The intercept is not penalized.
+    /// </remarks>
+    internal (T Objective, Vector<T> Gradient) LogLossAndGradient(
+        Vector<T> weights, double[] x, double[] y, int p)
     {
-        if (Regularization != null)
+        int n = y.Length;
+        var coefficients = new Vector<T>(p);
+        var beta = new double[p];
+        for (int j = 0; j < p; j++)
         {
-            return Regularization.Regularize(gradient, Coefficients);
+            coefficients[j] = weights[j];
+            beta[j] = NumOps.ToDouble(weights[j]);
         }
 
-        return gradient;
+        double intercept = NumOps.ToDouble(weights[p]);
+
+        // One pass over the rows: the margin, its loss term and residual, and the residual's share of the gradient.
+        // Fixed blocks of rows run in parallel and their sums are added in block order, so the result does not
+        // depend on how many threads ran it. Each block keeps [gradient sums..., loss, residual total].
+        int blocks = (n + LossBlockRows - 1) / LossBlockRows;
+        var partials = new double[blocks][];
+        System.Threading.Tasks.Parallel.For(0, blocks, block =>
+        {
+            var sums = new double[p + 2];
+            int end = Math.Min(n, (block + 1) * LossBlockRows);
+            for (int i = block * LossBlockRows; i < end; i++)
+            {
+                int offset = i * p;
+                double z = intercept;
+                for (int j = 0; j < p; j++) z += x[offset + j] * beta[j];
+
+                // One exponential serves both terms: with e = exp(-|z|),
+                // softplus(z) = max(z, 0) + log(1 + e), and sigmoid(z) = 1 / (1 + e) for z >= 0, e / (1 + e) below.
+                double e = Math.Exp(-Math.Abs(z));
+                double onePlusE = 1.0 + e;
+                sums[p] += (z > 0 ? z : 0) + Math.Log(onePlusE) - y[i] * z;
+
+                double residual = (z >= 0 ? 1.0 : e) / onePlusE - y[i];
+                sums[p + 1] += residual;
+                for (int j = 0; j < p; j++) sums[j] += residual * x[offset + j];
+            }
+
+            partials[block] = sums;
+        });
+
+        var gradientSums = new double[p];
+        double loss = 0;
+        double residualTotal = 0;
+        foreach (var sums in partials)
+        {
+            for (int j = 0; j < p; j++) gradientSums[j] += sums[j];
+            loss += sums[p];
+            residualTotal += sums[p + 1];
+        }
+
+        var coefficientGradient = new Vector<T>(p);
+        for (int j = 0; j < p; j++) coefficientGradient[j] = NumOps.FromDouble(gradientSums[j] / n);
+        T objective = NumOps.FromDouble(loss / n);
+        T residualSum = NumOps.FromDouble(residualTotal);
+
+        if (Regularization != null)
+        {
+            var zero = new Vector<T>(p);
+            var atEnd = Regularization.Regularize(zero, coefficients);
+            var atMiddle = Regularization.Regularize(zero, coefficients.Multiply(NumOps.FromDouble(0.5)));
+            objective = NumOps.Add(objective, coefficients.DotProduct(atMiddle));
+            coefficientGradient = coefficientGradient.Add(atEnd);
+        }
+
+        var gradient = new Vector<T>(p + 1);
+        for (int j = 0; j < p; j++)
+            gradient[j] = coefficientGradient[j];
+        gradient[p] = NumOps.Divide(residualSum, NumOps.FromDouble(n));
+        return (objective, gradient);
+    }
+
+    /// <summary>
+    /// The design matrix with each column centered and scaled, row-major in double precision, the 0/1 targets, and the
+    /// per-feature mean and standard deviation used (a constant column gets a deviation of 1): the data every evaluation
+    /// of the objective reads, and the statistics that map the fit back to the caller's scale.
+    /// </summary>
+    /// <remarks>
+    /// One conversion to double, then the column sums, the squared deviations and the scaling each run over fixed
+    /// blocks of rows in parallel, merged in block order so the result does not depend on the thread count. Three serial
+    /// passes through the generic matrix took about three times as long as the whole L-BFGS solve on 20,000 x 20.
+    /// </remarks>
+    private (double[] X, double[] Y, Vector<T> Mean, Vector<T> Std) StandardizedData(Matrix<T> x, Vector<T> y)
+    {
+        int n = x.Rows;
+        int p = x.Columns;
+        int blocks = (n + LossBlockRows - 1) / LossBlockRows;
+        var values = new double[n * p];
+
+        var blockSums = new double[blocks][];
+        System.Threading.Tasks.Parallel.For(0, blocks, block =>
+        {
+            var sums = new double[p];
+            int end = Math.Min(n, (block + 1) * LossBlockRows);
+            for (int i = block * LossBlockRows; i < end; i++)
+            {
+                var row = x.GetRowReadOnlySpan(i);
+                int offset = i * p;
+                for (int j = 0; j < p; j++)
+                {
+                    double value = NumOps.ToDouble(row[j]);
+                    values[offset + j] = value;
+                    sums[j] += value;
+                }
+            }
+
+            blockSums[block] = sums;
+        });
+
+        var means = new double[p];
+        foreach (var sums in blockSums)
+            for (int j = 0; j < p; j++) means[j] += sums[j];
+        for (int j = 0; j < p; j++) means[j] /= n;
+
+        var blockSquares = new double[blocks][];
+        System.Threading.Tasks.Parallel.For(0, blocks, block =>
+        {
+            var squares = new double[p];
+            int end = Math.Min(n, (block + 1) * LossBlockRows);
+            for (int i = block * LossBlockRows; i < end; i++)
+            {
+                int offset = i * p;
+                for (int j = 0; j < p; j++)
+                {
+                    double d = values[offset + j] - means[j];
+                    squares[j] += d * d;
+                }
+            }
+
+            blockSquares[block] = squares;
+        });
+
+        var squareTotals = new double[p];
+        foreach (var squares in blockSquares)
+            for (int j = 0; j < p; j++) squareTotals[j] += squares[j];
+
+        // The scaling applied is the one stored in T, so the back-transform divides by exactly what the fit saw.
+        var mean = new Vector<T>(p);
+        var std = new Vector<T>(p);
+        var center = new double[p];
+        var scale = new double[p];
+        for (int j = 0; j < p; j++)
+        {
+            double deviation = Math.Sqrt(squareTotals[j] / n);
+            if (deviation < 1e-10) deviation = 1.0;
+
+            mean[j] = NumOps.FromDouble(means[j]);
+            std[j] = NumOps.FromDouble(deviation);
+            center[j] = NumOps.ToDouble(mean[j]);
+            scale[j] = NumOps.ToDouble(std[j]);
+        }
+
+        System.Threading.Tasks.Parallel.For(0, blocks, block =>
+        {
+            int end = Math.Min(n, (block + 1) * LossBlockRows);
+            for (int i = block * LossBlockRows; i < end; i++)
+            {
+                int offset = i * p;
+                for (int j = 0; j < p; j++) values[offset + j] = (values[offset + j] - center[j]) / scale[j];
+            }
+        });
+
+        var labels = y.AsSpan();
+        var targets = new double[labels.Length];
+        for (int i = 0; i < labels.Length; i++) targets[i] = NumOps.ToDouble(labels[i]);
+        return (values, targets, mean, std);
     }
 
     /// <summary>
@@ -367,44 +473,5 @@ public partial class LogisticRegression<T> : RegressionBase<T>
     {
         T expNegX = NumOps.Exp(NumOps.Negate(x));
         return NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNegX));
-    }
-
-    /// <summary>
-    /// Determines if the training process has converged based on the magnitude of the gradient.
-    /// </summary>
-    /// <param name="gradient">The current gradient vector.</param>
-    /// <returns>True if the maximum absolute gradient value is less than the tolerance, indicating convergence; otherwise, false.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method checks if the training process has converged by comparing the maximum absolute value in the gradient
-    /// to the specified tolerance. If the maximum gradient is smaller than the tolerance, the model is considered to have converged,
-    /// meaning that further iterations would not significantly improve the model.
-    /// </para>
-    /// <para><b>For Beginners:</b> This checks if the model has finished learning.
-    /// 
-    /// Convergence means:
-    /// - The model's predictions aren't improving much anymore
-    /// - The adjustments being made are very small
-    /// - Further training is unlikely to give better results
-    /// 
-    /// It's like knowing when to stop studying for a test - at some point, more studying won't improve your score much,
-    /// and it's better to save your energy.
-    /// </para>
-    /// </remarks>
-    private bool HasConverged(Vector<T> gradient)
-    {
-        T maxGradient = gradient.Max(NumOps.Abs) ?? NumOps.Zero;
-        return NumOps.LessThan(maxGradient, NumOps.FromDouble(_options.Tolerance));
-    }
-
-    /// <summary>
-    /// Checks convergence using scaled gradient (accounts for sample size).
-    /// </summary>
-    private bool HasConvergedScaled(Vector<T> gradient, int n)
-    {
-        // Scale tolerance by sample count to match gradient scaling
-        T maxGradient = gradient.Max(NumOps.Abs) ?? NumOps.Zero;
-        T scaledMaxGradient = NumOps.Divide(maxGradient, NumOps.FromDouble(n));
-        return NumOps.LessThan(scaledMaxGradient, NumOps.FromDouble(_options.Tolerance));
     }
 }

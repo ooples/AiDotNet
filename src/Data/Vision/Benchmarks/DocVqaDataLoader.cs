@@ -29,10 +29,15 @@ public class DocVqaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "DocVQA";
+    /// <inheritdoc />
     public override string Description => "DocVQA document visual question answering";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.ImageWidth * _options.ImageHeight * 3;
+    /// <inheritdoc />
     public override int OutputDimension => _options.MaxAnswerLength;
 
     public DocVqaDataLoader(DocVqaDataLoaderOptions? options = null)
@@ -41,6 +46,7 @@ public class DocVqaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("docvqa");
     }
 
+    /// <inheritdoc />
     protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
     {
         string splitName = _options.Split == DatasetSplit.Test ? "test"
@@ -138,11 +144,13 @@ public class DocVqaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         InitializeIndices(totalSamples);
     }
 
+    /// <inheritdoc />
     protected override void UnloadDataCore()
     {
         LoadedFeatures = default; LoadedLabels = default; Indices = null; _sampleCount = 0;
     }
 
+    /// <inheritdoc />
     protected override (Tensor<T> Features, Tensor<T> Labels) ExtractBatch(int[] indices)
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
@@ -159,6 +167,7 @@ public class DocVqaDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         return (bf, bl);
     }
 
+    /// <inheritdoc />
     public override (IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Train,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Validation,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Test) Split(

@@ -25,8 +25,11 @@ public class LeavePOutStrategy<T> : ICrossValidationStrategy<T>
     private readonly int _p;
     private readonly int? _maxFolds;
 
+    /// <inheritdoc />
     public string Name => $"Leave-{_p}-Out";
+    /// <inheritdoc />
     public string Description => $"Leave-{_p}-Out cross-validation (exhaustive for small datasets).";
+    /// <inheritdoc />
     public int NumSplits { get; private set; }
 
     /// <summary>
@@ -42,6 +45,7 @@ public class LeavePOutStrategy<T> : ICrossValidationStrategy<T>
         _maxFolds = maxFolds;
     }
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         if (dataSize <= _p)

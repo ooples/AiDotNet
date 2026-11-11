@@ -31,10 +31,15 @@ public class MmluDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "MMLU";
+    /// <inheritdoc />
     public override string Description => "Massive Multitask Language Understanding (57-subject benchmark)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => Choices * _options.MaxQuestionLength;
+    /// <inheritdoc />
     public override int OutputDimension => Choices;
 
     public MmluDataLoader(MmluDataLoaderOptions? options = null)

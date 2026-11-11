@@ -47,10 +47,14 @@ public class PurgedKFoldStrategy<T> : ICrossValidationStrategy<T>
         _timeIndices = timeIndices;
     }
 
+    /// <inheritdoc />
     public string Name => $"Purged {_k}-Fold";
+    /// <inheritdoc />
     public int NumSplits => _k;
+    /// <inheritdoc />
     public string Description => $"Purged {_k}-fold with {_purgeGap} time step gap to prevent temporal leakage.";
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         if (dataSize <= 0)

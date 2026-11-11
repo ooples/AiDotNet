@@ -125,6 +125,7 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
     /// </summary>
     private bool _normalizedWeightsApplied;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => _innerLayer.SupportsTraining;
 
     /// <summary>
@@ -504,6 +505,7 @@ public partial class SpectralNormalizationLayer<T> : LayerBase<T>, IShapeContrac
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

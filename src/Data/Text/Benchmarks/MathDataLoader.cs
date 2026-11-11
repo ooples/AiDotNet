@@ -30,10 +30,15 @@ public class MathDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "MATH";
+    /// <inheritdoc />
     public override string Description => "Hendrycks MATH competition math problems";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.MaxProblemLength;
+    /// <inheritdoc />
     public override int OutputDimension => _options.MaxSolutionLength;
 
     public MathDataLoader(MathDataLoaderOptions? options = null)

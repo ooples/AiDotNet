@@ -23,10 +23,15 @@ public class XSumDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "XSum";
+    /// <inheritdoc />
     public override string Description => "XSum extreme abstractive summarization (single-sentence summaries)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.MaxDocumentLength;
+    /// <inheritdoc />
     public override int OutputDimension => _options.MaxSummaryLength;
 
     public XSumDataLoader(XSumDataLoaderOptions? options = null)

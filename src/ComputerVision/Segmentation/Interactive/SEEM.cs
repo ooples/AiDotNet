@@ -191,6 +191,7 @@ public partial class SEEM<T> : Common.PromptableSegmentationBase<T>
             throw new ArgumentOutOfRangeException(nameof(options), "SEEM dimensions and stage depths must be positive.");
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -200,6 +201,7 @@ public partial class SEEM<T> : Common.PromptableSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

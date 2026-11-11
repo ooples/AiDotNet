@@ -37,10 +37,15 @@ public class Stl10DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "STL-10";
+    /// <inheritdoc />
     public override string Description => "STL-10 96×96 image classification + unlabeled SSL split";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => PixelsPerImage;
+    /// <inheritdoc />
     public override int OutputDimension => NumClasses;
 
     public Stl10DataLoader(Stl10DataLoaderOptions? options = null)

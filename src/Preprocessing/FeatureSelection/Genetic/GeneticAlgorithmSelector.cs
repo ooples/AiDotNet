@@ -22,7 +22,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Genetic;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _populationSize;
@@ -35,11 +35,14 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public int PopulationSize => _populationSize;
     public int NGenerations => _nGenerations;
     public double[]? FeatureImportances => _featureImportances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public GeneticAlgorithmSelector(
@@ -63,12 +66,14 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         _randomState = randomState;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "GeneticAlgorithmSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -213,12 +218,14 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return (sxx > 1e-10 && syy > 1e-10) ? sxy / Math.Sqrt(sxx * syy) : 0;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -235,11 +242,13 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("GeneticAlgorithmSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -252,6 +261,7 @@ public class GeneticAlgorithmSelector<T> : TransformerBase<T, Matrix<T>, Matrix<
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

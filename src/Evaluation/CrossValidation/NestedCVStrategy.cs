@@ -58,10 +58,14 @@ public class NestedCVStrategy<T> : ICrossValidationStrategy<T>
         _randomSeed = randomSeed;
     }
 
+    /// <inheritdoc />
     public string Name => $"Nested CV ({_outerFolds}×{_innerFolds})";
+    /// <inheritdoc />
     public int NumSplits => _outerFolds;
+    /// <inheritdoc />
     public string Description => $"Nested CV with {_outerFolds} outer folds and {_innerFolds} inner folds for hyperparameter tuning.";
 
+    /// <inheritdoc />
     public IEnumerable<(int[] TrainIndices, int[] ValidationIndices)> Split(int dataSize, ReadOnlySpan<T> labels = default)
     {
         // The outer loop is returned as splits

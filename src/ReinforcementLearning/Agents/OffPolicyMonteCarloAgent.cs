@@ -74,6 +74,7 @@ public partial class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBas
         _random = Random;
     }
 
+    /// <inheritdoc />
     public override Vector<T> SelectAction(Vector<T> state, bool training = true)
     {
         EnsureStateExists(state);
@@ -102,6 +103,7 @@ public partial class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBas
         return result;
     }
 
+    /// <inheritdoc />
     public override void StoreExperience(Vector<T> state, Vector<T> action, T reward, Vector<T> nextState, bool done)
     {
         int actionIndex = ArgMax(action);
@@ -114,6 +116,7 @@ public partial class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBas
         }
     }
 
+    /// <inheritdoc />
     public override T Train()
     {
         // Training happens during episode completion in StoreExperience
@@ -262,6 +265,7 @@ public partial class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBas
         return maxIndex;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics()
     {
         return new Dictionary<string, T>
@@ -271,11 +275,13 @@ public partial class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBas
         };
     }
 
+    /// <inheritdoc />
     public override void ResetEpisode()
     {
         _episode.Clear();
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Vector<T> input)
     {
         return SelectAction(input, training: false);
@@ -292,6 +298,7 @@ public partial class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBas
         return Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -324,8 +331,10 @@ public partial class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBas
                 () => _qTable));
     }
 
+    /// <inheritdoc />
     public override int FeatureCount => _options.ActionSize;
 
+    /// <inheritdoc />
     public override void SaveModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))
@@ -337,6 +346,7 @@ public partial class OffPolicyMonteCarloAgent<T> : ReinforcementLearningAgentBas
         System.IO.File.WriteAllBytes(filepath, data);
     }
 
+    /// <inheritdoc />
     public override void LoadModel(string filepath)
     {
         if (string.IsNullOrWhiteSpace(filepath))

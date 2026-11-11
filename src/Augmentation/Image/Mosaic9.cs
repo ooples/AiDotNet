@@ -47,6 +47,7 @@ public class Mosaic9<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         // Single-image fallback
@@ -55,6 +56,7 @@ public class Mosaic9<T> : ImageAugmenterBase<T>
         return ApplyMosaic9(images, context);
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();
