@@ -1169,3 +1169,7 @@ AiDotNet.Interpretability.Explainers.PartialDependenceResult<T>.IceCurves.get ->
 AiDotNet.Interpretability.Explainers.AttentionExplanation<T>.AttentionRollout.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
 AiDotNet.Interpretability.Explainers.AttentionExplanation<T>.AverageAttentionPerLayer.get -> System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Matrix<T>!>!
 AiDotNet.Interpretability.Explainers.AttentionExplanation<T>.LayerAttention.get -> System.Collections.Generic.List<AiDotNet.Tensors.LinearAlgebra.Tensor<T>!>!
+*REMOVED*AiDotNet.Interpretability.Explainers.GradCAMExplanation<T>.Heatmap.get -> T[,]!
+*REMOVED*AiDotNet.Interpretability.Explainers.GradCAMExplanation<T>.OriginalHeatmap.get -> T[,]!
+AiDotNet.Interpretability.Explainers.GradCAMExplanation<T>.Heatmap.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!
+AiDotNet.Interpretability.Explainers.GradCAMExplanation<T>.OriginalHeatmap.get -> AiDotNet.Tensors.LinearAlgebra.Matrix<T>!

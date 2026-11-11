@@ -166,4 +166,95 @@ internal static class ExplainerTensorOps<T>
         var atOrAboveZero = engine.TensorGreaterEqual(vector, engine.TensorFullLike(vector, NumOps.Zero)).Cast<int>().ToVector();
         return Enumerable.Select(atOrAboveZero, flag => flag != 0 ? "+" : "").ToArray();
     }
+
+    /// <summary>
+    /// The first <paramref name="length"/> entries of <paramref name="values"/>, zero-padded when it is shorter.
+    /// </summary>
+    public static Vector<T> PadOrTruncate(Vector<T> values, int length)
+    {
+        int count = Math.Min(values.Length, length);
+        if (count == length)
+        {
+            return values.GetSubVector(0, length);
+        }
+
+        if (count == 0)
+        {
+            return new Vector<T>(length);
+        }
+
+        var padded = AiDotNetEngine.Current.TensorConcatenate(
+            new[] { values.GetSubVector(0, count).AsTensor(), new Tensor<T>(new[] { length - count }) }, 0);
+        return padded.ToVector();
+    }
+
+    /// <summary>
+    /// A 0/1 vector of length <paramref name="length"/> that is 1 at indices in [start, end).
+    /// </summary>
+    public static Tensor<T> RangeIndicator(int length, int start, int end)
+    {
+        var engine = AiDotNetEngine.Current;
+        var indices = engine.TensorArange<T>(0, length, 1);
+        var atOrAfterStart = engine.TensorGreaterThan(indices, NumOps.FromDouble(start - 1));
+        var beforeEnd = engine.TensorLessThan(indices, NumOps.FromDouble(end));
+        return engine.TensorMultiply(atOrAfterStart, beforeEnd);
+    }
+
+    /// <summary>
+    /// (x - min) / (max - min), with a range below <paramref name="minimumRange"/> replaced by 1.
+    /// </summary>
+    public static Tensor<T> MinMaxNormalize(Tensor<T> values, double minimumRange)
+    {
+        if (values.Length == 0)
+        {
+            return values;
+        }
+
+        var engine = AiDotNetEngine.Current;
+        T minValue = engine.TensorMinValue(values);
+        T range = NumOps.Subtract(engine.TensorMaxValue(values), minValue);
+        if (NumOps.LessThan(range, NumOps.FromDouble(minimumRange)))
+        {
+            range = NumOps.One;
+        }
+
+        return engine.TensorDivideScalar(engine.TensorSubtractScalar(values, minValue), range);
+    }
+
+    /// <summary>
+    /// Bilinear resize of a [height, width] map, sampling source coordinate i / target * source along each axis
+    /// (clamped at the last row and column), as R_h * map * R_w^T with per-axis interpolation matrices.
+    /// </summary>
+    public static Tensor<T> BilinearResize(Tensor<T> map, int targetHeight, int targetWidth)
+    {
+        var engine = AiDotNetEngine.Current;
+        var rows = InterpolationMatrix(map.Shape[0], targetHeight);
+        var columns = InterpolationMatrix(map.Shape[1], targetWidth);
+        return engine.TensorMatMul(engine.TensorMatMul(rows, map), engine.TensorTranspose(columns));
+    }
+
+    /// <summary>
+    /// The [target, source] linear-interpolation matrix: row i weighs (1 - f) at floor(s) and f at
+    /// min(floor(s) + 1, source - 1), where s = i / target * source and f = s - floor(s).
+    /// </summary>
+    private static Tensor<T> InterpolationMatrix(int source, int target)
+    {
+        var engine = AiDotNetEngine.Current;
+        var lower = Enumerable.Range(0, target).Select(i => Math.Min((int)((long)i * source / target), source - 1)).ToArray();
+        var upper = lower.Select(index => Math.Min(index + 1, source - 1)).ToArray();
+        var lowerIndex = new Tensor<int>(lower, new[] { target });
+
+        var positions = engine.TensorMultiplyScalar(
+            engine.TensorDivideScalar(engine.TensorArange<T>(0, target, 1), NumOps.FromDouble(target)), NumOps.FromDouble(source));
+        var fraction = engine.TensorSubtract(positions, lowerIndex.Cast<T>()).Reshape(new[] { target, 1 });
+        var complement = engine.TensorSubtract(engine.TensorFullLike(fraction, NumOps.One), fraction);
+
+        var identity = engine.TensorEye<T>(source);
+        var lowerRows = engine.TensorIndexSelect(identity, lowerIndex, 0);
+        var upperRows = engine.TensorIndexSelect(identity, new Tensor<int>(upper, new[] { target }), 0);
+        var shape = new[] { target, source };
+        return engine.TensorAdd(
+            engine.TensorMultiply(lowerRows, engine.TensorBroadcastTo(complement, shape)),
+            engine.TensorMultiply(upperRows, engine.TensorBroadcastTo(fraction, shape)));
+    }
 }
