@@ -62,4 +62,69 @@ public sealed class CategoryValueMap<T>
         var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
         return engine.TensorWhere(found, engine.TensorIndexSelect(ValueTensor, position, 0), fallback);
     }
+
+    /// <summary>
+    /// Encodes the given columns of <paramref name="data"/> through their maps (other columns pass through).
+    /// Unknown categories, and every entry of a column without a map, take <paramref name="unknownValue"/> for
+    /// that column, or throw <see cref="ArgumentException"/> when <paramref name="throwOnUnknown"/> is set.
+    /// </summary>
+    internal static Matrix<T> EncodeColumns(
+        Matrix<T> data,
+        ICollection<int> columnsToEncode,
+        IReadOnlyDictionary<int, CategoryValueMap<T>> maps,
+        Func<int, T> unknownValue,
+        bool throwOnUnknown)
+    {
+        int numRows = data.Rows;
+        int numColumns = data.Columns;
+        var columns = new List<Tensor<T>>(numColumns);
+
+        for (int j = 0; j < numColumns; j++)
+        {
+            var raw = PreprocessingTensorOps.Column(data, j);
+            if (!columnsToEncode.Contains(j))
+            {
+                columns.Add(raw);
+                continue;
+            }
+
+            var fallback = PreprocessingTensorOps.Filled(new[] { numRows }, unknownValue(j));
+            Tensor<T> found;
+            Tensor<T> encoded;
+            if (maps.TryGetValue(j, out var map))
+            {
+                encoded = map.Map(raw, fallback, out found);
+            }
+            else
+            {
+                found = new Tensor<T>(new[] { numRows });
+                encoded = fallback;
+            }
+
+            if (throwOnUnknown)
+            {
+                var missing = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(found));
+                if (missing.Length > 0)
+                    throw new ArgumentException($"Unknown category value: {raw.GetFlat(missing[0])} in column {j}");
+            }
+
+            columns.Add(encoded);
+        }
+
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
+    }
+
+    /// <summary>
+    /// Fits a map for one column: the sorted distinct categories with, per category, the row count and the
+    /// sum of <paramref name="target"/>; <paramref name="encode"/> turns those (counts, sums) into the encoded values.
+    /// </summary>
+    internal static CategoryValueMap<T> FromTargetStatistics(
+        Tensor<T> column, Tensor<T> target, Func<Tensor<T>, Tensor<T>, Tensor<T>> encode)
+    {
+        var categories = PreprocessingTensorOps.SortedUnique(column);
+        var position = PreprocessingTensorOps.LookupSorted(categories, column, out _);
+        var counts = PreprocessingTensorOps.CategoryCounts<T>(position, categories.Length);
+        var sums = PreprocessingTensorOps.CategorySums(position, target, categories.Length);
+        return new CategoryValueMap<T>(categories, encode(counts, sums));
+    }
 }
