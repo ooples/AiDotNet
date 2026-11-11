@@ -67,6 +67,14 @@ internal static class RegressionEngineOps
     /// ignoring NaN. Returns index -1 when no allowed, non-NaN value exists.
     /// </summary>
     public static (int Index, T Value) MaskedArgMaxFirst<T>(Vector<T> values, bool[] allowed)
+        => MaskedArgMaxFirst(values, null, allowed);
+
+    /// <summary>
+    /// The first largest value among the positions where <paramref name="mask"/> is non-zero and
+    /// <paramref name="allowed"/> is true (either may be null for "everywhere"), ignoring NaN.
+    /// Returns index -1 when no such value exists.
+    /// </summary>
+    public static (int Index, T Value) MaskedArgMaxFirst<T>(Vector<T> values, Tensor<T>? mask, bool[]? allowed)
     {
         var numOps = MathHelper.GetNumericOperations<T>();
         var engine = AiDotNetEngine.Current;
@@ -77,14 +85,121 @@ internal static class RegressionEngineOps
 
         var tensor = Tensor<T>.FromVector(values);
         var floor = Tensor<T>.FromVector(engine.Fill(values.Length, numOps.MinValue));
-        var usable = engine.TensorWhere(allowed, engine.TensorWhere(engine.TensorIsNan(tensor), floor, tensor), floor);
+        var usable = engine.TensorWhere(engine.TensorIsNan(tensor), floor, tensor);
+        if (mask is not null)
+        {
+            usable = engine.TensorWhere(mask, usable, floor);
+        }
+
+        if (allowed is not null)
+        {
+            usable = engine.TensorWhere(allowed, usable, floor);
+        }
+
         int index = engine.TensorArgMax(usable, 0).ToArray()[0];
-        if (!allowed[index] || numOps.IsNaN(values[index]))
+        bool masked = mask is not null && numOps.Equals(mask[index], numOps.Zero);
+        bool disallowed = allowed is not null && !allowed[index];
+        if (masked || disallowed || numOps.IsNaN(values[index]))
         {
             return (-1, numOps.MinValue);
         }
 
         return (index, usable[index]);
+    }
+
+    /// <summary>
+    /// Picks the best split position from per-position scores over a sorted feature: the first
+    /// largest score where <paramref name="mask"/> is non-zero and <paramref name="allowed"/> is true
+    /// (either may be null), ignoring NaN. The threshold is the midpoint of the two sorted values
+    /// around the split. Returns index -1 when no position qualifies.
+    /// </summary>
+    public static (int Index, T Score, T Threshold) BestSortedSplit<T>(
+        Vector<T> scores, Tensor<T>? mask, bool[]? allowed, Vector<T> sortedFeature)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var (index, score) = MaskedArgMaxFirst(scores, mask, allowed);
+        if (index < 0)
+        {
+            return (-1, numOps.MinValue, numOps.Zero);
+        }
+
+        T threshold = numOps.Divide(
+            numOps.Add(sortedFeature[index], sortedFeature[index + 1]), numOps.FromDouble(2));
+        return (index, score, threshold);
+    }
+
+    /// <summary>
+    /// Weighted sum of squared deviations from running moments, element-wise:
+    /// sumWy2 - sumWy^2 / sumW where sumW &gt; 0, else 0.
+    /// </summary>
+    public static Vector<T> WeightedSseFromMoments<T>(Vector<T> sumW, Vector<T> sumWy, Vector<T> sumWy2)
+    {
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        var raw = engine.Subtract(sumWy2, engine.Divide(engine.Multiply(sumWy, sumWy), sumW));
+        return engine.TensorWhere(
+            engine.TensorGreaterThan(Tensor<T>.FromVector(sumW), numOps.Zero),
+            Tensor<T>.FromVector(raw),
+            Tensor<T>.FromVector(engine.FillZero(sumW.Length))).ToVector();
+    }
+
+    /// <summary>
+    /// Sample positions ordered by ascending key; equal keys keep their original order (stable),
+    /// exactly like LINQ OrderBy over the positions.
+    /// </summary>
+    public static int[] StableAscendingOrder<T>(Vector<T> keys)
+    {
+        return keys
+            .Select((key, index) => (Key: key, Index: index))
+            .OrderBy(p => p.Key, Comparer<T>.Default)
+            .Select(p => p.Index)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Running sums of <paramref name="sortedValues"/> for every split position: element s-1 is the
+    /// sum of the first s values, for s = 1..n-1 (n-1 elements; empty when n &lt; 2).
+    /// </summary>
+    public static Vector<T> SplitPrefixSums<T>(Vector<T> sortedValues)
+    {
+        int n = sortedValues.Length;
+        if (n < 2)
+        {
+            return new Vector<T>(0);
+        }
+
+        return AiDotNetEngine.Current.TensorCumSum(Tensor<T>.FromVector(sortedValues), 0)
+            .ToVector().GetSubVector(0, n - 1);
+    }
+
+    /// <summary>
+    /// Midpoints (v[s-1] + v[s]) / 2 of adjacent sorted values, for s = 1..n-1.
+    /// </summary>
+    public static Vector<T> AdjacentMidpoints<T>(Vector<T> sortedValues)
+    {
+        int n = sortedValues.Length;
+        if (n < 2)
+        {
+            return new Vector<T>(0);
+        }
+
+        var engine = AiDotNetEngine.Current;
+        var numOps = MathHelper.GetNumericOperations<T>();
+        return engine.Divide(
+            engine.Add(sortedValues.GetSubVector(0, n - 1), sortedValues.GetSubVector(1, n - 1)),
+            numOps.FromDouble(2));
+    }
+
+    /// <summary>
+    /// A 0/1 mask over split positions s = 1..n-1 that is 1 where v[s] &gt; v[s-1] (a real threshold
+    /// exists between the two sorted values).
+    /// </summary>
+    public static Tensor<T> AdjacentIncreaseMask<T>(Vector<T> sortedValues)
+    {
+        int n = sortedValues.Length;
+        return AiDotNetEngine.Current.TensorGreaterThan(
+            Tensor<T>.FromVector(sortedValues.GetSubVector(1, n - 1)),
+            Tensor<T>.FromVector(sortedValues.GetSubVector(0, n - 1)));
     }
 
     /// <summary>
