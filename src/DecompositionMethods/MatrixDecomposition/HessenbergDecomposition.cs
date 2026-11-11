@@ -690,64 +690,21 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
     private Vector<T> SolveHessenbergSystem(Matrix<T> H, Vector<T> b)
     {
         var n = H.Rows;
-        var augmented = new Matrix<T>(n, n + 1);
-
-        // Create augmented matrix [H | b]
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            for (int j = 0; j < n; j++)
-            {
-                augmented[i, j] = H[i, j];
-            }
-            augmented[i, n] = b[i];
+            return new Vector<T>(0);
         }
 
-        // Forward elimination with partial pivoting
-        for (int k = 0; k < n - 1; k++)
+        // Gaussian elimination with partial pivoting on H, as one engine solve.
+        var (solution, info) = Linalg.SolveEx(
+            Tensor<T>.FromMatrix(H),
+            Tensor<T>.FromVector(b, new[] { n, 1 }));
+        if (Engine.TensorCountNonzero(info) > 0)
         {
-            // For Hessenberg matrix, we only need to check row k and k+1 for pivoting
-            if (NumOps.LessThan(NumOps.Abs(augmented[k, k]), NumOps.Abs(augmented[k + 1, k])))
-            {
-                // Swap rows k and k+1
-                for (int j = k; j <= n; j++)
-                {
-                    var temp = augmented[k, j];
-                    augmented[k, j] = augmented[k + 1, j];
-                    augmented[k + 1, j] = temp;
-                }
-            }
-
-            // Eliminate element in row k+1 (only one element below diagonal in Hessenberg)
-            if (!NumOps.Equals(augmented[k, k], NumOps.Zero))
-            {
-                var factor = NumOps.Divide(augmented[k + 1, k], augmented[k, k]);
-                for (int j = k; j <= n; j++)
-                {
-                    augmented[k + 1, j] = NumOps.Subtract(augmented[k + 1, j],
-                        NumOps.Multiply(factor, augmented[k, j]));
-                }
-            }
+            throw new InvalidOperationException("Matrix is singular and cannot be solved.");
         }
 
-        // Back substitution
-        var x = new Vector<T>(n);
-        for (int i = n - 1; i >= 0; i--)
-        {
-            T sum = augmented[i, n];
-            for (int j = i + 1; j < n; j++)
-            {
-                sum = NumOps.Subtract(sum, NumOps.Multiply(augmented[i, j], x[j]));
-            }
-
-            if (NumOps.Equals(augmented[i, i], NumOps.Zero))
-            {
-                throw new InvalidOperationException("Matrix is singular and cannot be solved.");
-            }
-
-            x[i] = NumOps.Divide(sum, augmented[i, i]);
-        }
-
-        return x;
+        return solution.Reshape(new[] { n }).ToVector();
     }
 
     /// <summary>
