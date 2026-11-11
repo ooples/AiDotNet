@@ -233,7 +233,8 @@ public partial class NonAttentiveTacotron<T> : TtsModelBase<T>, IAcousticModel<T
             var y = conv.Forward(Engine.Reshape(Engine.TensorTranspose(x), new[] { 1, x.Shape[1], length }));
             x = Engine.TensorTranspose(Engine.Reshape(y, new[] { y.Shape[1], length }));
         }
-        return _encoderLstm!.Forward(x);
+        return _encoderLstm!.ForwardWithLstmStateRegularization(x, _options.LstmCellClip,
+            _options.ZoneoutProbability > 0 ? Zoneout : null);
     }
 
     private Tensor<T> PredictDurationsSeconds(Tensor<T> encoded)

@@ -438,7 +438,7 @@ The vocoder tests change the mel hop and HiFi-GAN strides together so their fram
 
 ### Non-Attentive Tacotron supervised variant
 
-The shared width and encoder depth settings configure the native embedding, LSTMs and encoder convolutions. Saved options keep the native dimensions. Native inference caps phoneme input and output frames, and the default Adam recipe reads the configured learning rate and coupled L2 coefficient. The defaults retain Appendix A's learning rate of 0.001 and L2 coefficient of 1e-6. Tests exercise duration-supervised training and the Gaussian-aligned two-layer decoder. Encoder ZoneOut from §3 remains outstanding. [Non-Attentive Tacotron, §3 and Appendix A](https://arxiv.org/html/2010.04301)
+The shared width and encoder depth settings configure the native embedding, LSTMs and encoder convolutions. Saved options keep the native dimensions. Native inference caps phoneme input and output frames, and the default Adam recipe reads the configured learning rate and coupled L2 coefficient. The defaults retain Appendix A's learning rate of 0.001 and L2 coefficient of 1e-6. Both encoder directions clip the candidate cell state before the output gate and apply ZoneOut to the hidden and cell states carried to the next step. The tests compare the recurrent sequence to individual state updates and verify an encoder parameter update under duration-supervised training. [Non-Attentive Tacotron, §3 and Appendix A](https://arxiv.org/html/2010.04301)
 
 ### NaturalSpeech 2 waveform and training controls
 

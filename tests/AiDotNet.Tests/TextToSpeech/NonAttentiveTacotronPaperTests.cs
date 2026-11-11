@@ -103,6 +103,56 @@ public class NonAttentiveTacotronPaperTests
         Assert.Equal(1, options.NumEncoderLayers);
     }
 
+    [Fact]
+    public void EncoderLstm_ClipsBeforeTheOutputGateAndCarriesZoneoutState()
+    {
+        using var layer = new LSTMLayer<double>(3) { RandomSeed = 17 };
+        var input = new Tensor<double>(new[] { 1, 3, 2 }, new Vector<double>(new[] { 0.8, -0.4, 0.2, 1.1, -0.9, 0.3 }));
+        var first = Frame(0);
+        layer.ForwardFromState(first, null, null, out var initialHidden, out var initialCell);
+        const double clip = 0.001;
+        Assert.Contains(initialCell.ToArray(), value => Math.Abs(value) > clip);
+        var clipped = layer.ForwardWithStateRegularization(first, clip, null);
+        for (int i = 0; i < initialCell.Length; i++)
+        {
+            double cell = initialCell[0, i];
+            double expected = Math.Abs(cell) <= clip ? initialHidden[0, i]
+                : initialHidden[0, i] * Math.Tanh(Math.Sign(cell) * clip) / Math.Tanh(cell);
+            Assert.Equal(expected, clipped[0, 0, i], 10);
+        }
+
+        var hidden = new Tensor<double>(new[] { 1, 3 });
+        var state = new Tensor<double>(new[] { 1, 3 });
+        var expectedSequence = new List<double>();
+        for (int step = 0; step < 3; step++)
+        {
+            layer.ForwardFromState(Frame(step), hidden, state, out var nextHidden, out var nextState);
+            hidden = Mix(hidden, nextHidden);
+            state = Mix(state, nextState);
+            expectedSequence.AddRange(hidden.ToArray());
+        }
+        var actual = layer.ForwardWithStateRegularization(input, 0, Mix).ToArray();
+        Assert.Equal(expectedSequence.Count, actual.Length);
+        for (int i = 0; i < actual.Length; i++) Assert.Equal(expectedSequence[i], actual[i], 10);
+
+        Tensor<double> Frame(int step) =>
+            new(new[] { 1, 1, 2 }, new Vector<double>(new[] { input[0, step, 0], input[0, step, 1] }));
+
+        static Tensor<double> Mix(Tensor<double> previous, Tensor<double> next) =>
+            new(next.Shape.ToArray(), new Vector<double>(previous.ToArray().Zip(next.ToArray(), (old, current) => 0.1 * old + 0.9 * current).ToArray()));
+    }
+
+    [Fact]
+    public void DurationSupervisedTraining_UpdatesTheEncoderWithZoneoutEnabled()
+    {
+        using var model = CreateModel(o => o.ZoneoutProbability = 0.1);
+        var sample = Sample();
+        var embedding = Assert.Single(model.Layers.OfType<EmbeddingLayer<double>>());
+        var before = embedding.GetParameters().ToArray();
+        Assert.True(AiDotNet.Helpers.NumericalStabilityHelper.IsFinite(model.Train(sample)));
+        Assert.False(before.SequenceEqual(embedding.GetParameters().ToArray()));
+    }
+
     [Fact(Timeout = 60000)]
     public async Task LstmCell_MatchesTheGateEquations()
     {

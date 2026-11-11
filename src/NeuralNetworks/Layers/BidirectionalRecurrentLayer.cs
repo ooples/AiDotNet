@@ -41,6 +41,8 @@ public partial class BidirectionalRecurrentLayer<T> : LayerBase<T>, IShapeContra
     private readonly int _inputSize;
     private readonly int _hiddenSize;
     private readonly RecurrentCellType _cell;
+    private double _lstmCellClip;
+    private Func<Tensor<T>, Tensor<T>, Tensor<T>>? _lstmZoneout;
 
     [SubLayerInput("1, 1, _inputSize")]
     private readonly LSTMLayer<T>? _forwardLstm;
@@ -108,10 +110,33 @@ public partial class BidirectionalRecurrentLayer<T> : LayerBase<T>, IShapeContra
         int batch = x.Shape[0], time = x.Shape[1];
         LayerBase<T> forwardLayer = _cell == RecurrentCellType.Lstm ? _forwardLstm! : _forwardGru!;
         LayerBase<T> backwardLayer = _cell == RecurrentCellType.Lstm ? _backwardLstm! : _backwardGru!;
-        var forward = forwardLayer.Forward(x);
-        var backward = Reverse(backwardLayer.Forward(Reverse(x)));
+        Tensor<T> ReadDirection(LayerBase<T> layer, Tensor<T> sequence) =>
+            layer is LSTMLayer<T> lstm && (_lstmCellClip > 0 || _lstmZoneout is not null)
+                ? lstm.ForwardWithStateRegularization(sequence, _lstmCellClip, _lstmZoneout)
+                : layer.Forward(sequence);
+        var forward = ReadDirection(forwardLayer, x);
+        var backward = Reverse(ReadDirection(backwardLayer, Reverse(x)));
         var output = Engine.TensorConcatenate(new[] { forward, backward }, 2);
         return unbatched ? Engine.Reshape(output, new[] { time, 2 * _hiddenSize }) : output;
+    }
+
+    /// <summary>Applies the same recurrent state policy in both LSTM directions.</summary>
+    internal Tensor<T> ForwardWithLstmStateRegularization(
+        Tensor<T> input, double cellClip, Func<Tensor<T>, Tensor<T>, Tensor<T>>? zoneout)
+    {
+        if (_cell != RecurrentCellType.Lstm)
+            throw new InvalidOperationException("Cell clipping and ZoneOut require LSTM directions.");
+        _lstmCellClip = cellClip;
+        _lstmZoneout = zoneout;
+        try
+        {
+            return Forward(input);
+        }
+        finally
+        {
+            _lstmCellClip = 0;
+            _lstmZoneout = null;
+        }
     }
 
     // Reverses the time axis of [batch, time, features] (index selection takes 2-D input, so time is moved to the front).
