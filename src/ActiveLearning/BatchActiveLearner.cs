@@ -113,7 +113,7 @@ public sealed class BatchActiveLearner<T>
         marginalGain = engine.TensorWhere(isSelected, marginalGain, norm);
 
         // Selected batch first (in selection order), then the rest by informativeness.
-        var byInformativeness = engine.ArgSort(Tensor<T>.FromVector(informativeness), -1, descending: true).ToArray();
+        var byInformativeness = ActiveLearningEngineOps.StableOrder(Tensor<T>.FromVector(informativeness), descending: true);
         var order = new List<int>(n);
         order.AddRange(selected);
         foreach (var index in byInformativeness)

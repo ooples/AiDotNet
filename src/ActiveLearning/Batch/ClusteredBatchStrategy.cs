@@ -163,7 +163,7 @@ public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrate
             members.Add(i);
         }
 
-        // Sort each cluster by score (descending), with the same comparison sort as before
+        // Sort each cluster by score (descending), ties in pool order
         var engine = AiDotNetEngine.Current;
         var scoreTensor = Tensor<T>.FromVector(scores);
         var clusterGroups = new Dictionary<int, List<(int Index, int Rank)>>();
@@ -171,7 +171,7 @@ public class ClusteredBatchStrategy<T, TInput, TOutput> : IClusteringBatchStrate
         {
             var members = entry.Value.ToArray();
             var memberScores = engine.TensorIndexSelect(scoreTensor, new Tensor<int>(members, new[] { members.Length }), 0);
-            var order = engine.ArgSort(memberScores, -1, descending: true).ToArray();
+            var order = ActiveLearningEngineOps.StableOrder(memberScores, descending: true);
             var group = new List<(int Index, int Rank)>(members.Length);
             for (int r = 0; r < order.Length; r++)
             {

@@ -426,26 +426,45 @@ internal static class ActiveLearningEngineOps
     }
 
     /// <summary>
-    /// Selects the <paramref name="batchSize"/> highest-scoring indices, ties in index order.
+    /// Selects the <paramref name="batchSize"/> highest-scoring indices, ties in index order
+    /// (the order of the stable LINQ OrderByDescending this replaces).
     /// </summary>
-    /// <remarks>
-    /// Kept as a stable LINQ sort until the engine provides a stable argsort
-    /// (TensorArgSortStable in missing-ops): IEngine.ArgSort/TopK use an unstable sort and would
-    /// reorder tied scores.
-    /// </remarks>
     internal static int[] SelectTopScoring<T>(Vector<T> scores, int batchSize)
     {
-        var numOps = MathHelper.GetNumericOperations<T>();
-        var indexedScores = new List<(int Index, T Score)>();
-        for (int i = 0; i < scores.Length; i++)
+        var order = StableOrder(Tensor<T>.FromVector(scores), descending: true);
+        int take = Math.Max(0, Math.Min(batchSize, order.Length));
+        var result = new int[take];
+        Array.Copy(order, result, take);
+        return result;
+    }
+
+    /// <summary>
+    /// Positions of <paramref name="values"/> in stable sorted order (ties keep their original order),
+    /// ascending or descending.
+    /// </summary>
+    /// <remarks>
+    /// The engine sort is not guaranteed stable, so position j gets the unique key
+    /// (number of values sorting strictly before v[j]) * count + j, found with one sort and a binary
+    /// search; sorting those keys gives the stable order in O(count log count).
+    /// </remarks>
+    internal static int[] StableOrder<TValue>(Tensor<TValue> values, bool descending)
+    {
+        int count = values.Length;
+        if (count == 0)
         {
-            indexedScores.Add((i, scores[i]));
+            return [];
         }
 
-        return indexedScores
-            .OrderByDescending(x => numOps.ToDouble(x.Score))
-            .Take(batchSize)
-            .Select(x => x.Index)
-            .ToArray();
+        var engine = AiDotNetEngine.Current;
+        var flat = engine.Reshape(values.Contiguous(), [count]);
+        var sorted = engine.TensorSort(flat, 0, false).Values;
+
+        // ascending: #{m : v[m] < v[j]}; descending: #{m : v[m] > v[j]} = count - #{m : v[m] <= v[j]}
+        var before = descending
+            ? engine.ScalarMinusTensor(count, engine.TensorSearchSorted(sorted, flat, true))
+            : engine.TensorSearchSorted(sorted, flat, false);
+        var position = engine.TensorArange<long>(0, count, 1);
+        var key = engine.TensorAdd(engine.TensorMultiplyScalar(before.Cast<long>(), (long)count), position);
+        return engine.TensorArgsort(key, 0, false).ToArray();
     }
 }

@@ -90,10 +90,10 @@ public class RankedBatchStrategy<T, TInput, TOutput> : IBatchStrategy<T, TInput,
 
         int effectiveBatchSize = Math.Min(batchSize, candidateIndices.Length);
 
-        // Rank candidates by score (descending), with the same comparison sort as before
+        // Rank candidates by score (descending), ties in candidate order
         var engine = AiDotNetEngine.Current;
         var candidateScores = Tensor<T>.FromVector(scores.GetSubVector(0, candidateIndices.Length));
-        var order = engine.ArgSort(candidateScores, -1, descending: true).ToArray();
+        var order = ActiveLearningEngineOps.StableOrder(candidateScores, descending: true);
         var scoredCandidates = new List<(int Index, int Rank)>(order.Length);
         for (int r = 0; r < order.Length; r++)
         {
