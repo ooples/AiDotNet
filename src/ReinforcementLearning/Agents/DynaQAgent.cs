@@ -138,12 +138,9 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
             {
                 var (planNextState, planReward) = _model[planState][planAction];
 
-                // Simulated Q-learning update
-                T planCurrentQ = _qTable[planState][planAction];
-                T planMaxNextQ = GetMaxQValue(planNextState);
-                T planTarget = NumOps.Add(planReward, NumOps.Multiply(DiscountFactor, planMaxNextQ));
-                T planDelta = NumOps.Subtract(planTarget, planCurrentQ);
-                _qTable[planState][planAction] = NumOps.Add(planCurrentQ, NumOps.Multiply(LearningRate, planDelta));
+                // Simulated Q-learning update of one table entry (sequential: each planning
+                // step reads the values the previous one wrote).
+                PlanningUpdate(planState, planAction, planNextState, planReward);
             }
         }
 
@@ -156,22 +153,28 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
     /// <inheritdoc />
     public override T Train() => NumOps.Zero;
 
+    /// <summary>One simulated Q-learning update: Q(s,a) += lr * (r + gamma * max Q(s') - Q(s,a)).</summary>
+    private void PlanningUpdate(string planState, int planAction, string planNextState, T planReward)
+    {
+        T planTarget = RLTensorOps.BootstrapTarget(NumOps, planReward, DiscountFactor, GetMaxQValue(planNextState));
+        _qTable[planState][planAction] = RLTensorOps.TdStep(NumOps, _qTable[planState][planAction], planTarget, LearningRate);
+    }
+
     private void EnsureStateExists(Vector<T> state)
     {
         string stateKey = GetStateKey(state);
         if (!_qTable.ContainsKey(stateKey))
         {
-            _qTable[stateKey] = new Dictionary<int, T>();
             // Optimistic initialization with state-seeded jitter (Sutton &
             // Barto §2.6). See identical comment in DynaQPlusAgent — same
             // tabular-RL fix to avoid the "same action for every untrained
             // state" degeneracy that breaks DifferentStates_DifferentActions.
             var seedRng = RandomHelper.CreateSeededRandom(AiDotNet.Helpers.StableHash.Seed(stateKey)) /* stable across processes (#2361) */;
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                double jitter = seedRng.NextDouble() * 1e-6;
-                _qTable[stateKey][a] = NumOps.FromDouble(jitter);
-            }
+            // One NextDouble() draw per action in order (the seeded stream is unchanged), scaled
+            // to the 1e-6 jitter band with a single engine multiply.
+            var jitter = AiDotNetEngine.Current.Multiply(
+                Vector<T>.CreateRandom(seedRng, _options.ActionSize), NumOps.FromDouble(1e-6));
+            _qTable[stateKey] = RLTensorOps.ToRow(jitter);
         }
     }
 

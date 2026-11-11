@@ -117,24 +117,21 @@ public partial class WatkinsQLambdaAgent<T> : ReinforcementLearningAgentBase<T>
         // Watkins's Q(λ): Check if current action was greedy
         bool actionWasGreedy = (actionIndex == greedyCurrentAction);
 
+        var engine = AiDotNetEngine.Current;
+        T decayFactor = NumOps.Multiply(DiscountFactor, NumOps.FromDouble(_options.Lambda));
         foreach (var s in _qTable.Keys.ToList())
         {
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                T update = NumOps.Multiply(LearningRate, NumOps.Multiply(delta, _eligibilityTraces[s][a]));
-                _qTable[s][a] = NumOps.Add(_qTable[s][a], update);
+            // Whole-row update of this state: Q += lr * (delta * e).
+            var traces = RLTensorOps.Row(_eligibilityTraces[s], _options.ActionSize);
+            var qRow = RLTensorOps.Row(_qTable[s], _options.ActionSize);
+            RLTensorOps.Fill(_qTable[s], engine.Add(qRow, engine.Multiply(engine.Multiply(traces, delta), LearningRate)));
 
-                // Watkins's Q(λ): reset ALL traces if action was non-greedy (exploratory)
-                if (!actionWasGreedy)
-                {
-                    _eligibilityTraces[s][a] = NumOps.Zero;
-                }
-                else
-                {
-                    T decayFactor = NumOps.Multiply(DiscountFactor, NumOps.FromDouble(_options.Lambda));
-                    _eligibilityTraces[s][a] = NumOps.Multiply(_eligibilityTraces[s][a], decayFactor);
-                }
-            }
+            // Watkins's Q(λ): reset ALL traces if action was non-greedy (exploratory),
+            // otherwise decay them by gamma * lambda.
+            var nextTraces = actionWasGreedy
+                ? engine.Multiply(traces, decayFactor)
+                : Vector<T>.CreateDefault(_options.ActionSize, NumOps.Zero);
+            RLTensorOps.Fill(_eligibilityTraces[s], nextTraces);
         }
 
         if (done)

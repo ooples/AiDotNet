@@ -205,24 +205,12 @@ public partial class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
     private int GetBestAction(string stateKey)
     {
         EnsureStateExists(stateKey);
-        int bestAction = 0;
-        T bestValue = NumOps.Add(_qTable1[stateKey][0], _qTable2[stateKey][0]);
-        bool allEqual = true;
-
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            T sumValue = NumOps.Add(_qTable1[stateKey][a], _qTable2[stateKey][a]);
-            if (NumOps.GreaterThan(sumValue, bestValue))
-            {
-                bestValue = sumValue;
-                bestAction = a;
-                allEqual = false;
-            }
-            else if (!NumOps.Equals(sumValue, bestValue))
-            {
-                allEqual = false;
-            }
-        }
+        // Q1 + Q2 per action, then the first arg-max and the all-tied test over the sums.
+        var summed = AiDotNetEngine.Current.Add(
+            RLTensorOps.Row(_qTable1[stateKey], _options.ActionSize),
+            RLTensorOps.Row(_qTable2[stateKey], _options.ActionSize));
+        int bestAction = RLTensorOps.ArgMax(summed);
+        bool allEqual = RLTensorOps.AllEqual(summed, NumOps);
 
         // Sutton & Barto §2.3: when all action-values are tied (typical for an
         // unvisited state with zero-initialized Q-tables), default argmax always

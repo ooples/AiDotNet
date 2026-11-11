@@ -136,29 +136,23 @@ public partial class QLambdaAgent<T> : ReinforcementLearningAgentBase<T>
         _activeTraceStates.Add(stateKey);
 
         // Only iterate over states with active traces (performance optimization)
+        var engine = AiDotNetEngine.Current;
+        T decayFactor = NumOps.Multiply(DiscountFactor, NumOps.FromDouble(_options.Lambda));
+        T traceThreshold = NumOps.FromDouble(TraceThreshold);
         var statesToRemove = new List<string>();
         foreach (var s in _activeTraceStates.ToList())
         {
-            bool hasActiveTrace = false;
-            for (int a = 0; a < _options.ActionSize; a++)
-            {
-                T traceValue = _eligibilityTraces[s][a];
-                double traceDouble = NumOps.ToDouble(traceValue);
+            // Whole-row update of this state: Q += lr * (delta * e), then e *= gamma * lambda.
+            var traces = RLTensorOps.Row(_eligibilityTraces[s], _options.ActionSize);
+            var qRow = RLTensorOps.Row(_qTable[s], _options.ActionSize);
+            var update = engine.Multiply(engine.Multiply(traces, delta), LearningRate);
+            RLTensorOps.Fill(_qTable[s], engine.Add(qRow, update));
 
-                // Update Q-value using the trace
-                T update = NumOps.Multiply(LearningRate, NumOps.Multiply(delta, traceValue));
-                _qTable[s][a] = NumOps.Add(_qTable[s][a], update);
+            var decayed = engine.Multiply(traces, decayFactor);
+            RLTensorOps.Fill(_eligibilityTraces[s], decayed);
 
-                // Decay the trace
-                T decayFactor = NumOps.Multiply(DiscountFactor, NumOps.FromDouble(_options.Lambda));
-                _eligibilityTraces[s][a] = NumOps.Multiply(traceValue, decayFactor);
-
-                // Check if trace is still active after decay
-                if (NumOps.GreaterThan(NumOps.Abs(_eligibilityTraces[s][a]), NumOps.FromDouble(TraceThreshold)))
-                {
-                    hasActiveTrace = true;
-                }
-            }
+            // The state stays active while any decayed trace is above the threshold in magnitude.
+            bool hasActiveTrace = RLTensorOps.AnyGreaterThan(engine.Abs(decayed), traceThreshold);
 
             // Remove state from active set if all traces decayed to near-zero
             if (!hasActiveTrace)

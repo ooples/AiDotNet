@@ -179,12 +179,10 @@ public partial class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
             throw new ArgumentNullException(nameof(action));
         }
 
-        for (int i = 0; i < action.Length; i++)
+        int index = RLTensorOps.FirstPositiveIndex(action, NumOps.Zero, out bool found);
+        if (found)
         {
-            if (NumOps.GreaterThan(action[i], NumOps.Zero))
-            {
-                return i;
-            }
+            return index;
         }
 
         // Invalid action vector - all elements are <= 0
@@ -226,13 +224,7 @@ public partial class EveryVisitMonteCarloAgent<T> : ReinforcementLearningAgentBa
             return NumOps.Zero;
         }
 
-        T sum = NumOps.Zero;
-        foreach (T value in returns)
-        {
-            sum = NumOps.Add(sum, value);
-        }
-
-        return NumOps.Divide(sum, NumOps.FromDouble(returns.Count));
+        return RLTensorOps.Average(returns);
     }
 
     /// <inheritdoc />

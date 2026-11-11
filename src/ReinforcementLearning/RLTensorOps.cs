@@ -43,11 +43,21 @@ internal static class RLTensorOps
     /// </summary>
     internal static int FirstPositiveIndex<T>(Vector<T> values, T zero)
     {
+        return FirstPositiveIndex(values, zero, out _);
+    }
+
+    /// <summary>
+    /// First index whose element is strictly greater than zero; <paramref name="found"/> is false
+    /// (and the result 0) when no element is positive.
+    /// </summary>
+    internal static int FirstPositiveIndex<T>(Vector<T> values, T zero, out bool found)
+    {
         if (values is null)
         {
             throw new ArgumentNullException(nameof(values));
         }
 
+        found = false;
         if (values.Length == 0)
         {
             return 0;
@@ -56,7 +66,22 @@ internal static class RLTensorOps
         // The comparison is 1 where values > 0 and 0 elsewhere (NaN compares false), so the first
         // arg-max of the indicator is the first positive slot, and 0 when no slot is positive.
         var positive = Engine.TensorGreaterThan(values.AsTensor(), zero);
-        return Engine.TensorArgMax(positive, 0)[0];
+        int index = Engine.TensorArgMax(positive, 0)[0];
+        found = !MathHelper.GetNumericOperations<T>().Equals(positive[index], zero);
+        return index;
+    }
+
+    /// <summary>Arithmetic mean of a list of samples (sum, then divide by the count); zero when empty.</summary>
+    internal static T Average<T>(IReadOnlyList<T>? samples)
+    {
+        var ops = MathHelper.GetNumericOperations<T>();
+        if (samples is null || samples.Count == 0)
+        {
+            return ops.Zero;
+        }
+
+        T sum = Engine.Sum(Vector<T>.FromEnumerable(samples));
+        return ops.Divide(sum, ops.FromDouble(samples.Count));
     }
 
     /// <summary>Largest element (first-maximum scan semantics).</summary>
@@ -134,6 +159,121 @@ internal static class RLTensorOps
         }
 
         return Engine.DotProduct(powers.GetSubVector(0, rewards.Length), rewards);
+    }
+
+    /// <summary>
+    /// Scatters a vector into a dictionary-backed table row keyed 0..Length-1 (data movement only).
+    /// </summary>
+    internal static Dictionary<int, T> ToRow<T>(Vector<T> values)
+    {
+        if (values is null)
+        {
+            throw new ArgumentNullException(nameof(values));
+        }
+
+        var row = new Dictionary<int, T>(values.Length);
+        int action = 0;
+        foreach (var value in values)
+        {
+            row[action++] = value;
+        }
+
+        return row;
+    }
+
+    /// <summary>
+    /// Inverse-CDF categorical draw for an already-drawn uniform <paramref name="uniform"/>: the
+    /// first index whose running probability sum reaches it (the "r &lt;= cumulative" scan), or
+    /// <paramref name="fallback"/> when rounding leaves the total below it.
+    /// </summary>
+    internal static int SampleFromCdf<T>(Vector<T> probabilities, double uniform, int fallback)
+    {
+        if (probabilities is null)
+        {
+            throw new ArgumentNullException(nameof(probabilities));
+        }
+
+        if (probabilities.Length == 0)
+        {
+            return fallback;
+        }
+
+        var ops = MathHelper.GetNumericOperations<T>();
+        var cdf = Engine.TensorCumSum(probabilities.AsTensor(), 0);
+        var target = new Tensor<T>(new[] { ops.FromDouble(uniform) }, new[] { 1 });
+        int index = Engine.TensorSearchSorted(cdf, target, false)[0];
+        return index < probabilities.Length ? index : fallback;
+    }
+
+    /// <summary>Numerically stable softmax: exp(x - max) / sum(exp(x - max)).</summary>
+    internal static Vector<T> StableSoftmax<T>(Vector<T> logits)
+    {
+        if (logits is null)
+        {
+            throw new ArgumentNullException(nameof(logits));
+        }
+
+        T max = Max(logits);
+        var exp = Engine.TensorExp(Engine.TensorSubtractScalar(logits.AsTensor(), max));
+        T sum = Engine.TensorSum(exp);
+        return Engine.TensorDivideScalar(exp, sum).ToVector();
+    }
+
+    /// <summary>
+    /// Writes a vector back into an existing dictionary-backed row, keys 0..Length-1, keeping the
+    /// row object (data movement only).
+    /// </summary>
+    internal static void Fill<T>(Dictionary<int, T> row, Vector<T> values)
+    {
+        if (row is null)
+        {
+            throw new ArgumentNullException(nameof(row));
+        }
+
+        if (values is null)
+        {
+            throw new ArgumentNullException(nameof(values));
+        }
+
+        int action = 0;
+        foreach (var value in values)
+        {
+            row[action++] = value;
+        }
+    }
+
+    /// <summary>True when any element is strictly greater than <paramref name="threshold"/> (NaN never is).</summary>
+    internal static bool AnyGreaterThan<T>(Vector<T> values, T threshold)
+    {
+        if (values is null)
+        {
+            throw new ArgumentNullException(nameof(values));
+        }
+
+        if (values.Length == 0)
+        {
+            return false;
+        }
+
+        var above = Engine.TensorGreaterThan(values.AsTensor(), threshold);
+        var ops = MathHelper.GetNumericOperations<T>();
+        return !ops.Equals(Engine.TensorMaxValue(above), ops.Zero);
+    }
+
+    /// <summary>
+    /// One scalar temporal-difference step on a single table entry: current + lr * (target - current).
+    /// Sequential planning/trace loops apply it to one entry per iteration, where each update can
+    /// change the inputs of the next, so it is inherently scalar rather than element-wise.
+    /// </summary>
+    internal static T TdStep<T>(INumericOperations<T> ops, T current, T target, T learningRate)
+    {
+        return ops.Add(current, ops.Multiply(learningRate, ops.Subtract(target, current)));
+    }
+
+    /// <summary>The one-step bootstrap target reward + discount * next.</summary>
+    internal static T BootstrapTarget<T>(INumericOperations<T> ops, T reward, T discount, T next)
+    {
+        return ops.Add(reward, ops.Multiply(discount, next));
     }
 
     /// <summary>Concatenates vectors end to end.</summary>
