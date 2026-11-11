@@ -1635,6 +1635,7 @@ public partial class GRULayer<T> : LayerBase<T>, IShapeContract
         InvalidateGpuStackedWeights();
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();

@@ -157,26 +157,31 @@ public class PermutationIndividual : IEvolvable<PermutationGene, double>
         }
     }
 
+    /// <inheritdoc />
     public ICollection<PermutationGene> GetGenes()
     {
         return _genes;
     }
 
+    /// <inheritdoc />
     public void SetGenes(ICollection<PermutationGene> genes)
     {
         _genes = [.. genes];
     }
 
+    /// <inheritdoc />
     public double GetFitness()
     {
         return _fitness;
     }
 
+    /// <inheritdoc />
     public void SetFitness(double fitness)
     {
         _fitness = fitness;
     }
 
+    /// <inheritdoc />
     public IEvolvable<PermutationGene, double> Clone()
     {
         var clone = new PermutationIndividual([]);

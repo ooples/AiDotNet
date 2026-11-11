@@ -21,6 +21,7 @@ public class IslandModelGeneticAlgorithm<T, TInput, TOutput> :
         _migrationRate = migrationRate;
     }
 
+    /// <inheritdoc />
     public override EvolutionStats<T, TInput, TOutput> Evolve(
         int generations,
         TInput trainingInput,
@@ -230,6 +231,7 @@ public class IslandModelGeneticAlgorithm<T, TInput, TOutput> :
         InitializeIslands();
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();

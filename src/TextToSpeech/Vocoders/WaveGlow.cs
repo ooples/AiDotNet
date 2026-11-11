@@ -137,6 +137,7 @@ public partial class WaveGlow<T> : VocoderBase<T>
         return waveform;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
         var t = new Tensor<T>([1]);
@@ -144,6 +145,7 @@ public partial class WaveGlow<T> : VocoderBase<T>
         return t;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
@@ -164,6 +166,7 @@ public partial class WaveGlow<T> : VocoderBase<T>
             );
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -181,6 +184,7 @@ public partial class WaveGlow<T> : VocoderBase<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -205,6 +209,7 @@ public partial class WaveGlow<T> : VocoderBase<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(WaveGlow<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

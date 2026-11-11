@@ -89,6 +89,7 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
     #region Properties
 
     internal bool UseNativeMode => _useNativeMode;
+    /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
     internal int NumFeatures => _numFeatures;
     internal int NumInputFrames => _numInputFrames;
@@ -301,6 +302,7 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
 
     #region Private Methods
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         var result = input;
@@ -418,6 +420,7 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
         return stacked;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => Denoise(input);
 
     /// <inheritdoc/>
@@ -446,6 +449,7 @@ public partial class FastDVDNet<T> : VideoDenoisingBase<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>

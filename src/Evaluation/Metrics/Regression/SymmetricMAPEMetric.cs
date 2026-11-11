@@ -22,15 +22,24 @@ public class SymmetricMAPEMetric<T> : IRegressionMetric<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "sMAPE";
+    /// <inheritdoc />
     public string Category => "Regression";
+    /// <inheritdoc />
     public string Description => "Symmetric Mean Absolute Percentage Error.";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.LowerIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.Zero;
+    /// <inheritdoc />
     public T? MaxValue => NumOps.FromDouble(200.0);
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         if (predictions.Length != actuals.Length)
@@ -55,6 +64,7 @@ public class SymmetricMAPEMetric<T> : IRegressionMetric<T>
         return validCount > 0 ? NumOps.FromDouble(100.0 * sum / validCount) : NumOps.Zero;
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
         ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

@@ -110,13 +110,17 @@ public partial class CosyVoice3<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public int NumCodebooks => _options.NumCodebooks;
+    /// <inheritdoc />
     public int CodebookSize => _options.CodebookSize;
 
     /// <inheritdoc />
     /// <remarks>Traced: InitializeLayers passes NumCodebooks * CodebookSize as the codec vocabulary.</remarks>
     protected override int OutputFeatureWidth => _options.NumCodebooks * _options.CodebookSize;
+    /// <inheritdoc />
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>

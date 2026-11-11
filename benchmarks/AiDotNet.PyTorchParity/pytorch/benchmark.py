@@ -37,6 +37,7 @@ from pathlib import Path
 import psutil
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 BATCH_SIZES = [1, 8, 32, 128]
 
@@ -257,6 +258,370 @@ class TinyViT(nn.Module):
         return self.head(self.norm(self.encoder(tokens))[:, 0])
 
 
+LM_VOCAB, LM_POSITIONS, LM_WIDTH = 512, 64, 128
+
+
+class PreNormBlock(nn.Module):
+    """AiDotNet's PreLNTransformerBlock: x + MHA(RMSNorm(x)), then h + Linear(GELU(Linear(RMSNorm(h)))). RMSNorm eps
+    1e-6 with a gain only; AiDotNet's attention has no Q/K/V bias, so in_proj_bias is zeroed and frozen."""
+
+    def __init__(self, width: int, heads: int, ffn: int) -> None:
+        super().__init__()
+        self.norm1 = nn.RMSNorm(width, eps=1e-6)
+        self.attn = nn.MultiheadAttention(width, heads, dropout=0.0, batch_first=True)
+        self.attn.in_proj_bias.data.zero_()
+        self.attn.in_proj_bias.requires_grad_(False)
+        self.norm2 = nn.RMSNorm(width, eps=1e-6)
+        self.up = nn.Linear(width, ffn)
+        self.down = nn.Linear(ffn, width)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        n = self.norm1(x)
+        mask = torch.triu(torch.ones(x.shape[1], x.shape[1], dtype=torch.bool, device=x.device), diagonal=1)
+        x = x + self.attn(n, n, n, attn_mask=mask, need_weights=False)[0]
+        return x + self.down(torch.nn.functional.gelu(self.up(self.norm2(x))))
+
+
+class DecoderLM(nn.Module):
+    """The C# "decoder-lm" row: Embedding(512, 128) + 2 causal pre-norm blocks + RMSNorm + Linear(128, 512)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.embed = nn.Embedding(LM_VOCAB, LM_WIDTH)
+        self.blocks = nn.Sequential(*[PreNormBlock(LM_WIDTH, 4, 4 * LM_WIDTH) for _ in range(2)])
+        self.norm = nn.RMSNorm(LM_WIDTH, eps=1e-6)
+        self.head = nn.Linear(LM_WIDTH, LM_VOCAB)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.head(self.norm(self.blocks(self.embed(x))))
+
+
+def lm_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+    """Sequences following t[i+1] = (7 t[i] + 3) mod V from a random first token; the target is the next token at
+    every position (the C# row's LoadSyntheticBatch)."""
+    tokens = torch.empty(batch_size, LM_POSITIONS + 1, dtype=torch.long)
+    tokens[:, 0] = torch.randint(0, LM_VOCAB, (batch_size,))
+    for t in range(LM_POSITIONS):
+        tokens[:, t + 1] = (7 * tokens[:, t] + 3) % LM_VOCAB
+    return tokens[:, :-1].to(device), tokens[:, 1:].to(device)
+
+
+def kipf_graph(nodes: int = 32) -> torch.Tensor:
+    """A ring over the nodes plus a chord i -> i+5 from every third node (so degrees differ), with self-loops,
+    normalized D^-1/2 (A + I) D^-1/2 -- the same graph as the C# row's KipfGraph."""
+    a = torch.zeros(nodes, nodes, dtype=torch.float64)
+    for i in range(nodes):
+        a[i, i] = 1
+        a[i, (i + 1) % nodes] = a[(i + 1) % nodes, i] = 1
+        if i % 3 == 0:
+            a[i, (i + 5) % nodes] = a[(i + 5) % nodes, i] = 1
+    inv_sqrt = a.sum(dim=1).rsqrt()
+    return (inv_sqrt[:, None] * a * inv_sqrt[None, :]).float()
+
+
+GCN_NODES, GCN_FEATURES = 32, 16
+
+
+def gcn_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+    """Standard-normal node features; the class is whichever of the first ten features has the largest mean over the
+    nodes, so the label is learnable (the C# row's LoadSyntheticBatch)."""
+    x = torch.randn(batch_size, GCN_NODES, GCN_FEATURES)
+    return x.to(device), x[:, :, :10].sum(dim=1).argmax(dim=1).to(device)
+
+
+class GraphConv(nn.Module):
+    """Kipf & Welling's layer as AiDotNet's GraphConvolutionalLayer computes it: A_hat (X W) + b. The bias is added
+    after propagation (nn.Linear inside the product would propagate it too)."""
+
+    def __init__(self, in_features: int, out_features: int) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(torch.empty(in_features, out_features))
+        self.bias = nn.Parameter(torch.zeros(out_features))
+        nn.init.xavier_uniform_(self.weight)
+
+    def forward(self, x: torch.Tensor, adj: torch.Tensor) -> torch.Tensor:
+        return adj @ (x @ self.weight) + self.bias
+
+
+class GCNClassifier(nn.Module):
+    """2x GCN(16->64->64, ReLU) over one fixed 32-node graph, mean over nodes, Linear(64, 10). Input [B, 32, 16]."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.register_buffer("adj", kipf_graph())
+        self.gc1 = GraphConv(GCN_FEATURES, 64)
+        self.gc2 = GraphConv(64, 64)
+        self.head = nn.Linear(64, 10)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        h = torch.relu(self.gc1(x, self.adj))
+        h = torch.relu(self.gc2(h, self.adj))
+        return self.head(h.mean(dim=1))
+
+
+DDPM_IMAGE, DDPM_CHANNELS, DDPM_STEPS, DDPM_INFERENCE_T = 32, 3, 1000, 500
+
+
+class DDPMResBlock(nn.Module):
+    """AiDotNet's DiffusionResBlock: GroupNorm(32, eps 1e-5) -> SiLU -> Conv3x3, plus Linear(SiLU(temb)) per channel,
+    then GroupNorm -> SiLU -> Conv3x3, plus the input (through a 1x1 conv when the width changes). No dropout."""
+
+    def __init__(self, in_ch: int, out_ch: int, temb: int) -> None:
+        super().__init__()
+        self.norm1 = nn.GroupNorm(32, in_ch, eps=1e-5)
+        self.conv1 = nn.Conv2d(in_ch, out_ch, 3, padding=1)
+        self.time = nn.Linear(temb, out_ch)
+        self.norm2 = nn.GroupNorm(32, out_ch, eps=1e-5)
+        self.conv2 = nn.Conv2d(out_ch, out_ch, 3, padding=1)
+        self.skip = nn.Conv2d(in_ch, out_ch, 1) if in_ch != out_ch else None
+
+    def forward(self, x: torch.Tensor, temb: torch.Tensor) -> torch.Tensor:
+        h = self.conv1(F.silu(self.norm1(x)))
+        h = h + self.time(F.silu(temb))[:, :, None, None]
+        h = self.conv2(F.silu(self.norm2(h)))
+        return h + (self.skip(x) if self.skip is not None else x)
+
+
+class DDPMAttention(nn.Module):
+    """AiDotNet's DiffusionAttention as the U-Net builds it (residualGroupNorm): GroupNorm(32), multi-head
+    self-attention over the H*W positions with bias-free Q/K/V and a biased output projection (its
+    FlashAttentionLayer), then the input added back. Ho et al. 2020's attention block."""
+
+    def __init__(self, ch: int, heads: int) -> None:
+        super().__init__()
+        self.heads = heads
+        self.norm = nn.GroupNorm(32, ch, eps=1e-5)
+        self.q = nn.Linear(ch, ch, bias=False)
+        self.k = nn.Linear(ch, ch, bias=False)
+        self.v = nn.Linear(ch, ch, bias=False)
+        self.o = nn.Linear(ch, ch)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, c, h, w = x.shape
+        seq = self.norm(x).permute(0, 2, 3, 1).reshape(b, h * w, c)
+
+        def split(t: torch.Tensor) -> torch.Tensor:
+            return t.reshape(b, h * w, self.heads, c // self.heads).transpose(1, 2)
+
+        out = F.scaled_dot_product_attention(split(self.q(seq)), split(self.k(seq)), split(self.v(seq)))
+        out = self.o(out.transpose(1, 2).reshape(b, h * w, c))
+        return x + out.reshape(b, h, w, c).permute(0, 3, 1, 2)
+
+
+class DDPMUNet(nn.Module):
+    """The C# "ddpm" row's denoiser as AiDotNet's UNetNoisePredictor builds it for DDPMModel: 128 base channels,
+    multipliers [1, 2, 2, 2], two residual blocks per level, attention (4 heads) at level 1 (16x16) and in the middle;
+    a sinusoidal timestep embedding of width 512 through two Linear+ReLU; stride-2 conv down, ConvTranspose(4, 2, 1)
+    up; each decoder residual block concatenates one encoder skip."""
+
+    def __init__(self, base: int = 128, mults: tuple[int, ...] = (1, 2, 2, 2), blocks: int = 2,
+                 attention_levels: tuple[int, ...] = (1,), heads: int = 4) -> None:
+        super().__init__()
+        self.temb_dim = base * 4
+        self.time1 = nn.Linear(self.temb_dim, self.temb_dim)
+        self.time2 = nn.Linear(self.temb_dim, self.temb_dim)
+        self.inp = nn.Conv2d(DDPM_CHANNELS, base, 3, padding=1)
+        self.encoder = nn.ModuleList()
+        ch = base
+        for level, mult in enumerate(mults):
+            out = base * mult
+            for _ in range(blocks):
+                block = nn.ModuleDict({"res": DDPMResBlock(ch, out, self.temb_dim)})
+                if level in attention_levels:
+                    block["attn"] = DDPMAttention(out, heads)
+                self.encoder.append(block)
+                ch = out
+            if level < len(mults) - 1:
+                self.encoder.append(nn.ModuleDict({"down": nn.Conv2d(out, out, 3, stride=2, padding=1)}))
+        self.mid_res1 = DDPMResBlock(ch, ch, self.temb_dim)
+        self.mid_attn = DDPMAttention(ch, heads)
+        self.mid_res2 = DDPMResBlock(ch, ch, self.temb_dim)
+        self.decoder = nn.ModuleList()
+        for level in reversed(range(len(mults))):
+            out = base * mults[level]
+            for _ in range(blocks):
+                block = nn.ModuleDict({"res": DDPMResBlock(ch + out, out, self.temb_dim)})
+                if level in attention_levels:
+                    block["attn"] = DDPMAttention(out, heads)
+                self.decoder.append(block)
+                ch = out
+            if level > 0:
+                self.decoder.append(nn.ModuleDict({"up": nn.ConvTranspose2d(out, out, 4, stride=2, padding=1)}))
+        self.out = nn.Conv2d(base * mults[0], DDPM_CHANNELS, 3, padding=1)
+        betas = torch.linspace(1e-4, 0.02, DDPM_STEPS, dtype=torch.float64)
+        alpha_bar = torch.cumprod(1 - betas, dim=0)
+        self.register_buffer("sqrt_ab", alpha_bar.sqrt().float())
+        self.register_buffer("sqrt_1m_ab", (1 - alpha_bar).sqrt().float())
+        self._init_like_aidotnet()
+
+    # Ho et al. 2020: Adam at 2e-4 with the gradient norm clipped to 1 (no weight decay). The C# row uses the same.
+    optimizer_settings = {"lr": 2e-4, "weight_decay": 0.0}
+
+    @torch.no_grad()
+    def _init_like_aidotnet(self) -> None:
+        """The initial distributions AiDotNet's layers draw, so both sides start the same network and train the same
+        way. Convolutions: U(+-sqrt(3 / fan_in)) (Kaiming, gain 1), zero bias. Transposed convolutions and the
+        residual blocks' time projections: Xavier normal truncated at 2 sigma, zero bias. The time MLP (ReLU): He
+        normal truncated at 2 sigma. Attention Q/K/V: Xavier uniform. Zero (as Ho et al. and LDM): each residual
+        block's second conv, the attention output projection and the output conv."""
+        def trunc(weight: torch.Tensor, std: float) -> None:
+            nn.init.trunc_normal_(weight, std=std, a=-2 * std, b=2 * std)
+
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d):
+                bound = math.sqrt(3.0 / (module.in_channels * module.kernel_size[0] * module.kernel_size[1]))
+                nn.init.uniform_(module.weight, -bound, bound)
+                nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.ConvTranspose2d):
+                fan_in, fan_out = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                trunc(module.weight, math.sqrt(2.0 / (fan_in + fan_out)))
+                nn.init.zeros_(module.bias)
+            elif isinstance(module, DDPMResBlock):
+                trunc(module.time.weight, math.sqrt(2.0 / (module.time.in_features + module.time.out_features)))
+                nn.init.zeros_(module.time.bias)
+            elif isinstance(module, DDPMAttention):
+                for projection in (module.q, module.k, module.v):
+                    nn.init.xavier_uniform_(projection.weight)
+        for linear in (self.time1, self.time2):
+            trunc(linear.weight, math.sqrt(2.0 / linear.in_features))
+            nn.init.zeros_(linear.bias)
+        for module in self.modules():
+            if isinstance(module, DDPMResBlock):
+                nn.init.zeros_(module.conv2.weight)
+                nn.init.zeros_(module.conv2.bias)
+            elif isinstance(module, DDPMAttention):
+                nn.init.zeros_(module.o.weight)
+                nn.init.zeros_(module.o.bias)
+        nn.init.zeros_(self.out.weight)
+        nn.init.zeros_(self.out.bias)
+
+    def timestep_embedding(self, t: torch.Tensor) -> torch.Tensor:
+        """NoisePredictorBase.GetTimestepEmbedding: [sin, cos] of t * exp(-i ln(10000) / (half - 1))."""
+        half = self.temb_dim // 2
+        freqs = torch.exp(-math.log(10000.0) / (half - 1) * torch.arange(half, device=t.device, dtype=torch.float64))
+        angles = t.double()[:, None] * freqs[None, :]
+        return torch.cat([angles.sin(), angles.cos()], dim=1).float()
+
+    def denoise(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+        temb = F.relu(self.time2(F.relu(self.time1(self.timestep_embedding(t)))))
+        h = self.inp(x)
+        skips = []
+        for block in self.encoder:
+            if "down" in block:
+                h = block["down"](h)
+                continue
+            h = block["res"](h, temb)
+            if "attn" in block:
+                h = block["attn"](h)
+            skips.append(h)
+        h = self.mid_res2(self.mid_attn(self.mid_res1(h, temb)), temb)
+        for block in self.decoder:
+            if "up" in block:
+                h = block["up"](h)
+                continue
+            h = block["res"](torch.cat([h, skips.pop()], dim=1), temb)
+            if "attn" in block:
+                h = block["attn"](h)
+        return self.out(h)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Inference: one denoiser evaluation of the batch at timestep 500 (the C# row's Forward)."""
+        return self.denoise(x, torch.full((x.shape[0],), DDPM_INFERENCE_T, device=x.device, dtype=torch.long))
+
+    def training_loss(self, x0: torch.Tensor, _: torch.Tensor) -> torch.Tensor:
+        """Ho et al. 2020 Algorithm 1: a timestep and Gaussian noise per image, MSE against the noise."""
+        t = torch.randint(0, DDPM_STEPS, (x0.shape[0],), device=x0.device)
+        noise = torch.randn_like(x0)
+        xt = self.sqrt_ab[t][:, None, None, None] * x0 + self.sqrt_1m_ab[t][:, None, None, None] * noise
+        return F.mse_loss(self.denoise(xt, t), noise)
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """Clean images uniform in [-1, 1] (the C# row's LoadSyntheticBatch); the label half is unused."""
+        x = (torch.rand(batch_size, DDPM_CHANNELS, DDPM_IMAGE, DDPM_IMAGE) * 2 - 1).to(device)
+        return x, x
+
+
+WHISPER_MELS, WHISPER_FRAMES, WHISPER_TOKENS, WHISPER_VOCAB, WHISPER_SOT = 80, 3000, 16, 51865, 50258
+
+
+class WhisperTiny(nn.Module):
+    """The "whisper-tiny" row: transformers' WhisperForConditionalGeneration at the whisper-tiny configuration (width
+    384, 4 + 4 layers, 6 heads, FFN 1536), randomly initialized. A training step is teacher-forced cross-entropy over a
+    16-token transcript of a 30-second log-mel clip (labels shifted right behind <|startoftranscript|>, as AiDotNet's
+    WhisperModel does); inference is the encoder plus one decoder step from the start token. AiDotNet's whisper-tiny
+    has 9,216 fewer parameters: the q and v attention biases its attention layers do not have."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        from transformers import WhisperConfig, WhisperForConditionalGeneration
+
+        config = WhisperConfig(
+            vocab_size=WHISPER_VOCAB, num_mel_bins=WHISPER_MELS, d_model=384, encoder_layers=4, decoder_layers=4,
+            encoder_attention_heads=6, decoder_attention_heads=6, encoder_ffn_dim=1536, decoder_ffn_dim=1536,
+            max_source_positions=WHISPER_FRAMES // 2, max_target_positions=448, dropout=0.0,
+            decoder_start_token_id=WHISPER_SOT, pad_token_id=50257)
+        self.model = WhisperForConditionalGeneration(config)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        start = torch.full((x.shape[0], 1), WHISPER_SOT, dtype=torch.long, device=x.device)
+        return self.model(input_features=x, decoder_input_ids=start).logits
+
+    def training_loss(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        return self.model(input_features=x, labels=y).loss
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """Log-mel features in [-1, 1] (Whisper's normalized range) and random transcript tokens."""
+        x = (torch.rand(batch_size, WHISPER_MELS, WHISPER_FRAMES) * 2 - 1).to(device)
+        y = torch.randint(0, WHISPER_SOT, (batch_size, WHISPER_TOKENS)).to(device)
+        return x, y
+
+
+DETECTION_IMAGE, DETECTION_CLASSES, DETECTION_BOXES = 320, 90, 2
+
+
+class FasterRcnnR50Fpn(nn.Module):
+    """The "faster-rcnn" row: torchvision's fasterrcnn_resnet50_fpn with no pretrained weights (so batch normalization
+    trains, as in AiDotNet's backbone), 90 classes plus background, images fixed at 320x320. A training step sums the
+    RPN and RoI-head losses for one image with two boxes; inference is the full detect pipeline in eval mode. The
+    optimizer is SGD at 1e-3 with momentum 0.9, AiDotNet FasterRCNN's paper recipe."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        import torchvision
+
+        self.model = torchvision.models.detection.fasterrcnn_resnet50_fpn(
+            weights=None, weights_backbone=None, num_classes=DETECTION_CLASSES + 1,
+            min_size=DETECTION_IMAGE, max_size=DETECTION_IMAGE)
+
+    def make_optimizer(self) -> torch.optim.Optimizer:
+        return torch.optim.SGD(self.parameters(), lr=1e-3, momentum=0.9)
+
+    def forward(self, x: torch.Tensor) -> list[dict[str, torch.Tensor]]:
+        was_training = self.model.training
+        self.model.eval()
+        try:
+            return self.model(list(x))
+        finally:
+            self.model.train(was_training)
+
+    def training_loss(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        self.model.train()
+        targets = [{"boxes": boxes[:, 1:], "labels": boxes[:, 0].long() + 1} for boxes in y]
+        return sum(self.model(list(x), targets).values())
+
+    @staticmethod
+    def make_batch(batch_size: int, device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+        """Images uniform in [0, 1] and, per image, rows of (class, x1, y1, x2, y2) in pixels."""
+        x = torch.rand(batch_size, 3, DETECTION_IMAGE, DETECTION_IMAGE).to(device)
+        centers = torch.rand(batch_size, DETECTION_BOXES, 2) * 0.5 + 0.25
+        sizes = torch.rand(batch_size, DETECTION_BOXES, 2) * 0.3 + 0.1
+        corners = torch.cat([centers - sizes / 2, centers + sizes / 2], dim=2) * DETECTION_IMAGE
+        classes = torch.randint(0, DETECTION_CLASSES, (batch_size, DETECTION_BOXES, 1)).float()
+        return x, torch.cat([classes, corners], dim=2).to(device)
+
+
 def make_vision_model(name: str) -> nn.Module:
     """torchvision's definition of each architecture, adjusted only where AiDotNet's builder adjusts it for a
     32x32 input, so both sides run the same network: VGG's classifier reads the 512x1x1 feature map directly
@@ -291,6 +656,16 @@ VISION_MODELS = ("resnet18", "resnet50", "vgg11", "mobilenetv2", "densenet121", 
 def make_model(name: str) -> tuple[nn.Module, tuple[int, ...]]:
     if name == "gru":
         return GRUClassifier(), (32, 32)
+    if name == "gcn":
+        return GCNClassifier(), (GCN_NODES, GCN_FEATURES)
+    if name == "decoder-lm":
+        return DecoderLM(), (LM_POSITIONS,)
+    if name == "ddpm":
+        return DDPMUNet(), (DDPM_CHANNELS, DDPM_IMAGE, DDPM_IMAGE)
+    if name == "whisper-tiny":
+        return WhisperTiny(), (WHISPER_MELS, WHISPER_FRAMES)
+    if name == "faster-rcnn":
+        return FasterRcnnR50Fpn(), (3, DETECTION_IMAGE, DETECTION_IMAGE)
     if name in VISION_MODELS:
         return make_vision_model(name), (3, 32, 32)
     if name == "mlp":
@@ -324,7 +699,15 @@ def synchronize(device: torch.device) -> None:
         torch.cuda.synchronize(device)
 
 
-def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.device) -> tuple[torch.Tensor, torch.Tensor]:
+def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.device,
+                    model: nn.Module | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+    # A row whose data is not "randn input, random class" (DDPM's clean images) generates its own batch.
+    if model is not None and hasattr(model, "make_batch"):
+        return model.make_batch(batch_size, device)
+    if shape == (LM_POSITIONS,):
+        return lm_batch(batch_size, device)
+    if shape == (GCN_NODES, GCN_FEATURES):
+        return gcn_batch(batch_size, device)
     x = torch.randn((batch_size, *shape), device=device)
     y = torch.randint(0, 10, (batch_size,), device=device)
     return x, y
@@ -332,7 +715,9 @@ def synthetic_batch(batch_size: int, shape: tuple[int, ...], device: torch.devic
 
 def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.device, epochs: int, batches: int, batch_size: int, breakdown: bool = False) -> TrainingResult:
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+    # A row whose model trains with another recipe (the detector's paper SGD) builds its own optimizer.
+    optimizer = (model.make_optimizer() if hasattr(model, "make_optimizer")
+                 else torch.optim.AdamW(model.parameters(), **getattr(model, "optimizer_settings", {"lr": 1e-3})))
     epoch_seconds: list[float] = []
     gradient_seconds: list[float] = []
     data_seconds: list[float] = []
@@ -342,7 +727,7 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
     pool: list[tuple[torch.Tensor, torch.Tensor]] = []
     for _ in range(batches):
         start_data = time.perf_counter()
-        pool.append(synthetic_batch(batch_size, shape, device))
+        pool.append(synthetic_batch(batch_size, shape, device, model))
         synchronize(device)
         data_seconds.append(time.perf_counter() - start_data)
 
@@ -359,8 +744,13 @@ def benchmark_training(model: nn.Module, shape: tuple[int, ...], device: torch.d
             for x, y in pool:
 
                 optimizer.zero_grad(set_to_none=True)
-                logits = model(x)
-                loss = criterion(logits, y)
+                if hasattr(model, "training_loss"):
+                    # A row with its own objective (DDPM's noise regression) computes its loss itself.
+                    loss = model.training_loss(x, y)
+                else:
+                    logits = model(x)
+                    # Flattened so a per-position target (the decoder LM's [B, S] next tokens) is scored like a class one.
+                    loss = criterion(logits.reshape(-1, logits.shape[-1]), y.reshape(-1))
                 if first_loss is None:
                     first_loss = loss.detach()
                 # Per-step device syncs inflate the step on GPU; they run only under --breakdown,
@@ -415,7 +805,7 @@ def benchmark_inference(model: nn.Module, shape: tuple[int, ...], device: torch.
                         batch_sizes: list[int], warmup_min_ms: float = 0.0) -> list[InferenceBatchResult]:
     results: list[InferenceBatchResult] = []
     for batch_size in batch_sizes:
-        x, _ = synthetic_batch(batch_size, shape, device)
+        x, _ = synthetic_batch(batch_size, shape, device, model)
         warmup_times: list[float] = []
         # Same rule as the C# twin: at least warmup calls and at least warmup_min_ms of warm-up per batch size.
         warmup_start = time.perf_counter()
@@ -497,7 +887,9 @@ def run(args: argparse.Namespace) -> dict[str, object]:
     for name in [item.strip() for item in args.models.split(",") if item.strip()]:
         model, shape = make_model(name)
         model.to(device)
-        parameters = sum(parameter.numel() for parameter in model.parameters())
+        # Trainable only: the decoder LM's frozen, zeroed in_proj_bias stands in for attention AiDotNet builds without
+        # a Q/K/V bias, and counting it reported 768 parameters the C# row does not have.
+        parameters = sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad)
         if args.compile:
             # torch.compile (TorchInductor) — the "PyTorch compiled" comparison.
             # Counts params BEFORE compile (the wrapper hides .parameters()).

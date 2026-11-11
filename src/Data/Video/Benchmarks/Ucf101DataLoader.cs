@@ -14,10 +14,15 @@ public class Ucf101DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
     private int _sampleCount;
     private int _featureSize;
 
+    /// <inheritdoc />
     public override string Name => "UCF101";
+    /// <inheritdoc />
     public override string Description => "UCF101 action recognition (101 classes)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _featureSize;
+    /// <inheritdoc />
     public override int OutputDimension => NumClasses;
 
     public Ucf101DataLoader(Ucf101DataLoaderOptions? options = null)
@@ -27,6 +32,7 @@ public class Ucf101DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         _featureSize = _options.FramesPerVideo * _options.FrameHeight * _options.FrameWidth * 3;
     }
 
+    /// <inheritdoc />
     protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
     {
         if (!Directory.Exists(_dataPath))
@@ -68,11 +74,13 @@ public class Ucf101DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         await Task.CompletedTask;
     }
 
+    /// <inheritdoc />
     protected override void UnloadDataCore()
     {
         LoadedFeatures = default; LoadedLabels = default; Indices = null; _sampleCount = 0;
     }
 
+    /// <inheritdoc />
     protected override (Tensor<T> Features, Tensor<T> Labels) ExtractBatch(int[] indices)
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
@@ -80,6 +88,7 @@ public class Ucf101DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tenso
         return (VideoLoaderHelper.ExtractTensorBatch(features, indices), VideoLoaderHelper.ExtractTensorBatch(labels, indices));
     }
 
+    /// <inheritdoc />
     public override (IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Train,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Validation,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Test) Split(

@@ -177,6 +177,29 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
     private readonly Random _random;
 
     /// <summary>
+    /// Gets or sets the number of threads that build each tree: a positive count, or negative to count back from the
+    /// processor count (-1, the default, uses every processor, as scikit-learn's HistGradientBoostingClassifier
+    /// does). The trained model is the same for any value.
+    /// </summary>
+    /// <remarks>
+    /// Histograms, split gains and predictions run as engine tensor operations, which parallelise inside the engine,
+    /// so this value is validated (0 is rejected) but does not change the work split.
+    /// </remarks>
+    public int NJobs { get; set; } = -1;
+
+    /// <summary>
+    /// Rejects an <see cref="NJobs"/> of 0, which names no thread count.
+    /// </summary>
+    private void ValidateJobs()
+    {
+        if (NJobs == 0)
+        {
+            throw new InvalidOperationException(
+                $"{nameof(NJobs)} must be positive, or negative to count back from the processor count; got 0.");
+        }
+    }
+
+    /// <summary>
     /// Initializes a new instance of HistGradientBoostingClassifier.
     /// </summary>
     /// <param name="maxBins">Maximum number of bins per feature. Default is 256.</param>
@@ -256,6 +279,8 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
         int n = x.Rows;
         _trees.Clear();
 
+        ValidateJobs();
+
         // Step 1: Compute bin boundaries for each feature
         _binBoundaries = ComputeBinBoundaries(x);
 
@@ -324,6 +349,7 @@ public partial class HistGradientBoostingClassifier<T> : ClassifierBase<T>
             throw new ArgumentException($"Expected {NumFeatures} features but got {input.Columns}.", nameof(input));
         }
 
+        ValidateJobs();
         var engine = Engine;
         int rows = input.Rows;
         if (rows == 0)

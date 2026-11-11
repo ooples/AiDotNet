@@ -692,6 +692,14 @@ public abstract partial class LatentDiffusionModelBase<T> : DiffusionModelBase<T
         return FromPredictorOutput(prediction, noisySample);
     }
 
+    /// <summary>
+    /// A rank-3 sample whose leading axis is the latent channels is one [C, H, W] latent, as
+    /// <see cref="EnsureLatentShape"/> reads it, not a batch of C rows: counting it as C elements gave the timestep
+    /// tensor C rows, and the predictor answered with C latents for one.
+    /// </summary>
+    protected override bool IsBatchedTrainingSample(Tensor<T> sample)
+        => base.IsBatchedTrainingSample(sample) && !(sample.Rank == 3 && sample.Shape[0] == LatentChannels);
+
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, bool> BaseNoisePredictionByType = new();
 
     // True when none of the int-timestep prediction hooks is overridden below LatentDiffusionModelBase: an

@@ -37,6 +37,7 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
     private readonly int? _numHeadsOverride;
     private readonly int? _numKvHeadsOverride;
 
+    /// <inheritdoc />
     public override bool ProducesPooledOutput => false;
 
     /// <param name="options">The variant and optional transformer dimensions; each unset dimension
@@ -100,6 +101,7 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
         return new ChatGLM3TextConditioner<T>(tokenizer, options: new ChatGLM3TextConditionerOptions { Variant = variant });
     }
 
+    /// <inheritdoc />
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
         LayerHelper<T>.CreateDefaultChatGLM3TextLayers(
             vocabSize: VocabSize,
@@ -109,6 +111,7 @@ public class ChatGLM3TextConditioner<T> : TextConditioningBase<T>
             numHeads: _numHeadsOverride ?? GetNumHeads(_variant),
             numKvHeads: _numKvHeadsOverride ?? GetNumKvHeads(_variant));
 
+    /// <inheritdoc />
     public override Tensor<T> GetPooledEmbedding(Tensor<T> sequenceEmbeddings)
     {
         int rank = sequenceEmbeddings.Shape.Length;

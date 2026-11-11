@@ -66,7 +66,9 @@ public partial class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
 {
     private readonly ViTAdapterOptions _options;
 
+    /// <inheritdoc />
     protected override double DefaultLearningRate => _options.LearningRate;
+    /// <inheritdoc />
     protected override double DefaultWeightDecay => _options.WeightDecay;
 
     #region Fields
@@ -192,6 +194,7 @@ public partial class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
         };
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
@@ -203,6 +206,7 @@ public partial class ViTAdapter<T> : Common.SemanticSegmentationBase<T>
         return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

@@ -7,6 +7,7 @@ namespace AiDotNet.ProgramSynthesis.Requests;
 /// </summary>
 public sealed class CodeRefactoringRequest : CodeTaskRequestBase
 {
+    /// <inheritdoc />
     public override CodeTask Task => CodeTask.Refactoring;
 
     public string Code { get; set; } = string.Empty;

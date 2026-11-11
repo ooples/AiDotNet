@@ -170,6 +170,7 @@ public partial class PrincipalComponentRegression<T> : RegressionBase<T>
     /// </remarks>
     public override bool SupportsParameterInitialization => false;
 
+    /// <inheritdoc />
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         ValidateInputs(x, y);
@@ -334,6 +335,7 @@ public partial class PrincipalComponentRegression<T> : RegressionBase<T>
         return explainedVariance.Length;
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> input)
     {
         // OLS coefficients are in original space. Use base class prediction.

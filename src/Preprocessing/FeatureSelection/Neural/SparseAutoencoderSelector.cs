@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Neural;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly int _hiddenSize;
@@ -33,9 +33,12 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double[]? FeatureImportances => _featureImportances;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public SparseAutoencoderSelector(
@@ -57,6 +60,7 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         _sparsityWeight = sparsityWeight;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         _nInputFeatures = data.Columns;
@@ -168,6 +172,7 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
 
     private double Sigmoid(double x) => 1.0 / (1.0 + Math.Exp(-Math.Max(-500, Math.Min(500, x))));
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -184,11 +189,13 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("SparseAutoencoderSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -201,6 +208,7 @@ public class SparseAutoencoderSelector<T> : TransformerBase<T, Matrix<T>, Matrix
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

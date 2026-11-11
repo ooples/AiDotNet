@@ -587,6 +587,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         _implicitIdentityWhenUnset = true;
     }
 
+    /// <inheritdoc />
     public void SetAdjacencyMatrix(Tensor<T> adjacencyMatrix)
     {
         // Check if we need to re-extract edges (new matrix or first time)
@@ -778,6 +779,7 @@ public partial class GraphConvolutionalLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         EnsureDenseAdjacencyForInput(input);

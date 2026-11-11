@@ -252,11 +252,13 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         }
     }
 
+    /// <inheritdoc />
     public void Train(TInput input, TOutput expectedOutput)
     {
         _innerModel.Train(input, expectedOutput);
     }
 
+    /// <inheritdoc />
     public ModelMetadata<T> GetModelMetadata()
     {
         return _innerModel.GetModelMetadata();
@@ -267,6 +269,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         return InterfaceGuard.FeatureAware(_innerModel).GetActiveFeatureIndices();
     }
 
+    /// <inheritdoc />
     public virtual Dictionary<string, T> GetFeatureImportance()
     {
         return _innerModel.GetFeatureImportance();
@@ -282,6 +285,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         return InterfaceGuard.FeatureAware(_innerModel).IsFeatureUsed(featureIndex);
     }
 
+    /// <inheritdoc />
     public IFullModel<T, TInput, TOutput> DeepCopy()
     {
         var copiedInner = _innerModel.DeepCopy();
@@ -320,6 +324,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         return new ModelIndividual<T, TInput, TOutput, TGene>(cloned, clonedGenes, _modelFactory);
     }
 
+    /// <inheritdoc />
     public virtual void SetParameters(Vector<T> parameters)
     {
         _innerModel = InterfaceGuard.Parameterizable(_innerModel).WithParameters(parameters);
@@ -327,6 +332,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     }
 
     private int? _parameterCountCache;
+    /// <inheritdoc />
     public virtual long ParameterCount
         => _parameterCountCache ??= InterfaceGuard.Parameterizable(_innerModel).GetParameters()?.Length ?? 0;
 
@@ -336,6 +342,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
     /// <inheritdoc/>
     public virtual Vector<T> SanitizeParameters(Vector<T> parameters) => parameters;
 
+    /// <inheritdoc />
     public virtual void SaveModel(string filePath)
     {
         Helpers.ModelPersistenceGuard.EnforceBeforeSave();
@@ -356,6 +363,7 @@ public class ModelIndividual<T, TInput, TOutput, TGene> :
         catch (System.Security.SecurityException ex) { throw new InvalidOperationException($"Security error when saving model to '{filePath}': {ex.Message}", ex); }
     }
 
+    /// <inheritdoc />
     public virtual void LoadModel(string filePath)
     {
         Helpers.ModelPersistenceGuard.EnforceBeforeLoad();

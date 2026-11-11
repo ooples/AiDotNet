@@ -67,15 +67,14 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
     private readonly DocBankOptions _options;
 
     /// <summary>
-    /// Builds the model's own optimizer at the rate its options publish.
+    /// Builds the optimizer used only when the paper recipe cannot be resolved.
     /// </summary>
-    /// <returns>An Adam optimizer configured from the options.</returns>
+    /// <returns>An Adam optimizer at <see cref="DocBankOptions.LearningRate"/>, or Adam's 1e-3.</returns>
     /// <remarks>
     /// <para>
-    /// Both constructors previously wrote <c>new AdamOptimizer&lt;...&gt;(this)</c> with no
-    /// options, so the model trained at the optimizer's own default and DocBankOptions could not
-    /// influence it. The default is unchanged -- 1e-3 IS Adam's default -- but it is now a value
-    /// a caller can see and set.
+    /// DocBank declares its recipe (AdamW at 5e-5), so <see cref="PaperOptimizerFactory"/> builds the
+    /// training optimizer and this fallback is not reached; it exists so a recipe that resolves to
+    /// nothing still leaves the model trainable at the configured rate.
     /// </para>
     /// </remarks>
     private AdamOptimizer<T, Tensor<T>, Tensor<T>> CreateDefaultOptimizer()
@@ -83,7 +82,7 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
             this,
             new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
             {
-                InitialLearningRate = _options.LearningRate
+                InitialLearningRate = _options.LearningRate ?? 1e-3
             });
 
     #region Fields
@@ -92,14 +91,6 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
     private readonly InferenceSession? _onnxSession;
     private readonly IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> _optimizer;
 
-    // Cached tape-training optimizer (see GetOrCreateBaseOptimizer): a cosine-annealed Adam so the
-    // ResNet backbone trains with a decaying learning rate (He et al. 2016), the same schedule that
-    // keeps longer training from degrading the loss (MoreData_ShouldNotDegrade).
-    private IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>>? _baseTapeOptimizer;
-    // True only when the caller explicitly passed an optimizer (so GetOrCreateBaseOptimizer honors it
-    // instead of the scheduled default — the ctor always assigns _optimizer, so its type alone can't
-    // distinguish a user-supplied one from the built-in default).
-    private readonly bool _hasUserSuppliedOptimizer;
     private readonly int _backboneChannels;
     private readonly int _numClasses;
     private readonly int _hiddenDim;
@@ -193,9 +184,9 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
         // so the two constructors agreed only by coincidence.
         _hiddenDim = _options.HiddenDim;
         _useTextFeatures = _options.UseTextFeatures;
-        _hasUserSuppliedOptimizer = optimizer is not null;
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(
+        this, learningRateOverride: _options.LearningRate)
     ?? CreateDefaultOptimizer();
 
         ImageSize = _options.ImageSize;
@@ -240,9 +231,9 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
         _numClasses = _options.NumClasses;
         _hiddenDim = _options.HiddenDim;
         _useTextFeatures = _options.UseTextFeatures;
-        _hasUserSuppliedOptimizer = optimizer is not null;
         _optimizer = optimizer
-    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(this)
+    ?? PaperOptimizerFactory.CreateFor<T, Tensor<T>, Tensor<T>>(
+        this, learningRateOverride: _options.LearningRate)
     ?? CreateDefaultOptimizer();
 
         ImageSize = _options.ImageSize;
@@ -666,33 +657,16 @@ public partial class DocBank<T> : DocumentNeuralNetworkBase<T>, IPageSegmenter<T
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => RunBackbone(PreprocessDocument(input));
 
     /// <summary>
-    /// The optimizer the tape-training path (TrainWithTape) actually uses. ResNet training decays the
-    /// learning rate (He et al. 2016); with a constant rate the batch-1 smoke-test schedule overshoots
-    /// after the initial descent, so the loss creeps up with more iterations (MoreData_ShouldNotDegrade).
-    /// A cosine-annealed Adam lets the model converge early then anneals the LR toward zero, so longer
-    /// training does not degrade the loss. Stepped PER BATCH (once per Train() call) — the default
-    /// per-epoch mode would leave the rate pinned. Honors a caller-supplied optimizer if given.
+    /// The optimizer the tape-training path (TrainWithTape) uses: the one the constructor resolved.
     /// </summary>
+    /// <remarks>
+    /// That is the caller's optimizer when one was supplied, otherwise the paper recipe (AdamW at
+    /// 5e-5, or at <see cref="DocBankOptions.LearningRate"/> when set). This previously built a
+    /// separate decaying Adam at a hardcoded 1e-3, so training ignored both the recipe and the
+    /// option, and every configured learning rate left the weights bit-identical.
+    /// </remarks>
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer()
-    {
-        if (_hasUserSuppliedOptimizer && _optimizer is IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> userOpt)
-            return userOpt;
-
-        return _baseTapeOptimizer ??= new AdamOptimizer<T, Tensor<T>, Tensor<T>>(
-            this,
-            new AiDotNet.Models.Options.AdamOptimizerOptions<T, Tensor<T>, Tensor<T>>
-            {
-                UseAMSGrad = false,
-                InitialLearningRate = 0.001,
-                SchedulerStepMode = AiDotNet.LearningRateSchedulers.SchedulerStepMode.StepPerBatch,
-                // MONOTONIC exponential decay (cosine oscillates back up past T_max). The learning
-                // rate falls from 1e-3 to ~1e-7 by ~step 50, so the model converges in the early,
-                // high-LR steps and the long tail is effectively frozen — 200-iteration loss stays
-                // at the 50-iteration value instead of drifting up (MoreData_ShouldNotDegrade).
-                LearningRateScheduler = new AiDotNet.LearningRateSchedulers.ExponentialLRScheduler(
-                    baseLearningRate: 0.001, gamma: 0.85, minLearningRate: 1e-8),
-            });
-    }
+        => _optimizer;
 
     /// <inheritdoc />
     /// <remarks>The weights belong to the loaded graph in this mode. The base refuses

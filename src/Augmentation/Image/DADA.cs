@@ -18,6 +18,7 @@ public class DADA<T> : ImageAugmenterBase<T>
         Temperature = temperature; OperationCount = operationCount;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var ops = (AugmentOp[])Enum.GetValues(typeof(AugmentOp));
@@ -105,6 +106,7 @@ public class DADA<T> : ImageAugmenterBase<T>
         }
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

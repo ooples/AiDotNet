@@ -117,6 +117,7 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
 
     /// <summary>
@@ -227,7 +228,7 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
                 if (idx >= 0 && idx < waveLen)
                 {
                     double window =
-                        0.5 * (1.0 - Math.Cos(2.0 * Math.PI * (n + hopOut) / (2 * hopOut)));
+                        0.5 * (1.0 - Math.Cos(2.0 * Math.PI * (n + hopOut) / (2.0 * hopOut)));
                     double sample = magnitude[f] * Math.Cos(phase[f] + n * 0.1) * window * 0.3;
                     waveform[idx] = NumOps.FromDouble(NumOps.ToDouble(waveform[idx]) + sample);
                 }

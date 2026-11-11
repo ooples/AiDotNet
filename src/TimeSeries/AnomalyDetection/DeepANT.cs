@@ -128,6 +128,7 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
         _fcBiasGrad = new Tensor<T>(new[] { 1 });
     }
 
+    /// <inheritdoc />
     protected override void TrainCore(Matrix<T> x, Vector<T> y)
     {
         T learningRate = _numOps.FromDouble(_options.LearningRate);
@@ -323,6 +324,7 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
         _anomalyThreshold = _numOps.Add(mean, _numOps.Multiply(_numOps.FromDouble(3.0), std));
     }
 
+    /// <inheritdoc />
     public override Vector<T> Predict(Matrix<T> input)
     {
         if (TryPredictFromTimeIndexCalibration(input, _trainingSeries, out var calibratedPredictions))
@@ -343,6 +345,7 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
         return predictions;
     }
 
+    /// <inheritdoc />
     public override T PredictSingle(Vector<T> input)
     {
         // Forward pass through convolutional layers
@@ -436,6 +439,7 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
     // declares its state and writes no serialization at all.
 
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         return new ModelMetadata<T>
@@ -452,6 +456,7 @@ public partial class DeepANT<T> : TimeSeriesModelBase<T>
         };
     }
 
+    /// <inheritdoc />
     protected override IFullModel<T, Matrix<T>, Vector<T>> CreateInstance()
     {
         return new DeepANT<T>(new DeepANTOptions<T>(_options), initializeModel: false);

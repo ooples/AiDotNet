@@ -116,13 +116,18 @@ public partial class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTun
         TryAutoEnableWeightStreaming();
     }
 
+    /// <inheritdoc />
     public int EmbeddingDimension => _options.DecoderDim;
     int IVisualEncoder<T>.ImageSize => _options.ImageSize;
     int IVisualEncoder<T>.ImageChannels => 3;
+    /// <inheritdoc />
     public int MaxGenerationLength => _options.MaxGenerationLength;
+    /// <inheritdoc />
     public int DecoderEmbeddingDim => _options.DecoderDim;
+    /// <inheritdoc />
     public string LanguageModelName => _options.LanguageModelName;
 
+    /// <inheritdoc />
     public Tensor<T> EncodeImage(Tensor<T> image)
     {
         ThrowIfDisposed();
@@ -177,6 +182,7 @@ public partial class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTun
         return output;
     }
 
+    /// <inheritdoc />
     public Tensor<T> Chat(
         Tensor<T> image,
         IEnumerable<(string Role, string Content)> conversationHistory,
@@ -253,6 +259,7 @@ public partial class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTun
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -276,9 +283,11 @@ public partial class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTun
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessImage(Tensor<T> image) =>
         NormalizeImage(image, _options.ImageMean, _options.ImageStd);
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> output) => output;
 
     // Phi-3-Vision's decoder/vision blocks are lazy FullyConnected/attention
@@ -288,6 +297,7 @@ public partial class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTun
     // coarse structural estimate (≈12·d² per transformer block for QKVO + FFN,
     // plus the token embedding) lets the auto-detector turn streaming on in the
     // constructor so those weights stream as they materialize.
+    /// <inheritdoc />
     protected override long EstimateStructuralParameterCount()
     {
         // ONNX mode keeps weights in the external runtime; the AiDotNet layer
@@ -302,6 +312,7 @@ public partial class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTun
         return vision + decoder + embeddings;
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -328,6 +339,7 @@ public partial class Phi3Vision<T> : VisionLanguageModelBase<T>, IInstructionTun
             throw new ObjectDisposedException(GetType().FullName ?? nameof(Phi3Vision<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

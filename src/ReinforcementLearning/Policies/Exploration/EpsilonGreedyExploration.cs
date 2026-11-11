@@ -46,6 +46,7 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
             _epsilon = epsilonStart;
         }
 
+        /// <inheritdoc />
         public override Vector<T> GetExplorationAction(Vector<T> state, Vector<T> policyAction, int actionSpaceSize, Random random)
         {
             if (random.NextDouble() < _epsilon)
@@ -61,11 +62,13 @@ namespace AiDotNet.ReinforcementLearning.Policies.Exploration
             return policyAction;
         }
 
+        /// <inheritdoc />
         public override void Update()
         {
             _epsilon = Math.Max(_epsilonEnd, _epsilon * _epsilonDecay);
         }
 
+        /// <inheritdoc />
         public override void Reset()
         {
             _epsilon = _epsilonStart;

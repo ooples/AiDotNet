@@ -126,6 +126,7 @@ public partial class PrincipalNeighbourhoodAggregationLayer<T> : LayerBase<T>, I
     [Scratch]
     private Tensor<T>? _biasGradient;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <inheritdoc/>

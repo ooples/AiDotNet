@@ -84,7 +84,9 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>
         => SpatialStrideContract(inputRank, 16);
 
     private readonly EfficientTAMOptions _options;
+    /// <inheritdoc />
     protected override double DefaultLearningRate => _options.LearningRate;
+    /// <inheritdoc />
     protected override double DefaultWeightDecay => _options.WeightDecay;
 
     #region Fields
@@ -217,6 +219,7 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>
         _ => (192, 12, 3, 16, 256)
     };
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -255,6 +258,7 @@ public partial class EfficientTAM<T> : Common.VideoSegmentationBase<T>
         return activations;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

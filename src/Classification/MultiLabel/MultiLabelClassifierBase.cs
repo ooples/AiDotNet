@@ -347,6 +347,7 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
         }
     }
 
+    /// <inheritdoc />
     public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
 
     /// <inheritdoc/>
@@ -539,6 +540,7 @@ public abstract partial class MultiLabelClassifierBase<T> : IMultiLabelClassifie
     }
 
 
+    /// <inheritdoc />
     public virtual void SaveModel(string path)
     {
         ThrowIfDisposed();

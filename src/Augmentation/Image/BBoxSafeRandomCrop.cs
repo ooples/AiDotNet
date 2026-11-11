@@ -19,6 +19,7 @@ public class BBoxSafeRandomCrop<T> : SpatialImageAugmenterBase<T>
         MinBBoxAreaRatio = minBBoxAreaRatio;
     }
 
+    /// <inheritdoc />
     protected override (ImageTensor<T> data, IDictionary<string, object> parameters) ApplyWithTransformParams(
         ImageTensor<T> data, AugmentationContext<T> context)
     {
@@ -40,6 +41,7 @@ public class BBoxSafeRandomCrop<T> : SpatialImageAugmenterBase<T>
         return (data.Crop(y, x, h, w), parms);
     }
 
+    /// <inheritdoc />
     protected override BoundingBox<T> TransformBoundingBox(BoundingBox<T> box,
         IDictionary<string, object> transformParams, AugmentationContext<T> context)
     {
@@ -70,6 +72,7 @@ public class BBoxSafeRandomCrop<T> : SpatialImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     protected override Keypoint<T> TransformKeypoint(Keypoint<T> keypoint,
         IDictionary<string, object> transformParams, AugmentationContext<T> context)
     {
@@ -91,6 +94,7 @@ public class BBoxSafeRandomCrop<T> : SpatialImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     protected override SegmentationMask<T> TransformMask(SegmentationMask<T> mask,
         IDictionary<string, object> transformParams, AugmentationContext<T> context)
     {
@@ -120,6 +124,7 @@ public class BBoxSafeRandomCrop<T> : SpatialImageAugmenterBase<T>
         };
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

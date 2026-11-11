@@ -45,6 +45,7 @@ public partial class Gemma2DecoderBlock<T> : LayerBase<T>
     private readonly RMSNormalizationLayer<T> _normPostFfn;
     private readonly int _hiddenSize;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => false;
 
     /// <summary>Pre-attention RMSNorm.</summary>

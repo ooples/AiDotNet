@@ -234,6 +234,11 @@ internal static class TensorParallelPartitioner<T>
         switch (attention)
         {
             case MultiHeadAttentionLayer<T> mha:
+                // The shards below carry Q/K/V/O weights and the output bias only; a query or value bias would be
+                // dropped, and the output bias would no longer be the vector's tail.
+                if (mha.HasProjectionBiases)
+                    throw new System.NotSupportedException(
+                        "Tensor-parallel partitioning does not shard query or value projection biases yet.");
                 qW = mha.GetQueryWeights(); kW = mha.GetKeyWeights(); vW = mha.GetValueWeights(); oW = mha.GetOutputWeights();
                 oBias = ParamTail(mha.GetParameters(), mha.GetOutputWeights().Shape[1]);
                 return;
