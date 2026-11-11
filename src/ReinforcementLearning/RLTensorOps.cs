@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Interfaces;
 using AiDotNet.Tensors.LinearAlgebra;
 
 namespace AiDotNet.ReinforcementLearning;
@@ -27,7 +29,9 @@ internal static class RLTensorOps
 
         if (values.Length == 0)
         {
-            throw new ArgumentException("Cannot compute ArgMax of an empty vector.", nameof(values));
+            // The scalar scans read element 0 first; reading it here raises the same
+            // out-of-range exception they did for an empty vector.
+            _ = values[0];
         }
 
         return Engine.TensorArgMax(values.AsTensor(), 0)[0];
@@ -59,6 +63,40 @@ internal static class RLTensorOps
     internal static T Max<T>(Vector<T> values)
     {
         return values[ArgMax(values)];
+    }
+
+    /// <summary>
+    /// True when every element equals the first one under <see cref="INumericOperations{T}.Equals"/>
+    /// (so a NaN anywhere makes it false), the "all actions tied" test of the tabular agents.
+    /// </summary>
+    internal static bool AllEqual<T>(Vector<T> values, INumericOperations<T> ops)
+    {
+        if (values is null)
+        {
+            throw new ArgumentNullException(nameof(values));
+        }
+
+        if (values.Length <= 1)
+        {
+            return true;
+        }
+
+        var equal = Engine.TensorEquals(values.AsTensor(), values[0]);
+        return ops.Equals(Engine.TensorMinValue(equal), ops.One);
+    }
+
+    /// <summary>
+    /// Gathers actions 0..count-1 of a dictionary-backed table row into a vector (data movement
+    /// only; a missing action throws <see cref="KeyNotFoundException"/> like the indexed reads).
+    /// </summary>
+    internal static Vector<T> Row<T>(Dictionary<int, T> row, int count)
+    {
+        if (row is null)
+        {
+            throw new ArgumentNullException(nameof(row));
+        }
+
+        return Vector<T>.FromEnumerable(Enumerable.Range(0, count).Select(action => row[action]));
     }
 
     /// <summary>Concatenates vectors end to end.</summary>

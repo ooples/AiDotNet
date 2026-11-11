@@ -688,13 +688,8 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
     private int ArgMax(Vector<T> vector)
     {
-        int maxIndex = 0;
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], vector[maxIndex]))
-                maxIndex = i;
-        }
-        return maxIndex;
+        // An empty vector keeps the scan's index-0 default.
+        return vector.Length == 0 ? 0 : RLTensorOps.ArgMax(vector);
     }
 
     private T Max(Vector<T> vector)

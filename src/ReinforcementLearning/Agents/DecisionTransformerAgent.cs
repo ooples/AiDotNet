@@ -753,10 +753,8 @@ public partial class DecisionTransformerAgent<T> : DeepReinforcementLearningAgen
 
     private int ArgMax(Vector<T> values)
     {
-        int best = 0;
-        for (int i = 1; i < values.Length; i++)
-            if (NumOps.GreaterThan(values[i], values[best])) best = i;
-        return best;
+        // An empty vector keeps the scan's index-0 default.
+        return values.Length == 0 ? 0 : RLTensorOps.ArgMax(values);
     }
 
     /// <summary>The episode's starting return-to-go: the configured target, else the best stored episode return.</summary>

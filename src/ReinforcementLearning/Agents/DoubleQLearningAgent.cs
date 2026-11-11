@@ -185,14 +185,7 @@ public partial class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     private int GetActionIndex(Vector<T> action)
     {
-        for (int i = 0; i < action.Length; i++)
-        {
-            if (NumOps.GreaterThan(action[i], NumOps.Zero))
-            {
-                return i;
-            }
-        }
-        return 0;
+        return RLTensorOps.FirstPositiveIndex(action, NumOps.Zero);
     }
 
     private void EnsureStateExists(string stateKey)

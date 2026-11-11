@@ -198,14 +198,7 @@ public partial class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGr
 
     private int GetActionIndex(Vector<T> action)
     {
-        for (int i = 0; i < action.Length; i++)
-        {
-            if (NumOps.GreaterThan(action[i], NumOps.Zero))
-            {
-                return i;
-            }
-        }
-        return 0;
+        return RLTensorOps.FirstPositiveIndex(action, NumOps.Zero);
     }
 
     private void EnsureStateExists(string stateKey)
@@ -223,23 +216,9 @@ public partial class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGr
     private int GetBestAction(string stateKey)
     {
         EnsureStateExists(stateKey);
-        int bestAction = 0;
-        T bestValue = _qTable[stateKey][0];
-        bool allEqual = true;
-
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
-            {
-                bestValue = _qTable[stateKey][a];
-                bestAction = a;
-                allEqual = false;
-            }
-            else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
-            {
-                allEqual = false;
-            }
-        }
+        var qValues = RLTensorOps.Row(_qTable[stateKey], _options.ActionSize);
+        int bestAction = RLTensorOps.ArgMax(qValues);
+        bool allEqual = RLTensorOps.AllEqual(qValues, NumOps);
         if (allEqual)
             bestAction = HashStateToAction(stateKey, _options.ActionSize);
         return bestAction;

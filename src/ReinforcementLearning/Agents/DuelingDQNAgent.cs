@@ -274,19 +274,7 @@ public partial class DuelingDQNAgent<T> : DeepReinforcementLearningAgentBase<T>,
 
     private int ArgMax(Vector<T> vector)
     {
-        int maxIndex = 0;
-        T maxValue = vector[0];
-
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], maxValue))
-            {
-                maxValue = vector[i];
-                maxIndex = i;
-            }
-        }
-
-        return maxIndex;
+        return RLTensorOps.ArgMax(vector);
     }
     /// <inheritdoc/>
     public override void SaveModel(string filepath)
