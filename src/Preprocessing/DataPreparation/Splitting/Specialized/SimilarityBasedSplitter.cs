@@ -74,59 +74,26 @@ public class SimilarityBasedSplitter<T> : DataSplitterBase<T>
         ValidateInputs(X, y);
 
         int nSamples = X.Rows;
-        int nFeatures = X.Columns;
         int targetTestSize = Math.Max(1, (int)(nSamples * _testSize));
 
-        // Compute pairwise cosine similarities
-        var similarities = new double[nSamples, nSamples];
-        var norms = new double[nSamples];
+        // Compute pairwise cosine similarities (0 when either norm is 0; the diagonal is excluded below)
+        var engine = AiDotNet.Tensors.Engines.AiDotNetEngine.Current;
+        var x = Tensor<T>.FromMatrix(X);
+        var norms = engine.TensorSqrt(engine.ReduceSum(engine.TensorMultiply(x, x), new[] { 1 }, true)); // [n, 1]
+        var dots = engine.TensorMatMul(x, engine.TensorTranspose(x));
+        var normProducts = engine.TensorMatMul(norms, engine.TensorTranspose(norms));
+        var valid = engine.TensorGreaterThan(normProducts, NumOps.Zero);
+        var safeProducts = engine.TensorWhere(valid, normProducts, PreprocessingTensorOps.Filled(new[] { nSamples, nSamples }, NumOps.One));
+        var similarities = engine.TensorMultiply(engine.TensorDivide(dots, safeProducts), valid);
 
-        // Calculate norms
-        for (int i = 0; i < nSamples; i++)
-        {
-            double norm = 0;
-            for (int j = 0; j < nFeatures; j++)
-            {
-                double val = Convert.ToDouble(X[i, j]);
-                norm += val * val;
-            }
-            norms[i] = Math.Sqrt(norm);
-        }
+        // Calculate average similarity to every other sample
+        var offDiagonal = PreprocessingTensorOps.OneMinus(engine.TensorEye<T>(nSamples));
+        var avgSimilarity = engine.TensorDivideScalar(
+            engine.ReduceSum(engine.TensorMultiply(similarities, offDiagonal), new[] { 1 }, false),
+            NumOps.FromDouble(nSamples - 1));
 
-        // Calculate similarities
-        for (int i = 0; i < nSamples; i++)
-        {
-            similarities[i, i] = 1.0;
-            for (int j = i + 1; j < nSamples; j++)
-            {
-                double dot = 0;
-                for (int k = 0; k < nFeatures; k++)
-                {
-                    dot += Convert.ToDouble(X[i, k]) * Convert.ToDouble(X[j, k]);
-                }
-
-                double sim = (norms[i] > 0 && norms[j] > 0) ? dot / (norms[i] * norms[j]) : 0;
-                similarities[i, j] = sim;
-                similarities[j, i] = sim;
-            }
-        }
-
-        // Calculate average similarity for each sample
-        var avgSimilarity = new double[nSamples];
-        for (int i = 0; i < nSamples; i++)
-        {
-            double sum = 0;
-            for (int j = 0; j < nSamples; j++)
-            {
-                if (i != j) sum += similarities[i, j];
-            }
-            avgSimilarity[i] = sum / (nSamples - 1);
-        }
-
-        // Sort by similarity
-        var sortedIndices = Enumerable.Range(0, nSamples)
-            .OrderBy(i => _testSimilar ? -avgSimilarity[i] : avgSimilarity[i])
-            .ToArray();
+        // Sort by similarity (most similar first when testing on similar samples)
+        var sortedIndices = engine.TensorArgsort(avgSimilarity, 0, _testSimilar).AsSpan().ToArray();
 
         if (_shuffle)
         {
