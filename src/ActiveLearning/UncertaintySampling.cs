@@ -112,13 +112,8 @@ public class UncertaintySampling<T> : IActiveLearningStrategy<T>
         var predictions = model.Predict(unlabeledPool);
         var numSamples = unlabeledPool.Shape[0];
         var numClasses = predictions.Length / numSamples;
-        var scores = new Vector<T>(numSamples);
-
-        for (int i = 0; i < numSamples; i++)
-        {
-            var probs = ExtractProbabilities(predictions, i, numClasses);
-            scores[i] = ComputeUncertainty(probs);
-        }
+        var probs = ActiveLearningEngineOps.SoftmaxRows(predictions, numSamples, numClasses);
+        var scores = ComputeUncertainty(probs).ToVector();
 
         UpdateStatistics(scores);
         return scores;
@@ -136,112 +131,27 @@ public class UncertaintySampling<T> : IActiveLearningStrategy<T>
     }
 
     /// <summary>
-    /// Computes uncertainty for a single sample based on the configured measure.
+    /// Computes the uncertainty of every sample based on the configured measure.
     /// </summary>
-    private T ComputeUncertainty(Vector<T> probabilities)
+    /// <param name="probabilities">A [numSamples, numClasses] tensor of class probabilities.</param>
+    private Tensor<T> ComputeUncertainty(Tensor<T> probabilities)
     {
-        return _measure switch
+        var engine = AiDotNetEngine.Current;
+        switch (_measure)
         {
-            UncertaintyMeasure.LeastConfidence => ComputeLeastConfidence(probabilities),
-            UncertaintyMeasure.MarginSampling => ComputeMarginSampling(probabilities),
-            UncertaintyMeasure.Entropy => ComputeEntropy(probabilities),
-            _ => ComputeEntropy(probabilities)
-        };
-    }
-
-    /// <summary>
-    /// Computes least confidence: 1 - max(probabilities).
-    /// </summary>
-    private T ComputeLeastConfidence(Vector<T> probabilities)
-    {
-        var maxProb = _numOps.Zero;
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            if (_numOps.GreaterThan(probabilities[i], maxProb))
-            {
-                maxProb = probabilities[i];
-            }
+            case UncertaintyMeasure.LeastConfidence:
+                // 1 - max(probabilities)
+                return engine.ScalarMinusTensor(_numOps.One, ActiveLearningEngineOps.MaxRows(probabilities));
+            case UncertaintyMeasure.MarginSampling:
+                {
+                    // 1 - (P(1st) - P(2nd))
+                    var (first, second) = ActiveLearningEngineOps.TopTwoRows(probabilities);
+                    return engine.ScalarMinusTensor(_numOps.One, engine.TensorSubtract(first, second));
+                }
+            default:
+                // Entropy: -Σ p*log(p)
+                return ActiveLearningEngineOps.EntropyRows(probabilities, _numOps.FromDouble(1e-10));
         }
-        return _numOps.Subtract(_numOps.One, maxProb);
-    }
-
-    /// <summary>
-    /// Computes margin sampling: 1 - (P(1st) - P(2nd)).
-    /// </summary>
-    private T ComputeMarginSampling(Vector<T> probabilities)
-    {
-        var first = _numOps.Zero;
-        var second = _numOps.Zero;
-
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            if (_numOps.GreaterThan(probabilities[i], first))
-            {
-                second = first;
-                first = probabilities[i];
-            }
-            else if (_numOps.GreaterThan(probabilities[i], second))
-            {
-                second = probabilities[i];
-            }
-        }
-
-        var margin = _numOps.Subtract(first, second);
-        return _numOps.Subtract(_numOps.One, margin);
-    }
-
-    /// <summary>
-    /// Computes entropy: -Σ p*log(p).
-    /// </summary>
-    private T ComputeEntropy(Vector<T> probabilities)
-    {
-        var entropy = _numOps.Zero;
-        var epsilon = _numOps.FromDouble(1e-10);
-
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            var p = _numOps.Add(probabilities[i], epsilon);
-            var logP = _numOps.FromDouble(Math.Log(_numOps.ToDouble(p)));
-            var term = _numOps.Multiply(p, logP);
-            entropy = _numOps.Subtract(entropy, term);
-        }
-
-        return entropy;
-    }
-
-    /// <summary>
-    /// Extracts probabilities for a single sample from batch predictions.
-    /// </summary>
-    private Vector<T> ExtractProbabilities(Tensor<T> predictions, int sampleIndex, int numClasses)
-    {
-        var probs = new Vector<T>(numClasses);
-        var startIdx = sampleIndex * numClasses;
-
-        // Apply softmax to get probabilities
-        var maxLogit = _numOps.MinValue;
-        for (int c = 0; c < numClasses; c++)
-        {
-            if (_numOps.GreaterThan(predictions[startIdx + c], maxLogit))
-            {
-                maxLogit = predictions[startIdx + c];
-            }
-        }
-
-        var expSum = _numOps.Zero;
-        for (int c = 0; c < numClasses; c++)
-        {
-            var shifted = _numOps.Subtract(predictions[startIdx + c], maxLogit);
-            var expVal = _numOps.FromDouble(Math.Exp(_numOps.ToDouble(shifted)));
-            probs[c] = expVal;
-            expSum = _numOps.Add(expSum, expVal);
-        }
-
-        for (int c = 0; c < numClasses; c++)
-        {
-            probs[c] = _numOps.Divide(probs[c], expSum);
-        }
-
-        return probs;
     }
 
     /// <summary>
