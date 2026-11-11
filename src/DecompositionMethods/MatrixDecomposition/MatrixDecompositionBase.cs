@@ -306,6 +306,93 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     }
 
     /// <summary>
+    /// Orthogonal similarity reduction H = Q^T A Q by Householder reflectors applied to the columns
+    /// below the subdiagonal (upper Hessenberg form; tridiagonal for symmetric A), with Q e1 = e1.
+    /// </summary>
+    /// <param name="matrix">The square matrix to reduce (not modified).</param>
+    /// <returns>H (entries below the subdiagonal are rounding residue) and the orthogonal Q.</returns>
+    /// <remarks>
+    /// Step k reflects x = H[k+1:, k] onto alpha e1 with alpha = -sign(x0) ‖x‖ (sign(0) = +1),
+    /// using u = (x - alpha e1) / ‖x - alpha e1‖; steps whose ‖x‖ or ‖u‖ is below 1e-14 are
+    /// skipped. Each reflection is applied as two rank-1 whole-matrix engine updates.
+    /// </remarks>
+    protected (Matrix<T> H, Matrix<T> Q) ReduceByHouseholderSimilarity(Matrix<T> matrix)
+    {
+        int n = matrix.Rows;
+        var h = Tensor<T>.FromMatrix(matrix.Clone());
+        var q = Engine.TensorEye<T>(n);
+        T tiny = NumOps.FromDouble(1e-14);
+        T two = NumOps.FromDouble(2);
+        T zero = NumOps.Zero;
+
+        for (int k = 0; k < n - 2; k++)
+        {
+            int length = n - k - 1;
+            var x = Engine.TensorSlice(h, new[] { k + 1, k }, new[] { length, 1 });
+            var xNorm = Engine.TensorNorm(x).Reshape(new[] { 1, 1 });
+            if (AnyBelow(xNorm, tiny))
+            {
+                continue;
+            }
+
+            // u0 = x0 - alpha = x0 + sign(x0) ‖x‖, sign(x0) = -1 for x0 < 0 and +1 otherwise.
+            var x0 = Engine.TensorSlice(x, new[] { 0, 0 }, new[] { 1, 1 });
+            var negative = Engine.TensorLessThan(x0, zero);
+            var sign = Engine.TensorSubtract(Engine.TensorOnesLike(negative), Engine.TensorMultiplyScalar(negative, two));
+            var u = Engine.TensorSetSlice(x, Engine.TensorAdd(x0, Engine.TensorMultiply(sign, xNorm)), new[] { 0, 0 });
+
+            var uNorm = Engine.TensorNorm(u).Reshape(new[] { 1, 1 });
+            if (AnyBelow(uNorm, tiny))
+            {
+                continue;
+            }
+
+            u = Engine.TensorMultiplyScalar(u, Engine.TensorSum(Engine.TensorReciprocal(uNorm)));
+            var v = Engine.TensorSetSlice(new Tensor<T>(new[] { n, 1 }), u, new[] { k + 1, 0 });
+            var vT = Engine.TensorTranspose(v);
+
+            // H <- P H P and Q <- Q P with P = I - 2 v v^T.
+            h = Engine.TensorSubtract(h, Engine.TensorMultiplyScalar(Engine.TensorMatMul(v, Engine.TensorMatMul(vT, h)), two));
+            h = Engine.TensorSubtract(h, Engine.TensorMultiplyScalar(Engine.TensorMatMul(Engine.TensorMatMul(h, v), vT), two));
+            q = Engine.TensorSubtract(q, Engine.TensorMultiplyScalar(Engine.TensorMatMul(Engine.TensorMatMul(q, v), vT), two));
+        }
+
+        return (h.ToMatrix(), q.ToMatrix());
+    }
+
+    /// <summary>
+    /// Rescales a reduction H = Q^T A Q by D = diag(±1) so that every subdiagonal entry
+    /// H[k+1,k] is non-negative (H' = D H D, Q' = Q D).
+    /// </summary>
+    /// <remarks>
+    /// Rotation-based (Givens) and Lanczos reductions produce non-negative subdiagonals
+    /// (r = sqrt(a^2 + b^2), beta = ‖w‖); by the implicit-Q theorem an unreduced reduction with
+    /// Q e1 = e1 is unique up to exactly this sign scaling. d_0 = 1 and d_(k+1) = d_k sign(H[k+1,k])
+    /// (sign(0) = +1), computed with an engine cumulative product.
+    /// </remarks>
+    protected (Matrix<T> H, Matrix<T> Q) NormalizeSubdiagonalSigns(Matrix<T> hMatrix, Matrix<T> qMatrix)
+    {
+        int n = hMatrix.Rows;
+        if (n < 2)
+        {
+            return (hMatrix, qMatrix);
+        }
+
+        var h = Tensor<T>.FromMatrix(hMatrix);
+        var subdiagonal = Engine.TensorDiagonal(Engine.TensorSlice(h, new[] { 1, 0 }, new[] { n - 1, n - 1 }));
+        var signs = Engine.TensorSign(subdiagonal);
+        signs = Engine.TensorAdd(signs, Engine.TensorSubtract(Engine.TensorOnesLike(signs), Engine.TensorAbs(signs)));
+        var d = Engine.Concat(
+            new[] { Engine.TensorOnesLike(new Tensor<T>(new[] { 1 })), Engine.TensorCumProd(signs, 0) },
+            0);
+        var scaling = Engine.TensorDiagEmbed(d);
+
+        var scaledH = Engine.TensorMatMul(Engine.TensorMatMul(scaling, h), scaling);
+        var scaledQ = Engine.TensorMatMul(Tensor<T>.FromMatrix(qMatrix), scaling);
+        return (scaledH.ToMatrix(), scaledQ.ToMatrix());
+    }
+
+    /// <summary>
     /// Solves a triangular system <c>T x = rhs</c> with one whole-matrix engine triangular solve.
     /// </summary>
     /// <param name="triangular">The square triangular coefficient matrix.</param>

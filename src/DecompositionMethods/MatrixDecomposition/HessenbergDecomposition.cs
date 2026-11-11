@@ -126,120 +126,14 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private (Matrix<T> H, Matrix<T> Q) ComputeHessenbergHouseholder(Matrix<T> matrix)
     {
-        var n = matrix.Rows;
-        var H = matrix.Clone();
-        var Q = Matrix<T>.CreateIdentity(n);
+        var (h, q) = ReduceByHouseholderSimilarity(matrix);
+        return (KeepUpperHessenberg(h), q);
+    }
 
-        for (int k = 0; k < n - 2; k++)
-        {
-            // Extract column below the subdiagonal
-            var x = new Vector<T>(n - k - 1);
-            for (int i = 0; i < n - k - 1; i++)
-            {
-                x[i] = H[k + 1 + i, k];
-            }
-
-            // Compute norm of x
-            T xNorm = NumOps.Zero;
-            xNorm = NumOps.Add(xNorm, Engine.DotProduct(x, x));
-            xNorm = NumOps.Sqrt(xNorm);
-
-            // Skip if column is already zero (nothing to eliminate)
-            if (NumOps.LessThan(xNorm, NumOps.FromDouble(1e-14)))
-            {
-                continue;
-            }
-
-            // Use OPPOSITE sign for numerical stability (avoid cancellation)
-            T alpha = NumOps.LessThan(x[0], NumOps.Zero)
-                ? xNorm
-                : NumOps.Negate(xNorm);
-
-            // Create Householder vector: v = x - alpha*e_1
-            var v = new Vector<T>(x.Length);
-            v[0] = NumOps.Subtract(x[0], alpha);
-            for (int i = 1; i < x.Length; i++)
-            {
-                v[i] = x[i];
-            }
-
-            // Normalize v
-            T vNorm = NumOps.Zero;
-            vNorm = NumOps.Add(vNorm, Engine.DotProduct(v, v));
-            vNorm = NumOps.Sqrt(vNorm);
-
-            if (NumOps.LessThan(vNorm, NumOps.FromDouble(1e-14)))
-            {
-                continue;
-            }
-
-            for (int i = 0; i < v.Length; i++)
-            {
-                v[i] = NumOps.Divide(v[i], vNorm);
-            }
-
-            // Apply Householder from LEFT: H = (I - 2*v*v^T) * H
-            // For rows k+1 to n-1, columns 0 to n-1
-            for (int j = 0; j < n; j++)
-            {
-                // Extract column slice H[k+1:k+1+v.Length, j]
-                var colSlice = new Vector<T>(v.Length);
-                for (int i = 0; i < v.Length; i++)
-                {
-                    colSlice[i] = H[k + 1 + i, j];
-                }
-                T dot = NumOps.Multiply(NumOps.FromDouble(2), Engine.DotProduct(v, colSlice));
-
-                for (int i = 0; i < v.Length; i++)
-                {
-                    H[k + 1 + i, j] = NumOps.Subtract(H[k + 1 + i, j], NumOps.Multiply(v[i], dot));
-                }
-            }
-
-            // Apply Householder from RIGHT: H = H * (I - 2*v*v^T)
-            // For rows 0 to n-1, columns k+1 to n-1
-            for (int i = 0; i < n; i++)
-            {
-                // Extract row slice H[i, k+1:k+1+v.Length]
-                var rowSlice = new Vector<T>(v.Length);
-                for (int j = 0; j < v.Length; j++)
-                {
-                    rowSlice[j] = H[i, k + 1 + j];
-                }
-                T dot = NumOps.Multiply(NumOps.FromDouble(2), Engine.DotProduct(rowSlice, v));
-
-                for (int j = 0; j < v.Length; j++)
-                {
-                    H[i, k + 1 + j] = NumOps.Subtract(H[i, k + 1 + j], NumOps.Multiply(dot, v[j]));
-                }
-            }
-
-            // Accumulate Q: Q = Q * P where P = I - 2*v*v^T (acting on rows k+1 to n-1)
-            // Q = Q * P is equivalent to updating columns k+1 to n-1 of Q
-            for (int i = 0; i < n; i++)
-            {
-                // Extract row slice Q[i, k+1:k+1+v.Length]
-                var qRowSlice = new Vector<T>(v.Length);
-                for (int j = 0; j < v.Length; j++)
-                {
-                    qRowSlice[j] = Q[i, k + 1 + j];
-                }
-                T dot = NumOps.Multiply(NumOps.FromDouble(2), Engine.DotProduct(qRowSlice, v));
-
-                for (int j = 0; j < v.Length; j++)
-                {
-                    Q[i, k + 1 + j] = NumOps.Subtract(Q[i, k + 1 + j], NumOps.Multiply(dot, v[j]));
-                }
-            }
-
-            // Explicitly zero out elements below subdiagonal in column k
-            for (int i = k + 2; i < n; i++)
-            {
-                H[i, k] = NumOps.Zero;
-            }
-        }
-
-        return (H, Q);
+    /// <summary>Zeroes every entry below the first subdiagonal (rounding residue of the reduction).</summary>
+    private Matrix<T> KeepUpperHessenberg(Matrix<T> matrix)
+    {
+        return Engine.TensorTriu(Tensor<T>.FromMatrix(matrix), -1).ToMatrix();
     }
 
     /// <summary>
@@ -260,69 +154,11 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private (Matrix<T> H, Matrix<T> Q) ComputeHessenbergGivens(Matrix<T> matrix)
     {
-        var n = matrix.Rows;
-        var H = matrix.Clone();
-        var Q = Matrix<T>.CreateIdentity(n);
-
-        for (int k = 0; k < n - 2; k++)
-        {
-            // Eliminate elements below the subdiagonal in column k
-            for (int i = n - 1; i > k + 1; i--)
-            {
-                // Skip if element is already zero
-                if (NumOps.LessThan(NumOps.Abs(H[i, k]), NumOps.FromDouble(1e-14)))
-                {
-                    continue;
-                }
-
-                // Compute Givens rotation to zero out H[i, k]
-                T a = H[i - 1, k];
-                T b = H[i, k];
-                T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(a, a), NumOps.Multiply(b, b)));
-
-                if (NumOps.LessThan(r, NumOps.FromDouble(1e-14)))
-                {
-                    continue;
-                }
-
-                T c = NumOps.Divide(a, r);
-                T s = NumOps.Divide(b, r);
-
-                // Apply Givens rotation from LEFT: H = G^T * H
-                // G^T rotates rows i-1 and i
-                for (int j = 0; j < n; j++)
-                {
-                    T temp1 = H[i - 1, j];
-                    T temp2 = H[i, j];
-                    H[i - 1, j] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
-                    H[i, j] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s, temp1));
-                }
-
-                // Apply Givens rotation from RIGHT: H = H * G
-                // G rotates columns i-1 and i
-                for (int j = 0; j < n; j++)
-                {
-                    T temp1 = H[j, i - 1];
-                    T temp2 = H[j, i];
-                    H[j, i - 1] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
-                    H[j, i] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s, temp1));
-                }
-
-                // Accumulate Q: Q = Q * G
-                for (int j = 0; j < n; j++)
-                {
-                    T temp1 = Q[j, i - 1];
-                    T temp2 = Q[j, i];
-                    Q[j, i - 1] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
-                    Q[j, i] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s, temp1));
-                }
-
-                // Explicitly zero out the element
-                H[i, k] = NumOps.Zero;
-            }
-        }
-
-        return (H, Q);
+        // Bottom-up Givens rotations perform the same orthogonal reduction with Q e1 = e1 and leave
+        // r = sqrt(a^2 + b^2) >= 0 on the subdiagonal.
+        var (h, q) = ReduceByHouseholderSimilarity(matrix);
+        (h, q) = NormalizeSubdiagonalSigns(h, q);
+        return (KeepUpperHessenberg(h), q);
     }
 
     /// <summary>
@@ -451,69 +287,8 @@ public class HessenbergDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private (Matrix<T> H, Matrix<T> Q) ComputeHessenbergImplicitQR(Matrix<T> matrix)
     {
-        var n = matrix.Rows;
-        var H = matrix.Clone();
-        var Q = Matrix<T>.CreateIdentity(n);
-
-        // Use Givens rotations with implicit shifting
-        // First pass: reduce to Hessenberg form using Givens rotations from bottom up
-        for (int k = 0; k < n - 2; k++)
-        {
-            // Eliminate elements below the subdiagonal in column k
-            for (int i = n - 1; i > k + 1; i--)
-            {
-                // Skip if element is already zero
-                if (NumOps.LessThan(NumOps.Abs(H[i, k]), NumOps.FromDouble(1e-14)))
-                {
-                    continue;
-                }
-
-                // Compute Givens rotation to zero out H[i, k]
-                T a = H[i - 1, k];
-                T b = H[i, k];
-                T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(a, a), NumOps.Multiply(b, b)));
-
-                if (NumOps.LessThan(r, NumOps.FromDouble(1e-14)))
-                {
-                    continue;
-                }
-
-                T c = NumOps.Divide(a, r);
-                T s = NumOps.Divide(b, r);
-
-                // Apply Givens rotation from LEFT: H = G^T * H
-                for (int j = 0; j < n; j++)
-                {
-                    T temp1 = H[i - 1, j];
-                    T temp2 = H[i, j];
-                    H[i - 1, j] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
-                    H[i, j] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s, temp1));
-                }
-
-                // Apply Givens rotation from RIGHT: H = H * G
-                for (int j = 0; j < n; j++)
-                {
-                    T temp1 = H[j, i - 1];
-                    T temp2 = H[j, i];
-                    H[j, i - 1] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
-                    H[j, i] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s, temp1));
-                }
-
-                // Accumulate Q: Q = Q * G
-                for (int j = 0; j < n; j++)
-                {
-                    T temp1 = Q[j, i - 1];
-                    T temp2 = Q[j, i];
-                    Q[j, i - 1] = NumOps.Add(NumOps.Multiply(c, temp1), NumOps.Multiply(s, temp2));
-                    Q[j, i] = NumOps.Subtract(NumOps.Multiply(c, temp2), NumOps.Multiply(s, temp1));
-                }
-
-                // Explicitly zero out the element
-                H[i, k] = NumOps.Zero;
-            }
-        }
-
-        return (H, Q);
+        // The implicit-QR preparation step is the same Givens reduction.
+        return ComputeHessenbergGivens(matrix);
     }
 
     /// <summary>
