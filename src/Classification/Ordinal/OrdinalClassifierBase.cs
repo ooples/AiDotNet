@@ -234,6 +234,66 @@ public abstract partial class OrdinalClassifierBase<T> : ClassifierBase<T>, IOrd
     /// <para><b>For Beginners:</b> Since this is an ordinal classifier, we always
     /// return the Ordinal task type regardless of the number of classes.</para>
     /// </remarks>
+    /// <summary>
+    /// Feature importance as |coefficient| divided by the sum of absolute coefficients.
+    /// </summary>
+    /// <param name="coefficients">The coefficients.</param>
+    /// <returns>Importance per feature name.</returns>
+    protected Dictionary<string, T> NormalizedCoefficientImportance(Vector<T> coefficients)
+    {
+        var importance = new Dictionary<string, T>();
+        if (coefficients.Length == 0)
+        {
+            return importance;
+        }
+
+        // |coef| normalized by the sum of absolute coefficients (1 when they are all zero)
+        var engine = Engine;
+        var magnitudes = engine.TensorAbs(coefficients.AsTensor());
+        T total = engine.TensorSum(magnitudes);
+        if (NumOps.Equals(total, NumOps.Zero)) total = NumOps.One;
+        var values = engine.TensorDivideScalar(magnitudes, total).ToArray();
+
+        for (int i = 0; i < values.Length; i++)
+        {
+            string name = FeatureNames is not null && i < FeatureNames.Length
+                ? FeatureNames[i]
+                : $"Feature_{i}";
+            importance[name] = values[i];
+        }
+
+        return importance;
+    }
+
+    /// <summary>
+    /// bias + x * coefficients for every row (only the first coefficients.Length columns are used).
+    /// </summary>
+    /// <param name="features">The samples.</param>
+    /// <param name="coefficients">The coefficients.</param>
+    /// <param name="bias">The intercept.</param>
+    /// <returns>The [rows] linear predictions.</returns>
+    protected Tensor<T> LinearPredictions(Matrix<T> features, Vector<T> coefficients, T bias)
+    {
+        var engine = Engine;
+        int n = features.Rows;
+        int p = coefficients.Length;
+        if (n == 0)
+        {
+            return new Tensor<T>(new[] { 0 });
+        }
+
+        var x = Tensor<T>.FromMatrix(features);
+        if (features.Columns != p)
+        {
+            x = x.Slice(1, 0, p);
+        }
+
+        var products = p == 0
+            ? new Tensor<T>(new[] { n })
+            : engine.TensorMatMul(x, coefficients.AsTensor().Reshape(p, 1)).Reshape(n);
+        return engine.TensorAddScalar(products, bias);
+    }
+
     protected override ClassificationTaskType InferTaskType(Vector<T> y)
     {
         return ClassificationTaskType.Ordinal;

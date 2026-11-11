@@ -633,27 +633,6 @@ public partial class OrdinalLogisticRegression<T> : OrdinalClassifierBase<T>,
             return base.GetFeatureImportance();
         }
 
-        var importance = new Dictionary<string, T>();
-        if (_coefficients.Length == 0)
-        {
-            return importance;
-        }
-
-        // |coef| normalized by the sum of absolute coefficients (1 when they are all zero)
-        var engine = Engine;
-        var magnitudes = engine.TensorAbs(_coefficients.AsTensor());
-        T total = engine.TensorSum(magnitudes);
-        if (NumOps.Equals(total, NumOps.Zero)) total = NumOps.One;
-        var values = engine.TensorDivideScalar(magnitudes, total).ToArray();
-
-        for (int i = 0; i < values.Length; i++)
-        {
-            string name = FeatureNames is not null && i < FeatureNames.Length
-                ? FeatureNames[i]
-                : $"Feature_{i}";
-            importance[name] = values[i];
-        }
-
-        return importance;
+        return NormalizedCoefficientImportance(_coefficients);
     }
 }

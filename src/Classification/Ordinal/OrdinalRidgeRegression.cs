@@ -201,174 +201,60 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
         int p = NumFeatures;
         int K = NumClasses;
 
+        var engine = Engine;
+        var features = Tensor<T>.FromMatrix(x);
+        if (x.Columns != p)
+        {
+            features = features.Slice(1, 0, p);
+        }
+
         // Center data if fitting intercept
-        var featureMeans = new double[p];
-        double targetMean = 0;
-
-        if (_fitIntercept)
+        var featureMeans = new Tensor<T>(new[] { p });
+        T targetMean = NumOps.Zero;
+        var targets = y.AsTensor();
+        if (_fitIntercept && n > 0)
         {
-            // Compute feature means
-            for (int j = 0; j < p; j++)
-            {
-                double sum = 0;
-                for (int i = 0; i < n; i++)
-                {
-                    sum += NumOps.ToDouble(x[i, j]);
-                }
-                featureMeans[j] = sum / n;
-            }
-
-            // Compute target mean
-            for (int i = 0; i < n; i++)
-            {
-                targetMean += NumOps.ToDouble(y[i]);
-            }
-            targetMean /= n;
+            featureMeans = engine.ReduceMean(features, new[] { 0 }, false);
+            targetMean = engine.TensorMean(targets);
+            features = engine.TensorSubtract(features, featureMeans.Reshape(1, p));
+            targets = engine.TensorSubtractScalar(targets, targetMean);
         }
 
-        // Build X^T X + λI matrix
-        var XtX = new double[p, p];
-        var XtY = new double[p];
-
-        for (int i = 0; i < n; i++)
-        {
-            // Center features if fitting intercept
-            var xi = new double[p];
-            for (int j = 0; j < p; j++)
-            {
-                xi[j] = NumOps.ToDouble(x[i, j]) - (_fitIntercept ? featureMeans[j] : 0);
-            }
-
-            double yi = NumOps.ToDouble(y[i]) - (_fitIntercept ? targetMean : 0);
-
-            // Accumulate X^T X
-            for (int j = 0; j < p; j++)
-            {
-                for (int k = 0; k < p; k++)
-                {
-                    XtX[j, k] += xi[j] * xi[k];
-                }
-                XtY[j] += xi[j] * yi;
-            }
-        }
-
-        // Add ridge regularization to diagonal
-        for (int j = 0; j < p; j++)
-        {
-            XtX[j, j] += _alpha;
-        }
-
-        // Solve the system using Cholesky decomposition (or simple inversion for small p)
-        _coefficients = new Vector<T>(p);
-
-        // Simple Gaussian elimination for solving the linear system
-        var augmented = new double[p, p + 1];
-        for (int i = 0; i < p; i++)
-        {
-            for (int j = 0; j < p; j++)
-            {
-                augmented[i, j] = XtX[i, j];
-            }
-            augmented[i, p] = XtY[i];
-        }
-
-        // Forward elimination
-        for (int i = 0; i < p; i++)
-        {
-            // Find pivot
-            int maxRow = i;
-            for (int k = i + 1; k < p; k++)
-            {
-                if (Math.Abs(augmented[k, i]) > Math.Abs(augmented[maxRow, i]))
-                {
-                    maxRow = k;
-                }
-            }
-
-            // Swap rows
-            for (int k = i; k <= p; k++)
-            {
-                (augmented[i, k], augmented[maxRow, k]) = (augmented[maxRow, k], augmented[i, k]);
-            }
-
-            // Eliminate column
-            if (Math.Abs(augmented[i, i]) > 1e-10)
-            {
-                for (int k = i + 1; k < p; k++)
-                {
-                    double factor = augmented[k, i] / augmented[i, i];
-                    for (int j = i; j <= p; j++)
-                    {
-                        augmented[k, j] -= factor * augmented[i, j];
-                    }
-                }
-            }
-        }
-
-        // Back substitution
-        var solution = new double[p];
-        for (int i = p - 1; i >= 0; i--)
-        {
-            double sum = augmented[i, p];
-            for (int j = i + 1; j < p; j++)
-            {
-                sum -= augmented[i, j] * solution[j];
-            }
-            solution[i] = Math.Abs(augmented[i, i]) > 1e-10 ? sum / augmented[i, i] : 0;
-        }
-
-        for (int i = 0; i < p; i++)
-        {
-            _coefficients[i] = NumOps.FromDouble(solution[i]);
-        }
+        // Build X^T X + lambda*I and X^T y, then solve the ridge normal equations
+        var xT = engine.TensorTranspose(features);
+        var xtx = engine.TensorAdd(engine.TensorMatMul(xT, features),
+            engine.TensorMultiplyScalar(engine.TensorEye<T>(p), NumOps.FromDouble(_alpha)));
+        var xty = engine.TensorMatMul(xT, targets.Reshape(n, 1));
+        _coefficients = p == 0 ? new Vector<T>(0) : SolveSymmetric(xtx, xty).Reshape(p).ToVector();
 
         // Compute intercept
-        if (_fitIntercept)
-        {
-            double interceptVal = targetMean;
-            for (int j = 0; j < p; j++)
-            {
-                interceptVal -= solution[j] * featureMeans[j];
-            }
-            _bias = NumOps.FromDouble(interceptVal);
-        }
-        else
-        {
-            _bias = NumOps.Zero;
-        }
+        _bias = _fitIntercept
+            ? NumOps.Subtract(targetMean, p == 0 ? NumOps.Zero : engine.DotProduct(_coefficients, featureMeans.ToVector()))
+            : NumOps.Zero;
 
         // Learn thresholds using immediate-threshold method
         // Compute class means in prediction space
-        var classSums = new double[K];
-        var classCounts = new int[K];
-
-        for (int i = 0; i < n; i++)
-        {
-            // Compute prediction for this sample
-            double pred = NumOps.ToDouble(_bias);
-            for (int j = 0; j < p; j++)
-            {
-                pred += NumOps.ToDouble(_coefficients[j]) * NumOps.ToDouble(x[i, j]);
-            }
-
-            int classIdx = GetClassIndex(y[i]);
-            classSums[classIdx] += pred;
-            classCounts[classIdx]++;
-        }
-
-        var classMeans = new double[K];
-        for (int k = 0; k < K; k++)
-        {
-            classMeans[k] = classCounts[k] > 0 ? classSums[k] / classCounts[k] : 0;
-        }
+        var predictions = LinearPredictions(x, _coefficients, _bias);
+        var membership = engine.TensorOneHot<T>(GetOrdinalClassIndices(y), K);
+        var classSums = engine.TensorMatMul(engine.TensorTranspose(membership), predictions.Reshape(n, 1)).Reshape(K);
+        var classCounts = engine.TensorClampMin(engine.ReduceSum(membership, new[] { 0 }, false), NumOps.One);
+        var classMeans = engine.TensorDivide(classSums, classCounts);
 
         // Set thresholds at midpoints between class means
-        _thresholds = new Vector<T>(K - 1);
-        for (int k = 0; k < K - 1; k++)
-        {
-            double threshold = (classMeans[k] + classMeans[k + 1]) / 2.0;
-            _thresholds[k] = NumOps.FromDouble(threshold);
-        }
+        _thresholds = K <= 1
+            ? new Vector<T>(0)
+            : engine.TensorMultiplyScalar(engine.TensorAdd(classMeans.Slice(0, 0, K - 1), classMeans.Slice(0, 1, K)),
+                NumOps.FromDouble(0.5)).ToVector();
+    }
+
+    /// <summary>
+    /// Solves a x = b with LU and partial pivoting, falling back to the pseudo-inverse for singular systems.
+    /// </summary>
+    private Tensor<T> SolveSymmetric(Tensor<T> a, Tensor<T> b)
+    {
+        var (solution, info) = Linalg.SolveEx(a, b);
+        bool singular = info.Length > 0 && info.ToArray()[0] != 0;
+        return singular ? Engine.TensorMatMul(Linalg.Pinv(a), b) : solution;
     }
 
     /// <summary>
@@ -392,31 +278,28 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        int n = input.Rows;
+        int k = NumClasses;
+        if (n == 0)
         {
-            // Compute linear prediction
-            double pred = NumOps.ToDouble(_bias);
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                pred += NumOps.ToDouble(_coefficients[j]) * NumOps.ToDouble(input[i, j]);
-            }
-
-            // Find class based on thresholds
-            int classIdx = 0;
-            for (int k = 0; k < NumClasses - 1; k++)
-            {
-                if (pred > NumOps.ToDouble(_thresholds[k]))
-                {
-                    classIdx = k + 1;
-                }
-            }
-
-            predictions[i] = ClassLabels[classIdx];
+            return new Vector<T>(0);
         }
 
-        return predictions;
+        // Class = 1 + the last threshold the prediction exceeds (0 when it exceeds none):
+        // score 0.5 for class 0 and (j + 1) for class j + 1 when pred > threshold_j, so argmax picks it
+        var engine = Engine;
+        var pred = LinearPredictions(input, _coefficients, _bias).Reshape(n, 1);
+        var baseline = new Tensor<T>(new[] { n, 1 });
+        engine.TensorFill(baseline, NumOps.FromDouble(0.5));
+        if (k <= 1)
+        {
+            return ClassIndicesToLabels(new Tensor<int>(new[] { n }));
+        }
+
+        var exceeds = engine.TensorGreaterThan(pred, _thresholds.AsTensor().Reshape(1, k - 1));
+        var ranks = engine.TensorArange<T>(1, k).Reshape(1, k - 1);
+        var scores = engine.TensorConcatenate(new[] { baseline, engine.TensorMultiply(exceeds, ranks) }, 1);
+        return ClassIndicesToLabels(engine.TensorArgMax(scores, 1));
     }
 
     /// <summary>
@@ -438,28 +321,16 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
 
         int n = features.Rows;
         int K = NumClasses;
-        var cumProbs = new Matrix<T>(n, K - 1);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0 || K <= 1)
         {
-            // Compute linear prediction
-            double pred = NumOps.ToDouble(_bias);
-            for (int j = 0; j < NumFeatures; j++)
-            {
-                pred += NumOps.ToDouble(_coefficients[j]) * NumOps.ToDouble(features[i, j]);
-            }
-
-            // Convert to cumulative probabilities using sigmoid
-            for (int k = 0; k < K - 1; k++)
-            {
-                double z = NumOps.ToDouble(_thresholds[k]) - pred;
-                // Use a scaled sigmoid for smoother probabilities
-                double prob = 1.0 / (1.0 + Math.Exp(-z));
-                cumProbs[i, k] = NumOps.FromDouble(prob);
-            }
+            return new Matrix<T>(n, Math.Max(0, K - 1));
         }
 
-        return cumProbs;
+        // Convert to cumulative probabilities using sigmoid(threshold_k - pred)
+        var engine = Engine;
+        var pred = LinearPredictions(features, _coefficients, _bias).Reshape(n, 1);
+        var z = engine.TensorSubtract(_thresholds.AsTensor().Reshape(1, K - 1), pred);
+        return engine.TensorSigmoid(z).ToMatrix();
     }
 
     /// <summary>
@@ -477,22 +348,7 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
             return new Vector<T>(0);
         }
 
-        int totalLen = _coefficients.Length + 1 + _thresholds.Length;
-        var parameters = new Vector<T>(totalLen);
-
-        for (int i = 0; i < _coefficients.Length; i++)
-        {
-            parameters[i] = _coefficients[i];
-        }
-
-        parameters[_coefficients.Length] = _bias;
-
-        for (int i = 0; i < _thresholds.Length; i++)
-        {
-            parameters[_coefficients.Length + 1 + i] = _thresholds[i];
-        }
-
-        return parameters;
+        return Vector<T>.Concatenate(Vector<T>.Concatenate(_coefficients, FilledVector(1, _bias)), _thresholds);
     }
 
     /// <summary>
@@ -511,52 +367,25 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
         }
 
         // If we have NumFeatures and NumClasses set, use them
-        if (NumFeatures > 0 && NumClasses > 0)
+        int numCoefs;
+        int numThresholds;
+        if (NumFeatures > 0 && NumClasses > 0 && parameters.Length == NumFeatures + 1 + (NumClasses - 1))
         {
-            int numCoef = NumFeatures;
-            int numThresh = NumClasses - 1;
-            int expectedLen = numCoef + 1 + numThresh;
-
-            if (parameters.Length == expectedLen)
-            {
-                _coefficients = new Vector<T>(numCoef);
-                for (int i = 0; i < numCoef; i++)
-                {
-                    _coefficients[i] = parameters[i];
-                }
-
-                _bias = parameters[numCoef];
-
-                _thresholds = new Vector<T>(numThresh);
-                for (int i = 0; i < numThresh; i++)
-                {
-                    _thresholds[i] = parameters[numCoef + 1 + i];
-                }
-
-                return;
-            }
+            numCoefs = NumFeatures;
+            numThresholds = NumClasses - 1;
+        }
+        else
+        {
+            // Fallback: infer structure from parameter length
+            // Assume: coefficients = (len - 1) / 2, thresholds = (len - 1) / 2
+            numThresholds = (parameters.Length - 1) / 2;
+            numCoefs = parameters.Length - 1 - numThresholds;
+            NumFeatures = numCoefs;
         }
 
-        // Fallback: infer structure from parameter length
-        // Assume: coefficients = (len - 1) / 2, thresholds = (len - 1) / 2
-        int numThresholds = (parameters.Length - 1) / 2;
-        int numCoefs = parameters.Length - 1 - numThresholds;
-
-        _coefficients = new Vector<T>(numCoefs);
-        for (int i = 0; i < numCoefs; i++)
-        {
-            _coefficients[i] = parameters[i];
-        }
-
-        _bias = parameters[numCoefs];
-
-        _thresholds = new Vector<T>(numThresholds);
-        for (int i = 0; i < numThresholds; i++)
-        {
-            _thresholds[i] = parameters[numCoefs + 1 + i];
-        }
-
-        NumFeatures = numCoefs;
+        _coefficients = parameters.GetSubVector(0, numCoefs);
+        _bias = parameters.GetSubVector(numCoefs, 1).ToArray()[0];
+        _thresholds = parameters.GetSubVector(numCoefs + 1, numThresholds);
     }
 
     /// <summary>
@@ -575,11 +404,7 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
         model.NumClasses = NumClasses;
         if (ClassLabels is not null)
         {
-            model.ClassLabels = new Vector<T>(ClassLabels.Length);
-            for (int i = 0; i < ClassLabels.Length; i++)
-            {
-                model.ClassLabels[i] = ClassLabels[i];
-            }
+            model.ClassLabels = ClassLabels.Clone();
         }
         model.SetParameters(parameters);
         return model;
@@ -604,58 +429,36 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
             throw new InvalidOperationException("Model has not been trained.");
         }
 
+        var engine = Engine;
         int n = input.Rows;
         int p = NumFeatures;
+        int K = NumClasses;
+        var coefficients = FitToLength(_coefficients, p);
+        T twoOverN = NumOps.FromDouble(2.0 / n);
 
-        // Compute predictions
-        var residuals = new double[n];
-        for (int i = 0; i < n; i++)
+        // Residuals of the linear predictions
+        var residuals = engine.TensorSubtract(LinearPredictions(input, coefficients, _bias), target.AsTensor());
+
+        // Gradients for coefficients: (2/n) * X^T * residuals + 2*alpha*beta
+        var x = Tensor<T>.FromMatrix(input);
+        if (input.Columns != p)
         {
-            double pred = NumOps.ToDouble(_bias);
-            for (int j = 0; j < p; j++)
-            {
-                pred += NumOps.ToDouble(_coefficients[j]) * NumOps.ToDouble(input[i, j]);
-            }
-            residuals[i] = pred - NumOps.ToDouble(target[i]);
+            x = x.Slice(1, 0, p);
         }
 
-        // Compute gradients for coefficients: (2/n) * X^T * residuals + 2*alpha*beta
-        var gradCoef = new double[p];
-        for (int j = 0; j < p; j++)
-        {
-            double grad = 0;
-            for (int i = 0; i < n; i++)
-            {
-                grad += NumOps.ToDouble(input[i, j]) * residuals[i];
-            }
-            gradCoef[j] = (2.0 / n) * grad + 2.0 * _alpha * NumOps.ToDouble(_coefficients[j]);
-        }
+        var xtr = n == 0
+            ? new Tensor<T>(new[] { p })
+            : engine.TensorMatMul(engine.TensorTranspose(x), residuals.Reshape(n, 1)).Reshape(p);
+        var gradCoef = engine.TensorAdd(engine.TensorMultiplyScalar(xtr, twoOverN),
+            engine.TensorMultiplyScalar(coefficients.AsTensor(), NumOps.FromDouble(2.0 * _alpha)));
 
         // Gradient for bias: (2/n) * sum(residuals)
-        double gradBias = 0;
-        for (int i = 0; i < n; i++)
-        {
-            gradBias += residuals[i];
-        }
-        gradBias = (2.0 / n) * gradBias;
+        T gradBias = NumOps.Multiply(twoOverN, n == 0 ? NumOps.Zero : engine.TensorSum(residuals));
 
         // Pack into vector (thresholds have zero gradient as they're derived from data)
-        int K = NumClasses;
-        var gradients = new Vector<T>(p + 1 + (K - 1));
-
-        for (int j = 0; j < p; j++)
-        {
-            gradients[j] = NumOps.FromDouble(gradCoef[j]);
-        }
-        gradients[p] = NumOps.FromDouble(gradBias);
-
-        // Thresholds derived from data, so gradient is zero
-        for (int k = 0; k < K - 1; k++)
-        {
-            gradients[p + 1 + k] = NumOps.Zero;
-        }
-
-        return gradients;
+        return Vector<T>.Concatenate(
+            Vector<T>.Concatenate(gradCoef.ToVector(), FilledVector(1, gradBias)),
+            new Vector<T>(Math.Max(0, K - 1)));
     }
 
     /// <summary>
@@ -675,18 +478,12 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        double lr = NumOps.ToDouble(learningRate);
-
-        // Update coefficients
-        for (int j = 0; j < _coefficients.Length; j++)
-        {
-            double newVal = NumOps.ToDouble(_coefficients[j]) - lr * NumOps.ToDouble(gradients[j]);
-            _coefficients[j] = NumOps.FromDouble(newVal);
-        }
-
-        // Update bias
-        double newBias = NumOps.ToDouble(_bias) - lr * NumOps.ToDouble(gradients[_coefficients.Length]);
-        _bias = NumOps.FromDouble(newBias);
+        // Update coefficients and bias: w = w - lr * g
+        var engine = Engine;
+        int numCoefficients = _coefficients.Length;
+        _coefficients = engine.Subtract(_coefficients, engine.Multiply(gradients.GetSubVector(0, numCoefficients), learningRate));
+        T biasGradient = gradients.GetSubVector(numCoefficients, 1).ToArray()[0];
+        _bias = NumOps.Subtract(_bias, NumOps.Multiply(learningRate, biasGradient));
 
         // Note: Thresholds are not updated via gradient descent
     }
@@ -706,26 +503,6 @@ public partial class OrdinalRidgeRegression<T> : OrdinalClassifierBase<T>,
             return base.GetFeatureImportance();
         }
 
-        var importance = new Dictionary<string, T>();
-
-        // Sum of absolute coefficients for normalization
-        double total = 0;
-        for (int i = 0; i < _coefficients.Length; i++)
-        {
-            total += Math.Abs(NumOps.ToDouble(_coefficients[i]));
-        }
-
-        if (total == 0) total = 1;
-
-        for (int i = 0; i < _coefficients.Length; i++)
-        {
-            string name = FeatureNames is not null && i < FeatureNames.Length
-                ? FeatureNames[i]
-                : $"Feature_{i}";
-            double imp = Math.Abs(NumOps.ToDouble(_coefficients[i])) / total;
-            importance[name] = NumOps.FromDouble(imp);
-        }
-
-        return importance;
+        return NormalizedCoefficientImportance(_coefficients);
     }
 }
