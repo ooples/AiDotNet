@@ -20973,7 +20973,6 @@ AiDotNet.Data.Sampling.SubsetSampler.SubsetSampler(System.Collections.Generic.IE
 AiDotNet.Data.Sampling.WeightedSampler<T>
 AiDotNet.Data.Sampling.WeightedSampler<T>.WeightedSampler(System.Collections.Generic.IEnumerable<T>! weights, int? numSamples = null, bool replacement = true, int? seed = null) -> void
 AiDotNet.Data.Sampling.WeightedSamplerBase<T>
-AiDotNet.Data.Sampling.WeightedSamplerBase<T>.CumulativeProbabilities -> double[]!
 AiDotNet.Data.Sampling.WeightedSamplerBase<T>.NumSamples.get -> int?
 AiDotNet.Data.Sampling.WeightedSamplerBase<T>.NumSamples.set -> void
 AiDotNet.Data.Sampling.WeightedSamplerBase<T>.NumSamplesOverride -> int?
