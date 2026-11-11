@@ -31,6 +31,26 @@ public class GpuEagerTapeStepMatchesCpuTests
 {
     private const int Inputs = 16, Hidden = 32, Outputs = 4, Batch = 32, Steps = 6;
 
+    // Warm eager steps the readback test measures.
+    private const int MeasuredSteps = 3;
+
+    // The reads a warm eager step may make, by the method that issues them, and the bytes of each: a device norm
+    // record for the network clip, the optimizer clip and the finiteness check, and the loss.
+    private static readonly (string Caller, int Bytes)[] AllowedReadbacks =
+    {
+        ("NeuralNetworkBase`1.ApplyGradientClipping", NormRecordBytes),
+        ("GradientBasedOptimizerBase`3.ApplyTapeGlobalNormGradientClipping", NormRecordBytes),
+        ("GradientBasedOptimizerBase`3.HasAnomalousTapeGradients", NormRecordBytes),
+        ("NeuralNetworkBase`1.TrainWithTape", sizeof(float)),
+    };
+
+    private const int NormRecordBytes = AiDotNet.Tensors.Engines.Gpu.DeterministicGradientNorm.RecordWords * sizeof(uint);
+
+    // A probe site reads "{count}x {total bytes} B {issuing frame} <- {caller}".
+    private static readonly System.Text.RegularExpressions.Regex ReadbackSite = new(
+        @"^(?<count>\d+)x (?<bytes>[\d,]+) B .* <- (?<caller>\S+)$",
+        System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(1));
+
     private sealed class ClipProbe : AdamWOptimizer<float, Tensor<float>, Tensor<float>>
     {
         public ClipProbe() : base(null) { }
@@ -66,13 +86,13 @@ public class GpuEagerTapeStepMatchesCpuTests
         protected override bool SupportsFusedCompiledTraining => false;
     }
 
-    private static EagerNetwork BuildNetwork()
+    private static EagerNetwork BuildNetwork(int hidden = Hidden)
     {
         var layers = new List<ILayer<float>>
         {
-            new DenseLayer<float>(Hidden, (IActivationFunction<float>)new ReLUActivation<float>()),
+            new DenseLayer<float>(hidden, (IActivationFunction<float>)new ReLUActivation<float>()),
             // A norm gain read through the device weight path, at a nonzero offset of the flat parameter array.
-            new LayerNormalizationLayer<float>(Hidden),
+            new LayerNormalizationLayer<float>(hidden),
             new DenseLayer<float>(Outputs, (IActivationFunction<float>?)null),
         };
         var architecture = new NeuralNetworkArchitecture<float>(
@@ -104,9 +124,98 @@ public class GpuEagerTapeStepMatchesCpuTests
     {
         var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
         var baseType = typeof(NeuralNetworkBase<float>);
-        int version = (int)baseType.GetField("_layerStructureVersion", flags)!.GetValue(net)!;
-        baseType.GetField("_skipParameterBuffer", flags)!.SetValue(net, true);
-        baseType.GetField("_skipParameterBufferVersion", flags)!.SetValue(net, version);
+        System.Reflection.FieldInfo Field(string name) => baseType.GetField(name, flags)
+            ?? throw new InvalidOperationException($"NeuralNetworkBase has no field {name}.");
+        int version = Field("_layerStructureVersion").GetValue(net) is int v
+            ? v : throw new InvalidOperationException("_layerStructureVersion is not an int.");
+        Field("_skipParameterBuffer").SetValue(net, true);
+        Field("_skipParameterBufferVersion").SetValue(net, version);
+    }
+
+    /// <summary>
+    /// The #2433 transfer contract: a warm eager GPU step with the default global-norm clipping and the anomaly guard
+    /// reads back no gradient or weight. Those host passes downloaded every device gradient each step (27M-parameter
+    /// LM: 164 readbacks, 538 MB per step), so their bytes grew with the model; the device step reads only scalars, the
+    /// same count and bytes at any width. A 16x wider hidden layer is the control that would expose a per-parameter
+    /// download.
+    /// </summary>
+    [SkippableFact]
+    public void Gpu_eager_step_reads_back_no_gradients_at_any_width()
+    {
+        using var gpu = new DirectGpuTensorEngine();
+        if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
+            Assert.True(gpu.SupportsGpu && gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
+        Skip.If(!gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+
+        var narrow = ReadbackTotalsOverWarmSteps(gpu, Hidden);
+        var wide = ReadbackTotalsOverWarmSteps(gpu, Hidden * 16);
+        AssertOnlyScalarReadbacks(narrow, "narrow");
+        AssertOnlyScalarReadbacks(wide, "wide");
+    }
+
+    /// <summary>
+    /// Every read over the measured steps is one of <see cref="AllowedReadbacks"/>, once per step at its exact size,
+    /// and each of them happened: a gradient download is a read from another caller or of another size, and a probe
+    /// that recorded nothing fails on the missing loss read. Totals, not per-step averages, so a step that splits or
+    /// adds a read cannot hide behind integer division.
+    /// </summary>
+    private static void AssertOnlyScalarReadbacks((long Count, long Bytes, int Parameters, string[] Sites) run, string name)
+    {
+        string context = $"{name} model, {run.Parameters} parameters, {MeasuredSteps} steps: {run.Count} readbacks, "
+            + $"{run.Bytes} B ({string.Join("; ", run.Sites)})";
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (string site in run.Sites)
+        {
+            var match = ReadbackSite.Match(site);
+            Assert.True(match.Success, $"unparsed readback site '{site}'; {context}");
+            string caller = match.Groups["caller"].Value;
+            long count = long.Parse(match.Groups["count"].Value, System.Globalization.CultureInfo.InvariantCulture);
+            long bytes = long.Parse(match.Groups["bytes"].Value, System.Globalization.NumberStyles.AllowThousands,
+                System.Globalization.CultureInfo.InvariantCulture);
+            var allowed = AllowedReadbacks.Where(a => a.Caller == caller).ToArray();
+            Assert.True(allowed.Length == 1, $"readback from an unexpected caller '{caller}'; {context}");
+            Assert.True(count == MeasuredSteps && bytes == (long)allowed[0].Bytes * MeasuredSteps,
+                $"'{caller}' should read {allowed[0].Bytes} B once per step; {context}");
+            seen.Add(caller);
+        }
+
+        foreach (var (caller, _) in AllowedReadbacks)
+            Assert.True(seen.Contains(caller), $"no readback from '{caller}'; {context}");
+        Assert.Equal(AllowedReadbacks.Length * (long)MeasuredSteps, run.Count);
+        Assert.Equal(AllowedReadbacks.Sum(a => (long)a.Bytes) * MeasuredSteps, run.Bytes);
+    }
+
+    private static (long Count, long Bytes, int Parameters, string[] Sites) ReadbackTotalsOverWarmSteps(IEngine engine, int hidden)
+    {
+        var previous = AiDotNetEngine.Current;
+        bool priorCapture = GpuLaunchProbe.CaptureReadbackSites;
+        AiDotNetEngine.Current = engine;
+        try
+        {
+            var net = BuildNetwork(hidden);
+            var (x, y) = Data();
+            net.SetTrainingMode(true);
+            net.Predict(x);
+            net.SetTrainingMode(true);
+            for (int s = 0; s < 3; s++) net.Train(x, y);      // warm: device state, kernels and caches exist
+            int parameters = net.GetParameters().Length;     // before the probe: it reads every weight
+
+            GpuLaunchProbe.CaptureReadbackSites = true;
+            GpuLaunchProbe.Reset();
+            for (int s = 0; s < MeasuredSteps; s++)
+            {
+                long beforeDispatch = GpuLaunchProbe.AdamWDispatches;
+                net.Train(x, y);
+                Assert.True(GpuLaunchProbe.AdamWDispatches > beforeDispatch, "eager training did not dispatch GPU AdamW");
+            }
+            return (GpuLaunchProbe.Readbacks, GpuLaunchProbe.ReadbackBytes,
+                parameters, GpuLaunchProbe.ReadbackSites);
+        }
+        finally
+        {
+            GpuLaunchProbe.CaptureReadbackSites = priorCapture;
+            AiDotNetEngine.Current = previous;
+        }
     }
 
     private static List<double> Trajectory(IEngine engine, float[] initialParameters, bool withoutParameterBuffer)
@@ -145,13 +254,12 @@ public class GpuEagerTapeStepMatchesCpuTests
     [InlineData(true)]
     public void Gpu_eager_step_follows_the_cpu_trajectory(bool withoutParameterBuffer)
     {
-        DirectGpuTensorEngine? gpu = null;
-        gpu = new DirectGpuTensorEngine();
+        var gpu = new DirectGpuTensorEngine();
         try
         {
             if (Environment.GetEnvironmentVariable("AIDOTNET_REQUIRE_GPU_TESTS") == "1")
                 Assert.True(gpu.SupportsGpu && gpu.IsGpuAvailable, "The required GPU backend failed to initialize.");
-            Skip.If(gpu is null || !gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
+            Skip.If(!gpu.SupportsGpu || !gpu.IsGpuAvailable, "No DirectGpuTensorEngine available.");
 
             // One shared initialization for both engines.
             float[] init;
@@ -169,7 +277,7 @@ public class GpuEagerTapeStepMatchesCpuTests
             }
 
             var cpu = Trajectory(new CpuEngine(), init, withoutParameterBuffer);
-            var gpuLosses = Trajectory(gpu!, init, withoutParameterBuffer);
+            var gpuLosses = Trajectory(gpu, init, withoutParameterBuffer);
             string Show(List<double> l) => string.Join(" -> ", l.Select(v => v.ToString("G5")));
             Assert.True(cpu[^1] < 0.9 * cpu[0], $"the CPU reference did not learn: {Show(cpu)}");
             for (int s = 0; s < Steps; s++)
@@ -178,7 +286,7 @@ public class GpuEagerTapeStepMatchesCpuTests
         }
         finally
         {
-            gpu?.Dispose();
+            gpu.Dispose();
         }
     }
 }

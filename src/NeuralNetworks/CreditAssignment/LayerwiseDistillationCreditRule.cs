@@ -1,5 +1,7 @@
 using AiDotNet.Helpers;
 using AiDotNet.LinearAlgebra;
+using AiDotNet.Tensors.Engines;
+using AiDotNet.Tensors.Engines.Autodiff;
 
 namespace AiDotNet.NeuralNetworks.CreditAssignment;
 
@@ -105,15 +107,20 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
     public void ComputeTeachingSignals(ICreditAssignmentContext<T> context) =>
         throw new NotSupportedException($"{Name} is a local-objective rule; it is driven through {nameof(ILocalObjectiveCreditRule<T>)}.");
 
-    private IReadOnlyList<Tensor<T>> TeacherStates(Tensor<T> input)
+    private IReadOnlyList<Tensor<T>> TeacherStates(Tensor<T> input, IEngine engine)
     {
         if (!ReferenceEquals(input, _stepInput) || _stepTeacher is null)
         {
+            // The teacher is frozen: its forward and the normalisation are constants of the student step. Outside the
+            // tape, so the step does not keep every teacher activation alive until its backward (a SmolLM2-360M
+            // teacher at batch 16x256 ran a 12 GB GPU out of memory), and as engine ops, so the states stay on the
+            // device instead of a per-element host loop.
+            using var noGrad = new NoGradScope<T>();
             var states = _teacherHidden(input);
             if (states is null || states.Count < 2)
                 throw new InvalidOperationException("The teacher must return its embedding output plus at least one block output.");
             var normalized = new Tensor<T>[states.Count];
-            for (int j = 0; j < states.Count; j++) normalized[j] = RmsNormalizeConst(states[j]);
+            for (int j = 0; j < states.Count; j++) normalized[j] = RmsNormalizeConst(states[j], engine);
             _stepTeacher = normalized;
             _stepInput = input;
         }
@@ -137,7 +144,7 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
         // Exact configuration sentinel (<= 0 means exactly 0, as above): only a zero regression weight skips the
         // teacher, so a small positive weight still trains the hidden layers.
         if (_hiddenWeight <= 0) return task;
-        var teacher = TeacherStates(s.Input);
+        var teacher = TeacherStates(s.Input, s.Engine);
         int lt = teacher.Count - 1, h = s.HiddenLayerCount;
         int j = h <= 1 ? lt : (int)Math.Round((double)context.HiddenIndex * lt / (h - 1));
         var target = teacher[j];
@@ -163,14 +170,19 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
         if (_kdAlpha == 0 || _teacherLogits is null) return null;
         var e = step.Engine;
         int axis = prediction.Shape.Length - 1;
-        var teacherLogits = _teacherLogits(step.Input);
-        if (!teacherLogits.Shape.ToArray().SequenceEqual(prediction.Shape.ToArray()))
-            throw new InvalidOperationException(
-                $"Teacher logits [{string.Join(",", teacherLogits.Shape.ToArray())}] do not match student logits [{string.Join(",", prediction.Shape.ToArray())}].");
+        Tensor<T> teacherLogits, pt;
+        using (new NoGradScope<T>())
+        {
+            // Frozen teacher (see TeacherStates): computed off the tape, and its softmax as one engine op.
+            teacherLogits = _teacherLogits(step.Input);
+            if (!teacherLogits.Shape.ToArray().SequenceEqual(prediction.Shape.ToArray()))
+                throw new InvalidOperationException(
+                    $"Teacher logits [{string.Join(",", teacherLogits.Shape.ToArray())}] do not match student logits [{string.Join(",", prediction.Shape.ToArray())}].");
+            pt = e.TensorSoftmax(e.TensorMultiplyScalar(teacherLogits, Ops.FromDouble(1.0 / _temperature)), axis);
+        }
         // Soft term: T² · mean over positions of KL(p_t || p_s) = T² · mean(Σ p_t (log p_t − log p_s)); the p_t log p_t part is
         // constant in the student, so the student gradient is that of −T² · mean(Σ p_t log p_s).
         var invT = Ops.FromDouble(1.0 / _temperature);
-        var pt = SoftmaxConst(teacherLogits, _temperature);
         var logPs = e.TensorLogSoftmax(e.TensorMultiplyScalar(prediction, invT), axis);
         var cross = e.ReduceSum(e.TensorMultiply(logPs, pt), new[] { axis }, keepDims: false);
         var positions = Enumerable.Range(0, cross.Shape.Length).ToArray();
@@ -182,12 +194,14 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
     /// <inheritdoc />
     public void ApplyAuxiliaryGradients(IReadOnlyDictionary<Tensor<T>, Tensor<T>> gradients)
     {
-        var lr = _projectionLr;
+        // p -= lr * g as two engine ops: the per-element indexer loop read and wrote every element through the host,
+        // which on a GPU engine downloads the gradient and re-uploads the projection each step.
+        var engine = AiDotNetEngine.Current;
+        var lr = Ops.FromDouble(_projectionLr);
         foreach (var p in _projections)
         {
             if (!gradients.TryGetValue(p, out var g) || g.Length != p.Length) continue;
-            for (int i = 0; i < p.Length; i++)
-                p[i] = Ops.Subtract(p[i], Ops.Multiply(Ops.FromDouble(lr), g[i]));
+            engine.TensorSubtractInPlace(p, engine.TensorMultiplyScalar(g, lr));
         }
         _stepInput = null; _stepTeacher = null;
     }
@@ -216,32 +230,12 @@ public sealed class LayerwiseDistillationCreditRule<T> : ILocalObjectiveCreditRu
         return true;
     }
 
-    private static Tensor<T> RmsNormalizeConst(Tensor<T> t)
+    // x / sqrt(mean(x^2) + 1e-6) over the last axis. Called inside a NoGradScope, so the result is a constant.
+    private static Tensor<T> RmsNormalizeConst(Tensor<T> t, IEngine engine)
     {
-        int w = t.Shape[t.Shape.Length - 1], rows = t.Length / w;
-        var v = t.ToVector(); var r = new Vector<T>(v.Length);
-        for (int row = 0; row < rows; row++)
-        {
-            double ss = 0;
-            for (int c = 0; c < w; c++) { double x = Ops.ToDouble(v[row * w + c]); ss += x * x; }
-            double inv = 1.0 / Math.Sqrt(ss / w + 1e-6);
-            for (int c = 0; c < w; c++) r[row * w + c] = Ops.FromDouble(Ops.ToDouble(v[row * w + c]) * inv);
-        }
-        return new Tensor<T>(t.Shape.ToArray(), r);
-    }
-
-    private static Tensor<T> SoftmaxConst(Tensor<T> logits, double temperature)
-    {
-        int w = logits.Shape[logits.Shape.Length - 1], rows = logits.Length / w;
-        var v = logits.ToVector(); var r = new Vector<T>(v.Length);
-        for (int row = 0; row < rows; row++)
-        {
-            double max = double.NegativeInfinity;
-            for (int c = 0; c < w; c++) max = Math.Max(max, Ops.ToDouble(v[row * w + c]) / temperature);
-            double sum = 0;
-            for (int c = 0; c < w; c++) sum += Math.Exp(Ops.ToDouble(v[row * w + c]) / temperature - max);
-            for (int c = 0; c < w; c++) r[row * w + c] = Ops.FromDouble(Math.Exp(Ops.ToDouble(v[row * w + c]) / temperature - max) / sum);
-        }
-        return new Tensor<T>(logits.Shape.ToArray(), r);
+        var shape = t.Shape.ToArray();
+        var meanSquare = engine.ReduceMean(engine.TensorSquare(t), new[] { shape.Length - 1 }, keepDims: true);
+        var rms = engine.TensorSqrt(engine.TensorAddScalar(meanSquare, Ops.FromDouble(1e-6)));
+        return engine.TensorDivide(t, engine.TensorBroadcastTo(rms, shape));
     }
 }

@@ -707,6 +707,8 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
                     _fusedLinearScratch = new Tensor<T>([batchDim, outputSize]);
                 }
                 Engine.FusedLinearInto(_fusedLinearScratch, input, _weights, _biases, fusedActivation);
+                // The layer reuses this buffer next call; a scope open around this call must not free it.
+                AiDotNet.Tensors.Engines.TensorScope.Detach(_fusedLinearScratch);
                 if (cacheForManualBackward)
                     Output = _fusedLinearScratch;
                 return _fusedLinearScratch;
@@ -838,6 +840,13 @@ public partial class FeedForwardLayer<T> : LayerBase<T>, IShapeContract
         _weightsGradient = Tensor<T>.Empty();
         _biasesGradient = Tensor<T>.Empty();
     }
+
+    /// <summary>
+    /// Its forward caches serve only the next backward; the fused-linear scratch it reuses across calls is detached from
+    /// any open <see cref="AiDotNet.Tensors.Engines.TensorScope"/> each time it is written. Only this exact type has been
+    /// checked: a derived layer may keep more, so it counts as keeping a result.
+    /// </summary>
+    internal override bool KeepsResultsBetweenCalls => GetType() != typeof(FeedForwardLayer<T>);
 
     /// <inheritdoc />
     public override void ResetState()

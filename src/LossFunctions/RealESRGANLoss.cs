@@ -52,6 +52,9 @@ namespace AiDotNet.LossFunctions;
 [LossProperty(IsNonNegative = true, ZeroForIdentical = true, ExpectedOutput = OutputType.Continuous)]
 public class RealESRGANLoss<T> : LossFunctionBase<T>
 {
+    /// <summary>It runs caller-supplied feature, perceptual and discriminator networks, which may keep a GPU result between calls; nothing here can check that.</summary>
+    internal override bool KeepsResultsBetweenCalls => true;
+
     /// <summary>
     /// The L1 (pixel-wise) loss function.
     /// </summary>

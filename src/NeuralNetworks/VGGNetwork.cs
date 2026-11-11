@@ -71,8 +71,11 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
     /// <summary>
     /// The generated feed-forward CNN keeps nothing between calls, so each Predict frees its GPU intermediates when it
     /// ends. Caller-supplied <c>Architecture.Layers</c> may carry a tensor between calls, so they keep the default.
+    /// So do layers added to the generated stack afterwards, and a derived model may override Predict and keep a result
+    /// itself: only this exact type, holding the stack it generated, opts in.
     /// </summary>
-    protected override bool ReleasesInferenceIntermediates => Architecture.Layers is not { Count: > 0 };
+    protected override bool ReleasesInferenceIntermediates =>
+        GetType() == typeof(VGGNetwork<T>) && Architecture.Layers is not { Count: > 0 } && LayersMatchTheGeneratedStack();
 
     private readonly VGGOptions _options;
 
@@ -236,6 +239,7 @@ public partial class VGGNetwork<T> : ImageClassifierModelLayoutBase<T>
         {
             // Use VGG-specific layer configuration
             Layers.AddRange(LayerHelper<T>.CreateDefaultVGGLayers(Architecture, _configuration));
+            RecordGeneratedLayerTypes();
         }
     }
 

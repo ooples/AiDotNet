@@ -29,7 +29,7 @@ public interface ITokenizerRegistry
 /// <summary>Thread-safe in-memory <see cref="ITokenizerRegistry"/>.</summary>
 public sealed class TokenizerRegistry : ITokenizerRegistry
 {
-    private readonly ConcurrentDictionary<string, ITokenizer> _map = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, ITokenizer> _map = new(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc/>
     public bool TryGet(string modelName, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out ITokenizer? tokenizer)

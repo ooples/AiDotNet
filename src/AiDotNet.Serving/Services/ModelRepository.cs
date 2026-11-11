@@ -13,7 +13,7 @@ public class ModelRepository : IModelRepository
     /// <summary>
     /// Thread-safe storage for models, keyed by model name.
     /// </summary>
-    private readonly ConcurrentDictionary<string, ModelEntry> _models = new();
+    private readonly ConcurrentDictionary<string, ModelEntry> _models = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Loads a model and stores it with the given name.

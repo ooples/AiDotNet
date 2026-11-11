@@ -171,6 +171,40 @@ public partial class LocalObjectiveCreditRuleTests
     }
 
     [Fact]
+    public void LayerwiseDistillation_RunsTheFrozenTeacherOffTheTape()
+    {
+        // The teacher is frozen. Run on the student's tape, its forward kept every teacher activation alive until the
+        // student's backward: a SmolLM2-360M teacher at batch 16x256 ran a 12 GB GPU out of memory.
+        var (x, y, _) = MakeBlobs(24, seed: 3);
+        var loss = new CategoricalCrossEntropyLoss<double>();
+        var teacher = BuildNet(hidden: 2, seed: 5);
+        bool hiddenRan = false, hiddenOnTape = false, logitsRan = false, logitsOnTape = false;
+        var net = BuildNet(hidden: 4, seed: 9);
+        net.SetCreditRule(new LayerwiseDistillationCreditRule<double>(
+            input =>
+            {
+                hiddenRan = true;
+                hiddenOnTape |= !NoGradScope<double>.IsSuppressed;
+                var h = input; var states = new List<Tensor<double>>();
+                for (int i = 0; i < teacher.Layers.Count - 1; i++) { h = teacher.Layers[i].Forward(h); states.Add(Detach(h)); }
+                return states;
+            },
+            input =>
+            {
+                logitsRan = true;
+                logitsOnTape |= !NoGradScope<double>.IsSuppressed;
+                var h = input;
+                foreach (var layer in teacher.Layers) h = layer.Forward(h);
+                return Detach(h);
+            },
+            readoutLayerCount: 1, hiddenWeight: 1.0, kdAlpha: 0.5, seed: 3));
+        net.ComputeGradients(x, y, loss);
+        Assert.True(hiddenRan && logitsRan, "the teacher did not run; the test cannot observe where it ran");
+        Assert.False(hiddenOnTape, "the teacher's hidden-state forward ran while the student's tape was recording");
+        Assert.False(logitsOnTape, "the teacher's logit forward ran while the student's tape was recording");
+    }
+
+    [Fact]
     public void SetCreditRule_IsHonouredByTrain()
     {
         var (x, y, _) = MakeBlobs(30, seed: 4);

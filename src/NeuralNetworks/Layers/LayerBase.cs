@@ -8197,6 +8197,15 @@ public abstract class LayerBase<T> : ILayer<T>, ITrainableLayer<T>, IParameterSo
     public abstract void ResetState();
 
     /// <summary>
+    /// Whether this layer keeps a GPU result from one forward and reads it in a later one: a generation cache, carried
+    /// recurrent state, a buffer reused across calls. A <see cref="AiDotNet.Tensors.Engines.TensorScope"/> around a
+    /// model's Predict frees every GPU result the call creates, so a model scopes its calls only when no layer keeps one.
+    /// True unless the layer has been checked; a layer that caches its last forward only for backward rewrites that cache
+    /// on its next forward, so it keeps nothing between calls.
+    /// </summary>
+    internal virtual bool KeepsResultsBetweenCalls => true;
+
+    /// <summary>
     /// Gets diagnostic information about this layer's state and behavior.
     /// </summary>
     /// <returns>

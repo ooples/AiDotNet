@@ -27,7 +27,7 @@ public static class ChatTemplate
 
     private static string Label(string role) => role?.ToLowerInvariant() switch
     {
-        "system" => "System",
+        "system" or "developer" => "System",
         "assistant" => "Assistant",
         "tool" => "Tool",
         _ => "User",
