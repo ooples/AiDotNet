@@ -359,4 +359,72 @@ internal static class DimensionalityReductionOps
         var gramPinv = MatMulTranspose(ScaleColumns(vectors, inverted), vectors);
         return wide ? TransposeMatMul(a, gramPinv) : MatMulTranspose(gramPinv, a);
     }
+
+    /// <summary>
+    /// Neighbourhood offsets for locally linear methods: result[i, j, :] = x[neighbors[i, j]] - x[i], shape [n, k, p].
+    /// </summary>
+    internal static Tensor<T> NeighborhoodDifferences<T>(Tensor<T> x, Tensor<int> neighbors)
+    {
+        var engine = Engine;
+        int n = neighbors.Shape[0];
+        int k = neighbors.Shape[1];
+        int p = x.Shape[1];
+        var gathered = engine.Reshape(engine.TensorIndexSelect(x, engine.Reshape(neighbors, new[] { n * k }), 0), new[] { n, k, p });
+        return engine.TensorSubtract(gathered, engine.Reshape(x, new[] { n, 1, p }));
+    }
+
+    /// <summary>Gathers the neighbourhood rows x[neighbors[i, j]] into an [n, k, p] tensor.</summary>
+    internal static Tensor<T> NeighborhoodRows<T>(Tensor<T> x, Tensor<int> neighbors)
+    {
+        var engine = Engine;
+        int n = neighbors.Shape[0];
+        int k = neighbors.Shape[1];
+        return engine.Reshape(engine.TensorIndexSelect(x, engine.Reshape(neighbors, new[] { n * k }), 0), new[] { n, k, x.Shape[1] });
+    }
+
+    /// <summary>Batched a bᵀ over the leading axis: [n, r, c] x [n, s, c] -> [n, r, s].</summary>
+    internal static Tensor<T> BatchMatMulTranspose<T>(Tensor<T> a, Tensor<T> b) =>
+        Engine.TensorBatchMatMul(a, Engine.TensorSwapAxes(b, 1, 2));
+
+    /// <summary>Batched aᵀ b over the leading axis: [n, r, c] x [n, r, s] -> [n, c, s].</summary>
+    internal static Tensor<T> BatchTransposeMatMul<T>(Tensor<T> a, Tensor<T> b) =>
+        Engine.TensorBatchMatMul(Engine.TensorSwapAxes(a, 1, 2), b);
+
+    /// <summary>
+    /// Solves a[i] x[i] = b[i] for every i of a batch of square systems ([n, k, k] with [n, k]) by LU with
+    /// partial pivoting. The engine has no batched solver, so the systems are solved one by one.
+    /// </summary>
+    internal static Tensor<T> SolveEach<T>(Tensor<T> a, Tensor<T> b)
+    {
+        var engine = Engine;
+        var systems = engine.TensorUnstack(a, 0);
+        var rhs = engine.TensorUnstack(b, 0);
+        var solutions = new Tensor<T>[systems.Length];
+        for (int i = 0; i < systems.Length; i++)
+            solutions[i] = Solve(systems[i], rhs[i]);
+        return engine.TensorStack(solutions, 0);
+    }
+
+    /// <summary>
+    /// Symmetric eigen-decomposition of every matrix in an [n, k, k] batch, eigenvalues in the requested order with
+    /// ties in index order. Returns ([n, k] values, [n, k, k] vectors as columns).
+    /// </summary>
+    internal static (Tensor<T> Values, Tensor<T> Vectors) SymmetricEigenEach<T>(Tensor<T> a, bool descending)
+    {
+        var engine = Engine;
+        var matrices = engine.TensorUnstack(a, 0);
+        var values = new Tensor<T>[matrices.Length];
+        var vectors = new Tensor<T>[matrices.Length];
+        for (int i = 0; i < matrices.Length; i++)
+            (values[i], vectors[i]) = SymmetricEigen(matrices[i], descending);
+        return (engine.TensorStack(values, 0), engine.TensorStack(vectors, 0));
+    }
+
+    /// <summary>Per-matrix trace of an [n, k, k] batch.</summary>
+    internal static Tensor<T> BatchTrace<T>(Tensor<T> a)
+    {
+        int k = a.Shape[1];
+        var identity = Engine.Reshape(Identity<T>(k), new[] { 1, k, k });
+        return Engine.ReduceSum(Engine.TensorMultiply(a, identity), new[] { 1, 2 }, false);
+    }
 }
