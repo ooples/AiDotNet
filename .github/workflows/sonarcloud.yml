@@ -608,6 +608,9 @@ jobs:
           DELTA_MODE: ${{ needs.validation-source.outputs.delta_mode }}
           COLLECT_COVERAGE_EVERYWHERE: ${{ inputs.collect_coverage_everywhere }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          # Test shards to send to the self-hosted runner (Set-CiShardRunners). Zero for fork pull
+          # requests: their code must never run on a self-hosted machine.
+          SELF_HOSTED_SHARDS: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.SELF_HOSTED_SHARDS || '0' }}
         run: ./tools/TestImpact/Select-AffectedTests.ps1
 
       - name: Upload test-level selection plan
@@ -999,6 +1002,9 @@ jobs:
         env:
           MAP_KIND: ${{ steps.map.outputs.kind }}
           MAP_RUN_ID: ${{ steps.map.outputs.run_id }}
+          # Test shards to send to the self-hosted runner (Set-CiShardRunners). Zero for fork pull
+          # requests: their code must never run on a self-hosted machine.
+          SELF_HOSTED_SHARDS: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && vars.SELF_HOSTED_SHARDS || '0' }}
           # NOT the event's base sha: that is the base branch as it stood when the pull request was
           # opened, so for a pull request behind master it attributes every commit master
           # has gained since to the pull request. The selector verifies the checked-out merge commit's
@@ -1312,7 +1318,8 @@ jobs:
           # Validate the complete catalog, including entries omitted from this selection.
           $null = Split-CiWorkloads -Shards $all
           $workloads = Split-CiWorkloads -Shards @($matrixShards)
-          $json = ConvertTo-Json -InputObject @($workloads.Tests) -Depth 5 -Compress
+          $tests = @(Set-CiShardRunners -Shards @($workloads.Tests) -Count ([int] $env:SELF_HOSTED_SHARDS))
+          $json = ConvertTo-Json -InputObject $tests -Depth 5 -Compress
           "matrix=$json" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "ledger_matrix=$(ConvertTo-Json -InputObject @($ledgerShards) -Depth 5 -Compress)" |
             Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
@@ -1518,7 +1525,9 @@ jobs:
 
   test-net10-sharded:
     name: Tests (${{ matrix.shard.framework }}) - ${{ matrix.shard.name }}
-    runs-on: ubuntu-latest
+    # select-shards routes a few shards to the self-hosted runner (vars.SELF_HOSTED_SHARDS); the rest
+    # stay on the hosted pool.
+    runs-on: ${{ matrix.shard.runner || 'ubuntu-latest' }}
     needs: [build, validation-source, select-shards]
     # Forced coverage materially extends both test execution and post-test digest work. The live
     # all-shard experiment proved 50 minutes is too short: Generated Layers U passed every test at

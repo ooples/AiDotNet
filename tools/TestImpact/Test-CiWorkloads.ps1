@@ -205,5 +205,21 @@ finally {
     $env:GITHUB_OUTPUT = $previousOutput
     if (Test-Path -LiteralPath $outputPath) { Remove-Item -LiteralPath $outputPath }
 }
-Write-Host 'Workload partitions passed, including five executions of the shipping workflow emitter, six malformed kinds and six nightly-deferral cases.'
+# Set-CiShardRunners: a few ordinary shards go to the self-hosted label; heavy, custom-timeout and
+# the hosted majority stay put, and the caller's objects are not modified.
+$plain = 1..6 | ForEach-Object { [pscustomobject]@{ name = "Plain $_" } }
+$heavy = [pscustomobject]@{ name = 'Heavy'; heavy = $true }
+$slow = [pscustomobject]@{ name = 'Slow'; timeout = 90 }
+$shards = @($heavy, $slow) + $plain
+$routed = @(Set-CiShardRunners -Shards $shards -Count 3)
+Assert-True ($routed.Count -eq 8) 'Routing changed the number of shards.'
+Assert-True ((@($routed | Where-Object { $_.PSObject.Properties['runner'] } | ForEach-Object name) -join '|') -ceq
+    'Plain 1|Plain 2|Plain 3') 'Routing picked the wrong shards.'
+Assert-True (@($shards | Where-Object { $_.PSObject.Properties['runner'] }).Count -eq 0) 'Routing modified the input shards.'
+Assert-True (@((Set-CiShardRunners -Shards $shards -Count 99) | Where-Object { $_.PSObject.Properties['runner'] }).Count -eq 4) `
+    'Routing sent more than half the matrix to the self-hosted runner.'
+Assert-True (@((Set-CiShardRunners -Shards $shards -Count 0) | Where-Object { $_.PSObject.Properties['runner'] }).Count -eq 0) `
+    'Routing with a zero count still routed shards.'
+Assert-True (@(Set-CiShardRunners -Shards @() -Count 3).Count -eq 0) 'Routing an empty selection produced shards.'
+Write-Host 'Workload partitions passed, including five executions of the shipping workflow emitter, six malformed kinds and six nightly-deferral cases and shard runner routing.'
 exit 0

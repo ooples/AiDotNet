@@ -174,3 +174,31 @@ function Get-DeferredNightlyShards {
         $isNightly.Contains([string] $_.name) -and -not $keep.Contains([string] $_.name)
     } | ForEach-Object { [string] $_.name })
 }
+
+# Routes up to $Count test shards to the self-hosted runner label (the matrix job reads `runner`).
+# Hosted runners are a shared pool of about twenty; the self-hosted box takes jobs one at a time,
+# so it gets ordinary shards only (no heavy or custom-timeout ones) and never more than half the
+# matrix, which keeps the hosted pool on the critical path when the box is slow or busy.
+# Returns copies (wrap the call in @()): the input objects are shared with the ledger matrix and must not change.
+function Set-CiShardRunners {
+    param(
+        [Parameter(Mandatory)] [AllowEmptyCollection()] [object[]] $Shards,
+        [int] $Count,
+        [string] $Label = 'aidotnet-cpu')
+    $limit = [Math]::Min($Count, [Math]::Floor($Shards.Count / 2))
+    if ($limit -le 0) { return $Shards }
+    $ordinary = @($Shards | Where-Object {
+        -not (($_.PSObject.Properties['heavy'] -and $_.heavy) -or ($_.PSObject.Properties['timeout'] -and $_.timeout))
+    } | Select-Object -First $limit)
+    $picked = [Collections.Generic.HashSet[string]]::new([string[]] @($ordinary | ForEach-Object { [string] $_.name }),
+        [StringComparer]::Ordinal)
+    $routed = foreach ($shard in $Shards) {
+        if ($picked.Contains([string] $shard.name)) {
+            $copy = $shard.PSObject.Copy()
+            $copy | Add-Member -NotePropertyName runner -NotePropertyValue $Label -Force
+            $copy
+        }
+        else { $shard }
+    }
+    return $routed
+}
