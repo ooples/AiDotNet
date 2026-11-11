@@ -36,8 +36,8 @@ public class TargetEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly TargetEncoderHandleUnknown _handleUnknown;
 
     // Fitted parameters
-    private Dictionary<int, Dictionary<double, double>>? _encodingMaps;
-    private double[]? _globalMeans;
+    private Dictionary<int, CategoryValueMap<T>>? _encodingMaps;
+    private Tensor<T>? _globalMeans;
     private int _nInputFeatures;
 
     /// <summary>
@@ -53,7 +53,7 @@ public class TargetEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the encoding maps for each column.
     /// </summary>
-    public Dictionary<int, Dictionary<double, double>>? EncodingMaps => _encodingMaps;
+    public Dictionary<int, CategoryValueMap<T>>? EncodingMaps => _encodingMaps;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -103,66 +103,44 @@ public class TargetEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _nInputFeatures = data.Columns;
+        var engine = Engine;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
 
-        _encodingMaps = new Dictionary<int, Dictionary<double, double>>();
-        _globalMeans = new double[_nInputFeatures];
+        _encodingMaps = new Dictionary<int, CategoryValueMap<T>>();
+        var globalMeans = new bool[_nInputFeatures];
 
-        // Calculate global means for each column's targets
-        double globalTargetMean = 0;
-        for (int i = 0; i < target.Length; i++)
-        {
-            globalTargetMean += NumOps.ToDouble(target[i]);
-        }
-        globalTargetMean /= target.Length;
+        // Global target mean
+        var y = Tensor<T>.FromVector(target);
+        T globalTargetMean = engine.TensorMean(y);
+        T smoothing = NumOps.FromDouble(_smoothing);
+        T minSamplesLeaf = NumOps.FromDouble(_minSamplesLeaf);
 
         foreach (int col in columnsToProcess)
         {
-            _globalMeans[col] = globalTargetMean;
+            globalMeans[col] = true;
 
-            // Group by category value and compute statistics
-            var categoryStats = new Dictionary<double, (double Sum, int Count)>();
+            // Group by category value: per-category target sums and counts
+            var column = PreprocessingTensorOps.Column(data, col);
+            var categories = PreprocessingTensorOps.SortedUnique(column);
+            var position = PreprocessingTensorOps.LookupSorted(categories, column, out _);
+            var counts = PreprocessingTensorOps.CategoryCounts<T>(position, categories.Length);
+            var sums = PreprocessingTensorOps.CategorySums(position, y, categories.Length);
 
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double categoryValue = NumOps.ToDouble(data[i, col]);
-                double targetValue = NumOps.ToDouble(target[i]);
+            // Smoothed means (count * category_mean + smoothing * global_mean) / (count + smoothing);
+            // rare categories (count < minSamplesLeaf) use the global mean
+            var categoryMean = engine.TensorDivide(sums, counts);
+            var smoothed = engine.TensorDivide(
+                engine.TensorAddScalar(engine.TensorMultiply(counts, categoryMean), NumOps.Multiply(smoothing, globalTargetMean)),
+                engine.TensorAddScalar(counts, smoothing));
+            var global = PreprocessingTensorOps.Filled(new[] { categories.Length }, globalTargetMean);
+            var encoded = engine.TensorWhere(PreprocessingTensorOps.AtLeast(counts, minSamplesLeaf), smoothed, global);
 
-                if (!categoryStats.TryGetValue(categoryValue, out var stats))
-                {
-                    stats = (0, 0);
-                }
-
-                categoryStats[categoryValue] = (stats.Sum + targetValue, stats.Count + 1);
-            }
-
-            // Compute smoothed means for each category
-            var encodingMap = new Dictionary<double, double>();
-
-            foreach (var kvp in categoryStats)
-            {
-                double categoryValue = kvp.Key;
-                double sum = kvp.Value.Sum;
-                int count = kvp.Value.Count;
-
-                double categoryMean;
-                if (count >= _minSamplesLeaf)
-                {
-                    categoryMean = sum / count;
-                    // Apply smoothing: (count * category_mean + smoothing * global_mean) / (count + smoothing)
-                    double smoothedMean = (count * categoryMean + _smoothing * globalTargetMean) / (count + _smoothing);
-                    encodingMap[categoryValue] = smoothedMean;
-                }
-                else
-                {
-                    // Use global mean for rare categories
-                    encodingMap[categoryValue] = globalTargetMean;
-                }
-            }
-
-            _encodingMaps[col] = encodingMap;
+            _encodingMaps[col] = new CategoryValueMap<T>(categories, encoded);
         }
 
+        // Global mean per column (0 for columns that are not encoded)
+        _globalMeans = engine.TensorWhere(globalMeans,
+            PreprocessingTensorOps.Filled(new[] { _nInputFeatures }, globalTargetMean), new Tensor<T>(new[] { _nInputFeatures }));
         IsFitted = true;
     }
 
@@ -203,48 +181,41 @@ public class TargetEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
 
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
+        var columns = new List<Tensor<T>>(numColumns);
 
-        for (int i = 0; i < numRows; i++)
+        for (int j = 0; j < numColumns; j++)
         {
-            for (int j = 0; j < numColumns; j++)
+            var raw = PreprocessingTensorOps.Column(data, j);
+            var column = raw;
+            if (processSet.Contains(j))
             {
-                if (!processSet.Contains(j))
+                // Unknown categories use the column's global mean (or throw)
+                var globalMean = PreprocessingTensorOps.Filled(new[] { numRows }, _globalMeans.GetFlat(j));
+                Tensor<T> found;
+                if (_encodingMaps.TryGetValue(j, out var encodingMap))
                 {
-                    // Pass-through: copy value directly
-                    result[i, j] = data[i, j];
-                    continue;
-                }
-
-                double categoryValue = NumOps.ToDouble(data[i, j]);
-                double encodedValue;
-
-                if (_encodingMaps.TryGetValue(j, out var encodingMap) &&
-                    encodingMap.TryGetValue(categoryValue, out encodedValue))
-                {
-                    result[i, j] = NumOps.FromDouble(encodedValue);
+                    column = encodingMap.Map(raw, globalMean, out found);
                 }
                 else
                 {
-                    // Unknown category
-                    switch (_handleUnknown)
-                    {
-                        case TargetEncoderHandleUnknown.UseGlobalMean:
-                            result[i, j] = NumOps.FromDouble(_globalMeans[j]);
-                            break;
-                        case TargetEncoderHandleUnknown.Error:
-                            throw new ArgumentException($"Unknown category value: {categoryValue} in column {j}");
-                        default:
-                            result[i, j] = NumOps.FromDouble(_globalMeans[j]);
-                            break;
-                    }
+                    found = new Tensor<T>(new[] { numRows });
+                    column = globalMean;
+                }
+
+                if (_handleUnknown == TargetEncoderHandleUnknown.Error)
+                {
+                    var missing = PreprocessingTensorOps.MaskPositions(PreprocessingTensorOps.Not(found));
+                    if (missing.Length > 0)
+                        throw new ArgumentException(
+                            $"Unknown category value: {raw.GetFlat(missing[0])} in column {j}");
                 }
             }
+
+            columns.Add(column);
         }
 
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
     /// <summary>
