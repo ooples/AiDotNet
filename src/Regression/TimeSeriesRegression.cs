@@ -218,11 +218,8 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
 
         // Remember the tail of the training targets so prediction can seed its lag buffer with real
         // history instead of zeros.
-        _trainingTargetTail = [];
-        for (int i = Math.Max(0, y.Length - Math.Max(_options.LagOrder, 1)); i < y.Length; i++)
-        {
-            _trainingTargetTail.Add(y[i]);
-        }
+        int tailStart = Math.Max(0, y.Length - Math.Max(_options.LagOrder, 1));
+        _trainingTargetTail = [.. y.GetSubVector(tailStart, y.Length - tailStart)];
 
         // Prepare the data
         Matrix<T> preparedX = PrepareInputData(x, y);
@@ -317,17 +314,7 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
             }
 
             // Apply Cochrane-Orcutt transformation
-            Matrix<T> correctedX = new(x.Rows - 1, x.Columns);
-            Vector<T> correctedY = new(y.Length - 1);
-
-            for (int i = 1; i < x.Rows; i++)
-            {
-                for (int j = 0; j < x.Columns; j++)
-                {
-                    correctedX[i - 1, j] = NumOps.Subtract(x[i, j], NumOps.Multiply(autocorrelation, x[i - 1, j]));
-                }
-                correctedY[i - 1] = NumOps.Subtract(y[i], NumOps.Multiply(autocorrelation, y[i - 1]));
-            }
+            var (correctedX, correctedY) = QuasiDifference(x, y, autocorrelation);
 
             // Retrain the time series model with corrected data
             _timeSeriesModel.Train(correctedX, correctedY);
@@ -338,27 +325,53 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
         // Apply final correction to the original data
         if (!MathHelper.AlmostEqual(autocorrelation, NumOps.Zero))
         {
-            Matrix<T> finalCorrectedX = new(x.Rows, x.Columns);
-            Vector<T> finalCorrectedY = new(y.Length);
-
-            for (int j = 0; j < x.Columns; j++)
-            {
-                finalCorrectedX[0, j] = x[0, j];
-            }
-            finalCorrectedY[0] = y[0];
-
-            for (int i = 1; i < x.Rows; i++)
-            {
-                for (int j = 0; j < x.Columns; j++)
-                {
-                    finalCorrectedX[i, j] = NumOps.Subtract(x[i, j], NumOps.Multiply(autocorrelation, x[i - 1, j]));
-                }
-                finalCorrectedY[i] = NumOps.Subtract(y[i], NumOps.Multiply(autocorrelation, y[i - 1]));
-            }
+            // The first observation is kept as-is; every later one is quasi-differenced.
+            var (differencedX, differencedY) = QuasiDifference(x, y, autocorrelation);
+            Matrix<T> finalCorrectedX = Engine.TensorConcatenate(
+                new[] { Tensor<T>.FromMatrix(x.GetSubMatrix(0, 0, 1, x.Columns)), Tensor<T>.FromMatrix(differencedX) }, 0).ToMatrix();
+            Vector<T> finalCorrectedY = Vector<T>.Concatenate(y.GetSubVector(0, 1), differencedY);
 
             // Final retraining of the time series model with the fully corrected data
             _timeSeriesModel.Train(finalCorrectedX, finalCorrectedY);
         }
+    }
+
+    /// <summary>
+    /// Cochrane-Orcutt quasi-differences: x[i] - rho * x[i - 1] and y[i] - rho * y[i - 1] for i >= 1.
+    /// </summary>
+    private (Matrix<T> X, Vector<T> Y) QuasiDifference(Matrix<T> x, Vector<T> y, T rho)
+    {
+        int rows = x.Rows - 1;
+        var currentX = x.GetSubMatrix(1, 0, rows, x.Columns);
+        var previousX = x.GetSubMatrix(0, 0, rows, x.Columns);
+        var differencedX = Engine.MatrixSubtract(currentX, Engine.MatrixMultiplyScalar(previousX, rho));
+        int length = y.Length - 1;
+        var differencedY = Engine.Subtract(
+            y.GetSubVector(1, length), Engine.Multiply(y.GetSubVector(0, length), rho));
+        return (differencedX, differencedY);
+    }
+
+    /// <summary>
+    /// The trend column: start + 1, start + 2, ..., start + rows.
+    /// </summary>
+    private Tensor<T> TrendColumn(int rows, int start)
+    {
+        return Engine.Reshape(Engine.TensorArange<T>(start + 1, start + rows + 1, 1), new[] { rows, 1 });
+    }
+
+    /// <summary>
+    /// Seasonal indicator columns s = 1 .. period - 1: row i holds 1 in column s - 1 when
+    /// (i + phaseOffset) % period == s, else 0 (season 0 is the all-zero baseline).
+    /// </summary>
+    private Tensor<T> SeasonalColumns(int rows, int phaseOffset, int period)
+    {
+        // One row per phase: phase 0 is all zeros, phase s is the unit vector e_(s-1).
+        var pattern = Engine.TensorConcatenate(
+            new[] { new Tensor<T>(new[] { 1, period - 1 }), Engine.TensorEye<T>(period - 1) }, 0);
+        int start = phaseOffset % period;
+        int repeats = (start + rows + period - 1) / period;
+        var tiled = Engine.TensorTile(pattern, new[] { Math.Max(repeats, 1), 1 });
+        return Engine.TensorSlice(tiled, new[] { start, 0 }, new[] { rows, period - 1 });
     }
 
     /// <summary>
@@ -396,59 +409,41 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
         int seasonalFeatures = _options.SeasonalPeriod > 0 ? _options.SeasonalPeriod - 1 : 0;
         int totalFeatures = x.Columns + laggedFeatures + trendFeatures + seasonalFeatures;
 
-        Matrix<T> preparedX = new(n - _options.LagOrder, totalFeatures);
+        int lagOrder = _options.LagOrder;
+        int rows = n - lagOrder;
+        Matrix<T> preparedX = new(rows, totalFeatures);
 
-        // Add original features
-        for (int i = _options.LagOrder; i < n; i++)
+        if (rows > 0 && totalFeatures > 0)
         {
-            for (int j = 0; j < x.Columns; j++)
+            // Column blocks in order: original features, then per lag the lagged X block and the
+            // lagged y column, then the trend column, then the seasonal indicators.
+            var blocks = new List<Tensor<T>>();
+            if (x.Columns > 0)
             {
-                preparedX[i - _options.LagOrder, j] = x[i, j];
+                blocks.Add(Tensor<T>.FromMatrix(x.GetSubMatrix(lagOrder, 0, rows, x.Columns)));
             }
-        }
 
-        // Add lagged features
-        int column = x.Columns;
-        for (int lag = 1; lag <= _options.LagOrder; lag++)
-        {
-            // Add lagged X features
-            for (int j = 0; j < x.Columns; j++)
+            for (int lag = 1; lag <= lagOrder; lag++)
             {
-                for (int i = _options.LagOrder; i < n; i++)
+                if (x.Columns > 0)
                 {
-                    preparedX[i - _options.LagOrder, column] = x[i - lag, j];
+                    blocks.Add(Tensor<T>.FromMatrix(x.GetSubMatrix(lagOrder - lag, 0, rows, x.Columns)));
                 }
-                column++;
-            }
-            // Add lagged y values
-            for (int i = _options.LagOrder; i < n; i++)
-            {
-                preparedX[i - _options.LagOrder, column] = y[i - lag];
-            }
-            column++;
-        }
 
-        // Add trend feature
-        if (_options.IncludeTrend)
-        {
-            for (int i = 0; i < preparedX.Rows; i++)
-            {
-                preparedX[i, column] = NumOps.FromDouble(i + 1);
+                blocks.Add(Engine.Reshape(y.GetSubVector(lagOrder - lag, rows).AsTensor(), new[] { rows, 1 }));
             }
-            column++;
-        }
 
-        // Add seasonal features
-        if (_options.SeasonalPeriod > 0)
-        {
-            for (int s = 1; s < _options.SeasonalPeriod; s++)
+            if (_options.IncludeTrend)
             {
-                for (int i = 0; i < preparedX.Rows; i++)
-                {
-                    preparedX[i, column] = NumOps.FromDouble((i + _options.LagOrder) % _options.SeasonalPeriod == s ? 1 : 0);
-                }
-                column++;
+                blocks.Add(TrendColumn(rows, 0));
             }
+
+            if (seasonalFeatures > 0)
+            {
+                blocks.Add(SeasonalColumns(rows, lagOrder, _options.SeasonalPeriod));
+            }
+
+            preparedX = blocks.Count == 1 ? blocks[0].ToMatrix() : Engine.TensorConcatenate(blocks.ToArray(), 1).ToMatrix();
         }
 
         // Apply regularization
@@ -527,13 +522,9 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
             ? parameterized.GetParameters()
             : Vector<T>.Empty();
 
-        var extracted = new Vector<T>(originalFeatures);
-        for (int i = 0; i < originalFeatures && i < fitted.Length; i++)
-        {
-            extracted[i] = fitted[i];
-        }
-
-        Coefficients = extracted;
+        int copied = Math.Min(originalFeatures, fitted.Length);
+        Coefficients = Vector<T>.Concatenate(
+            fitted.GetSubVector(0, copied), Engine.FillZero<T>(originalFeatures - copied));
     }
 
     /// <summary>
@@ -577,10 +568,13 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
         T numerator = NumOps.Zero;
         T denominator = NumOps.Zero;
 
-        for (int i = 1; i < residuals.Length; i++)
+        if (residuals.Length > 1)
         {
-            numerator = NumOps.Add(numerator, NumOps.Multiply(residuals[i], residuals[i - 1]));
-            denominator = NumOps.Add(denominator, NumOps.Multiply(residuals[i - 1], residuals[i - 1]));
+            int length = residuals.Length - 1;
+            var current = residuals.GetSubVector(1, length);
+            var previous = residuals.GetSubVector(0, length);
+            numerator = Engine.DotProduct(current, previous);
+            denominator = Engine.DotProduct(previous, previous);
         }
 
         return NumOps.Divide(numerator, denominator);
@@ -699,33 +693,40 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
         if (input.Rows == 0) return predictions;
 
         int lagOrder = _options.LagOrder;
-        var recentTargets = new List<T>(Math.Max(lagOrder, 1));
-        for (int i = 0; i < lagOrder; i++)
-        {
-            // Seed from the end of the training targets when available, oldest first.
-            int seedIndex = _trainingTargetTail.Count - lagOrder + i;
-            recentTargets.Add(seedIndex >= 0 && seedIndex < _trainingTargetTail.Count
-                ? _trainingTargetTail[seedIndex]
-                : NumOps.Zero);
-        }
+
+        // Seed from the end of the training targets when available, oldest first; missing
+        // history is zero.
+        int available = Math.Min(lagOrder, _trainingTargetTail.Count);
+        var seededTail = new Vector<T>(_trainingTargetTail.GetRange(_trainingTargetTail.Count - available, available));
+        var recentTargets = Vector<T>.Concatenate(Engine.FillZero<T>(lagOrder - available), seededTail);
+
+        // Everything except the lagged targets is known up front; the lagged targets are the
+        // recursive part and are written into their columns row by row.
+        var (baseRows, lagTargetColumns) = BuildPredictionRows(input);
+        var lagTargetIndex = new Tensor<int>(lagTargetColumns, new[] { lagTargetColumns.Length });
+        var outputs = new List<Vector<T>>(input.Rows);
 
         for (int row = 0; row < input.Rows; row++)
         {
-            var features = BuildPredictionRow(input, row, recentTargets);
-            var single = new Matrix<T>(1, features.Length);
-            for (int j = 0; j < features.Length; j++) single[0, j] = features[j];
+            var features = baseRows.GetRow(row);
+            if (lagOrder > 0)
+            {
+                // recentTargets is oldest-first, so lag 1 is the last entry.
+                var lagValues = Engine.TensorFlip(recentTargets.AsTensor(), new[] { 0 });
+                features = Engine.TensorIndexCopy(features.AsTensor(), 0, lagTargetIndex, lagValues).ToVector();
+            }
 
-            var predicted = _timeSeriesModel.Predict(single);
-            predictions[row] = predicted.Length > 0 ? predicted[0] : NumOps.Zero;
+            var predicted = _timeSeriesModel.Predict(RegressionEngineOps2.AsRowMatrix(features));
+            var next = predicted.Length > 0 ? predicted.GetSubVector(0, 1) : Engine.FillZero<T>(1);
+            outputs.Add(next);
 
             if (lagOrder > 0)
             {
-                recentTargets.Add(predictions[row]);
-                recentTargets.RemoveAt(0);
+                recentTargets = Vector<T>.Concatenate(recentTargets.GetSubVector(1, lagOrder - 1), next);
             }
         }
 
-        return predictions;
+        return Vector<T>.Concatenate(outputs);
     }
 
     /// <summary>
@@ -735,46 +736,56 @@ public partial class TimeSeriesRegression<T> : RegressionBase<T>
     /// <param name="input">The full input matrix.</param>
     /// <param name="row">The row being predicted.</param>
     /// <param name="recentTargets">The most recent target values, oldest first.</param>
-    private Vector<T> BuildPredictionRow(Matrix<T> input, int row, List<T> recentTargets)
+    private (Matrix<T> Rows, int[] LagTargetColumns) BuildPredictionRows(Matrix<T> input)
     {
         int lagOrder = _options.LagOrder;
-        int laggedFeatures = lagOrder * (input.Columns + 1);
-        int trendFeatures = _options.IncludeTrend ? 1 : 0;
+        int rows = input.Rows;
         int seasonalFeatures = _options.SeasonalPeriod > 0 ? _options.SeasonalPeriod - 1 : 0;
 
-        var features = new Vector<T>(input.Columns + laggedFeatures + trendFeatures + seasonalFeatures);
-
+        var blocks = new List<Tensor<T>>();
+        var lagTargetColumns = new int[lagOrder];
         int column = 0;
-        for (int j = 0; j < input.Columns; j++) features[column++] = input[row, j];
+        if (input.Columns > 0)
+        {
+            blocks.Add(Tensor<T>.FromMatrix(input));
+            column += input.Columns;
+        }
 
+        var zeroColumn = new Tensor<T>(new[] { rows, 1 });
         for (int lag = 1; lag <= lagOrder; lag++)
         {
             // Lagged predictors come from earlier rows of the input; before the start of the matrix
             // the first row is repeated, which is the standard edge treatment.
-            int sourceRow = Math.Max(0, row - lag);
-            for (int j = 0; j < input.Columns; j++) features[column++] = input[sourceRow, j];
+            if (input.Columns > 0)
+            {
+                var sourceRows = Enumerable.Range(0, rows).Select(r => Math.Max(0, r - lag)).ToArray();
+                blocks.Add(Tensor<T>.FromMatrix(RegressionEngineOps2.GatherRows(input, sourceRows)));
+                column += input.Columns;
+            }
 
-            // recentTargets is oldest-first, so lag 1 is the last entry.
-            int bufferIndex = recentTargets.Count - lag;
-            features[column++] = bufferIndex >= 0 && bufferIndex < recentTargets.Count
-                ? recentTargets[bufferIndex]
-                : NumOps.Zero;
+            // The lagged target is filled in during the recursive forecast.
+            blocks.Add(zeroColumn);
+            lagTargetColumns[lag - 1] = column;
+            column++;
         }
 
         if (_options.IncludeTrend)
         {
-            features[column++] = NumOps.FromDouble(_trainingRowCount + row + 1);
+            blocks.Add(TrendColumn(rows, _trainingRowCount));
         }
 
-        int seasonalClock = seasonalFeatures > 0
-            ? (_trainingRowCount + row + lagOrder) % _options.SeasonalPeriod
-            : 0;
-        for (int s = 1; s <= seasonalFeatures; s++)
+        if (seasonalFeatures > 0)
         {
-            features[column++] = seasonalClock == s ? NumOps.One : NumOps.Zero;
+            blocks.Add(SeasonalColumns(rows, _trainingRowCount + lagOrder, _options.SeasonalPeriod));
         }
 
-        return features;
+        if (blocks.Count == 0)
+        {
+            return (new Matrix<T>(rows, 0), lagTargetColumns);
+        }
+
+        var matrix = blocks.Count == 1 ? blocks[0].ToMatrix() : Engine.TensorConcatenate(blocks.ToArray(), 1).ToMatrix();
+        return (matrix, lagTargetColumns);
     }
 
     /// <summary>
