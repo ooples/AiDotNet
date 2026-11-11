@@ -24,18 +24,11 @@ internal static class DetectionOutputBatching<T>
                 continue;
             }
 
-            var itemShape = new int[output.Shape.Length];
+            var start = new int[output.Shape.Length];
+            start[0] = batchIndex;
+            var itemShape = output.Shape.ToArray();
             itemShape[0] = 1;
-            for (int d = 1; d < output.Shape.Length; d++)
-                itemShape[d] = output.Shape[d];
-
-            var itemTensor = new Tensor<T>(itemShape);
-            int elementsPerItem = output.Length / batchSize;
-            int sourceOffset = batchIndex * elementsPerItem;
-            for (int j = 0; j < elementsPerItem; j++)
-                itemTensor[j] = output[sourceOffset + j];
-
-            itemOutputs.Add(itemTensor);
+            itemOutputs.Add(AiDotNetEngine.Current.TensorSlice(output, start, itemShape));
         }
 
         return itemOutputs;
