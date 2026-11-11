@@ -75,20 +75,6 @@ internal static class RegressionEngineOps2
     }
 
     /// <summary>
-    /// The columns of <paramref name="matrix"/> at <paramref name="indices"/>, in that order.
-    /// </summary>
-    public static Matrix<T> GatherColumns<T>(Matrix<T> matrix, IReadOnlyList<int> indices)
-    {
-        if (indices.Count == 0)
-        {
-            return new Matrix<T>(matrix.Rows, 0);
-        }
-
-        return AiDotNetEngine.Current
-            .TensorIndexSelect(Tensor<T>.FromMatrix(matrix), IndexTensor(indices), 1).ToMatrix();
-    }
-
-    /// <summary>
     /// <paramref name="matrix"/> + diag(<paramref name="diagonal"/>) for a square matrix.
     /// </summary>
     public static Matrix<T> AddDiagonal<T>(Matrix<T> matrix, Vector<T> diagonal)
@@ -237,14 +223,6 @@ internal static class RegressionEngineOps2
     public static Matrix<T> AsRowMatrix<T>(Vector<T> row)
     {
         return new Tensor<T>(new[] { 1, row.Length }, row.Clone()).ToMatrix();
-    }
-
-    /// <summary>
-    /// The column means of <paramref name="x"/> (population, divided by the row count).
-    /// </summary>
-    public static Vector<T> ColumnMeans<T>(Matrix<T> x)
-    {
-        return AiDotNetEngine.Current.ReduceMean(Tensor<T>.FromMatrix(x), new[] { 0 }, keepDims: false).ToVector();
     }
 
     /// <summary>
@@ -594,14 +572,6 @@ internal static class RegressionEngineOps2
         var m = engine.TensorBroadcastTo(new Tensor<T>(new[] { 1, means.Length }, means), shape);
         var s = engine.TensorBroadcastTo(new Tensor<T>(new[] { 1, stds.Length }, stds), shape);
         return engine.TensorDivide(engine.TensorSubtract(Tensor<T>.FromMatrix(x), m), s).ToMatrix();
-    }
-
-    /// <summary>
-    /// True when any element of <paramref name="mask"/> is non-zero.
-    /// </summary>
-    public static bool Any<T>(Tensor<T> mask)
-    {
-        return mask.Length > 0 && AiDotNetEngine.Current.TensorCountNonzero(mask) > 0;
     }
 
     /// <summary>
