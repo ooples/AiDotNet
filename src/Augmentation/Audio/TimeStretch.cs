@@ -84,7 +84,7 @@ public class TimeStretch<T> : AudioAugmenterBase<T>
         if (newLength < 1) newLength = 1;
 
         // Create new shape with modified time dimension
-        var newShape = waveform._shape;
+        var newShape = (int[])waveform._shape.Clone();
         newShape[waveform.Rank - 1] = newLength;
         var result = new Tensor<T>(newShape);
 
@@ -97,30 +97,29 @@ public class TimeStretch<T> : AudioAugmenterBase<T>
 
         // Process each channel/batch independently using linear interpolation
         // Production implementation would use phase vocoder for better quality
-        for (int outer = 0; outer < outerElements; outer++)
-        {
-            int srcOffset = outer * originalSamples;
-            int dstOffset = outer * newLength;
+        var engine = Engine;
+        var rows = engine.Reshape(waveform, [outerElements, originalSamples]);
 
-            for (int i = 0; i < newLength; i++)
-            {
-                double srcPos = (double)i * originalSamples / newLength;
-                int srcIndex = (int)srcPos;
-                double frac = srcPos - srcIndex;
+        // Source position of every output sample: i * originalSamples / newLength
+        var srcPos = engine.TensorDivideScalar(
+            engine.TensorMultiplyScalar(engine.TensorArange<T>(0, newLength, 1), NumOps.FromDouble(originalSamples)),
+            NumOps.FromDouble(newLength));
+        var srcFloor = engine.TensorFloor(srcPos);
+        T last = NumOps.FromDouble(originalSamples - 1);
 
-                if (srcIndex >= originalSamples - 1)
-                {
-                    result[dstOffset + i] = waveform[srcOffset + originalSamples - 1];
-                }
-                else
-                {
-                    double val1 = NumOps.ToDouble(waveform[srcOffset + srcIndex]);
-                    double val2 = NumOps.ToDouble(waveform[srcOffset + srcIndex + 1]);
-                    double interpolated = val1 + frac * (val2 - val1);
-                    result[dstOffset + i] = NumOps.FromDouble(interpolated);
-                }
-            }
-        }
+        // Positions at or past the last sample take the last sample (index clamped, weight 0)
+        var atEnd = engine.TensorGreaterThan(srcFloor, NumOps.FromDouble(originalSamples - 1.5));
+        var lower = engine.TensorClampMax(srcFloor, last);
+        var upper = engine.TensorClampMax(engine.TensorAddScalar(srcFloor, NumOps.One), last);
+        var frac = engine.TensorMultiply(
+            engine.TensorSubtract(srcPos, srcFloor),
+            engine.ScalarMinusTensor(NumOps.One, atEnd));
+
+        var val1 = engine.TensorIndexSelect(rows, lower.Cast<int>(), 1);
+        var val2 = engine.TensorIndexSelect(rows, upper.Cast<int>(), 1);
+        var weight = engine.Reshape(frac, [1, newLength]);
+        var interpolated = engine.TensorAdd(val1, engine.TensorMultiply(weight, engine.TensorSubtract(val2, val1)));
+        interpolated.Contiguous().CopyTo(result.AsWritableSpan());
 
         return result;
     }

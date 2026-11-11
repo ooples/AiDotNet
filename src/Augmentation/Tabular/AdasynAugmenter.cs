@@ -172,7 +172,9 @@ public class AdasynAugmenter<T> : TabularAugmenterBase<T>
         }
 
         // Generate synthetic samples
-        var syntheticSamples = new Matrix<T>(numToGenerate, cols);
+        var sources = new List<int>(numToGenerate);
+        var targets = new List<int>(numToGenerate);
+        var gaps = new List<double>(numToGenerate);
         int syntheticIndex = 0;
 
         var distances = ComputeDistanceMatrix(minorityData);
@@ -190,19 +192,17 @@ public class AdasynAugmenter<T> : TabularAugmenterBase<T>
                 int neighborIdx = neighbors[context.Random.Next(neighbors.Length)];
                 double gap = context.Random.NextDouble();
 
-                for (int c = 0; c < cols; c++)
-                {
-                    double val1 = NumOps.ToDouble(minorityData[i, c]);
-                    double val2 = NumOps.ToDouble(minorityData[neighborIdx, c]);
-                    double synthetic = val1 + gap * (val2 - val1);
-                    syntheticSamples[syntheticIndex, c] = NumOps.FromDouble(synthetic);
-                }
+                sources.Add(i);
+                targets.Add(neighborIdx);
+                gaps.Add(gap);
 
                 syntheticIndex++;
             }
         }
 
-        return syntheticSamples;
+        // Rows that were not generated stay zero
+        return TabularEngineOps<T>.InterpolateRows(
+            minorityData, sources.ToArray(), targets.ToArray(), gaps.ToArray(), numToGenerate);
     }
 
     /// <summary>

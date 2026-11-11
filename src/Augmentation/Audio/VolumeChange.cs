@@ -67,15 +67,13 @@ public class VolumeChange<T> : AudioAugmenterBase<T>
         int samples = GetSampleCount(waveform);
         var result = waveform.Clone();
 
-        for (int i = 0; i < samples; i++)
-        {
-            double originalValue = NumOps.ToDouble(waveform[i]);
-            double newValue = originalValue * gainLinear;
-
-            // Clip to valid range [-1, 1] to prevent clipping
-            newValue = Math.Max(-1.0, Math.Min(1.0, newValue));
-            result[i] = NumOps.FromDouble(newValue);
-        }
+        // Scale the first `samples` elements and clip to valid range [-1, 1]
+        var engine = Engine;
+        var signal = engine.TensorSlice(engine.Reshape(waveform, [waveform.Length]), [0], [samples]);
+        var scaled = engine.TensorClamp(
+            engine.TensorMultiplyScalar(signal, NumOps.FromDouble(gainLinear)),
+            NumOps.FromDouble(-1.0), NumOps.One);
+        scaled.Contiguous().CopyTo(result.AsWritableSpan().Slice(0, samples));
 
         return result;
     }
