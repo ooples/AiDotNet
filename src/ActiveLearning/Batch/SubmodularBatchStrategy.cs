@@ -199,12 +199,91 @@ public class SubmodularBatchStrategy<T, TInput, TOutput> : ISubmodularBatchStrat
     }
 
     /// <summary>
-    /// Greedy maximization of λ·informativeness + (1-λ)·marginal diversity gain. Every remaining
-    /// candidate's exact marginal gain is evaluated each round (the previous lazy upper-bound skip
-    /// only pruned candidates whose exact gain could not win, so the selected set is the same for
-    /// non-negative weights). Ties go to the lowest candidate index.
+    /// Greedy maximization of λ·informativeness + (1-λ)·marginal diversity gain with lazy
+    /// upper-bound evaluation: a candidate is skipped when its cached gain from an earlier round is
+    /// below the best gain found so far in this round.
     /// </summary>
     private int[] GreedyMaximizationWithScores(int[] candidateIndices, Vector<T> scores, int batchSize)
+    {
+        if (CanUseBatchedGreedy(candidateIndices.Length))
+        {
+            return BatchedGreedyMaximization(candidateIndices, scores, batchSize);
+        }
+
+        // Lazy greedy (kept as-is for objectives/weights where cached gains are not upper bounds)
+        var selected = new List<int>();
+        var remaining = new HashSet<int>(Enumerable.Range(0, candidateIndices.Length));
+
+        // Lazy evaluation: cache upper bounds for efficiency
+        var upperBounds = Enumerable.Repeat(NumOps.MaxValue, candidateIndices.Length).ToArray();
+
+        for (int b = 0; b < batchSize && remaining.Count > 0; b++)
+        {
+            T maxGain = NumOps.MinValue;
+            int bestIdx = -1;
+
+            // Find sample with maximum marginal gain
+            foreach (var idx in remaining)
+            {
+                // Lazy evaluation: skip if upper bound is worse than current best
+                if (bestIdx >= 0 && NumOps.Compare(upperBounds[idx], maxGain) < 0)
+                {
+                    continue;
+                }
+
+                // Compute marginal gain
+                var diversityGain = ComputeMarginalGainInternal(selected, idx);
+
+                // Combine with informativeness score
+                var informativenessGain = scores[idx];
+                var totalGain = ComputeCombinedGain(diversityGain, informativenessGain);
+
+                upperBounds[idx] = totalGain;
+
+                if (NumOps.Compare(totalGain, maxGain) > 0)
+                {
+                    maxGain = totalGain;
+                    bestIdx = idx;
+                }
+            }
+
+            if (bestIdx >= 0)
+            {
+                selected.Add(bestIdx);
+                remaining.Remove(bestIdx);
+            }
+        }
+
+        // Map back to pool indices
+        return selected.Select(i => candidateIndices[i]).ToArray();
+    }
+
+    /// <summary>
+    /// True when the lazy greedy picks exactly the first exact argmax every round, so all gains can
+    /// be evaluated batched. That holds when every cached gain is an upper bound of the current one:
+    /// facility-location and graph-cut gains never increase as the selection grows (each term only
+    /// shrinks, and rounding is monotone), and λ ≥ 0, (1-λ) ≥ 0 keep the combined gain monotone in
+    /// them. A skipped candidate then satisfies gain ≤ bound &lt; best, so it can neither be the
+    /// maximum nor its first occurrence. Log-determinant gains can grow (1 in the first round, the
+    /// distance to the first pick in the second) and negative weights flip the bound, so those use
+    /// the lazy loop.
+    /// </summary>
+    private bool CanUseBatchedGreedy(int candidateCount)
+    {
+        var features = _cachedFeatures;
+        return features is not null
+            && features.Shape[0] == candidateCount
+            && _objective != SubmodularObjective.LogDeterminant
+            && NumOps.GreaterThanOrEquals(_lambda, NumOps.Zero)
+            && NumOps.GreaterThanOrEquals(_diversityTradeoff, NumOps.Zero);
+    }
+
+    /// <summary>
+    /// Batched greedy maximization of λ·informativeness + (1-λ)·marginal diversity gain: every
+    /// remaining candidate's exact gain is evaluated each round and the first maximum wins. Only
+    /// used when <see cref="CanUseBatchedGreedy"/> proves it picks what the lazy greedy picks.
+    /// </summary>
+    private int[] BatchedGreedyMaximization(int[] candidateIndices, Vector<T> scores, int batchSize)
     {
         var features = _cachedFeatures;
         int n = candidateIndices.Length;
@@ -401,6 +480,14 @@ public class SubmodularBatchStrategy<T, TInput, TOutput> : ISubmodularBatchStrat
         var ones = new Tensor<T>(new[] { n });
         ones.Fill(NumOps.One);
         return ones;
+    }
+
+    private T ComputeCombinedGain(T diversityGain, T informativenessGain)
+    {
+        // Linear combination: λ * informativeness + (1-λ) * diversity
+        var infTerm = NumOps.Multiply(_lambda, informativenessGain);
+        var divTerm = NumOps.Multiply(_diversityTradeoff, diversityGain);
+        return NumOps.Add(infTerm, divTerm);
     }
 
     private T ComputeSimilarity(Vector<T> a, Vector<T> b)
