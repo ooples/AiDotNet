@@ -82,12 +82,8 @@ public class FeatureNoise<T> : TabularAugmenterBase<T>
 
         var engine = Engine;
         var values = Tensor<T>.FromMatrix(result);
-        var selector = TabularEngineOps<T>.FeatureSelector(features, cols);
         var noise = AugmentationRandom<T>.Gaussian(context, [rows, features.Length], 0, NoiseStdDev);
-        var noisy = engine.TensorAdd(values, engine.TensorMatMul(noise, selector));
-        var touched = engine.TensorBroadcastTo(
-            engine.TensorGreaterThan(engine.ReduceSum(selector, [0], true), NumOps.Zero), [rows, cols]);
-        return engine.TensorWhere(touched, noisy, values).ToMatrix();
+        return engine.TensorIndexAdd(values, 1, new Tensor<int>(features, [features.Length]), noise).ToMatrix();
     }
 
     /// <inheritdoc />
