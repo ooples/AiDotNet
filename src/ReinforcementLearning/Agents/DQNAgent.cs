@@ -377,16 +377,7 @@ public partial class DQNAgent<T> : DeepReinforcementLearningAgentBase<T>, IActio
 
     private T Max(Vector<T> vector)
     {
-        T maxValue = vector[0];
-
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], maxValue))
-            {
-                maxValue = vector[i];
-            }
-        }
-
+        T maxValue = RLTensorOps.Max(vector);
         return maxValue;
     }
     /// <inheritdoc/>

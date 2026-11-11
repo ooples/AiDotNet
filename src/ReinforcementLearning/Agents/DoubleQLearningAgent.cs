@@ -236,17 +236,7 @@ public partial class DoubleQLearningAgent<T> : ReinforcementLearningAgentBase<T>
 
     private int GetBestActionFromTable(Dictionary<string, Dictionary<int, T>> qTable, string stateKey)
     {
-        int bestAction = 0;
-        T bestValue = qTable[stateKey][0];
-
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            if (NumOps.GreaterThan(qTable[stateKey][a], bestValue))
-            {
-                bestValue = qTable[stateKey][a];
-                bestAction = a;
-            }
-        }
+        int bestAction = RLTensorOps.ArgMax(RLTensorOps.Row(qTable[stateKey], _options.ActionSize));
         return bestAction;
     }
 

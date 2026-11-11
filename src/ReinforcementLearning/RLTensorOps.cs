@@ -99,6 +99,43 @@ internal static class RLTensorOps
         return Vector<T>.FromEnumerable(Enumerable.Range(0, count).Select(action => row[action]));
     }
 
+    /// <summary>
+    /// The discount powers [1, g, g^2, ..., g^(count-1)], each formed by repeated multiplication
+    /// (a cumulative product), exactly like the running "discount *= gamma" scalar update.
+    /// </summary>
+    internal static Vector<T> DiscountPowers<T>(T gamma, int count)
+    {
+        if (count <= 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        var factors = Vector<T>.CreateDefault(count, gamma);
+        factors[0] = MathHelper.GetNumericOperations<T>().One;
+        return Engine.TensorCumProd(factors.AsTensor(), 0).ToVector();
+    }
+
+    /// <summary>
+    /// The n-step discounted sum sum_i g^i r_i, plus the discount g^n that applies to whatever
+    /// follows the last reward (the bootstrap value).
+    /// </summary>
+    internal static T DiscountedSum<T>(Vector<T> rewards, T gamma, out T nextDiscount)
+    {
+        if (rewards is null)
+        {
+            throw new ArgumentNullException(nameof(rewards));
+        }
+
+        var powers = DiscountPowers(gamma, rewards.Length + 1);
+        nextDiscount = powers[rewards.Length];
+        if (rewards.Length == 0)
+        {
+            return MathHelper.GetNumericOperations<T>().Zero;
+        }
+
+        return Engine.DotProduct(powers.GetSubVector(0, rewards.Length), rewards);
+    }
+
     /// <summary>Concatenates vectors end to end.</summary>
     internal static Vector<T> Concat<T>(params Vector<T>[] parts)
     {

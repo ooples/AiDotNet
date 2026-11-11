@@ -165,15 +165,7 @@ public partial class GradientBanditAgent<T> : ReinforcementLearningAgentBase<T>
     private Vector<T> ComputeSoftmax(Vector<T> preferences)
     {
         // Find max for numerical stability
-        T maxPref = preferences[0];
-        for (int i = 1; i < preferences.Length; i++)
-        {
-            if (NumOps.GreaterThan(preferences[i], maxPref))
-            {
-                maxPref = preferences[i];
-            }
-        }
-
+        T maxPref = RLTensorOps.Max(preferences);
         // Compute exp(H(a) - max)
         var expValues = new Vector<T>(preferences.Length);
         T sumExp = NumOps.Zero;

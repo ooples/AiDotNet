@@ -667,18 +667,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             throw new ArgumentException("Cannot compute ArgMax of an empty vector.", nameof(values));
         }
 
-        int maxIndex = 0;
-        T maxValue = values[0];
-
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.GreaterThan(values[i], maxValue))
-            {
-                maxValue = values[i];
-                maxIndex = i;
-            }
-        }
-
+        int maxIndex = RLTensorOps.ArgMax(values);
         return maxIndex;
     }
 
@@ -694,14 +683,7 @@ public partial class QMIXAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             throw new ArgumentException("Cannot compute MaxValue of an empty vector.", nameof(values));
         }
 
-        T maxValue = values[0];
-        for (int i = 1; i < values.Length; i++)
-        {
-            if (NumOps.GreaterThan(values[i], maxValue))
-            {
-                maxValue = values[i];
-            }
-        }
+        T maxValue = RLTensorOps.Max(values);
         return maxValue;
     }
 

@@ -146,15 +146,7 @@ public partial class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase
 
     private Vector<T> ComputeSoftmax(Dictionary<int, T> preferences)
     {
-        T maxPref = preferences[0];
-        for (int i = 1; i < preferences.Count; i++)
-        {
-            if (NumOps.GreaterThan(preferences[i], maxPref))
-            {
-                maxPref = preferences[i];
-            }
-        }
-
+        T maxPref = RLTensorOps.Max(RLTensorOps.Row(preferences, preferences.Count));
         var expValues = new Vector<T>(preferences.Count);
         T sumExp = NumOps.Zero;
         for (int i = 0; i < preferences.Count; i++)
@@ -174,7 +166,7 @@ public partial class TabularActorCriticAgent<T> : ReinforcementLearningAgentBase
     }
 
     private string GetStateKey(Vector<T> state) => string.Join(",", Enumerable.Range(0, state.Length).Select(i => NumOps.ToDouble(state[i]).ToString("F4")));
-    private int ArgMax(Vector<T> values) { int maxIndex = 0; T maxValue = values[0]; for (int i = 1; i < values.Length; i++) if (NumOps.GreaterThan(values[i], maxValue)) { maxValue = values[i]; maxIndex = i; } return maxIndex; }
+    private int ArgMax(Vector<T> values) { int maxIndex = RLTensorOps.ArgMax(values); return maxIndex; }
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T> { ["states_visited"] = NumOps.FromDouble(_valueTable.Count) };

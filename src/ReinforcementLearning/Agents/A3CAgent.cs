@@ -588,16 +588,7 @@ public partial class A3CAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
     private int GetDiscreteAction(Vector<T> actionVector)
     {
         // Action vector for discrete actions is one-hot encoded
-        int maxIdx = 0;
-        T maxVal = actionVector[0];
-        for (int i = 1; i < actionVector.Length; i++)
-        {
-            if (NumOps.GreaterThan(actionVector[i], maxVal))
-            {
-                maxVal = actionVector[i];
-                maxIdx = i;
-            }
-        }
+        int maxIdx = RLTensorOps.ArgMax(actionVector);
         return maxIdx;
     }
 

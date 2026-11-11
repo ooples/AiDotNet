@@ -369,16 +369,7 @@ namespace AiDotNet.ReinforcementLearning.Policies
         private Vector<T> Softmax(Vector<T> logits)
         {
             var probabilities = new Vector<T>(logits.Length);
-            T maxLogit = logits[0];
-
-            for (int i = 1; i < logits.Length; i++)
-            {
-                if (NumOps.GreaterThan(logits[i], maxLogit))
-                {
-                    maxLogit = logits[i];
-                }
-            }
-
+            T maxLogit = RLTensorOps.Max(logits);
             T sumExp = NumOps.Zero;
             for (int i = 0; i < logits.Length; i++)
             {

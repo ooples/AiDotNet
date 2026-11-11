@@ -167,11 +167,7 @@ public partial class ExpectedSARSAAgent<T> : ReinforcementLearningAgentBase<T>, 
         int bestAction = GetBestAction(stateKey);
         T bestQ = _qTable[stateKey][bestAction];
 
-        T sumQ = NumOps.Zero;
-        for (int a = 0; a < _options.ActionSize; a++)
-        {
-            sumQ = NumOps.Add(sumQ, _qTable[stateKey][a]);
-        }
+        T sumQ = AiDotNetEngine.Current.Sum(RLTensorOps.Row(_qTable[stateKey], _options.ActionSize));
 
         // (1 - ε) * Q(best) + ε * mean(Q)
         double prob = 1.0 - _epsilon;

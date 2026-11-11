@@ -227,8 +227,8 @@ public partial class PrioritizedSweepingAgent<T> : ReinforcementLearningAgentBas
             best = HashStateToAction(stateKey, _options.ActionSize);
         return best;
     }
-    private T GetMaxQValue(string stateKey) { if (!_qTable.ContainsKey(stateKey)) return NumOps.Zero; T max = _qTable[stateKey][0]; for (int a = 1; a < _options.ActionSize; a++) if (NumOps.GreaterThan(_qTable[stateKey][a], max)) max = _qTable[stateKey][a]; return max; }
-    private int ArgMax(Vector<T> values) { int maxIndex = 0; T maxValue = values[0]; for (int i = 1; i < values.Length; i++) if (NumOps.GreaterThan(values[i], maxValue)) { maxValue = values[i]; maxIndex = i; } return maxIndex; }
+    private T GetMaxQValue(string stateKey) { if (!_qTable.ContainsKey(stateKey)) return NumOps.Zero; T max = RLTensorOps.Max(RLTensorOps.Row(_qTable[stateKey], _options.ActionSize)); return max; }
+    private int ArgMax(Vector<T> values) { int maxIndex = RLTensorOps.ArgMax(values); return maxIndex; }
 
     /// <inheritdoc />
     public override Dictionary<string, T> GetMetrics() => new Dictionary<string, T> { ["states_visited"] = NumOps.FromDouble(_qTable.Count), ["model_size"] = NumOps.FromDouble(_model.Count), ["queue_size"] = NumOps.FromDouble(_priorityQueue.Count), ["epsilon"] = NumOps.FromDouble(_epsilon) };

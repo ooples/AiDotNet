@@ -330,17 +330,9 @@ public abstract partial class ReinforcementLearningAgentBase<T> : IRLAgent<T>, I
 
         // Decode the supervised target into an (action, reward) pair. argmax over
         // target gives the preferred action; the value at that index is its reward.
-        int bestIndex = 0;
-        T bestValue = target[0];
-        for (int i = 1; i < target.Length; i++)
-        {
-            if (NumOps.GreaterThan(target[i], bestValue))
-            {
-                bestValue = target[i];
-                bestIndex = i;
-            }
-        }
-
+        var qRow = target;
+        int bestIndex = RLTensorOps.ArgMax(qRow);
+        T bestValue = qRow[bestIndex];
         // Build a one-hot action vector with the same dimensionality as the target so
         // discrete agents can decode it via argmax in StoreExperience/SelectAction.
         var actionVec = new Vector<T>(target.Length);

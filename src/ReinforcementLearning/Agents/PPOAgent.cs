@@ -694,12 +694,7 @@ public partial class PPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGradi
 
     private T Max(Vector<T> vector)
     {
-        T max = vector[0];
-        for (int i = 1; i < vector.Length; i++)
-        {
-            if (NumOps.GreaterThan(vector[i], max))
-                max = vector[i];
-        }
+        T max = RLTensorOps.Max(vector);
         return max;
     }
     /// <inheritdoc/>

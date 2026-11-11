@@ -142,14 +142,8 @@ public partial class NStepSARSAAgent<T> : ReinforcementLearningAgentBase<T>, IGr
         EnsureStateExists(firstState);
 
         // Compute n-step return
-        T G = NumOps.Zero;
-        T discount = NumOps.One;
-
-        for (int i = 0; i < _nStepBuffer.Count; i++)
-        {
-            G = NumOps.Add(G, NumOps.Multiply(discount, _nStepBuffer[i].reward));
-            discount = NumOps.Multiply(discount, DiscountFactor);
-        }
+        var rewards = Vector<T>.FromEnumerable(_nStepBuffer.Select(step => step.reward));
+        T G = RLTensorOps.DiscountedSum(rewards, DiscountFactor, out T discount);
 
         // Add bootstrapped value if not done
         if (!done)

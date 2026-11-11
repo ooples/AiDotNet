@@ -128,13 +128,8 @@ public partial class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>,
         var (firstState, firstAction, firstReward) = _nStepBuffer[0];
         EnsureStateExists(firstState);
 
-        T G = NumOps.Zero;
-        T discount = NumOps.One;
-        for (int i = 0; i < _nStepBuffer.Count; i++)
-        {
-            G = NumOps.Add(G, NumOps.Multiply(discount, _nStepBuffer[i].reward));
-            discount = NumOps.Multiply(discount, DiscountFactor);
-        }
+        var stepRewards = Vector<T>.FromEnumerable(_nStepBuffer.Select(step => step.reward));
+        T G = RLTensorOps.DiscountedSum(stepRewards, DiscountFactor, out T discount);
 
         if (!done)
         {
@@ -152,14 +147,7 @@ public partial class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>,
 
     private T GetMaxQValue(string stateKey)
     {
-        T maxValue = _qTable[stateKey][0];
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            if (NumOps.GreaterThan(_qTable[stateKey][a], maxValue))
-            {
-                maxValue = _qTable[stateKey][a];
-            }
-        }
+        T maxValue = RLTensorOps.Max(RLTensorOps.Row(_qTable[stateKey], _options.ActionSize));
         return maxValue;
     }
 
@@ -186,11 +174,7 @@ public partial class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>,
 
     private int GetActionIndex(Vector<T> action)
     {
-        for (int i = 0; i < action.Length; i++)
-        {
-            if (NumOps.GreaterThan(action[i], NumOps.Zero)) return i;
-        }
-        return 0;
+        return RLTensorOps.FirstPositiveIndex(action, NumOps.Zero);
     }
 
     private void EnsureStateExists(string stateKey)
@@ -208,22 +192,9 @@ public partial class NStepQLearningAgent<T> : ReinforcementLearningAgentBase<T>,
     private int GetBestAction(string stateKey)
     {
         EnsureStateExists(stateKey);
-        int bestAction = 0;
-        T bestValue = _qTable[stateKey][0];
-        bool allEqual = true;
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            if (NumOps.GreaterThan(_qTable[stateKey][a], bestValue))
-            {
-                bestValue = _qTable[stateKey][a];
-                bestAction = a;
-                allEqual = false;
-            }
-            else if (!NumOps.Equals(_qTable[stateKey][a], bestValue))
-            {
-                allEqual = false;
-            }
-        }
+        var qRow = RLTensorOps.Row(_qTable[stateKey], _options.ActionSize);
+        int bestAction = RLTensorOps.ArgMax(qRow);
+        bool allEqual = RLTensorOps.AllEqual(qRow, NumOps);
         if (allEqual)
             bestAction = HashStateToAction(stateKey, _options.ActionSize);
         return bestAction;

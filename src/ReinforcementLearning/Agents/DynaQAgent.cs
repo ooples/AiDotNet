@@ -179,30 +179,14 @@ public partial class DynaQAgent<T> : ReinforcementLearningAgentBase<T>
 
     private int GetGreedyAction(string stateKey)
     {
-        int best = 0;
-        T bestVal = _qTable[stateKey][0];
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            if (NumOps.GreaterThan(_qTable[stateKey][a], bestVal))
-            {
-                bestVal = _qTable[stateKey][a];
-                best = a;
-            }
-        }
+        int best = RLTensorOps.ArgMax(RLTensorOps.Row(_qTable[stateKey], _options.ActionSize));
         return best;
     }
 
     private T GetMaxQValue(string stateKey)
     {
         if (!_qTable.ContainsKey(stateKey)) return NumOps.Zero;
-        T max = _qTable[stateKey][0];
-        for (int a = 1; a < _options.ActionSize; a++)
-        {
-            if (NumOps.GreaterThan(_qTable[stateKey][a], max))
-            {
-                max = _qTable[stateKey][a];
-            }
-        }
+        T max = RLTensorOps.Max(RLTensorOps.Row(_qTable[stateKey], _options.ActionSize));
         return max;
     }
 
