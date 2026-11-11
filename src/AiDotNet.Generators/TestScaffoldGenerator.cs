@@ -12544,7 +12544,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, " +
                     "inputSize: 4, outputSize: 1), " +
                     "new AiDotNet.Models.Options.FinancialPPOAgentOptions<double> { " +
-                    "StateSize = 4, ActionSize = 4, BatchSize = 1, ReplayBufferSize = 64, " +
+                    "StateSize = 4, ActionSize = 4, ReplayBufferSize = 64, " +
                     "WarmupSteps = 0, Seed = 42, NumEpochs = 1, RolloutLength = 16, MiniBatchSize = 16 })";
             }
             else if (model.ClassName == "FinRLAgent" && model.TypeParameterCount == 1)
@@ -12556,7 +12556,7 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Regression, inputSize: 4, outputSize: 4), " +
                     "options: new AiDotNet.Models.Options.FinancialPPOAgentOptions<double> { " +
-                    "StateSize = 4, ActionSize = 4, BatchSize = 1, ReplayBufferSize = 64, " +
+                    "StateSize = 4, ActionSize = 4, ReplayBufferSize = 64, " +
                     "WarmupSteps = 0, Seed = 42, NumEpochs = 1, RolloutLength = 16, MiniBatchSize = 16 }, " +
                     "secondaryArchitecture: new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +

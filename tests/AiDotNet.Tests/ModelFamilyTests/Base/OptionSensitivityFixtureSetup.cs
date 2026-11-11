@@ -1236,6 +1236,18 @@ internal static class OptionSensitivityFixtureSetup
 
     internal static void PrepareOptions(AiDotNet.Models.Options.ModelOptions options, string option)
     {
+        // Step schedules whose first switch is hundreds of thousands of batches out: bring the switch inside the
+        // probe's training steps so the scheduled rate is the one a step actually uses.
+        if (options is AiDotNet.Video.Options.VFITOptions vfit && option == "LearningRateSteps")
+            vfit.LearningRateMilestones = new[] { 1, 2, 3, 4, 5 };
+        if (options is AiDotNet.Video.Options.XVFIOptions xvfi && option == "LearningRateDecay")
+            xvfi.LearningRateMilestones = new[] { 1 };
+        if (options is AiDotNet.Video.Options.InterpAnyClearerOptions clearer && option == "MinLearningRate")
+        {
+            // The cosine floor acts only after the 2,000-step warmup; a four-step cosine starts decaying at once.
+            clearer.WarmupSteps = 0;
+            clearer.TotalSteps = 4;
+        }
         if (options is AiDotNet.TextToSpeech.Latest.MegaTTSOptions or AiDotNet.TextToSpeech.Latest.MegaTTS2Options)
             MegaTtsOptionFixture.Prepare(options, option);
         if (options is AiDotNet.TextToSpeech.Classic.NonAttentiveTacotronOptions nonAttentive)

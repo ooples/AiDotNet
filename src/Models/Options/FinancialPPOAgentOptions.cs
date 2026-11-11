@@ -45,7 +45,6 @@ public class FinancialPPOAgentOptions<T> : TradingAgentOptions<T>
         // every base property — including PPOClipRange and GAELambda, the ones PPO itself trains with.
         NumEpochs = other.NumEpochs;
         RolloutLength = other.RolloutLength;
-        MiniBatchSize = other.MiniBatchSize;
         AdamEpsilon = other.AdamEpsilon;
         ObservationClipRange = other.ObservationClipRange;
         MaxGradientNorm = other.MaxGradientNorm;
@@ -72,7 +71,17 @@ public class FinancialPPOAgentOptions<T> : TradingAgentOptions<T>
     /// Steps per Adam update (64 in the paper's MuJoCo setting). A rollout that does not divide evenly drops its last
     /// partial minibatch each epoch, as Baselines' iterator does.
     /// </summary>
-    public int MiniBatchSize { get; set; } = 64;
+    /// <remarks>
+    /// The same setting as the inherited <see cref="TradingAgentOptions{T}.BatchSize"/>, which is PPO's minibatch
+    /// size as Stable-Baselines3 and FinRL name it (<c>batch_size</c>). PPO keeps no replay buffer, so the
+    /// replay-sample meaning BatchSize has for the DQN and SAC agents does not exist here; two separate values would
+    /// leave one of them read by nothing.
+    /// </remarks>
+    public int MiniBatchSize
+    {
+        get => BatchSize;
+        set => BatchSize = value;
+    }
 
     /// <summary>Adam's ε (1e-5, Baselines' adam_epsilon).</summary>
     public double AdamEpsilon { get; set; } = 1e-5;

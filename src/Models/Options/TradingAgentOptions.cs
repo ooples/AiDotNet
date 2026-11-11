@@ -138,6 +138,8 @@ public class TradingAgentOptions<T> : ModelOptions
     /// Configure this no larger than <see cref="ReplayBufferSize"/> for autonomous replay/rollout
     /// training; a larger minimum can never be reached by the bounded buffer. Explicit one-shot
     /// supervised updates bypass this readiness requirement.</para>
+    /// <para>For PPO this is the minibatch size of each Adam update, the value
+    /// <see cref="FinancialPPOAgentOptions{T}.MiniBatchSize"/> also reads and writes.</para>
     /// <para><b>For Beginners:</b> This is how many observations the agent waits to collect for a normal
     /// update. A2C then learns once from all observations in its current rollout.</para></remarks>
     public int BatchSize { get; set; } = 64;
