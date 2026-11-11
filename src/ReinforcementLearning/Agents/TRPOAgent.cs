@@ -188,30 +188,19 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
         if (_options.IsContinuous)
         {
-            var mean = new Vector<T>(_options.ActionSize);
-            var logStd = new Vector<T>(_options.ActionSize);
-
-            for (int i = 0; i < _options.ActionSize; i++)
-            {
-                mean[i] = policyOutput[i];
-                logStd[i] = policyOutput[_options.ActionSize + i];
-                logStd[i] = MathHelper.Clamp<T>(logStd[i], NumOps.FromDouble(-20), NumOps.FromDouble(2));
-            }
+            var engine = AiDotNetEngine.Current;
+            var mean = policyOutput.GetSubVector(0, _options.ActionSize);
+            var logStd = engine.Clamp(
+                policyOutput.GetSubVector(_options.ActionSize, _options.ActionSize), NumOps.FromDouble(-20), NumOps.FromDouble(2));
 
             if (!training)
             {
                 return mean;
             }
 
-            var action = new Vector<T>(_options.ActionSize);
-            for (int i = 0; i < _options.ActionSize; i++)
-            {
-                var std = NumOps.Exp(logStd[i]);
-                var noise = MathHelper.GetNormalRandom<T>(NumOps.Zero, NumOps.One, Random);
-                action[i] = NumOps.Add(mean[i], NumOps.Multiply(std, noise));
-            }
-
-            return action;
+            // mean + exp(log_std) * N(0, 1), one draw per dimension in index order
+            var noise = RLTensorOps.NormalRandom<T>(Random, _options.ActionSize);
+            return engine.Add(mean, engine.Multiply(engine.Exp(logStd), noise));
         }
         else
         {
@@ -219,34 +208,14 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             if (!training)
             {
                 int bestAction = ArgMax(policyOutput);
-                var action = new Vector<T>(_options.ActionSize);
-                action[bestAction] = NumOps.One;
-                return action;
+                return RLTensorOps.OneHot<T>(_options.ActionSize, bestAction);
             }
 
-            double[] probs = new double[_options.ActionSize];
-            for (int i = 0; i < _options.ActionSize; i++)
-            {
-                probs[i] = Convert.ToDouble(NumOps.ToDouble(policyOutput[i]));
-            }
-
+            // First action whose running probability reaches the draw (summed in double precision, as before);
+            // action 0 when rounding falls short.
             double r = Random.NextDouble();
-            double cumulative = 0.0;
-            int selectedAction = 0;
-
-            for (int i = 0; i < probs.Length; i++)
-            {
-                cumulative += probs[i];
-                if (r <= cumulative)
-                {
-                    selectedAction = i;
-                    break;
-                }
-            }
-
-            var actionVec = new Vector<T>(_options.ActionSize);
-            actionVec[selectedAction] = NumOps.One;
-            return actionVec;
+            int selectedAction = RLTensorOps.SampleFromCdf(AsDoubles(RLTensorOps.Head(policyOutput, _options.ActionSize)), r, 0);
+            return RLTensorOps.OneHot<T>(_options.ActionSize, selectedAction);
         }
     }
 
@@ -282,13 +251,8 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         int n = states.Count;
         int stateSize = _options.StateSize;
 
-        var batchStates = new Tensor<T>([n, stateSize]);
-        var batchReturns = new Tensor<T>([n, 1]);
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j < stateSize; j++) batchStates[i, j] = states[i][j];
-            batchReturns[i, 0] = returns[i];
-        }
+        var batchStates = RLTensorOps.StackRows(states.Select(stateRow => RLTensorOps.Head(stateRow, stateSize)).ToList());
+        var batchReturns = RLTensorOps.FromList(returns.Take(n).ToList(), n, 1);
 
         // Value function: a separate regression on the empirical returns (Schulman et al. 2015, §8 and
         // Appendix D), ValueIterations passes at ValueLearningRate. The value network trains with the
@@ -368,27 +332,21 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         // forward runs before the parameters are read so lazily sized layers already hold their weights.
         var oldOutputs = _policyNetwork.Predict(batchStates).ToVector();
         var thetaOld = _policyNetwork.GetParameters();
-        var oldParams = new Vector<T>[n];
-        var oldLogProbs = new double[n];
-        var advantage = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            oldParams[i] = ToDistributionParameters(oldOutputs, i * outputWidth, outputWidth);
-            oldLogProbs[i] = LogProbability(oldParams[i], actions[i]);
-            advantage[i] = NumOps.ToDouble(advantages[i]);
-        }
+        var oldParams = Enumerable.Range(0, n)
+            .Select(row => ToDistributionParameters(oldOutputs, row * outputWidth, outputWidth)).ToArray();
+        var oldLogProbs = Enumerable.Range(0, n).Select(row => LogProbability(oldParams[row], actions[row])).ToArray();
+        var advantage = AsDoubles(Vector<T>.FromEnumerable(advantages.Take(n))).ToArray();
         CopyNetworkWeights(_policyNetwork, _oldPolicyNetwork);
 
         // g = ∇θ L at θ_old = Jᵀ (∂L/∂output), with ∂L/∂output evaluated in closed form at ratio = 1.
-        var surrogateOutputGradient = new Tensor<T>([n, outputWidth]);
-        for (int i = 0; i < n; i++)
-        {
-            var dLogProb = LogProbabilityOutputGradient(oldParams[i], actions[i]);
-            for (int k = 0; k < outputWidth; k++)
-            {
-                surrogateOutputGradient[i, k] = NumOps.FromDouble(advantage[i] * dLogProb[k] / n);
-            }
-        }
+        // Row i: A_i * d log pi / d params / n (in double precision, as before).
+        var engine = AiDotNetEngine.Current;
+        var surrogateRows = Enumerable.Range(0, n)
+            .Select(row => engine.Divide(
+                engine.Multiply(Vector<double>.FromArray(LogProbabilityOutputGradient(oldParams[row], actions[row])), advantage[row]),
+                (double)n))
+            .ToList();
+        var surrogateOutputGradient = FromDoubleRows(surrogateRows, n, outputWidth);
         var g = PolicyVectorJacobianProduct(batchStates, surrogateOutputGradient);
         double gNorm = Math.Sqrt(Dot(g, g));
         LastPolicyKL = 0.0;
@@ -413,24 +371,21 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             var minus = _policyNetwork.Predict(batchStates).ToVector();
             _policyNetwork.UpdateParameters(thetaOld);
 
-            var weighted = new Tensor<T>([n, outputWidth]);
-            for (int i = 0; i < n; i++)
-            {
-                var plusParams = ToDistributionParameters(plus, i * outputWidth, outputWidth);
-                var minusParams = ToDistributionParameters(minus, i * outputWidth, outputWidth);
-                for (int k = 0; k < outputWidth; k++)
+            // Row i: M_i (J v)_i / n, with (J v)_i = (params(theta + h v) - params(theta - h v)) / 2h.
+            var weightedRows = Enumerable.Range(0, n)
+                .Select(row =>
                 {
-                    double jv = (NumOps.ToDouble(plusParams[k]) - NumOps.ToDouble(minusParams[k])) / (2.0 * probe);
-                    weighted[i, k] = NumOps.FromDouble(DistributionFisherDiagonal(oldParams[i], k) * jv / n);
-                }
-            }
+                    var plusParams = AsDoubles(ToDistributionParameters(plus, row * outputWidth, outputWidth));
+                    var minusParams = AsDoubles(ToDistributionParameters(minus, row * outputWidth, outputWidth));
+                    var jv = engine.Divide(engine.Subtract(plusParams, minusParams), 2.0 * probe);
+                    return engine.Divide(engine.Multiply(DistributionFisherDiagonal(oldParams[row], outputWidth), jv), (double)n);
+                })
+                .ToList();
+            var weighted = FromDoubleRows(weightedRows, n, outputWidth);
 
+            // F v + damping * v
             var fv = PolicyVectorJacobianProduct(batchStates, weighted);
-            for (int p = 0; p < fv.Length; p++)
-            {
-                result[p] = NumOps.FromDouble(NumOps.ToDouble(fv[p]) + _options.Damping * NumOps.ToDouble(v[p]));
-            }
-            return result;
+            return Axpy(fv, _options.Damping, v);
         }
 
         // Conjugate gradient for F x = g.
@@ -448,6 +403,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         double oldSurrogate = Surrogate(batchStates, actions, oldLogProbs, advantage, outputWidth, null);
 
         double fraction = 1.0;
+        double? acceptedImprovement = null;
         for (int step = 0; step < _options.LineSearchSteps; step++, fraction *= _options.LineSearchBacktrackCoeff)
         {
             var candidate = Axpy(thetaOld, fraction * stepScale, x);
@@ -463,8 +419,14 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             {
                 LastPolicyKL = kl;
                 LastStepFraction = fraction;
-                return NumOps.FromDouble(improvement);
+                acceptedImprovement = improvement;
+                break;
             }
+        }
+
+        if (acceptedImprovement.HasValue)
+        {
+            return NumOps.FromDouble(acceptedImprovement.Value);
         }
 
         // No candidate satisfied both conditions: keep the old policy.
@@ -528,20 +490,16 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
 
     private double Dot(Vector<T> a, Vector<T> b)
     {
-        double sum = 0.0;
-        for (int i = 0; i < a.Length; i++) sum += NumOps.ToDouble(a[i]) * NumOps.ToDouble(b[i]);
-        return sum;
+        // sum_i a_i b_i, accumulated in double precision
+        return AiDotNetEngine.Current.DotProduct(AsDoubles(a), AsDoubles(b));
     }
 
     /// <summary>a + scale·b.</summary>
     private Vector<T> Axpy(Vector<T> a, double scale, Vector<T> b)
     {
-        var result = new Vector<T>(a.Length);
-        for (int i = 0; i < a.Length; i++)
-        {
-            result[i] = NumOps.FromDouble(NumOps.ToDouble(a[i]) + scale * NumOps.ToDouble(b[i]));
-        }
-        return result;
+        // a + scale * b, evaluated in double precision
+        var engine = AiDotNetEngine.Current;
+        return FromDoubles(engine.Add(AsDoubles(a), engine.Multiply(AsDoubles(b), scale)));
     }
 
     /// <summary>
@@ -552,22 +510,22 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     private Vector<T> ToDistributionParameters(Vector<T> outputs, int offset, int width)
     {
         var parameters = new Vector<T>(width);
+        var engine = AiDotNetEngine.Current;
         if (_options.IsContinuous)
         {
             int actionSize = _options.ActionSize;
-            for (int i = 0; i < actionSize; i++)
-            {
-                parameters[i] = outputs[offset + i];
-                parameters[actionSize + i] = MathHelper.Clamp<T>(
-                    outputs[offset + actionSize + i], NumOps.FromDouble(-20), NumOps.FromDouble(2));
-            }
+            var mean = outputs.GetSubVector(offset, actionSize);
+            var logStd = engine.Clamp(outputs.GetSubVector(offset + actionSize, actionSize), NumOps.FromDouble(-20), NumOps.FromDouble(2));
+            mean.AsSpan().CopyTo(parameters.AsWritableSpan().Slice(0, actionSize));
+            logStd.AsSpan().CopyTo(parameters.AsWritableSpan().Slice(actionSize, actionSize));
         }
         else
         {
-            for (int i = 0; i < width; i++)
-            {
-                parameters[i] = NumOps.FromDouble(Math.Max(NumOps.ToDouble(outputs[offset + i]), ProbabilityFloor));
-            }
+            // max(p, floor) in double precision; a NaN stays NaN, as Math.Max keeps it.
+            var probabilities = AsDoubles(outputs.GetSubVector(offset, width)).AsTensor();
+            var floor = engine.TensorFullLike(probabilities, ProbabilityFloor);
+            var floored = engine.TensorWhere(engine.TensorLessThan(probabilities, ProbabilityFloor), floor, probabilities);
+            parameters = floored.Cast<T>().ToVector();
         }
         return parameters;
     }
@@ -581,16 +539,11 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             return Math.Log(NumOps.ToDouble(parameters[ArgMax(action)]));
         }
 
+        // sum_i -0.5 z_i^2 - log sigma_i - 0.5 log(2 pi), z = (a - mu) / sigma, in double precision
         int actionSize = _options.ActionSize;
-        double logProb = 0.0;
-        for (int i = 0; i < actionSize; i++)
-        {
-            double mean = NumOps.ToDouble(parameters[i]);
-            double logStd = NumOps.ToDouble(parameters[actionSize + i]);
-            double z = (NumOps.ToDouble(action[i]) - mean) / Math.Exp(logStd);
-            logProb += -0.5 * z * z - logStd - 0.5 * Math.Log(2.0 * Math.PI);
-        }
-        return logProb;
+        var doubles = AsDoubles(parameters);
+        return RLTensorOps.GaussianLogProb(
+            doubles.GetSubVector(0, actionSize), doubles.GetSubVector(actionSize, actionSize), AsDoubles(RLTensorOps.Head(action, actionSize)));
     }
 
     /// <summary>∂ log π(a|s) / ∂(distribution parameters).</summary>
@@ -604,15 +557,14 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             return gradient;
         }
 
+        // d/d mu = z / sigma, d/d log sigma = z^2 - 1, z = (a - mu) / sigma (double precision)
         int actionSize = _options.ActionSize;
-        for (int i = 0; i < actionSize; i++)
-        {
-            double mean = NumOps.ToDouble(parameters[i]);
-            double std = Math.Exp(NumOps.ToDouble(parameters[actionSize + i]));
-            double z = (NumOps.ToDouble(action[i]) - mean) / std;
-            gradient[i] = z / std;
-            gradient[actionSize + i] = z * z - 1.0;
-        }
+        var engine = AiDotNetEngine.Current;
+        var doubles = AsDoubles(parameters);
+        var std = engine.Exp(doubles.GetSubVector(actionSize, actionSize));
+        var z = engine.Divide(engine.Subtract(AsDoubles(RLTensorOps.Head(action, actionSize)), doubles.GetSubVector(0, actionSize)), std);
+        engine.Divide(z, std).AsSpan().CopyTo(gradient.AsSpan(0, actionSize));
+        engine.Subtract(engine.Multiply(z, z), Vector<double>.CreateDefault(actionSize, 1.0)).AsSpan().CopyTo(gradient.AsSpan(actionSize, actionSize));
         return gradient;
     }
 
@@ -621,50 +573,50 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     /// probabilities (exact on the simplex, where every admissible direction sums to zero), 1/σ² for a Gaussian
     /// mean and 2 for its log standard deviation.
     /// </summary>
-    private double DistributionFisherDiagonal(Vector<T> parameters, int index)
+    private Vector<double> DistributionFisherDiagonal(Vector<T> parameters, int width)
     {
+        var engine = AiDotNetEngine.Current;
+        var doubles = AsDoubles(parameters);
         if (!_options.IsContinuous)
         {
-            return 1.0 / NumOps.ToDouble(parameters[index]);
+            // 1 / p_k
+            return engine.Divide(Vector<double>.CreateDefault(width, 1.0), RLTensorOps.Head(doubles, width));
         }
 
+        // [1 / sigma^2 for the means | 2 for the log standard deviations]
         int actionSize = _options.ActionSize;
-        if (index < actionSize)
-        {
-            double std = Math.Exp(NumOps.ToDouble(parameters[actionSize + index]));
-            return 1.0 / (std * std);
-        }
-        return 2.0;
+        var std = engine.Exp(doubles.GetSubVector(actionSize, actionSize));
+        var meanDiagonal = engine.Divide(Vector<double>.CreateDefault(actionSize, 1.0), engine.Multiply(std, std));
+        var diagonal = new Vector<double>(width);
+        meanDiagonal.AsSpan().CopyTo(diagonal.AsWritableSpan().Slice(0, actionSize));
+        diagonal.AsWritableSpan().Slice(actionSize, width - actionSize).Fill(2.0);
+        return diagonal;
     }
 
     /// <summary>KL(π_old ‖ π_new) for one state.</summary>
     private double KLDivergence(Vector<T> oldParameters, Vector<T> newParameters)
     {
-        double kl = 0.0;
+        var engine = AiDotNetEngine.Current;
+        var oldDoubles = AsDoubles(oldParameters);
+        var newDoubles = AsDoubles(newParameters);
         if (!_options.IsContinuous)
         {
-            for (int k = 0; k < oldParameters.Length; k++)
-            {
-                double p = NumOps.ToDouble(oldParameters[k]);
-                double q = NumOps.ToDouble(newParameters[k]);
-                kl += p * Math.Log(p / q);
-            }
-            return kl;
+            // sum_k p_k log(p_k / q_k)
+            var p = oldDoubles.AsTensor();
+            var logRatio = engine.TensorLog(engine.TensorDivide(p, RLTensorOps.Head(newDoubles, oldDoubles.Length).AsTensor()));
+            return engine.TensorSum(engine.TensorMultiply(p, logRatio));
         }
 
+        // sum_i log(sigma_new / sigma_old) + (sigma_old^2 + (mu_old - mu_new)^2) / (2 sigma_new^2) - 1/2
         int actionSize = _options.ActionSize;
-        for (int i = 0; i < actionSize; i++)
-        {
-            double oldMean = NumOps.ToDouble(oldParameters[i]);
-            double newMean = NumOps.ToDouble(newParameters[i]);
-            double oldLogStd = NumOps.ToDouble(oldParameters[actionSize + i]);
-            double newLogStd = NumOps.ToDouble(newParameters[actionSize + i]);
-            double oldVar = Math.Exp(2.0 * oldLogStd);
-            double newVar = Math.Exp(2.0 * newLogStd);
-            double meanGap = oldMean - newMean;
-            kl += newLogStd - oldLogStd + (oldVar + meanGap * meanGap) / (2.0 * newVar) - 0.5;
-        }
-        return kl;
+        var oldLogStd = oldDoubles.GetSubVector(actionSize, actionSize);
+        var newLogStd = newDoubles.GetSubVector(actionSize, actionSize);
+        var oldVar = engine.Exp(engine.Multiply(oldLogStd, 2.0));
+        var newVar = engine.Exp(engine.Multiply(newLogStd, 2.0));
+        var meanGap = engine.Subtract(oldDoubles.GetSubVector(0, actionSize), newDoubles.GetSubVector(0, actionSize));
+        var spread = engine.Divide(engine.Add(oldVar, engine.Multiply(meanGap, meanGap)), engine.Multiply(newVar, 2.0));
+        var perDimension = engine.Subtract(engine.Add(engine.Subtract(newLogStd, oldLogStd), spread), Vector<double>.CreateDefault(actionSize, 0.5));
+        return engine.Sum(perDimension);
     }
 
     private (List<Vector<T>> states, List<Vector<T>> actions, List<T> advantages, List<T> returns) ComputeAdvantages()
@@ -690,7 +642,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             // Compute current state value
             var stateTensor = Tensor<T>.FromVector(state);
             var valueTensor = _valueNetwork.Predict(stateTensor);
-            values.Add(valueTensor.ToVector()[0]);
+            values.Add(RLTensorOps.FirstValue(valueTensor));
 
             // Compute next state value (correctly use nextState from buffer)
             if (done)
@@ -701,7 +653,7 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
             {
                 var nextStateTensor = Tensor<T>.FromVector(nextState);
                 var nextValueTensor = _valueNetwork.Predict(nextStateTensor);
-                nextValues.Add(nextValueTensor.ToVector()[0]);
+                nextValues.Add(RLTensorOps.FirstValue(nextValueTensor));
             }
         }
 
@@ -747,12 +699,12 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
         var mean = StatisticsHelper<T>.CalculateMean(advantages.ToArray());
         var std = StatisticsHelper<T>.CalculateStandardDeviation(advantages.ToArray());
 
-        if (NumOps.GreaterThan(std, NumOps.Zero))
+        if (advantages.Count > 0 && NumOps.GreaterThan(std, NumOps.Zero))
         {
-            for (int i = 0; i < advantages.Count; i++)
-            {
-                advantages[i] = NumOps.Divide(NumOps.Subtract(advantages[i], mean), std);
-            }
+            // (A - mean) / std
+            var engine = AiDotNetEngine.Current;
+            var advantageVector = Vector<T>.FromEnumerable(advantages);
+            advantages = engine.Divide(engine.Subtract(advantageVector, Vector<T>.CreateDefault(advantages.Count, mean)), std).ToList();
         }
 
         return (states, actions, advantages, returns);
@@ -761,6 +713,23 @@ public partial class TRPOAgent<T> : DeepReinforcementLearningAgentBase<T>, IGrad
     private int ArgMax(Vector<T> values)
     {
         return RLTensorOps.ArgMax(values);
+    }
+
+    // The trust-region arithmetic runs in double precision (conjugate gradient, KL, log-probabilities); these
+    // convert whole vectors across that boundary.
+    private static Vector<double> AsDoubles(Vector<T> values)
+    {
+        return values.Length == 0 ? new Vector<double>(0) : values.AsTensor().Cast<double>().ToVector();
+    }
+
+    private static Vector<T> FromDoubles(Vector<double> values)
+    {
+        return values.Length == 0 ? new Vector<T>(0) : values.AsTensor().Cast<T>().ToVector();
+    }
+
+    private static Tensor<T> FromDoubleRows(IReadOnlyList<Vector<double>> rows, int count, int width)
+    {
+        return count == 0 ? new Tensor<T>([0, width]) : RLTensorOps.StackRows(rows).Cast<T>();
     }
 
     /// <inheritdoc />
