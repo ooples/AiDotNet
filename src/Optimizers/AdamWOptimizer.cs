@@ -842,7 +842,7 @@ public partial class AdamWOptimizer<T, TInput, TOutput> : GradientBasedOptimizer
             else
             {
                 var parameterMask = Engine.Reshape(
-                    configuredMask.GetSubVector(parameterMaskOffset, param.Length).AsTensor(), param._shape);
+                    Vector<T>.FromSpan(configuredMask.AsSpan().Slice(parameterMaskOffset, param.Length)).AsTensor(), param._shape);
                 using var parameterDecayMultiplier = Engine.TensorMultiplyScalar(parameterMask, decayScale);
                 decayTerm = Engine.TensorMultiply(param, parameterDecayMultiplier);
             }
