@@ -165,12 +165,7 @@ public partial class InverseGaussianRegression<T> : RegressionBase<T>
         Intercept = NumOps.Zero;
 
         // Initialize coefficients using mean for appropriate link
-        T meanY = NumOps.Zero;
-        for (int i = 0; i < numSamples; i++)
-        {
-            meanY = NumOps.Add(meanY, y[i]);
-        }
-        meanY = NumOps.Divide(meanY, NumOps.FromDouble(numSamples));
+        T meanY = NumOps.Divide(Engine.Sum(y), NumOps.FromDouble(numSamples));
 
         // Set initial intercept based on link function
         double meanYDouble = NumOps.ToDouble(meanY);
@@ -205,10 +200,7 @@ public partial class InverseGaussianRegression<T> : RegressionBase<T>
             var minRegularization = 1e-10;
             var userStrength = Regularization?.GetOptions().Strength ?? 0.0;
             var effectiveStrength = NumOps.FromDouble(Math.Max(minRegularization, userStrength));
-            for (int i = 0; i < xTwx.Rows; i++)
-            {
-                xTwx[i, i] = NumOps.Add(xTwx[i, i], effectiveStrength);
-            }
+            xTwx = Engine.MatrixAdd(xTwx, Matrix<T>.CreateDiagonal(Engine.Fill(xTwx.Rows, effectiveStrength)));
 
             Vector<T> newCoefficients = MatrixSolutionHelper.SolveLinearSystem(xTwx, xTwz, _options.DecompositionType);
 
@@ -223,8 +215,7 @@ public partial class InverseGaussianRegression<T> : RegressionBase<T>
                 break;
             }
 
-            Coefficients = new Vector<T>([.. newCoefficients.Take(numFeatures)]);
-            Intercept = newCoefficients[numFeatures];
+            UnpackCoefficients(newCoefficients, numFeatures);
         }
 
         // Estimate dispersion parameter using Pearson residuals
@@ -247,14 +238,29 @@ public partial class InverseGaussianRegression<T> : RegressionBase<T>
     /// </remarks>
     private void ValidateInverseGaussianData(Vector<T> y)
     {
-        for (int i = 0; i < y.Length; i++)
+        if (y.Length == 0)
         {
-            double value = NumOps.ToDouble(y[i]);
-            if (value <= 0)
-            {
-                throw new ArgumentException($"Inverse Gaussian regression requires strictly positive target values. Found value {value} at index {i}.");
-            }
+            return;
         }
+
+        // The first non-positive value (NaN compares false, so it is not reported).
+        var nonPositive = RegressionEngineOps.NonzeroIndices(Engine.TensorLessEqual(
+            Tensor<T>.FromVector(y), Tensor<T>.FromVector(Engine.FillZero(y.Length))));
+        if (nonPositive.Length > 0)
+        {
+            int i = nonPositive[0];
+            double value = NumOps.ToDouble(y[i]);
+            throw new ArgumentException($"Inverse Gaussian regression requires strictly positive target values. Found value {value} at index {i}.");
+        }
+    }
+
+    /// <summary>
+    /// Splits the augmented IRLS solution [coefficients..., intercept] into Coefficients and Intercept.
+    /// </summary>
+    private void UnpackCoefficients(Vector<T> augmented, int numFeatures)
+    {
+        Coefficients = augmented.GetSubVector(0, numFeatures);
+        Intercept = augmented[numFeatures];
     }
 
     /// <summary>
@@ -279,17 +285,15 @@ public partial class InverseGaussianRegression<T> : RegressionBase<T>
     {
         return _options.LinkFunction switch
         {
-            InverseGaussianLinkFunction.Log => eta.Transform(NumOps.Exp),
-            InverseGaussianLinkFunction.InverseSquared => eta.Transform(v =>
-            {
-                double etaVal = NumOps.ToDouble(v);
-                // μ = 1/sqrt(-2η), but need to handle sign carefully
-                if (etaVal >= 0) return NumOps.FromDouble(1e10); // Large positive if invalid
-                return NumOps.FromDouble(1.0 / Math.Sqrt(-2.0 * etaVal));
-            }),
-            InverseGaussianLinkFunction.Inverse => eta.Transform(v => NumOps.Divide(NumOps.One, v)),
+            InverseGaussianLinkFunction.Log => Engine.Exp(eta),
+            // μ = 1/sqrt(-2η), but need to handle sign carefully: large positive if η >= 0 (invalid)
+            InverseGaussianLinkFunction.InverseSquared => Engine.TensorWhere(
+                Engine.TensorGreaterEqual(Tensor<T>.FromVector(eta), Tensor<T>.FromVector(Engine.FillZero(eta.Length))),
+                Tensor<T>.FromVector(Engine.Fill(eta.Length, NumOps.FromDouble(1e10))),
+                Tensor<T>.FromVector(Engine.Reciprocal(Engine.Sqrt(Engine.Multiply(eta, NumOps.FromDouble(-2.0)))))).ToVector(),
+            InverseGaussianLinkFunction.Inverse => Engine.Reciprocal(eta),
             InverseGaussianLinkFunction.Identity => eta.Clone(),
-            _ => eta.Transform(NumOps.Exp)
+            _ => Engine.Exp(eta)
         };
     }
 
@@ -311,21 +315,10 @@ public partial class InverseGaussianRegression<T> : RegressionBase<T>
     /// </remarks>
     private Vector<T> ClampMu(Vector<T> mu)
     {
-        var result = new Vector<T>(mu.Length);
         T minValue = NumOps.FromDouble(MuFloor);
         T maxValue = NumOps.FromDouble(MuCeiling);
 
-        for (int i = 0; i < mu.Length; i++)
-        {
-            T value = mu[i];
-            if (NumOps.LessThan(value, minValue))
-                value = minValue;
-            else if (NumOps.GreaterThan(value, maxValue))
-                value = maxValue;
-            result[i] = value;
-        }
-
-        return result;
+        return Engine.Clamp(mu, minValue, maxValue);
     }
 
     /// <summary>
@@ -351,28 +344,26 @@ public partial class InverseGaussianRegression<T> : RegressionBase<T>
     /// </remarks>
     private Matrix<T> ComputeWeights(Vector<T> mu)
     {
-        var weights = new Vector<T>(mu.Length);
-
-        for (int i = 0; i < mu.Length; i++)
+        var weights = _options.LinkFunction switch
         {
-            T muVal = mu[i];
-            T muCubed = NumOps.Multiply(muVal, NumOps.Multiply(muVal, muVal));
-            T weight = _options.LinkFunction switch
-            {
-                // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ³ × (1/μ)²) = 1/μ
-                InverseGaussianLinkFunction.Log => NumOps.Divide(NumOps.One, muVal),
-                // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ³ × (1/μ³)²) = μ³
-                InverseGaussianLinkFunction.InverseSquared => muCubed,
-                // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ³ × (1/μ²)²) = μ
-                InverseGaussianLinkFunction.Inverse => muVal,
-                // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ³ × 1) = 1/μ³
-                InverseGaussianLinkFunction.Identity => NumOps.Divide(NumOps.One, muCubed),
-                _ => NumOps.Divide(NumOps.One, muVal)
-            };
-            weights[i] = weight;
-        }
+            // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ³ × (1/μ)²) = 1/μ
+            InverseGaussianLinkFunction.Log => Engine.Reciprocal(mu),
+            // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ³ × (1/μ³)²) = μ³
+            InverseGaussianLinkFunction.InverseSquared => Cube(mu),
+            // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ³ × (1/μ²)²) = μ
+            InverseGaussianLinkFunction.Inverse => mu.Clone(),
+            // W = 1 / (V(μ) × (g'(μ))²) = 1 / (μ³ × 1) = 1/μ³
+            InverseGaussianLinkFunction.Identity => Engine.Reciprocal(Cube(mu)),
+            _ => Engine.Reciprocal(mu)
+        };
 
         return Matrix<T>.CreateDiagonal(weights);
+    }
+
+    /// <summary>μ³ element-wise, multiplied as μ * (μ * μ).</summary>
+    private Vector<T> Cube(Vector<T> mu)
+    {
+        return Engine.Multiply(mu, Engine.Multiply(mu, mu));
     }
 
     /// <summary>
@@ -399,33 +390,21 @@ public partial class InverseGaussianRegression<T> : RegressionBase<T>
     /// </remarks>
     private Vector<T> ComputeWorkingResponse(Vector<T> eta, Vector<T> y, Vector<T> mu)
     {
-        var z = new Vector<T>(eta.Length);
+        var diff = Engine.Subtract(y, mu);
+        var muSquared = Engine.Multiply(mu, mu);
 
-        for (int i = 0; i < eta.Length; i++)
+        return _options.LinkFunction switch
         {
-            T etaVal = eta[i];
-            T muVal = mu[i];
-            T diff = NumOps.Subtract(y[i], muVal);
-            T muSquared = NumOps.Multiply(muVal, muVal);
-            T muCubed = NumOps.Multiply(muSquared, muVal);
-
-            T zVal = _options.LinkFunction switch
-            {
-                // g'(μ) = 1/μ, so z = η + (y - μ)/μ
-                InverseGaussianLinkFunction.Log => NumOps.Add(etaVal, NumOps.Divide(diff, muVal)),
-                // g'(μ) = 1/μ³, so z = η + (y - μ)/μ³
-                InverseGaussianLinkFunction.InverseSquared => NumOps.Add(etaVal, NumOps.Divide(diff, muCubed)),
-                // g'(μ) = -1/μ², so z = η - (y - μ)/μ²
-                InverseGaussianLinkFunction.Inverse => NumOps.Subtract(etaVal, NumOps.Divide(diff, muSquared)),
-                // g'(μ) = 1, so z = η + (y - μ) = y
-                InverseGaussianLinkFunction.Identity => y[i],
-                _ => NumOps.Add(etaVal, NumOps.Divide(diff, muVal))
-            };
-
-            z[i] = zVal;
-        }
-
-        return z;
+            // g'(μ) = 1/μ, so z = η + (y - μ)/μ
+            InverseGaussianLinkFunction.Log => Engine.Add(eta, Engine.Divide(diff, mu)),
+            // g'(μ) = 1/μ³, so z = η + (y - μ)/μ³
+            InverseGaussianLinkFunction.InverseSquared => Engine.Add(eta, Engine.Divide(diff, Engine.Multiply(muSquared, mu))),
+            // g'(μ) = -1/μ², so z = η - (y - μ)/μ²
+            InverseGaussianLinkFunction.Inverse => Engine.Subtract(eta, Engine.Divide(diff, muSquared)),
+            // g'(μ) = 1, so z = η + (y - μ) = y
+            InverseGaussianLinkFunction.Identity => y.Clone(),
+            _ => Engine.Add(eta, Engine.Divide(diff, mu))
+        };
     }
 
     /// <summary>
@@ -472,16 +451,9 @@ public partial class InverseGaussianRegression<T> : RegressionBase<T>
         int n = y.Length;
         int p = Coefficients.Length + 1;
 
-        T sumPearsonResidualsSq = NumOps.Zero;
-        for (int i = 0; i < n; i++)
-        {
-            T muVal = predictions[i];
-            // For Inverse Gaussian, variance = μ³, so Pearson residual = (y - μ) / sqrt(μ³)
-            T variance = NumOps.Multiply(muVal, NumOps.Multiply(muVal, muVal));
-            T diff = NumOps.Subtract(y[i], muVal);
-            T pearsonResidualSq = NumOps.Divide(NumOps.Multiply(diff, diff), variance);
-            sumPearsonResidualsSq = NumOps.Add(sumPearsonResidualsSq, pearsonResidualSq);
-        }
+        // For Inverse Gaussian, variance = μ³, so Pearson residual = (y - μ) / sqrt(μ³)
+        var diff = Engine.Subtract(y, predictions);
+        T sumPearsonResidualsSq = Engine.Sum(Engine.Divide(Engine.Multiply(diff, diff), Cube(predictions)));
 
         _dispersion = NumOps.Divide(sumPearsonResidualsSq, NumOps.FromDouble(Math.Max(1, n - p)));
     }
@@ -504,8 +476,6 @@ public partial class InverseGaussianRegression<T> : RegressionBase<T>
     {
         // Use base linear prediction: X * Coefficients + Intercept
         var predictions = x.Multiply(Coefficients);
-        for (int i = 0; i < predictions.Length; i++)
-            predictions[i] = NumOps.Add(predictions[i], Intercept);
-        return predictions;
+        return Engine.Add(predictions, Engine.Fill(predictions.Length, Intercept));
     }
 }
