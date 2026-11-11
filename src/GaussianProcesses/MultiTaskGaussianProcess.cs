@@ -253,18 +253,7 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
     /// </summary>
     private Vector<T> ComputeTaskMeans(Matrix<T> Y)
     {
-        var means = new Vector<T>(_numTasks);
-        for (int t = 0; t < _numTasks; t++)
-        {
-            T sum = _numOps.Zero;
-            for (int i = 0; i < Y.Rows; i++)
-            {
-                sum = _numOps.Add(sum, Y[i, t]);
-            }
-            means[t] = _numOps.Divide(sum, _numOps.FromDouble(Y.Rows));
-        }
-
-        return means;
+        return Engine.ReduceMean(Tensor<T>.FromMatrix(Y), new[] { 0 }, keepDims: false).ToVector();
     }
 
     /// <summary>
@@ -289,29 +278,14 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         int n = _Y.Rows;
 
         // Compute empirical covariance between tasks, around the means Fit already took.
-        var taskMeans = _taskMeans;
-
-        _taskCovariance = new Matrix<T>(_numTasks, _numTasks);
-        for (int t1 = 0; t1 < _numTasks; t1++)
-        {
-            for (int t2 = 0; t2 < _numTasks; t2++)
-            {
-                T cov = _numOps.Zero;
-                for (int i = 0; i < n; i++)
-                {
-                    T diff1 = _numOps.Subtract(_Y[i, t1], taskMeans[t1]);
-                    T diff2 = _numOps.Subtract(_Y[i, t2], taskMeans[t2]);
-                    cov = _numOps.Add(cov, _numOps.Multiply(diff1, diff2));
-                }
-                _taskCovariance[t1, t2] = _numOps.Divide(cov, _numOps.FromDouble(n - 1));
-            }
-        }
+        // cov = Cᵀ C / (n - 1) with C the task-centered targets
+        var engine = Engine;
+        var centered = CenteredTargets();
+        var covariance = engine.TensorDivideScalar(
+            engine.TensorMatMul(engine.TensorTranspose(centered), centered), _numOps.FromDouble(n - 1));
 
         // Add jitter for stability
-        for (int t = 0; t < _numTasks; t++)
-        {
-            _taskCovariance[t, t] = _numOps.Add(_taskCovariance[t, t], _numOps.FromDouble(1e-6));
-        }
+        _taskCovariance = GaussianProcessEngineOps.AddToDiagonal(covariance.ToMatrix(), _numOps.FromDouble(1e-6));
 
         // Compute Cholesky factor
         try
@@ -630,6 +604,42 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         int totalSize = n * _numTasks;
 
         // Compute input kernel matrix
+        var Kx = InputKernelMatrix();
+
+        // Build combined kernel using Kronecker structure: K[t1·n + i, t2·n + j] = B[t1, t2] · Kx[i, j]
+        var engine = Engine;
+        var blockShape = new[] { _numTasks, n, _numTasks, n };
+        var taskBlocks = engine.TensorBroadcastTo(
+            Tensor<T>.FromMatrix(_taskCovariance).Reshape(new[] { _numTasks, 1, _numTasks, 1 }), blockShape);
+        var inputBlocks = engine.TensorBroadcastTo(
+            Tensor<T>.FromMatrix(Kx).Reshape(new[] { 1, n, 1, n }), blockShape);
+        var combined = engine.TensorMultiply(taskBlocks, inputBlocks).Reshape(new[] { totalSize, totalSize }).ToMatrix();
+
+        // Add the fitted observation noise to the diagonal, then jitter
+        combined = GaussianProcessEngineOps.AddToDiagonal(combined, _fittedNoiseVariance[0]);
+        _K = GaussianProcessEngineOps.AddToDiagonal(combined, _numOps.FromDouble(1e-6));
+    }
+
+    /// <summary>
+    /// Computes the alpha vector for predictions.
+    /// </summary>
+    /// <summary>
+    /// Targets minus their task means, [n, tasks].
+    /// </summary>
+    private Tensor<T> CenteredTargets()
+    {
+        var engine = Engine;
+        var targets = Tensor<T>.FromMatrix(_Y);
+        var means = Tensor<T>.FromVector(_taskMeans).Reshape(new[] { 1, _numTasks });
+        return engine.TensorSubtract(targets, engine.TensorBroadcastTo(means, new[] { _Y.Rows, _numTasks }));
+    }
+
+    /// <summary>
+    /// Input kernel matrix Kx[i, j] = k(x_i, x_j) over the training inputs.
+    /// </summary>
+    private Matrix<T> InputKernelMatrix()
+    {
+        int n = _X.Rows;
         var Kx = new Matrix<T>(n, n);
         for (int i = 0; i < n; i++)
         {
@@ -639,57 +649,31 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
             }
         }
 
-        // Build combined kernel using Kronecker structure
-        _K = new Matrix<T>(totalSize, totalSize);
-        for (int t1 = 0; t1 < _numTasks; t1++)
-        {
-            for (int t2 = 0; t2 < _numTasks; t2++)
-            {
-                T taskCov = _taskCovariance[t1, t2];
-                for (int i = 0; i < n; i++)
-                {
-                    for (int j = 0; j < n; j++)
-                    {
-                        int row = t1 * n + i;
-                        int col = t2 * n + j;
-                        _K[row, col] = _numOps.Multiply(taskCov, Kx[i, j]);
-                    }
-                }
-            }
-        }
-
-        // Add the fitted observation noise to the diagonal
-        T noise = _fittedNoiseVariance[0];
-        for (int i = 0; i < totalSize; i++)
-        {
-            _K[i, i] = _numOps.Add(_K[i, i], noise);
-        }
-
-        // Add jitter
-        T jitter = _numOps.FromDouble(1e-6);
-        for (int i = 0; i < totalSize; i++)
-        {
-            _K[i, i] = _numOps.Add(_K[i, i], jitter);
-        }
+        return Kx;
     }
 
     /// <summary>
-    /// Computes the alpha vector for predictions.
+    /// Cross kernel vector k(x, x_i) over the training inputs.
     /// </summary>
+    private Vector<T> CrossKernelVector(Vector<T> x)
+    {
+        int n = _X.Rows;
+        var kStar = new Vector<T>(n);
+        for (int i = 0; i < n; i++)
+        {
+            kStar[i] = _kernel.Calculate(x, _X.GetRow(i));
+        }
+
+        return kStar;
+    }
+
     private void ComputeAlpha()
     {
         int n = _X.Rows;
 
-        // Flatten Y into a vector (task-major order)
-        var yFlat = new Vector<T>(n * _numTasks);
-        for (int t = 0; t < _numTasks; t++)
-        {
-            for (int i = 0; i < n; i++)
-            {
-                // Deviations from the task mean - what the zero-mean prior describes.
-                yFlat[t * n + i] = _numOps.Subtract(_Y[i, t], _taskMeans[t]);
-            }
-        }
+        // Flatten Y into a vector (task-major order, index t·n + i).
+        // Deviations from the task mean - what the zero-mean prior describes.
+        var yFlat = Engine.TensorTranspose(CenteredTargets()).Reshape(new[] { n * _numTasks }).ToVector();
 
         // Solve K * alpha = y
         _alpha = MatrixSolutionHelper.SolveLinearSystem(_K, yFlat, _decompositionType);
@@ -722,60 +706,40 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
         int n = _X.Rows;
 
         // Compute kernel vector between test point and training points
-        var kStar = new Vector<T>(n);
-        for (int i = 0; i < n; i++)
-        {
-            kStar[i] = _kernel.Calculate(x, _X.GetRow(i));
-        }
-
-        // Compute predictions for each task
-        var means = new Vector<T>(_numTasks);
-        var variances = new Vector<T>(_numTasks);
-
+        var kStar = CrossKernelVector(x);
+        var engine = Engine;
+        var taskCovariance = Tensor<T>.FromMatrix(_taskCovariance);
         T kStarStar = _kernel.Calculate(x, x);
 
+        // Mean_t = Σ_t2 B[t, t2] Σ_i k*_i α[t2·n + i] = (B · (A k*))_t with A = α reshaped to [tasks, n].
+        // The prior explains deviations from the task mean; add the mean back.
+        var alphaByTask = Tensor<T>.FromVector(_alpha).Reshape(new[] { _numTasks, n });
+        var kStarColumn = Tensor<T>.FromVector(kStar).Reshape(new[] { n, 1 });
+        var taskProjections = engine.TensorMatMul(alphaByTask, kStarColumn);
+        var means = engine.TensorAdd(
+            engine.TensorMatMul(taskCovariance, taskProjections).Reshape(new[] { _numTasks }),
+            Tensor<T>.FromVector(_taskMeans)).ToVector();
+
+        // Variance (simplified - full computation would use Kronecker structure):
+        // B[t, t] k** - k*_tᵀ K⁻¹ k*_t with k*_t[t2·n + i] = B[t, t2] k*_i (column t of kStarTasks).
+        int totalSize = n * _numTasks;
+        var columnShape = new[] { _numTasks, n, _numTasks };
+        var kStarTasks = engine.TensorMultiply(
+            engine.TensorBroadcastTo(engine.TensorTranspose(taskCovariance).Reshape(new[] { _numTasks, 1, _numTasks }), columnShape),
+            engine.TensorBroadcastTo(kStarColumn.Reshape(new[] { 1, n, 1 }), columnShape)).Reshape(new[] { totalSize, _numTasks });
+
+        var kStarTaskMatrix = kStarTasks.ToMatrix();
+        var solved = new Tensor<T>[_numTasks];
         for (int t = 0; t < _numTasks; t++)
         {
-            // Mean: sum over all (task, datapoint) pairs weighted by alpha
-            T mean = _numOps.Zero;
-            for (int t2 = 0; t2 < _numTasks; t2++)
-            {
-                T taskCov = _taskCovariance[t, t2];
-                for (int i = 0; i < n; i++)
-                {
-                    int idx = t2 * n + i;
-                    T contribution = _numOps.Multiply(taskCov, _numOps.Multiply(kStar[i], _alpha[idx]));
-                    mean = _numOps.Add(mean, contribution);
-                }
-            }
-            // The prior explains deviations from the task mean; add the mean back.
-            means[t] = _numOps.Add(mean, _taskMeans[t]);
-
-            // Variance (simplified - full computation would use Kronecker structure)
-            T variance = _numOps.Multiply(_taskCovariance[t, t], kStarStar);
-
-            // Subtract reduction from training data
-            var kStarTask = new Vector<T>(n * _numTasks);
-            for (int t2 = 0; t2 < _numTasks; t2++)
-            {
-                T taskCov = _taskCovariance[t, t2];
-                for (int i = 0; i < n; i++)
-                {
-                    kStarTask[t2 * n + i] = _numOps.Multiply(taskCov, kStar[i]);
-                }
-            }
-
-            var v = MatrixSolutionHelper.SolveLinearSystem(_K, kStarTask, _decompositionType);
-            T reduction = _numOps.Zero;
-            for (int i = 0; i < kStarTask.Length; i++)
-            {
-                reduction = _numOps.Add(reduction, _numOps.Multiply(kStarTask[i], v[i]));
-            }
-
-            variance = _numOps.Subtract(variance, reduction);
-            variance = _numOps.FromDouble(Math.Max(_numOps.ToDouble(variance), 1e-10));
-            variances[t] = variance;
+            solved[t] = Tensor<T>.FromVector(
+                MatrixSolutionHelper.SolveLinearSystem(_K, kStarTaskMatrix.GetColumn(t), _decompositionType));
         }
+
+        var reduction = engine.ReduceSum(
+            engine.TensorMultiply(kStarTasks, engine.TensorStack(solved, 1)), new[] { 0 }, keepDims: false);
+        var priorVariance = engine.TensorMultiplyScalar(engine.TensorDiagonal(taskCovariance), kStarStar);
+        var variances = engine.TensorMax(engine.TensorSubtract(priorVariance, reduction), _numOps.FromDouble(1e-10)).ToVector();
 
         return (means, variances);
     }
@@ -819,12 +783,7 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
 
     private Matrix<T> CreateIdentityMatrix(int size)
     {
-        var matrix = new Matrix<T>(size, size);
-        for (int i = 0; i < size; i++)
-        {
-            matrix[i, i] = _numOps.One;
-        }
-        return matrix;
+        return Engine.TensorEye<T>(size).ToMatrix();
     }
 
     /// <summary>
@@ -833,9 +792,7 @@ public partial class MultiTaskGaussianProcess<T> : GaussianProcessBase<T>
     /// </summary>
     public override void Fit(Matrix<T> X, Vector<T> y)
     {
-        var yMatrix = new Matrix<T>(y.Length, 1);
-        for (int i = 0; i < y.Length; i++)
-            yMatrix[i, 0] = y[i];
+        var yMatrix = Tensor<T>.FromVector(y).Reshape(new[] { y.Length, 1 }).ToMatrix();
         Fit(X, yMatrix);
     }
 
