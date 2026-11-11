@@ -646,39 +646,46 @@ internal sealed class PypinyinReader
         }
     }
 
-    // pypinyin.seg.mmseg.Seg(no_non_phrases=True).cut
+    // pypinyin 0.55.0's pypinyin.seg.mmseg.Seg(no_non_phrases=True).cut: grow a prefix one character at a time,
+    // remembering the longest prefix that is itself a phrase. When the prefix stops matching, emit that phrase (or,
+    // with none, the first character) and continue after it; when the whole remainder matches as a prefix, emit the
+    // longest phrase and continue, or, with none, the remainder as one phrase or character by character.
     private IEnumerable<List<string>> MaximumMatching(List<string> text)
     {
         int start = 0;
         while (start < text.Count)
         {
-            int matchedPrefix = 0;
+            int validLength = 0;
             bool broke = false;
             for (int index = start; index < text.Count; index++)
             {
-                string candidate = string.Concat(text.GetRange(start, index - start + 1));
-                if (_phrasePrefixes.Contains(candidate)) matchedPrefix = index - start + 1;
-                else
+                int length = index - start + 1;
+                string word = string.Concat(text.GetRange(start, length));
+                if (_phrasePrefixes.Contains(word))
                 {
-                    // mmseg remembers the longest prefix, not the longest complete phrase. If that prefix
-                    // is not itself a phrase, it emits one character even when a shorter valid phrase exists.
-                    int count = matchedPrefix > 0 && _phrases.ContainsKey(string.Concat(text.GetRange(start, matchedPrefix)))
-                        ? matchedPrefix : 1;
-                    yield return text.GetRange(start, count);
-                    start += count;
-                    broke = true;
-                    break;
+                    if (_phrases.ContainsKey(word)) validLength = length;
+                    continue;
                 }
+                int count = validLength > 0 ? validLength : 1;
+                yield return text.GetRange(start, count);
+                start += count;
+                broke = true;
+                break;
             }
             if (broke) continue;
-            string remainder = string.Concat(text.GetRange(start, text.Count - start));
-            if (_phrases.ContainsKey(remainder)) yield return text.GetRange(start, text.Count - start);
+            if (validLength > 0)
+            {
+                yield return text.GetRange(start, validLength);
+                start += validLength;
+                continue;
+            }
+            var remainder = text.GetRange(start, text.Count - start);
+            if (_phrases.ContainsKey(string.Concat(remainder))) yield return remainder;
             else
-                foreach (var c in text.GetRange(start, text.Count - start)) yield return new List<string> { c };
+                foreach (var c in remainder) yield return new List<string> { c };
             yield break;
         }
     }
-
 
     // DefaultConverter.convert(word, BOPOMOFO, heteronym=False, errors="default"): the phrase's readings, or each
     // character's (a character without a reading is kept as written). mmseg yields phrases and single characters only.
