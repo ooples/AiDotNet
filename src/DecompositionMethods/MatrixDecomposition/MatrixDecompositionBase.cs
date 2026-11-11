@@ -243,6 +243,69 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     }
 
     /// <summary>
+    /// Unpivoted symmetric factorization A = L D L^T (L unit lower triangular, D diagonal) computed
+    /// with right-looking whole-block engine updates: for each pivot j, the column below the pivot
+    /// is scaled by 1 / D[j] and the trailing block receives the rank-1 update l c^T.
+    /// </summary>
+    /// <param name="matrix">The symmetric matrix to factor (only read, never modified).</param>
+    /// <returns>The unit lower triangular factor L and the diagonal D.</returns>
+    /// <remarks>
+    /// This is the same elimination as the left-looking dot-product form
+    /// (L[i,j] = (A[i,j] - sum_k L[i,k] L[j,k] D[k]) / D[j]); it works for indefinite matrices with
+    /// non-zero leading minors and, like that form, divides by a zero pivot rather than throwing.
+    /// </remarks>
+    protected (Matrix<T> L, Vector<T> D) ComputeUnpivotedLdl(Matrix<T> matrix)
+    {
+        int n = matrix.Rows;
+        if (n == 0)
+        {
+            return (new Matrix<T>(0, 0), new Vector<T>(0));
+        }
+
+        var work = Tensor<T>.FromMatrix(matrix.Clone());
+        var lower = Engine.TensorEye<T>(n);
+        var diagonal = new Tensor<T>(new[] { n });
+
+        for (int j = 0; j < n; j++)
+        {
+            var pivot = Engine.TensorSlice(work, new[] { j, j }, new[] { 1, 1 });
+            diagonal = Engine.TensorSetSlice(diagonal, pivot.Reshape(new[] { 1 }), new[] { j });
+
+            int rest = n - j - 1;
+            if (rest == 0)
+            {
+                break;
+            }
+
+            T inversePivot = Engine.TensorSum(Engine.TensorReciprocal(pivot));
+            var column = Engine.TensorSlice(work, new[] { j + 1, j }, new[] { rest, 1 });
+            var multipliers = Engine.TensorMultiplyScalar(column, inversePivot);
+            lower = Engine.TensorSetSlice(lower, multipliers, new[] { j + 1, j });
+
+            var trailing = Engine.TensorSlice(work, new[] { j + 1, j + 1 }, new[] { rest, rest });
+            trailing = Engine.TensorSubtract(trailing, Engine.TensorMatMul(multipliers, Engine.TensorTranspose(column)));
+            work = Engine.TensorSetSlice(work, trailing, new[] { j + 1, j + 1 });
+        }
+
+        return (lower.ToMatrix(), diagonal.ToVector());
+    }
+
+    /// <summary>
+    /// Solves (L D L^T) x = b with two unit-triangular engine solves and one diagonal scaling.
+    /// </summary>
+    protected static Matrix<T> SolveLdlSystem(Matrix<T> unitLower, Vector<T> diagonal, Matrix<T> rhs)
+    {
+        var engine = AiDotNetEngine.Current;
+        var l = Tensor<T>.FromMatrix(unitLower);
+        var y = Linalg.SolveTriangular(l, Tensor<T>.FromMatrix(rhs), upper: false, unitDiagonal: true);
+        var d = engine.TensorBroadcastTo(
+            Tensor<T>.FromVector(diagonal, new[] { diagonal.Length, 1 }),
+            new[] { rhs.Rows, rhs.Columns });
+        y = engine.TensorMultiply(y, engine.TensorReciprocal(d));
+        return Linalg.SolveTriangular(engine.TensorTranspose(l), y, upper: true, unitDiagonal: true).ToMatrix();
+    }
+
+    /// <summary>
     /// Solves a triangular system <c>T x = rhs</c> with one whole-matrix engine triangular solve.
     /// </summary>
     /// <param name="triangular">The square triangular coefficient matrix.</param>
