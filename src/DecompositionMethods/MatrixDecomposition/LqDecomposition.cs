@@ -133,131 +133,48 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private (Matrix<T> L, Matrix<T> Q) ComputeLqHouseholder(Matrix<T> matrix)
     {
-        int m = matrix.Rows;
-        int n = matrix.Columns;
-
-        // LQ of A is computed via QR of A^T: A^T = Q_qr * R, so A = R^T * Q_qr^T
-        var At = matrix.Transpose();
-
-        // Perform QR decomposition on A^T using Householder reflections
-        var (Q_qr, R) = ComputeQrHouseholder(At);
-
-        // L = R^T (transpose of upper triangular R gives lower triangular L)
-        // For full LQ decomposition, L is m x n (with zeros past column min(m,n))
-        // For wide matrices (m < n), the rightmost (n-m) columns of L are zeros
-        var L = new Matrix<T>(m, n);
-        int minDim = Math.Min(m, n);
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < minDim; j++)
-            {
-                // R is n x m (from QR of n x m matrix A^T)
-                // We extract R^T by swapping indices: L[i,j] = R[j,i]
-                // Only copy the lower triangular portion (j <= i for lower triangular)
-                if (j < R.Rows && i < R.Columns)
-                {
-                    L[i, j] = R[j, i];
-                }
-            }
-        }
-
-        // Q = Q_qr^T (transpose of Q from QR gives our Q)
-        // Q_qr is n x n, so Q is n x n
-        var Q = Q_qr.Transpose();
-
-        return (L, Q);
+        // A = LQ is the transpose of the complete Householder QR of A^T: L = R^T, Q = Q_qr^T.
+        return ComputeLqFromEngineQr(matrix, positiveDiagonal: false);
     }
 
     /// <summary>
-    /// Computes QR decomposition using Householder reflections (internal helper for LQ).
+    /// Computes A = LQ from one complete engine QR factorization of A^T (A^T = Q_qr R).
     /// </summary>
-    /// <param name="matrix">The matrix to decompose (m x n).</param>
-    /// <returns>A tuple containing Q (m x m orthogonal) and R (m x n upper triangular).</returns>
-    private (Matrix<T> Q, Matrix<T> R) ComputeQrHouseholder(Matrix<T> matrix)
+    /// <param name="matrix">The m x n matrix to factor.</param>
+    /// <param name="positiveDiagonal">
+    /// True to scale the factors so that L has a non-negative diagonal (the Gram-Schmidt and Givens
+    /// conventions); false keeps the Householder reflector signs.
+    /// </param>
+    /// <returns>L (m x n, lower trapezoidal) and Q (n x n, orthogonal).</returns>
+    private (Matrix<T> L, Matrix<T> Q) ComputeLqFromEngineQr(Matrix<T> matrix, bool positiveDiagonal)
     {
         int m = matrix.Rows;
         int n = matrix.Columns;
-
-        var R = matrix.Clone();
-        var Q = Matrix<T>.CreateIdentityMatrix(m);
-
-        int minDim = Math.Min(m, n);
-        for (int k = 0; k < minDim; k++)
+        if (m == 0 || n == 0)
         {
-            // Extract column k from row k onwards
-            var x = new Vector<T>(m - k);
-            for (int i = k; i < m; i++)
-            {
-                x[i - k] = R[i, k];
-            }
-
-            // Compute the norm of x
-            T normX = NumOps.Sqrt(x.DotProduct(x));
-            if (NumOps.Equals(normX, NumOps.Zero))
-                continue;
-
-            // Compute alpha = -sign(x[0]) * ||x||
-            T alpha = NumOps.Negate(NumOps.SignOrZero(x[0]));
-            alpha = NumOps.Multiply(alpha, normX);
-
-            // Compute u = x - alpha * e1
-            var u = new Vector<T>(x.Length);
-            u[0] = NumOps.Subtract(x[0], alpha);
-            for (int i = 1; i < x.Length; i++)
-            {
-                u[i] = x[i];
-            }
-
-            // Normalize u
-            T normU = NumOps.Sqrt(u.DotProduct(u));
-            if (NumOps.Equals(normU, NumOps.Zero))
-                continue;
-
-            for (int i = 0; i < u.Length; i++)
-            {
-                u[i] = NumOps.Divide(u[i], normU);
-            }
-
-            // Apply Householder transformation to R: R = (I - 2*u*u^T) * R
-            // Only affect rows k to m-1
-            for (int j = k; j < n; j++)
-            {
-                // Compute u^T * R[k:m, j]
-                T dot = NumOps.Zero;
-                for (int i = 0; i < u.Length; i++)
-                {
-                    dot = NumOps.Add(dot, NumOps.Multiply(u[i], R[k + i, j]));
-                }
-
-                // R[k:m, j] -= 2 * dot * u
-                T twoTimeDot = NumOps.Multiply(NumOps.FromDouble(2.0), dot);
-                for (int i = 0; i < u.Length; i++)
-                {
-                    R[k + i, j] = NumOps.Subtract(R[k + i, j], NumOps.Multiply(twoTimeDot, u[i]));
-                }
-            }
-
-            // Apply Householder transformation to Q: Q = Q * (I - 2*u*u^T)
-            // This is equivalent to: Q[:, k:m] = Q[:, k:m] - 2 * Q[:, k:m] * u * u^T
-            for (int i = 0; i < m; i++)
-            {
-                // Compute Q[i, k:m] * u
-                T dot = NumOps.Zero;
-                for (int j = 0; j < u.Length; j++)
-                {
-                    dot = NumOps.Add(dot, NumOps.Multiply(Q[i, k + j], u[j]));
-                }
-
-                // Q[i, k:m] -= 2 * dot * u^T
-                T twoTimeDot = NumOps.Multiply(NumOps.FromDouble(2.0), dot);
-                for (int j = 0; j < u.Length; j++)
-                {
-                    Q[i, k + j] = NumOps.Subtract(Q[i, k + j], NumOps.Multiply(twoTimeDot, u[j]));
-                }
-            }
+            return (new Matrix<T>(m, n), Matrix<T>.CreateIdentity(n));
         }
 
-        return (Q, R);
+        var (q, r) = Linalg.QR(Engine.TensorTranspose(Tensor<T>.FromMatrix(matrix)), "complete");
+
+        if (positiveDiagonal)
+        {
+            // Row j of R and column j of Q_qr flip together, so A^T = Q_qr R is preserved.
+            var signs = Engine.TensorSign(Engine.TensorDiagonal(r));
+            signs = Engine.TensorAdd(signs, Engine.TensorSubtract(Engine.TensorOnesLike(signs), Engine.TensorAbs(signs)));
+            int k = signs.Length;
+            if (k < n)
+            {
+                signs = Engine.TensorSetSlice(
+                    Engine.TensorFullLike(new Tensor<T>(new[] { n }), NumOps.One), signs, new[] { 0 });
+            }
+
+            var signMatrix = Engine.TensorDiagEmbed(signs);
+            q = Engine.TensorMatMul(q, signMatrix);
+            r = Engine.TensorMatMul(signMatrix, r);
+        }
+
+        return (Engine.TensorTranspose(r).ToMatrix(), Engine.TensorTranspose(q).ToMatrix());
     }
 
     /// <summary>
@@ -275,134 +192,9 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private (Matrix<T> L, Matrix<T> Q) ComputeLqGramSchmidt(Matrix<T> matrix)
     {
-        int m = matrix.Rows;
-        int n = matrix.Columns;
-
-        // LQ of A is computed via QR of A^T
-        var At = matrix.Transpose();
-
-        // Perform QR decomposition on A^T using Gram-Schmidt
-        var (Q_qr, R) = ComputeQrGramSchmidt(At);
-
-        // L = R^T (transpose of upper triangular R gives lower triangular L)
-        var L = new Matrix<T>(m, n);
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (j < R.Rows && i < R.Columns)
-                {
-                    L[i, j] = R[j, i];
-                }
-            }
-        }
-
-        // Q = Q_qr^T
-        var Q = Q_qr.Transpose();
-
-        return (L, Q);
-    }
-
-    /// <summary>
-    /// Computes QR decomposition using Gram-Schmidt (internal helper for LQ).
-    /// </summary>
-    private (Matrix<T> Q, Matrix<T> R) ComputeQrGramSchmidt(Matrix<T> matrix)
-    {
-        int m = matrix.Rows;
-        int n = matrix.Columns;
-
-        var Q = new Matrix<T>(m, m);
-        var R = new Matrix<T>(m, n);
-
-        int minDim = Math.Min(m, n);
-
-        for (int j = 0; j < minDim; j++)
-        {
-            // Get column j
-            var v = new Vector<T>(m);
-            for (int i = 0; i < m; i++)
-            {
-                v[i] = matrix[i, j];
-            }
-
-            // Orthogonalize against previous columns
-            for (int k = 0; k < j; k++)
-            {
-                // Get Q column k
-                var qk = new Vector<T>(m);
-                for (int i = 0; i < m; i++)
-                {
-                    qk[i] = Q[i, k];
-                }
-
-                // R[k,j] = q_k^T * v
-                T rVal = v.DotProduct(qk);
-                R[k, j] = rVal;
-
-                // v = v - R[k,j] * q_k
-                for (int i = 0; i < m; i++)
-                {
-                    v[i] = NumOps.Subtract(v[i], NumOps.Multiply(rVal, qk[i]));
-                }
-            }
-
-            // Normalize
-            T norm = NumOps.Sqrt(v.DotProduct(v));
-            R[j, j] = norm;
-
-            if (!NumOps.Equals(norm, NumOps.Zero))
-            {
-                for (int i = 0; i < m; i++)
-                {
-                    Q[i, j] = NumOps.Divide(v[i], norm);
-                }
-            }
-        }
-
-        // Fill remaining Q columns to complete the orthogonal matrix
-        // Each new column must be orthogonalized against all previous columns
-        for (int j = minDim; j < m; j++)
-        {
-            // Start with the j-th standard basis vector e_j
-            var v = new Vector<T>(m);
-            v[j] = NumOps.One;
-
-            // Orthogonalize against all previous Q columns
-            for (int k = 0; k < j; k++)
-            {
-                // Get Q column k
-                var qk = new Vector<T>(m);
-                for (int i = 0; i < m; i++)
-                {
-                    qk[i] = Q[i, k];
-                }
-
-                // Project v onto qk and subtract: v = v - (v·qk) * qk
-                T dot = v.DotProduct(qk);
-                for (int i = 0; i < m; i++)
-                {
-                    v[i] = NumOps.Subtract(v[i], NumOps.Multiply(dot, qk[i]));
-                }
-            }
-
-            // Normalize the result
-            T norm = NumOps.Sqrt(v.DotProduct(v));
-            if (!NumOps.Equals(norm, NumOps.Zero))
-            {
-                for (int i = 0; i < m; i++)
-                {
-                    Q[i, j] = NumOps.Divide(v[i], norm);
-                }
-            }
-            else
-            {
-                // Fallback: if orthogonalization yields zero vector, use identity
-                // This shouldn't happen with proper Gram-Schmidt but prevents NaN
-                Q[j, j] = NumOps.One;
-            }
-        }
-
-        return (Q, R);
+        // Gram-Schmidt on the columns of A^T (completed to a full basis) is the complete QR of A^T
+        // with a non-negative R diagonal.
+        return ComputeLqFromEngineQr(matrix, positiveDiagonal: true);
     }
 
     /// <summary>
@@ -420,81 +212,9 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     private (Matrix<T> L, Matrix<T> Q) ComputeLqGivens(Matrix<T> matrix)
     {
-        int m = matrix.Rows;
-        int n = matrix.Columns;
-
-        // LQ of A is computed via QR of A^T
-        var At = matrix.Transpose();
-
-        // Perform QR decomposition on A^T using Givens rotations
-        var (Q_qr, R) = ComputeQrGivens(At);
-
-        // L = R^T (transpose of upper triangular R gives lower triangular L)
-        var L = new Matrix<T>(m, n);
-        for (int i = 0; i < m; i++)
-        {
-            for (int j = 0; j < n; j++)
-            {
-                if (j < R.Rows && i < R.Columns)
-                {
-                    L[i, j] = R[j, i];
-                }
-            }
-        }
-
-        // Q = Q_qr^T
-        var Q = Q_qr.Transpose();
-
-        return (L, Q);
-    }
-
-    /// <summary>
-    /// Computes QR decomposition using Givens rotations (internal helper for LQ).
-    /// </summary>
-    private (Matrix<T> Q, Matrix<T> R) ComputeQrGivens(Matrix<T> matrix)
-    {
-        int m = matrix.Rows;
-        int n = matrix.Columns;
-
-        var R = matrix.Clone();
-        var Q = Matrix<T>.CreateIdentityMatrix(m);
-
-        for (int j = 0; j < n; j++)
-        {
-            for (int i = m - 1; i > j; i--)
-            {
-                if (!NumOps.Equals(R[i, j], NumOps.Zero))
-                {
-                    T a = R[i - 1, j];
-                    T b = R[i, j];
-                    T r = NumOps.Sqrt(NumOps.Add(NumOps.Multiply(a, a), NumOps.Multiply(b, b)));
-
-                    if (NumOps.Equals(r, NumOps.Zero))
-                        continue;
-
-                    T c = NumOps.Divide(a, r);
-                    T s = NumOps.Divide(b, r);
-
-                    // Apply Givens rotation to R (rows i-1 and i)
-                    for (int k = 0; k < n; k++)
-                    {
-                        T temp = R[i - 1, k];
-                        R[i - 1, k] = NumOps.Add(NumOps.Multiply(c, temp), NumOps.Multiply(s, R[i, k]));
-                        R[i, k] = NumOps.Add(NumOps.Multiply(NumOps.Negate(s), temp), NumOps.Multiply(c, R[i, k]));
-                    }
-
-                    // Apply Givens rotation to Q (columns i-1 and i)
-                    for (int k = 0; k < m; k++)
-                    {
-                        T temp = Q[k, i - 1];
-                        Q[k, i - 1] = NumOps.Add(NumOps.Multiply(c, temp), NumOps.Multiply(s, Q[k, i]));
-                        Q[k, i] = NumOps.Add(NumOps.Multiply(NumOps.Negate(s), temp), NumOps.Multiply(c, Q[k, i]));
-                    }
-                }
-            }
-        }
-
-        return (Q, R);
+        // Bottom-up Givens rotations leave R[j,j] = sqrt(a^2 + b^2) >= 0: the complete QR of A^T
+        // with a non-negative R diagonal.
+        return ComputeLqFromEngineQr(matrix, positiveDiagonal: true);
     }
 
     /// <summary>
@@ -518,29 +238,13 @@ public class LqDecomposition<T> : MatrixDecompositionBase<T>
     private Vector<T> ForwardSubstitution(Matrix<T> L, Vector<T> b)
     {
         int n = L.Rows;
-        var y = new Vector<T>(n);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0)
         {
-            // VECTORIZED: Use dot product for sum computation
-            T sum = NumOps.Zero;
-            if (i > 0)
-            {
-                var rowSlice = new T[i];
-                var ySlice = new T[i];
-                for (int k = 0; k < i; k++)
-                {
-                    rowSlice[k] = L[i, k];
-                    ySlice[k] = y[k];
-                }
-                var rowVec = new Vector<T>(rowSlice);
-                var yVec = new Vector<T>(ySlice);
-                sum = rowVec.DotProduct(yVec);
-            }
-
-            y[i] = NumOps.Divide(NumOps.Subtract(b[i], sum), L[i, i]);
+            return new Vector<T>(0);
         }
 
-        return y;
+        // Only the leading n x n lower-triangular block takes part in the substitution.
+        var square = L.Columns == n ? L : L.GetSubMatrix(0, 0, n, n);
+        return SolveTriangularSystem(square, b, upper: false);
     }
 }

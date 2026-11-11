@@ -102,8 +102,8 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     /// </remarks>
     public override Vector<T> Solve(Vector<T> b)
     {
-        var y = ForwardSubstitution(L, b);
-        return BackSubstitution(L.Transpose(), y);
+        var y = SolveTriangularSystem(L, b, upper: false);
+        return SolveTriangularSystem(L.Transpose(), y, upper: true);
     }
 
     /// <summary>
@@ -118,12 +118,15 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
         // Validate matrix is symmetric (required for all Cholesky algorithms)
         ValidateSymmetric(matrix);
 
+        // Crout (column order), Banachiewicz (row order), LDL' (square roots last) and the blocked
+        // variant all produce the same unique lower factor of an SPD matrix; the engine's Cholesky
+        // kernel computes it in one whole-matrix call on every backend.
         return algorithm switch
         {
-            CholeskyAlgorithmType.Crout => ComputeCholeskyCrout(matrix),
-            CholeskyAlgorithmType.Banachiewicz => ComputeCholeskyBanachiewicz(matrix),
-            CholeskyAlgorithmType.LDL => ComputeCholeskyLDL(matrix),
-            CholeskyAlgorithmType.BlockCholesky => ComputeBlockCholesky(matrix),
+            CholeskyAlgorithmType.Crout
+                or CholeskyAlgorithmType.Banachiewicz
+                or CholeskyAlgorithmType.LDL
+                or CholeskyAlgorithmType.BlockCholesky => ComputeCholeskyFactor(matrix),
             _ => throw new ArgumentException("Unsupported Cholesky decomposition algorithm.")
         };
     }
@@ -136,516 +139,67 @@ public class CholeskyDecomposition<T> : MatrixDecompositionBase<T>
     private void ValidateSymmetric(Matrix<T> matrix)
     {
         int n = matrix.Rows;
-        // Two-tier tolerance (matches scikit-learn/GPy pattern):
-        // - Small asymmetry (< 1e-6 relative to diagonal): auto-fix (floating-point noise)
-        // - Large asymmetry: throw (genuine non-symmetric matrix — caller bug)
-        T half = NumOps.FromDouble(0.5);
-
-        // Compute reference scale from diagonal for relative tolerance
-        double diagScale = 0;
-        for (int i = 0; i < n; i++)
-            diagScale = Math.Max(diagScale, Math.Abs(NumOps.ToDouble(matrix[i, i])));
-        double relativeTolerance = Math.Max(diagScale * 1e-6, 1e-10);
-
-        for (int i = 0; i < n; i++)
+        if (n == 0 || matrix.Columns != n)
         {
-            for (int j = i + 1; j < n; j++)
-            {
-                double diff = Math.Abs(NumOps.ToDouble(NumOps.Subtract(matrix[i, j], matrix[j, i])));
-                if (diff > relativeTolerance * 1000)
-                {
-                    // Large asymmetry relative to matrix scale — genuine bug
-                    throw new ArgumentException(
-                        $"Matrix must be symmetric for Cholesky decomposition. " +
-                        $"Asymmetry at [{i},{j}]: {diff:E3} exceeds tolerance {relativeTolerance * 1000:E3}.");
-                }
-                // Small asymmetry: auto-fix (K + K^T) / 2
-                T avg = NumOps.Multiply(half, NumOps.Add(matrix[i, j], matrix[j, i]));
-                matrix[i, j] = avg;
-                matrix[j, i] = avg;
-            }
+            // Non-square input is rejected by the factorization with its own message.
+            return;
         }
+
+        // Use relative tolerance: scale by the largest diagonal magnitude so that
+        // matrices with large entries (e.g., kernel matrices) aren't falsely rejected.
+        var values = Tensor<T>.FromMatrix(matrix);
+        var transposed = Engine.TensorTranspose(values);
+        T diagScale = Engine.TensorMaxValue(Engine.TensorAbs(Engine.TensorDiagonal(values)));
+        T relativeTolerance = MathHelper.Max(
+            NumOps.Multiply(diagScale, NumOps.FromDouble(1e-6)),
+            NumOps.FromDouble(1e-10));
+        T threshold = NumOps.Multiply(relativeTolerance, NumOps.FromDouble(1000));
+
+        var asymmetry = Engine.TensorAbs(Engine.TensorSubtract(values, transposed));
+        if (NumOps.GreaterThan(Engine.TensorMaxValue(asymmetry), threshold))
+        {
+            // Report the first offending (i, j), j > i, in row-major order, as the scan did.
+            var violations = Engine.TensorTriu(Engine.TensorGreaterThan(asymmetry, threshold), 1);
+            int flat = Engine.TensorArgMax(violations.Reshape(new[] { violations.Length }), 0)[0];
+            int i = flat / n;
+            int j = flat % n;
+            T diff = asymmetry[i, j];
+            throw new ArgumentException(
+                $"Matrix must be symmetric for Cholesky decomposition. " +
+                $"Asymmetry at [{i},{j}]: {diff:E3} exceeds tolerance {threshold:E3}.");
+        }
+
+        // Symmetrize in place: (A + A^T) / 2 leaves the diagonal unchanged and averages each pair.
+        var symmetric = Engine.TensorMultiplyScalar(Engine.TensorAdd(values, transposed), NumOps.FromDouble(0.5));
+        matrix.SetSubMatrix(0, 0, symmetric.ToMatrix());
     }
 
     /// <summary>
-    /// Computes the Cholesky decomposition using a default approach.
-    /// </summary>
-    /// <param name="matrix">The matrix to decompose.</param>
-    /// <returns>The lower triangular matrix L.</returns>
-    /// <exception cref="ArgumentException">
-    /// Thrown when the matrix is not square, not symmetric, or not positive definite.
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// <b>VECTORIZED:</b> This method uses vectorized dot product operations for inner loop sums,
-    /// improving performance while maintaining the sequential outer loop structure required by
-    /// Cholesky's strong data dependencies.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ComputeCholeskyDefault(Matrix<T> matrix)
-    {
-        if (matrix.Rows != matrix.Columns)
-        {
-            throw new ArgumentException("Matrix must be square for Cholesky decomposition.");
-        }
-
-        int n = matrix.Rows;
-        var L = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j <= i; j++)
-            {
-                if (i != j)
-                {
-                    T diff = NumOps.Abs(NumOps.Subtract(matrix[i, j], matrix[j, i]));
-                    T tolerance = NumOps.FromDouble(1e-10);
-                    if (NumOps.GreaterThan(diff, tolerance))
-                    {
-                        throw new ArgumentException("Matrix must be symmetric for Cholesky decomposition.");
-                    }
-                }
-
-                if (j == i) // Diagonal elements
-                {
-                    // VECTORIZED: compute sum of squares using dot product
-                    T sum = NumOps.Zero;
-                    if (j > 0)
-                    {
-                        var rowJ = L.GetRow(j);
-                        var rowJSegment = new Vector<T>(rowJ.Take(j));
-                        sum = rowJSegment.DotProduct(rowJSegment);
-                    }
-
-                    T diagonalValue = NumOps.Subtract(matrix[j, j], sum);
-                    if (NumOps.LessThanOrEquals(diagonalValue, NumOps.Zero))
-                    {
-                        throw new ArgumentException("Matrix is not positive definite.");
-                    }
-                    L[j, j] = NumOps.Sqrt(diagonalValue);
-                }
-                else // Lower triangular elements
-                {
-                    // VECTORIZED: compute dot product of L[i,:j] and L[j,:j]
-                    T sum = NumOps.Zero;
-                    if (j > 0)
-                    {
-                        var rowI = L.GetRow(i);
-                        var rowJ = L.GetRow(j);
-                        var rowISegment = new Vector<T>(rowI.Take(j));
-                        var rowJSegment = new Vector<T>(rowJ.Take(j));
-                        sum = rowISegment.DotProduct(rowJSegment);
-                    }
-
-                    L[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), L[j, j]);
-                }
-            }
-        }
-
-        return L;
-    }
-
-    /// <summary>
-    /// Computes the Cholesky decomposition using the Crout algorithm.
+    /// Computes the lower Cholesky factor with one engine factorization.
     /// </summary>
     /// <param name="matrix">The matrix to decompose.</param>
     /// <returns>The lower triangular matrix L.</returns>
     /// <exception cref="ArgumentException">
     /// Thrown when the matrix is not square or not positive definite.
     /// </exception>
-    /// <remarks>
-    /// <para>
-    /// The Crout algorithm computes the decomposition column by column, which can be
-    /// more efficient for certain matrix structures.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> The Crout method processes the matrix one column at a time,
-    /// building up the solution gradually. It's like solving a puzzle by completing
-    /// one vertical section before moving to the next.
-    /// </para>
-    /// <para>
-    /// <b>VECTORIZED:</b> This method uses vectorized dot product operations for computing
-    /// row sums, replacing scalar loops with efficient vector operations while maintaining
-    /// the column-by-column processing order required by the algorithm.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ComputeCholeskyCrout(Matrix<T> matrix)
+    private Matrix<T> ComputeCholeskyFactor(Matrix<T> matrix)
     {
         if (matrix.Rows != matrix.Columns)
         {
             throw new ArgumentException("Matrix must be square for Cholesky decomposition.");
         }
 
-        int n = matrix.Rows;
-        var L = new Matrix<T>(n, n);
-
-        // Reused offset-0 scratch buffers for the inner dot products. Copying each L[*, 0..j) slice
-        // to a fresh buffer start reproduces the array-element-0 alignment of the original's
-        // per-element vectors, so NumOps.Dot is bit-identical across frameworks. (A raw mid-row
-        // span starts at offset j*n / i*n, which shifts net10.0 SIMD alignment and changes rounding
-        // enough to fail near-singular KernelRidge/GP tests.) One pair of buffers per decomposition
-        // instead of O(n^2) sub-vector allocations — this is what removes the tens-of-GB churn.
-        var segI = new T[n];
-        var segJ = new T[n];
-
-        for (int j = 0; j < n; j++)
+        if (matrix.Rows == 0)
         {
-            // Diagonal: A[j,j] - Σ_{k<j} L[j,k]².
-            T sum = NumOps.Zero;
-            if (j > 0)
-            {
-                L.GetRowReadOnlySpan(j).Slice(0, j).CopyTo(segJ);
-                sum = NumOps.Dot(segJ.AsSpan(0, j), segJ.AsSpan(0, j));
-            }
-
-            T diagonalValue = NumOps.Subtract(matrix[j, j], sum);
-            if (NumOps.LessThanOrEquals(diagonalValue, NumOps.Zero))
-            {
-                throw new ArgumentException("Matrix is not positive definite.");
-            }
-            L[j, j] = NumOps.Sqrt(diagonalValue);
-
-            // Off-diagonal: (A[i,j] - Σ_{k<j} L[i,k]·L[j,k]) / L[j,j]. segJ already holds L[j, 0..j).
-            for (int i = j + 1; i < n; i++)
-            {
-                T offSum = NumOps.Zero;
-                if (j > 0)
-                {
-                    L.GetRowReadOnlySpan(i).Slice(0, j).CopyTo(segI);
-                    offSum = NumOps.Dot(segI.AsSpan(0, j), segJ.AsSpan(0, j));
-                }
-
-                L[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], offSum), L[j, j]);
-            }
+            return new Matrix<T>(0, 0);
         }
 
-        return L;
-    }
-
-    /// <summary>
-    /// Computes the Cholesky decomposition using the Banachiewicz algorithm.
-    /// </summary>
-    /// <param name="matrix">The matrix to decompose.</param>
-    /// <returns>The lower triangular matrix L.</returns>
-    /// <exception cref="ArgumentException">
-    /// Thrown when the matrix is not square or not positive definite.
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// The Banachiewicz algorithm computes the decomposition row by row, which can be
-    /// more efficient for certain matrix structures.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> The Banachiewicz method processes the matrix one row at a time,
-    /// building up the solution gradually. It's like solving a puzzle by completing
-    /// one horizontal section before moving to the next.
-    /// </para>
-    /// <para>
-    /// <b>VECTORIZED:</b> This method uses vectorized dot product operations to compute
-    /// row element contributions, replacing scalar accumulation loops with efficient
-    /// vector operations while maintaining row-by-row processing order.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ComputeCholeskyBanachiewicz(Matrix<T> matrix)
-    {
-        if (matrix.Rows != matrix.Columns)
+        var (factor, info) = Linalg.CholeskyEx(Tensor<T>.FromMatrix(matrix), upper: false);
+        if (Engine.TensorCountNonzero(info) > 0)
         {
-            throw new ArgumentException("Matrix must be square for Cholesky decomposition.");
+            throw new ArgumentException("Matrix is not positive definite.");
         }
 
-        int n = matrix.Rows;
-        var L = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j <= i; j++)
-            {
-                // VECTORIZED: compute dot product of L[i,:j] and L[j,:j]
-                T sum = NumOps.Zero;
-                if (j > 0)
-                {
-                    var rowI = L.GetRow(i);
-                    var rowJ = L.GetRow(j);
-                    var rowISegment = new Vector<T>(rowI.Take(j));
-                    var rowJSegment = new Vector<T>(rowJ.Take(j));
-                    sum = rowISegment.DotProduct(rowJSegment);
-                }
-
-                if (i == j)
-                {
-                    T diagonalValue = NumOps.Subtract(matrix[i, i], sum);
-                    if (NumOps.LessThanOrEquals(diagonalValue, NumOps.Zero))
-                    {
-                        throw new ArgumentException("Matrix is not positive definite.");
-                    }
-                    L[i, j] = NumOps.Sqrt(diagonalValue);
-                }
-                else
-                {
-                    L[i, j] = NumOps.Divide(NumOps.Subtract(matrix[i, j], sum), L[j, j]);
-                }
-            }
-        }
-
-        return L;
-    }
-
-    /// <summary>
-    /// Computes the LDL' decomposition and converts it to Cholesky form.
-    /// </summary>
-    /// <param name="matrix">The matrix to decompose.</param>
-    /// <returns>The lower triangular matrix L.</returns>
-    /// <exception cref="ArgumentException">
-    /// Thrown when the matrix is not square or not positive definite.
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// The LDL' decomposition is a variant of Cholesky that avoids square roots until the final step.
-    /// This can be more numerically stable for certain matrices.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method avoids calculating square roots until the very end,
-    /// which can give more accurate results for certain matrices. It's like doing all the
-    /// easy arithmetic first and saving the complicated square root calculations for last.
-    /// </para>
-    /// <para>
-    /// <b>VECTORIZED:</b> This method uses vectorized operations with element-wise multiplication
-    /// and dot products for computing weighted sums, replacing scalar accumulation loops.
-    /// The final conversion to LL' form uses vectorized row operations.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ComputeCholeskyLDL(Matrix<T> matrix)
-    {
-        if (matrix.Rows != matrix.Columns)
-        {
-            throw new ArgumentException("Matrix must be square for Cholesky decomposition.");
-        }
-
-        int n = matrix.Rows;
-        var L = Matrix<T>.CreateIdentity(n);
-        var D = new Vector<T>(n);
-
-        for (int j = 0; j < n; j++)
-        {
-            T d = matrix[j, j];
-            if (j > 0)
-            {
-                // VECTORIZED: compute weighted sum using element-wise operations
-                var rowJ = L.GetRow(j);
-                var rowJSegment = new Vector<T>(rowJ.Take(j));
-                var dSegment = new Vector<T>(D.Take(j));
-
-                // Compute L[j,k]^2 * D[k] for k < j
-                var squaredRow = new Vector<T>(rowJSegment.Select(x => NumOps.Multiply(x, x)));
-                var weighted = new Vector<T>(squaredRow.Zip(dSegment, (l, dVal) => NumOps.Multiply(l, dVal)));
-                var weightedSum = weighted.Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
-
-                d = NumOps.Subtract(d, weightedSum);
-            }
-            D[j] = d;
-
-            for (int i = j + 1; i < n; i++)
-            {
-                T sum = matrix[i, j];
-                if (j > 0)
-                {
-                    // VECTORIZED: compute weighted dot product
-                    var rowI = L.GetRow(i);
-                    var rowJ = L.GetRow(j);
-                    var rowISegment = new Vector<T>(rowI.Take(j));
-                    var rowJSegment = new Vector<T>(rowJ.Take(j));
-                    var dSegment = new Vector<T>(D.Take(j));
-
-                    // Compute sum of L[i,k] * L[j,k] * D[k] for k < j
-                    var product = new Vector<T>(rowISegment.Zip(rowJSegment, (li, lj) => NumOps.Multiply(li, lj)));
-                    var weighted = new Vector<T>(product.Zip(dSegment, (p, dVal) => NumOps.Multiply(p, dVal)));
-                    var weightedSum = weighted.Aggregate(NumOps.Zero, (acc, val) => NumOps.Add(acc, val));
-
-                    sum = NumOps.Subtract(sum, weightedSum);
-                }
-                L[i, j] = NumOps.Divide(sum, d);
-            }
-        }
-
-        // Convert LDL' to LL' - vectorized per row
-        for (int i = 0; i < n; i++)
-        {
-            for (int j = 0; j <= i; j++)
-            {
-                L[i, j] = NumOps.Multiply(L[i, j], NumOps.Sqrt(D[j]));
-            }
-        }
-
-        return L;
-    }
-
-    /// <summary>
-    /// Computes the Cholesky decomposition using a block algorithm for large matrices.
-    /// </summary>
-    /// <param name="matrix">The matrix to decompose.</param>
-    /// <returns>The lower triangular matrix L.</returns>
-    /// <exception cref="ArgumentException">
-    /// Thrown when the matrix is not square or not positive definite.
-    /// </exception>
-    /// <remarks>
-    /// <para>
-    /// The block Cholesky algorithm divides the matrix into blocks to improve cache efficiency
-    /// and potentially leverage parallel processing for large matrices.
-    /// </para>
-    /// <para>
-    /// <b>For Beginners:</b> This method breaks large matrices into smaller chunks (blocks)
-    /// that fit better in your computer's memory cache, making it much faster for big matrices.
-    /// Think of it like eating a large meal by breaking it into smaller, manageable bites.
-    /// </para>
-    /// </remarks>
-    private Matrix<T> ComputeBlockCholesky(Matrix<T> matrix)
-    {
-        if (matrix.Rows != matrix.Columns)
-        {
-            throw new ArgumentException("Matrix must be square for Cholesky decomposition.");
-        }
-
-        int n = matrix.Rows;
-        int blockSize = 64; // Adjust this based on your needs
-        var L = new Matrix<T>(n, n);
-
-        for (int i = 0; i < n; i += blockSize)
-        {
-            int size = Math.Min(blockSize, n - i);
-            var subMatrix = matrix.SubMatrix(i, i, size, size);
-            var subL = ComputeCholeskyCrout(subMatrix);
-
-            for (int r = 0; r < size; r++)
-            {
-                for (int c = 0; c <= r; c++)
-                {
-                    L[i + r, i + c] = subL[r, c];
-                }
-            }
-
-            if (i + size < n)
-            {
-                var B = matrix.SubMatrix(i + size, i, n - i - size, size);
-                var subLCholesky = new CholeskyDecomposition<T>(L.SubMatrix(i, i, size, size));
-                var X = subLCholesky.SolveMatrix(B.Transpose());
-
-                for (int r = 0; r < n - i - size; r++)
-                {
-                    for (int c = 0; c < size; c++)
-                    {
-                        L[i + size + r, i + c] = X[c, r];
-                    }
-                }
-
-                var C = matrix.SubMatrix(i + size, i + size, n - i - size, n - i - size);
-                // VECTORIZED: compute row updates using dot products
-                for (int r = 0; r < n - i - size; r++)
-                {
-                    for (int c = 0; c <= r; c++)
-                    {
-                        // VECTORIZED: compute dot product of L[i+size+r, i:i+size] and L[i+size+c, i:i+size]
-                        T sum = NumOps.Zero;
-                        if (size > 0)
-                        {
-                            var rowR = L.GetRow(i + size + r);
-                            var rowC = L.GetRow(i + size + c);
-                            var rowRSegment = new Vector<T>(rowR.Skip(i).Take(size));
-                            var rowCSegment = new Vector<T>(rowC.Skip(i).Take(size));
-                            sum = rowRSegment.DotProduct(rowCSegment);
-                        }
-                        C[r, c] = NumOps.Subtract(C[r, c], sum);
-                        C[c, r] = C[r, c];
-                    }
-                }
-            }
-        }
-
-        return L;
-    }
-
-    /// <summary>
-    /// Solves a system of linear equations for multiple right-hand sides.
-    /// </summary>
-    /// <param name="B">The matrix of right-hand sides.</param>
-    /// <returns>The solution matrix X where A*X = B.</returns>
-    private Matrix<T> SolveMatrix(Matrix<T> B)
-    {
-        int columns = B.Columns;
-        var X = new Matrix<T>(L.Columns, columns);
-
-        for (int i = 0; i < columns; i++)
-        {
-            var columnVector = B.GetColumn(i);
-            var solutionVector = Solve(columnVector);
-            X.SetColumn(i, solutionVector);
-        }
-
-        return X;
-    }
-
-    /// <summary>
-    /// Performs forward substitution to solve L*y = b.
-    /// </summary>
-    /// <param name="L">The lower triangular matrix.</param>
-    /// <param name="b">The right-hand side vector.</param>
-    /// <returns>The solution vector y.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>VECTORIZED:</b> Uses vectorized dot product for computing row contributions,
-    /// replacing scalar accumulation loops while maintaining the sequential dependency order.
-    /// </para>
-    /// </remarks>
-    private Vector<T> ForwardSubstitution(Matrix<T> L, Vector<T> b)
-    {
-        var y = new Vector<T>(L.Rows);
-        for (int i = 0; i < L.Rows; i++)
-        {
-            // VECTORIZED: compute dot product of L[i,:i] and y[:i]
-            T sum = NumOps.Zero;
-            if (i > 0)
-            {
-                var rowL = L.GetRow(i);
-                var rowLSegment = new Vector<T>(rowL.Take(i));
-                var ySegment = new Vector<T>(y.Take(i));
-                sum = rowLSegment.DotProduct(ySegment);
-            }
-
-            y[i] = NumOps.Divide(NumOps.Subtract(b[i], sum), L[i, i]);
-        }
-
-        return y;
-    }
-
-    /// <summary>
-    /// Performs back substitution to solve L^T*x = y.
-    /// </summary>
-    /// <param name="LT">The transpose of the lower triangular matrix.</param>
-    /// <param name="y">The right-hand side vector.</param>
-    /// <returns>The solution vector x.</returns>
-    /// <remarks>
-    /// <para>
-    /// <b>VECTORIZED:</b> Uses vectorized dot product for computing row contributions,
-    /// replacing scalar accumulation loops while maintaining the sequential dependency order.
-    /// </para>
-    /// </remarks>
-    private Vector<T> BackSubstitution(Matrix<T> LT, Vector<T> y)
-    {
-        var x = new Vector<T>(LT.Columns);
-        for (int i = LT.Columns - 1; i >= 0; i--)
-        {
-            // VECTORIZED: compute dot product of LT[i, i+1:] and x[i+1:]
-            T sum = NumOps.Zero;
-            if (i < LT.Columns - 1)
-            {
-                var rowLT = LT.GetRow(i);
-                var rowLTSegment = new Vector<T>(rowLT.Skip(i + 1));
-                var xSegment = new Vector<T>(x.Skip(i + 1));
-                sum = rowLTSegment.DotProduct(xSegment);
-            }
-
-            x[i] = NumOps.Divide(NumOps.Subtract(y[i], sum), LT[i, i]);
-        }
-
-        return x;
+        return factor.ToMatrix();
     }
 }

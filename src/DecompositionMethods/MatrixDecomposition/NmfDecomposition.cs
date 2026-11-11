@@ -149,7 +149,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         int m = V.Rows;
         int n = V.Columns;
 
-        // Validate that numeric type supports small positive values (required for NMF algorithm)
+        // Validate that T supports floating-point operations (NMF requires small positive epsilon values)
         T testEpsilon = NumOps.FromDouble(1e-10);
         if (NumOps.Equals(testEpsilon, NumOps.Zero))
         {
@@ -159,10 +159,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         }
 
         // Scale initialization to data magnitude to avoid zero-locking
-        T vSum = NumOps.Zero;
-        for (int i = 0; i < m; i++)
-            for (int j = 0; j < n; j++)
-                vSum = NumOps.Add(vSum, V[i, j]);
+        T vSum = Engine.TensorSum(Tensor<T>.FromMatrix(V));
         T vMean = NumOps.Divide(vSum, NumOps.FromDouble((double)(m * n)));
         T initScale = NumOps.Sqrt(NumOps.Divide(NumOps.Add(vMean, NumOps.FromDouble(1e-10)), NumOps.FromDouble((double)k)));
 
@@ -170,19 +167,10 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         //
         // Initialization was five restarts from RandomHelper.CreateSecureRandom(), which is
         // unseeded by construction, so the factorization differed on every run and the quality of
-        // the result rode on the draw. That is what made NMF_IdentityLikeMatrix_ReconstructsWell
-        // intermittent: the same 3x3 diagonal input reconstructed within tolerance on most runs and
-        // missed on some, with nothing in the input to explain the difference.
-        //
-        // NNDSVD (Boutsidis & Gallopoulos 2008, "SVD based initialization: A head start for
-        // nonnegative matrix factorization") derives the starting point from the data's own
-        // singular vectors instead. scikit-learn made the same move for the same reason -- its NMF
-        // default init is nndsvda rather than random -- because an SVD-derived start both removes
-        // the run-to-run variance and lands closer to a good optimum, so fewer iterations are
-        // needed to reach one.
-        //
-        // The random restarts are kept as a fallback rather than deleted: if the SVD cannot be
-        // formed for this input, the previous behaviour still applies rather than failing outright.
+        // the result rode on the draw. NNDSVD (Boutsidis & Gallopoulos 2008, "SVD based
+        // initialization: A head start for nonnegative matrix factorization") derives the starting
+        // point from the data's own singular vectors instead (scikit-learn's nndsvda default does
+        // the same). The random restarts are kept as a fallback for inputs whose SVD cannot be formed.
         Matrix<T> bestW = new Matrix<T>(0, 0);
         Matrix<T> bestH = new Matrix<T>(0, 0);
         T bestError = NumOps.MaxValue;
@@ -195,18 +183,6 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
             bestH = deterministicH;
         }
 
-        // FALLBACK ONLY -- entered when no deterministic start could be formed at all.
-        //
-        // This gate deliberately ignores how WELL the deterministic run reconstructed. `tolerance`
-        // is the update loop's convergence tolerance: it bounds the CHANGE in reconstruction error
-        // between iterations, not the error itself. A perfectly good rank-k approximation of a
-        // higher-rank matrix converges with a residual far above it, so using it as a quality bar
-        // fired the restarts on ordinary inputs -- and a random trial that happened to score lower
-        // then replaced the deterministic result, restoring exactly the run-to-run variance NNDSVD
-        // was introduced to remove.
-        //
-        // scikit-learn draws the same line: with an SVD-based init its NMF runs the update loop
-        // once and never restarts, because the start no longer depends on a draw.
         if (bestW.Rows == 0)
         {
             const int nRestarts = 5;
@@ -215,7 +191,7 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
                 var (trialW, trialH) = RunNmfTrial(V, m, n, k, maxIterations, tolerance, initScale);
                 T trialError = ComputeReconstructionError(V, trialW, trialH);
 
-                if (bestW.Rows == 0 || NumOps.LessThan(trialError, bestError))
+                if (bestW.Rows == 0 || AnyBelow(Tensor<T>.FromScalar(trialError), bestError))
                 {
                     bestW = trialW;
                     bestH = trialH;
@@ -248,9 +224,8 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     private bool TryInitializeNndsvd(
         Matrix<T> V, int m, int n, int k, out Matrix<T> initialW, out Matrix<T> initialH)
     {
-        // Named initialW/initialH rather than W/H: this type already exposes W and H as the RESULT
-        // of the factorization, and out parameters with those names shadowed them inside this
-        // method -- so a reader, or a later edit, could not tell the seed from the answer.
+        // NNDSVD: each component starts from the dominant non-negative part of its singular pair,
+        // scaled by sqrt(sigma). Any SVD failure falls back to random initialization.
         initialW = new Matrix<T>(0, 0);
         initialH = new Matrix<T>(0, 0);
 
@@ -269,93 +244,48 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
         Matrix<T> vt = svd.Vt;
         if (u.Rows != m || vt.Columns != n || singular.Length == 0) return false;
 
-        initialW = new Matrix<T>(m, k);
-        initialH = new Matrix<T>(k, n);
-
-        // A strictly zero start is absorbing under multiplicative updates: 0 * anything stays 0, so
-        // a component seeded with zeros can never recover. Seed those with a small positive floor.
+        // Floor keeps every entry strictly positive: a zero entry is a fixed point of the
+        // multiplicative update and would never recover.
         T floor = NumOps.FromDouble(1e-8);
+        int used = Math.Min(k, singular.Length);
 
-        for (int component = 0; component < k; component++)
-        {
-            if (component >= singular.Length)
-            {
-                for (int i = 0; i < m; i++) initialW[i, component] = floor;
-                for (int j = 0; j < n; j++) initialH[component, j] = floor;
-                continue;
-            }
+        var uCols = Engine.TensorSlice(Tensor<T>.FromMatrix(u), new[] { 0, 0 }, new[] { m, used });
+        var vRows = Engine.TensorSlice(Tensor<T>.FromMatrix(vt), new[] { 0, 0 }, new[] { used, n });
+        var sqrtSigma = Engine.TensorSqrt(Engine.TensorAbs(
+            Engine.TensorSlice(Tensor<T>.FromVector(singular), new[] { 0 }, new[] { used })));
 
-            T sqrtSigma = NumOps.Sqrt(NumOps.Abs(singular[component]));
+        // Positive and negative parts, and their norms per component (squares of entries <= 0 add
+        // nothing to the positive norm and vice versa).
+        var uPos = Engine.ReLU(uCols);
+        var uNeg = Engine.ReLU(Engine.TensorNegate(uCols));
+        var vPos = Engine.ReLU(vRows);
+        var vNeg = Engine.ReLU(Engine.TensorNegate(vRows));
+        var positiveMass = Engine.TensorMultiply(Engine.TensorNorm(uPos, 0), Engine.TensorNorm(vPos, 1));
+        var negativeMass = Engine.TensorMultiply(Engine.TensorNorm(uNeg, 0), Engine.TensorNorm(vNeg, 1));
 
-            if (component == 0)
-            {
-                // The leading pair is nonnegative up to a global sign, so its magnitude is used.
-                for (int i = 0; i < m; i++)
-                    initialW[i, 0] = MaxOf(NumOps.Multiply(sqrtSigma, NumOps.Abs(u[i, 0])), floor);
-                for (int j = 0; j < n; j++)
-                    initialH[0, j] = MaxOf(NumOps.Multiply(sqrtSigma, NumOps.Abs(vt[0, j])), floor);
-                continue;
-            }
+        // Use the positive part where its mass is at least the negative part's; component 0 (the
+        // Perron vector of a non-negative matrix) uses |u|, |v| directly.
+        var usePositive = Engine.TensorSubtract(Engine.TensorOnesLike(positiveMass), Engine.TensorGreaterThan(negativeMass, positiveMass));
+        var isFirst = Engine.TensorSetSlice(
+            Engine.TensorFullLike(usePositive, NumOps.Zero), Engine.TensorFullLike(new Tensor<T>(new[] { 1 }), NumOps.One), new[] { 0 });
 
-            // Split both singular vectors into positive and negative parts and keep the side whose
-            // outer product carries more energy.
-            T positiveNormU = NumOps.Zero, negativeNormU = NumOps.Zero;
-            T positiveNormV = NumOps.Zero, negativeNormV = NumOps.Zero;
-            for (int i = 0; i < m; i++)
-            {
-                T value = u[i, component];
-                if (NumOps.GreaterThan(value, NumOps.Zero))
-                    positiveNormU = NumOps.Add(positiveNormU, NumOps.Multiply(value, value));
-                else
-                    negativeNormU = NumOps.Add(negativeNormU, NumOps.Multiply(value, value));
-            }
-            for (int j = 0; j < n; j++)
-            {
-                T value = vt[component, j];
-                if (NumOps.GreaterThan(value, NumOps.Zero))
-                    positiveNormV = NumOps.Add(positiveNormV, NumOps.Multiply(value, value));
-                else
-                    negativeNormV = NumOps.Add(negativeNormV, NumOps.Multiply(value, value));
-            }
+        var useU = Engine.TensorBroadcastTo(usePositive.Reshape(new[] { 1, used }), new[] { m, used });
+        var firstU = Engine.TensorBroadcastTo(isFirst.Reshape(new[] { 1, used }), new[] { m, used });
+        var partU = Engine.TensorWhere(firstU, Engine.TensorAbs(uCols), Engine.TensorWhere(useU, uPos, uNeg));
 
-            bool usePositive = NumOps.GreaterThanOrEquals(
-                NumOps.Multiply(NumOps.Sqrt(positiveNormU), NumOps.Sqrt(positiveNormV)),
-                NumOps.Multiply(NumOps.Sqrt(negativeNormU), NumOps.Sqrt(negativeNormV)));
+        var useV = Engine.TensorBroadcastTo(usePositive.Reshape(new[] { used, 1 }), new[] { used, n });
+        var firstV = Engine.TensorBroadcastTo(isFirst.Reshape(new[] { used, 1 }), new[] { used, n });
+        var partV = Engine.TensorWhere(firstV, Engine.TensorAbs(vRows), Engine.TensorWhere(useV, vPos, vNeg));
 
-            for (int i = 0; i < m; i++)
-            {
-                initialW[i, component] = ScaledPart(u[i, component], usePositive, sqrtSigma, floor);
-            }
-            for (int j = 0; j < n; j++)
-            {
-                initialH[component, j] = ScaledPart(vt[component, j], usePositive, sqrtSigma, floor);
-            }
-        }
+        var w = Engine.TensorMax(Engine.TensorMultiply(partU,
+            Engine.TensorBroadcastTo(sqrtSigma.Reshape(new[] { 1, used }), new[] { m, used })), floor);
+        var h = Engine.TensorMax(Engine.TensorMultiply(partV,
+            Engine.TensorBroadcastTo(sqrtSigma.Reshape(new[] { used, 1 }), new[] { used, n })), floor);
 
+        // Components beyond the available singular values start at the floor.
+        initialW = Engine.TensorSetSlice(Engine.TensorFullLike(new Tensor<T>(new[] { m, k }), floor), w, new[] { 0, 0 }).ToMatrix();
+        initialH = Engine.TensorSetSlice(Engine.TensorFullLike(new Tensor<T>(new[] { k, n }), floor), h, new[] { 0, 0 }).ToMatrix();
         return true;
-    }
-
-    private T MaxOf(T value, T floor) => NumOps.GreaterThan(value, floor) ? value : floor;
-
-    /// <summary>
-    /// One NNDSVD entry: take the positive or negative part of <paramref name="value"/>, scale it by
-    /// the singular value, and clamp it up to <paramref name="floor"/>.
-    /// </summary>
-    /// <remarks>
-    /// Both the W and the H loop computed this identically inline, as a nested conditional inside a
-    /// nested loop - which is what CodeQL flagged as a block with too many complex statements, and
-    /// it was also a copy of the same expression in two places. NNDSVD (Boutsidis and Gallopoulos,
-    /// 2008) initializes from either the positive or the negative part of each singular vector pair,
-    /// whichever carries more energy; the unused part contributes zero, and the floor keeps the
-    /// factor strictly non-negative so the multiplicative updates cannot divide by zero.
-    /// </remarks>
-    private T ScaledPart(T value, bool usePositive, T sqrtSigma, T floor)
-    {
-        T part = usePositive
-            ? (NumOps.GreaterThan(value, NumOps.Zero) ? value : NumOps.Zero)
-            : (NumOps.LessThan(value, NumOps.Zero) ? NumOps.Negate(value) : NumOps.Zero);
-
-        return MaxOf(NumOps.Multiply(sqrtSigma, part), floor);
     }
 
     /// <summary>
@@ -368,77 +298,45 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// <summary>Runs the multiplicative-update loop from a supplied starting pair.</summary>
     private (Matrix<T> W, Matrix<T> H) RunNmfTrialFrom(Matrix<T> V, Matrix<T> startW, Matrix<T> startH, int m, int n, int k, int maxIterations, double tolerance)
     {
-        Matrix<T> tempW = startW;
-        Matrix<T> tempH = startH;
+        var v = Tensor<T>.FromMatrix(V);
+        var w = Tensor<T>.FromMatrix(startW);
+        var h = Tensor<T>.FromMatrix(startH);
 
-        T previousError = NumOps.MaxValue;
+        var previousError = Tensor<T>.FromScalar(NumOps.MaxValue);
         T toleranceT = NumOps.FromDouble(tolerance);
         T epsilon = NumOps.FromDouble(1e-10);
 
         for (int iteration = 0; iteration < maxIterations; iteration++)
         {
-            // Update H: H = H .* (W^T * V + eps) ./ (W^T * W * H + eps)
-            Matrix<T> WT = tempW.Transpose();
-            Matrix<T> WTV = WT.Multiply(V);
-            Matrix<T> WTW = WT.Multiply(tempW);
-            Matrix<T> WTWH = WTW.Multiply(tempH);
+            // Lee-Seung multiplicative updates, epsilon-stabilized:
+            // H <- H .* (W^T V + eps) ./ (W^T W H + eps)
+            var wT = Engine.TensorTranspose(w);
+            var numeratorH = Engine.TensorAddScalar(Engine.TensorMatMul(wT, v), epsilon);
+            var denominatorH = Engine.TensorAddScalar(Engine.TensorMatMul(Engine.TensorMatMul(wT, w), h), epsilon);
+            h = Engine.TensorMultiply(h, Engine.TensorDivide(numeratorH, denominatorH));
 
-            // VECTORIZED: Process each row as a vector using Engine operations
-            var epsilonVec = new Vector<T>(n);
-            for (int idx = 0; idx < n; idx++) epsilonVec[idx] = epsilon;
+            // W <- W .* (V H^T + eps) ./ (W H H^T + eps)
+            var hT = Engine.TensorTranspose(h);
+            var numeratorW = Engine.TensorAddScalar(Engine.TensorMatMul(v, hT), epsilon);
+            var denominatorW = Engine.TensorAddScalar(Engine.TensorMatMul(Engine.TensorMatMul(w, h), hT), epsilon);
+            w = Engine.TensorMultiply(w, Engine.TensorDivide(numeratorW, denominatorW));
 
-            for (int i = 0; i < k; i++)
-            {
-                Vector<T> numeratorH = WTV.GetRow(i);
-                Vector<T> wtwhRow = WTWH.GetRow(i);
-                Vector<T> tempHRow = tempH.GetRow(i);
-
-                var stabilizedNumerator = (Vector<T>)Engine.Add(numeratorH, epsilonVec);
-                var denominator = (Vector<T>)Engine.Add(wtwhRow, epsilonVec);
-                var ratio = (Vector<T>)Engine.Divide(stabilizedNumerator, denominator);
-                var updated = (Vector<T>)Engine.Multiply(tempHRow, ratio);
-                tempH.SetRow(i, updated);
-            }
-
-            // Update W: W = W .* (V * H^T + eps) ./ (W * H * H^T + eps)
-            Matrix<T> HT = tempH.Transpose();
-            Matrix<T> VHT = V.Multiply(HT);
-            Matrix<T> WH = tempW.Multiply(tempH);
-            Matrix<T> WHHT = WH.Multiply(HT);
-
-            // VECTORIZED: Process each row as a vector using Engine operations
-            var epsilonVecW = new Vector<T>(k);
-            for (int idx = 0; idx < k; idx++) epsilonVecW[idx] = epsilon;
-
-            for (int i = 0; i < m; i++)
-            {
-                Vector<T> numeratorW = VHT.GetRow(i);
-                Vector<T> whhtRow = WHHT.GetRow(i);
-                Vector<T> tempWRow = tempW.GetRow(i);
-
-                var stabilizedNumerator = (Vector<T>)Engine.Add(numeratorW, epsilonVecW);
-                var denominator = (Vector<T>)Engine.Add(whhtRow, epsilonVecW);
-                var ratio = (Vector<T>)Engine.Divide(stabilizedNumerator, denominator);
-                var updated = (Vector<T>)Engine.Multiply(tempWRow, ratio);
-                tempW.SetRow(i, updated);
-            }
-
-            // Check for convergence
+            // Check convergence every 10 iterations
             if (iteration % 10 == 0)
             {
-                T error = ComputeReconstructionError(V, tempW, tempH);
-                T errorChange = NumOps.Abs(NumOps.Subtract(previousError, error));
+                var error = Engine.TensorNorm(Engine.TensorSubtract(v, Engine.TensorMatMul(w, h)));
+                var errorChange = Engine.TensorAbs(Engine.TensorSubtract(previousError, error.Reshape(previousError.Shape.ToArray())));
 
-                if (NumOps.LessThan(errorChange, toleranceT))
+                if (AnyBelow(errorChange, toleranceT))
                 {
                     break;
                 }
 
-                previousError = error;
+                previousError = error.Reshape(previousError.Shape.ToArray());
             }
         }
 
-        return (tempW, tempH);
+        return (w.ToMatrix(), h.ToMatrix());
     }
 
     /// <summary>
@@ -450,21 +348,10 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// <returns>A randomly initialized matrix.</returns>
     private Matrix<T> InitializeRandomMatrix(int rows, int cols, T scale)
     {
+        // Entries scale * (0.1 + U[0, 1)) are strictly positive, as multiplicative updates require.
         var random = RandomHelper.CreateSecureRandom();
-        var matrix = new Matrix<T>(rows, cols);
-
-        for (int i = 0; i < rows; i++)
-        {
-            for (int j = 0; j < cols; j++)
-            {
-                // Use [0.1, 1.1) * scale to avoid near-zero values that cause
-                // zero-locking in multiplicative updates
-                T randomValue = NumOps.FromDouble(0.1 + random.NextDouble());
-                matrix[i, j] = NumOps.Multiply(scale, randomValue);
-            }
-        }
-
-        return matrix;
+        var uniform = Tensor<T>.FromMatrix(Matrix<T>.CreateRandom(random, rows, cols));
+        return Engine.TensorMultiplyScalar(Engine.TensorAddScalar(uniform, NumOps.FromDouble(0.1)), scale).ToMatrix();
     }
 
     /// <summary>
@@ -537,6 +424,31 @@ public class NmfDecomposition<T> : MatrixDecompositionBase<T>
     /// <param name="b">Right-hand side vector.</param>
     /// <returns>Solution vector.</returns>
     private Vector<T> SolveLinearSystem(Matrix<T> A, Vector<T> b)
+    {
+        int n = A.Rows;
+        if (n == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        // Gaussian elimination with partial pivoting as one engine solve.
+        var a = Tensor<T>.FromMatrix(A);
+        var rhs = Tensor<T>.FromVector(b, new[] { n, 1 });
+        var (solution, info) = Linalg.SolveEx(a, rhs);
+        if (Engine.TensorCountNonzero(info) > 0)
+        {
+            // Singular: keep the original elimination, which sets the components with a zero pivot to zero.
+            return SolveByEliminationSkippingZeroPivots(A, b);
+        }
+
+        return solution.Reshape(new[] { n }).ToVector();
+    }
+
+    /// <summary>
+    /// Gaussian elimination with partial pivoting that leaves zero-pivot components at zero (the
+    /// original behaviour for singular systems).
+    /// </summary>
+    private Vector<T> SolveByEliminationSkippingZeroPivots(Matrix<T> A, Vector<T> b)
     {
         int n = A.Rows;
         Matrix<T> augmented = new Matrix<T>(n, n + 1);
