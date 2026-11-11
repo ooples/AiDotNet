@@ -722,23 +722,41 @@ public partial class DecisionTreeRegression<T> : DecisionTreeRegressionBase<T>
             return new DecisionTreeNode<T> { IsLeaf = true, Prediction = NumOps.Zero };
         }
 
+        // One row-major pass over the matrix's rows. The previous copy called Convert.ToDouble on a generic
+        // T, which binds to the object overload and boxes every element, and GetColumn allocated a vector
+        // per feature: in a 100-tree forest over 300 features that copy cost twice the split search.
         var columns = new double[numFeatures][];
-        for (int f = 0; f < numFeatures; f++)
-        {
-            var span = x.GetColumn(f).AsTensor().Data.Span;
-            var arr = new double[n];
-            for (int i = 0; i < n; i++) arr[i] = Convert.ToDouble(span[i]);
-            columns[f] = arr;
-        }
-
-        var ySpan = y.AsTensor().Data.Span;
+        for (int f = 0; f < numFeatures; f++) columns[f] = new double[n];
         var yArr = new double[n];
-        for (int i = 0; i < n; i++) yArr[i] = Convert.ToDouble(ySpan[i]);
+        CopyToDouble(y.AsTensor().Data.Span, yArr);
+        var row = new double[numFeatures];
+        for (int i = 0; i < n; i++)
+        {
+            CopyToDouble(x.GetRowReadOnlySpan(i), row);
+            for (int f = 0; f < numFeatures; f++) columns[f][i] = row[f];
+        }
 
         var indices = new int[n];
         for (int i = 0; i < n; i++) indices[i] = i;
 
         return BuildTreeFastIndexed(columns, yArr, indices, 0);
+    }
+
+    /// <summary>Copies <paramref name="source"/> into <paramref name="destination"/> as doubles; a block copy for double.</summary>
+    [AiDotNet.Attributes.ScalarKernel("Element types other than double have no block conversion to double; double takes the block copy above.")]
+    private static void CopyToDouble(ReadOnlySpan<T> source, Span<double> destination)
+    {
+#if NET7_0_OR_GREATER
+        if (typeof(T) == typeof(double))
+        {
+            System.Runtime.InteropServices.MemoryMarshal.CreateReadOnlySpan(
+                ref System.Runtime.CompilerServices.Unsafe.As<T, double>(
+                    ref System.Runtime.InteropServices.MemoryMarshal.GetReference(source)), source.Length).CopyTo(destination);
+            return;
+        }
+#endif
+        var numOps = MathHelper.GetNumericOperations<T>();
+        for (int i = 0; i < source.Length; i++) destination[i] = numOps.ToDouble(source[i]);
     }
 
     private DecisionTreeNode<T> BuildTreeFastIndexed(double[][] columns, double[] yArr, int[] indices, int depth)
