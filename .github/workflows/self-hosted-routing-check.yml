@@ -33,6 +33,11 @@ jobs:
           . ./tools/TestImpact/CiWorkloadKinds.ps1
           $runners = Get-SelfHostedRunners -Repository $env:GITHUB_REPOSITORY -Token $env:SELF_HOSTED_RUNNER_TOKEN
           $plan = Get-SelfHostedShardPlan -Config $env:SELF_HOSTED_RUNNERS -Runners $runners
+          if ($plan.Count -gt 0) {
+            # Reported, not subtracted: this check proves the path works even while the runner is busy.
+            $pending = Get-SelfHostedPendingJobs -Repository $env:GITHUB_REPOSITORY -Token $env:SELF_HOSTED_RUNNER_TOKEN -Label $plan.Label
+            Write-Host "Jobs already waiting for or running on '$($plan.Label)': $pending"
+          }
           Write-Host "Self-hosted routing: $($plan.Count) shard(s). $($plan.Reason)"
           $shards = 1..40 | ForEach-Object { [pscustomobject]@{ name = "Shard $_" } }
           $routed = @(Set-CiShardRunners -Shards $shards -Count $plan.Count -Label $plan.Label |
