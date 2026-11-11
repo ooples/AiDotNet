@@ -273,6 +273,49 @@ public abstract class MatrixDecompositionBase<T> : IMatrixDecomposition<T>
     }
 
     /// <summary>
+    /// Thin QR factorization with a non-negative diagonal in R, computed with one engine QR call.
+    /// </summary>
+    /// <param name="matrix">The m x n matrix to factor.</param>
+    /// <returns>
+    /// Q (m x n, orthonormal columns) and R (n x n, upper triangular, R[i,i] &gt;= 0) with A = QR.
+    /// When m &lt; n the trailing n - m columns of Q and rows of R are zero.
+    /// </returns>
+    /// <remarks>
+    /// The thin QR factorization of a full-column-rank matrix with a positive R diagonal is unique,
+    /// so this matches Gram-Schmidt orthogonalization (which produces R[j,j] = ‖v_j‖ &gt; 0).
+    /// The engine QR uses Householder reflections; its signs are normalized here by scaling
+    /// column j of Q and row j of R by sign(R[j,j]).
+    /// </remarks>
+    protected (Matrix<T> Q, Matrix<T> R) ComputePositiveDiagonalQr(Matrix<T> matrix)
+    {
+        int m = matrix.Rows;
+        int n = matrix.Columns;
+        if (m == 0 || n == 0)
+        {
+            return (new Matrix<T>(m, n), new Matrix<T>(n, n));
+        }
+
+        var (q, r) = Linalg.QR(Tensor<T>.FromMatrix(matrix), "reduced");
+        var signs = Engine.TensorSign(Engine.TensorDiagonal(r));
+        // sign(0) = 0 would erase the column; use +1 there.
+        signs = Engine.TensorAdd(signs, Engine.TensorSubtract(Engine.TensorOnesLike(signs), Engine.TensorAbs(signs)));
+        var signMatrix = Engine.TensorDiagEmbed(signs);
+        q = Engine.TensorMatMul(q, signMatrix);
+        r = Engine.TensorMatMul(signMatrix, r);
+
+        int k = Math.Min(m, n);
+        if (k == n)
+        {
+            return (q.ToMatrix(), r.ToMatrix());
+        }
+
+        // m < n: pad Q with zero columns and R with zero rows so the shapes stay m x n and n x n.
+        var paddedQ = Engine.TensorSetSlice(new Tensor<T>(new[] { m, n }), q, new[] { 0, 0 });
+        var paddedR = Engine.TensorSetSlice(new Tensor<T>(new[] { n, n }), r, new[] { 0, 0 });
+        return (paddedQ.ToMatrix(), paddedR.ToMatrix());
+    }
+
+    /// <summary>
     /// Checks if two values are approximately equal within a tolerance.
     /// </summary>
     /// <param name="a">The first value.</param>
