@@ -64,10 +64,10 @@ public class RotationPredictionLoss<T> : LossFunctionBase<T>, ISelfSupervisedLos
         }
 
         // Validate input shape (should be [N, H, W] or [N, H, W, C])
-        if (tensorInput.Shape.Length < 3)
+        if (tensorInput.Shape.Length < 3 || tensorInput.Shape.Length > 4)
         {
             throw new ArgumentException(
-                $"Input tensor must have at least 3 dimensions [N, H, W] or [N, H, W, C], " +
+                $"Input tensor must have 3 dimensions [N, H, W] or 4 dimensions [N, H, W, C], " +
                 $"but got shape [{string.Join(", ", tensorInput._shape)}]");
         }
 
@@ -77,11 +77,6 @@ public class RotationPredictionLoss<T> : LossFunctionBase<T>, ISelfSupervisedLos
         int channels = tensorInput.Shape.Length > 3 ? tensorInput.Shape[3] : 1;
 
         bool copiesAnyElement = numImages > 0 && height > 0 && width > 0 && channels > 0;
-        if (tensorInput.Shape.Length > 4 && copiesAnyElement)
-        {
-            throw new ArgumentException("Number of indices must match the tensor's rank.");
-        }
-
         if (height != width && copiesAnyElement)
         {
             // The 90°/270° rotations keep the [height, width] layout, so they only fit square images.

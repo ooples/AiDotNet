@@ -361,13 +361,8 @@ public sealed partial class APNet2GeneratorLoss<T> : LossFunctionBase<T>
         Tensor<T> sin;
         using (new AiDotNet.Tensors.Engines.Autodiff.NoGradScope<T>())
         {
-            var sampleIndex = Engine.TensorArange<T>(0, _fftSize, 1);
-            var binIndex = Engine.TensorArange<T>(0, bins, 1);
-            var product = Engine.TensorOuter(sampleIndex, binIndex);
-            var wrapped = Engine.TensorRemainder(product, Engine.TensorFullLike(product, NumOps.FromDouble(_fftSize)));
-            var angle = Engine.TensorMultiplyScalar(wrapped, NumOps.FromDouble(TwoPi / _fftSize));
-            cos = Engine.TensorCos(angle);
-            sin = Engine.TensorSin(angle);
+            // The product is reduced exactly in 64-bit integers and the bases are built in bounded blocks
+            (cos, sin) = DftBasis<T>.Build(_fftSize, bins, negateSine: false);
         }
 
         lock (_dftBasisLock)

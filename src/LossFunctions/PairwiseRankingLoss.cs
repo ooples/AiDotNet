@@ -140,14 +140,24 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
     /// </summary>
     private Tensor<T> ComputePairWeights(Tensor<T> actual)
     {
+        return ComputePairWeights(actual, ComputeExtremities(actual), 0, actual.Length);
+    }
+
+    /// <summary>
+    /// Rows <paramref name="start"/> .. <paramref name="start"/> + <paramref name="rows"/> - 1 of the pair
+    /// weights W, as a [rows, n] block, for the precomputed per-item <paramref name="extremity"/>.
+    /// </summary>
+    private Tensor<T> ComputePairWeights(Tensor<T> actual, Tensor<T> extremity, int start, int rows)
+    {
         int n = actual.Length;
-        var pairShape = new[] { n, n };
-        var columnShape = new[] { n, 1 };
+        var pairShape = new[] { rows, n };
+        var columnShape = new[] { rows, 1 };
         var rowShape = new[] { 1, n };
+        var blockActual = Engine.TensorNarrow(actual, 0, start, rows);
 
         // Only ordered pairs where i is the true winner contribute; ties contribute nothing.
         var winner = Engine.TensorGreaterThan(
-            Engine.TensorBroadcastTo(Engine.Reshape(actual, columnShape), pairShape),
+            Engine.TensorBroadcastTo(Engine.Reshape(blockActual, columnShape), pairShape),
             Engine.TensorBroadcastTo(Engine.Reshape(actual, rowShape), pairShape));
 
         if (_tailWeightPower == 0.0)
@@ -155,14 +165,19 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
             return winner;
         }
 
-        var extremity = ComputeExtremities(actual);
         var pairExtremity = Engine.TensorMax(
-            Engine.TensorBroadcastTo(Engine.Reshape(extremity, columnShape), pairShape),
+            Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorNarrow(extremity, 0, start, rows), columnShape), pairShape),
             Engine.TensorBroadcastTo(Engine.Reshape(extremity, rowShape), pairShape));
         var tailWeight = Engine.TensorPower(
             Engine.TensorAddScalar(pairExtremity, NumOps.One), NumOps.FromDouble(_tailWeightPower));
         return Engine.TensorMultiply(winner, tailWeight);
     }
+
+    /// <summary>
+    /// Upper bound on the elements of one [rows, n] pair block in <see cref="CalculateLoss"/>, so the
+    /// non-tape loss holds O(n) rather than several dense [n, n] tensors.
+    /// </summary>
+    private const int PairBlockElements = 1 << 18;
 
     /// <summary>
     /// Logistic sigmoid 1 / (1 + exp(-x)), computed in a numerically stable way.
@@ -194,16 +209,26 @@ public class PairwiseRankingLoss<T> : LossFunctionBase<T>
         int n = predicted.Length;
         if (n == 0) return NumOps.Zero;
 
-        var weights = ComputePairWeights(actual.AsTensor());
-        if (!NumOps.GreaterThan(Engine.TensorSum(weights), NumOps.Zero)) return NumOps.Zero;
-
-        // L = (1/n) * sum_ij W[i,j] * softplus(-(s_i - s_j))
+        // L = (1/n) * sum_ij W[i,j] * softplus(-(s_i - s_j)), accumulated over bounded blocks of rows i
+        var targets = actual.AsTensor();
+        var extremity = ComputeExtremities(targets);
         var scores = predicted.AsTensor();
-        var pairShape = new[] { n, n };
-        var sI = Engine.TensorBroadcastTo(Engine.Reshape(scores, new[] { n, 1 }), pairShape);
-        var sJ = Engine.TensorBroadcastTo(Engine.Reshape(scores, new[] { 1, n }), pairShape);
-        var negDiff = Engine.TensorNegate(Engine.TensorSubtract(sI, sJ));
-        T lossSum = Engine.TensorSum(Engine.TensorMultiply(Engine.Softplus(negDiff), weights));
+        int block = Math.Max(1, Math.Min(n, PairBlockElements / n));
+        T weightSum = NumOps.Zero;
+        T lossSum = NumOps.Zero;
+        for (int start = 0; start < n; start += block)
+        {
+            int rows = Math.Min(block, n - start);
+            var pairShape = new[] { rows, n };
+            var weights = ComputePairWeights(targets, extremity, start, rows);
+            var sI = Engine.TensorBroadcastTo(Engine.Reshape(Engine.TensorNarrow(scores, 0, start, rows), new[] { rows, 1 }), pairShape);
+            var sJ = Engine.TensorBroadcastTo(Engine.Reshape(scores, new[] { 1, n }), pairShape);
+            var negDiff = Engine.TensorNegate(Engine.TensorSubtract(sI, sJ));
+            weightSum = NumOps.Add(weightSum, Engine.TensorSum(weights));
+            lossSum = NumOps.Add(lossSum, Engine.TensorSum(Engine.TensorMultiply(Engine.Softplus(negDiff), weights)));
+        }
+
+        if (!NumOps.GreaterThan(weightSum, NumOps.Zero)) return NumOps.Zero;
 
         // Normalize by the ITEM count n, not the pair count (~n^2). The original RankNet (Burges et al.
         // 2005) accumulates per-pair gradients (sum); dividing by the pair count shrinks the per-item

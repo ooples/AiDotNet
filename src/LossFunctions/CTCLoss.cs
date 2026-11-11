@@ -137,12 +137,13 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
     /// </summary>
     /// <param name="encoded">The encoded targets.</param>
     /// <param name="batchSize">The number of sequences to decode.</param>
+    /// <param name="paramName">The caller's parameter name for the encoded targets, used in exceptions.</param>
     /// <returns>The label sequences and their lengths.</returns>
-    private static (int[][] Targets, int[] TargetLengths) DecodeTargets(Vector<T> encoded, int batchSize)
+    private static (int[][] Targets, int[] TargetLengths) DecodeTargets(Vector<T> encoded, int batchSize, string paramName)
     {
-        // The encoding holds integer metadata (lengths and label ids), converted once in bulk. There is
-        // no engine T -> int cast yet (TensorCast, recorded in missing-ops), so this is a bulk Transform.
-        int[] codes = encoded.Transform(value => (int)Convert.ToDouble(value)).ToArray();
+        // The encoding holds integer metadata (lengths and label ids). Each code is rounded to the nearest
+        // integer in bulk before the int conversion, so a float code such as 1.9999999 reads as label 2.
+        int[] codes = AiDotNetEngine.Current.TensorRound(encoded.AsTensor()).Cast<int>().ToArray();
 
         var targets = new int[batchSize][];
         var targetLengths = new int[batchSize];
@@ -150,14 +151,16 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
         for (int b = 0; b < batchSize; b++)
         {
             if (index >= codes.Length)
-                throw new ArgumentOutOfRangeException("index");
+                throw new ArgumentOutOfRangeException(paramName,
+                    $"The encoded targets end before the length of sequence {b}.");
 
             int length = codes[index++];
+            if (length < 0 || length > codes.Length - index)
+                throw new ArgumentOutOfRangeException(paramName,
+                    $"Sequence {b} has encoded length {length}, but {codes.Length - index} codes remain.");
+
             targetLengths[b] = length;
             targets[b] = new int[length];
-            if (length > codes.Length - index)
-                throw new ArgumentOutOfRangeException("index");
-
             Array.Copy(codes, index, targets[b], 0, length);
             index += length;
         }
@@ -494,7 +497,7 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
         var logProbs = Tensor<T>.FromVector(
             predicted.GetSubVector(0, usedLength), new[] { batchSize, timeStepsTotal, _numClasses });
 
-        var (targets, targetLengths) = DecodeTargets(actual, batchSize);
+        var (targets, targetLengths) = DecodeTargets(actual, batchSize, nameof(actual));
         var inputLengths = Enumerable.Repeat(timeStepsTotal, batchSize).ToArray();
 
         return CalculateLoss(logProbs, targets, inputLengths, targetLengths);
@@ -513,7 +516,7 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
         int timeSteps = predicted.Shape.Length == 3 ? predicted.Shape[1]
             : predicted.Length / (_numClasses * batchSize);
 
-        var (targets, targetLengths) = DecodeTargets(target.ToVector(), batchSize);
+        var (targets, targetLengths) = DecodeTargets(target.ToVector(), batchSize, nameof(target));
         var inputLengths = Enumerable.Repeat(timeSteps, batchSize).ToArray();
         var targetsTensor = ConcatenateTargets(targets, targetLengths);
 
@@ -526,7 +529,11 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
         // layout. Keep the public loss contract batch-first and transpose through the
         // engine so the operation remains tape-tracked.
         var timeMajorLogProbs = Engine.TensorPermute(logProbs, new[] { 1, 0, 2 });
-        return Engine.TensorCTCLoss(
+        var perItemLoss = Engine.TensorCTCLoss(
             timeMajorLogProbs, targetsTensor, inputLengths, targetLengths, _blankIndex);
+
+        // The engine returns one loss per batch item; the tape loss is their mean, the same scalar
+        // CalculateLoss returns, so the gradients are those of the reported loss.
+        return Engine.ReduceMean(perItemLoss, new[] { 0 }, keepDims: false);
     }
 }

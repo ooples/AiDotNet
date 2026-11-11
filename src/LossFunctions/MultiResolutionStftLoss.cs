@@ -315,14 +315,9 @@ public sealed class MultiResolutionStftLoss<T> : LossFunctionBase<T>
 
             // Real DFT bases. Sine is negated so the pair matches e^{-i2*pi*kn/N}; the magnitude is
             // insensitive to that sign, but keeping the convention right makes these reusable.
-            // angle[n, k] = 2π·((k·n) mod N)/N: reducing the exact integer product modulo N first keeps
-            // the argument in [0, 2π), so cos/sin lose no precision to a large angle.
-            var binIndex = engine.TensorArange<T>(0, bins, 1);
-            var product = engine.TensorOuter(sampleIndex, binIndex);
-            var wrapped = engine.TensorRemainder(product, engine.TensorFullLike(product, ops.FromDouble(frameSize)));
-            var angle = engine.TensorMultiplyScalar(wrapped, ops.FromDouble(2.0 * Math.PI / frameSize));
-            cos = engine.TensorCos(angle);
-            sin = engine.TensorNegate(engine.TensorSin(angle));
+            // angle[n, k] = 2π·((k·n) mod N)/N with the product reduced exactly in 64-bit integers, built in
+            // bounded blocks written straight into the two bases.
+            (cos, sin) = DftBasis<T>.Build(frameSize, bins, negateSine: true);
         }
 
         return (window, cos, sin);
