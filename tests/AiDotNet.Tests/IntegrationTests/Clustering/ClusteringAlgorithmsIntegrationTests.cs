@@ -1028,8 +1028,8 @@ public class EnsembleNeuralClusteringIntegrationTests
         _ = ClusteringTestHelpers.RequireNotNull(som.Weights, "Weights");
         _ = ClusteringTestHelpers.RequireNotNull(som.NeuronLabels, "NeuronLabels");
         var umat = som.GetUMatrix();
-        Assert.Equal(options.GridHeight, umat.GetLength(0));
-        Assert.Equal(options.GridWidth, umat.GetLength(1));
+        Assert.Equal(options.GridHeight, umat.Rows);
+        Assert.Equal(options.GridWidth, umat.Columns);
     }
 }
 
