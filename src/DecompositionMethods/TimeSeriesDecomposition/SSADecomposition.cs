@@ -140,8 +140,8 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
 
         Matrix<T> X = CreateTrajectoryMatrix();
         Matrix<T> U = new Matrix<T>(_windowSize, _numberOfComponents);
-        Vector<T> S = new Vector<T>(_numberOfComponents);
         Matrix<T> V = new Matrix<T>(K, _numberOfComponents);
+        var singularValues = new List<Tensor<T>>();
 
         for (int i = 0; i < _numberOfComponents; i++)
         {
@@ -163,13 +163,16 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
             v = v.Divide(s);
 
             U.SetColumn(i, u);
-            S[i] = s;
+            singularValues.Add(Tensor<T>.FromScalar(s).Reshape(new[] { 1 }));
             V.SetColumn(i, v);
 
             // Deflate X
             X = X.Subtract(u.OuterProduct(v).Multiply(s));
         }
 
+        Vector<T> S = singularValues.Count > 0
+            ? Engine.TensorConcatenate(singularValues.ToArray(), 0).ToVector()
+            : new Vector<T>(0);
         return (U, S, V);
     }
 
@@ -190,35 +193,36 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
         int N = TimeSeries.Length;
         int K = N - _windowSize + 1;
 
-        // Create the Toeplitz matrix
-        Matrix<T> C = new Matrix<T>(_windowSize, _windowSize);
-        for (int i = 0; i < _windowSize; i++)
-        {
-            for (int j = 0; j <= i; j++)
-            {
-                T sum = NumOps.Zero;
-                for (int k = 0; k < N - i + j; k++)
-                {
-                    sum = NumOps.Add(sum, NumOps.Multiply(TimeSeries[k], TimeSeries[k + i - j]));
-                }
-                C[i, j] = C[j, i] = NumOps.Divide(sum, NumOps.FromDouble(N - i + j));
-            }
-        }
+        // Create the Toeplitz matrix C[i, j] = c(|i - j|), where the lag-l autocovariance
+        // c(l) = sum_{k < N - l} x[k] x[k + l] / (N - l) comes from the zero-padded self-correlation
+        // of the series (lag l at output position N - 1 - l).
+        var signal = Tensor<T>.FromVector(TimeSeries, new[] { 1, 1, N });
+        var correlation = Engine.Conv1D(signal, signal, 1, N - 1).Reshape(new[] { 2 * N - 1 });
+        var lagSums = Engine.TensorFlip(
+            Engine.TensorSlice(correlation, new[] { N - _windowSize }, new[] { _windowSize }), new[] { 0 });
+        var pairCounts = Engine.ScalarMinusTensor(NumOps.FromDouble(N), Engine.TensorArange<T>(0, _windowSize, 1));
+        var autocovariance = Engine.TensorMultiply(lagSums, Engine.TensorReciprocal(pairCounts));
+
+        var index = Engine.TensorArange<int>(0, _windowSize, 1);
+        var lags = Engine.TensorAbs(Engine.TensorSubtract(
+            Engine.TensorBroadcastTo(index.Reshape(new[] { _windowSize, 1 }), new[] { _windowSize, _windowSize }),
+            Engine.TensorBroadcastTo(index.Reshape(new[] { 1, _windowSize }), new[] { _windowSize, _windowSize })));
+        Matrix<T> C = Engine.TensorIndexSelect(autocovariance, lags.Reshape(new[] { _windowSize * _windowSize }), 0)
+            .Reshape(new[] { _windowSize, _windowSize }).ToMatrix();
 
         // Perform eigendecomposition
         var eigenDecomposition = new EigenDecomposition<T>(C);
         Matrix<T> U = eigenDecomposition.EigenVectors;
-        Vector<T> S = eigenDecomposition.EigenValues.Transform(x => NumOps.Sqrt(x));
+        Vector<T> S = Engine.TensorSqrt(Tensor<T>.FromVector(eigenDecomposition.EigenValues)).ToVector();
 
-        // Compute V
-        Matrix<T> V = new Matrix<T>(K, _numberOfComponents);
+        // Compute V: column i is X^T u_i / s_i
         Matrix<T> X = CreateTrajectoryMatrix();
-        for (int i = 0; i < _numberOfComponents; i++)
-        {
-            Vector<T> v = X.Transpose().Multiply(U.GetColumn(i));
-            v = v.Divide(S[i]);
-            V.SetColumn(i, v);
-        }
+        var leading = Engine.TensorSlice(Tensor<T>.FromMatrix(U), new[] { 0, 0 }, new[] { U.Rows, _numberOfComponents });
+        var projected = Engine.TensorMatMul(Engine.TensorTranspose(Tensor<T>.FromMatrix(X)), leading);
+        var inverseS = Engine.TensorReciprocal(Engine.TensorSlice(Tensor<T>.FromVector(S), new[] { 0 }, new[] { _numberOfComponents }));
+        Matrix<T> V = Engine.TensorMultiply(
+            projected,
+            Engine.TensorBroadcastTo(inverseS.Reshape(new[] { 1, _numberOfComponents }), new[] { K, _numberOfComponents })).ToMatrix();
 
         // Truncate to the specified number of components
         U = U.Submatrix(0, _windowSize - 1, 0, _numberOfComponents - 1);
@@ -272,17 +276,15 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
     private Matrix<T> CreateTrajectoryMatrix()
     {
         int K = TimeSeries.Length - _windowSize + 1;
-        var trajectoryMatrix = new Matrix<T>(_windowSize, K);
 
-        for (int i = 0; i < K; i++)
-        {
-            for (int j = 0; j < _windowSize; j++)
-            {
-                trajectoryMatrix[j, i] = TimeSeries[i + j];
-            }
-        }
-
-        return trajectoryMatrix;
+        // Hankel matrix: trajectoryMatrix[j, i] = x[i + j]
+        var rowIndex = Engine.TensorArange<int>(0, _windowSize, 1).Reshape(new[] { _windowSize, 1 });
+        var columnIndex = Engine.TensorArange<int>(0, K, 1).Reshape(new[] { 1, K });
+        var positions = Engine.TensorAdd(
+            Engine.TensorBroadcastTo(rowIndex, new[] { _windowSize, K }),
+            Engine.TensorBroadcastTo(columnIndex, new[] { _windowSize, K }));
+        return Engine.TensorIndexSelect(Tensor<T>.FromVector(TimeSeries), positions.Reshape(new[] { _windowSize * K }), 0)
+            .Reshape(new[] { _windowSize, K }).ToMatrix();
     }
 
     /// <summary>
@@ -307,12 +309,14 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
     private Matrix<T>[] GroupComponents(Matrix<T> U, Vector<T> S, Matrix<T> V)
     {
         var groupedComponents = new Matrix<T>[_numberOfComponents];
+        var singularValues = Tensor<T>.FromVector(S);
 
         for (int i = 0; i < _numberOfComponents; i++)
         {
             var Ui = U.GetColumn(i);
             var Vi = V.GetColumn(i);
-            groupedComponents[i] = Ui.OuterProduct(Vi).Multiply(S[i]);
+            T si = Engine.TensorSum(Engine.TensorSlice(singularValues, new[] { i }, new[] { 1 }));
+            groupedComponents[i] = Ui.OuterProduct(Vi).Multiply(si);
         }
 
         return groupedComponents;
@@ -341,26 +345,28 @@ public class SSADecomposition<T> : TimeSeriesDecompositionBase<T>
 
         for (int k = 0; k < _numberOfComponents; k++)
         {
-            var component = new Vector<T>(TimeSeries.Length);
-            var X = groupedComponents[k];
-
-            for (int i = 0; i < TimeSeries.Length; i++)
-            {
-                T sum = NumOps.Zero;
-                int count = 0;
-
-                for (int j = Math.Max(0, i - X.Columns + 1); j <= Math.Min(i, X.Rows - 1); j++)
-                {
-                    sum = NumOps.Add(sum, X[j, i - j]);
-                    count++;
-                }
-
-                component[i] = NumOps.Divide(sum, NumOps.FromDouble(count));
-            }
-
-            reconstructedComponents[k] = component;
+            var X = Tensor<T>.FromMatrix(groupedComponents[k]);
+            var sums = AntiDiagonalSums(X);
+            var counts = AntiDiagonalSums(Engine.TensorOnesLike(X));
+            reconstructedComponents[k] = Engine.TensorMultiply(sums, Engine.TensorReciprocal(counts)).ToVector();
         }
 
         return reconstructedComponents;
+    }
+
+    /// <summary>
+    /// Sums of a [W, K] matrix along its W + K - 1 anti-diagonals (i = row + column), by skewing:
+    /// [X | 0_W] flattened and re-read with row length W + K - 1 shifts row j right by j, so the
+    /// column sums of the skewed matrix are the anti-diagonal sums.
+    /// </summary>
+    private Tensor<T> AntiDiagonalSums(Tensor<T> matrix)
+    {
+        int rows = matrix.Shape[0];
+        int columns = matrix.Shape[1];
+        int length = rows + columns - 1;
+        var widened = Engine.TensorConcatenate(new[] { matrix, new Tensor<T>(new[] { rows, rows }) }, 1)
+            .Reshape(new[] { rows * (columns + rows) });
+        var skewed = Engine.TensorSlice(widened, new[] { 0 }, new[] { rows * length }).Reshape(new[] { rows, length });
+        return Engine.ReduceSum(skewed, new[] { 0 }, false);
     }
 }
