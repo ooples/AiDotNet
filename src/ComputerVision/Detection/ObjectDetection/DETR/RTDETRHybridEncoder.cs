@@ -276,10 +276,9 @@ internal sealed class RtdetrHybridEncoder<T> : CvParameterModule<T>
         var s5 = projected[2];
         int batch = s5.Shape[0], h = s5.Shape[2], w = s5.Shape[3];
         var tokens = engine.TensorPermute(engine.Reshape(s5, new[] { batch, _hidden, h * w }), new[] { 0, 2, 1 });
-        var numOps = MathHelper.GetNumericOperations<T>();
         var pe = RtdetrAifiLayer<T>.SinCosPositionalEncoding(w, h, _hidden, _temperature);
         var position = engine.TensorBroadcastTo(
-            new Tensor<T>(pe.Select(v => numOps.FromDouble(v)).ToArray(), new[] { 1, h * w, _hidden }), new[] { batch, h * w, _hidden });
+            CvTensorOps<T>.FromDoubleArray(pe, new[] { 1, h * w, _hidden }), new[] { batch, h * w, _hidden });
         var attended = _aifi.Forward(tokens, position);
         projected[2] = engine.Reshape(engine.TensorPermute(attended, new[] { 0, 2, 1 }), new[] { batch, _hidden, h, w });
 
