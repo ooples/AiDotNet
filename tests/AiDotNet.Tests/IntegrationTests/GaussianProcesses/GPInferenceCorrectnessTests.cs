@@ -266,6 +266,76 @@ public class GPInferenceCorrectnessTests
 
     #endregion
 
+    #region VariationalStrategies Reference Tests
+
+    /// <summary>
+    /// Checks the sparse variational ELBO against the closed form of Hensman et al. (2013) for a Gaussian
+    /// likelihood, computed densely with 2 inducing points:
+    /// Σ_i log N(y_i | k_iᵀKuu⁻¹m, σ²) - (1/2σ²) Σ_i (k_ii - k_iᵀKuu⁻¹k_i) - (1/2σ²) Σ_i k_iᵀKuu⁻¹ S Kuu⁻¹k_i
+    /// - ½ (tr(Kuu⁻¹S) + mᵀKuu⁻¹m - M + log|Kuu| - log|S|), with S = L_S L_Sᵀ and Kuu jittered by 1e-6.
+    /// </summary>
+    [Fact(Timeout = 120000)]
+    public async Task VariationalStrategies_ComputeELBO_MatchesSvgpClosedForm()
+    {
+        var kernel = new GaussianKernel<double>(1.0);
+        var strategies = new VariationalStrategies<double>();
+
+        var X = new Matrix<double>(3, 1);
+        X[0, 0] = 0.0; X[1, 0] = 0.7; X[2, 0] = 1.5;
+        var y = new Vector<double>(new[] { 0.3, -0.2, 0.8 });
+        var Z = new Matrix<double>(2, 1);
+        Z[0, 0] = 0.2; Z[1, 0] = 1.2;
+        var m = new Vector<double>(new[] { 0.1, -0.4 });
+        var LS = new Matrix<double>(2, 2);
+        LS[0, 0] = 0.5; LS[1, 0] = 0.2; LS[1, 1] = 0.4;
+        double noise = 0.25;
+
+        double actual = strategies.ComputeELBO(X, y, Z, kernel, noise, m, LS);
+
+        // Dense reference
+        double k00 = kernel.Calculate(Z.GetRow(0), Z.GetRow(0)) + 1e-6;
+        double k01 = kernel.Calculate(Z.GetRow(0), Z.GetRow(1));
+        double k11 = kernel.Calculate(Z.GetRow(1), Z.GetRow(1)) + 1e-6;
+        double det = k00 * k11 - k01 * k01;
+        double i00 = k11 / det, i01 = -k01 / det, i11 = k00 / det;
+
+        double s00 = LS[0, 0] * LS[0, 0];
+        double s01 = LS[0, 0] * LS[1, 0];
+        double s11 = LS[1, 0] * LS[1, 0] + LS[1, 1] * LS[1, 1];
+
+        double kinvM0 = i00 * m[0] + i01 * m[1];
+        double kinvM1 = i01 * m[0] + i11 * m[1];
+
+        double expected = 0;
+        for (int i = 0; i < 3; i++)
+        {
+            var xi = X.GetRow(i);
+            double u0 = kernel.Calculate(Z.GetRow(0), xi);
+            double u1 = kernel.Calculate(Z.GetRow(1), xi);
+            double mu = u0 * kinvM0 + u1 * kinvM1;
+            double a0 = i00 * u0 + i01 * u1;
+            double a1 = i01 * u0 + i11 * u1;
+            double qii = u0 * a0 + u1 * a1;
+            double sVar = a0 * (s00 * a0 + s01 * a1) + a1 * (s01 * a0 + s11 * a1);
+            double kii = kernel.Calculate(xi, xi);
+            double diff = y[i] - mu;
+
+            expected += -0.5 * Math.Log(2 * Math.PI * noise) - 0.5 * diff * diff / noise;
+            expected -= 0.5 / noise * (kii - qii);
+            expected -= 0.5 / noise * sVar;
+        }
+
+        double traceKinvS = i00 * s00 + 2 * i01 * s01 + i11 * s11;
+        double quad = m[0] * kinvM0 + m[1] * kinvM1;
+        double logDetS = 2 * (Math.Log(LS[0, 0]) + Math.Log(LS[1, 1]));
+        expected -= 0.5 * (traceKinvS + quad - 2 + Math.Log(det) - logDetS);
+
+        Assert.True(Math.Abs(actual - expected) < 1e-8 * Math.Max(1.0, Math.Abs(expected)),
+            $"ELBO: expected {expected}, got {actual}");
+    }
+
+    #endregion
+
     #region BetaLikelihood Tests
 
     [Fact(Timeout = 120000)]
