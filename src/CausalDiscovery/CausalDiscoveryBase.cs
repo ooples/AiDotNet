@@ -705,9 +705,19 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
     /// </summary>
     private protected Matrix<T> ProjectToAcyclic(Matrix<T> weights)
     {
+        return ProjectToAcyclic(weights, Engine.TensorAbs(Tensor<T>.FromMatrix(weights)));
+    }
+
+    /// <summary>
+    /// Greedy acyclic projection ranked by <paramref name="priority"/> [d x d] (descending, row-major
+    /// order among ties) instead of |weight|; candidates are still the off-diagonal non-zero weights.
+    /// </summary>
+    private protected Matrix<T> ProjectToAcyclic(Matrix<T> weights, Tensor<T> priority)
+    {
         int d = weights.Rows;
         var flat = Tensor<T>.FromMatrix(weights).Reshape(new[] { d * d });
         var magnitude = Engine.TensorAbs(flat);
+        var rank = priority.Reshape(new[] { d * d });
 
         // Candidate edges: off-diagonal entries with a non-zero magnitude, in row-major (from, to) order.
         var candidate = Engine.TensorMultiply(
@@ -719,7 +729,7 @@ public abstract class CausalDiscoveryBase<T> : ICausalDiscoveryAlgorithm<T>
 
         // Strongest first; the stable sort keeps (from, to) order among equal magnitudes.
         var positionIndex = new Tensor<int>(positions, new[] { positions.Length });
-        int[] order = Engine.TensorArgsort(Engine.TensorIndexSelect(magnitude, positionIndex, 0), -1, true).ToArray();
+        int[] order = Engine.TensorArgsort(Engine.TensorIndexSelect(rank, positionIndex, 0), -1, true).ToArray();
 
         var reachable = new bool[d, d];
         var kept = new List<int>();
