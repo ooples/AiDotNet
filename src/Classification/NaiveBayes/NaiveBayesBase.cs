@@ -245,39 +245,6 @@ public abstract partial class NaiveBayesBase<T> : ProbabilisticClassifierBase<T>
     }
 
     /// <summary>
-    /// Serializes a matrix as its row-major T values plus its shape.
-    /// </summary>
-    protected static void SerializeMatrixValues(Dictionary<string, object> data, string name, Matrix<T>? matrix)
-    {
-        if (matrix is null) return;
-        data[name] = matrix.Rows == 0 || matrix.Columns == 0 ? Array.Empty<T>() : Tensor<T>.FromMatrix(matrix).ToArray();
-        data[$"{name}Rows"] = matrix.Rows;
-        data[$"{name}Cols"] = matrix.Columns;
-    }
-
-    /// <summary>
-    /// Restores a matrix written by <see cref="SerializeMatrixValues"/> (null when absent or empty).
-    /// </summary>
-    protected static Matrix<T>? DeserializeMatrixValues(Newtonsoft.Json.Linq.JObject obj, string name)
-    {
-        var token = obj[name];
-        if (token is null) return null;
-        var arr = token.ToObject<T[]>() ?? Array.Empty<T>();
-        int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
-        int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
-        if (rows <= 0 || cols <= 0) return null;
-        if (arr.Length < rows * cols)
-        {
-            throw new InvalidOperationException(
-                $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
-        }
-
-        var values = new T[rows * cols];
-        Array.Copy(arr, values, values.Length);
-        return new Tensor<T>(values, new[] { rows, cols }).ToMatrix();
-    }
-
-    /// <summary>
     /// log P(sample | class) through the batched <see cref="ComputeLogLikelihoods"/> on a single row.
     /// </summary>
     /// <param name="sample">The sample's features.</param>

@@ -650,6 +650,59 @@ public abstract partial class ClassifierBase<T> : IClassifier<T>, IConfigurableM
     }
 
     /// <summary>
+    /// Serializes a matrix as its row-major T values plus its shape.
+    /// </summary>
+    protected static void SerializeMatrixValues(Dictionary<string, object> data, string name, Matrix<T>? matrix)
+    {
+        if (matrix is null) return;
+        data[name] = matrix.Rows == 0 || matrix.Columns == 0 ? Array.Empty<T>() : Tensor<T>.FromMatrix(matrix).ToArray();
+        data[$"{name}Rows"] = matrix.Rows;
+        data[$"{name}Cols"] = matrix.Columns;
+    }
+
+    /// <summary>
+    /// Restores a matrix written by <see cref="SerializeMatrixValues"/> (null when absent or empty).
+    /// </summary>
+    protected static Matrix<T>? DeserializeMatrixValues(Newtonsoft.Json.Linq.JObject obj, string name)
+    {
+        var token = obj[name];
+        if (token is null) return null;
+        var arr = token.ToObject<T[]>() ?? Array.Empty<T>();
+        int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
+        int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
+        if (rows <= 0 || cols <= 0) return null;
+        if (arr.Length < rows * cols)
+        {
+            throw new InvalidOperationException(
+                $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
+        }
+
+        var values = new T[rows * cols];
+        Array.Copy(arr, values, values.Length);
+        return new Tensor<T>(values, new[] { rows, cols }).ToMatrix();
+    }
+
+    /// <summary>
+    /// Serializes a vector as its T values.
+    /// </summary>
+    protected static void SerializeVectorValues(Dictionary<string, object> data, string name, Vector<T>? vector)
+    {
+        if (vector is null) return;
+        data[name] = vector.ToArray();
+    }
+
+    /// <summary>
+    /// Restores a vector written by <see cref="SerializeVectorValues"/> (null when absent or empty).
+    /// </summary>
+    protected static Vector<T>? DeserializeVectorValues(Newtonsoft.Json.Linq.JObject obj, string name)
+    {
+        var token = obj[name];
+        if (token is null) return null;
+        var arr = token.ToObject<T[]>() ?? Array.Empty<T>();
+        return arr.Length == 0 ? null : Vector<T>.Wrap(arr);
+    }
+
+    /// <summary>
     /// Majority vote: the label with the most votes per row (ties go to the lowest class index).
     /// </summary>
     /// <param name="votes">The [n, NumClasses] vote counts.</param>

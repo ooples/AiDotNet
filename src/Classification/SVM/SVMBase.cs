@@ -254,6 +254,57 @@ public abstract partial class SVMBase<T> : ProbabilisticClassifierBase<T>, IDeci
     }
 
     /// <summary>
+    /// +1 for the positive class (the last class label) and -1 for every other label.
+    /// </summary>
+    protected Vector<T> SignedTargets(Vector<T> y)
+    {
+        if (ClassLabels is null || y.Length == 0)
+        {
+            return new Vector<T>(y.Length);
+        }
+
+        var isPositive = Engine.TensorEquals(y.AsTensor(), ClassLabels[ClassLabels.Length - 1]);
+        return Engine.TensorSubtractScalar(Engine.TensorMultiplyScalar(isPositive, NumOps.FromDouble(2.0)), NumOps.One).ToVector();
+    }
+
+    /// <summary>
+    /// Indices i with values[i] &gt; threshold, in increasing order.
+    /// </summary>
+    protected int[] IndicesAbove(Vector<T> values, T threshold)
+    {
+        if (values.Length == 0)
+        {
+            return Array.Empty<int>();
+        }
+
+        var positions = Engine.TensorNonzero(Engine.TensorGreaterThan(values.AsTensor(), threshold));
+        return positions.Length == 0 ? Array.Empty<int>() : positions.Reshape(positions.Length).ToArray();
+    }
+
+    /// <summary>
+    /// bias + sum_i coefficients[i] * kernel(input_row, train_i) for every input row, as an [input.Rows, 1] matrix.
+    /// </summary>
+    protected Matrix<T> KernelDecisions(Matrix<T> input, Matrix<T> train, Vector<T> coefficients, T bias)
+    {
+        var engine = Engine;
+        if (input.Rows == 0)
+        {
+            return new Matrix<T>(0, 1);
+        }
+
+        if (train.Rows == 0)
+        {
+            var constant = new Tensor<T>(new[] { input.Rows, 1 });
+            engine.TensorFill(constant, bias);
+            return constant.ToMatrix();
+        }
+
+        var kernel = ComputeKernelMatrix(input, train);
+        var sums = engine.TensorMatMul(kernel, coefficients.AsTensor().Reshape(coefficients.Length, 1));
+        return engine.TensorAddScalar(sums, bias).ToMatrix();
+    }
+
+    /// <summary>
     /// Gets the gamma value, computing it automatically if not specified.
     /// </summary>
     protected T GetGamma()
