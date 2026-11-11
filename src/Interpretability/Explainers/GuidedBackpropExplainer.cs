@@ -149,11 +149,9 @@ public class GuidedBackpropExplainer<T> : ILocalExplainer<T, GuidedBackpropExpla
         var explanation = Explain(vector, targetClass);
 
         // Reshape gradients back to tensor shape
-        var gradTensor = new Tensor<T>(input._shape);
-        for (int i = 0; i < Math.Min(vector.Length, explanation.GuidedGradients.Length); i++)
-        {
-            gradTensor[GetMultiIndex(i, input._shape)] = explanation.GuidedGradients[i];
-        }
+        int count = Math.Min(vector.Length, explanation.GuidedGradients.Length);
+        var gradTensor = new Tensor<T>(input._shape,
+            ExplainerTensorOps<T>.PadOrTruncate(explanation.GuidedGradients.GetSubVector(0, count), input.Length));
 
         return new GuidedBackpropExplanation<T>(
             input: vector,
@@ -217,25 +215,8 @@ public class GuidedBackpropExplainer<T> : ILocalExplainer<T, GuidedBackpropExpla
         var gradients = gradHelper.ComputeGradient(input, actualTarget);
 
         // Apply guided backpropagation modification: zero out negative gradients
-        var guidedGradients = new T[gradients.Length];
-        for (int i = 0; i < gradients.Length; i++)
-        {
-            double gradVal = NumOps.ToDouble(gradients[i]);
-            double inputVal = NumOps.ToDouble(input[i]);
-
-            // Guided: only keep positive gradients where input is also positive
-            // This is a simplification - true guided backprop modifies ReLU backward
-            if (gradVal > 0)
-            {
-                guidedGradients[i] = gradients[i];
-            }
-            else
-            {
-                guidedGradients[i] = NumOps.Zero;
-            }
-        }
-
-        return new Vector<T>(guidedGradients);
+        // This is a simplification - true guided backprop modifies ReLU backward
+        return KeepPositive(gradients.AsTensor()).ToVector();
     }
 
     /// <summary>
@@ -243,29 +224,40 @@ public class GuidedBackpropExplainer<T> : ILocalExplainer<T, GuidedBackpropExpla
     /// </summary>
     private Vector<T> ComputeNumericalGuidedGradients(Vector<T> input, int? targetClass)
     {
-        double epsilon = 1e-5;
+        var engine = AiDotNetEngine.Current;
+        T epsilon = NumOps.FromDouble(1e-5);
         var prediction = GetPrediction(input);
         int actualTarget = targetClass ?? GetPredictedClass(prediction);
-        double baseScore = NumOps.ToDouble(prediction[actualTarget]);
+        T baseScore = prediction[actualTarget];
 
-        var gradients = new T[input.Length];
-
-        for (int i = 0; i < input.Length; i++)
+        if (input.Length == 0)
         {
-            // Perturb positively
-            var perturbed = input.Clone();
-            perturbed[i] = NumOps.Add(perturbed[i], NumOps.FromDouble(epsilon));
-
-            var perturbedPred = GetPrediction(perturbed);
-            double perturbedScore = NumOps.ToDouble(perturbedPred[actualTarget]);
-
-            double grad = (perturbedScore - baseScore) / epsilon;
-
-            // Guided: only keep positive gradients
-            gradients[i] = grad > 0 ? NumOps.FromDouble(grad) : NumOps.Zero;
+            return new Vector<T>(0);
         }
 
-        return new Vector<T>(gradients);
+        // Perturb each feature positively
+        var perturbedPredictions = new List<Vector<T>>(input.Length);
+        for (int i = 0; i < input.Length; i++)
+        {
+            var step = ExplainerTensorOps<T>.RangeIndicator(input.Length, i, i + 1).ToVector();
+            perturbedPredictions.Add(GetPrediction(engine.Add(input, engine.Multiply(step, epsilon))));
+        }
+
+        var perturbedScores = engine.TensorSliceAxis(ExplainerTensorOps<T>.Stack(perturbedPredictions), 1, actualTarget);
+        var gradients = engine.TensorDivideScalar(engine.TensorSubtractScalar(perturbedScores, baseScore), epsilon);
+
+        // Guided: only keep positive gradients
+        return KeepPositive(gradients).ToVector();
+    }
+
+    /// <summary>
+    /// The entries above zero, with every other entry (including NaN) set to zero.
+    /// </summary>
+    private static Tensor<T> KeepPositive(Tensor<T> values)
+    {
+        var engine = AiDotNetEngine.Current;
+        var positive = engine.TensorGreaterThan(values, NumOps.Zero);
+        return engine.TensorWhere(positive, values, engine.TensorFullLike(values, NumOps.Zero));
     }
 
     /// <summary>
@@ -284,11 +276,9 @@ public class GuidedBackpropExplainer<T> : ILocalExplainer<T, GuidedBackpropExpla
         }
         else if (_tensorPredictFunction != null)
         {
-            var tensor = new Tensor<T>(_inputShape ?? new[] { input.Length });
-            for (int i = 0; i < input.Length; i++)
-            {
-                tensor[GetMultiIndex(i, tensor._shape)] = input[i];
-            }
+            var shape = _inputShape ?? new[] { input.Length };
+            int length = shape.Aggregate(1, (product, dim) => product * dim);
+            var tensor = new Tensor<T>(shape, ExplainerTensorOps<T>.PadOrTruncate(input, length));
             return _tensorPredictFunction(tensor).ToVector();
         }
 
@@ -300,38 +290,9 @@ public class GuidedBackpropExplainer<T> : ILocalExplainer<T, GuidedBackpropExpla
     /// </summary>
     private int GetPredictedClass(Vector<T> prediction)
     {
-        int maxIdx = 0;
-        double maxVal = NumOps.ToDouble(prediction[0]);
-
-        for (int i = 1; i < prediction.Length; i++)
-        {
-            double val = NumOps.ToDouble(prediction[i]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-
-        return maxIdx;
+        return ExplainerTensorOps<T>.ArgMax(prediction);
     }
 
-    /// <summary>
-    /// Converts linear index to multi-dimensional index.
-    /// </summary>
-    private int[] GetMultiIndex(int linearIndex, int[] shape)
-    {
-        var index = new int[shape.Length];
-        int remaining = linearIndex;
-
-        for (int i = shape.Length - 1; i >= 0; i--)
-        {
-            index[i] = remaining % shape[i];
-            remaining /= shape[i];
-        }
-
-        return index;
-    }
 }
 
 /// <summary>
@@ -389,25 +350,17 @@ public class GuidedBackpropExplanation<T>
     /// <summary>Normalizes gradients to [0, 1] range.</summary>
     public Vector<T> GetNormalizedGradients()
     {
-        double max = 0;
-        for (int i = 0; i < GuidedGradients.Length; i++)
-        {
-            double val = NumOps.ToDouble(GuidedGradients[i]);
-            if (val > max) max = val;
-        }
+        var engine = AiDotNetEngine.Current;
+        T max = GuidedGradients.Length > 0
+            ? engine.TensorMaxValue(engine.TensorMax(GuidedGradients.AsTensor(), NumOps.Zero))
+            : NumOps.Zero;
 
-        if (max < 1e-10)
+        if (NumOps.LessThan(max, NumOps.FromDouble(1e-10)))
         {
             return new Vector<T>(GuidedGradients.Length);
         }
 
-        var normalized = new T[GuidedGradients.Length];
-        for (int i = 0; i < GuidedGradients.Length; i++)
-        {
-            normalized[i] = NumOps.FromDouble(NumOps.ToDouble(GuidedGradients[i]) / max);
-        }
-
-        return new Vector<T>(normalized);
+        return engine.Divide(GuidedGradients, max);
     }
 
     /// <summary>Returns string representation.</summary>
@@ -415,6 +368,6 @@ public class GuidedBackpropExplanation<T>
     {
         var top = GetTopFeatures(5).ToList();
         return $"GuidedBackprop for class {TargetClass} (pred={Prediction}):\n" +
-               $"  Top features: {string.Join(", ", top.Select(t => $"[{t.Index}]={NumOps.ToDouble(t.Gradient):F4}"))}";
+               $"  Top features: {string.Join(", ", top.Select(t => $"[{t.Index}]={t.Gradient:F4}"))}";
     }
 }
