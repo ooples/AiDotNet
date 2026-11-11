@@ -167,29 +167,10 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
         TaskType = InferTaskType(y);
 
         // Store training data
-        _xTrain = new Matrix<T>(x.Rows, x.Columns);
-        for (int i = 0; i < x.Rows; i++)
-        {
-            for (int j = 0; j < x.Columns; j++)
-            {
-                _xTrain[i, j] = x[i, j];
-            }
-        }
+        _xTrain = x.Clone();
 
         // Convert labels to +1/-1
-        _yTrain = new Vector<T>(y.Length);
-        T positiveClass = ClassLabels[ClassLabels.Length - 1];
-        for (int i = 0; i < y.Length; i++)
-        {
-            if (NumOps.Compare(y[i], positiveClass) == 0)
-            {
-                _yTrain[i] = NumOps.One;
-            }
-            else
-            {
-                _yTrain[i] = NumOps.Negate(NumOps.One);
-            }
-        }
+        _yTrain = SignedTargets(y);
 
         // Train using Nu-SMO variant
         TrainNuSMO();
@@ -223,9 +204,8 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
         // gradient descent on alphas", picked its partner multiplier at RANDOM, and applied a
         // "simplified KKT check" that ignored the second constraint entirely.
         var linear = new Vector<T>(n);            // nu-SVC has no linear term
-        var upperBounds = new Vector<T>(n);
         T upperBound = NumOps.Divide(NumOps.One, NumOps.FromDouble(n));
-        for (int i = 0; i < n; i++) upperBounds[i] = upperBound;
+        var upperBounds = FilledVector(n, upperBound);
 
         var initialAlphas = BuildFeasibleNuStart(n, upperBound);
 
@@ -260,14 +240,14 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
     /// </remarks>
     private Vector<T> BuildFeasibleNuStart(int n, T upperBound)
     {
-        var alphas = new Vector<T>(n);
-        int positiveCount = 0;
-        int negativeCount = 0;
-        for (int i = 0; i < n; i++)
+        if (_yTrain is null)
         {
-            if (NumOps.Equals((_yTrain ?? throw new InvalidOperationException("_yTrain is null where it is required."))[i], NumOps.One)) positiveCount++;
-            else if (NumOps.Equals(_yTrain[i], NumOps.Negate(NumOps.One))) negativeCount++;
+            throw new InvalidOperationException("_yTrain is null where it is required.");
         }
+
+        // Labels are exactly +1 / -1 (see SignedTargets).
+        int positiveCount = IndicesAbove(_yTrain, NumOps.Zero).Length;
+        int negativeCount = n - positiveCount;
 
         double maximumFeasibleNu = 2.0 * Math.Min(positiveCount, negativeCount) / n;
         if (_nu > maximumFeasibleNu + 1e-12)
@@ -278,80 +258,36 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
                 nameof(_nu));
         }
 
+        if (n == 0)
+        {
+            return new Vector<T>(0);
+        }
+
+        // Every member of a class shares the same cap, so the even water-fill settles in one pass:
+        // each member receives min(cap, (nu / 2) / classCount).
         double half = _nu / 2.0;
-
-        foreach (var label in new[] { NumOps.One, NumOps.Negate(NumOps.One) })
-        {
-            var members = new List<int>();
-            for (int i = 0; i < n; i++)
-            {
-                if (NumOps.Equals((_yTrain ?? throw new InvalidOperationException("_yTrain is null where it is required."))[i], label)) members.Add(i);
-            }
-
-            if (members.Count == 0) continue;
-
-            double remaining = half;
-            double cap = NumOps.ToDouble(upperBound);
-
-            // Fill evenly, then push any mass the cap rejected onto the members with room left.
-            while (remaining > 1e-12)
-            {
-                var open = members.Where(i => NumOps.ToDouble(alphas[i]) < cap - 1e-12).ToList();
-                if (open.Count == 0) break;
-
-                double share = remaining / open.Count;
-                double placed = 0;
-
-                foreach (int i in open)
-                {
-                    double current = NumOps.ToDouble(alphas[i]);
-                    double next = Math.Min(cap, current + share);
-                    placed += next - current;
-                    alphas[i] = NumOps.FromDouble(next);
-                }
-
-                if (placed <= 1e-12) break;
-                remaining -= placed;
-            }
-        }
-
-        return alphas;
+        T positiveShare = positiveCount == 0 ? NumOps.Zero : Min(upperBound, NumOps.FromDouble(half / positiveCount));
+        T negativeShare = negativeCount == 0 ? NumOps.Zero : Min(upperBound, NumOps.FromDouble(half / negativeCount));
+        var isPositive = Engine.TensorGreaterThan(_yTrain.AsTensor(), NumOps.Zero);
+        return Engine.TensorWhere(isPositive,
+            FilledVector(n, positiveShare).AsTensor(),
+            FilledVector(n, negativeShare).AsTensor()).ToVector();
     }
 
     /// <summary>
-    /// Computes the prediction error for sample i.
+    /// Decision values sum over alpha_i &gt; 1e-10 of alpha_i * y_i * kernel(x_i, x) - rho for every row.
     /// </summary>
-    private T ComputeError(int i)
-    {
-        if (_xTrain is null || _yTrain is null)
-        {
-            throw new InvalidOperationException("Training data has not been initialized.");
-        }
-
-        T decision = ComputeDecisionForSample(GetRow(_xTrain, i));
-        return NumOps.Subtract(decision, _yTrain[i]);
-    }
-
-    /// <summary>
-    /// Computes the decision value for a single sample.
-    /// </summary>
-    private T ComputeDecisionForSample(Vector<T> x)
+    private Vector<T> ComputeDecisions(Matrix<T> input)
     {
         if (_xTrain is null || _yTrain is null || _alphas is null)
         {
             throw new InvalidOperationException("Model has not been trained.");
         }
 
-        T sum = NumOps.Zero;
-        for (int i = 0; i < _xTrain.Rows; i++)
-        {
-            if (NumOps.Compare(_alphas[i], NumOps.FromDouble(1e-10)) > 0)
-            {
-                T kernel = ComputeKernel(GetRow(_xTrain, i), x);
-                sum = NumOps.Add(sum, NumOps.Multiply(NumOps.Multiply(_alphas[i], _yTrain[i]), kernel));
-            }
-        }
-        return NumOps.Subtract(sum, _rho);
+        var active = IndicesAbove(_alphas, NumOps.FromDouble(1e-10));
+        var coefficients = Engine.Multiply(SelectElements(_alphas, active), SelectElements(_yTrain, active));
+        var train = active.Length == 0 ? new Matrix<T>(0, _xTrain.Columns) : _xTrain.GetRows(active);
+        return KernelDecisions(input, train, coefficients, NumOps.Negate(_rho)).GetColumn(0);
     }
 
     /// <summary>
@@ -364,41 +300,27 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
             throw new InvalidOperationException("Training data has not been initialized.");
         }
 
-        var svIndices = new List<int>();
-        for (int i = 0; i < _alphas.Length; i++)
+        var svIndices = IndicesAbove(_alphas, NumOps.FromDouble(1e-10));
+        if (svIndices.Length > 0)
         {
-            if (NumOps.Compare(_alphas[i], NumOps.FromDouble(1e-10)) > 0)
-            {
-                svIndices.Add(i);
-            }
-        }
-
-        if (svIndices.Count > 0)
-        {
-            _supportVectors = new Matrix<T>(svIndices.Count, NumFeatures);
-            _dualCoef = new Matrix<T>(1, svIndices.Count);
-
-            for (int i = 0; i < svIndices.Count; i++)
-            {
-                int idx = svIndices[i];
-                for (int j = 0; j < NumFeatures; j++)
-                {
-                    _supportVectors[i, j] = _xTrain[idx, j];
-                }
-                _dualCoef[0, i] = NumOps.Multiply(_alphas[idx], _yTrain[idx]);
-            }
+            var supportVectors = _xTrain.GetRows(svIndices);
+            _supportVectors = supportVectors.Columns == NumFeatures
+                ? supportVectors
+                : SelectColumns(supportVectors, Enumerable.Range(0, NumFeatures).ToArray());
+            var dualCoef = Engine.Multiply(SelectElements(_alphas, svIndices), SelectElements(_yTrain, svIndices));
+            _dualCoef = dualCoef.AsTensor().Reshape(1, svIndices.Length).ToMatrix();
         }
     }
 
     /// <inheritdoc/>
     public override Matrix<T> DecisionFunction(Matrix<T> input)
     {
-        var decisions = new Matrix<T>(input.Rows, 1);
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            decisions[i, 0] = ComputeDecisionForSample(GetRow(input, i));
+            return new Matrix<T>(0, 1);
         }
-        return decisions;
+
+        return ComputeDecisions(input).AsTensor().Reshape(input.Rows, 1).ToMatrix();
     }
 
     /// <inheritdoc/>
@@ -410,45 +332,45 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
         }
 
         var decisions = DecisionFunction(input);
-        var predictions = new Vector<T>(input.Rows);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0)
         {
-            if (NumOps.Compare(decisions[i, 0], NumOps.Zero) >= 0)
-            {
-                predictions[i] = ClassLabels[ClassLabels.Length - 1];
-            }
-            else
-            {
-                predictions[i] = ClassLabels[0];
-            }
+            return new Vector<T>(0);
         }
 
-        return predictions;
+        // Non-negative decision -> positive class, otherwise the first class
+        var isPositive = AtLeast(decisions.GetColumn(0), NumOps.Zero);
+        var positive = FilledVector(input.Rows, ClassLabels[ClassLabels.Length - 1]).AsTensor();
+        var negative = FilledVector(input.Rows, ClassLabels[0]).AsTensor();
+        return Engine.TensorWhere(isPositive.AsTensor(), positive, negative).ToVector();
     }
 
     /// <inheritdoc/>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)
     {
         var decisions = DecisionFunction(input);
-        var probabilities = new Matrix<T>(input.Rows, NumClasses);
-
-        for (int i = 0; i < input.Rows; i++)
+        if (input.Rows == 0 || NumClasses == 0)
         {
-            // Sigmoid transformation
-            T decision = decisions[i, 0];
-            T negDecision = NumOps.Negate(decision);
-            T expNeg = NumOps.Exp(negDecision);
-            T prob = NumOps.Divide(NumOps.One, NumOps.Add(NumOps.One, expNeg));
-
-            probabilities[i, 0] = NumOps.Subtract(NumOps.One, prob);
-            if (NumClasses > 1)
-            {
-                probabilities[i, 1] = prob;
-            }
+            return new Matrix<T>(input.Rows, NumClasses);
         }
 
-        return probabilities;
+        // Sigmoid transformation: p = 1 / (1 + exp(-decision)); columns [1 - p, p, 0, ...]
+        var engine = Engine;
+        var ones = new Tensor<T>(new[] { input.Rows, 1 });
+        engine.TensorFill(ones, NumOps.One);
+        var prob = engine.TensorDivide(ones,
+            engine.TensorAddScalar(engine.TensorExp(engine.TensorNegate(Tensor<T>.FromMatrix(decisions))), NumOps.One));
+        var columns = new List<Tensor<T>> { engine.ScalarMinusTensor(NumOps.One, prob) };
+        if (NumClasses > 1)
+        {
+            columns.Add(prob);
+        }
+
+        if (NumClasses > 2)
+        {
+            columns.Add(new Tensor<T>(new[] { input.Rows, NumClasses - 2 }));
+        }
+
+        return (columns.Count == 1 ? columns[0] : engine.TensorConcatenate(columns.ToArray(), 1)).ToMatrix();
     }
 
     /// <inheritdoc/>
@@ -462,56 +384,21 @@ public partial class NuSupportVectorClassifier<T> : SVMBase<T>
 
     private void SerializeMatrix(Dictionary<string, object> data, string name, Matrix<T>? matrix)
     {
-        if (matrix is null) return;
-        var arr = new double[matrix.Rows * matrix.Columns];
-        int idx = 0;
-        for (int i = 0; i < matrix.Rows; i++)
-            for (int j = 0; j < matrix.Columns; j++)
-                arr[idx++] = NumOps.ToDouble(matrix[i, j]);
-        data[name] = arr;
-        data[$"{name}Rows"] = matrix.Rows;
-        data[$"{name}Cols"] = matrix.Columns;
+        SerializeMatrixValues(data, name, matrix);
     }
 
     private Matrix<T>? DeserializeMatrix(JObject obj, string name)
     {
-        var token = obj[name];
-        if (token is null) return null;
-        var arr = token.ToObject<double[]>() ?? Array.Empty<double>();
-        int rows = obj[$"{name}Rows"]?.ToObject<int>() ?? 0;
-        int cols = obj[$"{name}Cols"]?.ToObject<int>() ?? 0;
-        if (rows <= 0 || cols <= 0) return null;
-        if (arr.Length < rows * cols)
-        {
-            throw new InvalidOperationException(
-                $"Deserialization failed: {name} array length {arr.Length} is less than expected {rows}x{cols}={rows * cols}.");
-        }
-        var matrix = new Matrix<T>(rows, cols);
-        int idx = 0;
-        for (int i = 0; i < rows; i++)
-            for (int j = 0; j < cols; j++)
-                matrix[i, j] = NumOps.FromDouble(arr[idx++]);
-        return matrix;
+        return DeserializeMatrixValues(obj, name);
     }
 
     private void SerializeVector(Dictionary<string, object> data, string name, Vector<T>? vector)
     {
-        if (vector is null) return;
-        var arr = new double[vector.Length];
-        for (int i = 0; i < vector.Length; i++)
-            arr[i] = NumOps.ToDouble(vector[i]);
-        data[name] = arr;
+        SerializeVectorValues(data, name, vector);
     }
 
     private Vector<T>? DeserializeVector(JObject obj, string name)
     {
-        var token = obj[name];
-        if (token is null) return null;
-        var arr = token.ToObject<double[]>() ?? Array.Empty<double>();
-        if (arr.Length == 0) return null;
-        var vector = new Vector<T>(arr.Length);
-        for (int i = 0; i < arr.Length; i++)
-            vector[i] = NumOps.FromDouble(arr[i]);
-        return vector;
+        return DeserializeVectorValues(obj, name);
     }
 }
