@@ -1,4 +1,5 @@
 using System;
+using AiDotNet.Tensors.Engines;
 using AiDotNet.Tensors.LinearAlgebra;
 using AiDotNet.Validation;
 
@@ -97,23 +98,44 @@ internal static class ActionMasking
     public static int ArgMaxLegal<T>(Vector<T> values, bool[]? mask, INumericOperations<T> ops)
     {
         mask = Validate(mask, values.Length);
-
-        int best = -1;
-        for (int i = 0; i < values.Length; i++)
+        var engine = AiDotNetEngine.Current;
+        if (mask is null)
         {
-            if (mask is not null && !mask[i])
-            {
-                continue;
-            }
+            // An empty, unmasked vector has no legal index: keep the -1 sentinel.
+            return values.Length == 0 ? -1 : engine.TensorArgMax(values.AsTensor(), 0)[0];
+        }
 
-            if (best < 0 || ops.GreaterThan(values[i], values[best]))
+        // Gather the legal values in index order, take their first arg-max (strict greater-than
+        // scan from the first legal slot, as before), and map it back to the full action index.
+        // Validate guarantees at least one legal index.
+        var legal = LegalIndices(mask);
+        var legalValues = engine.TensorGather(values.AsTensor(), new Tensor<int>(legal, new[] { legal.Length }), 0);
+        return legal[engine.TensorArgMax(legalValues, 0)[0]];
+    }
+
+    /// <summary>Indices of the legal (true) mask slots, in ascending order.</summary>
+    private static int[] LegalIndices(bool[] mask)
+    {
+        int count = 0;
+        for (int i = 0; i < mask.Length; i++)
+        {
+            if (mask[i])
             {
-                best = i;
+                count++;
             }
         }
 
-        // Validate guarantees at least one in-range legal index, so the loop always assigned.
-        return best;
+        var legal = new int[count];
+        int next = 0;
+        for (int i = 0; i < mask.Length; i++)
+        {
+            if (mask[i])
+            {
+                legal[next++] = i;
+            }
+        }
+
+        return legal;
     }
 
     /// <summary>
@@ -143,13 +165,9 @@ internal static class ActionMasking
         }
 
         var blocked = NegativeInfinity(ops);
-        var masked = new Vector<T>(logits.Length);
-        for (int i = 0; i < logits.Length; i++)
-        {
-            masked[i] = mask[i] ? logits[i] : blocked;
-        }
-
-        return masked;
+        var engine = AiDotNetEngine.Current;
+        var logitTensor = logits.AsTensor();
+        return engine.TensorWhere(mask, logitTensor, engine.TensorFullLike(logitTensor, blocked)).ToVector();
     }
 
     /// <summary>Refuses finite-only numeric types before a masked policy can be sampled or trained.</summary>
@@ -194,46 +212,27 @@ internal static class ActionMasking
             return probabilities;
         }
 
-        var masked = new Vector<T>(probabilities.Length);
-        double total = 0;
-        int legalCount = 0;
-        for (int i = 0; i < probabilities.Length; i++)
+        var engine = AiDotNetEngine.Current;
+        var probs = probabilities.AsTensor();
+        var zeros = engine.TensorFullLike(probs, ops.Zero);
+
+        // A legal slot keeps its probability only when it is finite and strictly positive;
+        // NaN, infinite, zero and negative entries contribute zero mass. Selections (not
+        // multiplications) keep a NaN or infinity from leaking into the result.
+        var finite = engine.TensorWhere(engine.TensorIsFinite(probs), probs, zeros);
+        var positive = engine.TensorWhere(engine.TensorGreaterThan(finite, ops.Zero), finite, zeros);
+        var safe = engine.TensorWhere(mask, positive, zeros);
+        T total = engine.TensorSum(safe);
+
+        if (ops.GreaterThan(total, ops.Zero))
         {
-            if (!mask[i])
-            {
-                continue;
-            }
-
-            double p = ops.ToDouble(probabilities[i]);
-            if (p > 0 && !double.IsNaN(p) && !double.IsInfinity(p))
-            {
-                total += p;
-            }
-
-            legalCount++;
+            return engine.TensorDivideScalar(safe, total).ToVector();
         }
 
-        for (int i = 0; i < probabilities.Length; i++)
-        {
-            if (!mask[i])
-            {
-                masked[i] = ops.Zero;
-                continue;
-            }
-
-            if (total > 0)
-            {
-                double p = ops.ToDouble(probabilities[i]);
-                double safe = p > 0 && !double.IsNaN(p) && !double.IsInfinity(p) ? p : 0;
-                masked[i] = ops.FromDouble(safe / total);
-            }
-            else
-            {
-                masked[i] = ops.FromDouble(1.0 / legalCount);
-            }
-        }
-
-        return masked;
+        // No usable mass: spread it uniformly over the legal actions.
+        int legalCount = LegalIndices(mask).Length;
+        var uniform = engine.TensorFullLike(probs, ops.Divide(ops.One, ops.FromDouble(legalCount)));
+        return engine.TensorWhere(mask, uniform, zeros).ToVector();
     }
 
     /// <summary>
