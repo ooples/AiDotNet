@@ -8393,12 +8393,14 @@ public partial class TestScaffoldGenerator : IIncrementalGenerator
             {
                 // MusicGen (Copet et al. 2023): T5 conditioning, the delay-pattern LM over four EnCodec codebooks and
                 // the 32 kHz codec, at CI-smoke widths. Its input is T5 token ids (the text encoder's embedding comes
-                // first), and Predict generates DurationSeconds = 0.1 s (five frames) seeded by Seed.
+                // first), and Predict generates DurationSeconds = 0.1 s (five frames) seeded by Seed. The paper's 4000-step
+                // linear warm-up holds the rate under 2.5 % of its value through any probe here (the memorization probe moved
+                // 3.3695 -> 3.3689 in 100 steps), so the fixture warms up for one step through the public option.
                 constructorExpr = $"new {typeName}<double>(new AiDotNet.NeuralNetworks.NeuralNetworkArchitecture<double>(" +
                     "inputType: AiDotNet.Enums.InputType.OneDimensional, " +
                     "taskType: AiDotNet.Enums.NeuralNetworkTaskType.Generative, inputSize: 8, outputSize: 3200), " +
                     "new AiDotNet.Audio.MusicGen.MusicGenOptions { ModelSize = AiDotNet.Audio.MusicGen.MusicGenModelSize.Small, " +
-                    "ModelDim = 16, NumHeads = 2, NumLayers = 2, TextVocabularySize = 64, TextModelDim = 8, TextLayers = 2, " +
+                    "WarmupSteps = 1, ModelDim = 16, NumHeads = 2, NumLayers = 2, TextVocabularySize = 64, TextModelDim = 8, TextLayers = 2, " +
                     "TextHeads = 2, TextKeyValueDim = 4, TextFeedForwardDim = 16, DurationSeconds = 0.1, Seed = 42, " +
                     "Codec = new AiDotNet.Audio.Generation.EnCodecOptions { SampleRate = 32000, Filters = 4, Ratios = new[] { 8, 5, 4, 4 }, " +
                     "Dimension = 8, ResidualKernelSizes = new[] { 3, 1 }, TrueSkip = true, Causal = false, ReflectPadding = false, " +
