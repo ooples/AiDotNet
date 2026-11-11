@@ -112,17 +112,20 @@ public class Kinetics400DataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, 
                 byte[] imageBytes = await FilePolyfill.ReadAllBytesAsync(frameFiles[f], cancellationToken);
                 int featureOffset = i * _featureSize + f * framePixels;
                 int pixelCount = Math.Min(imageBytes.Length, framePixels);
-                for (int p = 0; p < pixelCount; p++)
-                {
-                    double val = _options.Normalize ? imageBytes[p] / 255.0 : imageBytes[p];
-                    featuresData[featureOffset + p] = val;
-                }
+                Array.Copy(imageBytes, 0, featuresData, featureOffset, pixelCount);
             }
 
             labelsData[i * NumClasses + classIndex] = 1.0;
         }
 
-        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSamples, _featureSize }).Cast<T>();
+        var features = new Tensor<double>(featuresData, new[] { totalSamples, _featureSize });
+        if (_options.Normalize)
+        {
+            // Raw bytes -> [0, 1] in one engine op (unfilled positions stay 0)
+            features = AiDotNetEngine.Current.TensorDivideScalar(features, 255.0);
+        }
+
+        LoadedFeatures = features.Cast<T>();
         LoadedLabels = new Tensor<double>(labelsData, new[] { totalSamples, NumClasses }).Cast<T>();
         InitializeIndices(totalSamples);
     }
