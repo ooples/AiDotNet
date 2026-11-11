@@ -326,21 +326,12 @@ public abstract class RLDataLoaderBase<T> : DataLoaderBase<T>, IRLDataLoader<T>
             if (_environment.IsContinuousActionSpace)
             {
                 // Random continuous action in [-1, 1] range
-                // Draws stay in index order; the [0, 1) -> [-1, 1) map runs as one engine op.
-                var draws = new double[_environment.ActionSpaceSize];
-                for (int i = 0; i < draws.Length; i++)
+                var action = new Vector<T>(_environment.ActionSpaceSize);
+                for (int i = 0; i < _environment.ActionSpaceSize; i++)
                 {
-                    draws[i] = _random.NextDouble();
+                    action[i] = NumOps.FromDouble(_random.NextDouble() * 2 - 1);
                 }
-                if (draws.Length == 0)
-                {
-                    return new Vector<T>(0);
-                }
-
-                var engine = AiDotNetEngine.Current;
-                var scaled = engine.TensorSubtractScalar(
-                    engine.TensorMultiplyScalar(new Tensor<double>(draws, new[] { draws.Length }), 2.0), 1.0);
-                return scaled.Cast<T>().ToVector();
+                return action;
             }
             else
             {

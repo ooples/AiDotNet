@@ -100,13 +100,13 @@ public class StreamingTextDataset<T> : InputOutputDataLoaderBase<T, Tensor<T>, T
         // token stream and the targets are the same run shifted by one; positions past the end stay zero.
         int total = totalSeqs * seqLen;
         var tokenArray = allTokenIds.ToArray();
-        var featuresData = new double[total];
-        var labelsData = new double[total];
+        var featuresData = new int[total];
+        var labelsData = new int[total];
         Array.Copy(tokenArray, 0, featuresData, 0, Math.Min(total, tokenArray.Length));
         Array.Copy(tokenArray, Math.Min(1, tokenArray.Length), labelsData, 0, Math.Max(0, Math.Min(total, tokenArray.Length - 1)));
 
-        LoadedFeatures = new Tensor<double>(featuresData, new[] { totalSeqs, seqLen }).Cast<T>();
-        LoadedLabels = new Tensor<double>(labelsData, new[] { totalSeqs, seqLen }).Cast<T>();
+        LoadedFeatures = new Tensor<int>(featuresData, new[] { totalSeqs, seqLen }).Cast<T>();
+        LoadedLabels = new Tensor<int>(labelsData, new[] { totalSeqs, seqLen }).Cast<T>();
         InitializeIndices(totalSeqs);
     }
 
