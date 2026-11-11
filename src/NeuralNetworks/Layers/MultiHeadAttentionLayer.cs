@@ -256,6 +256,20 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     private Tensor<T> _outputBias;
 
     /// <summary>
+    /// The query projection's bias, or null when the projection has none (the default). Whisper's attention has one
+    /// on the query and value projections and none on the key (Radford et al. 2022).
+    /// </summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_embeddingDimension", Condition = nameof(_useQueryBias))]
+    private Tensor<T>? _queryBias;
+
+    /// <summary>The value projection's bias, or null when the projection has none (the default).</summary>
+    [TrainableParameter(Role = PersistentTensorRole.Biases, Shape = "_embeddingDimension", Condition = nameof(_useValueBias))]
+    private Tensor<T>? _valueBias;
+
+    private bool _useQueryBias;
+    private bool _useValueBias;
+
+    /// <summary>
     /// True once <see cref="EnsureInitialized"/> has allocated and populated the
     /// weight/bias tensors. Needed for the lazy-initialization path introduced to
     /// keep DiT-scale transformer stacks from eagerly allocating ~1 GB of Q/K/V/O
@@ -370,6 +384,28 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </summary>
     /// <param name="groupSize">Number of adjacent frames per attention position.</param>
     /// <returns>This layer.</returns>
+    /// <summary>
+    /// Gives the query and/or value projections a bias, as Whisper's attention has (the key projection never does:
+    /// a bias on the keys adds the same score to every key of a query and cancels in the softmax).
+    /// </summary>
+    /// <param name="query">Whether the query projection has a bias.</param>
+    /// <param name="value">Whether the value projection has a bias.</param>
+    /// <returns>This layer.</returns>
+    /// <exception cref="InvalidOperationException">The weights are already allocated.</exception>
+    public MultiHeadAttentionLayer<T> ConfigureProjectionBiases(bool query, bool value)
+    {
+        if (_isInitialized)
+            throw new InvalidOperationException(
+                "Projection biases must be configured before the attention's weights are allocated (its first forward).");
+
+        _useQueryBias = query;
+        _useValueBias = value;
+        return this;
+    }
+
+    /// <summary>Whether the query or value projection has a bias; see <see cref="ConfigureProjectionBiases"/>.</summary>
+    public bool HasProjectionBiases => _useQueryBias || _useValueBias;
+
     public MultiHeadAttentionLayer<T> ConfigureAttentionGrouping(int groupSize)
     {
         if (groupSize <= 0)
@@ -619,6 +655,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
     /// </remarks>
     protected override bool ParametersAreConstructionSized => true;
 
+    /// <inheritdoc />
     protected override void EnsureInitialized()
     {
         // Metadata walks may bring up child structure, but must not allocate Q/K/V/O values.
@@ -626,6 +663,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         base.EnsureInitialized();
     }
 
+    /// <inheritdoc />
     protected override void OnFirstForward(Tensor<T> input)
     {
         int rank = input.Shape.Length;
@@ -746,7 +784,9 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
                 && WeightsAlreadyAllocated(_keyWeights, _embeddingDimension, _embeddingDimension)
                 && WeightsAlreadyAllocated(_valueWeights, _embeddingDimension, _embeddingDimension)
                 && WeightsAlreadyAllocated(_outputWeights, _embeddingDimension, _embeddingDimension)
-                && WeightsAlreadyAllocated(_outputBias, _embeddingDimension))
+                && WeightsAlreadyAllocated(_outputBias, _embeddingDimension)
+                && (!_useQueryBias || (_queryBias is not null && WeightsAlreadyAllocated(_queryBias, _embeddingDimension)))
+                && (!_useValueBias || (_valueBias is not null && WeightsAlreadyAllocated(_valueBias, _embeddingDimension))))
             {
                 _isInitialized = true;
                 return;
@@ -791,6 +831,22 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
             RegisterTrainableParameter(_valueWeights, PersistentTensorRole.Weights);
             RegisterTrainableParameter(_outputWeights, PersistentTensorRole.Weights);
             RegisterTrainableParameter(_outputBias, PersistentTensorRole.Biases);
+
+            // Projection biases start at zero, as nn.Linear's bias does in PyTorch's Whisper only after loading; a
+            // zero start keeps the configured layer computing what the bias-free one did until training moves it.
+            if (_useQueryBias)
+            {
+                _queryBias = AllocateLazyWeight([_embeddingDimension]);
+                _queryBias.Fill(NumOps.Zero);
+                RegisterTrainableParameter(_queryBias, PersistentTensorRole.Biases);
+            }
+
+            if (_useValueBias)
+            {
+                _valueBias = AllocateLazyWeight([_embeddingDimension]);
+                _valueBias.Fill(NumOps.Zero);
+                RegisterTrainableParameter(_valueBias, PersistentTensorRole.Biases);
+            }
 
             _isInitialized = true;
         }
@@ -972,6 +1028,8 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         metadata[prefix + "RopeTheta"] = _ropeTheta.ToString("R", ci);
         metadata[prefix + "PositionalMaxSequenceLength"] = _positionalMaxSequenceLength.ToString(ci);
         metadata[prefix + "AttentionDropoutRate"] = _attentionDropoutRate.ToString("R", ci);
+        metadata[prefix + "QueryBias"] = _useQueryBias.ToString();
+        metadata[prefix + "ValueBias"] = _useValueBias.ToString();
     }
 
     /// <summary>
@@ -1222,6 +1280,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         return ForwardInternal(input, input, input);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTracedMany(params Tensor<T>[] inputs)
     {
         if (inputs.Length == 1) return ForwardInternal(inputs[0], inputs[0], inputs[0]);
@@ -1375,6 +1434,8 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         // Weights must be materialized (lazy-init Q/K/V start at [0,0]).
         if (_queryWeights.Rank != 2 || _queryWeights.Shape[0] == 0 || _queryWeights.Shape[1] == 0)
             return false;
+        // The fused kernel takes bias-free Q/K/V projections.
+        if (HasProjectionBiases) return false;
 
         int rank = query.Rank;
         if (rank < 1) return false;
@@ -1573,6 +1634,10 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         var Q_flat = Engine.TensorMatMul(q2D, _queryWeights);
         var K_flat = Engine.TensorMatMul(k2D, _keyWeights);
         var V_flat = Engine.TensorMatMul(v2D, _valueWeights);
+        if (_queryBias is not null)
+            Q_flat = Engine.TensorAdd(Q_flat, Engine.TensorBroadcastTo(Engine.Reshape(_queryBias, [1, _embeddingDimension]), Q_flat._shape));
+        if (_valueBias is not null)
+            V_flat = Engine.TensorAdd(V_flat, Engine.TensorBroadcastTo(Engine.Reshape(_valueBias, [1, _embeddingDimension]), V_flat._shape));
 
         // Q/K/V steering hook (see IQkvTransform). Applied HERE — after projection, before the head
         // split — because methods that rewrite Q/K/V need the projected tensors, and the only other
@@ -1980,6 +2045,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         }
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -1997,6 +2063,7 @@ public partial class MultiHeadAttentionLayer<T> : LayerBase<T>, IAuxiliaryLossLa
         GetType() != typeof(MultiHeadAttentionLayer<T>) || UseAuxiliaryLoss || _alibiLayer is not null || _ropeLayer is not null
         || QkvTransform is not null;
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

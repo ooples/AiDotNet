@@ -226,6 +226,7 @@ public partial class InternImage<T> : Common.SemanticSegmentationBase<T>
         };
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4;
@@ -242,6 +243,7 @@ public partial class InternImage<T> : Common.SemanticSegmentationBase<T>
         return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null)

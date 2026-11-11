@@ -17,6 +17,7 @@ public class AugMax<T> : ImageAugmenterBase<T>
         K = k; N = n; M = m;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         // Generate K augmented versions using RandAugment, return a random one
@@ -34,6 +35,7 @@ public class AugMax<T> : ImageAugmenterBase<T>
         return candidates[selected];
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

@@ -107,10 +107,30 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
             throw new ArgumentException("Number of samples in X must match length of y.");
         }
 
-        NumFeatures = x.Columns;
-        ClassLabels = ExtractClassLabels(y);
+        var rows = new int[x.Rows];
+        for (int i = 0; i < rows.Length; i++) rows[i] = i;
+        TrainDense(CreateDenseData(x), y, rows, y);
+    }
+
+    /// <summary>
+    /// Trains on the data rows <paramref name="rows"/> of already-ranked <paramref name="data"/> (a row listed twice
+    /// counts twice), exactly as <see cref="Train"/> would on a matrix holding those rows in that order. A forest
+    /// ranks its data once and trains every tree on its bootstrap rows this way, without copying them out.
+    /// </summary>
+    /// <param name="y">Labels indexed by data row.</param>
+    internal void TrainOnRows(DenseTreeData data, Vector<T> y, int[] rows)
+    {
+        var sampleLabels = new Vector<T>(rows.Length);
+        for (int i = 0; i < rows.Length; i++) sampleLabels[i] = y[rows[i]];
+        TrainDense(data, y, rows, sampleLabels);
+    }
+
+    private void TrainDense(DenseTreeData data, Vector<T> y, int[] rows, Vector<T> sampleLabels)
+    {
+        NumFeatures = data.Features;
+        ClassLabels = ExtractClassLabels(sampleLabels);
         NumClasses = ClassLabels.Length;
-        TaskType = InferTaskType(y);
+        TaskType = InferTaskType(sampleLabels);
 
         // Initialize random number generator
         _random = Options.Seed.HasValue
@@ -120,296 +140,11 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
         // Initialize feature importances
         FeatureImportances = new Vector<T>(NumFeatures);
 
-        // Create indices array
-        var indices = Enumerable.Range(0, x.Rows).ToList();
-
-        // Build the tree recursively
-        _root = BuildTree(x, y, indices, 0);
+        // Grow the tree on the ranked data (DecisionTreeClassifier.DenseBuilder.cs).
+        _root = BuildDense(data, y, rows);
 
         // Normalize feature importances
         NormalizeFeatureImportances();
-    }
-
-    /// <summary>
-    /// Builds the decision tree recursively.
-    /// </summary>
-    private DecisionNode<T> BuildTree(Matrix<T> x, Vector<T> y, List<int> indices, int depth)
-    {
-        // Check stopping conditions
-        if (ShouldStop(indices, y, depth))
-        {
-            return CreateLeafNode(y, indices);
-        }
-
-        // Find the best split
-        var (bestFeature, bestThreshold, bestGain) = FindBestSplit(x, y, indices);
-
-        // If no good split found, create leaf
-        if (bestFeature < 0 || NumOps.Compare(bestGain, NumOps.FromDouble(Options.MinImpurityDecrease)) <= 0)
-        {
-            return CreateLeafNode(y, indices);
-        }
-
-        // Split the data
-        var (leftIndices, rightIndices) = SplitData(x, indices, bestFeature, bestThreshold);
-
-        // Check if split is valid
-        if (leftIndices.Count < Options.MinSamplesLeaf || rightIndices.Count < Options.MinSamplesLeaf)
-        {
-            return CreateLeafNode(y, indices);
-        }
-
-        // Update feature importances
-        UpdateFeatureImportances(bestFeature, bestGain, indices.Count);
-
-        // Recursively build children
-        var leftChild = BuildTree(x, y, leftIndices, depth + 1);
-        var rightChild = BuildTree(x, y, rightIndices, depth + 1);
-
-        return new DecisionNode<T>
-        {
-            FeatureIndex = bestFeature,
-            Threshold = bestThreshold,
-            Left = leftChild,
-            Right = rightChild,
-            IsLeaf = false,
-            NumSamples = indices.Count
-        };
-    }
-
-    /// <summary>
-    /// Determines if we should stop splitting.
-    /// </summary>
-    private bool ShouldStop(List<int> indices, Vector<T> y, int depth)
-    {
-        // Check max depth
-        if (Options.MaxDepth.HasValue && depth >= Options.MaxDepth.Value)
-            return true;
-
-        // Check minimum samples
-        if (indices.Count < Options.MinSamplesSplit)
-            return true;
-
-        // Check if pure node (all same class)
-        var firstClass = y[indices[0]];
-        bool allSame = true;
-        for (int i = 1; i < indices.Count && allSame; i++)
-        {
-            if (NumOps.Compare(y[indices[i]], firstClass) != 0)
-            {
-                allSame = false;
-            }
-        }
-        if (allSame)
-            return true;
-
-        return false;
-    }
-
-    /// <summary>
-    /// Creates a leaf node with class probabilities.
-    /// </summary>
-    private DecisionNode<T> CreateLeafNode(Vector<T> y, List<int> indices)
-    {
-        var classCounts = new int[NumClasses];
-        foreach (var idx in indices)
-        {
-            int classIdx = GetClassIndex(y[idx]);
-            classCounts[classIdx]++;
-        }
-
-        var probabilities = new Vector<T>(NumClasses);
-        T total = NumOps.FromDouble(indices.Count);
-        for (int c = 0; c < NumClasses; c++)
-        {
-            probabilities[c] = NumOps.Divide(NumOps.FromDouble(classCounts[c]), total);
-        }
-
-        // Find predicted class (argmax)
-        int predictedClass = 0;
-        for (int c = 1; c < NumClasses; c++)
-        {
-            if (classCounts[c] > classCounts[predictedClass])
-            {
-                predictedClass = c;
-            }
-        }
-
-        return new DecisionNode<T>
-        {
-            IsLeaf = true,
-            ClassProbabilities = probabilities,
-            PredictedClass = predictedClass,
-            NumSamples = indices.Count
-        };
-    }
-
-    /// <summary>
-    /// Finds the best split for the given indices.
-    /// </summary>
-    private (int feature, T threshold, T gain) FindBestSplit(Matrix<T> x, Vector<T> y, List<int> indices)
-    {
-        int bestFeature = -1;
-        T bestThreshold = NumOps.Zero;
-        T bestGain = NumOps.Zero;
-
-        // Determine which features to consider
-        var featuresToConsider = GetFeaturesToConsider();
-
-        // Calculate current impurity
-        T currentImpurity = CalculateImpurity(y, indices);
-
-        foreach (int feature in featuresToConsider)
-        {
-            // Get sorted unique values for this feature
-            var values = indices
-                .Select(i => x[i, feature])
-                .Distinct()
-                .OrderBy(v => NumOps.ToDouble(v))
-                .ToList();
-
-            // Try midpoints between consecutive values as thresholds
-            for (int i = 0; i < values.Count - 1; i++)
-            {
-                T threshold = NumOps.Divide(NumOps.Add(values[i], values[i + 1]), NumOps.FromDouble(2.0));
-
-                // Calculate gain for this split
-                var (leftIndices, rightIndices) = SplitData(x, indices, feature, threshold);
-
-                if (leftIndices.Count < Options.MinSamplesLeaf || rightIndices.Count < Options.MinSamplesLeaf)
-                    continue;
-
-                T leftImpurity = CalculateImpurity(y, leftIndices);
-                T rightImpurity = CalculateImpurity(y, rightIndices);
-
-                T leftWeight = NumOps.Divide(NumOps.FromDouble(leftIndices.Count), NumOps.FromDouble(indices.Count));
-                T rightWeight = NumOps.Divide(NumOps.FromDouble(rightIndices.Count), NumOps.FromDouble(indices.Count));
-
-                T weightedImpurity = NumOps.Add(
-                    NumOps.Multiply(leftWeight, leftImpurity),
-                    NumOps.Multiply(rightWeight, rightImpurity)
-                );
-
-                T gain = NumOps.Subtract(currentImpurity, weightedImpurity);
-
-                if (NumOps.Compare(gain, bestGain) > 0)
-                {
-                    bestGain = gain;
-                    bestFeature = feature;
-                    bestThreshold = threshold;
-                }
-            }
-        }
-
-        return (bestFeature, bestThreshold, bestGain);
-    }
-
-    /// <summary>
-    /// Gets the features to consider for splitting based on MaxFeatures setting.
-    /// </summary>
-    private int[] GetFeaturesToConsider()
-    {
-        if (!Options.MaxFeatures.HasValue || Options.MaxFeatures.Value >= NumFeatures)
-        {
-            return Enumerable.Range(0, NumFeatures).ToArray();
-        }
-
-        // Randomly select MaxFeatures features
-        var allFeatures = Enumerable.Range(0, NumFeatures).ToList();
-        var selectedFeatures = new int[Options.MaxFeatures.Value];
-
-        for (int i = 0; i < Options.MaxFeatures.Value; i++)
-        {
-            int idx = (_random ?? throw new InvalidOperationException("_random has not been initialized.")).Next(allFeatures.Count);
-            selectedFeatures[i] = allFeatures[idx];
-            allFeatures.RemoveAt(idx);
-        }
-
-        return selectedFeatures;
-    }
-
-    /// <summary>
-    /// Calculates impurity for a set of samples based on the configured criterion.
-    /// </summary>
-    private T CalculateImpurity(Vector<T> y, List<int> indices)
-    {
-        if (indices.Count == 0)
-            return NumOps.Zero;
-
-        var classCounts = new int[NumClasses];
-        foreach (var idx in indices)
-        {
-            int classIdx = GetClassIndex(y[idx]);
-            classCounts[classIdx]++;
-        }
-
-        return Options.Criterion switch
-        {
-            ClassificationSplitCriterion.Gini => CalculateGiniImpurity(classCounts, indices.Count),
-            ClassificationSplitCriterion.Entropy => CalculateEntropy(classCounts, indices.Count),
-            ClassificationSplitCriterion.LogLoss => CalculateEntropy(classCounts, indices.Count), // Same as entropy for splits
-            _ => CalculateGiniImpurity(classCounts, indices.Count)
-        };
-    }
-
-    /// <summary>
-    /// Calculates Gini impurity.
-    /// </summary>
-    private T CalculateGiniImpurity(int[] classCounts, int total)
-    {
-        T gini = NumOps.One;
-        T totalT = NumOps.FromDouble(total);
-
-        for (int c = 0; c < NumClasses; c++)
-        {
-            T prob = NumOps.Divide(NumOps.FromDouble(classCounts[c]), totalT);
-            gini = NumOps.Subtract(gini, NumOps.Multiply(prob, prob));
-        }
-
-        return gini;
-    }
-
-    /// <summary>
-    /// Calculates entropy.
-    /// </summary>
-    private T CalculateEntropy(int[] classCounts, int total)
-    {
-        T entropy = NumOps.Zero;
-        T totalT = NumOps.FromDouble(total);
-
-        for (int c = 0; c < NumClasses; c++)
-        {
-            if (classCounts[c] > 0)
-            {
-                T prob = NumOps.Divide(NumOps.FromDouble(classCounts[c]), totalT);
-                entropy = NumOps.Subtract(entropy, NumOps.Multiply(prob, NumOps.Log(prob)));
-            }
-        }
-
-        return entropy;
-    }
-
-    /// <summary>
-    /// Splits data based on a feature and threshold.
-    /// </summary>
-    private (List<int> left, List<int> right) SplitData(Matrix<T> x, List<int> indices, int feature, T threshold)
-    {
-        var left = new List<int>();
-        var right = new List<int>();
-
-        foreach (var idx in indices)
-        {
-            if (NumOps.Compare(x[idx, feature], threshold) <= 0)
-            {
-                left.Add(idx);
-            }
-            else
-            {
-                right.Add(idx);
-            }
-        }
-
-        return (left, right);
     }
 
     /// <summary>
@@ -464,6 +199,9 @@ public partial class DecisionTreeClassifier<T> : ProbabilisticClassifierBase<T>,
 
         throw new ArgumentException($"Label {label} not found in class labels.");
     }
+
+    /// <summary>The trained tree as flat arrays for batch evaluation, or null before training.</summary>
+    internal FlatDecisionTree<T>? Flatten() => _root is null ? null : FlatDecisionTree<T>.From(_root);
 
     /// <inheritdoc/>
     public override Matrix<T> PredictProbabilities(Matrix<T> input)

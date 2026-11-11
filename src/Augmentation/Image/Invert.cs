@@ -12,6 +12,7 @@ public class Invert<T> : ImageAugmenterBase<T>
 {
     public Invert(double probability = 0.5) : base(probability) { }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();

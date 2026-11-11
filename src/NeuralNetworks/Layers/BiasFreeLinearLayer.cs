@@ -55,6 +55,7 @@ public sealed partial class BiasFreeLinearLayer<T> : LayerBase<T>, IShapeContrac
 
     public int InputSize => _inputSize;
     public int OutputSize => _outputSize;
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
     public BiasFreeLinearLayer(int inputSize, int outputSize)
         : base([inputSize], [outputSize])
@@ -68,6 +69,7 @@ public sealed partial class BiasFreeLinearLayer<T> : LayerBase<T>, IShapeContrac
         RegisterTrainableParameter(_weights, PersistentTensorRole.Weights);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         if (input.Rank < 1 || input.Shape[^1] != _inputSize)
@@ -94,6 +96,7 @@ public sealed partial class BiasFreeLinearLayer<T> : LayerBase<T>, IShapeContrac
         return Engine.Reshape(matrixOutput, outputShape);
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         var gradients = GetParameterGradients();
@@ -103,6 +106,7 @@ public sealed partial class BiasFreeLinearLayer<T> : LayerBase<T>, IShapeContrac
         Engine.InvalidatePersistentTensor(_weights);
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
     }

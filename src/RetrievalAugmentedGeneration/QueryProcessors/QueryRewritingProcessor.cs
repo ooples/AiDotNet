@@ -64,6 +64,7 @@ public class QueryRewritingProcessor<T> : QueryProcessorBase
         }
     }
 
+    /// <inheritdoc />
     protected override string ProcessQueryCore(string query)
     {
         if (string.IsNullOrWhiteSpace(query))

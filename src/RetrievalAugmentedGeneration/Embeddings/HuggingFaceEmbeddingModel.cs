@@ -32,7 +32,9 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
         private readonly bool _ownsHttpClient;
         private bool _disposed;
 
+        /// <inheritdoc />
         public override int EmbeddingDimension => _dimension;
+        /// <inheritdoc />
         public override int MaxTokens => _maxTokens;
 
         public HuggingFaceEmbeddingModel(string modelName, string apiKey = "", int dimension = 768, int maxTokens = 512, HttpClient? httpClient = null)
@@ -57,6 +59,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             }
         }
 
+        /// <inheritdoc />
         protected override Vector<T> EmbedCore(string text)
         {
             // Surface API/transport failures instead of fabricating a fake vector.
@@ -120,6 +123,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             return await EmbedBatchCoreAsync(textList);
         }
 
+        /// <inheritdoc />
         protected override async Task<Matrix<T>> EmbedBatchCoreAsync(IList<string> texts)
         {
             var endpoint = $"https://api-inference.huggingface.co/pipeline/feature-extraction/{_modelName}";
@@ -155,6 +159,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.EmbeddingModels
             return matrix;
         }
 
+        /// <inheritdoc />
         protected override void Dispose(bool disposing)
         {
             if (!_disposed)

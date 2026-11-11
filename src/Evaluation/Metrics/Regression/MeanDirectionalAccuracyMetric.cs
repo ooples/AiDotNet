@@ -23,15 +23,24 @@ public class MeanDirectionalAccuracyMetric<T> : IRegressionMetric<T>
 {
     private static readonly INumericOperations<T> NumOps = MathHelper.GetNumericOperations<T>();
 
+    /// <inheritdoc />
     public string Name => "MDA";
+    /// <inheritdoc />
     public string Category => "Regression";
+    /// <inheritdoc />
     public string Description => "Mean Directional Accuracy (fraction of correct direction predictions).";
+    /// <inheritdoc />
     public MetricDirection Direction => MetricDirection.HigherIsBetter;
+    /// <inheritdoc />
     public T? MinValue => NumOps.Zero;
+    /// <inheritdoc />
     public T? MaxValue => NumOps.One;
+    /// <inheritdoc />
     public bool RequiresProbabilities => false;
+    /// <inheritdoc />
     public bool SupportsMultiClass => false;
 
+    /// <inheritdoc />
     public T Compute(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals)
     {
         if (predictions.Length != actuals.Length)
@@ -58,6 +67,7 @@ public class MeanDirectionalAccuracyMetric<T> : IRegressionMetric<T>
         return total > 0 ? NumOps.FromDouble((double)correct / total) : NumOps.FromDouble(0.5);
     }
 
+    /// <inheritdoc />
     public MetricWithCI<T> ComputeWithCI(ReadOnlySpan<T> predictions, ReadOnlySpan<T> actuals,
         ConfidenceIntervalMethod ciMethod = ConfidenceIntervalMethod.PercentileBootstrap,
         double confidenceLevel = 0.95, int bootstrapSamples = 1000, int? randomSeed = null)

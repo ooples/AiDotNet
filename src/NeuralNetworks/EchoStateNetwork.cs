@@ -1119,6 +1119,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
     /// <inheritdoc/>
     public override bool SupportsTraining => true;
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
 
@@ -1275,6 +1276,7 @@ public partial class EchoStateNetwork<T> : SequenceModelLayoutBase<T>
             $"{nameof(EchoStateNetwork<T>)} is trained by ridge regression on the linear readout, not gradient "
             + "descent, so it has no parameter gradients to report.");
 
+    /// <inheritdoc />
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         // ESN training per Jaeger 2001 "The 'echo state' approach" §3.4 /

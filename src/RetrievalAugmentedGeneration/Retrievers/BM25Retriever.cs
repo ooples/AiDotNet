@@ -32,6 +32,7 @@ namespace AiDotNet.RetrievalAugmentedGeneration.Retrievers
             _b = NumOps.FromDouble(b);
         }
 
+        /// <inheritdoc />
         protected override IEnumerable<Document<T>> RetrieveCore(string query, int topK, Dictionary<string, object> metadataFilters)
         {
             var queryTerms = Tokenize(query);

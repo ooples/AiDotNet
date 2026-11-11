@@ -58,6 +58,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
     {
     }
 
+    /// <inheritdoc />
     public override async Task<IFullModel<T, TInput, TOutput>> SearchAsync(
         TInput inputs,
         TOutput targets,
@@ -118,6 +119,7 @@ public sealed class BayesianOptimizationAutoML<T, TInput, TOutput> : BuiltInSupe
         }
     }
 
+    /// <inheritdoc />
     public override Task<Dictionary<string, object>> SuggestNextTrialAsync()
     {
         var modelType = PickModelTypeByUcb();

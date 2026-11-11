@@ -21,7 +21,7 @@ namespace AiDotNet.Preprocessing.FeatureSelection.Fairness;
 /// </remarks>
 [ComponentType(ComponentType.FeatureSelector)]
 [PipelineStage(PipelineStage.Preprocessing)]
-public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
+public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>, ISupervisedFeatureSelector<T>, IFixedCountFeatureSelector<T>
 {
     private readonly int _nFeaturesToSelect;
     private readonly double _fairnessWeight;
@@ -33,13 +33,16 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private int[]? _selectedIndices;
     private int _nInputFeatures;
 
+    /// <inheritdoc />
     public int NFeaturesToSelect => _nFeaturesToSelect;
     public double FairnessWeight => _fairnessWeight;
     public int ProtectedAttributeIndex => _protectedAttributeIndex;
     public double[]? FairnessScores => _fairnessScores;
     public double[]? PredictiveScores => _predictiveScores;
     public double[]? CombinedScores => _combinedScores;
+    /// <inheritdoc />
     public int[]? SelectedIndices => _selectedIndices;
+    /// <inheritdoc />
     public override bool SupportsInverseTransform => false;
 
     public FairFeatureSelector(
@@ -61,12 +64,14 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         _protectedAttributeIndex = protectedAttributeIndex;
     }
 
+    /// <inheritdoc />
     protected override void FitCore(Matrix<T> data)
     {
         throw new InvalidOperationException(
             "FairFeatureSelector requires target values. Use Fit(Matrix<T> data, Vector<T> target) instead.");
     }
 
+    /// <inheritdoc />
     public void Fit(Matrix<T> data, Vector<T> target)
     {
         if (data.Rows != target.Length)
@@ -160,12 +165,14 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         IsFitted = true;
     }
 
+    /// <inheritdoc />
     public Matrix<T> FitTransform(Matrix<T> data, Vector<T> target)
     {
         Fit(data, target);
         return Transform(data);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_selectedIndices is null)
@@ -182,11 +189,13 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return new Matrix<T>(result);
     }
 
+    /// <inheritdoc />
     protected override Matrix<T> InverseTransformCore(Matrix<T> data)
     {
         throw new NotSupportedException("FairFeatureSelector does not support inverse transformation.");
     }
 
+    /// <inheritdoc />
     public bool[] GetSupportMask()
     {
         if (_selectedIndices is null)
@@ -199,6 +208,7 @@ public class FairFeatureSelector<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         return mask;
     }
 
+    /// <inheritdoc />
     public override string[] GetFeatureNamesOut(string[]? inputFeatureNames = null)
     {
         if (_selectedIndices is null) return [];

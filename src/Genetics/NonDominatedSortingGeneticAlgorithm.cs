@@ -23,6 +23,7 @@ public class NSGAII<T, TInput, TOutput> :
         _objectives = objectives;
     }
 
+    /// <inheritdoc />
     protected override ICollection<ModelIndividual<T, TInput, TOutput, ModelParameterGene<T>>> CreateNextGeneration(
         TInput trainingInput,
         TOutput trainingOutput,
@@ -394,6 +395,7 @@ public class NSGAII<T, TInput, TOutput> :
         individual.SetFitness(GetObjectiveFitness(individual, 0));
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetMetaData()
     {
         var metadata = base.GetMetaData();

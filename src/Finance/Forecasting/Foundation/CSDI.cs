@@ -293,9 +293,12 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
 
     #region NeuralNetworkBase Overrides
 
+    /// <inheritdoc />
     public override bool SupportsTraining => _useNativeMode;
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input) => _useNativeMode ? ForwardNative(input) : ForecastOnnx(input);
 
+    /// <inheritdoc />
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> target)
     {
         if (!_useNativeMode)
@@ -575,6 +578,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
 
     // UpdateParameters was an empty override, silently dropping every restore. The base
     // distributes the vector over the declared enumeration.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata() => new()
     {
         AdditionalInfo = new Dictionary<string, object>
@@ -594,6 +598,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
 
     #region IForecastingModel Implementation
 
+    /// <inheritdoc />
     protected override Tensor<T> ForecastCore(Tensor<T> historicalData, double[]? quantiles)
     {
         if (quantiles is not null && quantiles.Length > 0)
@@ -602,6 +607,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         return _useNativeMode ? ForwardNative(historicalData) : ForecastOnnx(historicalData);
     }
 
+    /// <inheritdoc />
     public override Tensor<T> AutoregressiveForecast(Tensor<T> input, int steps)
     {
         // CSDI is non-autoregressive — truncate output to requested steps
@@ -613,6 +619,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         return result;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> Evaluate(Tensor<T> predictions, Tensor<T> actuals)
     {
         T mse = NumOps.Zero; T mae = NumOps.Zero; int count = 0;
@@ -657,6 +664,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         return reshaped ? Engine.Reshape(normalized, input._shape) : normalized;
     }
 
+    /// <inheritdoc />
     public override Dictionary<string, T> GetFinancialMetrics()
     {
         T lastLoss = LastLoss is not null ? LastLoss : NumOps.Zero;
@@ -774,6 +782,7 @@ public partial class CSDI<T> : TimeSeriesFoundationModelBase<T>, ITrainingObject
         return result;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> ForecastOnnx(Tensor<T> input)
     {
         if (OnnxSession == null) throw new InvalidOperationException("ONNX session is not initialized.");

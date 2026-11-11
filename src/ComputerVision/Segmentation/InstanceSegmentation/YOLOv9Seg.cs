@@ -185,6 +185,7 @@ public partial class YOLOv9Seg<T> : Common.InstanceSegmentationBase<T>
         _ => ([64, 128, 256, 512], [3, 6, 6, 3], 256)
     };
 
+    /// <inheritdoc />
     protected override Tensor<T> Forward(Tensor<T> input)
     {
         bool hasBatch = input.Rank == 4; if (!hasBatch) input = AddBatchDimension(input);
@@ -194,6 +195,7 @@ public partial class YOLOv9Seg<T> : Common.InstanceSegmentationBase<T>
         if (!hasBatch) features = RemoveBatchDimension(features); return features;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictOnnx(Tensor<T> input)
     {
         if (_onnxSession is null) throw new InvalidOperationException("ONNX session is not initialized.");

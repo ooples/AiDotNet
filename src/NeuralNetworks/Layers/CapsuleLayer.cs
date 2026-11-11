@@ -165,6 +165,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
     [Scratch]
     private Tensor<T>? _lastCouplingCoefficients;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -747,6 +748,7 @@ public partial class CapsuleLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, ISh
         _biasGradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         _lastCouplingCoefficients = null;

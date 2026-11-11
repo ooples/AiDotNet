@@ -25,10 +25,15 @@ public class ProteinDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
     private readonly string _dataPath;
     private int _sampleCount;
 
+    /// <inheritdoc />
     public override string Name => "Protein";
+    /// <inheritdoc />
     public override string Description => "Protein structure graph classification";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _options.FeatureDimension;
+    /// <inheritdoc />
     public override int OutputDimension => 1;
 
     public ProteinDataLoader(ProteinDataLoaderOptions? options = null)
@@ -37,6 +42,7 @@ public class ProteinDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         _dataPath = _options.DataPath ?? DatasetDownloader.GetDefaultDataPath("proteins");
     }
 
+    /// <inheritdoc />
     protected override async Task LoadDataCoreAsync(CancellationToken cancellationToken)
     {
         // Look for CSV/TSV protein files
@@ -121,11 +127,13 @@ public class ProteinDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         InitializeIndices(totalSamples);
     }
 
+    /// <inheritdoc />
     protected override void UnloadDataCore()
     {
         LoadedFeatures = default; LoadedLabels = default; Indices = null; _sampleCount = 0;
     }
 
+    /// <inheritdoc />
     protected override (Tensor<T> Features, Tensor<T> Labels) ExtractBatch(int[] indices)
     {
         var features = LoadedFeatures ?? throw new InvalidOperationException("Features not loaded.");
@@ -144,6 +152,7 @@ public class ProteinDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tens
         return (bf, bl);
     }
 
+    /// <inheritdoc />
     public override (IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Train,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Validation,
         IInputOutputDataLoader<T, Tensor<T>, Tensor<T>> Test) Split(

@@ -14,6 +14,7 @@ namespace AiDotNet.FederatedLearning.Selection;
 [PipelineStage(PipelineStage.Training)]
 public sealed class UniformRandomClientSelectionStrategy : ClientSelectionStrategyBase
 {
+    /// <inheritdoc />
     public override List<int> SelectClients(ClientSelectionRequest request)
     {
         if (request == null)
@@ -26,6 +27,7 @@ public sealed class UniformRandomClientSelectionStrategy : ClientSelectionStrate
         return ShuffleAndTake(candidates, desired, request.Random);
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "UniformRandom";
 }
 

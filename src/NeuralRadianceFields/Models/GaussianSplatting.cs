@@ -475,6 +475,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
     private SpatialHashGrid? _spatialIndex;
     private bool _spatialIndexDirty = true;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     public GaussianSplatting()
@@ -1114,6 +1115,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         _spatialIndexDirty = true;
     }
 
+    /// <inheritdoc />
     public (Tensor<T> rgb, Tensor<T> density) QueryField(Tensor<T> positions, Tensor<T> viewingDirections)
     {
         if (positions.Shape.Length != 2 || positions.Shape[1] != 3)
@@ -1270,6 +1272,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         return (new Tensor<T>(rgb, [numPoints, 3]), new Tensor<T>(density, [numPoints, 1]));
     }
 
+    /// <inheritdoc />
     public Tensor<T> RenderImage(
         Vector<T> cameraPosition,
         Matrix<T> cameraRotation,
@@ -1680,6 +1683,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         });
     }
 
+    /// <inheritdoc />
     public Tensor<T> RenderRays(
         Tensor<T> rayOrigins,
         Tensor<T> rayDirections,
@@ -1796,6 +1800,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         return new Tensor<T>(colors, [numRays, 3]);
     }
 
+    /// <inheritdoc />
     public override Tensor<T> ForwardWithMemory(Tensor<T> input)
     {
         if (input.Shape.Length != 2 || input.Shape[1] != 6)
@@ -2044,6 +2049,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         return LastLoss ?? NumOps.Zero;
     }
 
+    /// <inheritdoc />
     protected override bool TryApplyLearningRule(Tensor<T> input, Tensor<T> expectedOutput)
     {
         if (LossFunction == null)
@@ -2510,6 +2516,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         MarkSpatialIndexDirty();
     }
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         int colorDim = _useSphericalHarmonics ? 3 * GetShBasisCount() : 3;
@@ -3356,6 +3363,7 @@ public partial class GaussianSplatting<T> : AiDotNet.NeuralNetworks.VectorModelL
         InvalidateParameterCountCache();
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         return ForwardWithMemory(input);
