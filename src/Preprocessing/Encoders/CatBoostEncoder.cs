@@ -36,8 +36,8 @@ public class CatBoostEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     private readonly CatBoostHandleUnknown _handleUnknown;
 
     // Fitted parameters
-    private Dictionary<int, Dictionary<double, (double Sum, int Count)>>? _categoryStats;
-    private double _globalMean;
+    private Dictionary<int, CategoryValueMap<T>>? _categoryStats;
+    private T _globalMean = MathHelper.GetNumericOperations<T>().Zero;
     private int _nInputFeatures;
 
     /// <summary>
@@ -53,7 +53,7 @@ public class CatBoostEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
     /// <summary>
     /// Gets the global target mean.
     /// </summary>
-    public double GlobalMean => _globalMean;
+    public T GlobalMean => _globalMean;
 
     /// <summary>
     /// Gets whether this transformer supports inverse transformation.
@@ -106,37 +106,21 @@ public class CatBoostEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
         }
 
         _nInputFeatures = data.Columns;
+        var engine = Engine;
         var columnsToProcess = GetColumnsToProcess(_nInputFeatures);
 
         // Compute global mean
-        double targetSum = 0;
-        for (int i = 0; i < target.Length; i++)
-        {
-            targetSum += NumOps.ToDouble(target[i]);
-        }
-        _globalMean = targetSum / target.Length;
+        var y = Tensor<T>.FromVector(target);
+        _globalMean = engine.TensorMean(y);
+        T prior = NumOps.FromDouble(_prior);
+        T priorMean = NumOps.Multiply(prior, _globalMean);
 
-        // Compute category statistics (for transform on new data)
-        _categoryStats = new Dictionary<int, Dictionary<double, (double Sum, int Count)>>();
-
+        // Full category statistics (for transform on new data): (sum + prior * mean) / (count + prior)
+        _categoryStats = new Dictionary<int, CategoryValueMap<T>>();
         foreach (int col in columnsToProcess)
         {
-            var stats = new Dictionary<double, (double Sum, int Count)>();
-
-            for (int i = 0; i < data.Rows; i++)
-            {
-                double categoryValue = NumOps.ToDouble(data[i, col]);
-                double targetValue = NumOps.ToDouble(target[i]);
-
-                if (!stats.TryGetValue(categoryValue, out var existing))
-                {
-                    existing = (0, 0);
-                }
-
-                stats[categoryValue] = (existing.Sum + targetValue, existing.Count + 1);
-            }
-
-            _categoryStats[col] = stats;
+            _categoryStats[col] = CategoryValueMap<T>.FromTargetStatistics(PreprocessingTensorOps.Column(data, col), y,
+                (counts, sums) => engine.TensorDivide(engine.TensorAddScalar(sums, priorMean), engine.TensorAddScalar(counts, prior)));
         }
 
         IsFitted = true;
@@ -172,13 +156,15 @@ public class CatBoostEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new ArgumentException("Target length must match data rows.");
         }
 
+        var engine = Engine;
         int numRows = data.Rows;
         int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
+        var processSet = new HashSet<int>(GetColumnsToProcess(numColumns));
+        var y = Tensor<T>.FromVector(target);
+        T prior = NumOps.FromDouble(_prior);
+        T priorMean = NumOps.Multiply(prior, _globalMean);
 
-        // Create shuffled order for randomization
+        // Create shuffled order for randomization; orderPosition[row] is when the row is visited
         var random = RandomHelper.CreateSeededRandom(_randomState);
         var order = Enumerable.Range(0, numRows).ToArray();
         for (int i = numRows - 1; i > 0; i--)
@@ -187,50 +173,77 @@ public class CatBoostEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             (order[i], order[j]) = (order[j], order[i]);
         }
 
-        // For each column, apply ordered encoding
-        foreach (int col in columnsToProcess)
+        var orderPosition = new int[numRows];
+        for (int t = 0; t < numRows; t++)
+            orderPosition[order[t]] = t;
+
+        var columns = new List<Tensor<T>>(numColumns);
+        for (int col = 0; col < numColumns; col++)
         {
-            // Running statistics per category
-            var runningSum = new Dictionary<double, double>();
-            var runningCount = new Dictionary<double, int>();
-
-            foreach (int originalIdx in order)
+            var column = PreprocessingTensorOps.Column(data, col);
+            if (processSet.Contains(col) && numRows > 0)
             {
-                double categoryValue = NumOps.ToDouble(data[originalIdx, col]);
-                double targetValue = NumOps.ToDouble(target[originalIdx]);
-
-                // Compute encoding using PREVIOUS samples only
-                double sum = runningSum.GetValueOrDefault(categoryValue, 0);
-                int count = runningCount.GetValueOrDefault(categoryValue, 0);
-
-                // Ordered target encoding formula
-                double encodedValue = (sum + _prior * _globalMean) / (count + _prior);
-                result[originalIdx, col] = NumOps.FromDouble(encodedValue);
-
-                // Update running statistics (for next samples)
-                runningSum[categoryValue] = sum + targetValue;
-                runningCount[categoryValue] = count + 1;
+                column = OrderedEncoding(column, y, orderPosition, priorMean, prior);
             }
+
+            columns.Add(column);
         }
 
-        // Copy non-processed columns
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (!processSet.Contains(j))
-                {
-                    result[i, j] = data[i, j];
-                }
-            }
-        }
-
-        return new Matrix<T>(result);
+        return PreprocessingTensorOps.StackColumns(columns, numRows);
     }
 
     /// <summary>
-    /// Transforms test data using full category statistics (for inference).
+    /// Ordered target encoding of one column: each row is encoded from the target sum and count of the rows of
+    /// its category visited before it, <c>(sum + prior * mean) / (count + prior)</c>.
     /// </summary>
+    private Tensor<T> OrderedEncoding(Tensor<T> column, Tensor<T> y, int[] orderPosition, T priorMean, T prior)
+    {
+        var engine = Engine;
+        int numRows = column.Length;
+        var categories = PreprocessingTensorOps.SortedUnique(column);
+        var category = PreprocessingTensorOps.LookupSorted(categories, column, out _).AsSpan().ToArray();
+
+        // Visit the rows grouped by category and, within a category, in shuffled order
+        var keys = new long[numRows];
+        var visit = new int[numRows];
+        for (int r = 0; r < numRows; r++)
+        {
+            keys[r] = (long)category[r] * numRows + orderPosition[r];
+            visit[r] = r;
+        }
+
+        Array.Sort(keys, visit);
+
+        // Start of each category run in the visit order, and each row's place in the visit order
+        var runStart = new int[numRows];
+        var previousCount = new int[numRows];
+        var visitPosition = new int[numRows];
+        for (int t = 0; t < numRows; t++)
+        {
+            bool newRun = t == 0 || category[visit[t]] != category[visit[t - 1]];
+            runStart[t] = newRun ? t : runStart[t - 1];
+            previousCount[t] = t - runStart[t];
+            visitPosition[visit[t]] = t;
+        }
+
+        // Target sum of the earlier rows of the same category: exclusive prefix sum minus its value at the run start
+        var visited = engine.TensorIndexSelect(y, new Tensor<int>(visit, new[] { numRows }), 0);
+        var exclusive = engine.TensorSubtract(engine.TensorCumSum(visited, 0), visited);
+        var previousSum = engine.TensorSubtract(
+            exclusive, engine.TensorIndexSelect(exclusive, new Tensor<int>(runStart, new[] { numRows }), 0));
+
+        // Ordered target encoding formula
+        var encoded = engine.TensorDivide(
+            engine.TensorAddScalar(previousSum, priorMean),
+            engine.TensorAddScalar(new Tensor<int>(previousCount, new[] { numRows }).Cast<T>(), prior));
+        return engine.TensorIndexSelect(encoded, new Tensor<int>(visitPosition, new[] { numRows }), 0);
+    }
+
+    /// <summary>
+    /// Transforms new data using full category statistics.
+    /// </summary>
+    /// <param name="data">The data to transform.</param>
+    /// <returns>The encoded data.</returns>
     protected override Matrix<T> TransformCore(Matrix<T> data)
     {
         if (_categoryStats is null)
@@ -238,50 +251,9 @@ public class CatBoostEncoder<T> : TransformerBase<T, Matrix<T>, Matrix<T>>
             throw new InvalidOperationException("Encoder has not been fitted.");
         }
 
-        int numRows = data.Rows;
-        int numColumns = data.Columns;
-        var result = new T[numRows, numColumns];
-        var columnsToProcess = GetColumnsToProcess(numColumns);
-        var processSet = new HashSet<int>(columnsToProcess);
-
-        for (int i = 0; i < numRows; i++)
-        {
-            for (int j = 0; j < numColumns; j++)
-            {
-                if (!processSet.Contains(j))
-                {
-                    result[i, j] = data[i, j];
-                    continue;
-                }
-
-                double categoryValue = NumOps.ToDouble(data[i, j]);
-
-                if (_categoryStats.TryGetValue(j, out var colStats) &&
-                    colStats.TryGetValue(categoryValue, out var stats))
-                {
-                    // Use full statistics for test data
-                    double encodedValue = (stats.Sum + _prior * _globalMean) / (stats.Count + _prior);
-                    result[i, j] = NumOps.FromDouble(encodedValue);
-                }
-                else
-                {
-                    // Unknown category
-                    switch (_handleUnknown)
-                    {
-                        case CatBoostHandleUnknown.UseGlobalMean:
-                            result[i, j] = NumOps.FromDouble(_globalMean);
-                            break;
-                        case CatBoostHandleUnknown.Error:
-                            throw new ArgumentException($"Unknown category value: {categoryValue} in column {j}");
-                        default:
-                            result[i, j] = NumOps.FromDouble(_globalMean);
-                            break;
-                    }
-                }
-            }
-        }
-
-        return new Matrix<T>(result);
+        var processSet = new HashSet<int>(GetColumnsToProcess(data.Columns));
+        return CategoryValueMap<T>.EncodeColumns(data, processSet, _categoryStats, _ => _globalMean,
+            _handleUnknown == CatBoostHandleUnknown.Error);
     }
 
     /// <summary>
