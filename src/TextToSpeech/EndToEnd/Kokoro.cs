@@ -234,6 +234,13 @@ public partial class Kokoro<T> : TtsModelBase<T>, IEndToEndTts<T>
     public override Tensor<T> ForwardForTraining(Tensor<T> input) => IsOnnxMode ? PredictCore(input) : NativeForward(input, training: true);
 
     /// <inheritdoc />
+    /// <remarks>Kokoro's forward reads its predicted durations back to the host and builds the token-to-frame alignment
+    /// from them, so the graph's shape and the alignment's values follow the data: a static replay cannot express that
+    /// graph break, and a traced plan trained on a NaN loss with every gradient zero. It trains on the eager tape, which
+    /// re-runs the true forward each step.</remarks>
+    protected override bool SupportsFusedCompiledTraining => false;
+
+    /// <inheritdoc />
     protected override IGradientBasedOptimizer<T, Tensor<T>, Tensor<T>> GetOrCreateBaseOptimizer() =>
         _optimizer ?? base.GetOrCreateBaseOptimizer();
 

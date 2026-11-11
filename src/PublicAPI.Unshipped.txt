@@ -22492,3 +22492,4 @@ virtual AiDotNet.TextToSpeech.TtsModelOptions.FftSize.get -> int
 virtual AiDotNet.TextToSpeech.TtsModelOptions.FftSize.set -> void
 virtual AiDotNet.TextToSpeech.TtsModelOptions.VocabSize.get -> int
 virtual AiDotNet.TextToSpeech.TtsModelOptions.VocabSize.set -> void
+override AiDotNet.TextToSpeech.EndToEnd.Kokoro<T>.SupportsFusedCompiledTraining.get -> bool
