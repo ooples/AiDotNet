@@ -283,40 +283,50 @@ public static class SegmentationRenderer
         if (paletteSize == 0)
             throw new ArgumentException("Colour palette is empty.", nameof(colors));
 
-        var half = numOps.FromDouble(0.5);
         var anchors = new MaskAnchor[numMasks];
+        int plane = height * width;
+        var rgbShape = new[] { 3, height, width };
+
+        // Masks and canvas in double, each from one bulk conversion. Every blend was stored in T before the
+        // next mask read it, so the canvas is rounded through T (in bulk) after each mask.
+        var maskValues = CvTensorOps<T>.ToDoubleArray(maskStack);
+        var canvas = CvTensorOps<T>.ToDoubleArray(rgb);
 
         for (int m = 0; m < numMasks; m++)
         {
             double cr = palette[m % paletteSize, 0] * scale / 255.0;
             double cg = palette[m % paletteSize, 1] * scale / 255.0;
             double cb = palette[m % paletteSize, 2] * scale / 255.0;
+            int maskOffset = m * plane;
 
             for (int y = 0; y < height; y++)
             {
                 for (int x = 0; x < width; x++)
                 {
-                    if (numOps.LessThanOrEquals(maskStack[m, y, x], half)) continue;
+                    // Not above 0.5 (NaN is not at or below it, so it blends, as before).
+                    if (maskValues[maskOffset + (y * width) + x] <= 0.5) continue;
                     if (!anchors[m].HasValue) anchors[m] = new MaskAnchor(y, x);
-                    Blend(rgb, numOps, y, x, cr, cg, cb, alpha);
+                    Blend(canvas, plane, (y * width) + x, cr, cg, cb, alpha);
                 }
             }
 
             if (drawContours && contourThickness > 0)
-                DrawContour(rgb, maskStack, numOps, m, height, width, contourThickness, cr, cg, cb);
+                DrawContour(canvas, maskValues, maskOffset, height, width, contourThickness, cr, cg, cb);
+
+            canvas = CvTensorOps<T>.ToDoubleArray(CvTensorOps<T>.FromDoubleArray(canvas, rgbShape));
         }
 
-        return new DrawResult<T>(rgb, scale, anchors);
+        return new DrawResult<T>(CvTensorOps<T>.FromDoubleArray(canvas, rgbShape), scale, anchors);
     }
 
-    private static void Blend<T>(
-        Tensor<T> rgb, INumericOperations<T> numOps, int y, int x,
+    private static void Blend(
+        double[] canvas, int plane, int pixel,
         double cr, double cg, double cb, double alpha)
     {
         double keep = 1.0 - alpha;
-        rgb[0, y, x] = numOps.FromDouble(numOps.ToDouble(rgb[0, y, x]) * keep + cr * alpha);
-        rgb[1, y, x] = numOps.FromDouble(numOps.ToDouble(rgb[1, y, x]) * keep + cg * alpha);
-        rgb[2, y, x] = numOps.FromDouble(numOps.ToDouble(rgb[2, y, x]) * keep + cb * alpha);
+        canvas[pixel] = canvas[pixel] * keep + cr * alpha;
+        canvas[plane + pixel] = canvas[plane + pixel] * keep + cg * alpha;
+        canvas[(2 * plane) + pixel] = canvas[(2 * plane) + pixel] * keep + cb * alpha;
     }
 
     /// <summary>
@@ -324,15 +334,14 @@ public static class SegmentationRenderer
     /// mask and at least one 4-neighbour is outside it (or off the edge of the image), then dilated
     /// to the requested thickness.
     /// </summary>
-    private static void DrawContour<T>(
-        Tensor<T> rgb, Tensor<T> maskStack, INumericOperations<T> numOps,
-        int maskIndex, int height, int width, int thickness,
+    private static void DrawContour(
+        double[] canvas, double[] maskValues, int maskOffset, int height, int width, int thickness,
         double cr, double cg, double cb)
     {
-        var half = numOps.FromDouble(0.5);
+        int plane = height * width;
         bool Inside(int y, int x) =>
             y >= 0 && y < height && x >= 0 && x < width
-            && numOps.GreaterThan(maskStack[maskIndex, y, x], half);
+            && maskValues[maskOffset + (y * width) + x] > 0.5;
 
         var boundary = new List<(int Y, int X)>();
         for (int y = 0; y < height; y++)
@@ -354,9 +363,10 @@ public static class SegmentationRenderer
                 {
                     int y = by + dy, x = bx + dx;
                     if (y < 0 || y >= height || x < 0 || x >= width) continue;
-                    rgb[0, y, x] = numOps.FromDouble(cr);
-                    rgb[1, y, x] = numOps.FromDouble(cg);
-                    rgb[2, y, x] = numOps.FromDouble(cb);
+                    int pixel = (y * width) + x;
+                    canvas[pixel] = cr;
+                    canvas[plane + pixel] = cg;
+                    canvas[(2 * plane) + pixel] = cb;
                 }
             }
         }
@@ -381,7 +391,22 @@ public static class SegmentationRenderer
         int height = rgb.Shape[1];
         int width = rgb.Shape[2];
         int count = boxes.Shape[0];
+        int columns = boxes.Shape[1];
         int paletteSize = palette.GetLength(0);
+        int plane = height * width;
+
+        // Box corners in double and every drawn colour in T, each from one bulk conversion; the boxes are
+        // painted into a copy of the pixels that is written back in one bulk copy.
+        var boxValues = CvTensorOps<T>.ToDoubleArray(boxes);
+        var colourValues = new double[keptInstances.Count * 3];
+        for (int drawn = 0; drawn < keptInstances.Count; drawn++)
+        {
+            colourValues[3 * drawn] = palette[drawn % paletteSize, 0] * scale / 255.0;
+            colourValues[(3 * drawn) + 1] = palette[drawn % paletteSize, 1] * scale / 255.0;
+            colourValues[(3 * drawn) + 2] = palette[drawn % paletteSize, 2] * scale / 255.0;
+        }
+        var colours = CvTensorOps<T>.FromDoubleArray(colourValues, new[] { colourValues.Length }).ToArray();
+        var pixels = rgb.ToArray();
 
         for (int drawn = 0; drawn < keptInstances.Count; drawn++)
         {
@@ -393,26 +418,29 @@ public static class SegmentationRenderer
                     nameof(boxes));
             }
 
-            int x1 = (int)Math.Round(numOps.ToDouble(boxes[original, 0]));
-            int y1 = (int)Math.Round(numOps.ToDouble(boxes[original, 1]));
-            int x2 = (int)Math.Round(numOps.ToDouble(boxes[original, 2]));
-            int y2 = (int)Math.Round(numOps.ToDouble(boxes[original, 3]));
+            int x1 = (int)Math.Round(boxValues[(original * columns) + 0]);
+            int y1 = (int)Math.Round(boxValues[(original * columns) + 1]);
+            int x2 = (int)Math.Round(boxValues[(original * columns) + 2]);
+            int y2 = (int)Math.Round(boxValues[(original * columns) + 3]);
 
-            double cr = palette[drawn % paletteSize, 0] * scale / 255.0;
-            double cg = palette[drawn % paletteSize, 1] * scale / 255.0;
-            double cb = palette[drawn % paletteSize, 2] * scale / 255.0;
+            T cr = colours[3 * drawn];
+            T cg = colours[(3 * drawn) + 1];
+            T cb = colours[(3 * drawn) + 2];
 
             void Plot(int y, int x)
             {
                 if (y < 0 || y >= height || x < 0 || x >= width) return;
-                rgb[0, y, x] = numOps.FromDouble(cr);
-                rgb[1, y, x] = numOps.FromDouble(cg);
-                rgb[2, y, x] = numOps.FromDouble(cb);
+                int pixel = (y * width) + x;
+                pixels[pixel] = cr;
+                pixels[plane + pixel] = cg;
+                pixels[(2 * plane) + pixel] = cb;
             }
 
             for (int x = Math.Min(x1, x2); x <= Math.Max(x1, x2); x++) { Plot(y1, x); Plot(y2, x); }
             for (int y = Math.Min(y1, y2); y <= Math.Max(y1, y2); y++) { Plot(y, x1); Plot(y, x2); }
         }
+
+        pixels.AsSpan().CopyTo(rgb.AsWritableSpan());
     }
 
     /// <summary>
@@ -431,21 +459,11 @@ public static class SegmentationRenderer
         if (channels != 1 && channels != 3)
             throw new ArgumentException($"Image must have 1 or 3 channels; got {channels}.", nameof(image));
 
-        var rgb = new Tensor<T>([3, height, width]);
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                for (int c = 0; c < 3; c++)
-                {
-                    rgb[c, y, x] = unbatched.Rank == 2
-                        ? unbatched[y, x]
-                        : unbatched[channels == 1 ? 0 : c, y, x];
-                }
-            }
-        }
-
-        return rgb;
+        // A fresh [3, H, W] copy: grey inputs repeat their one plane three times.
+        var engine = AiDotNetEngine.Current;
+        if (channels == 1)
+            return engine.TensorTile(engine.Reshape(unbatched, new[] { 1, height, width }), new[] { 3, 1, 1 });
+        return new Tensor<T>(unbatched.ToArray(), new[] { 3, height, width });
     }
 
     /// <summary>
@@ -454,9 +472,8 @@ public static class SegmentationRenderer
     /// </summary>
     private static double DetectImageScale<T>(Tensor<T> image, INumericOperations<T> numOps)
     {
-        var one = numOps.One;
-        for (int index = 0; index < image.Length; index++)
-            if (numOps.GreaterThan(image[index], one)) return 255.0;
+        foreach (double value in CvTensorOps<T>.ToDoubleArray(image))
+            if (value > 1.0) return 255.0;
         return 1.0;
     }
 
@@ -470,11 +487,7 @@ public static class SegmentationRenderer
                     $"Mask [{unbatched.Shape[0]},{unbatched.Shape[1]}] does not match image [{height},{width}].",
                     nameof(masks));
 
-            var single = new Tensor<T>([1, height, width]);
-            for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
-                    single[0, y, x] = unbatched[y, x];
-            return single;
+            return AiDotNetEngine.Current.Reshape(unbatched, new[] { 1, height, width });
         }
 
         if (unbatched.Rank != 3)
@@ -499,10 +512,11 @@ public static class SegmentationRenderer
         var scores = output.InstanceScores;
         int count = (output.InstanceMasks ?? throw new InvalidOperationException("output.InstanceMasks is null where it is required.")).Shape[0];
         var keep = new List<int>(count);
+        var scoreValues = scores is null ? null : CvTensorOps<T>.ToDoubleArray(scores);
         for (int i = 0; i < count; i++)
         {
-            if (scores is null || i >= scores.Length
-                || numOps.ToDouble(scores[i]) >= config.MinDisplayConfidence)
+            if (scoreValues is null || i >= scoreValues.Length
+                || scoreValues[i] >= config.MinDisplayConfidence)
             {
                 keep.Add(i);
             }
@@ -517,12 +531,8 @@ public static class SegmentationRenderer
 
         int height = masks.Shape[1];
         int width = masks.Shape[2];
-        var filtered = new Tensor<T>([keep.Count, height, width]);
-        for (int k = 0; k < keep.Count; k++)
-            for (int y = 0; y < height; y++)
-                for (int x = 0; x < width; x++)
-                    filtered[k, y, x] = masks[keep[k], y, x];
-        return filtered;
+        if (keep.Count == 0) return new Tensor<T>([0, height, width]);
+        return CvTensorOps<T>.Select(masks, keep.ToArray(), 0);
     }
 
     /// <summary>
@@ -647,19 +657,19 @@ public static class SegmentationRenderer
         // Channel indices deliberately equal class IDs. Channel 0 stays empty as background, so
         // class N is rendered with palette entry N rather than being shifted to N-1.
         int channels = Math.Max(1, numClasses);
-        var masks = new Tensor<T>([channels, height, width]);
-        var one = numOps.One;
+        var classes = CvTensorOps<T>.ToDoubleArray(unbatched);
+        var masks = new double[channels * height * width];
 
         for (int y = 0; y < height; y++)
         {
             for (int x = 0; x < width; x++)
             {
-                int cls = (int)Math.Round(numOps.ToDouble(unbatched[y, x]));
+                int cls = (int)Math.Round(classes[(y * width) + x]);
                 if (cls <= 0 || cls >= numClasses) continue;
-                masks[cls, y, x] = one;
+                masks[(((cls * height) + y) * width) + x] = 1.0;
             }
         }
-        return masks;
+        return CvTensorOps<T>.FromDoubleArray(masks, new[] { channels, height, width });
     }
 
     private readonly struct DrawResult<T>
