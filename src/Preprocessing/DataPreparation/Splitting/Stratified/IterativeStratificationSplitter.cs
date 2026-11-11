@@ -99,29 +99,26 @@ public class IterativeStratificationSplitter<T> : DataSplitterBase<T>
         int targetTestSize = Math.Max(1, (int)(nSamples * _testSize));
         int targetTrainSize = nSamples - targetTestSize;
 
-        // Calculate label frequencies
-        var labelCounts = new double[nLabels];
-        for (int j = 0; j < nLabels; j++)
-        {
-            for (int i = 0; i < nSamples; i++)
-            {
-                labelCounts[j] += Convert.ToDouble(_labelMatrix[i, j]);
-            }
-        }
+        var engine = AiDotNetEngine.Current;
+        var labels = Tensor<T>.FromMatrix(_labelMatrix);
 
-        // Sort labels by frequency (rarest first)
-        var labelOrder = Enumerable.Range(0, nLabels)
-            .OrderBy(j => labelCounts[j])
-            .ToArray();
+        // Calculate label frequencies
+        var labelCounts = engine.ReduceSum(labels, new[] { 0 }, false);
+
+        // Sort labels by frequency (rarest first, ties in label order)
+        var labelOrder = engine.TensorArgsort(labelCounts, 0, false).AsSpan().ToArray();
+
+        // Membership flags (label value > 0), copied once for the sequential assignment below
+        var membership = engine.TensorGreaterThan(labels, NumOps.Zero).Cast<int>().AsSpan().ToArray();
 
         // Initialize sample availability and fold assignment
         var available = new HashSet<int>(Enumerable.Range(0, nSamples));
         var trainIndices = new List<int>();
         var testIndices = new List<int>();
 
-        // Calculate desired label counts per fold
-        var trainLabelCounts = new double[nLabels];
-        var testLabelCounts = new double[nLabels];
+        // Running label counts per fold
+        var trainLabelCounts = new Tensor<T>(new[] { nLabels });
+        var testLabelCounts = new Tensor<T>(new[] { nLabels });
 
         // Iterate through labels from rarest to most common
         foreach (int labelIdx in labelOrder)
@@ -132,7 +129,7 @@ public class IterativeStratificationSplitter<T> : DataSplitterBase<T>
             var samplesWithLabel = new List<int>();
             foreach (int i in available)
             {
-                if (Convert.ToDouble(_labelMatrix[i, labelIdx]) > 0)
+                if (membership[i * nLabels + labelIdx] != 0)
                 {
                     samplesWithLabel.Add(i);
                 }
@@ -145,22 +142,9 @@ public class IterativeStratificationSplitter<T> : DataSplitterBase<T>
                 ShuffleList(samplesWithLabel);
             }
 
-            // Assign samples to balance this label between train/test
-            double totalLabelCount = labelCounts[labelIdx];
-            double targetTrainForLabel = totalLabelCount * (1 - _testSize);
-            double targetTestForLabel = totalLabelCount * _testSize;
-
             foreach (int sampleIdx in samplesWithLabel)
             {
                 if (!available.Contains(sampleIdx)) continue;
-
-                // Decide which fold needs this label more
-                double trainDeficit = targetTrainForLabel - trainLabelCounts[labelIdx];
-                double testDeficit = targetTestForLabel - testLabelCounts[labelIdx];
-
-                // Also consider overall size constraints
-                double trainSizeRatio = (double)trainIndices.Count / targetTrainSize;
-                double testSizeRatio = (double)testIndices.Count / targetTestSize;
 
                 bool assignToTest;
                 if (testIndices.Count >= targetTestSize)
@@ -173,27 +157,21 @@ public class IterativeStratificationSplitter<T> : DataSplitterBase<T>
                 }
                 else
                 {
-                    // Balance based on label deficit and size ratio
-                    double trainScore = trainDeficit / Math.Max(1, targetTrainForLabel) - trainSizeRatio;
-                    double testScore = testDeficit / Math.Max(1, targetTestForLabel) - testSizeRatio;
-                    assignToTest = testScore > trainScore;
+                    assignToTest = TestNeedsLabelMore(
+                        labelCounts, trainLabelCounts, testLabelCounts, labelIdx,
+                        (double)trainIndices.Count / targetTrainSize, (double)testIndices.Count / targetTestSize);
                 }
 
+                var sampleLabels = engine.Reshape(engine.TensorNarrow(labels, 0, sampleIdx, 1), new[] { nLabels });
                 if (assignToTest)
                 {
                     testIndices.Add(sampleIdx);
-                    for (int j = 0; j < nLabels; j++)
-                    {
-                        testLabelCounts[j] += Convert.ToDouble(_labelMatrix[sampleIdx, j]);
-                    }
+                    testLabelCounts = engine.TensorAdd(testLabelCounts, sampleLabels);
                 }
                 else
                 {
                     trainIndices.Add(sampleIdx);
-                    for (int j = 0; j < nLabels; j++)
-                    {
-                        trainLabelCounts[j] += Convert.ToDouble(_labelMatrix[sampleIdx, j]);
-                    }
+                    trainLabelCounts = engine.TensorAdd(trainLabelCounts, sampleLabels);
                 }
 
                 available.Remove(sampleIdx);
@@ -215,6 +193,29 @@ public class IterativeStratificationSplitter<T> : DataSplitterBase<T>
 
         return BuildResult(X, y, trainIndices.ToArray(), testIndices.ToArray());
     }
+
+    /// <summary>
+    /// Balances one label between the folds: with targets total (1 - testSize) and total testSize, each fold scores
+    /// (target - count) / max(1, target) - its size ratio, and the sample goes to test when test scores higher.
+    /// </summary>
+    private bool TestNeedsLabelMore(
+        Tensor<T> labelCounts, Tensor<T> trainLabelCounts, Tensor<T> testLabelCounts, int labelIdx,
+        double trainSizeRatio, double testSizeRatio)
+    {
+        var ops = NumOps;
+        T total = labelCounts[labelIdx];
+        T targetTrain = ops.Multiply(total, ops.FromDouble(1 - _testSize));
+        T targetTest = ops.Multiply(total, ops.FromDouble(_testSize));
+
+        // Decide which fold needs this label more, also considering overall size constraints
+        T trainDeficit = ops.Subtract(targetTrain, trainLabelCounts[labelIdx]);
+        T testDeficit = ops.Subtract(targetTest, testLabelCounts[labelIdx]);
+        T trainScore = ops.Subtract(ops.Divide(trainDeficit, MaxWithOne(targetTrain)), ops.FromDouble(trainSizeRatio));
+        T testScore = ops.Subtract(ops.Divide(testDeficit, MaxWithOne(targetTest)), ops.FromDouble(testSizeRatio));
+        return ops.GreaterThan(testScore, trainScore);
+    }
+
+    private static T MaxWithOne(T value) => NumOps.GreaterThan(value, NumOps.One) ? value : NumOps.One;
 
     private void ShuffleList(List<int> list)
     {
