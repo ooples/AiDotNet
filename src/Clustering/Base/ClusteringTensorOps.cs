@@ -294,6 +294,10 @@ internal static class ClusteringTensorOps
         return Engine.TensorIndexSelect(ToTensor(m), Vector<int>.Wrap(rows).AsTensor(), 0).ToMatrix();
     }
 
+    /// <summary>Selects columns of a rank-2 tensor by index.</summary>
+    internal static Tensor<T> SelectColumns<T>(Tensor<T> m, int[] columns)
+        => Engine.TensorIndexSelect(m, Vector<int>.Wrap(columns).AsTensor(), 1);
+
     /// <summary>Selects elements of a vector by index.</summary>
     internal static Vector<T> SelectElements<T>(Vector<T> v, int[] indices)
     {
@@ -356,9 +360,17 @@ internal static class ClusteringTensorOps
     /// </summary>
     internal static int SampleProportional<T>(Vector<T> weights, Random random)
     {
+        int position = SampleProportionalOrNone(weights, random);
+        return position >= 0 ? position : 0;
+    }
+
+    /// <summary>As <see cref="SampleProportional"/>, but returns -1 when no running sum reaches the threshold.</summary>
+    internal static int SampleProportionalOrNone<T>(Vector<T> weights, Random random)
+    {
         if (weights.Length == 0)
         {
-            return 0;
+            random.NextDouble();
+            return -1;
         }
 
         var engine = Engine;
@@ -369,7 +381,7 @@ internal static class ClusteringTensorOps
         T total = engine.TensorMaxValue(cumulative);
         T threshold = numOps.Multiply(numOps.FromDouble(random.NextDouble()), total);
         int position = engine.TensorSearchSorted(cumulative, Vector<T>.FromArray(new[] { threshold }).AsTensor(), false).ToArray()[0];
-        return position < weights.Length ? position : 0;
+        return position < weights.Length ? position : -1;
     }
 
     /// <summary>Distance (configured metric) from every row of x to one point, evaluated as metric(row, point).</summary>
