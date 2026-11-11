@@ -211,50 +211,22 @@ public class LayerGradCAMExplainer<T> : ILocalExplainer<T, LayerGradCAMExplanati
     /// </remarks>
     private Matrix<T> ComputeGradCAM(Vector<T> activations, Vector<T> gradients)
     {
-        // Reshape activations and gradients to [channels, height, width]
-        // Assuming they're flattened in channel-major order
+        // Reshape activations and gradients to [channels, height * width]
+        // Assuming they're flattened in channel-major order (missing entries count as zero)
+        var engine = AiDotNetEngine.Current;
+        int spatialSize = _layerHeight * _layerWidth;
+        int size = _numChannels * spatialSize;
+        var gradientPlanes = new Tensor<T>(new[] { _numChannels, spatialSize }, ExplainerTensorOps<T>.PadOrTruncate(gradients, size));
+        var activationPlanes = new Tensor<T>(new[] { _numChannels, spatialSize }, ExplainerTensorOps<T>.PadOrTruncate(activations, size));
 
         // Step 1: Global average pool gradients to get weights per channel
-        var weights = new double[_numChannels];
-        int spatialSize = _layerHeight * _layerWidth;
-
-        for (int c = 0; c < _numChannels; c++)
-        {
-            double sum = 0;
-            for (int s = 0; s < spatialSize; s++)
-            {
-                int idx = c * spatialSize + s;
-                if (idx < gradients.Length)
-                {
-                    sum += NumOps.ToDouble(gradients[idx]);
-                }
-            }
-            weights[c] = sum / spatialSize;
-        }
+        var weights = engine.ReduceMean(gradientPlanes, new[] { 1 }, false).Reshape(new[] { 1, _numChannels });
 
         // Step 2: Weighted combination of activation maps
-        var gradcam = new Matrix<T>(_layerHeight, _layerWidth);
+        var combined = engine.TensorMatMul(weights, activationPlanes);
 
-        for (int h = 0; h < _layerHeight; h++)
-        {
-            for (int w = 0; w < _layerWidth; w++)
-            {
-                double value = 0;
-                for (int c = 0; c < _numChannels; c++)
-                {
-                    int idx = c * spatialSize + h * _layerWidth + w;
-                    if (idx < activations.Length)
-                    {
-                        value += weights[c] * NumOps.ToDouble(activations[idx]);
-                    }
-                }
-
-                // Step 3: ReLU - only keep positive values
-                gradcam[h, w] = NumOps.FromDouble(Math.Max(0, value));
-            }
-        }
-
-        return gradcam;
+        // Step 3: ReLU - only keep positive values
+        return engine.ReLU(combined).Reshape(new[] { _layerHeight, _layerWidth }).ToMatrix();
     }
 
     /// <summary>
@@ -266,40 +238,8 @@ public class LayerGradCAMExplainer<T> : ILocalExplainer<T, LayerGradCAMExplanati
         int targetH = inputShape[^2];
         int targetW = inputShape[^1];
 
-        var upsampled = new Tensor<T>(new[] { targetH, targetW });
-
-        for (int h = 0; h < targetH; h++)
-        {
-            for (int w = 0; w < targetW; w++)
-            {
-                // Compute source coordinates
-                double srcH = (double)h / targetH * _layerHeight;
-                double srcW = (double)w / targetW * _layerWidth;
-
-                // Bilinear interpolation
-                int h0 = Math.Min((int)Math.Floor(srcH), _layerHeight - 1);
-                int h1 = Math.Min(h0 + 1, _layerHeight - 1);
-                int w0 = Math.Min((int)Math.Floor(srcW), _layerWidth - 1);
-                int w1 = Math.Min(w0 + 1, _layerWidth - 1);
-
-                double dh = srcH - h0;
-                double dw = srcW - w0;
-
-                double v00 = NumOps.ToDouble(gradcam[h0, w0]);
-                double v01 = NumOps.ToDouble(gradcam[h0, w1]);
-                double v10 = NumOps.ToDouble(gradcam[h1, w0]);
-                double v11 = NumOps.ToDouble(gradcam[h1, w1]);
-
-                double value = v00 * (1 - dh) * (1 - dw) +
-                              v01 * (1 - dh) * dw +
-                              v10 * dh * (1 - dw) +
-                              v11 * dh * dw;
-
-                upsampled[h, w] = NumOps.FromDouble(value);
-            }
-        }
-
-        return upsampled;
+        // Bilinear interpolation
+        return ExplainerTensorOps<T>.BilinearResize(Tensor<T>.FromMatrix(gradcam), targetH, targetW);
     }
 
     /// <summary>
@@ -336,27 +276,32 @@ public class LayerGradCAMExplainer<T> : ILocalExplainer<T, LayerGradCAMExplanati
     /// </summary>
     private Vector<T> ComputeNumericalLayerGradients(Vector<T> input, int targetClass)
     {
-        double epsilon = 1e-5;
+        var engine = AiDotNetEngine.Current;
+        T epsilon = NumOps.FromDouble(1e-5);
         var basePred = _predictFunction(input);
-        double baseScore = NumOps.ToDouble(basePred[targetClass]);
+        T baseScore = basePred[targetClass];
 
         int size = _numChannels * _layerHeight * _layerWidth;
-        var gradients = new T[size];
+        int count = Math.Min(input.Length, size);
 
         // Approximate layer gradients via input perturbations
         // This is a rough approximation
-        for (int i = 0; i < Math.Min(input.Length, size); i++)
+        var perturbedPredictions = new List<Vector<T>>(count);
+        for (int i = 0; i < count; i++)
         {
-            var perturbed = input.Clone();
-            perturbed[i] = NumOps.Add(perturbed[i], NumOps.FromDouble(epsilon));
-
-            var perturbedPred = _predictFunction(perturbed);
-            double perturbedScore = NumOps.ToDouble(perturbedPred[targetClass]);
-
-            gradients[i] = NumOps.FromDouble((perturbedScore - baseScore) / epsilon);
+            var step = ExplainerTensorOps<T>.RangeIndicator(input.Length, i, i + 1).ToVector();
+            var perturbed = engine.Add(input, engine.Multiply(step, epsilon));
+            perturbedPredictions.Add(_predictFunction(perturbed));
         }
 
-        return new Vector<T>(gradients);
+        if (count == 0)
+        {
+            return new Vector<T>(size);
+        }
+
+        var perturbedScores = engine.TensorSliceAxis(ExplainerTensorOps<T>.Stack(perturbedPredictions), 1, targetClass);
+        var gradients = engine.TensorDivideScalar(engine.TensorSubtractScalar(perturbedScores, baseScore), epsilon);
+        return ExplainerTensorOps<T>.PadOrTruncate(gradients.ToVector(), size);
     }
 
     /// <summary>
@@ -364,20 +309,7 @@ public class LayerGradCAMExplainer<T> : ILocalExplainer<T, LayerGradCAMExplanati
     /// </summary>
     private int GetPredictedClass(Vector<T> prediction)
     {
-        int maxIdx = 0;
-        double maxVal = NumOps.ToDouble(prediction[0]);
-
-        for (int i = 1; i < prediction.Length; i++)
-        {
-            double val = NumOps.ToDouble(prediction[i]);
-            if (val > maxVal)
-            {
-                maxVal = val;
-                maxIdx = i;
-            }
-        }
-
-        return maxIdx;
+        return ExplainerTensorOps<T>.ArgMax(prediction);
     }
 }
 
@@ -437,30 +369,16 @@ public class LayerGradCAMExplanation<T>
     /// <summary>Gets normalized GradCAM map (0-1 range).</summary>
     public Matrix<T> GetNormalizedMap()
     {
-        double max = 0;
-        for (int h = 0; h < LayerHeight; h++)
+        var engine = AiDotNetEngine.Current;
+        var map = Tensor<T>.FromMatrix(GradCAMMap);
+        T max = map.Length > 0 ? engine.TensorMaxValue(engine.TensorMax(map, NumOps.Zero)) : NumOps.Zero;
+
+        if (NumOps.GreaterThan(max, NumOps.FromDouble(1e-10)))
         {
-            for (int w = 0; w < LayerWidth; w++)
-            {
-                double val = NumOps.ToDouble(GradCAMMap[h, w]);
-                if (val > max) max = val;
-            }
+            return engine.TensorDivideScalar(map, max).ToMatrix();
         }
 
-        var normalized = new Matrix<T>(LayerHeight, LayerWidth);
-        if (max > 1e-10)
-        {
-            for (int h = 0; h < LayerHeight; h++)
-            {
-                for (int w = 0; w < LayerWidth; w++)
-                {
-                    normalized[h, w] = NumOps.FromDouble(
-                        NumOps.ToDouble(GradCAMMap[h, w]) / max);
-                }
-            }
-        }
-
-        return normalized;
+        return new Matrix<T>(LayerHeight, LayerWidth);
     }
 
     /// <summary>Gets top activated regions.</summary>
@@ -487,6 +405,6 @@ public class LayerGradCAMExplanation<T>
         var top = GetTopRegions(3).ToList();
         return $"GradCAM for class {TargetClass} (pred={Prediction}):\n" +
                $"  Map size: {LayerHeight}x{LayerWidth}\n" +
-               $"  Top regions: {string.Join(", ", top.Select(r => $"({r.H},{r.W})={NumOps.ToDouble(r.Activation):F4}"))}";
+               $"  Top regions: {string.Join(", ", top.Select(r => $"({r.H},{r.W})={r.Activation:F4}"))}";
     }
 }
