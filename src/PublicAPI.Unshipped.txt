@@ -1141,3 +1141,9 @@ AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.Us
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
+*REMOVED*AiDotNet.GaussianProcesses.BetaLikelihood<T>.LogLikelihood(AiDotNet.Tensors.LinearAlgebra.Vector<T>! y, AiDotNet.Tensors.LinearAlgebra.Vector<T>! f) -> double
+AiDotNet.GaussianProcesses.BetaLikelihood<T>.LogLikelihood(AiDotNet.Tensors.LinearAlgebra.Vector<T>! y, AiDotNet.Tensors.LinearAlgebra.Vector<T>! f) -> T
+*REMOVED*AiDotNet.GaussianProcesses.StudentTGaussianProcess<T>.GetOutlierWeights() -> double[]?
+AiDotNet.GaussianProcesses.StudentTGaussianProcess<T>.GetOutlierWeights() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
+*REMOVED*AiDotNet.GaussianProcesses.HeteroscedasticGaussianProcess<T>.GetNoiseVariances() -> double[]?
+AiDotNet.GaussianProcesses.HeteroscedasticGaussianProcess<T>.GetNoiseVariances() -> AiDotNet.Tensors.LinearAlgebra.Vector<T>?
