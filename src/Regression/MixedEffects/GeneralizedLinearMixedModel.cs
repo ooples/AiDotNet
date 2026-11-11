@@ -268,10 +268,7 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
         if (_fixedEffects is not null && _fixedEffects.Length > 0)
         {
             int featureCount = _fixedEffects.Length - 1;
-            var coefficients = new Vector<T>(featureCount);
-            for (int j = 0; j < featureCount; j++) coefficients[j] = _fixedEffects[j];
-
-            Coefficients = coefficients;
+            Coefficients = _fixedEffects.GetSubVector(0, featureCount);
             Intercept = _fixedEffects[featureCount];
         }
         else
@@ -566,26 +563,17 @@ public partial class GeneralizedLinearMixedModel<T> : RegressionBase<T>
     /// </summary>
     private void FitWeightedLME(Matrix<T> fixedX, Matrix<T> fullX, Vector<T> workingY, Vector<T> weights)
     {
-        // Apply weights by transforming the problem
-        var sqrtW = new Vector<T>(weights.Length);
-        for (int i = 0; i < weights.Length; i++)
-        {
-            sqrtW[i] = NumOps.Sqrt(weights[i]);
-        }
+        // Apply weights by transforming the problem: rows of X and y scaled by sqrt(w)
+        var sqrtW = Engine.Sqrt(weights);
 
         // Weight-transform the design matrix and response
-        var wX = new Matrix<T>(fixedX.Rows, fixedX.Columns);
-        var wY = new Vector<T>(workingY.Length);
-
-        for (int i = 0; i < fixedX.Rows; i++)
-        {
-            double w = NumOps.ToDouble(sqrtW[i]);
-            for (int j = 0; j < fixedX.Columns; j++)
-            {
-                wX[i, j] = NumOps.FromDouble(NumOps.ToDouble(fixedX[i, j]) * w);
-            }
-            wY[i] = NumOps.FromDouble(NumOps.ToDouble(workingY[i]) * w);
-        }
+        var wX = fixedX.Rows == 0 || fixedX.Columns == 0
+            ? new Matrix<T>(fixedX.Rows, fixedX.Columns)
+            : Engine.TensorMultiply(
+                Tensor<T>.FromMatrix(fixedX),
+                Engine.TensorBroadcastTo(new Tensor<T>(new[] { fixedX.Rows, 1 }, sqrtW.GetSubVector(0, fixedX.Rows)),
+                    new[] { fixedX.Rows, fixedX.Columns })).ToMatrix();
+        var wY = Engine.Multiply(workingY, sqrtW);
 
         // Compute BLUPs
         ComputeBLUPs(wX, fullX, wY, weights);
