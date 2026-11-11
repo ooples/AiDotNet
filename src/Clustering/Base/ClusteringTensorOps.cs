@@ -384,6 +384,41 @@ internal static class ClusteringTensorOps
         return position < weights.Length ? position : -1;
     }
 
+    /// <summary>
+    /// Draws <paramref name="count"/> indices, each with probability proportional to the (non-negative) weights, from
+    /// one running sum: draw t is the first index whose running sum reaches u_t * total for the t-th
+    /// random.NextDouble(), or 0 when none does. One draw matches <see cref="SampleProportional"/>.
+    /// </summary>
+    internal static int[] SampleProportionalMany<T>(Vector<T> weights, Random random, int count)
+    {
+        var draws = new int[count];
+        if (weights.Length == 0)
+        {
+            for (int t = 0; t < count; t++) random.NextDouble();
+            return draws;
+        }
+
+        var cumulative = Engine.TensorCumSum(weights.AsTensor(), 0);
+
+        // The weights are non-negative, so the running sum ends at its maximum.
+        T total = Engine.TensorMaxValue(cumulative);
+        for (int t = 0; t < count; t++)
+        {
+            draws[t] = FirstReaching(cumulative, total, random.NextDouble());
+        }
+
+        return draws;
+    }
+
+    /// <summary>The first index whose running sum reaches <paramref name="fraction"/> * total, or 0 when none does.</summary>
+    private static int FirstReaching<T>(Tensor<T> cumulative, T total, double fraction)
+    {
+        var numOps = MathHelper.GetNumericOperations<T>();
+        T threshold = numOps.Multiply(numOps.FromDouble(fraction), total);
+        int position = Engine.TensorSearchSorted(cumulative, Vector<T>.FromArray(new[] { threshold }).AsTensor(), false).ToArray()[0];
+        return position < cumulative.Length ? position : 0;
+    }
+
     /// <summary>Distance (configured metric) from every row of x to one point, evaluated as metric(row, point).</summary>
     internal static Vector<T> DistancesToPoint<T>(IDistanceMetric<T> metric, Matrix<T> x, Vector<T> point)
         => Tensor<T>.FromMatrix(metric.ComputePairwise(x, Tensor<T>.FromVector(point, new[] { 1, point.Length }).ToMatrix())).ToVector();

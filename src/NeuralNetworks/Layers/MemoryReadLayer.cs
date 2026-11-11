@@ -186,6 +186,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
     [Scratch]
     private Tensor<T>? _outputBiasGradient;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
@@ -684,6 +685,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         return result;
     }
 
+    /// <inheritdoc />
     public override void ClearGradients()
     {
         base.ClearGradients();
@@ -691,6 +693,7 @@ public partial class MemoryReadLayer<T> : LayerBase<T>, IAuxiliaryLossLayer<T>, 
         _outputWeightsGradient = null; _outputBiasGradient = null;
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
         // Clear cached values from forward and backward passes

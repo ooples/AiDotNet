@@ -25,6 +25,7 @@ public sealed class CodeTokenizationPipeline : ICodeTokenizationPipeline
         _syntaxProvider = syntaxProvider;
     }
 
+    /// <inheritdoc />
     public CodeTokenizationResult Tokenize(
         string code,
         ProgramLanguage language,

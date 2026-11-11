@@ -23,6 +23,7 @@ public partial class LearnableLogitScaleLayer<T> : LayerBase<T>
     [TrainableParameter(Role = PersistentTensorRole.Weights)]
     private Tensor<T> _logScale;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
     /// <summary>Construction state: kept so the generated clone factory can rebuild this layer.</summary>
     private readonly double _temperature;
@@ -40,6 +41,7 @@ public partial class LearnableLogitScaleLayer<T> : LayerBase<T>
     public T Scale => NumOps.Exp(NumOps.FromDouble(Math.Max(
         0.0, Math.Min(NumOps.ToDouble(_logScale[0]), MaximumLogScale))));
 
+    /// <inheritdoc />
     protected override Tensor<T> ForwardTraced(Tensor<T> input)
     {
         var clamped = Engine.TensorClamp(
@@ -48,6 +50,7 @@ public partial class LearnableLogitScaleLayer<T> : LayerBase<T>
         return Engine.TensorMultiply(input, scale);
     }
 
+    /// <inheritdoc />
     public override void UpdateParameters(T learningRate)
     {
         var gradient = GetParameterGradients();
@@ -56,6 +59,7 @@ public partial class LearnableLogitScaleLayer<T> : LayerBase<T>
         Engine.InvalidatePersistentTensor(_logScale);
     }
 
+    /// <inheritdoc />
     public override void ResetState()
     {
     }

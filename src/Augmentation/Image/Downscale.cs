@@ -22,6 +22,7 @@ public class Downscale<T> : ImageAugmenterBase<T>
         DownInterpolation = downInterpolation; UpInterpolation = upInterpolation;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         double scale = context.GetRandomDouble(MinScale, MaxScale);
@@ -35,6 +36,7 @@ public class Downscale<T> : ImageAugmenterBase<T>
         return upResize.Apply(small, context);
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

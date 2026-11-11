@@ -34,6 +34,7 @@ public sealed class BulyanFullModelAggregationStrategy<T, TInput, TOutput> :
         _useClientWeightsForAveraging = useClientWeightsForAveraging;
     }
 
+    /// <inheritdoc />
     public override IFullModel<T, TInput, TOutput> Aggregate(
         Dictionary<int, IFullModel<T, TInput, TOutput>> clientModels,
         Dictionary<int, double> clientWeights)
@@ -150,6 +151,7 @@ public sealed class BulyanFullModelAggregationStrategy<T, TInput, TOutput> :
             .ToList();
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "Bulyan";
 }
 

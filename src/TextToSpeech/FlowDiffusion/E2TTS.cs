@@ -102,9 +102,13 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public int NumCodebooks => _options.NumCodebooks;
+    /// <inheritdoc />
     public int CodebookSize => _options.CodebookSize;
+    /// <inheritdoc />
     public int CodecFrameRate => _options.CodecFrameRate;
 
     /// <summary>Synthesizes speech. E2 TTS: character-level text -> masked mel prediction via flow matching -> vocoder.</summary>
@@ -138,6 +142,7 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
         return Predict(tokens);
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
         int len = Math.Min(text.Length, _options.MaxTextLength);
@@ -147,6 +152,7 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
         return t;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
     protected override void InitializeLayers()
@@ -170,6 +176,7 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
             );
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -210,6 +217,7 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
     }
 
     // UpdateParameters folded one enumeration the base already folds. Removed under AIDN082.
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -262,6 +270,7 @@ public partial class E2TTS<T> : TtsModelBase<T>, ICodecTts<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(E2TTS<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

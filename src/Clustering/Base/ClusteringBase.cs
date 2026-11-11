@@ -530,6 +530,7 @@ public abstract partial class ClusteringBase<T> : IClustering<T>, IConfigurableM
         }
     }
 
+    /// <inheritdoc />
     public ParameterLayoutSnapshot ParameterLayout => Registry.ParameterLayout;
 
     /// <inheritdoc/>

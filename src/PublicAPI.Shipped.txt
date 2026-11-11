@@ -24040,7 +24040,6 @@ AiDotNet.Diffusion.Attention.CausalTemporalAttention<T>.NumHeads.get -> int
 AiDotNet.Diffusion.Attention.CausalTemporalAttention<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
 AiDotNet.Diffusion.Attention.DiffusionAttention<T>
 AiDotNet.Diffusion.Attention.DiffusionAttention<T>.Channels.get -> int
-AiDotNet.Diffusion.Attention.DiffusionAttention<T>.DiffusionAttention(int channels, int numHeads = 8, int spatialSize = 64, int flashAttentionThreshold = 256, bool useCausalMask = false) -> void
 AiDotNet.Diffusion.Attention.DiffusionAttention<T>.FlashAttentionEnabled.get -> bool
 AiDotNet.Diffusion.Attention.DiffusionAttention<T>.NumHeads.get -> int
 AiDotNet.Diffusion.Attention.DiffusionAttention<T>.OutputAxesFor(int inputRank) -> System.Collections.Generic.IReadOnlyList<AiDotNet.Interfaces.OutputAxisContract>?
@@ -67394,7 +67393,6 @@ AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.ReplaceFfnDown(AiDotNe
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.ReplaceFfnUp(AiDotNet.NeuralNetworks.Layers.LayerBase<T>! replacement) -> void
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.ReplaceSelfAttention(AiDotNet.NeuralNetworks.Layers.LayerBase<T>! replacement) -> void
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.SelfAttentionLayer.get -> AiDotNet.NeuralNetworks.Layers.LayerBase<T>!
-AiDotNet.NeuralNetworks.Layers.TransformerDecoderBlock<T>.TransformerDecoderBlock(int hiddenSize, int numHeads, int ffnDim, double dropoutRate = 0) -> void
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderLayer<T>
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderLayer<T>.AuxiliaryLossWeight.get -> T
 AiDotNet.NeuralNetworks.Layers.TransformerDecoderLayer<T>.AuxiliaryLossWeight.set -> void
@@ -130424,7 +130422,6 @@ static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultColBERTLayers(AiDotNet.Neura
 static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultColBERTLayers(int vocabSize = 30522, int embeddingDimension = 128, int maxSequenceLength = 512, int numLayers = 12, int numHeads = 12, int feedForwardDim = 3072) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultColBERTLayers(int vocabSize, int embeddingDimension, int maxSequenceLength, int numLayers, int numHeads, int feedForwardDim, int hiddenDimension) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultConformerFPLayers(int numMels = 256, int hiddenDim = 256, int numLayers = 6, int numAttentionHeads = 4, int feedForwardDim = 1024, int embeddingDim = 128, double dropoutRate = 0.1) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
-static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultConformerLayers(int encoderDim = 512, int numLayers = 18, int numAttentionHeads = 8, int feedForwardExpansionFactor = 4, int numMels = 80, int vocabSize = 5000, double dropoutRate = 0.1, int maxSequenceLength = 750) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultConformerTransducerLayers(int encoderDim = 512, int numEncoderLayers = 18, int numAttentionHeads = 8, int feedForwardExpansionFactor = 4, int predictionDim = 640, int jointDim = 640, int numMels = 80, int vocabSize = 5000, double dropoutRate = 0.1, int maxSequenceLength = 750) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultContextNetLayers(int numBlocks = 23, int numSubBlocks = 5, int numMels = 80, int vocabSize = 1024, int kernelSize = 5, int squeezeExcitationRatio = 8, double widthScaling = 1, double dropoutRate = 0.1) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
 static AiDotNet.Helpers.LayerHelper<T>.CreateDefaultCopulaGANDiscriminatorLayers(int inputDim, int[]! hiddenDims, double dropoutRate) -> System.Collections.Generic.IEnumerable<AiDotNet.Interfaces.ILayer<T>!>!
@@ -131857,7 +131854,6 @@ static AiDotNet.NeuralNetworks.Layers.AdaptiveAveragePoolingLayer<T>.GlobalPool(
 static AiDotNet.NeuralNetworks.Layers.Conv3DLayer<T>.WithInputChannels(int inputChannels, int outputChannels, int kernelSize, int stride = 1, int padding = 0, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null) -> AiDotNet.NeuralNetworks.Layers.Conv3DLayer<T>!
 static AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>.Configure(int[]! inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null) -> AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>!
 static AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>.Configure(int[]! inputShape, int kernelSize, int numberOfFilters, int stride = 1, int padding = 0, AiDotNet.Interfaces.IVectorActivationFunction<T>? vectorActivationFunction = null) -> AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>!
-static AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>.WithInputDepth(int inputDepth, int outputDepth, int kernelSize, int stride = 1, int padding = 0, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null, AiDotNet.Initialization.IInitializationStrategy<T>? initializationStrategy = null, AiDotNet.Interfaces.IActivationFunction<T>? nonlinearityForInit = null, int groups = 1) -> AiDotNet.NeuralNetworks.Layers.ConvolutionalLayer<T>!
 static AiDotNet.NeuralNetworks.Layers.DeconvolutionalLayer<T>.WithInputDepth(int inputDepth, int outputDepth, int kernelSize, int stride = 1, int padding = 0, AiDotNet.Interfaces.IActivationFunction<T>? activationFunction = null) -> AiDotNet.NeuralNetworks.Layers.DeconvolutionalLayer<T>!
 static AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>.WithVectorActivation(int inputSize, int outputSize, AiDotNet.Interfaces.IVectorActivationFunction<T>! vectorActivationFunction) -> AiDotNet.NeuralNetworks.Layers.FullyConnectedLayer<T>!
 static AiDotNet.NeuralNetworks.Layers.LayerBase<T>.ApplyGpuActivation(AiDotNet.Tensors.Engines.DirectGpu.IDirectGpuBackend! backend, AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer! input, AiDotNet.Tensors.Engines.DirectGpu.IGpuBuffer! output, int size, AiDotNet.Tensors.Engines.FusedActivationType activation) -> void

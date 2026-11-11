@@ -1,3 +1,7 @@
+using AiDotNet.Attributes;
+using AiDotNet.Interfaces;
+using Newtonsoft.Json;
+
 namespace AiDotNet.Models.Options;
 
 /// <summary>
@@ -94,6 +98,12 @@ public class LogisticRegressionOptions<T> : RegressionOptions<T>
     /// right temperature for cooking: too high and things burn, too low and nothing cooks.
     /// </para>
     /// </remarks>
+    /// <value>
+    /// The step size of the solver <see cref="AiDotNet.Regression.LogisticRegression{T}.CreateGradientDescentSolver"/>
+    /// builds. The default L-BFGS solver chooses its own step by line search, so this has no effect unless that solver
+    /// is selected.
+    /// </value>
+    [OptionBehaviourExempt("Only the gradient descent solver LogisticRegression.CreateGradientDescentSolver builds uses it; the default L-BFGS solver chooses its step by line search.")]
     public double LearningRate { get; set; } = 0.01;
 
     /// <summary>
@@ -133,4 +143,33 @@ public class LogisticRegressionOptions<T> : RegressionOptions<T>
     /// </para>
     /// </remarks>
     public double Tolerance { get; set; } = 1e-4;
+
+    /// <summary>
+    /// Gets or sets the optimizer that minimizes the logistic loss, or <c>null</c> for L-BFGS.
+    /// </summary>
+    /// <value>
+    /// The solver, or <c>null</c> (the default) for the library's <c>LBFGSOptimizer</c>. JSON serialization excludes
+    /// this runtime object; a deserialized model keeps its fitted coefficients either way.
+    /// </value>
+    /// <remarks>
+    /// <para>
+    /// Every solver minimizes the same objective: the mean log loss over the training rows plus the configured
+    /// regularization penalty on the coefficients (the intercept is not penalized), on standardized features. Any
+    /// <see cref="IFunctionOptimizer{T}"/> fits, so a caller can pass any of the library's gradient-based optimizers
+    /// created for function minimization. <see cref="MaxIterations"/> and <see cref="Tolerance"/> (a bound on the
+    /// largest gradient component) are handed to whichever solver runs.
+    /// </para>
+    /// <para>
+    /// L-BFGS is the default because it is what scikit-learn's <c>LogisticRegression</c> uses: it converges in tens of
+    /// iterations where fixed-step gradient descent needs thousands, to the same minimum. The model used to be fitted
+    /// by gradient descent alone, at <see cref="LearningRate"/>;
+    /// <see cref="AiDotNet.Regression.LogisticRegression{T}.CreateGradientDescentSolver"/> rebuilds that solver for a
+    /// caller who wants it.
+    /// </para>
+    /// <para><b>For Beginners:</b> This is the method used to find the best coefficients. Leave it unset unless you
+    /// have a reason to change it; the default is fast and reliable.
+    /// </para>
+    /// </remarks>
+    [JsonIgnore]
+    public IFunctionOptimizer<T>? Solver { get; set; }
 }

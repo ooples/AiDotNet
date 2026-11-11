@@ -200,6 +200,7 @@ public class InputXGradientExplainer<T> : ILocalExplainer<T, InputXGradientExpla
     public Vector<T> ComputeGlobalAttributions(Matrix<T> data)
         => AttributionAggregation.MeanAbsolute<T>(ExplainBatch(data));
 
+    /// <inheritdoc />
     public InputXGradientExplanation<T>[] ExplainBatch(Matrix<T> instances)
     {
         var explanations = new InputXGradientExplanation<T>[instances.Rows];

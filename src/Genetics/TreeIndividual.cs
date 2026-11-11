@@ -342,6 +342,7 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
         return $"({NodeToString(node.Children[0])} {node.Value} {NodeToString(node.Children[1])})";
     }
 
+    /// <inheritdoc />
     public ICollection<NodeGene> GetGenes()
     {
         // Since tree structure doesn't fit neatly into a flat list,
@@ -349,6 +350,7 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
         return [_rootNode];
     }
 
+    /// <inheritdoc />
     public void SetGenes(ICollection<NodeGene> genes)
     {
         // Assume the first gene is the root node
@@ -358,16 +360,19 @@ public class TreeIndividual : IEvolvable<NodeGene, double>
         }
     }
 
+    /// <inheritdoc />
     public double GetFitness()
     {
         return _fitness;
     }
 
+    /// <inheritdoc />
     public void SetFitness(double fitness)
     {
         _fitness = fitness;
     }
 
+    /// <inheritdoc />
     public IEvolvable<NodeGene, double> Clone()
     {
         var clone = new TreeIndividual(_rootNode.Clone());

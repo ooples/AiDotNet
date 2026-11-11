@@ -17,6 +17,7 @@ public class Superpixels<T> : ImageAugmenterBase<T>
         GridSize = gridSize; MinReplaceRate = minReplaceRate; MaxReplaceRate = maxReplaceRate;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -60,6 +61,7 @@ public class Superpixels<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

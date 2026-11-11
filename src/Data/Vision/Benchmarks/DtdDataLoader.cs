@@ -32,10 +32,15 @@ public class DtdDataLoader<T> : InputOutputDataLoaderBase<T, Tensor<T>, Tensor<T
     private int _sampleCount;
     private int _imageSize;
 
+    /// <inheritdoc />
     public override string Name => "DTD";
+    /// <inheritdoc />
     public override string Description => "Describable Textures Dataset (47 classes)";
+    /// <inheritdoc />
     public override int TotalCount => _sampleCount;
+    /// <inheritdoc />
     public override int FeatureCount => _imageSize * _imageSize * 3;
+    /// <inheritdoc />
     public override int OutputDimension => NumClasses;
 
     public DtdDataLoader(DtdDataLoaderOptions? options = null)

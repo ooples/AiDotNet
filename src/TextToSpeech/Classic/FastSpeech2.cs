@@ -111,9 +111,13 @@ public partial class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
     }
 
     int ITtsModel<T>.SampleRate => _options.SampleRate;
+    /// <inheritdoc />
     public int MaxTextLength => _options.MaxTextLength;
+    /// <inheritdoc />
     public new int MelChannels => _options.MelChannels;
+    /// <inheritdoc />
     public new int HopSize => _options.HopSize;
+    /// <inheritdoc />
     public int FftSize => _options.FftSize;
 
     /// <summary>
@@ -255,6 +259,7 @@ public partial class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
         _encoderLayerEnd = 1 + _options.NumEncoderLayers * lpb;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PreprocessText(string text)
     {
         if (_tokenizer is null)
@@ -267,8 +272,10 @@ public partial class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
         return tokens;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessAudio(Tensor<T> output) => output;
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -286,6 +293,7 @@ public partial class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
     /// write on every parameter surface, so the guard is stated once here instead of being
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -312,6 +320,7 @@ public partial class FastSpeech2<T> : TtsModelBase<T>, IAcousticModel<T>
             throw new ObjectDisposedException(GetType().FullName ?? nameof(FastSpeech2<T>));
     }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed)

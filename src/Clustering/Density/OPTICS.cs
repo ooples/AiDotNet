@@ -115,6 +115,7 @@ public partial class OPTICS<T> : ClusteringBase<T>
         return newInstance;
     }
 
+    /// <inheritdoc />
     public override void Train(Matrix<T> x, Vector<T> y)
     {
         int n = x.Rows;

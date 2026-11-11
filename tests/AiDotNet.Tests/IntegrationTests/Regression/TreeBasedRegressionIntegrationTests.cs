@@ -114,6 +114,54 @@ public class TreeBasedRegressionIntegrationTests
         Assert.True(importance1 >= 0, "Feature importance should be non-negative");
     }
 
+    [SkippableFact]
+    public void DecisionTreeRegression_Predict_DoesNotCopyEachRow()
+    {
+#if !NETCOREAPP3_0_OR_GREATER
+        // net471 has no per-thread allocation counter, and a process-wide one counts parallel tests too.
+        Skip.If(true, "GC.GetAllocatedBytesForCurrentThread needs .NET Core 3.0 or later.");
+#else
+        // A forest's permutation importance predicts every row through every tree once per permuted feature.
+        // Copying each 300-wide row (2.4 KB) to read the few features on one path made prediction
+        // allocation-bound: 2,000 rows used to allocate ~4.8 MB per call; the result vector is 16 KB.
+        const int rows = 2_000, features = 300;
+        var random = AiDotNet.Tensors.Helpers.RandomHelper.CreateSeededRandom(7);
+        var x = new Matrix<double>(rows, features);
+        var y = new Vector<double>(rows);
+        for (int i = 0; i < rows; i++)
+        {
+            for (int j = 0; j < features; j++)
+            {
+                x[i, j] = random.NextDouble();
+            }
+
+            y[i] = 3.0 * x[i, 0] - 2.0 * x[i, 17] + x[i, 250] * x[i, 3];
+        }
+
+        var regression = new DecisionTreeRegression<double>(new DecisionTreeOptions { MaxDepth = 8, MinSamplesSplit = 2 });
+        regression.Train(x, y);
+
+        var batch = regression.Predict(x); // JIT outside the measurement
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        regression.Predict(x);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(allocated < 200_000, $"Predict allocated {allocated:N0} bytes for {rows} rows");
+
+        // The batch walk and a one-row matrix must reach the same leaf.
+        for (int i = 0; i < rows; i += 97)
+        {
+            var single = new Matrix<double>(1, features);
+            for (int j = 0; j < features; j++)
+            {
+                single[0, j] = x[i, j];
+            }
+
+            Assert.Equal(batch[i], regression.Predict(single)[0]);
+        }
+#endif
+    }
+
     #endregion
 
     #region RandomForestRegression Tests

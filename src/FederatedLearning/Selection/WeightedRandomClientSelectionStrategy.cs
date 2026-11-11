@@ -14,6 +14,7 @@ namespace AiDotNet.FederatedLearning.Selection;
 [PipelineStage(PipelineStage.Training)]
 public sealed class WeightedRandomClientSelectionStrategy : ClientSelectionStrategyBase
 {
+    /// <inheritdoc />
     public override List<int> SelectClients(ClientSelectionRequest request)
     {
         if (request == null)
@@ -87,5 +88,6 @@ public sealed class WeightedRandomClientSelectionStrategy : ClientSelectionStrat
         return selected;
     }
 
+    /// <inheritdoc />
     public override string GetStrategyName() => "WeightedRandom";
 }

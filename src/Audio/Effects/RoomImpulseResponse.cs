@@ -379,6 +379,7 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
         _bound = true;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -735,8 +736,10 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
         return noise;
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -789,6 +792,7 @@ public partial class RoomImpulseResponse<T> : AudioNeuralNetworkBase<T>, IAudioE
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(RoomImpulseResponse<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

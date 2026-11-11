@@ -46,6 +46,7 @@ public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
     /// </summary>
     private readonly DenseLayer<T> _textProjection;
 
+    /// <inheritdoc />
     public override bool ProducesPooledOutput => true;
 
     /// <summary>
@@ -118,6 +119,7 @@ public partial class CLIPTextConditioner<T> : TextConditioningBase<T>
         return new CLIPTextConditioner<T>(tokenizer, options: new CLIPTextConditionerOptions { Variant = variant });
     }
 
+    /// <inheritdoc />
     protected override IEnumerable<ILayer<T>> CreateDefaultLayers() =>
         LayerHelper<T>.CreateDefaultCLIPTextLayers(
             vocabSize: VocabSize,

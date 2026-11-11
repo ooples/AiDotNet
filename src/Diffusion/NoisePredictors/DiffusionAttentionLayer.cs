@@ -163,6 +163,7 @@ public sealed partial class DiffusionAttentionLayer<T> : LayerBase<T>, IShapeCon
         return metadata;
     }
 
+    /// <inheritdoc />
     protected override void EnsureParametersMaterialized()
     {
         if (_queryWeights.Length > 0) return;

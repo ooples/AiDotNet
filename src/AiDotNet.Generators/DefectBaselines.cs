@@ -18,17 +18,12 @@ internal static class DefectBaselines
 {
     /// <summary>
     /// Models with no generated or hand-written test class when AIDN040 became an error (2026-09-28): 328
-    /// of 1807. Keyed by fully qualified name because simple names collide.
+    /// of 1807. Empty since every model gained a fixture (#2394); kept so AIDN040 has an exemption list that
+    /// can only stay empty. Keyed by fully qualified name because simple names collide.
     /// </summary>
     internal static readonly System.Collections.Generic.HashSet<string> UntestedModels =
         new System.Collections.Generic.HashSet<string>(System.StringComparer.Ordinal)
         {
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.AmazonPolly<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.AzureNeuralTTS<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.ElevenLabsTTS<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.GoogleCloudTTS<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.Murf<T>",
-            "global::AiDotNet.TextToSpeech.ProprietaryAPI.NVIDIARivaTTS<T>",
         };
 
     /// <summary>

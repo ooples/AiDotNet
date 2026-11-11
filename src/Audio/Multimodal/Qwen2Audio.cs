@@ -197,6 +197,7 @@ public partial class Qwen2Audio<T> : AudioNeuralNetworkBase<T>, IAudioLanguageMo
             dropoutRate: _options.DropoutRate));
     }
 
+    /// <inheritdoc />
     protected override Tensor<T> PredictCore(Tensor<T> input)
     {
         ThrowIfDisposed();
@@ -210,8 +211,10 @@ public partial class Qwen2Audio<T> : AudioNeuralNetworkBase<T>, IAudioLanguageMo
     /// repeated -- and cannot be applied to one surface and forgotten on another.</remarks>
     protected override bool SupportsParameterMutation => _useNativeMode;
 
+    /// <inheritdoc />
     protected override Tensor<T> PostprocessOutput(Tensor<T> o) => o;
 
+    /// <inheritdoc />
     public override ModelMetadata<T> GetModelMetadata()
     {
         var m = new ModelMetadata<T>
@@ -287,6 +290,7 @@ public partial class Qwen2Audio<T> : AudioNeuralNetworkBase<T>, IAudioLanguageMo
 
     private void ThrowIfDisposed() { if (_disposed) throw new ObjectDisposedException(GetType().FullName ?? nameof(Qwen2Audio<T>)); }
 
+    /// <inheritdoc />
     protected override void Dispose(bool disposing)
     {
         if (_disposed) return;

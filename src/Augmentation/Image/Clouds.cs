@@ -19,6 +19,7 @@ public class Clouds<T> : ImageAugmenterBase<T>
         MinScale = minScale; MaxScale = maxScale;
     }
 
+    /// <inheritdoc />
     protected override ImageTensor<T> ApplyAugmentation(ImageTensor<T> data, AugmentationContext<T> context)
     {
         var result = data.Clone();
@@ -91,6 +92,7 @@ public class Clouds<T> : ImageAugmenterBase<T>
         return result;
     }
 
+    /// <inheritdoc />
     public override IDictionary<string, object> GetParameters()
     {
         var p = base.GetParameters();

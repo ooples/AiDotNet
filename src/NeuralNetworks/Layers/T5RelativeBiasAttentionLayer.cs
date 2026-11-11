@@ -139,6 +139,7 @@ public partial class T5RelativeBiasAttentionLayer<T> : LayerBase<T>, IShapeContr
     [Scratch]
     private Tensor<T>? _externalPositionBias;
 
+    /// <inheritdoc />
     public override bool SupportsTraining => true;
 
     /// <summary>
