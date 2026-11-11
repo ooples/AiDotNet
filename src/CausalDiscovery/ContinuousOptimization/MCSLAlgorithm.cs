@@ -216,15 +216,4 @@ public class MCSLAlgorithm<T> : ContinuousOptimizationBase<T>
 
         return (Engine.TensorWhere(offDiagonal, newW, W), Engine.TensorWhere(offDiagonal, newM, M));
     }
-
-    /// <summary>
-    /// sigmoid(x / tau), saturated to exactly 1 above 20 and 0 below -20.
-    /// </summary>
-    private Tensor<T> ClampedSigmoid(Tensor<T> logits, double tau)
-    {
-        var x = Engine.TensorDivideScalar(logits, NumOps.FromDouble(tau));
-        var sigmoid = Engine.TensorSigmoid(x);
-        sigmoid = Engine.TensorWhere(Engine.TensorGreaterThan(x, NumOps.FromDouble(20)), Engine.TensorOnesLike(x), sigmoid);
-        return Engine.TensorWhere(Engine.TensorLessThan(x, NumOps.FromDouble(-20)), Engine.TensorZerosLike(x), sigmoid);
-    }
 }
