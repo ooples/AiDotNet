@@ -360,15 +360,17 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
         if (alternateAxis == defaultAxis || alternateAxis >= rank)
             return defaultAxis;
 
-        double defaultScore = ProbabilityAxisScore(target, defaultAxis);
-        double alternateScore = ProbabilityAxisScore(target, alternateAxis);
+        T defaultScore = ProbabilityAxisScore(target, defaultAxis);
+        T alternateScore = ProbabilityAxisScore(target, alternateAxis);
+        T tolerance = NumOps.FromDouble(1e-6);
 
-        return alternateScore < 1e-6 && alternateScore + 1e-6 < defaultScore
+        return NumOps.LessThan(alternateScore, tolerance)
+            && NumOps.LessThan(NumOps.Add(alternateScore, tolerance), defaultScore)
             ? alternateAxis
             : defaultAxis;
     }
 
-    private double ProbabilityAxisScore(Tensor<T> target, int axis)
+    private T ProbabilityAxisScore(Tensor<T> target, int axis)
     {
         // _shape, not Shape.ToArray(): every read below is read-only, so the defensive copy was
         // pure allocation on a per-call scoring path (ADNPERF001).
@@ -380,12 +382,12 @@ public class CrossEntropyWithLogitsLoss<T> : LossFunctionBase<T>
 
         int outer = target.Length / (axisSize * inner);
         if (outer * inner == 0)
-            return double.PositiveInfinity;
+            return NumOps.MaxValue; // no slices: never preferred over a scored axis
 
         // Mean over every slice along the axis of |Σ_axis target - 1|.
         var axisSums = Engine.ReduceSum(target, new[] { axis }, keepDims: false);
         var deviation = Engine.TensorAbs(Engine.TensorSubtractScalar(axisSums, NumOps.One));
-        return NumOps.ToDouble(Engine.TensorMean(deviation));
+        return Engine.TensorMean(deviation);
     }
 
     private Tensor<T> ClassIndicesToOneHot(Tensor<T> indices, int numClasses, int classAxis, int[] oneHotShape)

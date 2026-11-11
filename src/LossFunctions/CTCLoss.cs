@@ -140,7 +140,8 @@ public class CTCLoss<T> : LossFunctionBase<T>, ISequenceLossFunction<T>
     /// <returns>The label sequences and their lengths.</returns>
     private static (int[][] Targets, int[] TargetLengths) DecodeTargets(Vector<T> encoded, int batchSize)
     {
-        // The encoding holds integer metadata (lengths and label ids), converted once in bulk.
+        // The encoding holds integer metadata (lengths and label ids), converted once in bulk. There is
+        // no engine T -> int cast yet (TensorCast, recorded in missing-ops), so this is a bulk Transform.
         int[] codes = encoded.Transform(value => (int)Convert.ToDouble(value)).ToArray();
 
         var targets = new int[batchSize][];
