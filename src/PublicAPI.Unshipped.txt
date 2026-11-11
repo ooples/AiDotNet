@@ -1141,3 +1141,55 @@ AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.Us
 AiDotNet.Models.Options.ConjugateGradientOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.get -> bool
 AiDotNet.Models.Options.DFPOptimizerOptions<T, TInput, TOutput>.UseLineSearch.set -> void
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningCandidate
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningCandidate.ActiveLearningCandidate() -> void
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningCandidate.Informativeness.get -> double
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningCandidate.Informativeness.init -> void
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningCandidate.MarginalGain.get -> double
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningCandidate.MarginalGain.init -> void
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningCandidate.PoolIndex.get -> int
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningCandidate.PoolIndex.init -> void
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningCandidate.SelectionOrder.get -> int
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningCandidate.SelectionOrder.init -> void
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection.ActiveLearningSelection() -> void
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection.BatchSize.get -> int
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection.BatchSize.init -> void
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection.DiversityWeight.get -> double
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection.DiversityWeight.init -> void
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection.Ranking.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.ActiveLearning.ActiveLearningCandidate!>!
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection.Ranking.init -> void
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection.RepresentationSpace.get -> string!
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection.RepresentationSpace.init -> void
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection.SelectedIndices.get -> int[]!
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection.SelectedIndices.init -> void
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection.StrategyName.get -> string!
+*REMOVED*AiDotNet.ActiveLearning.ActiveLearningSelection.StrategyName.init -> void
+*REMOVED*AiDotNet.ActiveLearning.BatchActiveLearner<T>.Select(AiDotNet.Tensors.LinearAlgebra.Vector<T>! informativeness, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! representation, int batchSize, string! strategyName, string! representationSpace) -> AiDotNet.ActiveLearning.ActiveLearningSelection!
+*REMOVED*AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.ActiveLearningSelection.get -> AiDotNet.ActiveLearning.ActiveLearningSelection?
+AiDotNet.ActiveLearning.ActiveLearningCandidate<T>
+AiDotNet.ActiveLearning.ActiveLearningCandidate<T>.ActiveLearningCandidate() -> void
+AiDotNet.ActiveLearning.ActiveLearningCandidate<T>.Informativeness.get -> T
+AiDotNet.ActiveLearning.ActiveLearningCandidate<T>.Informativeness.init -> void
+AiDotNet.ActiveLearning.ActiveLearningCandidate<T>.MarginalGain.get -> T
+AiDotNet.ActiveLearning.ActiveLearningCandidate<T>.MarginalGain.init -> void
+AiDotNet.ActiveLearning.ActiveLearningCandidate<T>.PoolIndex.get -> int
+AiDotNet.ActiveLearning.ActiveLearningCandidate<T>.PoolIndex.init -> void
+AiDotNet.ActiveLearning.ActiveLearningCandidate<T>.SelectionOrder.get -> int
+AiDotNet.ActiveLearning.ActiveLearningCandidate<T>.SelectionOrder.init -> void
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>.ActiveLearningSelection() -> void
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>.BatchSize.get -> int
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>.BatchSize.init -> void
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>.DiversityWeight.get -> double
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>.DiversityWeight.init -> void
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>.Ranking.get -> System.Collections.Generic.IReadOnlyList<AiDotNet.ActiveLearning.ActiveLearningCandidate<T>!>!
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>.Ranking.init -> void
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>.RepresentationSpace.get -> string!
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>.RepresentationSpace.init -> void
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>.SelectedIndices.get -> int[]!
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>.SelectedIndices.init -> void
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>.StrategyName.get -> string!
+AiDotNet.ActiveLearning.ActiveLearningSelection<T>.StrategyName.init -> void
+AiDotNet.ActiveLearning.BatchActiveLearner<T>.Select(AiDotNet.Tensors.LinearAlgebra.Vector<T>! informativeness, AiDotNet.Tensors.LinearAlgebra.Matrix<T>! representation, int batchSize, string! strategyName, string! representationSpace) -> AiDotNet.ActiveLearning.ActiveLearningSelection<T>!
+AiDotNet.Models.Results.AiModelResult<T, TInput, TOutput>.ActiveLearningSelection.get -> AiDotNet.ActiveLearning.ActiveLearningSelection<T>?

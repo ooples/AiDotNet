@@ -46,112 +46,96 @@ public sealed class BatchActiveLearner<T>
     /// <param name="strategyName">The configured strategy's name, for the report.</param>
     /// <param name="representationSpace">Label for the representation space used, for the report.</param>
     /// <returns>The ranked pool plus the selected batch.</returns>
-    public ActiveLearningSelection Select(
+    public ActiveLearningSelection<T> Select(
         Vector<T> informativeness,
         Matrix<T> representation,
         int batchSize,
         string strategyName,
         string representationSpace)
     {
+        var engine = AiDotNetEngine.Current;
         int n = informativeness.Length;
         int budget = Math.Max(0, Math.Min(batchSize, n));
+        if (n == 0)
+        {
+            return new ActiveLearningSelection<T>
+            {
+                BatchSize = budget,
+                StrategyName = strategyName,
+                RepresentationSpace = representationSpace,
+                DiversityWeight = _diversityWeight,
+            };
+        }
+
+        var scores = Tensor<T>.FromVector(informativeness).Reshape(new[] { 1, n });
 
         // Normalize informativeness to [0, 1] so the diversity weight is scale-independent.
-        var scores = new double[n];
-        double min = double.PositiveInfinity, max = double.NegativeInfinity;
-        for (int i = 0; i < n; i++)
+        var norm = new Tensor<T>(new[] { 1, n });
+        var min = engine.TensorMinValue(scores);
+        var range = _numOps.Subtract(engine.TensorMaxValue(scores), min);
+        if (_numOps.GreaterThan(range, _numOps.Zero))
         {
-            scores[i] = _numOps.ToDouble(informativeness[i]);
-            if (scores[i] < min) min = scores[i];
-            if (scores[i] > max) max = scores[i];
+            norm = engine.TensorDivideScalar(engine.TensorSubtractScalar(scores, min), range);
         }
 
-        double range = max - min;
-        var norm = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            norm[i] = range > 0 ? (scores[i] - min) / range : 0.0;
-        }
-
-        // Precompute L2 norms of representation rows for cosine similarity.
-        var rowNorm = new double[n];
-        for (int i = 0; i < n; i++)
-        {
-            double sum = 0;
-            for (int j = 0; j < representation.Columns; j++)
-            {
-                double v = _numOps.ToDouble(representation[i, j]);
-                sum += v * v;
-            }
-
-            rowNorm[i] = Math.Sqrt(sum);
-        }
+        // Representation rows and their L2 norms for cosine similarity.
+        var rows = ActiveLearningEngineOps.AsRows(Tensor<T>.FromMatrix(representation), n, representation.Columns);
+        var rowNorm = ActiveLearningEngineOps.RowNorms(rows).Reshape(new[] { 1, n });
+        var hasNorm = engine.TensorGreaterThan(rowNorm, _numOps.Zero);
 
         var selected = new List<int>(budget);
         var selectionOrder = new int[n];
-        var marginalGain = new double[n];
         for (int i = 0; i < n; i++) selectionOrder[i] = -1;
-        var maxSimToSelected = new double[n]; // redundancy of each sample against the chosen set
+        var isSelected = new bool[n];
+        var marginalGain = new Tensor<T>(new[] { 1, n });
+        var maxSimToSelected = new Tensor<T>(new[] { 1, n }); // redundancy of each sample against the chosen set
+        var weight = _numOps.FromDouble(_diversityWeight);
 
         for (int step = 0; step < budget; step++)
         {
-            int best = -1;
-            double bestAdjusted = double.NegativeInfinity;
-            for (int i = 0; i < n; i++)
-            {
-                if (selectionOrder[i] >= 0) continue;
-                double adjusted = norm[i] - (_diversityWeight * maxSimToSelected[i]);
-                if (adjusted > bestAdjusted)
-                {
-                    bestAdjusted = adjusted;
-                    best = i;
-                }
-            }
-
+            var adjusted = engine.TensorSubtract(norm, engine.TensorMultiplyScalar(maxSimToSelected, weight));
+            int best = ActiveLearningEngineOps.ArgMaxAbove(adjusted, isSelected, _numOps.MinValue);
             if (best < 0) break;
 
             selectionOrder[best] = step;
-            marginalGain[best] = bestAdjusted;
+            isSelected[best] = true;
+            var chosen = new bool[n];
+            chosen[best] = true;
+            marginalGain = engine.TensorWhere(chosen, adjusted, marginalGain);
             selected.Add(best);
 
             // Update every remaining sample's redundancy against the newly chosen point.
-            for (int i = 0; i < n; i++)
-            {
-                if (selectionOrder[i] >= 0) continue;
-                double sim = CosineSimilarity(representation, rowNorm, i, best);
-                if (sim > maxSimToSelected[i]) maxSimToSelected[i] = sim;
-            }
+            var similarity = CosineSimilarity(rows, rowNorm, hasNorm, best);
+            maxSimToSelected = engine.TensorMax(maxSimToSelected, similarity);
         }
 
         // Unselected samples keep their raw normalized informativeness as marginal gain.
-        for (int i = 0; i < n; i++)
+        marginalGain = engine.TensorWhere(isSelected, marginalGain, norm);
+
+        // Selected batch first (in selection order), then the rest by informativeness.
+        var byInformativeness = engine.ArgSort(Tensor<T>.FromVector(informativeness), -1, descending: true).ToArray();
+        var order = new List<int>(n);
+        order.AddRange(selected);
+        foreach (var index in byInformativeness)
         {
-            if (selectionOrder[i] < 0) marginalGain[i] = norm[i];
+            if (!isSelected[index]) order.Add(index);
         }
 
-        var ranking = new List<ActiveLearningCandidate>(n);
-        for (int i = 0; i < n; i++)
+        var informativenessValues = informativeness.ToArray();
+        var gains = marginalGain.ToArray();
+        var ranking = new List<ActiveLearningCandidate<T>>(n);
+        foreach (var index in order)
         {
-            ranking.Add(new ActiveLearningCandidate
+            ranking.Add(new ActiveLearningCandidate<T>
             {
-                PoolIndex = i,
-                Informativeness = scores[i],
-                SelectionOrder = selectionOrder[i],
-                MarginalGain = marginalGain[i],
+                PoolIndex = index,
+                Informativeness = informativenessValues[index],
+                SelectionOrder = selectionOrder[index],
+                MarginalGain = gains[index],
             });
         }
 
-        // Selected batch first (in selection order), then the rest by informativeness.
-        ranking.Sort((a, b) =>
-        {
-            bool aSel = a.SelectionOrder >= 0, bSel = b.SelectionOrder >= 0;
-            if (aSel && bSel) return a.SelectionOrder.CompareTo(b.SelectionOrder);
-            if (aSel) return -1;
-            if (bSel) return 1;
-            return b.Informativeness.CompareTo(a.Informativeness);
-        });
-
-        return new ActiveLearningSelection
+        return new ActiveLearningSelection<T>
         {
             Ranking = ranking,
             SelectedIndices = selected.ToArray(),
@@ -162,17 +146,23 @@ public sealed class BatchActiveLearner<T>
         };
     }
 
-    private double CosineSimilarity(Matrix<T> rep, double[] rowNorm, int i, int k)
+    /// <summary>
+    /// Redundancy of every sample against sample <paramref name="k"/>: cosine similarity mapped to
+    /// [0, 1] by clamping negatives (opposite directions are not redundant), 0 when either row has
+    /// zero norm.
+    /// </summary>
+    /// <returns>A [1, n] tensor.</returns>
+    private Tensor<T> CosineSimilarity(Tensor<T> rows, Tensor<T> rowNorm, Tensor<T> hasNorm, int k)
     {
-        if (rowNorm[i] <= 0 || rowNorm[k] <= 0) return 0.0;
-        double dot = 0;
-        for (int j = 0; j < rep.Columns; j++)
-        {
-            dot += _numOps.ToDouble(rep[i, j]) * _numOps.ToDouble(rep[k, j]);
-        }
+        var engine = AiDotNetEngine.Current;
+        int n = rows.Shape[0];
+        var shape = new[] { 1, n };
+        var dot = ActiveLearningEngineOps.DotBlock(rows, k, 1);
+        var normK = engine.TensorBroadcastTo(engine.TensorSlice(rowNorm, new[] { 0, k }, new[] { 1, 1 }), shape);
+        var cos = engine.TensorDivide(dot, engine.TensorMultiply(rowNorm, normK));
 
-        double cos = dot / (rowNorm[i] * rowNorm[k]);
-        // Map cosine [-1, 1] to a [0, 1] redundancy: opposite directions are not redundant.
-        return Math.Max(0.0, cos);
+        var hasNormK = engine.TensorBroadcastTo(engine.TensorSlice(hasNorm, new[] { 0, k }, new[] { 1, 1 }), shape);
+        var valid = engine.TensorMultiply(hasNorm, hasNormK);
+        return engine.TensorWhere(valid, engine.TensorMax(cos, _numOps.Zero), new Tensor<T>(shape));
     }
 }
